@@ -9,27 +9,8 @@ readme = "README.md"
 keywords = ["lua"]
 license = "MIT"
 
-[badges]
-travis-ci = { repository = "chucklefish/rlua", branch = "master" }
-
-[features]
-default = ["builtin-lua"]
-# Builds the correct version of Lua 5.3 inside the crate. If you want to link a
-# specialized version of lua into your binary, you can disable this feature to
-# do that, but care must be taken.  `rlua` makes at least the following
-# assumptions about the linked lua library:
-#   * LUA_INTEGER is long long
-#   * LUA_NUMBER as double
-#   * LUA_EXTRASPACE is at least pointer sized and has at least pointer alignment.
-#   * LUAI_MAXSTACK is 1_000_000
-builtin-lua = ["cc"]
-# Uses pkg-config to find an appropriate lua 5.3 library to link with.  All of
-# the caveats about disabling the default builtin-lua feature apply here as
-# well.  If neither the builtin-lua nor the system-lua feature is enabled, then
-# no lua library will be linked at all and one must be linked with or built into
-# the final binary manually.  The builtin-lua and system-lua features are
-# mutually exclusive and enabling both will cause an error at build time.
-system-lua = ["pkg-config"]
+# [badges]
+# travis-ci = { repository = "chucklefish/rlua", branch = "master" }
 
 [dependencies]
 libc = { version = "0.2" }
@@ -38,8 +19,7 @@ num-traits = { version = "0.2.6" }
 compiletest_rs = { version = "0.3", optional = true }
 
 [build-dependencies]
-cc = { version = "1.0", optional = true }
-pkg-config = { version = "0.3.11", optional = true }
+pkg-config = "0.3"
 
 [dev-dependencies]
 rustyline = "2.0.0"
