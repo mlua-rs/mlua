@@ -19,7 +19,8 @@ num-traits = { version = "0.2.6" }
 compiletest_rs = { version = "0.3", optional = true }
 
 [build-dependencies]
-pkg-config = "0.3"
+cc = "1.0"
+pkg-config = "0.3.11"
 
 [dev-dependencies]
 rustyline = "2.0.0"
