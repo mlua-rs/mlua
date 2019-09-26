@@ -73,4 +73,6 @@ pub use types::{Integer, LightUserData, Number, RegistryKey};
 pub use userdata::{AnyUserData, MetaMethod, UserData, UserDataMethods};
 pub use value::{FromLua, FromLuaMulti, MultiValue, Nil, ToLua, ToLuaMulti, Value};
 
+pub use ffi::lua_State;
+
 pub mod prelude;
