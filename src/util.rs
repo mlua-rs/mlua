@@ -661,11 +661,11 @@ pub unsafe fn init_error_metatables(state: *mut ffi::lua_State) {
 }
 
 struct WrappedError(pub Error);
-struct WrappedPanic(pub Option<Box<Any + Send>>);
+struct WrappedPanic(pub Option<Box<dyn Any + Send>>);
 
 // Pushes a WrappedError::Panic to the top of the stack.  Uses two stack spaces and does not call
 // lua_checkstack.
-unsafe fn push_wrapped_panic(state: *mut ffi::lua_State, panic: Box<Any + Send>) {
+unsafe fn push_wrapped_panic(state: *mut ffi::lua_State, panic: Box<dyn Any + Send>) {
     gc_guard(state, || {
         let ud = ffi::lua_newuserdata(state, mem::size_of::<WrappedPanic>()) as *mut WrappedPanic;
         ptr::write(ud, WrappedPanic(Some(panic)))

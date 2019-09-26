@@ -183,7 +183,7 @@ impl fmt::Display for Error {
 }
 
 impl failure::Fail for Error {
-    fn cause(&self) -> Option<&failure::Fail> {
+    fn cause(&self) -> Option<&dyn failure::Fail> {
         match *self {
             Error::CallbackError { ref cause, .. } => Some(cause.as_ref()),
             Error::ExternalError(ref err) => err.as_fail().cause(),
