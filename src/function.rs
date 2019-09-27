@@ -1,13 +1,13 @@
 use std::os::raw::c_int;
 use std::ptr;
 
-use error::{Error, Result};
-use ffi;
-use types::LuaRef;
-use util::{
+use crate::error::{Error, Result};
+use crate::ffi;
+use crate::types::LuaRef;
+use crate::util::{
     assert_stack, check_stack, error_traceback, pop_error, protect_lua_closure, StackGuard,
 };
-use value::{FromLuaMulti, MultiValue, ToLuaMulti};
+use crate::value::{FromLuaMulti, MultiValue, ToLuaMulti};
 
 /// Handle to an internal Lua function.
 #[derive(Clone, Debug)]
@@ -23,9 +23,8 @@ impl<'lua> Function<'lua> {
     /// Call Lua's built-in `tostring` function:
     ///
     /// ```
-    /// # extern crate rlua;
     /// # use rlua::{Lua, Function, Result};
-    /// # fn try_main() -> Result<()> {
+    /// # fn main() -> Result<()> {
     /// let lua = Lua::new();
     /// let globals = lua.globals();
     ///
@@ -35,31 +34,25 @@ impl<'lua> Function<'lua> {
     ///
     /// # Ok(())
     /// # }
-    /// # fn main() {
-    /// #     try_main().unwrap();
-    /// # }
     /// ```
     ///
     /// Call a function with multiple arguments:
     ///
     /// ```
-    /// # extern crate rlua;
     /// # use rlua::{Lua, Function, Result};
-    /// # fn try_main() -> Result<()> {
+    /// # fn main() -> Result<()> {
     /// let lua = Lua::new();
     ///
-    /// let sum: Function = lua.eval(r#"
-    ///     function(a, b)
-    ///         return a + b
-    ///     end
-    /// "#, None)?;
+    /// let sum: Function = lua.load(
+    ///     r#"
+    ///         function(a, b)
+    ///             return a + b
+    ///         end
+    ///     "#).eval()?;
     ///
     /// assert_eq!(sum.call::<_, u32>((3, 4))?, 3 + 4);
     ///
     /// # Ok(())
-    /// # }
-    /// # fn main() {
-    /// #     try_main().unwrap();
     /// # }
     /// ```
     pub fn call<A: ToLuaMulti<'lua>, R: FromLuaMulti<'lua>>(&self, args: A) -> Result<R> {
@@ -76,7 +69,7 @@ impl<'lua> Function<'lua> {
             let stack_start = ffi::lua_gettop(lua.state);
             lua.push_ref(&self.0);
             for arg in args {
-                lua.push_value(arg);
+                lua.push_value(arg)?;
             }
             let ret = ffi::lua_pcall(lua.state, nargs, ffi::LUA_MULTRET, stack_start);
             if ret != ffi::LUA_OK {
@@ -102,16 +95,15 @@ impl<'lua> Function<'lua> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate rlua;
     /// # use rlua::{Lua, Function, Result};
-    /// # fn try_main() -> Result<()> {
+    /// # fn main() -> Result<()> {
     /// let lua = Lua::new();
     ///
-    /// let sum: Function = lua.eval(r#"
+    /// let sum: Function = lua_context.load(r#"
     ///     function(a, b)
     ///         return a + b
     ///     end
-    /// "#, None)?;
+    /// "#).eval()?;
     ///
     /// let bound_a = sum.bind(1)?;
     /// assert_eq!(bound_a.call::<_, u32>(2)?, 1 + 2);
@@ -120,9 +112,6 @@ impl<'lua> Function<'lua> {
     /// assert_eq!(bound_a_and_b.call::<_, u32>(())?, 13 + 57);
     ///
     /// # Ok(())
-    /// # }
-    /// # fn main() {
-    /// #     try_main().unwrap();
     /// # }
     /// ```
     pub fn bind<A: ToLuaMulti<'lua>>(&self, args: A) -> Result<Function<'lua>> {
@@ -161,7 +150,7 @@ impl<'lua> Function<'lua> {
             lua.push_ref(&self.0);
             ffi::lua_pushinteger(lua.state, nargs as ffi::lua_Integer);
             for arg in args {
-                lua.push_value(arg);
+                lua.push_value(arg)?;
             }
 
             protect_lua_closure(lua.state, nargs + 2, 1, |state| {

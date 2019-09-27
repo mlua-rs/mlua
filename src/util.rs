@@ -1,12 +1,13 @@
 use std::any::Any;
-use std::ffi::CStr;
+use std::borrow::Cow;
+use std::fmt::Write;
 use std::os::raw::{c_char, c_int, c_void};
 use std::panic::{catch_unwind, resume_unwind, AssertUnwindSafe};
 use std::sync::Arc;
-use std::{mem, ptr};
+use std::{mem, ptr, slice};
 
-use error::{Error, Result};
-use ffi;
+use crate::error::{Error, Result};
+use crate::ffi;
 
 // Checks that Lua has enough free stack space for future stack operations.  On failure, this will
 // panic with an internal error message.
@@ -20,7 +21,7 @@ pub unsafe fn assert_stack(state: *mut ffi::lua_State, amount: c_int) {
     );
 }
 
-// Similar to `assert_stack`, but returns `Error::StackError` on failure.
+// Checks that Lua has enough free stack space and returns `Error::StackError` on failure.
 pub unsafe fn check_stack(state: *mut ffi::lua_State, amount: c_int) -> Result<()> {
     if ffi::lua_checkstack(state, amount) == 0 {
         Err(Error::StackError)
@@ -37,7 +38,7 @@ pub struct StackGuard {
 impl StackGuard {
     // Creates a StackGuard instance with wa record of the stack size, and on Drop will check the
     // stack size and drop any extra elements.  If the stack size at the end is *smaller* than at
-    // the beginning, this is considered a fatal logic error and will result in an abort.
+    // the beginning, this is considered a fatal logic error and will result in a panic.
     pub unsafe fn new(state: *mut ffi::lua_State) -> StackGuard {
         StackGuard {
             state,
@@ -179,16 +180,10 @@ pub unsafe fn pop_error(state: *mut ffi::lua_State, err_code: c_int) -> Error {
         if let Some(p) = (*panic).0.take() {
             resume_unwind(p);
         } else {
-            rlua_panic!("panic was resumed twice")
+            rlua_panic!("error during panic handling, panic was resumed twice")
         }
     } else {
-        let err_string = gc_guard(state, || {
-            if let Some(s) = ffi::lua_tostring(state, -1).as_ref() {
-                CStr::from_ptr(s).to_string_lossy().into_owned()
-            } else {
-                "<unprintable error>".to_owned()
-            }
-        });
+        let err_string = to_string(state, -1).into_owned();
         ffi::lua_pop(state, 1);
 
         match err_code {
@@ -202,17 +197,13 @@ pub unsafe fn pop_error(state: *mut ffi::lua_State, err_code: c_int) -> Error {
                 }
             }
             ffi::LUA_ERRERR => {
-                // The Lua manual documents this error wrongly: It is not raised when a message
-                // handler errors, but rather when some specific situations regarding stack
-                // overflow handling occurs. Since it is not very useful do differentiate
-                // between that and "ordinary" runtime errors, we handle them the same way.
+                // This error is raised when the error handler raises an error too many times
+                // recursively, and continuing to trigger the error handler would cause a stack
+                // overflow.  It is not very useful to differentiate between this and "ordinary"
+                // runtime errors, so we handle them the same way.
                 Error::RuntimeError(err_string)
             }
-            ffi::LUA_ERRMEM => {
-                // This should be impossible, as we set the lua allocator to one that aborts
-                // instead of failing.
-                rlua_abort!("impossible Lua allocation error")
-            }
+            ffi::LUA_ERRMEM => Error::MemoryError(err_string),
             ffi::LUA_ERRGCMM => Error::GarbageCollectorError(err_string),
             _ => rlua_panic!("unrecognized lua error code"),
         }
@@ -246,7 +237,9 @@ pub unsafe fn get_userdata<T>(state: *mut ffi::lua_State, index: c_int) -> *mut 
 }
 
 // Pops the userdata off of the top of the stack and returns it to rust, invalidating the lua
-// userdata.
+// userdata and gives it the special "destructed" userdata metatable.  Userdata must not have been
+// previously invalidated, and this method does not check for this.  Uses 1 extra stack space and
+// does not call checkstack
 pub unsafe fn take_userdata<T>(state: *mut ffi::lua_State) -> T {
     // We set the metatable of userdata on __gc to a special table with no __gc method and with
     // metamethods that trigger an error on access.  We do this so that it will not be double
@@ -336,7 +329,8 @@ pub unsafe fn init_userdata_metatable<T>(
 }
 
 pub unsafe extern "C" fn userdata_destructor<T>(state: *mut ffi::lua_State) -> c_int {
-    callback_error(state, || {
+    callback_error(state, |_| {
+        check_stack(state, 1)?;
         take_userdata::<T>(state);
         Ok(0)
     })
@@ -346,24 +340,54 @@ pub unsafe extern "C" fn userdata_destructor<T>(state: *mut ffi::lua_State) -> c
 // returns an error, *or if the given function panics*, this will result in a call to lua_error (a
 // longjmp).  The error or panic is wrapped in such a way that when calling pop_error back on
 // the rust side, it will resume the panic.
+//
+// This function assumes the structure of the stack at the beginning of a callback, that the only
+// elements on the stack are the arguments to the callback.
+//
+// This function uses some of the bottom of the stack for error handling, the given callback will be
+// given the number of arguments available as an argument, and should return the number of returns
+// as normal, but cannot assume that the arguments available start at 0.
 pub unsafe fn callback_error<R, F>(state: *mut ffi::lua_State, f: F) -> R
 where
-    F: FnOnce() -> Result<R>,
+    F: FnOnce(c_int) -> Result<R>,
 {
-    match catch_unwind(AssertUnwindSafe(f)) {
-        Ok(Ok(r)) => r,
+    let nargs = ffi::lua_gettop(state);
+
+    // We need one extra stack space to store preallocated memory, and at least 3 stack spaces
+    // overall for handling error metatables
+    let extra_stack = if nargs < 3 { 3 - nargs } else { 1 };
+    ffi::luaL_checkstack(
+        state,
+        extra_stack,
+        cstr!("not enough stack space for callback error handling"),
+    );
+
+    // We cannot shadow rust errors with Lua ones, we pre-allocate enough memory to store a wrapped
+    // error or panic *before* we proceed.
+    let ud = ffi::lua_newuserdata(
+        state,
+        mem::size_of::<WrappedError>().max(mem::size_of::<WrappedPanic>()),
+    );
+    ffi::lua_rotate(state, 1, 1);
+
+    match catch_unwind(AssertUnwindSafe(|| f(nargs))) {
+        Ok(Ok(r)) => {
+            ffi::lua_rotate(state, 1, -1);
+            ffi::lua_pop(state, 1);
+            r
+        }
         Ok(Err(err)) => {
-            ffi::lua_settop(state, 0);
-            ffi::luaL_checkstack(state, 2, ptr::null());
-            push_wrapped_error(state, err);
+            ffi::lua_settop(state, 1);
+            ptr::write(ud as *mut WrappedError, WrappedError(err));
+            get_error_metatable(state);
+            ffi::lua_setmetatable(state, -2);
             ffi::lua_error(state)
         }
         Err(p) => {
-            ffi::lua_settop(state, 0);
-            if ffi::lua_checkstack(state, 2) == 0 {
-                rlua_abort!("not enough stack space to propagate panic");
-            }
-            push_wrapped_panic(state, p);
+            ffi::lua_settop(state, 1);
+            ptr::write(ud as *mut WrappedPanic, WrappedPanic(Some(p)));
+            get_panic_metatable(state);
+            ffi::lua_setmetatable(state, -2);
             ffi::lua_error(state)
         }
     }
@@ -371,50 +395,48 @@ where
 
 // Takes an error at the top of the stack, and if it is a WrappedError, converts it to an
 // Error::CallbackError with a traceback, if it is some lua type, prints the error along with a
-// traceback, and if it is a WrappedPanic, does not modify it.  This function should never panic or
-// trigger a error (longjmp).
+// traceback, and if it is a WrappedPanic, does not modify it.  This function does its best to avoid
+// triggering another error and shadowing previous rust errors, but it may trigger Lua errors that
+// shadow rust errors under certain memory conditions.  This function ensures that such behavior
+// will *never* occur with a rust panic, however.
 pub unsafe extern "C" fn error_traceback(state: *mut ffi::lua_State) -> c_int {
     // I believe luaL_traceback requires this much free stack to not error.
     const LUA_TRACEBACK_STACK: c_int = 11;
 
     if ffi::lua_checkstack(state, 2) == 0 {
-        // If we don't have enough stack space to even check the error type, do nothing
-    } else if let Some(error) = get_wrapped_error(state, 1).as_ref() {
+        // If we don't have enough stack space to even check the error type, do nothing so we don't
+        // risk shadowing a rust panic.
+    } else if let Some(error) = get_wrapped_error(state, -1).as_ref() {
+        // lua_newuserdata and luaL_traceback may error, but nothing that implements Drop should be
+        // on the rust stack at this time.
+        let ud = ffi::lua_newuserdata(state, mem::size_of::<WrappedError>()) as *mut WrappedError;
         let traceback = if ffi::lua_checkstack(state, LUA_TRACEBACK_STACK) != 0 {
-            gc_guard(state, || {
-                ffi::luaL_traceback(state, state, ptr::null(), 0);
-            });
-            let traceback = CStr::from_ptr(ffi::lua_tostring(state, -1))
-                .to_string_lossy()
-                .into_owned();
+            ffi::luaL_traceback(state, state, ptr::null(), 0);
+
+            let traceback = to_string(state, -1).into_owned();
             ffi::lua_pop(state, 1);
             traceback
         } else {
-            "not enough stack space for traceback".to_owned()
+            "<not enough stack space for traceback>".to_owned()
         };
 
         let error = error.clone();
-        ffi::lua_pop(state, 1);
+        ffi::lua_remove(state, -2);
 
-        push_wrapped_error(
-            state,
-            Error::CallbackError {
+        ptr::write(
+            ud,
+            WrappedError(Error::CallbackError {
                 traceback,
                 cause: Arc::new(error),
-            },
+            }),
         );
-    } else if !is_wrapped_panic(state, 1) {
+        get_error_metatable(state);
+        ffi::lua_setmetatable(state, -2);
+    } else if !is_wrapped_panic(state, -1) {
         if ffi::lua_checkstack(state, LUA_TRACEBACK_STACK) != 0 {
-            gc_guard(state, || {
-                let s = ffi::lua_tostring(state, 1);
-                let s = if s.is_null() {
-                    cstr!("<unprintable lua error>")
-                } else {
-                    s
-                };
-                ffi::luaL_traceback(state, state, s, 0);
-                ffi::lua_remove(state, -2);
-            });
+            let s = ffi::luaL_tolstring(state, -1, ptr::null_mut());
+            ffi::luaL_traceback(state, state, s, 0);
+            ffi::lua_remove(state, -2);
         }
     }
     1
@@ -493,16 +515,16 @@ pub unsafe fn main_state(state: *mut ffi::lua_State) -> *mut ffi::lua_State {
     main_state
 }
 
-// Pushes a WrappedError::Error to the top of the stack.  Uses two stack spaces and does not call
+// Pushes a WrappedError to the top of the stack.  Uses two stack spaces and does not call
 // lua_checkstack.
-pub unsafe fn push_wrapped_error(state: *mut ffi::lua_State, err: Error) {
-    gc_guard(state, || {
-        let ud = ffi::lua_newuserdata(state, mem::size_of::<WrappedError>()) as *mut WrappedError;
-        ptr::write(ud, WrappedError(err))
-    });
-
+pub unsafe fn push_wrapped_error(state: *mut ffi::lua_State, err: Error) -> Result<()> {
+    let ud = protect_lua_closure(state, 0, 1, move |state| {
+        ffi::lua_newuserdata(state, mem::size_of::<WrappedError>()) as *mut WrappedError
+    })?;
+    ptr::write(ud, WrappedError(err));
     get_error_metatable(state);
     ffi::lua_setmetatable(state, -2);
+    Ok(())
 }
 
 // Checks if the value at the given index is a WrappedError, and if it is returns a pointer to it,
@@ -528,49 +550,43 @@ pub unsafe fn get_wrapped_error(state: *mut ffi::lua_State, index: c_int) -> *co
     }
 }
 
-// Runs the given function with the Lua garbage collector disabled.  `rlua` assumes that all
-// allocation failures are aborts, so when the garbage collector is disabled, 'm' functions that can
-// cause either an allocation error or a a `__gc` metamethod error are prevented from causing errors
-// at all.  The given function should never panic or longjmp, because this could inadverntently
-// disable the gc.  This is useful when error handling must allocate, and `__gc` errors at that time
-// would shadow more important errors, or be extremely difficult to handle safely.
-pub unsafe fn gc_guard<R, F: FnOnce() -> R>(state: *mut ffi::lua_State, f: F) -> R {
-    if ffi::lua_gc(state, ffi::LUA_GCISRUNNING, 0) != 0 {
-        ffi::lua_gc(state, ffi::LUA_GCSTOP, 0);
-        let r = f();
-        ffi::lua_gc(state, ffi::LUA_GCRESTART, 0);
-        r
-    } else {
-        f()
-    }
-}
-
 // Initialize the error, panic, and destructed userdata metatables.
-pub unsafe fn init_error_metatables(state: *mut ffi::lua_State) {
+pub unsafe fn init_error_registry(state: *mut ffi::lua_State) {
     assert_stack(state, 8);
 
     // Create error metatable
 
     unsafe extern "C" fn error_tostring(state: *mut ffi::lua_State) -> c_int {
-        ffi::luaL_checkstack(state, 2, ptr::null());
-
-        callback_error(state, || {
+        let err_buf = callback_error(state, |_| {
+            check_stack(state, 3)?;
             if let Some(error) = get_wrapped_error(state, -1).as_ref() {
-                let error_str = error.to_string();
-                gc_guard(state, || {
-                    ffi::lua_pushlstring(
-                        state,
-                        error_str.as_ptr() as *const c_char,
-                        error_str.len(),
-                    )
-                });
-                ffi::lua_remove(state, -2);
+                ffi::lua_pushlightuserdata(
+                    state,
+                    &ERROR_PRINT_BUFFER_KEY as *const u8 as *mut c_void,
+                );
+                ffi::lua_rawget(state, ffi::LUA_REGISTRYINDEX);
+                let err_buf = ffi::lua_touserdata(state, -1) as *mut String;
+                ffi::lua_pop(state, 2);
 
-                Ok(1)
+                (*err_buf).clear();
+                // Depending on how the API is used and what error types scripts are given, it may
+                // be possible to make this consume arbitrary amounts of memory (for example, some
+                // kind of recursive error structure?)
+                let _ = write!(&mut (*err_buf), "{}", error);
+                Ok(err_buf)
             } else {
-                panic!("userdata mismatch in Error metamethod");
+                // I'm not sure whether this is possible to trigger without bugs in rlua?
+                Err(Error::UserDataTypeMismatch)
             }
-        })
+        });
+
+        ffi::lua_pushlstring(
+            state,
+            (*err_buf).as_ptr() as *const c_char,
+            (*err_buf).len(),
+        );
+        (*err_buf).clear();
+        1
     }
 
     ffi::lua_pushlightuserdata(
@@ -615,7 +631,11 @@ pub unsafe fn init_error_metatables(state: *mut ffi::lua_State) {
 
     unsafe extern "C" fn destructed_error(state: *mut ffi::lua_State) -> c_int {
         ffi::luaL_checkstack(state, 2, ptr::null());
-        push_wrapped_error(state, Error::CallbackDestructed);
+        let ud = ffi::lua_newuserdata(state, mem::size_of::<WrappedError>()) as *mut WrappedError;
+
+        ptr::write(ud, WrappedError(Error::CallbackDestructed));
+        get_error_metatable(state);
+        ffi::lua_setmetatable(state, -2);
         ffi::lua_error(state)
     }
 
@@ -658,21 +678,56 @@ pub unsafe fn init_error_metatables(state: *mut ffi::lua_State) {
     }
 
     ffi::lua_rawset(state, ffi::LUA_REGISTRYINDEX);
+
+    // Create error print buffer
+
+    ffi::lua_pushlightuserdata(state, &ERROR_PRINT_BUFFER_KEY as *const u8 as *mut c_void);
+
+    let ud = ffi::lua_newuserdata(state, mem::size_of::<String>()) as *mut String;
+    ptr::write(ud, String::new());
+
+    ffi::lua_newtable(state);
+    ffi::lua_pushstring(state, cstr!("__gc"));
+    ffi::lua_pushcfunction(state, userdata_destructor::<String>);
+    ffi::lua_rawset(state, -3);
+    ffi::lua_setmetatable(state, -2);
+
+    ffi::lua_rawset(state, ffi::LUA_REGISTRYINDEX);
 }
 
 struct WrappedError(pub Error);
 struct WrappedPanic(pub Option<Box<dyn Any + Send>>);
 
-// Pushes a WrappedError::Panic to the top of the stack.  Uses two stack spaces and does not call
-// lua_checkstack.
-unsafe fn push_wrapped_panic(state: *mut ffi::lua_State, panic: Box<dyn Any + Send>) {
-    gc_guard(state, || {
-        let ud = ffi::lua_newuserdata(state, mem::size_of::<WrappedPanic>()) as *mut WrappedPanic;
-        ptr::write(ud, WrappedPanic(Some(panic)))
-    });
-
-    get_panic_metatable(state);
-    ffi::lua_setmetatable(state, -2);
+// Converts the given lua value to a string in a reasonable format without causing a Lua error or
+// panicking.
+unsafe fn to_string<'a>(state: *mut ffi::lua_State, index: c_int) -> Cow<'a, str> {
+    match ffi::lua_type(state, index) {
+        ffi::LUA_TNONE => "<none>".into(),
+        ffi::LUA_TNIL => "<nil>".into(),
+        ffi::LUA_TBOOLEAN => (ffi::lua_toboolean(state, index) != 1).to_string().into(),
+        ffi::LUA_TLIGHTUSERDATA => {
+            format!("<lightuserdata {:?}>", ffi::lua_topointer(state, index)).into()
+        }
+        ffi::LUA_TNUMBER => {
+            let mut isint = 0;
+            let i = ffi::lua_tointegerx(state, -1, &mut isint);
+            if isint == 0 {
+                ffi::lua_tonumber(state, index).to_string().into()
+            } else {
+                i.to_string().into()
+            }
+        }
+        ffi::LUA_TSTRING => {
+            let mut size = 0;
+            let data = ffi::lua_tolstring(state, index, &mut size);
+            String::from_utf8_lossy(slice::from_raw_parts(data as *const u8, size))
+        }
+        ffi::LUA_TTABLE => format!("<table {:?}>", ffi::lua_topointer(state, index)).into(),
+        ffi::LUA_TFUNCTION => format!("<function {:?}>", ffi::lua_topointer(state, index)).into(),
+        ffi::LUA_TUSERDATA => format!("<userdata {:?}>", ffi::lua_topointer(state, index)).into(),
+        ffi::LUA_TTHREAD => format!("<thread {:?}>", ffi::lua_topointer(state, index)).into(),
+        _ => "<unknown>".into(),
+    }
 }
 
 // Checks if the value at the given index is a WrappedPanic.  Uses 2 stack spaces and does not call
@@ -720,3 +775,4 @@ unsafe fn get_destructed_userdata_metatable(state: *mut ffi::lua_State) {
 static ERROR_METATABLE_REGISTRY_KEY: u8 = 0;
 static PANIC_METATABLE_REGISTRY_KEY: u8 = 0;
 static DESTRUCTED_USERDATA_METATABLE: u8 = 0;
+static ERROR_PRINT_BUFFER_KEY: u8 = 0;

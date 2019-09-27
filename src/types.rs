@@ -2,10 +2,10 @@ use std::os::raw::{c_int, c_void};
 use std::sync::{Arc, Mutex};
 use std::{fmt, mem, ptr};
 
-use error::Result;
-use ffi;
-use lua::Lua;
-use value::MultiValue;
+use crate::error::Result;
+use crate::ffi;
+use crate::lua::Lua;
+use crate::value::MultiValue;
 
 /// Type of Lua integer numbers.
 pub type Integer = ffi::lua_Integer;
@@ -52,7 +52,7 @@ impl fmt::Debug for RegistryKey {
 
 impl Drop for RegistryKey {
     fn drop(&mut self) {
-        if let Some(list) = self.unref_list.lock().unwrap().as_mut() {
+        if let Some(list) = rlua_expect!(self.unref_list.lock(), "unref_list poisoned").as_mut() {
             list.push(self.registry_id);
         }
     }

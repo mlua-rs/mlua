@@ -2,9 +2,9 @@ use std::iter::FromIterator;
 use std::ops::{Deref, DerefMut};
 use std::result::Result as StdResult;
 
-use error::Result;
-use lua::Lua;
-use value::{FromLua, FromLuaMulti, MultiValue, Nil, ToLua, ToLuaMulti};
+use crate::error::Result;
+use crate::lua::Lua;
+use crate::value::{FromLua, FromLuaMulti, MultiValue, Nil, ToLua, ToLuaMulti};
 
 /// Result is convertible to `MultiValue` following the common Lua idiom of returning the result
 /// on success, or in the case of an error, returning `nil` and an error message.
@@ -62,20 +62,15 @@ impl<'lua> FromLuaMulti<'lua> for MultiValue<'lua> {
 /// # Examples
 ///
 /// ```
-/// # extern crate rlua;
 /// # use rlua::{Lua, Variadic, Result};
-/// # fn try_main() -> Result<()> {
+/// # fn main() -> Result<()> {
 /// let lua = Lua::new();
-///
 /// let add = lua.create_function(|_, vals: Variadic<f64>| -> Result<f64> {
 ///     Ok(vals.iter().sum())
 /// }).unwrap();
 /// lua.globals().set("add", add)?;
-/// assert_eq!(lua.eval::<_, f64>("add(3, 2, 5)", None)?, 10.0);
+/// assert_eq!(lua.load("add(3, 2, 5)").eval::<f32>()?, 10.0);
 /// # Ok(())
-/// # }
-/// # fn main() {
-/// #     try_main().unwrap();
 /// # }
 /// ```
 ///
@@ -88,6 +83,12 @@ impl<T> Variadic<T> {
     /// Creates an empty `Variadic` wrapper containing no values.
     pub fn new() -> Variadic<T> {
         Variadic(Vec::new())
+    }
+}
+
+impl<T> Default for Variadic<T> {
+    fn default() -> Variadic<T> {
+        Variadic::new()
     }
 }
 

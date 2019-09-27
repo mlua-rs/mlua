@@ -1,9 +1,9 @@
 use std::{slice, str};
 
-use error::{Error, Result};
-use ffi;
-use types::LuaRef;
-use util::{assert_stack, StackGuard};
+use crate::error::{Error, Result};
+use crate::ffi;
+use crate::types::LuaRef;
+use crate::util::{assert_stack, StackGuard};
 
 /// Handle to an internal Lua string.
 ///
@@ -17,21 +17,17 @@ impl<'lua> String<'lua> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate rlua;
     /// # use rlua::{Lua, String, Result};
-    /// # fn try_main() -> Result<()> {
+    /// # fn main() -> Result<()> {
     /// let lua = Lua::new();
     /// let globals = lua.globals();
     ///
     /// let version: String = globals.get("_VERSION")?;
     /// assert!(version.to_str().unwrap().contains("Lua"));
     ///
-    /// let non_utf8: String = lua.eval(r#"  "test\xff"  "#, None)?;
+    /// let non_utf8: String = lua.load(r#"  "test\xff"  "#).eval()?;
     /// assert!(non_utf8.to_str().is_err());
     /// # Ok(())
-    /// # }
-    /// # fn main() {
-    /// #     try_main().unwrap();
     /// # }
     /// ```
     pub fn to_str(&self) -> Result<&str> {
@@ -50,14 +46,13 @@ impl<'lua> String<'lua> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate rlua;
-    /// # use rlua::{Lua, String};
-    /// # fn main() {
+    /// # use rlua::{Lua, String, Result};
+    /// # fn main() -> Result<()> {
     /// let lua = Lua::new();
-    ///
-    /// let non_utf8: String = lua.eval(r#"  "test\xff"  "#, None).unwrap();
+    /// let non_utf8: String = lua.load(r#"  "test\xff"  "#).eval()?;
     /// assert!(non_utf8.to_str().is_err());    // oh no :(
     /// assert_eq!(non_utf8.as_bytes(), &b"test\xff"[..]);
+    /// # Ok(())
     /// # }
     /// ```
     pub fn as_bytes(&self) -> &[u8] {

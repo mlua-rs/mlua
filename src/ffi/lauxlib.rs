@@ -23,10 +23,10 @@
 //! Contains definitions from `lauxlib.h`.
 
 use libc::{c_int, c_long, c_char, c_void, size_t};
-use ffi::lua;
-use ffi::lua::{lua_State, lua_CFunction, lua_Integer, lua_Number};
-use ffi::luaconf::LUAL_BUFFERSIZE;
 use std::ptr;
+
+use super::lua::{self, lua_State, lua_CFunction, lua_Integer, lua_Number};
+use super::luaconf::LUAL_BUFFERSIZE;
 
 pub use super::glue::LUAL_NUMSIZES;
 pub use super::glue::LUA_FILEHANDLE;

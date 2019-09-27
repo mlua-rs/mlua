@@ -1,11 +1,11 @@
 use std::marker::PhantomData;
 use std::os::raw::c_int;
 
-use error::Result;
-use ffi;
-use types::{Integer, LuaRef};
-use util::{assert_stack, protect_lua, protect_lua_closure, StackGuard};
-use value::{FromLua, Nil, ToLua, Value};
+use crate::error::Result;
+use crate::ffi;
+use crate::types::{Integer, LuaRef};
+use crate::util::{assert_stack, protect_lua, protect_lua_closure, StackGuard};
+use crate::value::{FromLua, Nil, ToLua, Value};
 
 /// Handle to an internal Lua table.
 #[derive(Clone, Debug)]
@@ -24,9 +24,8 @@ impl<'lua> Table<'lua> {
     /// Export a value as a global to make it usable from Lua:
     ///
     /// ```
-    /// # extern crate rlua;
     /// # use rlua::{Lua, Result};
-    /// # fn try_main() -> Result<()> {
+    /// # fn main() -> Result<()> {
     /// let lua = Lua::new();
     /// let globals = lua.globals();
     ///
@@ -43,9 +42,6 @@ impl<'lua> Table<'lua> {
     /// "#, None)?;
     /// # Ok(())
     /// # }
-    /// # fn main() {
-    /// #     try_main().unwrap();
-    /// # }
     /// ```
     ///
     /// [`raw_set`]: #method.raw_set
@@ -58,8 +54,8 @@ impl<'lua> Table<'lua> {
             assert_stack(lua.state, 6);
 
             lua.push_ref(&self.0);
-            lua.push_value(key);
-            lua.push_value(value);
+            lua.push_value(key)?;
+            lua.push_value(value)?;
 
             unsafe extern "C" fn set_table(state: *mut ffi::lua_State) -> c_int {
                 ffi::lua_settable(state, -3);
@@ -81,18 +77,14 @@ impl<'lua> Table<'lua> {
     /// Query the version of the Lua interpreter:
     ///
     /// ```
-    /// # extern crate rlua;
     /// # use rlua::{Lua, Result};
-    /// # fn try_main() -> Result<()> {
+    /// # fn main() -> Result<()> {
     /// let lua = Lua::new();
     /// let globals = lua.globals();
     ///
     /// let version: String = globals.get("_VERSION")?;
     /// println!("Lua version: {}", version);
     /// # Ok(())
-    /// # }
-    /// # fn main() {
-    /// #     try_main().unwrap();
     /// # }
     /// ```
     ///
@@ -105,7 +97,7 @@ impl<'lua> Table<'lua> {
             assert_stack(lua.state, 5);
 
             lua.push_ref(&self.0);
-            lua.push_value(key);
+            lua.push_value(key)?;
 
             unsafe extern "C" fn get_table(state: *mut ffi::lua_State) -> c_int {
                 ffi::lua_gettable(state, -2);
@@ -127,7 +119,7 @@ impl<'lua> Table<'lua> {
             assert_stack(lua.state, 5);
 
             lua.push_ref(&self.0);
-            lua.push_value(key);
+            lua.push_value(key)?;
 
             unsafe extern "C" fn get_table(state: *mut ffi::lua_State) -> c_int {
                 ffi::lua_gettable(state, -2);
@@ -151,8 +143,8 @@ impl<'lua> Table<'lua> {
             assert_stack(lua.state, 6);
 
             lua.push_ref(&self.0);
-            lua.push_value(key);
-            lua.push_value(value);
+            lua.push_value(key)?;
+            lua.push_value(value)?;
 
             unsafe extern "C" fn raw_set(state: *mut ffi::lua_State) -> c_int {
                 ffi::lua_rawset(state, -3);
@@ -173,7 +165,7 @@ impl<'lua> Table<'lua> {
             assert_stack(lua.state, 3);
 
             lua.push_ref(&self.0);
-            lua.push_value(key);
+            lua.push_value(key)?;
             ffi::lua_rawget(lua.state, -2);
             lua.pop_value()
         };
@@ -261,9 +253,8 @@ impl<'lua> Table<'lua> {
     /// Iterate over all globals:
     ///
     /// ```
-    /// # extern crate rlua;
     /// # use rlua::{Lua, Result, Value};
-    /// # fn try_main() -> Result<()> {
+    /// # fn main() -> Result<()> {
     /// let lua = Lua::new();
     /// let globals = lua.globals();
     ///
@@ -273,9 +264,6 @@ impl<'lua> Table<'lua> {
     ///     // ...
     /// }
     /// # Ok(())
-    /// # }
-    /// # fn main() {
-    /// #     try_main().unwrap();
     /// # }
     /// ```
     ///
@@ -307,20 +295,23 @@ impl<'lua> Table<'lua> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate rlua;
     /// # use rlua::{Lua, Result, Table};
-    /// # fn try_main() -> Result<()> {
+    /// # fn main() -> Result<()> {
     /// let lua = Lua::new();
-    /// let my_table: Table = lua.eval("{ [1] = 4, [2] = 5, [4] = 7, key = 2 }", None)?;
+    /// let my_table: Table = lua.load(r#"
+    ///     {
+    ///         [1] = 4,
+    ///         [2] = 5,
+    ///         [4] = 7,
+    ///         key = 2
+    ///     }
+    /// "#).eval()?;
     ///
     /// let expected = [4, 5];
     /// for (&expected, got) in expected.iter().zip(my_table.sequence_values::<u32>()) {
     ///     assert_eq!(expected, got?);
     /// }
     /// # Ok(())
-    /// # }
-    /// # fn main() {
-    /// #     try_main().unwrap();
     /// # }
     /// ```
     ///
@@ -364,7 +355,7 @@ where
                     assert_stack(lua.state, 6);
 
                     lua.push_ref(&self.table);
-                    lua.push_value(next_key);
+                    lua.push_value(next_key)?;
 
                     if protect_lua_closure(lua.state, 2, ffi::LUA_MULTRET, |state| {
                         ffi::lua_next(state, -2) != 0

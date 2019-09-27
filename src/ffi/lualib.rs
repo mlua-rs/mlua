@@ -22,8 +22,9 @@
 
 //! Contains definitions from `lualib.h`.
 
-use ffi::lua::lua_State;
 use libc::c_int;
+
+use super::lua::lua_State;
 
 pub use super::glue::{
   LUA_COLIBNAME, LUA_TABLIBNAME, LUA_IOLIBNAME, LUA_OSLIBNAME, LUA_STRLIBNAME,

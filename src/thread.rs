@@ -1,10 +1,12 @@
 use std::os::raw::c_int;
 
-use error::{Error, Result};
-use ffi;
-use types::LuaRef;
-use util::{assert_stack, check_stack, error_traceback, pop_error, StackGuard};
-use value::{FromLuaMulti, MultiValue, ToLuaMulti};
+use crate::error::{Error, Result};
+use crate::ffi;
+use crate::types::LuaRef;
+use crate::util::{
+    assert_stack, check_stack, error_traceback, pop_error, protect_lua_closure, StackGuard,
+};
+use crate::value::{FromLuaMulti, MultiValue, ToLuaMulti};
 
 /// Status of a Lua thread (or coroutine).
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
@@ -44,9 +46,8 @@ impl<'lua> Thread<'lua> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate rlua;
-    /// # use rlua::{Lua, Thread, Error, Result};
-    /// # fn try_main() -> Result<()> {
+    /// # use rlua::{Lua, Thread, Error};
+    /// # fn main() -> Result<()> {
     /// let lua = Lua::new();
     /// let thread: Thread = lua.eval(r#"
     ///     coroutine.create(function(arg)
@@ -65,10 +66,6 @@ impl<'lua> Thread<'lua> {
     ///     Err(Error::CoroutineInactive) => {},
     ///     unexpected => panic!("unexpected result {:?}", unexpected),
     /// }
-    /// # Ok(())
-    /// # }
-    /// # fn main() {
-    /// #     try_main().unwrap();
     /// # }
     /// ```
     pub fn resume<A, R>(&self, args: A) -> Result<R>
@@ -80,7 +77,7 @@ impl<'lua> Thread<'lua> {
         let args = args.to_lua_multi(lua)?;
         let results = unsafe {
             let _sg = StackGuard::new(lua.state);
-            assert_stack(lua.state, 1);
+            assert_stack(lua.state, 3);
 
             lua.push_ref(&self.0);
             let thread_state = ffi::lua_tothread(lua.state, -1);
@@ -97,13 +94,16 @@ impl<'lua> Thread<'lua> {
             check_stack(thread_state, nargs + 1)?;
 
             for arg in args {
-                lua.push_value(arg);
+                lua.push_value(arg)?;
             }
             ffi::lua_xmove(lua.state, thread_state, nargs);
 
             let ret = ffi::lua_resume(thread_state, lua.state, nargs);
             if ret != ffi::LUA_OK && ret != ffi::LUA_YIELD {
-                error_traceback(thread_state);
+                protect_lua_closure(lua.state, 0, 0, |_| {
+                    error_traceback(thread_state);
+                    0
+                })?;
                 return Err(pop_error(thread_state, ret));
             }
 

@@ -1,18 +1,20 @@
 use std::collections::{BTreeMap, HashMap};
+use std::ffi::{CStr, CString};
 use std::hash::{BuildHasher, Hash};
 use std::string::String as StdString;
 
+use bstr::{BStr, BString};
 use num_traits::cast;
 
-use error::{Error, Result};
-use function::Function;
-use lua::Lua;
-use string::String;
-use table::Table;
-use thread::Thread;
-use types::{LightUserData, Number};
-use userdata::{AnyUserData, UserData};
-use value::{FromLua, Nil, ToLua, Value};
+use crate::error::{Error, Result};
+use crate::function::Function;
+use crate::lua::Lua;
+use crate::string::String;
+use crate::table::Table;
+use crate::thread::Thread;
+use crate::types::{LightUserData, Number};
+use crate::userdata::{AnyUserData, UserData};
+use crate::value::{FromLua, Nil, ToLua, Value};
 
 impl<'lua> ToLua<'lua> for Value<'lua> {
     fn to_lua(self, _: &'lua Lua) -> Result<Value<'lua>> {
@@ -35,7 +37,7 @@ impl<'lua> ToLua<'lua> for String<'lua> {
 impl<'lua> FromLua<'lua> for String<'lua> {
     fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> Result<String<'lua>> {
         let ty = value.type_name();
-        lua.coerce_string(value)
+        lua.coerce_string(value)?
             .ok_or_else(|| Error::FromLuaConversionError {
                 from: ty,
                 to: "String",
@@ -150,7 +152,7 @@ impl<'lua> FromLua<'lua> for Error {
         match value {
             Value::Error(err) => Ok(err),
             val => Ok(Error::RuntimeError(
-                lua.coerce_string(val)
+                lua.coerce_string(val)?
                     .and_then(|s| Some(s.to_str().ok()?.to_owned()))
                     .unwrap_or_else(|| "<unprintable error>".to_owned()),
             )),
@@ -203,12 +205,13 @@ impl<'lua> FromLua<'lua> for StdString {
     fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> Result<Self> {
         let ty = value.type_name();
         Ok(lua
-            .coerce_string(value)
+            .coerce_string(value)?
             .ok_or_else(|| Error::FromLuaConversionError {
                 from: ty,
                 to: "String",
                 message: Some("expected string or number".to_string()),
-            })?.to_str()?
+            })?
+            .to_str()?
             .to_owned())
     }
 }
@@ -216,6 +219,68 @@ impl<'lua> FromLua<'lua> for StdString {
 impl<'lua, 'a> ToLua<'lua> for &'a str {
     fn to_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
         Ok(Value::String(lua.create_string(self)?))
+    }
+}
+
+impl<'lua> ToLua<'lua> for CString {
+    fn to_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
+        Ok(Value::String(lua.create_string(self.as_bytes())?))
+    }
+}
+
+impl<'lua> FromLua<'lua> for CString {
+    fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> Result<Self> {
+        let ty = value.type_name();
+        let string = lua
+            .coerce_string(value)?
+            .ok_or_else(|| Error::FromLuaConversionError {
+                from: ty,
+                to: "CString",
+                message: Some("expected string or number".to_string()),
+            })?;
+
+        match CStr::from_bytes_with_nul(string.as_bytes_with_nul()) {
+            Ok(s) => Ok(s.into()),
+            Err(_) => Err(Error::FromLuaConversionError {
+                from: ty,
+                to: "CString",
+                message: Some("invalid C-style string".to_string()),
+            }),
+        }
+    }
+}
+
+impl<'lua, 'a> ToLua<'lua> for &'a CStr {
+    fn to_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
+        Ok(Value::String(lua.create_string(self.to_bytes())?))
+    }
+}
+
+impl<'lua, 'a> ToLua<'lua> for BString {
+    fn to_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
+        Ok(Value::String(lua.create_string(&self)?))
+    }
+}
+
+impl<'lua> FromLua<'lua> for BString {
+    fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> Result<Self> {
+        let ty = value.type_name();
+        Ok(BString::from(
+            lua.coerce_string(value)?
+                .ok_or_else(|| Error::FromLuaConversionError {
+                    from: ty,
+                    to: "String",
+                    message: Some("expected string or number".to_string()),
+                })?
+                .as_bytes()
+                .to_vec(),
+        ))
+    }
+}
+
+impl<'lua, 'a> ToLua<'lua> for &BStr {
+    fn to_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
+        Ok(Value::String(lua.create_string(&self)?))
     }
 }
 
@@ -231,7 +296,8 @@ macro_rules! lua_convert_int {
                             from: stringify!($x),
                             to: "number",
                             message: Some("out of range".to_owned()),
-                        }).map(Value::Number)
+                        })
+                        .map(Value::Number)
                 }
             }
         }
@@ -239,20 +305,20 @@ macro_rules! lua_convert_int {
         impl<'lua> FromLua<'lua> for $x {
             fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> Result<Self> {
                 let ty = value.type_name();
-                (if let Some(i) = lua.coerce_integer(value.clone()) {
+                (if let Some(i) = lua.coerce_integer(value.clone())? {
                     cast(i)
                 } else {
-                    cast(
-                        lua.coerce_number(value)
-                            .ok_or_else(|| Error::FromLuaConversionError {
-                                from: ty,
-                                to: stringify!($x),
-                                message: Some(
-                                    "expected number or string coercible to number".to_string(),
-                                ),
-                            })?,
-                    )
-                }).ok_or_else(|| Error::FromLuaConversionError {
+                    cast(lua.coerce_number(value)?.ok_or_else(|| {
+                        Error::FromLuaConversionError {
+                            from: ty,
+                            to: stringify!($x),
+                            message: Some(
+                                "expected number or string coercible to number".to_string(),
+                            ),
+                        }
+                    })?)
+                })
+                .ok_or_else(|| Error::FromLuaConversionError {
                     from: ty,
                     to: stringify!($x),
                     message: Some("out of range".to_owned()),
@@ -286,12 +352,13 @@ macro_rules! lua_convert_float {
         impl<'lua> FromLua<'lua> for $x {
             fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> Result<Self> {
                 let ty = value.type_name();
-                lua.coerce_number(value)
+                lua.coerce_number(value)?
                     .ok_or_else(|| Error::FromLuaConversionError {
                         from: ty,
                         to: stringify!($x),
                         message: Some("expected number or string coercible to number".to_string()),
-                    }).and_then(|n| {
+                    })
+                    .and_then(|n| {
                         cast(n).ok_or_else(|| Error::FromLuaConversionError {
                             from: ty,
                             to: stringify!($x),

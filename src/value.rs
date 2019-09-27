@@ -1,14 +1,14 @@
 use std::iter::{self, FromIterator};
 use std::{slice, str, vec};
 
-use error::{Error, Result};
-use function::Function;
-use lua::Lua;
-use string::String;
-use table::Table;
-use thread::Thread;
-use types::{Integer, LightUserData, Number};
-use userdata::AnyUserData;
+use crate::error::{Error, Result};
+use crate::function::Function;
+use crate::lua::Lua;
+use crate::string::String;
+use crate::table::Table;
+use crate::thread::Thread;
+use crate::types::{Integer, LightUserData, Number};
+use crate::userdata::AnyUserData;
 
 /// A dynamically typed Lua value.  The `String`, `Table`, `Function`, `Thread`, and `UserData`
 /// variants contain handle types into the internal Lua state.  It is a logic error to mix handle
@@ -86,6 +86,12 @@ impl<'lua> MultiValue<'lua> {
     }
 }
 
+impl<'lua> Default for MultiValue<'lua> {
+    fn default() -> MultiValue<'lua> {
+        MultiValue::new()
+    }
+}
+
 impl<'lua> FromIterator<Value<'lua>> for MultiValue<'lua> {
     fn from_iter<I: IntoIterator<Item = Value<'lua>>>(iter: I) -> Self {
         MultiValue::from_vec(Vec::from_iter(iter))
@@ -136,6 +142,10 @@ impl<'lua> MultiValue<'lua> {
 
     pub fn len(&self) -> usize {
         self.0.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.len() == 0
     }
 
     pub fn iter(&self) -> iter::Rev<slice::Iter<Value<'lua>>> {

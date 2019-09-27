@@ -23,8 +23,9 @@
 //! Contains definitions from `lua.h`.
 
 use libc::{c_void, c_int, c_char, c_uchar, size_t};
-use ffi::luaconf;
 use std::ptr;
+
+use super::luaconf;
 
 pub use super::glue::{LUA_VERSION_MAJOR, LUA_VERSION_MINOR, LUA_VERSION_NUM, LUA_VERSION_RELEASE};
 pub use super::glue::{LUA_VERSION, LUA_RELEASE, LUA_COPYRIGHT, LUA_AUTHORS};
