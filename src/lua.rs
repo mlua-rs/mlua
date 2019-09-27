@@ -18,10 +18,9 @@ use crate::types::{Callback, Integer, LightUserData, LuaRef, Number, RegistryKey
 use crate::userdata::{AnyUserData, MetaMethod, UserData, UserDataMethods};
 use crate::util::{
     assert_stack, callback_error, check_stack, get_userdata, get_wrapped_error,
-    init_error_registry, init_userdata_metatable, main_state, pop_error,
-    protect_lua, protect_lua_closure, safe_pcall, safe_xpcall,
-    push_string, push_userdata, push_wrapped_error, StackGuard,
-    userdata_destructor,
+    init_error_registry, init_userdata_metatable, main_state, pop_error, protect_lua,
+    protect_lua_closure, push_string, push_userdata, push_wrapped_error, safe_pcall, safe_xpcall,
+    userdata_destructor, StackGuard,
 };
 use crate::value::{FromLua, FromLuaMulti, MultiValue, Nil, ToLua, ToLuaMulti, Value};
 
@@ -101,7 +100,10 @@ impl Lua {
             ref_free: Vec::new(),
         }));
 
-        rlua_debug_assert!(ffi::lua_gettop(state) == state_top, "stack leak during creation");
+        rlua_debug_assert!(
+            ffi::lua_gettop(state) == state_top,
+            "stack leak during creation"
+        );
         assert_stack(state, ffi::LUA_MINSTACK);
 
         // Place pointer to ExtraData in the lua_State "extra space"
@@ -207,7 +209,7 @@ impl Lua {
         &'lua self,
         source: &[u8],
         name: Option<&CString>,
-        env: Option<Value<'lua>>
+        env: Option<Value<'lua>>,
     ) -> Result<Function<'lua>> {
         unsafe {
             let _sg = StackGuard::new(self.state);
@@ -564,11 +566,7 @@ impl Lua {
     ///
     /// This value will be available to rust from all `Lua` instances which share the same main
     /// state.
-    pub fn set_named_registry_value<'lua, S, T>(
-        &'lua self,
-        name: &S,
-        t: T,
-    ) -> Result<()>
+    pub fn set_named_registry_value<'lua, S, T>(&'lua self, name: &S, t: T) -> Result<()>
     where
         S: ?Sized + AsRef<[u8]>,
         T: ToLua<'lua>,
@@ -957,7 +955,7 @@ impl Lua {
     ) -> Result<Function<'lua>> {
         unsafe extern "C" fn call_callback(state: *mut ffi::lua_State) -> c_int {
             callback_error(state, |nargs| {
-               if ffi::lua_type(state, ffi::lua_upvalueindex(1)) == ffi::LUA_TNIL {
+                if ffi::lua_type(state, ffi::lua_upvalueindex(1)) == ffi::LUA_TNIL {
                     return Err(Error::CallbackDestructed);
                 }
 
@@ -1109,7 +1107,8 @@ impl<'lua, 'a> Chunk<'lua, 'a> {
         let mut expression_source = b"return ".to_vec();
         expression_source.extend(self.source);
         if let Ok(function) =
-            self.lua.load_chunk(&expression_source, self.name.as_ref(), self.env.clone())
+            self.lua
+                .load_chunk(&expression_source, self.name.as_ref(), self.env.clone())
         {
             function.call(())
         } else {
@@ -1128,7 +1127,8 @@ impl<'lua, 'a> Chunk<'lua, 'a> {
     ///
     /// This simply compiles the chunk without actually executing it.
     pub fn into_function(self) -> Result<Function<'lua>> {
-        self.lua.load_chunk(self.source, self.name.as_ref(), self.env)
+        self.lua
+            .load_chunk(self.source, self.name.as_ref(), self.env)
     }
 }
 

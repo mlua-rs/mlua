@@ -23,12 +23,12 @@
 //! Contains definitions from `luaconf.h`.
 
 pub use super::glue::LUAL_BUFFERSIZE;
-pub use super::glue::LUA_NUMBER;
 pub use super::glue::LUA_INTEGER;
+pub use super::glue::LUA_NUMBER;
 pub use super::glue::LUA_UNSIGNED;
 
-pub use super::glue::{LUA_IDSIZE};
-pub use super::glue::{LUA_MININTEGER, LUA_MAXINTEGER};
+pub use super::glue::LUA_IDSIZE;
+pub use super::glue::{LUA_MAXINTEGER, LUA_MININTEGER};
 
 pub use super::glue::LUAI_MAXSTACK;
 pub use super::glue::LUAL_NUMSIZES;
@@ -39,11 +39,10 @@ use libc::c_int;
 
 #[inline(always)]
 pub unsafe fn lua_numtointeger(n: LUA_NUMBER, p: *mut LUA_INTEGER) -> c_int {
-  if n >= (LUA_MININTEGER as LUA_NUMBER) && n < -(LUA_MININTEGER as LUA_NUMBER) {
-    *p = n as LUA_INTEGER;
-    1
-  } else {
-    0
-  }
+    if n >= (LUA_MININTEGER as LUA_NUMBER) && n < -(LUA_MININTEGER as LUA_NUMBER) {
+        *p = n as LUA_INTEGER;
+        1
+    } else {
+        0
+    }
 }
-

@@ -1,15 +1,15 @@
 use std::any::Any;
+use std::cell::Cell;
 use std::cell::RefCell;
 use std::marker::PhantomData;
 use std::mem;
 use std::os::raw::c_void;
 use std::rc::Rc;
-use std::cell::Cell;
 
 use crate::error::{Error, Result};
-use crate::lua::Lua;
 use crate::ffi;
 use crate::function::Function;
+use crate::lua::Lua;
 use crate::types::{Callback, LuaRef};
 use crate::userdata::{AnyUserData, MetaMethod, UserData, UserDataMethods};
 use crate::util::{

@@ -16,7 +16,8 @@ fn scope_func() {
             .create_function(move |_, ()| {
                 r.set(42);
                 Ok(())
-            }).unwrap();
+            })
+            .unwrap();
         lua.globals().set("bad", f.clone()).unwrap();
         f.call::<_, ()>(()).unwrap();
         assert_eq!(Rc::strong_count(&rc), 2);
@@ -55,7 +56,8 @@ fn scope_drop() {
                 scope
                     .create_static_userdata(MyUserdata(rc.clone()))
                     .unwrap(),
-            ).unwrap();
+            )
+            .unwrap();
         assert_eq!(Rc::strong_count(&rc), 2);
     });
     assert_eq!(Rc::strong_count(&rc), 1);
@@ -76,7 +78,8 @@ fn scope_capture() {
             .create_function_mut(|_, ()| {
                 i = 42;
                 Ok(())
-            }).unwrap()
+            })
+            .unwrap()
             .call::<_, ()>(())
             .unwrap();
     });
@@ -92,7 +95,8 @@ fn outer_lua_access() {
             .create_function_mut(|_, ()| {
                 table.set("a", "b").unwrap();
                 Ok(())
-            }).unwrap()
+            })
+            .unwrap()
             .call::<_, ()>(())
             .unwrap();
     });
@@ -132,7 +136,8 @@ fn scope_userdata_methods() {
                     end
                 "#,
                 None,
-            ).unwrap();
+            )
+            .unwrap();
 
         f.call::<_, ()>(scope.create_nonstatic_userdata(MyUserData(&i)).unwrap())
             .unwrap();
@@ -172,7 +177,8 @@ fn scope_userdata_functions() {
                 end
             "#,
             None,
-        ).unwrap();
+        )
+        .unwrap();
 
     let dummy = 0;
     lua.scope(|scope| {
@@ -209,7 +215,8 @@ fn scope_userdata_mismatch() {
             end
         "#,
         None,
-    ).unwrap();
+    )
+    .unwrap();
 
     let a = Cell::new(1);
     let b = Cell::new(1);

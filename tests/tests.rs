@@ -44,7 +44,8 @@ fn test_exec() {
             res = 'foo'..'bar'
         "#,
         None,
-    ).unwrap();
+    )
+    .unwrap();
     assert_eq!(globals.get::<_, String>("res").unwrap(), "foobar");
 
     let module: Table = lua
@@ -59,7 +60,8 @@ fn test_exec() {
             return module
         "#,
             None,
-        ).unwrap();
+        )
+        .unwrap();
     assert!(module.contains_key("func").unwrap());
     assert_eq!(
         module
@@ -104,7 +106,8 @@ fn test_lua_multi() {
             end
         "#,
         None,
-    ).unwrap();
+    )
+    .unwrap();
 
     let concat = globals.get::<_, Function>("concat").unwrap();
     let mreturn = globals.get::<_, Function>("mreturn").unwrap();
@@ -128,7 +131,8 @@ fn test_coercion() {
             num = 123.0
         "#,
         None,
-    ).unwrap();
+    )
+    .unwrap();
 
     assert_eq!(globals.get::<_, String>("int").unwrap(), "123");
     assert_eq!(globals.get::<_, i32>("str").unwrap(), 123);
@@ -209,7 +213,8 @@ fn test_error() {
             end
         "#,
         None,
-    ).unwrap();
+    )
+    .unwrap();
 
     let rust_error_function = lua
         .create_function(|_, ()| -> Result<()> { Err(TestError.to_lua_err()) })
@@ -329,7 +334,8 @@ fn test_result_conversions() {
             Ok(Err::<String, _>(
                 err_msg("only through failure can we succeed").to_lua_err(),
             ))
-        }).unwrap();
+        })
+        .unwrap();
     let ok = lua
         .create_function(|_, ()| Ok(Ok::<_, Error>("!".to_owned())))
         .unwrap();
@@ -348,7 +354,8 @@ fn test_result_conversions() {
             assert(e == nil)
         "#,
         None,
-    ).unwrap();
+    )
+    .unwrap();
 }
 
 #[test]
@@ -443,7 +450,8 @@ fn test_pcall_xpcall() {
             xpcall_status, _ = xpcall(error, function(err) xpcall_error = err end, "testerror")
         "#,
         None,
-    ).unwrap();
+    )
+    .unwrap();
 
     assert_eq!(globals.get::<_, bool>("pcall_status").unwrap(), false);
     assert_eq!(
@@ -465,7 +473,8 @@ fn test_pcall_xpcall() {
             end
         "#,
         None,
-    ).unwrap();
+    )
+    .unwrap();
     let _ = globals
         .get::<_, Function>("xpcall_recursion")
         .unwrap()
@@ -521,7 +530,8 @@ fn test_set_metatable_nil() {
         setmetatable(a, nil)
     "#,
         None,
-    ).unwrap();
+    )
+    .unwrap();
 }
 
 #[test]
@@ -556,7 +566,8 @@ fn test_named_registry_value() {
         .create_function(move |lua, ()| {
             assert_eq!(lua.named_registry_value::<i32>("test")?, 42);
             Ok(())
-        }).unwrap();
+        })
+        .unwrap();
 
     f.call::<_, ()>(()).unwrap();
 
@@ -581,7 +592,8 @@ fn test_registry_value() {
                 panic!();
             }
             Ok(())
-        }).unwrap();
+        })
+        .unwrap();
 
     f.call::<_, ()>(()).unwrap();
 }
@@ -660,13 +672,12 @@ fn too_many_arguments() {
     let lua = Lua::new();
     lua.exec::<_, ()>("function test(...) end", None).unwrap();
     let args = Variadic::from_iter(1..1000000);
-    assert!(
-        lua.globals()
-            .get::<_, Function>("test")
-            .unwrap()
-            .call::<_, ()>(args)
-            .is_err()
-    );
+    assert!(lua
+        .globals()
+        .get::<_, Function>("test")
+        .unwrap()
+        .call::<_, ()>(args)
+        .is_err());
 }
 
 #[test]
@@ -678,13 +689,12 @@ fn too_many_recursions() {
         .unwrap();
     lua.globals().set("f", f).unwrap();
 
-    assert!(
-        lua.globals()
-            .get::<_, Function>("f")
-            .unwrap()
-            .call::<_, ()>(())
-            .is_err()
-    );
+    assert!(lua
+        .globals()
+        .get::<_, Function>("f")
+        .unwrap()
+        .call::<_, ()>(())
+        .is_err());
 }
 
 #[test]
@@ -697,15 +707,14 @@ fn too_many_binds() {
             end
         "#,
         None,
-    ).unwrap();
+    )
+    .unwrap();
 
     let concat = globals.get::<_, Function>("f").unwrap();
     assert!(concat.bind(Variadic::from_iter(1..1000000)).is_err());
-    assert!(
-        concat
-            .call::<_, ()>(Variadic::from_iter(1..1000000))
-            .is_err()
-    );
+    assert!(concat
+        .call::<_, ()>(Variadic::from_iter(1..1000000))
+        .is_err());
 }
 
 #[test]
@@ -723,8 +732,10 @@ fn large_args() {
                     assert_eq!(i, args[i]);
                 }
                 Ok(s)
-            }).unwrap(),
-        ).unwrap();
+            })
+            .unwrap(),
+        )
+        .unwrap();
 
     let f: Function = lua
         .eval(
@@ -734,7 +745,8 @@ fn large_args() {
             end
         "#,
             None,
-        ).unwrap();
+        )
+        .unwrap();
 
     assert_eq!(
         f.call::<_, usize>((0..100).collect::<Variadic<usize>>())
@@ -753,7 +765,8 @@ fn large_args_ref() {
                 assert_eq!(args[i], i.to_string());
             }
             Ok(())
-        }).unwrap();
+        })
+        .unwrap();
 
     f.call::<_, ()>((0..100).map(|i| i.to_string()).collect::<Variadic<_>>())
         .unwrap();

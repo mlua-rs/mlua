@@ -34,7 +34,8 @@ fn test_table() {
                 table3 = {1, 2, nil, 4, 5}
             "#,
         None,
-    ).unwrap();
+    )
+    .unwrap();
 
     let table1 = globals.get::<_, Table>("table1").unwrap();
     let table2 = globals.get::<_, Table>("table2").unwrap();
@@ -88,7 +89,8 @@ fn test_table() {
         .set(
             "table4",
             lua.create_sequence_from(vec![1, 2, 3, 4, 5]).unwrap(),
-        ).unwrap();
+        )
+        .unwrap();
     let table4 = globals.get::<_, Table>("table4").unwrap();
     assert_eq!(
         table4.pairs().collect::<Result<Vec<(i64, i64)>>>().unwrap(),
@@ -107,7 +109,8 @@ fn test_table_scope() {
             }
         "#,
         None,
-    ).unwrap();
+    )
+    .unwrap();
 
     // Make sure that table gets do not borrow the table, but instead just borrow lua.
     let tin;
@@ -131,7 +134,8 @@ fn test_metatable() {
         .set(
             "__index",
             lua.create_function(|_, ()| Ok("index_value")).unwrap(),
-        ).unwrap();
+        )
+        .unwrap();
     table.set_metatable(Some(metatable));
     assert_eq!(table.get::<_, String>("any_key").unwrap(), "index_value");
     match table.raw_get::<_, Value>("any_key").unwrap() {
@@ -165,7 +169,8 @@ fn test_table_error() {
             })
         "#,
         None,
-    ).unwrap();
+    )
+    .unwrap();
 
     let bad_table: Table = globals.get("table").unwrap();
     assert!(bad_table.set(1, 1).is_err());

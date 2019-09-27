@@ -13,7 +13,8 @@ fn test_function() {
         end
     "#,
         None,
-    ).unwrap();
+    )
+    .unwrap();
 
     let concat = globals.get::<_, Function>("concat").unwrap();
     assert_eq!(concat.call::<_, String>(("foo", "bar")).unwrap(), "foobar");
@@ -34,7 +35,8 @@ fn test_bind() {
         end
     "#,
         None,
-    ).unwrap();
+    )
+    .unwrap();
 
     let mut concat = globals.get::<_, Function>("concat").unwrap();
     concat = concat.bind("foo").unwrap();
@@ -60,7 +62,8 @@ fn test_rust_function() {
         return 1
     "#,
         None,
-    ).unwrap();
+    )
+    .unwrap();
 
     let lua_function = globals.get::<_, Function>("lua_function").unwrap();
     let rust_function = lua.create_function(|_, ()| Ok("hello")).unwrap();
