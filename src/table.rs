@@ -132,6 +132,13 @@ impl<'lua> Table<'lua> {
         }
     }
 
+    /// Removes a key from the table, returning the value at the key
+    /// if the key was previously in the table.
+    pub fn raw_remove<K: ToLua<'lua>>(&self, key: K) -> Result<()> {
+        self.raw_set(key, Nil)?;
+        Ok(())
+    }
+
     /// Sets a key-value pair without invoking metamethods.
     pub fn raw_set<K: ToLua<'lua>, V: ToLua<'lua>>(&self, key: K, value: V) -> Result<()> {
         let lua = self.0.lua;
