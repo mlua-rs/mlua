@@ -19,8 +19,8 @@ use crate::userdata::{AnyUserData, MetaMethod, UserData, UserDataMethods};
 use crate::util::{
     assert_stack, callback_error, check_stack, get_userdata, get_wrapped_error,
     init_error_registry, init_userdata_metatable, main_state, pop_error, protect_lua,
-    protect_lua_closure, push_string, push_userdata, push_wrapped_error, safe_pcall, safe_xpcall,
-    userdata_destructor, StackGuard,
+    protect_lua_closure, push_string, push_userdata, push_wrapped_error, userdata_destructor,
+    StackGuard,
 };
 use crate::value::{FromLua, FromLuaMulti, MultiValue, Nil, ToLua, ToLuaMulti, Value};
 
@@ -61,22 +61,6 @@ impl Lua {
                 ffi::lua_rawset(state, -3);
 
                 ffi::lua_rawset(state, ffi::LUA_REGISTRYINDEX);
-
-                // Override pcall and xpcall with versions that cannot be used to catch rust panics.
-
-                /*
-                ffi::lua_rawgeti(state, ffi::LUA_REGISTRYINDEX, ffi::LUA_RIDX_GLOBALS);
-
-                ffi::lua_pushstring(state, cstr!("pcall"));
-                ffi::lua_pushcfunction(state, safe_pcall);
-                ffi::lua_rawset(state, -3);
-
-                ffi::lua_pushstring(state, cstr!("xpcall"));
-                ffi::lua_pushcfunction(state, safe_xpcall);
-                ffi::lua_rawset(state, -3);
-
-                ffi::lua_pop(state, 1);
-                */
 
                 // Create ref stack thread and place it in the registry to prevent it from being garbage
                 // collected.

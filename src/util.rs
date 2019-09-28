@@ -372,8 +372,7 @@ where
 
     match catch_unwind(AssertUnwindSafe(|| f(nargs))) {
         Ok(Ok(r)) => {
-            ffi::lua_rotate(state, 1, -1);
-            ffi::lua_pop(state, 1);
+            ffi::lua_remove(state, 1);
             r
         }
         Ok(Err(err)) => {
@@ -440,71 +439,6 @@ pub unsafe extern "C" fn error_traceback(state: *mut ffi::lua_State) -> c_int {
         }
     }
     1
-}
-
-// A variant of pcall that does not allow lua to catch panic errors from callback_error
-pub unsafe extern "C" fn safe_pcall(state: *mut ffi::lua_State) -> c_int {
-    ffi::luaL_checkstack(state, 2, ptr::null());
-
-    let top = ffi::lua_gettop(state);
-    if top == 0 {
-        ffi::lua_pushstring(state, cstr!("not enough arguments to pcall"));
-        ffi::lua_error(state);
-    } else if ffi::lua_pcall(state, top - 1, ffi::LUA_MULTRET, 0) != ffi::LUA_OK {
-        if is_wrapped_panic(state, -1) {
-            ffi::lua_error(state);
-        }
-        ffi::lua_pushboolean(state, 0);
-        ffi::lua_insert(state, -2);
-        2
-    } else {
-        ffi::lua_pushboolean(state, 1);
-        ffi::lua_insert(state, 1);
-        ffi::lua_gettop(state)
-    }
-}
-
-// A variant of xpcall that does not allow lua to catch panic errors from callback_error
-pub unsafe extern "C" fn safe_xpcall(state: *mut ffi::lua_State) -> c_int {
-    unsafe extern "C" fn xpcall_msgh(state: *mut ffi::lua_State) -> c_int {
-        ffi::luaL_checkstack(state, 2, ptr::null());
-
-        if is_wrapped_panic(state, -1) {
-            1
-        } else {
-            ffi::lua_pushvalue(state, ffi::lua_upvalueindex(1));
-            ffi::lua_insert(state, 1);
-            ffi::lua_call(state, ffi::lua_gettop(state) - 1, ffi::LUA_MULTRET);
-            ffi::lua_gettop(state)
-        }
-    }
-
-    ffi::luaL_checkstack(state, 2, ptr::null());
-
-    let top = ffi::lua_gettop(state);
-    if top < 2 {
-        ffi::lua_pushstring(state, cstr!("not enough arguments to xpcall"));
-        ffi::lua_error(state);
-    }
-
-    ffi::lua_pushvalue(state, 2);
-    ffi::lua_pushcclosure(state, xpcall_msgh, 1);
-    ffi::lua_copy(state, 1, 2);
-    ffi::lua_replace(state, 1);
-
-    let res = ffi::lua_pcall(state, ffi::lua_gettop(state) - 2, ffi::LUA_MULTRET, 1);
-    if res != ffi::LUA_OK {
-        if is_wrapped_panic(state, -1) {
-            ffi::lua_error(state);
-        }
-        ffi::lua_pushboolean(state, 0);
-        ffi::lua_insert(state, -2);
-        2
-    } else {
-        ffi::lua_pushboolean(state, 1);
-        ffi::lua_insert(state, 2);
-        ffi::lua_gettop(state) - 1
-    }
 }
 
 // Does not call lua_checkstack, uses 1 stack space.
@@ -574,6 +508,31 @@ pub unsafe fn init_error_registry(state: *mut ffi::lua_State) {
                 // kind of recursive error structure?)
                 let _ = write!(&mut (*err_buf), "{}", error);
                 Ok(err_buf)
+            } else if is_wrapped_panic(state, -1) {
+                let panic = get_userdata::<WrappedPanic>(state, -1);
+                if let Some(p) = (*panic).0.take() {
+                    ffi::lua_pushlightuserdata(
+                        state,
+                        &ERROR_PRINT_BUFFER_KEY as *const u8 as *mut c_void,
+                    );
+                    ffi::lua_rawget(state, ffi::LUA_REGISTRYINDEX);
+                    let err_buf = ffi::lua_touserdata(state, -1) as *mut String;
+                    ffi::lua_pop(state, 2);
+
+                    let error = if let Some(x) = p.downcast_ref::<&str>() {
+                        x.to_string()
+                    } else if let Some(x) = p.downcast_ref::<String>() {
+                        x.to_string()
+                    } else {
+                        "panic".to_string()
+                    };
+
+                    (*err_buf).clear();
+                    let _ = write!(&mut (*err_buf), "{}", error);
+                    Ok(err_buf)
+                } else {
+                    rlua_panic!("error during panic handling, panic was resumed twice")
+                }
             } else {
                 // I'm not sure whether this is possible to trigger without bugs in rlua?
                 Err(Error::UserDataTypeMismatch)
@@ -619,6 +578,10 @@ pub unsafe fn init_error_registry(state: *mut ffi::lua_State) {
 
     ffi::lua_pushstring(state, cstr!("__gc"));
     ffi::lua_pushcfunction(state, userdata_destructor::<WrappedPanic>);
+    ffi::lua_rawset(state, -3);
+
+    ffi::lua_pushstring(state, cstr!("__tostring"));
+    ffi::lua_pushcfunction(state, error_tostring);
     ffi::lua_rawset(state, -3);
 
     ffi::lua_pushstring(state, cstr!("__metatable"));
@@ -696,7 +659,7 @@ pub unsafe fn init_error_registry(state: *mut ffi::lua_State) {
 }
 
 struct WrappedError(pub Error);
-struct WrappedPanic(pub Option<Box<dyn Any + Send>>);
+struct WrappedPanic(pub Option<Box<dyn Any + Send + 'static>>);
 
 // Converts the given lua value to a string in a reasonable format without causing a Lua error or
 // panicking.
