@@ -1,17 +1,14 @@
-#![cfg(feature = "compiletest_rs")]
-
-extern crate compiletest_rs as compiletest;
-
 use std::path::PathBuf;
 
 fn run_mode(mode: &'static str) {
-    let mut config = compiletest::Config::default();
+    let mut config = compiletest_rs::Config::default();
 
     config.mode = mode.parse().expect("Invalid mode");
     config.src_base = PathBuf::from(format!("tests/{}", mode));
-    config.target_rustcflags = Some("-L target/debug -L target/debug/deps".to_string());
+    config.link_deps();
+    config.clean_rmeta();
 
-    compiletest::run_tests(&config);
+    compiletest_rs::run_tests(&config);
 }
 
 #[test]

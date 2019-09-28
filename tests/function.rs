@@ -1,30 +1,33 @@
-extern crate rlua;
+use rlua::{Function, Result, String};
 
-use rlua::{Function, Lua, String};
+include!("_lua.rs");
 
 #[test]
-fn test_function() {
-    let lua = Lua::new();
+fn test_function() -> Result<()> {
+    let lua = make_lua();
+
     let globals = lua.globals();
-    lua.exec::<_, ()>(
+    lua.load(
         r#"
         function concat(arg1, arg2)
             return arg1 .. arg2
         end
     "#,
-        None,
     )
-    .unwrap();
+    .exec()?;
 
-    let concat = globals.get::<_, Function>("concat").unwrap();
-    assert_eq!(concat.call::<_, String>(("foo", "bar")).unwrap(), "foobar");
+    let concat = globals.get::<_, Function>("concat")?;
+    assert_eq!(concat.call::<_, String>(("foo", "bar"))?, "foobar");
+
+    Ok(())
 }
 
 #[test]
-fn test_bind() {
-    let lua = Lua::new();
+fn test_bind() -> Result<()> {
+    let lua = make_lua();
+
     let globals = lua.globals();
-    lua.exec::<_, ()>(
+    lua.load(
         r#"
         function concat(...)
             local res = ""
@@ -34,25 +37,27 @@ fn test_bind() {
             return res
         end
     "#,
-        None,
     )
-    .unwrap();
+    .exec()?;
 
-    let mut concat = globals.get::<_, Function>("concat").unwrap();
-    concat = concat.bind("foo").unwrap();
-    concat = concat.bind("bar").unwrap();
-    concat = concat.bind(("baz", "baf")).unwrap();
+    let mut concat = globals.get::<_, Function>("concat")?;
+    concat = concat.bind("foo")?;
+    concat = concat.bind("bar")?;
+    concat = concat.bind(("baz", "baf"))?;
     assert_eq!(
-        concat.call::<_, String>(("hi", "wut")).unwrap(),
+        concat.call::<_, String>(("hi", "wut"))?,
         "foobarbazbafhiwut"
     );
+
+    Ok(())
 }
 
 #[test]
-fn test_rust_function() {
-    let lua = Lua::new();
+fn test_rust_function() -> Result<()> {
+    let lua = make_lua();
+
     let globals = lua.globals();
-    lua.exec::<_, ()>(
+    lua.load(
         r#"
         function lua_function()
             return rust_function()
@@ -61,13 +66,14 @@ fn test_rust_function() {
         -- Test to make sure chunk return is ignored
         return 1
     "#,
-        None,
     )
-    .unwrap();
+    .exec()?;
 
-    let lua_function = globals.get::<_, Function>("lua_function").unwrap();
-    let rust_function = lua.create_function(|_, ()| Ok("hello")).unwrap();
+    let lua_function = globals.get::<_, Function>("lua_function")?;
+    let rust_function = lua.create_function(|_, ()| Ok("hello"))?;
 
-    globals.set("rust_function", rust_function).unwrap();
-    assert_eq!(lua_function.call::<_, String>(()).unwrap(), "hello");
+    globals.set("rust_function", rust_function)?;
+    assert_eq!(lua_function.call::<_, String>(())?, "hello");
+
+    Ok(())
 }
