@@ -3,9 +3,10 @@ use std::os::raw::c_int;
 
 use crate::error::Result;
 use crate::ffi;
+use crate::function::Function;
 use crate::types::{Integer, LuaRef};
 use crate::util::{assert_stack, protect_lua, protect_lua_closure, StackGuard};
-use crate::value::{FromLua, Nil, ToLua, Value};
+use crate::value::{FromLua, FromLuaMulti, Nil, ToLua, ToLuaMulti, Value};
 
 /// Handle to an internal Lua table.
 #[derive(Clone, Debug)]
@@ -130,6 +131,37 @@ impl<'lua> Table<'lua> {
             let has = ffi::lua_isnil(lua.state, -1) == 0;
             Ok(has)
         }
+    }
+
+    /// Gets the function associated to `key` from the table and executes it,
+    /// passing the table as the first argument.
+    ///
+    /// # Examples
+    ///
+    /// Execute the table method with name "concat":
+    ///
+    /// ```
+    /// # use rlua::{Function, Lua, Result};
+    /// # fn main() -> Result<()> {
+    /// # let lua = Lua::new();
+    /// # let table = lua.create_table();
+    /// // Lua: table:concat("param1", "param2")
+    /// table.call("concat", ("param1", "param2"))?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// This might invoke the `__index` metamethod.
+    pub fn call<K, A, R>(&self, key: K, args: A) -> Result<R>
+    where
+        K: ToLua<'lua>,
+        A: ToLuaMulti<'lua>,
+        R: FromLuaMulti<'lua>,
+    {
+        let lua = self.0.lua;
+        let mut args = args.to_lua_multi(lua)?;
+        args.push_front(Value::Table(self.clone()));
+        self.get::<_, Function>(key)?.call(args)
     }
 
     /// Removes a key from the table, returning the value at the key
