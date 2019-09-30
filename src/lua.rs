@@ -17,10 +17,9 @@ use crate::thread::Thread;
 use crate::types::{Callback, Integer, LightUserData, LuaRef, Number, RegistryKey};
 use crate::userdata::{AnyUserData, MetaMethod, UserData, UserDataMethods};
 use crate::util::{
-    assert_stack, callback_error, check_stack, get_userdata, get_wrapped_error,
-    init_error_registry, init_userdata_metatable, main_state, pop_error, protect_lua,
-    protect_lua_closure, push_string, push_userdata, push_wrapped_error, userdata_destructor,
-    StackGuard,
+    assert_stack, callback_error, check_stack, get_main_state, get_userdata, get_wrapped_error,
+    init_error_registry, init_userdata_metatable, pop_error, protect_lua, protect_lua_closure,
+    push_string, push_userdata, push_wrapped_error, userdata_destructor, StackGuard,
 };
 use crate::value::{FromLua, FromLuaMulti, MultiValue, Nil, ToLua, ToLuaMulti, Value};
 
@@ -37,10 +36,11 @@ unsafe impl Send for Lua {}
 impl Lua {
     /// Constructs a new Lua instance from the existing state.
     pub unsafe fn init_from_ptr(state: *mut ffi::lua_State) -> Lua {
-        let state_top = ffi::lua_gettop(state);
+        let main_state = get_main_state(state);
+        let main_state_top = ffi::lua_gettop(state);
 
         let ref_thread = rlua_expect!(
-            protect_lua_closure(state, 0, 0, |state| {
+            protect_lua_closure(main_state, 0, 0, |state| {
                 init_error_registry(state);
 
                 // Create the function metatable
@@ -85,17 +85,17 @@ impl Lua {
         }));
 
         rlua_debug_assert!(
-            ffi::lua_gettop(state) == state_top,
+            ffi::lua_gettop(main_state) == main_state_top,
             "stack leak during creation"
         );
-        assert_stack(state, ffi::LUA_MINSTACK);
+        assert_stack(main_state, ffi::LUA_MINSTACK);
 
         // Place pointer to ExtraData in the lua_State "extra space"
-        *(ffi::lua_getextraspace(state) as *mut *mut ExtraData) = extra;
+        *(ffi::lua_getextraspace(main_state) as *mut *mut ExtraData) = extra;
 
         Lua {
             state,
-            main_state: main_state(state),
+            main_state: main_state,
             _no_ref_unwind_safe: PhantomData,
         }
     }
@@ -632,7 +632,7 @@ impl Lua {
 
             Ok(RegistryKey {
                 registry_id,
-                unref_list: (*extra_data(self.state)).registry_unref_list.clone(),
+                unref_list: (*extra_data(self.main_state)).registry_unref_list.clone(),
             })
         }
     }
@@ -692,7 +692,7 @@ impl Lua {
         unsafe {
             Arc::ptr_eq(
                 &key.unref_list,
-                &(*extra_data(self.state)).registry_unref_list,
+                &(*extra_data(self.main_state)).registry_unref_list,
             )
         }
     }
@@ -706,7 +706,7 @@ impl Lua {
         unsafe {
             let unref_list = mem::replace(
                 &mut *rlua_expect!(
-                    (*extra_data(self.state)).registry_unref_list.lock(),
+                    (*extra_data(self.main_state)).registry_unref_list.lock(),
                     "unref list poisoned"
                 ),
                 Some(Vec::new()),
@@ -810,8 +810,7 @@ impl Lua {
 
             ffi::LUA_TUSERDATA => {
                 // It should not be possible to interact with userdata types other than custom
-                // UserData types OR a WrappedError.  WrappedPanic should never be able to be caught
-                // in lua, so it should never be here.
+                // UserData types OR a WrappedError.  WrappedPanic should not be here.
                 if let Some(err) = get_wrapped_error(self.state, -1).as_ref() {
                     let err = err.clone();
                     ffi::lua_pop(self.state, 1);
@@ -833,7 +832,7 @@ impl Lua {
             lref.lua.main_state == self.main_state,
             "Lua instance passed Value created from a different main Lua state"
         );
-        let extra = extra_data(self.state);
+        let extra = extra_data(self.main_state);
         ffi::lua_pushvalue((*extra).ref_thread, lref.index);
         ffi::lua_xmove((*extra).ref_thread, self.state, 1);
     }
@@ -848,7 +847,7 @@ impl Lua {
     // number of short term references being created, and `RegistryKey` being used for long term
     // references.
     pub(crate) unsafe fn pop_ref<'lua>(&'lua self) -> LuaRef<'lua> {
-        let extra = extra_data(self.state);
+        let extra = extra_data(self.main_state);
         ffi::lua_xmove(self.state, (*extra).ref_thread, 1);
         let index = ref_stack_pop(extra);
         LuaRef { lua: self, index }
@@ -856,7 +855,7 @@ impl Lua {
 
     pub(crate) fn clone_ref<'lua>(&'lua self, lref: &LuaRef<'lua>) -> LuaRef<'lua> {
         unsafe {
-            let extra = extra_data(self.state);
+            let extra = extra_data(self.main_state);
             ffi::lua_pushvalue((*extra).ref_thread, lref.index);
             let index = ref_stack_pop(extra);
             LuaRef { lua: self, index }
@@ -865,7 +864,7 @@ impl Lua {
 
     pub(crate) fn drop_ref<'lua>(&'lua self, lref: &mut LuaRef<'lua>) {
         unsafe {
-            let extra = extra_data(self.state);
+            let extra = extra_data(self.main_state);
             ffi::lua_pushnil((*extra).ref_thread);
             ffi::lua_replace((*extra).ref_thread, lref.index);
             (*extra).ref_free.push(lref.index);
@@ -873,7 +872,7 @@ impl Lua {
     }
 
     pub(crate) unsafe fn userdata_metatable<T: 'static + UserData>(&self) -> Result<c_int> {
-        if let Some(table_id) = (*extra_data(self.state))
+        if let Some(table_id) = (*extra_data(self.main_state))
             .registered_userdata
             .get(&TypeId::of::<T>())
         {
@@ -919,7 +918,7 @@ impl Lua {
         let id = protect_lua_closure(self.state, 1, 0, |state| {
             ffi::luaL_ref(state, ffi::LUA_REGISTRYINDEX)
         })?;
-        (*extra_data(self.state))
+        (*extra_data(self.main_state))
             .registered_userdata
             .insert(TypeId::of::<T>(), id);
         Ok(id)
@@ -949,7 +948,7 @@ impl Lua {
 
                 let lua = Lua {
                     state: state,
-                    main_state: main_state(state),
+                    main_state: get_main_state(state),
                     _no_ref_unwind_safe: PhantomData,
                 };
 
