@@ -25,7 +25,6 @@ pkg-config = { version = "0.3.11" }
 [dev-dependencies]
 rustyline = "5.0"
 criterion = "0.2.0"
-compiletest_rs = { version = "0.3", features = ["stable"] }
 
 [[bench]]
 name = "benchmark"
