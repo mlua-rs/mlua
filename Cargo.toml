@@ -13,6 +13,11 @@ license = "MIT"
 # [badges]
 # travis-ci = { repository = "khvzak/mlua", branch = "master" }
 
+[workspace]
+members = [
+    "mlua_derive",
+]
+
 [dependencies]
 libc = { version = "0.2" }
 num-traits = { version = "0.2.6" }

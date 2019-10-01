@@ -100,6 +100,18 @@ impl Lua {
         }
     }
 
+    // Executes module entrypoint function, which returns only one Value.
+    // The returned value then pushed to the Lua stack.
+    #[doc(hidden)]
+    pub fn entrypoint1<'lua, 'callback, R, F>(&'lua self, func: F) -> Result<c_int>
+    where
+        R: ToLua<'callback>,
+        F: 'static + Send + Fn(&'callback Lua) -> Result<R>,
+    {
+        let cb = self.create_callback(Box::new(move |lua, _| func(lua)?.to_lua_multi(lua)))?;
+        unsafe { self.push_value(cb.call(())?).map(|_| 1) }
+    }
+
     /// Returns true if the garbage collector is currently running automatically.
     pub fn gc_is_running(&self) -> bool {
         unsafe { ffi::lua_gc(self.main_state, ffi::LUA_GCISRUNNING, 0) != 0 }
@@ -718,8 +730,7 @@ impl Lua {
     }
 
     // Uses 2 stack spaces, does not call checkstack
-    // TODO: return to original
-    pub unsafe fn push_value(&self, value: Value) -> Result<()> {
+    pub(crate) unsafe fn push_value(&self, value: Value) -> Result<()> {
         match value {
             Value::Nil => {
                 ffi::lua_pushnil(self.state);
@@ -770,8 +781,7 @@ impl Lua {
     }
 
     // Uses 2 stack spaces, does not call checkstack
-    // TODO: return to original
-    pub unsafe fn pop_value(&self) -> Value {
+    pub(crate) unsafe fn pop_value(&self) -> Value {
         match ffi::lua_type(self.state, -1) {
             ffi::LUA_TNIL => {
                 ffi::lua_pop(self.state, 1);
