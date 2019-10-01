@@ -91,6 +91,7 @@ fn main() {
     println!("cargo:rerun-if-env-changed=LUA_INCLUDE_DIR");
     println!("cargo:rerun-if-env-changed=LUA_LIB_DIR");
     println!("cargo:rerun-if-env-changed=LUA_LIB_NAME");
+    println!("cargo:rerun-if-changed=src/ffi/glue/glue.c");
 
     if include_dir != "" && lib_dir != "" && lua_lib != "" {
         let _version = use_custom_lua(&include_dir, &lib_dir, &lua_lib).unwrap();
