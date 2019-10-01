@@ -52,7 +52,7 @@ impl fmt::Debug for RegistryKey {
 
 impl Drop for RegistryKey {
     fn drop(&mut self) {
-        if let Some(list) = rlua_expect!(self.unref_list.lock(), "unref_list poisoned").as_mut() {
+        if let Some(list) = mlua_expect!(self.unref_list.lock(), "unref_list poisoned").as_mut() {
             list.push(self.registry_id);
         }
     }

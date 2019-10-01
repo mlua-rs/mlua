@@ -1,7 +1,7 @@
 use std::cell::Cell;
 use std::rc::Rc;
 
-use rlua::{Error, Function, MetaMethod, Result, String, UserData, UserDataMethods};
+use mlua::{Error, Function, MetaMethod, Result, String, UserData, UserDataMethods};
 
 include!("_lua.rs");
 

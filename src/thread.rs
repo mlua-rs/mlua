@@ -46,7 +46,7 @@ impl<'lua> Thread<'lua> {
     /// # Examples
     ///
     /// ```
-    /// # use rlua::{Lua, Thread, Error};
+    /// # use mlua::{Lua, Thread, Error};
     /// # fn main() -> Result<()> {
     /// let lua = Lua::new();
     /// let thread: Thread = lua.eval(r#"

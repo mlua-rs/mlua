@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use rlua::{Error, Result, UserData};
+use mlua::{Error, Result, UserData};
 
 include!("_lua.rs");
 

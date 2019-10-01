@@ -62,7 +62,7 @@ impl<'lua> FromLuaMulti<'lua> for MultiValue<'lua> {
 /// # Examples
 ///
 /// ```
-/// # use rlua::{Lua, Variadic, Result};
+/// # use mlua::{Lua, Variadic, Result};
 /// # fn main() -> Result<()> {
 /// let lua = Lua::new();
 /// let add = lua.create_function(|_, vals: Variadic<f64>| -> Result<f64> {

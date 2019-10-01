@@ -1,4 +1,4 @@
-use rlua::{Function, Result, String};
+use mlua::{Function, Result, String};
 
 include!("_lua.rs");
 

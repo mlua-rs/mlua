@@ -17,7 +17,7 @@ impl<'lua> String<'lua> {
     /// # Examples
     ///
     /// ```
-    /// # use rlua::{Lua, String, Result};
+    /// # use mlua::{Lua, String, Result};
     /// # fn main() -> Result<()> {
     /// let lua = Lua::new();
     /// let globals = lua.globals();
@@ -46,7 +46,7 @@ impl<'lua> String<'lua> {
     /// # Examples
     ///
     /// ```
-    /// # use rlua::{Lua, String, Result};
+    /// # use mlua::{Lua, String, Result};
     /// # fn main() -> Result<()> {
     /// let lua = Lua::new();
     /// let non_utf8: String = lua.load(r#"  "test\xff"  "#).eval()?;
@@ -68,7 +68,7 @@ impl<'lua> String<'lua> {
             assert_stack(lua.state, 1);
 
             lua.push_ref(&self.0);
-            rlua_debug_assert!(
+            mlua_debug_assert!(
                 ffi::lua_type(lua.state, -1) == ffi::LUA_TSTRING,
                 "string ref is not string type"
             );
@@ -91,7 +91,7 @@ impl<'lua> AsRef<[u8]> for String<'lua> {
 
 // Lua strings are basically &[u8] slices, so implement PartialEq for anything resembling that.
 //
-// This makes our `String` comparable with `Vec<u8>`, `[u8]`, `&str`, `String` and `rlua::String`
+// This makes our `String` comparable with `Vec<u8>`, `[u8]`, `&str`, `String` and `mlua::String`
 // itself.
 //
 // The only downside is that this disallows a comparison with `Cow<str>`, as that only implements

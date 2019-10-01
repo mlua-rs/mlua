@@ -27,7 +27,7 @@ extern "C" {
 }
 
 #[allow(unused)]
-fn make_lua() -> rlua::Lua {
+fn make_lua() -> mlua::Lua {
     macro_rules! cstr {
         ($s:expr) => {
             concat!($s, "\0") as *const str as *const ::std::os::raw::c_char
@@ -48,6 +48,6 @@ fn make_lua() -> rlua::Lua {
         luaL_requiref(state, cstr!("package"), luaopen_package, 1);
         lua_settop(state, -8 - 1);
 
-        rlua::Lua::init_from_ptr(state)
+        mlua::Lua::init_from_ptr(state)
     }
 }

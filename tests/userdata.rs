@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use rlua::{
+use mlua::{
     AnyUserData, ExternalError, Function, MetaMethod, Result, String, UserData, UserDataMethods,
 };
 

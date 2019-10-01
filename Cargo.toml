@@ -1,22 +1,22 @@
 [package]
-name = "rlua"
+name = "mlua"
 version = "0.15.3"
-authors = ["kyren <catherine@chucklefish.org>"]
+authors = ["Aleksandr Orlenko <zxteam@pm.me>", "kyren <catherine@chucklefish.org>"]
 edition = "2018"
 description = "High level bindings to Lua 5.3"
-repository = "https://github.com/chucklefish/rlua"
-documentation = "https://docs.rs/rlua"
+repository = "https://github.com/khvzak/mlua"
+documentation = "https://docs.rs/mlua"
 readme = "README.md"
 keywords = ["lua"]
 license = "MIT"
 
 # [badges]
-# travis-ci = { repository = "chucklefish/rlua", branch = "master" }
+# travis-ci = { repository = "khvzak/mlua", branch = "master" }
 
 [dependencies]
 libc = { version = "0.2" }
 num-traits = { version = "0.2.6" }
-bstr = {version = "0.2", features = ["std"], default_features = false }
+bstr = { version = "0.2", features = ["std"], default_features = false }
 
 [build-dependencies]
 cc = { version = "1.0" }

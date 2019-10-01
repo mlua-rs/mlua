@@ -1,6 +1,6 @@
 use std::panic::catch_unwind;
 
-use rlua::{Error, Function, Result, Thread, ThreadStatus};
+use mlua::{Error, Function, Result, Thread, ThreadStatus};
 
 include!("_lua.rs");
 

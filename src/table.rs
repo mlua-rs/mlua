@@ -25,7 +25,7 @@ impl<'lua> Table<'lua> {
     /// Export a value as a global to make it usable from Lua:
     ///
     /// ```
-    /// # use rlua::{Lua, Result};
+    /// # use mlua::{Lua, Result};
     /// # fn main() -> Result<()> {
     /// let lua = Lua::new();
     /// let globals = lua.globals();
@@ -78,7 +78,7 @@ impl<'lua> Table<'lua> {
     /// Query the version of the Lua interpreter:
     ///
     /// ```
-    /// # use rlua::{Lua, Result};
+    /// # use mlua::{Lua, Result};
     /// # fn main() -> Result<()> {
     /// let lua = Lua::new();
     /// let globals = lua.globals();
@@ -141,7 +141,7 @@ impl<'lua> Table<'lua> {
     /// Execute the table method with name "concat":
     ///
     /// ```
-    /// # use rlua::{Function, Lua, Result};
+    /// # use mlua::{Function, Lua, Result};
     /// # fn main() -> Result<()> {
     /// # let lua = Lua::new();
     /// # let table = lua.create_table();
@@ -292,7 +292,7 @@ impl<'lua> Table<'lua> {
     /// Iterate over all globals:
     ///
     /// ```
-    /// # use rlua::{Lua, Result, Value};
+    /// # use mlua::{Lua, Result, Value};
     /// # fn main() -> Result<()> {
     /// let lua = Lua::new();
     /// let globals = lua.globals();
@@ -334,7 +334,7 @@ impl<'lua> Table<'lua> {
     /// # Examples
     ///
     /// ```
-    /// # use rlua::{Lua, Result, Table};
+    /// # use mlua::{Lua, Result, Table};
     /// # fn main() -> Result<()> {
     /// let lua = Lua::new();
     /// let my_table: Table = lua.load(r#"

@@ -1,6 +1,6 @@
 use std::os::raw::c_void;
 
-use rlua::{Function, LightUserData, Result};
+use mlua::{Function, LightUserData, Result};
 
 include!("_lua.rs");
 

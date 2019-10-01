@@ -212,7 +212,7 @@ pub trait UserDataMethods<'lua, T: UserData> {
 /// # Examples
 ///
 /// ```
-/// # use rlua::{Lua, UserData, Result};
+/// # use mlua::{Lua, UserData, Result};
 /// # fn main() -> Result<()> {
 /// struct MyUserData(i32);
 ///
@@ -232,7 +232,7 @@ pub trait UserDataMethods<'lua, T: UserData> {
 /// [`UserDataMethods`] for more information):
 ///
 /// ```
-/// # use rlua::{Lua, MetaMethod, UserData, UserDataMethods, Result};
+/// # use mlua::{Lua, MetaMethod, UserData, UserDataMethods, Result};
 /// # fn main() -> Result<()> {
 /// struct MyUserData(i32);
 ///

@@ -12,10 +12,10 @@ use crate::ffi;
 // Checks that Lua has enough free stack space for future stack operations.  On failure, this will
 // panic with an internal error message.
 pub unsafe fn assert_stack(state: *mut ffi::lua_State, amount: c_int) {
-    // TODO: This should only be triggered when there is a logic error in `rlua`.  In the future,
+    // TODO: This should only be triggered when there is a logic error in `mlua`.  In the future,
     // when there is a way to be confident about stack safety and test it, this could be enabled
     // only when `cfg!(debug_assertions)` is true.
-    rlua_assert!(
+    mlua_assert!(
         ffi::lua_checkstack(state, amount) != 0,
         "out of stack space"
     );
@@ -54,7 +54,7 @@ impl Drop for StackGuard {
             if top > self.top {
                 ffi::lua_settop(self.state, self.top);
             } else if top < self.top {
-                rlua_panic!("{} too many stack values popped", self.top - top);
+                mlua_panic!("{} too many stack values popped", self.top - top);
             }
         }
     }
@@ -167,7 +167,7 @@ where
 //   3) Otherwise, interprets the error as the appropriate lua error.
 // Uses 2 stack spaces, does not call lua_checkstack.
 pub unsafe fn pop_error(state: *mut ffi::lua_State, err_code: c_int) -> Error {
-    rlua_debug_assert!(
+    mlua_debug_assert!(
         err_code != ffi::LUA_OK && err_code != ffi::LUA_YIELD,
         "pop_error called with non-error return code"
     );
@@ -180,7 +180,7 @@ pub unsafe fn pop_error(state: *mut ffi::lua_State, err_code: c_int) -> Error {
         if let Some(p) = (*panic).0.take() {
             resume_unwind(p);
         } else {
-            rlua_panic!("error during panic handling, panic was resumed twice")
+            mlua_panic!("error during panic handling, panic was resumed twice")
         }
     } else {
         let err_string = to_string(state, -1).into_owned();
@@ -205,7 +205,7 @@ pub unsafe fn pop_error(state: *mut ffi::lua_State, err_code: c_int) -> Error {
             }
             ffi::LUA_ERRMEM => Error::MemoryError(err_string),
             ffi::LUA_ERRGCMM => Error::GarbageCollectorError(err_string),
-            _ => rlua_panic!("unrecognized lua error code"),
+            _ => mlua_panic!("unrecognized lua error code"),
         }
     }
 }
@@ -232,7 +232,7 @@ pub unsafe fn push_userdata<T>(state: *mut ffi::lua_State, t: T) -> Result<()> {
 
 pub unsafe fn get_userdata<T>(state: *mut ffi::lua_State, index: c_int) -> *mut T {
     let ud = ffi::lua_touserdata(state, index) as *mut T;
-    rlua_debug_assert!(!ud.is_null(), "userdata pointer is null");
+    mlua_debug_assert!(!ud.is_null(), "userdata pointer is null");
     ud
 }
 
@@ -248,7 +248,7 @@ pub unsafe fn take_userdata<T>(state: *mut ffi::lua_State) -> T {
     get_destructed_userdata_metatable(state);
     ffi::lua_setmetatable(state, -2);
     let ud = ffi::lua_touserdata(state, -1) as *mut T;
-    rlua_debug_assert!(!ud.is_null(), "userdata pointer is null");
+    mlua_debug_assert!(!ud.is_null(), "userdata pointer is null");
     ffi::lua_pop(state, 1);
     ptr::read(ud)
 }
@@ -303,7 +303,7 @@ pub unsafe fn init_userdata_metatable<T>(
                 ffi::lua_pushcclosure(state, meta_index_impl, 2);
             })?;
         } else {
-            rlua_panic!("improper __index type {}", index_type);
+            mlua_panic!("improper __index type {}", index_type);
         }
 
         protect_lua_closure(state, 3, 1, |state| {
@@ -531,10 +531,10 @@ pub unsafe fn init_error_registry(state: *mut ffi::lua_State) {
                     let _ = write!(&mut (*err_buf), "{}", error);
                     Ok(err_buf)
                 } else {
-                    rlua_panic!("error during panic handling, panic was resumed twice")
+                    mlua_panic!("error during panic handling, panic was resumed twice")
                 }
             } else {
-                // I'm not sure whether this is possible to trigger without bugs in rlua?
+                // I'm not sure whether this is possible to trigger without bugs in mlua?
                 Err(Error::UserDataTypeMismatch)
             }
         });

@@ -3,7 +3,7 @@ use std::panic::catch_unwind;
 use std::sync::Arc;
 use std::{error, f32, f64, fmt};
 
-use rlua::{Error, ExternalError, Function, Nil, Result, String, Table, UserData, Value, Variadic};
+use mlua::{Error, ExternalError, Function, Nil, Result, String, Table, UserData, Value, Variadic};
 
 include!("_lua.rs");
 

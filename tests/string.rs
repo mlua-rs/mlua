@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 
-use rlua::{Result, String};
+use mlua::{Result, String};
 
 include!("_lua.rs");
 
@@ -15,7 +15,7 @@ fn compare() {
     with_str("teststring", |t| assert_eq!(t, b"teststring")); // &[u8]
     with_str("teststring", |t| assert_eq!(t, b"teststring".to_vec())); // Vec<u8>
     with_str("teststring", |t| assert_eq!(t, "teststring".to_string())); // String
-    with_str("teststring", |t| assert_eq!(t, t)); // rlua::String
+    with_str("teststring", |t| assert_eq!(t, t)); // mlua::String
     with_str("teststring", |t| {
         assert_eq!(t, Cow::from(b"teststring".as_ref()))
     }); // Cow (borrowed)

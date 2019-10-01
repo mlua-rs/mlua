@@ -1,6 +1,6 @@
 //! # High-level bindings to Lua
 //!
-//! The `rlua` crate provides safe high-level bindings to the [Lua programming language].
+//! The `mlua` crate provides safe high-level bindings to the [Lua programming language].
 //!
 //! # The `Lua` object
 //!
@@ -16,7 +16,7 @@
 //! For more general conversions, the [`ToLuaMulti`] and [`FromLuaMulti`] traits allow converting
 //! between Rust types and *any number* of Lua values.
 //!
-//! Most code in `rlua` is generic over implementors of those traits, so in most places the normal
+//! Most code in `mlua` is generic over implementors of those traits, so in most places the normal
 //! Rust data structures are accepted without having to write any boilerplate.
 //!
 //! # Custom Userdata

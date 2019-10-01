@@ -1,5 +1,5 @@
 use bstr::{BStr, BString};
-use rlua::Result;
+use mlua::Result;
 
 include!("_lua.rs");
 

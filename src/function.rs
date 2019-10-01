@@ -23,7 +23,7 @@ impl<'lua> Function<'lua> {
     /// Call Lua's built-in `tostring` function:
     ///
     /// ```
-    /// # use rlua::{Lua, Function, Result};
+    /// # use mlua::{Lua, Function, Result};
     /// # fn main() -> Result<()> {
     /// let lua = Lua::new();
     /// let globals = lua.globals();
@@ -39,7 +39,7 @@ impl<'lua> Function<'lua> {
     /// Call a function with multiple arguments:
     ///
     /// ```
-    /// # use rlua::{Lua, Function, Result};
+    /// # use mlua::{Lua, Function, Result};
     /// # fn main() -> Result<()> {
     /// let lua = Lua::new();
     ///
@@ -95,7 +95,7 @@ impl<'lua> Function<'lua> {
     /// # Examples
     ///
     /// ```
-    /// # use rlua::{Lua, Function, Result};
+    /// # use mlua::{Lua, Function, Result};
     /// # fn main() -> Result<()> {
     /// let lua = Lua::new();
     ///

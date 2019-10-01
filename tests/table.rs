@@ -1,4 +1,4 @@
-use rlua::{Nil, Result, Table, Value};
+use mlua::{Nil, Result, Table, Value};
 
 include!("_lua.rs");
 

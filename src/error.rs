@@ -4,7 +4,7 @@ use std::result::Result as StdResult;
 use std::string::String as StdString;
 use std::sync::Arc;
 
-/// Error type returned by `rlua` methods.
+/// Error type returned by `mlua` methods.
 #[derive(Debug, Clone)]
 pub enum Error {
     /// Syntax error while parsing Lua source code.
@@ -44,7 +44,7 @@ pub enum Error {
     CallbackDestructed,
     /// Not enough stack space to place arguments to Lua functions or return values from callbacks.
     ///
-    /// Due to the way `rlua` works, it should not be directly possible to run out of stack space
+    /// Due to the way `mlua` works, it should not be directly possible to run out of stack space
     /// during normal use. The only way that this error can be triggered is if a `Function` is
     /// called with a huge number of arguments, or a rust callback returns a huge number of return
     /// values.
@@ -126,7 +126,7 @@ pub enum Error {
     ExternalError(Arc<dyn StdError + Send + Sync>),
 }
 
-/// A specialized `Result` type used by `rlua`'s API.
+/// A specialized `Result` type used by `mlua`'s API.
 pub type Result<T> = StdResult<T, Error>;
 
 impl fmt::Display for Error {

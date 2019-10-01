@@ -39,7 +39,7 @@ impl Lua {
         let main_state = get_main_state(state);
         let main_state_top = ffi::lua_gettop(state);
 
-        let ref_thread = rlua_expect!(
+        let ref_thread = mlua_expect!(
             protect_lua_closure(main_state, 0, 0, |state| {
                 init_error_registry(state);
 
@@ -84,7 +84,7 @@ impl Lua {
             ref_free: Vec::new(),
         }));
 
-        rlua_debug_assert!(
+        mlua_debug_assert!(
             ffi::lua_gettop(main_state) == main_state_top,
             "stack leak during creation"
         );
@@ -314,7 +314,7 @@ impl Lua {
     /// Create a function which prints its argument:
     ///
     /// ```
-    /// # use rlua::{Lua, Result};
+    /// # use mlua::{Lua, Result};
     /// # fn main() -> Result<()> {
     /// let lua = Lua::new();
     ///
@@ -330,7 +330,7 @@ impl Lua {
     /// Use tuples to accept multiple arguments:
     ///
     /// ```
-    /// # use rlua::{Lua, Result};
+    /// # use mlua::{Lua, Result};
     /// # fn main() -> Result<()> {
     /// let lua = Lua::new();
     ///
@@ -705,13 +705,13 @@ impl Lua {
     pub fn expire_registry_values(&self) {
         unsafe {
             let unref_list = mem::replace(
-                &mut *rlua_expect!(
+                &mut *mlua_expect!(
                     (*extra_data(self.main_state)).registry_unref_list.lock(),
                     "unref list poisoned"
                 ),
                 Some(Vec::new()),
             );
-            for id in rlua_expect!(unref_list, "unref list not set") {
+            for id in mlua_expect!(unref_list, "unref list not set") {
                 ffi::luaL_unref(self.state, ffi::LUA_REGISTRYINDEX, id);
             }
         }
@@ -822,7 +822,7 @@ impl Lua {
 
             ffi::LUA_TTHREAD => Value::Thread(Thread(self.pop_ref())),
 
-            _ => rlua_panic!("LUA_TNONE in pop_value"),
+            _ => mlua_panic!("LUA_TNONE in pop_value"),
         }
     }
 
@@ -1124,7 +1124,7 @@ unsafe fn ref_stack_pop(extra: *mut ExtraData) -> c_int {
             // It is a user error to create enough references to exhaust the Lua max stack size for
             // the ref thread.
             if ffi::lua_checkstack((*extra).ref_thread, (*extra).ref_stack_size) == 0 {
-                rlua_panic!("cannot create a Lua reference, out of auxiliary stack space");
+                mlua_panic!("cannot create a Lua reference, out of auxiliary stack space");
             }
             (*extra).ref_stack_size *= 2;
         }
