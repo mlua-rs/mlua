@@ -159,7 +159,7 @@ pub use self::lua::{
 };
 
 // auxiliary library types
-pub use self::lauxlib::{luaL_Buffer, luaL_Reg, luaL_Stream};
+pub use self::lauxlib::{luaL_Buffer, luaL_Reg};
 
 // auxiliary library functions
 pub use self::lauxlib::{

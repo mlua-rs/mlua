@@ -1,29 +1,29 @@
 #[allow(non_camel_case_types)]
-type lua_State = libc::c_void;
+type lua_State = std::os::raw::c_void;
 
 #[allow(non_camel_case_types)]
-type lua_CFunction = unsafe extern "C" fn(L: *mut lua_State) -> libc::c_int;
+type lua_CFunction = unsafe extern "C" fn(L: *mut lua_State) -> std::os::raw::c_int;
 
 extern "C" {
     fn luaL_newstate() -> *mut lua_State;
 
     fn luaL_requiref(
         L: *mut lua_State,
-        modname: *const libc::c_char,
+        modname: *const std::os::raw::c_char,
         openf: lua_CFunction,
-        glb: libc::c_int,
+        glb: std::os::raw::c_int,
     );
 
-    fn lua_settop(L: *mut lua_State, idx: libc::c_int);
+    fn lua_settop(L: *mut lua_State, idx: std::os::raw::c_int);
 
-    fn luaopen_base(L: *mut lua_State) -> libc::c_int;
-    fn luaopen_coroutine(L: *mut lua_State) -> libc::c_int;
-    fn luaopen_table(L: *mut lua_State) -> libc::c_int;
-    fn luaopen_io(L: *mut lua_State) -> libc::c_int;
-    fn luaopen_os(L: *mut lua_State) -> libc::c_int;
-    fn luaopen_string(L: *mut lua_State) -> libc::c_int;
-    fn luaopen_math(L: *mut lua_State) -> libc::c_int;
-    fn luaopen_package(L: *mut lua_State) -> libc::c_int;
+    fn luaopen_base(L: *mut lua_State) -> std::os::raw::c_int;
+    fn luaopen_coroutine(L: *mut lua_State) -> std::os::raw::c_int;
+    fn luaopen_table(L: *mut lua_State) -> std::os::raw::c_int;
+    fn luaopen_io(L: *mut lua_State) -> std::os::raw::c_int;
+    fn luaopen_os(L: *mut lua_State) -> std::os::raw::c_int;
+    fn luaopen_string(L: *mut lua_State) -> std::os::raw::c_int;
+    fn luaopen_math(L: *mut lua_State) -> std::os::raw::c_int;
+    fn luaopen_package(L: *mut lua_State) -> std::os::raw::c_int;
 }
 
 #[allow(unused)]

@@ -33,9 +33,9 @@ pub use super::glue::{LUA_MAXINTEGER, LUA_MININTEGER};
 pub use super::glue::LUAI_MAXSTACK;
 pub use super::glue::LUAL_NUMSIZES;
 
-pub use super::glue::LUA_KCONTEXT;
+pub type LUA_KCONTEXT = isize; // intptr_t
 
-use libc::c_int;
+use std::os::raw::c_int;
 
 #[inline(always)]
 pub unsafe fn lua_numtointeger(n: LUA_NUMBER, p: *mut LUA_INTEGER) -> c_int {

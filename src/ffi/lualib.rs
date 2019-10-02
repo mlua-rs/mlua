@@ -22,7 +22,7 @@
 
 //! Contains definitions from `lualib.h`.
 
-use libc::c_int;
+use std::os::raw::c_int;
 
 use super::lua::lua_State;
 

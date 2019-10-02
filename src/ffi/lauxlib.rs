@@ -22,7 +22,7 @@
 
 //! Contains definitions from `lauxlib.h`.
 
-use libc::{c_char, c_int, c_long, c_void, size_t};
+use std::os::raw::{c_char, c_int, c_long, c_void};
 use std::ptr;
 
 use super::lua::{self, lua_CFunction, lua_Integer, lua_Number, lua_State};
@@ -45,23 +45,23 @@ pub unsafe fn luaL_checkversion(L: *mut lua_State) {
     luaL_checkversion_(
         L,
         lua::LUA_VERSION_NUM as lua_Number,
-        LUAL_NUMSIZES as size_t,
+        LUAL_NUMSIZES as usize,
     )
 }
 
 extern "C" {
-    pub fn luaL_checkversion_(L: *mut lua_State, ver: lua_Number, sz: size_t);
+    pub fn luaL_checkversion_(L: *mut lua_State, ver: lua_Number, sz: usize);
 
     pub fn luaL_getmetafield(L: *mut lua_State, obj: c_int, e: *const c_char) -> c_int;
     pub fn luaL_callmeta(L: *mut lua_State, obj: c_int, e: *const c_char) -> c_int;
-    pub fn luaL_tolstring(L: *mut lua_State, idx: c_int, len: *mut size_t) -> *const c_char;
+    pub fn luaL_tolstring(L: *mut lua_State, idx: c_int, len: *mut usize) -> *const c_char;
     pub fn luaL_argerror(L: *mut lua_State, arg: c_int, l: *const c_char) -> c_int;
-    pub fn luaL_checklstring(L: *mut lua_State, arg: c_int, l: *mut size_t) -> *const c_char;
+    pub fn luaL_checklstring(L: *mut lua_State, arg: c_int, l: *mut usize) -> *const c_char;
     pub fn luaL_optlstring(
         L: *mut lua_State,
         arg: c_int,
         def: *const c_char,
-        l: *mut size_t,
+        l: *mut usize,
     ) -> *const c_char;
     pub fn luaL_checknumber(L: *mut lua_State, arg: c_int) -> lua_Number;
     pub fn luaL_optnumber(L: *mut lua_State, arg: c_int, def: lua_Number) -> lua_Number;
@@ -113,7 +113,7 @@ extern "C" {
     pub fn luaL_loadbufferx(
         L: *mut lua_State,
         buff: *const c_char,
-        sz: size_t,
+        sz: usize,
         name: *const c_char,
         mode: *const c_char,
     ) -> c_int;
@@ -242,7 +242,7 @@ pub unsafe fn luaL_getmetatable(L: *mut lua_State, n: *const c_char) {
 pub unsafe fn luaL_loadbuffer(
     L: *mut lua_State,
     s: *const c_char,
-    sz: size_t,
+    sz: usize,
     n: *const c_char,
 ) -> c_int {
     luaL_loadbufferx(L, s, sz, n, ptr::null())
@@ -251,8 +251,8 @@ pub unsafe fn luaL_loadbuffer(
 #[repr(C)]
 pub struct luaL_Buffer {
     pub b: *mut c_char,
-    pub size: size_t,
-    pub n: size_t,
+    pub size: usize,
+    pub n: usize,
     pub L: *mut lua_State,
     pub initb: [c_char; LUAL_BUFFERSIZE as usize],
 }
@@ -271,29 +271,23 @@ pub unsafe fn luaL_addchar(B: *mut luaL_Buffer, c: c_char) {
 }
 
 #[inline(always)]
-pub unsafe fn luaL_addsize(B: *mut luaL_Buffer, s: size_t) {
+pub unsafe fn luaL_addsize(B: *mut luaL_Buffer, s: usize) {
     (*B).n += s;
 }
 
 extern "C" {
     pub fn luaL_buffinit(L: *mut lua_State, B: *mut luaL_Buffer);
-    pub fn luaL_prepbuffsize(B: *mut luaL_Buffer, sz: size_t) -> *mut c_char;
-    pub fn luaL_addlstring(B: *mut luaL_Buffer, s: *const c_char, l: size_t);
+    pub fn luaL_prepbuffsize(B: *mut luaL_Buffer, sz: usize) -> *mut c_char;
+    pub fn luaL_addlstring(B: *mut luaL_Buffer, s: *const c_char, l: usize);
     pub fn luaL_addstring(B: *mut luaL_Buffer, s: *const c_char);
     pub fn luaL_addvalue(B: *mut luaL_Buffer);
     pub fn luaL_pushresult(B: *mut luaL_Buffer);
-    pub fn luaL_pushresultsize(B: *mut luaL_Buffer, sz: size_t);
-    pub fn luaL_buffinitsize(L: *mut lua_State, B: *mut luaL_Buffer, sz: size_t) -> *mut c_char;
+    pub fn luaL_pushresultsize(B: *mut luaL_Buffer, sz: usize);
+    pub fn luaL_buffinitsize(L: *mut lua_State, B: *mut luaL_Buffer, sz: usize) -> *mut c_char;
 }
 
 pub unsafe fn luaL_prepbuffer(B: *mut luaL_Buffer) -> *mut c_char {
-    luaL_prepbuffsize(B, LUAL_BUFFERSIZE as size_t)
-}
-
-#[repr(C)]
-pub struct luaL_Stream {
-    pub f: *mut ::libc::FILE,
-    pub closef: lua_CFunction,
+    luaL_prepbuffsize(B, LUAL_BUFFERSIZE as usize)
 }
 
 // omitted: old module system compatibility

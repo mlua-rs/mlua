@@ -19,7 +19,6 @@ members = [
 ]
 
 [dependencies]
-libc = { version = "0.2" }
 num-traits = { version = "0.2.6" }
 bstr = { version = "0.2", features = ["std"], default_features = false }
 
