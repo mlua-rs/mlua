@@ -1,9 +1,9 @@
 [package]
 name = "mlua"
-version = "0.15.3"
+version = "0.1.0"
 authors = ["Aleksandr Orlenko <zxteam@pm.me>", "kyren <catherine@chucklefish.org>"]
 edition = "2018"
-description = "High level bindings to Lua 5.3"
+description = "High level bindings to Lua 5.3 for writing modules"
 repository = "https://github.com/khvzak/mlua"
 documentation = "https://docs.rs/mlua"
 readme = "README.md"
