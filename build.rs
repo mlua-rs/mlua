@@ -46,7 +46,7 @@ fn use_custom_lua<S: AsRef<str>>(include_dir: &S, lib_dir: &S, lua_lib: &S) -> R
     }
 
     println!("cargo:rustc-link-search=native={}", lib_dir.as_ref());
-    println!("cargo:rustc-link-lib={}", lua_lib.as_ref());
+    println!("cargo:rustc-link-lib=static={}", lua_lib.as_ref());
 
     Ok(version_found)
 }
@@ -84,12 +84,12 @@ fn build_glue<P: AsRef<Path> + std::fmt::Debug>(include_paths: &[P]) {
 }
 
 fn main() {
-    let include_dir = env::var("LUA_INCLUDE_DIR").unwrap_or(String::new());
-    let lib_dir = env::var("LUA_LIB_DIR").unwrap_or(String::new());
+    let include_dir = env::var("LUA_INC").unwrap_or(String::new());
+    let lib_dir = env::var("LUA_LIB").unwrap_or(String::new());
     let lua_lib = env::var("LUA_LIB_NAME").unwrap_or(String::new());
 
-    println!("cargo:rerun-if-env-changed=LUA_INCLUDE_DIR");
-    println!("cargo:rerun-if-env-changed=LUA_LIB_DIR");
+    println!("cargo:rerun-if-env-changed=LUA_INC");
+    println!("cargo:rerun-if-env-changed=LUA_LIB");
     println!("cargo:rerun-if-env-changed=LUA_LIB_NAME");
     println!("cargo:rerun-if-changed=src/ffi/glue/glue.c");
 
