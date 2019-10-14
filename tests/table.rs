@@ -1,10 +1,8 @@
-use mlua::{Nil, Result, Table, Value};
-
-include!("_lua.rs");
+use mlua::{Lua, Nil, Result, Table, Value};
 
 #[test]
 fn test_set_get() -> Result<()> {
-    let lua = make_lua();
+    let lua = Lua::new();
 
     let globals = lua.globals();
     globals.set("foo", "bar")?;
@@ -17,7 +15,7 @@ fn test_set_get() -> Result<()> {
 
 #[test]
 fn test_table() -> Result<()> {
-    let lua = make_lua();
+    let lua = Lua::new();
 
     let globals = lua.globals();
 
@@ -91,7 +89,7 @@ fn test_table() -> Result<()> {
 
 #[test]
 fn test_table_scope() -> Result<()> {
-    let lua = make_lua();
+    let lua = Lua::new();
 
     let globals = lua.globals();
     lua.load(
@@ -119,7 +117,7 @@ fn test_table_scope() -> Result<()> {
 
 #[test]
 fn test_metatable() -> Result<()> {
-    let lua = make_lua();
+    let lua = Lua::new();
 
     let table = lua.create_table()?;
     let metatable = lua.create_table()?;
@@ -141,7 +139,7 @@ fn test_metatable() -> Result<()> {
 
 #[test]
 fn test_table_error() -> Result<()> {
-    let lua = make_lua();
+    let lua = Lua::new();
 
     let globals = lua.globals();
     lua.load(

@@ -1,18 +1,19 @@
 use std::sync::Arc;
 
-use mlua::{Error, Result, UserData};
-
-include!("_lua.rs");
+use mlua::{Lua, Result, UserData};
 
 #[test]
 fn test_gc_control() -> Result<()> {
-    let lua = make_lua();
+    let lua = Lua::new();
 
-    assert!(lua.gc_is_running());
-    lua.gc_stop();
-    assert!(!lua.gc_is_running());
-    lua.gc_restart();
-    assert!(lua.gc_is_running());
+    #[cfg(feature = "lua53")]
+    {
+        assert!(lua.gc_is_running());
+        lua.gc_stop();
+        assert!(!lua.gc_is_running());
+        lua.gc_restart();
+        assert!(lua.gc_is_running());
+    }
 
     struct MyUserdata(Arc<()>);
     impl UserData for MyUserdata {}
@@ -30,9 +31,12 @@ fn test_gc_control() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "lua53")]
 #[test]
 fn test_gc_error() {
-    let lua = make_lua();
+    use mlua::Error;
+
+    let lua = Lua::new();
     match lua
         .load(
             r#"

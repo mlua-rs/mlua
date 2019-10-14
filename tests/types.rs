@@ -1,12 +1,10 @@
 use std::os::raw::c_void;
 
-use mlua::{Function, LightUserData, Result};
-
-include!("_lua.rs");
+use mlua::{Function, LightUserData, Lua, Result};
 
 #[test]
 fn test_lightuserdata() -> Result<()> {
-    let lua = make_lua();
+    let lua = Lua::new();
 
     let globals = lua.globals();
     lua.load(

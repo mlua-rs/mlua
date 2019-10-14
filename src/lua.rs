@@ -16,6 +16,8 @@ use crate::table::Table;
 use crate::thread::Thread;
 use crate::types::{Callback, Integer, LightUserData, LuaRef, Number, RegistryKey};
 use crate::userdata::{AnyUserData, MetaMethod, UserData, UserDataMethods};
+#[cfg(not(feature = "lua53"))]
+use crate::util::set_main_state;
 use crate::util::{
     assert_stack, callback_error, check_stack, get_main_state, get_userdata, get_wrapped_error,
     init_error_registry, init_userdata_metatable, pop_error, protect_lua, protect_lua_closure,
@@ -34,9 +36,41 @@ pub struct Lua {
 unsafe impl Send for Lua {}
 
 impl Lua {
+    // Creates a new Lua state and loads standard library without the debug library.
+    #[doc(hidden)]
+    pub fn new() -> Lua {
+        unsafe {
+            let state = ffi::luaL_newstate();
+
+            ffi::luaL_requiref(state, cstr!("_G"), ffi::luaopen_base, 1);
+            #[cfg(feature = "lua53")]
+            ffi::luaL_requiref(state, cstr!("coroutine"), ffi::luaopen_coroutine, 1);
+            ffi::luaL_requiref(state, cstr!("table"), ffi::luaopen_table, 1);
+            ffi::luaL_requiref(state, cstr!("io"), ffi::luaopen_io, 1);
+            ffi::luaL_requiref(state, cstr!("os"), ffi::luaopen_os, 1);
+            ffi::luaL_requiref(state, cstr!("string"), ffi::luaopen_string, 1);
+            #[cfg(feature = "lua53")]
+            ffi::luaL_requiref(state, cstr!("utf8"), ffi::luaopen_utf8, 1);
+            ffi::luaL_requiref(state, cstr!("math"), ffi::luaopen_math, 1);
+            ffi::luaL_requiref(state, cstr!("package"), ffi::luaopen_package, 1);
+            #[cfg(feature = "lua53")]
+            ffi::lua_pop(state, 9);
+            #[cfg(not(feature = "lua53"))]
+            ffi::lua_pop(state, 7);
+
+            Lua::init_from_ptr(state)
+        }
+    }
+
     /// Constructs a new Lua instance from the existing state.
     pub unsafe fn init_from_ptr(state: *mut ffi::lua_State) -> Lua {
+        #[cfg(feature = "lua53")]
         let main_state = get_main_state(state);
+        #[cfg(not(feature = "lua53"))]
+        let main_state = {
+            set_main_state(state);
+            state
+        };
         let main_state_top = ffi::lua_gettop(state);
 
         let ref_thread = mlua_expect!(
@@ -113,6 +147,7 @@ impl Lua {
     }
 
     /// Returns true if the garbage collector is currently running automatically.
+    #[cfg(feature = "lua53")]
     pub fn gc_is_running(&self) -> bool {
         unsafe { ffi::lua_gc(self.main_state, ffi::LUA_GCISRUNNING, 0) != 0 }
     }
@@ -231,7 +266,10 @@ impl Lua {
                 ffi::LUA_OK => {
                     if let Some(env) = env {
                         self.push_value(env)?;
+                        #[cfg(feature = "lua53")]
                         ffi::lua_setupvalue(self.state, -2, 1);
+                        #[cfg(not(feature = "lua53"))]
+                        ffi::lua_setfenv(self.state, -2);
                     }
                     Ok(Function(self.pop_ref()))
                 }
@@ -421,7 +459,10 @@ impl Lua {
         unsafe {
             let _sg = StackGuard::new(self.state);
             assert_stack(self.state, 2);
+            #[cfg(feature = "lua53")]
             ffi::lua_rawgeti(self.state, ffi::LUA_REGISTRYINDEX, ffi::LUA_RIDX_GLOBALS);
+            #[cfg(not(feature = "lua53"))]
+            ffi::lua_pushvalue(self.state, ffi::LUA_GLOBALSINDEX);
             Table(self.pop_ref())
         }
     }

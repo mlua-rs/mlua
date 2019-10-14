@@ -1,10 +1,8 @@
-use mlua::{Function, Result, String};
-
-include!("_lua.rs");
+use mlua::{Function, Lua, Result, String};
 
 #[test]
 fn test_function() -> Result<()> {
-    let lua = make_lua();
+    let lua = Lua::new();
 
     let globals = lua.globals();
     lua.load(
@@ -24,7 +22,7 @@ fn test_function() -> Result<()> {
 
 #[test]
 fn test_bind() -> Result<()> {
-    let lua = make_lua();
+    let lua = Lua::new();
 
     let globals = lua.globals();
     lua.load(
@@ -54,7 +52,7 @@ fn test_bind() -> Result<()> {
 
 #[test]
 fn test_rust_function() -> Result<()> {
-    let lua = make_lua();
+    let lua = Lua::new();
 
     let globals = lua.globals();
     lua.load(

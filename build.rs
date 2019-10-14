@@ -45,8 +45,13 @@ fn use_custom_lua<S: AsRef<str>>(include_dir: &S, lib_dir: &S, lua_lib: &S) -> R
         }
     }
 
+    let mut static_link = "";
+    if env::var("LUA_LINK").unwrap_or(String::new()) == "static" {
+        static_link = "static=";
+    }
+
     println!("cargo:rustc-link-search=native={}", lib_dir.as_ref());
-    println!("cargo:rustc-link-lib=static={}", lua_lib.as_ref());
+    println!("cargo:rustc-link-lib={}{}", static_link, lua_lib.as_ref());
 
     Ok(version_found)
 }
@@ -91,6 +96,7 @@ fn main() {
     println!("cargo:rerun-if-env-changed=LUA_INC");
     println!("cargo:rerun-if-env-changed=LUA_LIB");
     println!("cargo:rerun-if-env-changed=LUA_LIB_NAME");
+    println!("cargo:rerun-if-env-changed=LUA_LINK");
     println!("cargo:rerun-if-changed=src/ffi/glue/glue.c");
 
     if include_dir != "" && lib_dir != "" && lua_lib != "" {
@@ -101,10 +107,35 @@ fn main() {
 
     // Find lua via pkg-config
 
-    let lua = pkg_config::Config::new()
-        .range_version((Bound::Included("5.3"), Bound::Excluded("5.4")))
-        .probe("lua")
-        .unwrap();
+    #[cfg(feature = "lua53")]
+    {
+        let mut lua = pkg_config::Config::new()
+            .range_version((Bound::Included("5.3"), Bound::Excluded("5.4")))
+            .probe("lua");
 
-    build_glue(&lua.include_paths);
+        if lua.is_err() {
+            lua = pkg_config::Config::new().probe("lua5.3");
+        }
+
+        match lua {
+            Ok(lua) => build_glue(&lua.include_paths),
+            Err(err) => panic!(err),
+        };
+    }
+
+    #[cfg(not(feature = "lua53"))]
+    {
+        let mut lua = pkg_config::Config::new()
+            .range_version((Bound::Included("5.1"), Bound::Excluded("5.2")))
+            .probe("lua");
+
+        if lua.is_err() {
+            lua = pkg_config::Config::new().probe("lua5.1");
+        }
+
+        match lua {
+            Ok(lua) => build_glue(&lua.include_paths),
+            Err(err) => panic!(err),
+        };
+    }
 }

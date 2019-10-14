@@ -1,13 +1,11 @@
 use std::borrow::Cow;
 
-use mlua::{Result, String};
-
-include!("_lua.rs");
+use mlua::{Lua, Result, String};
 
 #[test]
 fn compare() {
     fn with_str<F: FnOnce(String)>(s: &str, f: F) {
-        f(make_lua().create_string(s).unwrap());
+        f(Lua::new().create_string(s).unwrap());
     }
 
     // Tests that all comparisons we want to have are usable
@@ -24,12 +22,12 @@ fn compare() {
 
 #[test]
 fn string_views() -> Result<()> {
-    let lua = make_lua();
+    let lua = Lua::new();
 
     lua.load(
         r#"
         ok = "null bytes are valid utf-8, wh\0 knew?"
-        err = "but \xff isn't :("
+        err = "but \255 isn't :("
         empty = ""
     "#,
     )
@@ -58,7 +56,7 @@ fn string_views() -> Result<()> {
 
 #[test]
 fn raw_string() -> Result<()> {
-    let lua = make_lua();
+    let lua = Lua::new();
 
     let rs = lua.create_string(&[0, 1, 2, 3, 0, 1, 2, 3])?;
     assert_eq!(rs.as_bytes(), &[0, 1, 2, 3, 0, 1, 2, 3]);

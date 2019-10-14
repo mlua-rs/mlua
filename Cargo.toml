@@ -3,7 +3,7 @@ name = "mlua"
 version = "0.1.0"
 authors = ["Aleksandr Orlenko <zxteam@pm.me>", "kyren <catherine@chucklefish.org>"]
 edition = "2018"
-description = "High level bindings to Lua 5.3 for writing modules"
+description = "High level bindings to Lua 5.3/5.1 for writing modules"
 repository = "https://github.com/khvzak/mlua"
 documentation = "https://docs.rs/mlua"
 readme = "README.md"
@@ -17,6 +17,10 @@ license = "MIT"
 members = [
     "mlua_derive",
 ]
+
+[features]
+default = ["lua53"]
+lua53 = []
 
 [dependencies]
 num-traits = { version = "0.2.6" }

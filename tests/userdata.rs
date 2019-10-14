@@ -1,10 +1,9 @@
 use std::sync::Arc;
 
 use mlua::{
-    AnyUserData, ExternalError, Function, MetaMethod, Result, String, UserData, UserDataMethods,
+    AnyUserData, ExternalError, Function, Lua, MetaMethod, Result, String, UserData,
+    UserDataMethods,
 };
-
-include!("_lua.rs");
 
 #[test]
 fn test_user_data() -> Result<()> {
@@ -14,7 +13,7 @@ fn test_user_data() -> Result<()> {
     impl UserData for UserData1 {};
     impl UserData for UserData2 {};
 
-    let lua = make_lua();
+    let lua = Lua::new();
     let userdata1 = lua.create_userdata(UserData1(1))?;
     let userdata2 = lua.create_userdata(UserData2(Box::new(2)))?;
 
@@ -43,7 +42,7 @@ fn test_methods() -> Result<()> {
         }
     }
 
-    let lua = make_lua();
+    let lua = Lua::new();
     let globals = lua.globals();
     let userdata = lua.create_userdata(MyUserData(42))?;
     globals.set("userdata", userdata.clone())?;
@@ -96,7 +95,7 @@ fn test_metamethods() -> Result<()> {
         }
     }
 
-    let lua = make_lua();
+    let lua = Lua::new();
     let globals = lua.globals();
     globals.set("userdata1", MyUserData(7))?;
     globals.set("userdata2", MyUserData(3))?;
@@ -127,7 +126,7 @@ fn test_gc_userdata() -> Result<()> {
         }
     }
 
-    let lua = make_lua();
+    let lua = Lua::new();
     lua.globals().set("userdata", MyUserdata { id: 123 })?;
 
     assert!(lua
@@ -160,7 +159,7 @@ fn detroys_userdata() -> Result<()> {
 
     let rc = Arc::new(());
 
-    let lua = make_lua();
+    let lua = Lua::new();
     lua.globals().set("userdata", MyUserdata(rc.clone()))?;
 
     assert_eq!(Arc::strong_count(&rc), 2);
@@ -179,7 +178,7 @@ fn user_value() -> Result<()> {
     struct MyUserData;
     impl UserData for MyUserData {}
 
-    let lua = make_lua();
+    let lua = Lua::new();
     let ud = lua.create_userdata(MyUserData)?;
     ud.set_user_value("hello")?;
     assert_eq!(ud.get_user_value::<String>()?, "hello");
@@ -205,7 +204,7 @@ fn test_functions() -> Result<()> {
         }
     }
 
-    let lua = make_lua();
+    let lua = Lua::new();
     let globals = lua.globals();
     let userdata = lua.create_userdata(MyUserData(42))?;
     globals.set("userdata", userdata.clone())?;

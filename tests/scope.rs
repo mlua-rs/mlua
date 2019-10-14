@@ -1,13 +1,11 @@
 use std::cell::Cell;
 use std::rc::Rc;
 
-use mlua::{Error, Function, MetaMethod, Result, String, UserData, UserDataMethods};
-
-include!("_lua.rs");
+use mlua::{Error, Function, Lua, MetaMethod, Result, String, UserData, UserDataMethods};
 
 #[test]
 fn scope_func() -> Result<()> {
-    let lua = make_lua();
+    let lua = Lua::new();
 
     let rc = Rc::new(Cell::new(0));
     lua.scope(|scope| {
@@ -34,7 +32,7 @@ fn scope_func() -> Result<()> {
 
 #[test]
 fn scope_drop() -> Result<()> {
-    let lua = make_lua();
+    let lua = Lua::new();
 
     struct MyUserdata(Rc<()>);
     impl UserData for MyUserdata {
@@ -65,7 +63,7 @@ fn scope_drop() -> Result<()> {
 
 #[test]
 fn scope_capture() -> Result<()> {
-    let lua = make_lua();
+    let lua = Lua::new();
 
     let mut i = 0;
     lua.scope(|scope| {
@@ -83,7 +81,7 @@ fn scope_capture() -> Result<()> {
 
 #[test]
 fn outer_lua_access() -> Result<()> {
-    let lua = make_lua();
+    let lua = Lua::new();
 
     let table = lua.create_table()?;
     lua.scope(|scope| {
@@ -114,7 +112,7 @@ fn scope_userdata_methods() -> Result<()> {
         }
     }
 
-    let lua = make_lua();
+    let lua = Lua::new();
 
     let i = Cell::new(42);
     let f: Function = lua
@@ -156,7 +154,7 @@ fn scope_userdata_functions() -> Result<()> {
         }
     }
 
-    let lua = make_lua();
+    let lua = Lua::new();
 
     let dummy = 0;
     let f = lua
@@ -192,7 +190,7 @@ fn scope_userdata_mismatch() -> Result<()> {
         }
     }
 
-    let lua = make_lua();
+    let lua = Lua::new();
 
     lua.load(
         r#"

@@ -1,5 +1,6 @@
 // The MIT License (MIT)
 //
+// Copyright (c) 2019 A. Orlenko
 // Copyright (c) 2014 J.C. Moyer
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -25,24 +26,13 @@
 pub use super::glue::LUAL_BUFFERSIZE;
 pub use super::glue::LUA_INTEGER;
 pub use super::glue::LUA_NUMBER;
+#[cfg(feature = "lua53")]
 pub use super::glue::LUA_UNSIGNED;
 
 pub use super::glue::LUA_IDSIZE;
-pub use super::glue::{LUA_MAXINTEGER, LUA_MININTEGER};
 
-pub use super::glue::LUAI_MAXSTACK;
+#[cfg(feature = "lua53")]
 pub use super::glue::LUAL_NUMSIZES;
 
+#[cfg(feature = "lua53")]
 pub type LUA_KCONTEXT = isize; // intptr_t
-
-use std::os::raw::c_int;
-
-#[inline(always)]
-pub unsafe fn lua_numtointeger(n: LUA_NUMBER, p: *mut LUA_INTEGER) -> c_int {
-    if n >= (LUA_MININTEGER as LUA_NUMBER) && n < -(LUA_MININTEGER as LUA_NUMBER) {
-        *p = n as LUA_INTEGER;
-        1
-    } else {
-        0
-    }
-}

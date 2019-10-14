@@ -192,7 +192,8 @@ pub unsafe fn pop_error(state: *mut ffi::lua_State, err_code: c_int) -> Error {
                 Error::SyntaxError {
                     // This seems terrible, but as far as I can tell, this is exactly what the
                     // stock Lua REPL does.
-                    incomplete_input: err_string.ends_with("<eof>"),
+                    incomplete_input: err_string.ends_with("<eof>")
+                        || err_string.ends_with("'<eof>'"),
                     message: err_string,
                 }
             }
@@ -204,6 +205,7 @@ pub unsafe fn pop_error(state: *mut ffi::lua_State, err_code: c_int) -> Error {
                 Error::RuntimeError(err_string)
             }
             ffi::LUA_ERRMEM => Error::MemoryError(err_string),
+            #[cfg(feature = "lua53")]
             ffi::LUA_ERRGCMM => Error::GarbageCollectorError(err_string),
             _ => mlua_panic!("unrecognized lua error code"),
         }
@@ -441,9 +443,23 @@ pub unsafe extern "C" fn error_traceback(state: *mut ffi::lua_State) -> c_int {
     1
 }
 
+// Does not call lua_checkstack, uses 2 stack spaces.
+#[cfg(not(feature = "lua53"))]
+pub unsafe fn set_main_state(state: *mut ffi::lua_State) {
+    ffi::lua_pushlightuserdata(state, &MAIN_THREAD_REGISTRY_KEY as *const u8 as *mut c_void);
+    ffi::lua_pushthread(state);
+    ffi::lua_rawset(state, ffi::LUA_REGISTRYINDEX);
+}
+
 // Does not call lua_checkstack, uses 1 stack space.
 pub unsafe fn get_main_state(state: *mut ffi::lua_State) -> *mut ffi::lua_State {
+    #[cfg(feature = "lua53")]
     ffi::lua_rawgeti(state, ffi::LUA_REGISTRYINDEX, ffi::LUA_RIDX_MAINTHREAD);
+    #[cfg(not(feature = "lua53"))]
+    {
+        ffi::lua_pushlightuserdata(state, &MAIN_THREAD_REGISTRY_KEY as *const u8 as *mut c_void);
+        ffi::lua_rawget(state, ffi::LUA_REGISTRYINDEX);
+    }
     let main_state = ffi::lua_tothread(state, -1);
     ffi::lua_pop(state, 1);
     main_state
@@ -735,6 +751,8 @@ unsafe fn get_destructed_userdata_metatable(state: *mut ffi::lua_State) {
     ffi::lua_rawget(state, ffi::LUA_REGISTRYINDEX);
 }
 
+#[cfg(not(feature = "lua53"))]
+static MAIN_THREAD_REGISTRY_KEY: u8 = 0;
 static ERROR_METATABLE_REGISTRY_KEY: u8 = 0;
 static PANIC_METATABLE_REGISTRY_KEY: u8 = 0;
 static DESTRUCTED_USERDATA_METATABLE: u8 = 0;

@@ -1,12 +1,10 @@
 use std::panic::catch_unwind;
 
-use mlua::{Error, Function, Result, Thread, ThreadStatus};
-
-include!("_lua.rs");
+use mlua::{Error, Function, Lua, Result, Thread, ThreadStatus};
 
 #[test]
 fn test_thread() -> Result<()> {
-    let lua = make_lua();
+    let lua = Lua::new();
 
     let thread = lua.create_thread(
         lua.load(
@@ -97,11 +95,18 @@ fn test_thread() -> Result<()> {
 
 #[test]
 fn coroutine_from_closure() -> Result<()> {
-    let lua = make_lua();
+    let lua = Lua::new();
 
     let thrd_main = lua.create_function(|_, ()| Ok(()))?;
     lua.globals().set("main", thrd_main)?;
+
+    #[cfg(feature = "lua53")]
     let thrd: Thread = lua.load("coroutine.create(main)").eval()?;
+    #[cfg(not(feature = "lua53"))]
+    let thrd: Thread = lua
+        .load("coroutine.create(function(...) return main(unpack(arg)) end)")
+        .eval()?;
+
     thrd.resume::<_, ()>(())?;
 
     Ok(())
@@ -111,7 +116,7 @@ fn coroutine_from_closure() -> Result<()> {
 fn coroutine_panic() {
     match catch_unwind(|| -> Result<()> {
         // check that coroutines propagate panics correctly
-        let lua = make_lua();
+        let lua = Lua::new();
         let thrd_main = lua.create_function(|_, ()| -> Result<()> {
             panic!("test_panic");
         })?;

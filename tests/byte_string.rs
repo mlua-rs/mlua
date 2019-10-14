@@ -1,21 +1,19 @@
 use bstr::{BStr, BString};
-use mlua::Result;
-
-include!("_lua.rs");
+use mlua::{Lua, Result};
 
 #[test]
 fn byte_string_round_trip() -> Result<()> {
-    let lua = make_lua();
+    let lua = Lua::new();
 
     lua.load(
         r#"
-        invalid_sequence_identifier = "\xa0\xa1"
-        invalid_2_octet_sequence_2nd = "\xc3\x28"
-        invalid_3_octet_sequence_2nd = "\xe2\x28\xa1"
-        invalid_3_octet_sequence_3rd = "\xe2\x82\x28"
-        invalid_4_octet_sequence_2nd = "\xf0\x28\x8c\xbc"
-        invalid_4_octet_sequence_3rd = "\xf0\x90\x28\xbc"
-        invalid_4_octet_sequence_4th = "\xf0\x28\x8c\x28"
+        invalid_sequence_identifier = "\160\161"
+        invalid_2_octet_sequence_2nd = "\195\040"
+        invalid_3_octet_sequence_2nd = "\226\040\161"
+        invalid_3_octet_sequence_3rd = "\226\130\040"
+        invalid_4_octet_sequence_2nd = "\240\040\140\188"
+        invalid_4_octet_sequence_3rd = "\240\144\040\188"
+        invalid_4_octet_sequence_4th = "\240\040\140\040"
 
         an_actual_string = "Hello, world!"
     "#,

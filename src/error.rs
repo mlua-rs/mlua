@@ -31,6 +31,7 @@ pub enum Error {
     /// Lua garbage collector error, aka `LUA_ERRGCMM`.
     ///
     /// The Lua VM returns this error when there is an error running a `__gc` metamethod.
+    #[cfg(feature = "lua53")]
     GarbageCollectorError(StdString),
     /// A mutable callback has triggered Lua code that has called the same mutable callback again.
     ///
@@ -137,6 +138,7 @@ impl fmt::Display for Error {
             Error::MemoryError(ref msg) => {
                 write!(fmt, "memory error: {}", msg)
             }
+            #[cfg(feature = "lua53")]
             Error::GarbageCollectorError(ref msg) => {
                 write!(fmt, "garbage collector error: {}", msg)
             }

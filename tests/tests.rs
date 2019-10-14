@@ -3,13 +3,13 @@ use std::panic::catch_unwind;
 use std::sync::Arc;
 use std::{error, f32, f64, fmt};
 
-use mlua::{Error, ExternalError, Function, Nil, Result, String, Table, UserData, Value, Variadic};
-
-include!("_lua.rs");
+use mlua::{
+    Error, ExternalError, Function, Lua, Nil, Result, String, Table, UserData, Value, Variadic,
+};
 
 #[test]
 fn test_load() -> Result<()> {
-    let lua = make_lua();
+    let lua = Lua::new();
     let func = lua.load("return 1+2").into_function()?;
     let result: i32 = func.call(())?;
     assert_eq!(result, 3);
@@ -21,7 +21,7 @@ fn test_load() -> Result<()> {
 
 #[test]
 fn test_exec() -> Result<()> {
-    let lua = make_lua();
+    let lua = Lua::new();
 
     let globals = lua.globals();
     lua.load(
@@ -56,7 +56,7 @@ fn test_exec() -> Result<()> {
 
 #[test]
 fn test_eval() -> Result<()> {
-    let lua = make_lua();
+    let lua = Lua::new();
 
     assert_eq!(lua.load("1 + 1").eval::<i32>()?, 2);
     assert_eq!(lua.load("false == false").eval::<bool>()?, true);
@@ -77,7 +77,7 @@ fn test_eval() -> Result<()> {
 
 #[test]
 fn test_lua_multi() -> Result<()> {
-    let lua = make_lua();
+    let lua = Lua::new();
 
     lua.load(
         r#"
@@ -108,7 +108,7 @@ fn test_lua_multi() -> Result<()> {
 
 #[test]
 fn test_coercion() -> Result<()> {
-    let lua = make_lua();
+    let lua = Lua::new();
 
     lua.load(
         r#"
@@ -148,7 +148,7 @@ fn test_error() -> Result<()> {
         }
     }
 
-    let lua = make_lua();
+    let lua = Lua::new();
 
     let globals = lua.globals();
     lua.load(
@@ -183,6 +183,13 @@ fn test_error() -> Result<()> {
             end, 3)
 
             local function handler(err)
+                if string.match(_VERSION, ' 5%.1$') then
+                    -- Special case for Lua 5.1
+                    local caps = string.match(err, ': (%d+)$')
+                    if caps then
+                        err = caps
+                    end
+                end
                 testvar = testvar + err
                 return "should be ignored"
             end
@@ -260,7 +267,7 @@ fn test_error() -> Result<()> {
     assert!(understand_recursion.call::<_, ()>(()).is_err());
 
     match catch_unwind(|| -> Result<()> {
-        let lua = make_lua();
+        let lua = Lua::new();
         let globals = lua.globals();
 
         lua.load(
@@ -288,7 +295,7 @@ fn test_error() -> Result<()> {
     };
 
     match catch_unwind(|| -> Result<()> {
-        let lua = make_lua();
+        let lua = Lua::new();
         let globals = lua.globals();
 
         lua.load(
@@ -321,7 +328,7 @@ fn test_error() -> Result<()> {
 
 #[test]
 fn test_result_conversions() -> Result<()> {
-    let lua = make_lua();
+    let lua = Lua::new();
     let globals = lua.globals();
 
     let err = lua.create_function(|_, ()| {
@@ -352,7 +359,7 @@ fn test_result_conversions() -> Result<()> {
 
 #[test]
 fn test_num_conversion() -> Result<()> {
-    let lua = make_lua();
+    let lua = Lua::new();
 
     assert_eq!(
         lua.coerce_integer(Value::String(lua.create_string("1")?))?,
@@ -382,7 +389,10 @@ fn test_num_conversion() -> Result<()> {
 
     assert_eq!(lua.load("1.0").eval::<i64>()?, 1);
     assert_eq!(lua.load("1.0").eval::<f64>()?, 1.0);
+    #[cfg(feature = "lua53")]
     assert_eq!(lua.load("1.0").eval::<String>()?, "1.0");
+    #[cfg(not(feature = "lua53"))]
+    assert_eq!(lua.load("1.0").eval::<String>()?, "1");
 
     assert_eq!(lua.load("1.5").eval::<i64>()?, 1);
     assert_eq!(lua.load("1.5").eval::<f64>()?, 1.5);
@@ -404,7 +414,7 @@ fn test_num_conversion() -> Result<()> {
 
 #[test]
 fn test_pcall_xpcall() -> Result<()> {
-    let lua = make_lua();
+    let lua = Lua::new();
     let globals = lua.globals();
 
     // make sure that we handle not enough arguments
@@ -412,6 +422,18 @@ fn test_pcall_xpcall() -> Result<()> {
     assert!(lua.load("pcall()").exec().is_err());
     assert!(lua.load("xpcall()").exec().is_err());
     assert!(lua.load("xpcall(function() end)").exec().is_err());
+
+    // Lua5.3 compatible version of xpcall
+    #[cfg(not(feature = "lua53"))]
+    lua.load(
+        r#"
+        local xpcall_orig = xpcall
+        function xpcall(f, err, ...)
+            return xpcall_orig(function() return f(unpack(arg)) end, err)
+        end
+    "#,
+    )
+    .exec()?;
 
     // Make sure that the return values from are correct on success
 
@@ -444,7 +466,13 @@ fn test_pcall_xpcall() -> Result<()> {
     assert_eq!(globals.get::<_, String>("pcall_error")?, "testerror");
 
     assert_eq!(globals.get::<_, bool>("xpcall_statusr")?, false);
+    #[cfg(feature = "lua53")]
     assert_eq!(globals.get::<_, String>("xpcall_error")?, "testerror");
+    #[cfg(not(feature = "lua53"))]
+    assert!(globals
+        .get::<_, String>("xpcall_error")?
+        .to_str()?
+        .ends_with(": testerror"));
 
     // Make sure that weird xpcall error recursion at least doesn't cause unsafety or panics.
     lua.load(
@@ -464,7 +492,7 @@ fn test_pcall_xpcall() -> Result<()> {
 
 #[test]
 fn test_recursive_mut_callback_error() -> Result<()> {
-    let lua = make_lua();
+    let lua = Lua::new();
 
     let mut v = Some(Box::new(123));
     let f = lua.create_function_mut::<_, (), _>(move |lua, mutate: bool| {
@@ -499,7 +527,7 @@ fn test_recursive_mut_callback_error() -> Result<()> {
 
 #[test]
 fn test_set_metatable_nil() -> Result<()> {
-    let lua = make_lua();
+    let lua = Lua::new();
     lua.load(
         r#"
         a = {}
@@ -512,7 +540,7 @@ fn test_set_metatable_nil() -> Result<()> {
 
 #[test]
 fn test_named_registry_value() -> Result<()> {
-    let lua = make_lua();
+    let lua = Lua::new();
 
     lua.set_named_registry_value::<_, i32>("test", 42)?;
     let f = lua.create_function(move |lua, ()| {
@@ -533,7 +561,7 @@ fn test_named_registry_value() -> Result<()> {
 
 #[test]
 fn test_registry_value() -> Result<()> {
-    let lua = make_lua();
+    let lua = Lua::new();
 
     let mut r = Some(lua.create_registry_value::<i32>(42)?);
     let f = lua.create_function_mut(move |lua, ()| {
@@ -557,7 +585,7 @@ fn test_drop_registry_value() -> Result<()> {
 
     impl UserData for MyUserdata {}
 
-    let lua = make_lua();
+    let lua = Lua::new();
     let rc = Arc::new(());
 
     let r = lua.create_registry_value(MyUserdata(rc.clone()))?;
@@ -575,8 +603,8 @@ fn test_drop_registry_value() -> Result<()> {
 
 #[test]
 fn test_lua_registry_ownership() -> Result<()> {
-    let lua1 = make_lua();
-    let lua2 = make_lua();
+    let lua1 = Lua::new();
+    let lua2 = Lua::new();
 
     let r1 = lua1.create_registry_value("hello")?;
     let r2 = lua2.create_registry_value("hello")?;
@@ -591,8 +619,8 @@ fn test_lua_registry_ownership() -> Result<()> {
 
 #[test]
 fn test_mismatched_registry_key() -> Result<()> {
-    let lua1 = make_lua();
-    let lua2 = make_lua();
+    let lua1 = Lua::new();
+    let lua2 = Lua::new();
 
     let r = lua1.create_registry_value("hello")?;
     match lua2.remove_registry_value(r) {
@@ -605,7 +633,7 @@ fn test_mismatched_registry_key() -> Result<()> {
 
 #[test]
 fn too_many_returns() -> Result<()> {
-    let lua = make_lua();
+    let lua = Lua::new();
     let f = lua.create_function(|_, ()| Ok(Variadic::from_iter(1..1000000)))?;
     assert!(f.call::<_, Vec<u32>>(()).is_err());
     Ok(())
@@ -613,7 +641,7 @@ fn too_many_returns() -> Result<()> {
 
 #[test]
 fn too_many_arguments() -> Result<()> {
-    let lua = make_lua();
+    let lua = Lua::new();
     lua.load("function test(...) end").exec()?;
     let args = Variadic::from_iter(1..1000000);
     assert!(lua
@@ -626,7 +654,7 @@ fn too_many_arguments() -> Result<()> {
 
 #[test]
 fn too_many_recursions() -> Result<()> {
-    let lua = make_lua();
+    let lua = Lua::new();
     let f = lua
         .create_function(move |lua, ()| lua.globals().get::<_, Function>("f")?.call::<_, ()>(()))?;
     lua.globals().set("f", f)?;
@@ -642,7 +670,7 @@ fn too_many_recursions() -> Result<()> {
 
 #[test]
 fn too_many_binds() -> Result<()> {
-    let lua = make_lua();
+    let lua = Lua::new();
     let globals = lua.globals();
     lua.load(
         r#"
@@ -663,7 +691,7 @@ fn too_many_binds() -> Result<()> {
 
 #[test]
 fn large_args() -> Result<()> {
-    let lua = make_lua();
+    let lua = Lua::new();
     let globals = lua.globals();
 
     globals.set(
@@ -698,7 +726,7 @@ fn large_args() -> Result<()> {
 
 #[test]
 fn large_args_ref() -> Result<()> {
-    let lua = make_lua();
+    let lua = Lua::new();
 
     let f = lua.create_function(|_, args: Variadic<String>| {
         for i in 0..args.len() {
@@ -714,7 +742,7 @@ fn large_args_ref() -> Result<()> {
 
 #[test]
 fn chunk_env() -> Result<()> {
-    let lua = make_lua();
+    let lua = Lua::new();
 
     let assert: Function = lua.globals().get("assert")?;
 
@@ -756,7 +784,7 @@ fn chunk_env() -> Result<()> {
 
 #[test]
 fn context_thread() -> Result<()> {
-    let lua = make_lua();
+    let lua = Lua::new();
 
     let f = lua
         .load(
@@ -767,7 +795,32 @@ fn context_thread() -> Result<()> {
         )
         .into_function()?;
 
+    #[cfg(feature = "lua53")]
     f.call::<_, ()>(lua.current_thread())?;
+
+    #[cfg(not(feature = "lua53"))]
+    f.call::<_, ()>(Nil)?;
+
+    Ok(())
+}
+
+#[test]
+#[cfg(not(feature = "lua53"))]
+fn context_thread_51() -> Result<()> {
+    let lua = Lua::new();
+
+    let thread = lua.create_thread(
+        lua.load(
+            r#"
+                function (thread)
+                    assert(coroutine.running() == thread)
+                end
+            "#,
+        )
+        .eval()?,
+    )?;
+
+    thread.resume::<_, ()>(thread.clone())?;
 
     Ok(())
 }
