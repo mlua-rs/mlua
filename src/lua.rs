@@ -30,6 +30,7 @@ pub struct Lua {
     pub(crate) state: *mut ffi::lua_State,
     main_state: *mut ffi::lua_State,
     extra: Arc<RefCell<ExtraData>>,
+    ephemeral: bool,
     // Lua has lots of interior mutability, should not be RefUnwindSafe
     _no_ref_unwind_safe: PhantomData<UnsafeCell<()>>,
 }
@@ -47,9 +48,25 @@ struct ExtraData {
 
 unsafe impl Send for Lua {}
 
+impl Drop for Lua {
+    fn drop(&mut self) {
+        unsafe {
+            if !self.ephemeral {
+                let mut extra = self.extra.borrow_mut();
+                mlua_debug_assert!(
+                    ffi::lua_gettop(extra.ref_thread) == extra.ref_stack_max
+                        && extra.ref_stack_max as usize == extra.ref_free.len(),
+                    "reference leak detected"
+                );
+                *mlua_expect!(extra.registry_unref_list.lock(), "unref list poisoned") = None;
+                ffi::lua_close(self.state);
+            }
+        }
+    }
+}
+
 impl Lua {
-    // Creates a new Lua state and loads standard library without the debug library.
-    #[doc(hidden)]
+    /// Creates a new Lua state and loads standard library without the `debug` library.
     pub fn new() -> Lua {
         unsafe {
             let state = ffi::luaL_newstate();
@@ -70,7 +87,9 @@ impl Lua {
             #[cfg(not(feature = "lua53"))]
             ffi::lua_pop(state, 7);
 
-            Lua::init_from_ptr(state)
+            let mut lua = Lua::init_from_ptr(state);
+            lua.ephemeral = false;
+            lua
         }
     }
 
@@ -158,6 +177,7 @@ impl Lua {
             state,
             main_state: main_state,
             extra: extra,
+            ephemeral: true,
             _no_ref_unwind_safe: PhantomData,
         }
     }
@@ -1035,6 +1055,7 @@ impl Lua {
                     state: state,
                     main_state: get_main_state(state),
                     extra: (*extra).clone(),
+                    ephemeral: true,
                     _no_ref_unwind_safe: PhantomData,
                 };
 
