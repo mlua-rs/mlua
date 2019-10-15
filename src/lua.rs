@@ -29,8 +29,20 @@ use crate::value::{FromLua, FromLuaMulti, MultiValue, Nil, ToLua, ToLuaMulti, Va
 pub struct Lua {
     pub(crate) state: *mut ffi::lua_State,
     main_state: *mut ffi::lua_State,
+    extra: Arc<RefCell<ExtraData>>,
     // Lua has lots of interior mutability, should not be RefUnwindSafe
     _no_ref_unwind_safe: PhantomData<UnsafeCell<()>>,
+}
+
+// Data associated with the lua_State.
+struct ExtraData {
+    registered_userdata: HashMap<TypeId, c_int>,
+    registry_unref_list: Arc<Mutex<Option<Vec<c_int>>>>,
+
+    ref_thread: *mut ffi::lua_State,
+    ref_stack_size: c_int,
+    ref_stack_max: c_int,
+    ref_free: Vec<c_int>,
 }
 
 unsafe impl Send for Lua {}
@@ -77,17 +89,35 @@ impl Lua {
             protect_lua_closure(main_state, 0, 0, |state| {
                 init_error_registry(state);
 
-                // Create the function metatable
+                // Create the function metatables and place them in the registry
+                // to prevent them from being garbage collected.
 
                 ffi::lua_pushlightuserdata(
                     state,
-                    &FUNCTION_METATABLE_REGISTRY_KEY as *const u8 as *mut c_void,
+                    &FUNCTION_CALLBACK_METATABLE_REGISTRY_KEY as *const u8 as *mut c_void,
                 );
 
                 ffi::lua_newtable(state);
 
                 ffi::lua_pushstring(state, cstr!("__gc"));
                 ffi::lua_pushcfunction(state, userdata_destructor::<Callback>);
+                ffi::lua_rawset(state, -3);
+
+                ffi::lua_pushstring(state, cstr!("__metatable"));
+                ffi::lua_pushboolean(state, 0);
+                ffi::lua_rawset(state, -3);
+
+                ffi::lua_rawset(state, ffi::LUA_REGISTRYINDEX);
+
+                ffi::lua_pushlightuserdata(
+                    state,
+                    &FUNCTION_EXTRA_METATABLE_REGISTRY_KEY as *const u8 as *mut c_void,
+                );
+
+                ffi::lua_newtable(state);
+
+                ffi::lua_pushstring(state, cstr!("__gc"));
+                ffi::lua_pushcfunction(state, userdata_destructor::<Arc<RefCell<ExtraData>>>);
                 ffi::lua_rawset(state, -3);
 
                 ffi::lua_pushstring(state, cstr!("__metatable"));
@@ -106,9 +136,9 @@ impl Lua {
             "Error during Lua construction",
         );
 
-        // Create ExtraData, and place it in the lua_State "extra space"
+        // Create ExtraData
 
-        let extra = Box::into_raw(Box::new(ExtraData {
+        let extra = Arc::new(RefCell::new(ExtraData {
             registered_userdata: HashMap::new(),
             registry_unref_list: Arc::new(Mutex::new(Some(Vec::new()))),
             ref_thread,
@@ -124,12 +154,10 @@ impl Lua {
         );
         assert_stack(main_state, ffi::LUA_MINSTACK);
 
-        // Place pointer to ExtraData in the lua_State "extra space"
-        *(ffi::lua_getextraspace(main_state) as *mut *mut ExtraData) = extra;
-
         Lua {
             state,
             main_state: main_state,
+            extra: extra,
             _no_ref_unwind_safe: PhantomData,
         }
     }
@@ -685,7 +713,7 @@ impl Lua {
 
             Ok(RegistryKey {
                 registry_id,
-                unref_list: (*extra_data(self.main_state)).registry_unref_list.clone(),
+                unref_list: self.extra.borrow().registry_unref_list.clone(),
             })
         }
     }
@@ -742,12 +770,7 @@ impl Lua {
     /// `Error::MismatchedRegistryKey` if passed a `RegistryKey` that was not created with a
     /// matching `Lua` state.
     pub fn owns_registry_value(&self, key: &RegistryKey) -> bool {
-        unsafe {
-            Arc::ptr_eq(
-                &key.unref_list,
-                &(*extra_data(self.main_state)).registry_unref_list,
-            )
-        }
+        Arc::ptr_eq(&key.unref_list, &self.extra.borrow().registry_unref_list)
     }
 
     /// Remove any registry values whose `RegistryKey`s have all been dropped.
@@ -759,7 +782,7 @@ impl Lua {
         unsafe {
             let unref_list = mem::replace(
                 &mut *mlua_expect!(
-                    (*extra_data(self.main_state)).registry_unref_list.lock(),
+                    self.extra.borrow().registry_unref_list.lock(),
                     "unref list poisoned"
                 ),
                 Some(Vec::new()),
@@ -883,9 +906,9 @@ impl Lua {
             lref.lua.main_state == self.main_state,
             "Lua instance passed Value created from a different main Lua state"
         );
-        let extra = extra_data(self.main_state);
-        ffi::lua_pushvalue((*extra).ref_thread, lref.index);
-        ffi::lua_xmove((*extra).ref_thread, self.state, 1);
+        let extra = self.extra.borrow();
+        ffi::lua_pushvalue(extra.ref_thread, lref.index);
+        ffi::lua_xmove(extra.ref_thread, self.state, 1);
     }
 
     // Pops the topmost element of the stack and stores a reference to it.  This pins the object,
@@ -898,32 +921,34 @@ impl Lua {
     // number of short term references being created, and `RegistryKey` being used for long term
     // references.
     pub(crate) unsafe fn pop_ref<'lua>(&'lua self) -> LuaRef<'lua> {
-        let extra = extra_data(self.main_state);
-        ffi::lua_xmove(self.state, (*extra).ref_thread, 1);
-        let index = ref_stack_pop(extra);
+        let mut extra = self.extra.borrow_mut();
+        ffi::lua_xmove(self.state, extra.ref_thread, 1);
+        let index = ref_stack_pop(&mut extra);
         LuaRef { lua: self, index }
     }
 
     pub(crate) fn clone_ref<'lua>(&'lua self, lref: &LuaRef<'lua>) -> LuaRef<'lua> {
         unsafe {
-            let extra = extra_data(self.main_state);
-            ffi::lua_pushvalue((*extra).ref_thread, lref.index);
-            let index = ref_stack_pop(extra);
+            let mut extra = self.extra.borrow_mut();
+            ffi::lua_pushvalue(extra.ref_thread, lref.index);
+            let index = ref_stack_pop(&mut extra);
             LuaRef { lua: self, index }
         }
     }
 
     pub(crate) fn drop_ref<'lua>(&'lua self, lref: &mut LuaRef<'lua>) {
         unsafe {
-            let extra = extra_data(self.main_state);
-            ffi::lua_pushnil((*extra).ref_thread);
-            ffi::lua_replace((*extra).ref_thread, lref.index);
-            (*extra).ref_free.push(lref.index);
+            let mut extra = self.extra.borrow_mut();
+            ffi::lua_pushnil(extra.ref_thread);
+            ffi::lua_replace(extra.ref_thread, lref.index);
+            extra.ref_free.push(lref.index);
         }
     }
 
     pub(crate) unsafe fn userdata_metatable<T: 'static + UserData>(&self) -> Result<c_int> {
-        if let Some(table_id) = (*extra_data(self.main_state))
+        if let Some(table_id) = self
+            .extra
+            .borrow()
             .registered_userdata
             .get(&TypeId::of::<T>())
         {
@@ -969,9 +994,12 @@ impl Lua {
         let id = protect_lua_closure(self.state, 1, 0, |state| {
             ffi::luaL_ref(state, ffi::LUA_REGISTRYINDEX)
         })?;
-        (*extra_data(self.main_state))
+
+        self.extra
+            .borrow_mut()
             .registered_userdata
             .insert(TypeId::of::<T>(), id);
+
         Ok(id)
     }
 
@@ -992,14 +1020,21 @@ impl Lua {
                 if ffi::lua_type(state, ffi::lua_upvalueindex(1)) == ffi::LUA_TNIL {
                     return Err(Error::CallbackDestructed);
                 }
+                if ffi::lua_type(state, ffi::lua_upvalueindex(2)) == ffi::LUA_TNIL {
+                    return Err(Error::CallbackDestructed);
+                }
 
                 if nargs < ffi::LUA_MINSTACK {
                     check_stack(state, ffi::LUA_MINSTACK - nargs)?;
                 }
 
+                let extra =
+                    get_userdata::<Arc<RefCell<ExtraData>>>(state, ffi::lua_upvalueindex(2));
+
                 let lua = Lua {
                     state: state,
                     main_state: get_main_state(state),
+                    extra: (*extra).clone(),
                     _no_ref_unwind_safe: PhantomData,
                 };
 
@@ -1025,19 +1060,26 @@ impl Lua {
 
         unsafe {
             let _sg = StackGuard::new(self.state);
-            assert_stack(self.state, 4);
+            assert_stack(self.state, 6);
 
             push_userdata::<Callback>(self.state, func)?;
-
             ffi::lua_pushlightuserdata(
                 self.state,
-                &FUNCTION_METATABLE_REGISTRY_KEY as *const u8 as *mut c_void,
+                &FUNCTION_CALLBACK_METATABLE_REGISTRY_KEY as *const u8 as *mut c_void,
             );
             ffi::lua_rawget(self.state, ffi::LUA_REGISTRYINDEX);
             ffi::lua_setmetatable(self.state, -2);
 
-            protect_lua_closure(self.state, 1, 1, |state| {
-                ffi::lua_pushcclosure(state, call_callback, 1);
+            push_userdata::<Arc<RefCell<ExtraData>>>(self.state, self.extra.clone())?;
+            ffi::lua_pushlightuserdata(
+                self.state,
+                &FUNCTION_EXTRA_METATABLE_REGISTRY_KEY as *const u8 as *mut c_void,
+            );
+            ffi::lua_rawget(self.state, ffi::LUA_REGISTRYINDEX);
+            ffi::lua_setmetatable(self.state, -2);
+
+            protect_lua_closure(self.state, 2, 1, |state| {
+                ffi::lua_pushcclosure(state, call_callback, 2);
             })?;
 
             Ok(Function(self.pop_ref()))
@@ -1064,21 +1106,6 @@ impl Lua {
 
         Ok(AnyUserData(self.pop_ref()))
     }
-}
-
-// Data associated with the main lua_State via lua_getextraspace.
-struct ExtraData {
-    registered_userdata: HashMap<TypeId, c_int>,
-    registry_unref_list: Arc<Mutex<Option<Vec<c_int>>>>,
-
-    ref_thread: *mut ffi::lua_State,
-    ref_stack_size: c_int,
-    ref_stack_max: c_int,
-    ref_free: Vec<c_int>,
-}
-
-unsafe fn extra_data(state: *mut ffi::lua_State) -> *mut ExtraData {
-    *(ffi::lua_getextraspace(state) as *mut *mut ExtraData)
 }
 
 /// Returned from [`Lua::load`] and is used to finalize loading and executing Lua main chunks.
@@ -1166,25 +1193,26 @@ impl<'lua, 'a> Chunk<'lua, 'a> {
     }
 }
 
-unsafe fn ref_stack_pop(extra: *mut ExtraData) -> c_int {
-    if let Some(free) = (*extra).ref_free.pop() {
-        ffi::lua_replace((*extra).ref_thread, free);
+unsafe fn ref_stack_pop(extra: &mut ExtraData) -> c_int {
+    if let Some(free) = extra.ref_free.pop() {
+        ffi::lua_replace(extra.ref_thread, free);
         free
     } else {
-        if (*extra).ref_stack_max >= (*extra).ref_stack_size {
+        if extra.ref_stack_max >= extra.ref_stack_size {
             // It is a user error to create enough references to exhaust the Lua max stack size for
             // the ref thread.
-            if ffi::lua_checkstack((*extra).ref_thread, (*extra).ref_stack_size) == 0 {
+            if ffi::lua_checkstack(extra.ref_thread, extra.ref_stack_size) == 0 {
                 mlua_panic!("cannot create a Lua reference, out of auxiliary stack space");
             }
-            (*extra).ref_stack_size *= 2;
+            extra.ref_stack_size *= 2;
         }
-        (*extra).ref_stack_max += 1;
-        (*extra).ref_stack_max
+        extra.ref_stack_max += 1;
+        extra.ref_stack_max
     }
 }
 
-static FUNCTION_METATABLE_REGISTRY_KEY: u8 = 0;
+static FUNCTION_CALLBACK_METATABLE_REGISTRY_KEY: u8 = 0;
+static FUNCTION_EXTRA_METATABLE_REGISTRY_KEY: u8 = 0;
 
 struct StaticUserDataMethods<'lua, T: 'static + UserData> {
     methods: Vec<(Vec<u8>, Callback<'lua, 'static>)>,
