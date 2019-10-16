@@ -1,0 +1,20 @@
+error[E0373]: closure may outlive the current function, but it borrows `test`, which is owned by the current function
+  --> $DIR/function_borrow.rs:9:33
+   |
+9  |     let _ = lua.create_function(|_, ()| -> Result<i32> {
+   |                                 ^^^^^^^^^^^^^^^^^^^^^^ may outlive borrowed value `test`
+10 |         Ok(test.0)
+   |            ---- `test` is borrowed here
+   |
+note: function requires argument type to outlive `'static`
+  --> $DIR/function_borrow.rs:9:13
+   |
+9  |       let _ = lua.create_function(|_, ()| -> Result<i32> {
+   |  _____________^
+10 | |         Ok(test.0)
+11 | |     });
+   | |______^
+help: to force the closure to take ownership of `test` (and any other referenced variables), use the `move` keyword
+   |
+9  |     let _ = lua.create_function(move |_, ()| -> Result<i32> {
+   |                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^

@@ -7,7 +7,7 @@ description = "High level bindings to Lua 5.1 / LuaJIT / Lua 5.3"
 repository = "https://github.com/khvzak/mlua"
 documentation = "https://docs.rs/mlua"
 readme = "README.md"
-keywords = ["lua"]
+keywords = ["lua", "luajit"]
 license = "MIT"
 
 # [badges]
@@ -34,6 +34,7 @@ pkg-config = { version = "0.3.11" }
 [dev-dependencies]
 rustyline = "5.0"
 criterion = "0.2.0"
+trybuild = "1.0"
 
 [[bench]]
 name = "benchmark"

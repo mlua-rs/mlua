@@ -1,0 +1,13 @@
+error[E0597]: `userdata` does not live long enough
+  --> $DIR/userdata_borrow.rs:15:25
+   |
+15 |         _userdata_ref = userdata.borrow::<MyUserData>();
+   |                         ^^^^^^^^ borrowed value does not live long enough
+16 |         //~^ error: `userdata` does not live long enough
+17 |     }
+   |     - `userdata` dropped here while still borrowed
+18 |     Ok(())
+19 | }
+   | - borrow might be used here, when `_userdata_ref` is dropped and runs the destructor for type `std::result::Result<std::cell::Ref<'_, main::MyUserData>, mlua::error::Error>`
+   |
+   = note: values in a scope are dropped in the opposite order they are defined
