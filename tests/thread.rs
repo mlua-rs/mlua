@@ -1,3 +1,14 @@
+#![cfg_attr(
+    all(feature = "luajit", target_os = "macos", target_arch = "x86_64"),
+    feature(link_args)
+)]
+
+#[cfg_attr(
+    all(feature = "luajit", target_os = "macos", target_arch = "x86_64"),
+    link_args = "-pagezero_size 10000 -image_base 100000000"
+)]
+extern "system" {}
+
 use std::panic::catch_unwind;
 
 use mlua::{Error, Function, Lua, Result, Thread, ThreadStatus};
@@ -100,9 +111,9 @@ fn coroutine_from_closure() -> Result<()> {
     let thrd_main = lua.create_function(|_, ()| Ok(()))?;
     lua.globals().set("main", thrd_main)?;
 
-    #[cfg(feature = "lua53")]
+    #[cfg(any(feature = "lua53", feature = "luajit"))]
     let thrd: Thread = lua.load("coroutine.create(main)").eval()?;
-    #[cfg(not(feature = "lua53"))]
+    #[cfg(all(not(feature = "lua53"), not(feature = "luajit")))]
     let thrd: Thread = lua
         .load("coroutine.create(function(...) return main(unpack(arg)) end)")
         .eval()?;

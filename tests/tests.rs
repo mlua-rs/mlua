@@ -1,3 +1,14 @@
+#![cfg_attr(
+    all(feature = "luajit", target_os = "macos", target_arch = "x86_64"),
+    feature(link_args)
+)]
+
+#[cfg_attr(
+    all(feature = "luajit", target_os = "macos", target_arch = "x86_64"),
+    link_args = "-pagezero_size 10000 -image_base 100000000"
+)]
+extern "system" {}
+
 use std::iter::FromIterator;
 use std::panic::catch_unwind;
 use std::sync::Arc;
@@ -226,12 +237,12 @@ fn test_error() -> Result<()> {
     assert!(no_error.call::<_, ()>(()).is_ok());
     match lua_error.call::<_, ()>(()) {
         Err(Error::RuntimeError(_)) => {}
-        Err(_) => panic!("error is not RuntimeError kind"),
+        Err(e) => panic!("error is not RuntimeError kind, got {:?}", e),
         _ => panic!("error not returned"),
     }
     match rust_error.call::<_, ()>(()) {
         Err(Error::CallbackError { .. }) => {}
-        Err(_) => panic!("error is not CallbackError kind"),
+        Err(e) => panic!("error is not CallbackError kind, got {:?}", e),
         _ => panic!("error not returned"),
     }
 
@@ -423,8 +434,8 @@ fn test_pcall_xpcall() -> Result<()> {
     assert!(lua.load("xpcall()").exec().is_err());
     assert!(lua.load("xpcall(function() end)").exec().is_err());
 
-    // Lua5.3 compatible version of xpcall
-    #[cfg(not(feature = "lua53"))]
+    // Lua 5.3 / LuaJIT compatible version of xpcall
+    #[cfg(all(not(feature = "lua53"), not(feature = "luajit")))]
     lua.load(
         r#"
         local xpcall_orig = xpcall
@@ -466,9 +477,12 @@ fn test_pcall_xpcall() -> Result<()> {
     assert_eq!(globals.get::<_, String>("pcall_error")?, "testerror");
 
     assert_eq!(globals.get::<_, bool>("xpcall_statusr")?, false);
-    #[cfg(feature = "lua53")]
-    assert_eq!(globals.get::<_, String>("xpcall_error")?, "testerror");
-    #[cfg(not(feature = "lua53"))]
+    #[cfg(any(feature = "lua53", feature = "luajit"))]
+    assert_eq!(
+        globals.get::<_, std::string::String>("xpcall_error")?,
+        "testerror"
+    );
+    #[cfg(all(not(feature = "lua53"), not(feature = "luajit")))]
     assert!(globals
         .get::<_, String>("xpcall_error")?
         .to_str()?
@@ -653,6 +667,7 @@ fn too_many_arguments() -> Result<()> {
 }
 
 #[test]
+#[cfg(not(feature = "luajit"))]
 fn too_many_recursions() -> Result<()> {
     let lua = Lua::new();
     let f = lua

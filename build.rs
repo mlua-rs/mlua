@@ -107,6 +107,9 @@ fn main() {
 
     // Find lua via pkg-config
 
+    #[cfg(all(feature = "lua53", feature = "luajit"))]
+    panic!("Cannot enable lua53 and luajit simultaneously");
+
     #[cfg(feature = "lua53")]
     {
         let mut lua = pkg_config::Config::new()
@@ -123,7 +126,7 @@ fn main() {
         };
     }
 
-    #[cfg(not(feature = "lua53"))]
+    #[cfg(all(not(feature = "lua53"), not(feature = "luajit")))]
     {
         let mut lua = pkg_config::Config::new()
             .range_version((Bound::Included("5.1"), Bound::Excluded("5.2")))
@@ -132,6 +135,18 @@ fn main() {
         if lua.is_err() {
             lua = pkg_config::Config::new().probe("lua5.1");
         }
+
+        match lua {
+            Ok(lua) => build_glue(&lua.include_paths),
+            Err(err) => panic!(err),
+        };
+    }
+
+    #[cfg(feature = "luajit")]
+    {
+        let lua = pkg_config::Config::new()
+            .range_version((Bound::Included("2.0.5"), Bound::Excluded("2.1.0")))
+            .probe("luajit");
 
         match lua {
             Ok(lua) => build_glue(&lua.include_paths),
