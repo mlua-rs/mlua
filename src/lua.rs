@@ -414,8 +414,7 @@ impl Lua {
     /// ```
     /// # use mlua::{Lua, Result};
     /// # fn main() -> Result<()> {
-    /// let lua = Lua::new();
-    ///
+    /// # let lua = Lua::new();
     /// let greet = lua.create_function(|_, name: String| {
     ///     println!("Hello, {}!", name);
     ///     Ok(())
@@ -430,8 +429,7 @@ impl Lua {
     /// ```
     /// # use mlua::{Lua, Result};
     /// # fn main() -> Result<()> {
-    /// let lua = Lua::new();
-    ///
+    /// # let lua = Lua::new();
     /// let print_person = lua.create_function(|_, (name, age): (String, u8)| {
     ///     println!("{} is {} years old!", name, age);
     ///     Ok(())

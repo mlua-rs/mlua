@@ -17,15 +17,15 @@ impl<'lua> String<'lua> {
     /// # Examples
     ///
     /// ```
-    /// # use mlua::{Lua, String, Result};
+    /// # use mlua::{Lua, Result, String};
     /// # fn main() -> Result<()> {
-    /// let lua = Lua::new();
+    /// # let lua = Lua::new();
     /// let globals = lua.globals();
     ///
     /// let version: String = globals.get("_VERSION")?;
-    /// assert!(version.to_str().unwrap().contains("Lua"));
+    /// assert!(version.to_str()?.contains("Lua"));
     ///
-    /// let non_utf8: String = lua.load(r#"  "test\xff"  "#).eval()?;
+    /// let non_utf8: String = lua.load(r#"  "test\255"  "#).eval()?;
     /// assert!(non_utf8.to_str().is_err());
     /// # Ok(())
     /// # }
@@ -46,10 +46,10 @@ impl<'lua> String<'lua> {
     /// # Examples
     ///
     /// ```
-    /// # use mlua::{Lua, String, Result};
+    /// # use mlua::{Lua, Result, String};
     /// # fn main() -> Result<()> {
-    /// let lua = Lua::new();
-    /// let non_utf8: String = lua.load(r#"  "test\xff"  "#).eval()?;
+    /// # let lua = Lua::new();
+    /// let non_utf8: String = lua.load(r#"  "test\255"  "#).eval()?;
     /// assert!(non_utf8.to_str().is_err());    // oh no :(
     /// assert_eq!(non_utf8.as_bytes(), &b"test\xff"[..]);
     /// # Ok(())

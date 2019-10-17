@@ -1,20 +1,16 @@
-extern crate rlua;
-
 use std::f32;
 use std::iter::FromIterator;
 
-use rlua::{Function, Lua, MetaMethod, Result, UserData, UserDataMethods, Variadic};
+use mlua::{Function, Lua, MetaMethod, Result, UserData, UserDataMethods, Variadic};
 
 fn main() -> Result<()> {
-    // Create a Lua context with `Lua::new()`.  Eventually, this will allow further control on the
-    // lua std library, and will specifically allow limiting Lua to a subset of "safe"
-    // functionality.
-
+    // You can create a new Lua state with `Lua::new()`.  This loads the default Lua std library
+    // *without* the debug library.
     let lua = Lua::new();
 
     // You can get and set global variables.  Notice that the globals table here is a permanent
-    // reference to _G, and it is mutated behind the scenes as lua code is loaded.  This API is
-    // based heavily around internal mutation (just like lua itself).
+    // reference to _G, and it is mutated behind the scenes as Lua code is loaded.  This API is
+    // based heavily around sharing and internal mutation (just like Lua itself).
 
     let globals = lua.globals();
 
@@ -24,22 +20,25 @@ fn main() -> Result<()> {
     assert_eq!(globals.get::<_, String>("string_var")?, "hello");
     assert_eq!(globals.get::<_, i64>("int_var")?, 42);
 
-    // You can load and evaluate lua code.  The second parameter here gives the chunk a better name
-    // when lua error messages are printed.
+    // You can load and evaluate Lua code.  The returned type of `Lua::load` is a builder
+    // that allows you to change settings before running Lua code.  Here, we are using it to set
+    // the name of the laoded chunk to "example code", which will be used when Lua error
+    // messages are printed.
 
-    lua.exec::<_, ()>(
+    lua.load(
         r#"
             global = 'foo'..'bar'
         "#,
-        Some("example code"),
-    )?;
+    )
+    .set_name("example code")?
+    .exec()?;
     assert_eq!(globals.get::<_, String>("global")?, "foobar");
 
-    assert_eq!(lua.eval::<_, i32>("1 + 1", None)?, 2);
-    assert_eq!(lua.eval::<_, bool>("false == false", None)?, true);
-    assert_eq!(lua.eval::<_, i32>("return 1 + 2", None)?, 3);
+    assert_eq!(lua.load("1 + 1").eval::<i32>()?, 2);
+    assert_eq!(lua.load("false == false").eval::<bool>()?, true);
+    assert_eq!(lua.load("return 1 + 2").eval::<i32>()?, 3);
 
-    // You can create and manage lua tables
+    // You can create and manage Lua tables
 
     let array_table = lua.create_table()?;
     array_table.set(1, "one")?;
@@ -59,20 +58,20 @@ fn main() -> Result<()> {
     globals.set("array_table", array_table)?;
     globals.set("map_table", map_table)?;
 
-    lua.eval::<_, ()>(
+    lua.load(
         r#"
-        for k, v in pairs(array_table) do
-            print(k, v)
-        end
+            for k, v in pairs(array_table) do
+                print(k, v)
+            end
 
-        for k, v in pairs(map_table) do
-            print(k, v)
-        end
+            for k, v in pairs(map_table) do
+                print(k, v)
+            end
         "#,
-        None,
-    )?;
+    )
+    .exec()?;
 
-    // You can load lua functions
+    // You can load Lua functions
 
     let print: Function = globals.get("print")?;
     print.call::<_, ()>("hello from rust")?;
@@ -88,15 +87,15 @@ fn main() -> Result<()> {
         ["hello", "yet", "again", "from", "rust"].iter().cloned(),
     ))?;
 
-    // You can bind rust functions to lua as well.  Callbacks receive the Lua state itself as their
+    // You can bind rust functions to Lua as well.  Callbacks receive the Lua state inself as their
     // first parameter, and the arguments given to the function as the second parameter.  The type
     // of the arguments can be anything that is convertible from the parameters given by Lua, in
     // this case, the function expects two string sequences.
 
     let check_equal = lua.create_function(|_, (list1, list2): (Vec<String>, Vec<String>)| {
         // This function just checks whether two string lists are equal, and in an inefficient way.
-        // Lua callbacks return `rlua::Result`, an Ok value is a normal return, and an Err return
-        // turns into a Lua 'error'.  Again, any type that is convertible to lua may be returned.
+        // Lua callbacks return `mlua::Result`, an Ok value is a normal return, and an Err return
+        // turns into a Lua 'error'.  Again, any type that is convertible to Lua may be returned.
         Ok(list1 == list2)
     })?;
     globals.set("check_equal", check_equal)?;
@@ -110,17 +109,29 @@ fn main() -> Result<()> {
     globals.set("join", join)?;
 
     assert_eq!(
-        lua.eval::<_, bool>(r#"check_equal({"a", "b", "c"}, {"a", "b", "c"})"#, None)?,
+        lua.load(r#"check_equal({"a", "b", "c"}, {"a", "b", "c"})"#)
+            .eval::<bool>()?,
         true
     );
     assert_eq!(
-        lua.eval::<_, bool>(r#"check_equal({"a", "b", "c"}, {"d", "e", "f"})"#, None)?,
+        lua.load(r#"check_equal({"a", "b", "c"}, {"d", "e", "f"})"#)
+            .eval::<bool>()?,
         false
     );
-    assert_eq!(
-        lua.eval::<_, String>(r#"join("a", "b", "c")"#, None)?,
-        "abc"
-    );
+    assert_eq!(lua.load(r#"join("a", "b", "c")"#).eval::<String>()?, "abc");
+
+    // Callbacks receive a Lua state as their first parameter so that they can use it to
+    // create new Lua values, if necessary.
+
+    let create_table = lua.create_function(|lua, ()| {
+        let t = lua.create_table()?;
+        t.set(1, 1)?;
+        t.set(2, 2)?;
+        Ok(t)
+    })?;
+    globals.set("create_table", create_table)?;
+
+    assert_eq!(lua.load(r#"create_table()[2]"#).eval::<i32>()?, 2);
 
     // You can create userdata with methods and metamethods defined on them.
     // Here's a worked example that shows many of the features of this API
@@ -146,22 +157,26 @@ fn main() -> Result<()> {
     globals.set("vec2", vec2_constructor)?;
 
     assert!(
-        (lua.eval::<_, f32>("(vec2(1, 2) + vec2(2, 2)):magnitude()", None)? - 5.0).abs()
+        (lua.load("(vec2(1, 2) + vec2(2, 2)):magnitude()")
+            .eval::<f32>()?
+            - 5.0)
+            .abs()
             < f32::EPSILON
     );
 
-    // Normally, Rust types passed to `Lua` must be `Send`, because `Lua` itself is `Send`, and must
-    // be `'static`, because there is no way to tell when Lua might garbage collect them.  There is,
-    // however, a limited way to lift both of these restrictions.  You can call `Lua::scope` to
-    // create userdata and callbacks types that only live for as long as the call to scope, but do
-    // not have to be `Send` OR `'static`.
+    // Normally, Rust types passed to `Lua` must be `Send`, because `Lua` itself is `Send`, and
+    // must be `'static`, because there is no way to be sure of their lifetime inside the Lua
+    // state.  There is, however, a limited way to lift both of these requirements.  You can
+    // call `Lua::scope` to create userdata and callbacks types that only live for as long
+    // as the call to scope, but do not have to be `Send` OR `'static`.
 
     {
         let mut rust_val = 0;
 
         lua.scope(|scope| {
-            // We create a 'sketchy' lua callback that modifies the variable `rust_val`.  Outside of a
-            // `Lua::scope` call, this would not be allowed because it could be unsafe.
+            // We create a 'sketchy' Lua callback that holds a mutable reference to the variable
+            // `rust_val`.  Outside of a `Lua::scope` call, this would not be allowed
+            // because it could be unsafe.
 
             lua.globals().set(
                 "sketchy",
@@ -171,17 +186,17 @@ fn main() -> Result<()> {
                 })?,
             )?;
 
-            lua.eval::<_, ()>("sketchy()", None)
+            lua.load("sketchy()").exec()
         })?;
 
         assert_eq!(rust_val, 42);
     }
 
-    // We were able to run our 'sketchy' function inside the scope just fine.  However, if we try to
-    // run our 'sketchy' function outside of the scope, the function we created will have been
-    // invalidated and we will generate an error.  If our function wasn't invalidated, we might be
-    // able to improperly access the destroyed `rust_val` which would be unsafe.
-    assert!(lua.eval::<_, ()>("sketchy()", None).is_err());
+    // We were able to run our 'sketchy' function inside the scope just fine.  However, if we
+    // try to run our 'sketchy' function outside of the scope, the function we created will have
+    // been invalidated and we will generate an error.  If our function wasn't invalidated, we
+    // might be able to improperly access the freed `rust_val` which would be unsafe.
+    assert!(lua.load("sketchy()").exec().is_err());
 
     Ok(())
 }

@@ -23,9 +23,9 @@ impl<'lua> Function<'lua> {
     /// Call Lua's built-in `tostring` function:
     ///
     /// ```
-    /// # use mlua::{Lua, Function, Result};
+    /// # use mlua::{Function, Lua, Result};
     /// # fn main() -> Result<()> {
-    /// let lua = Lua::new();
+    /// # let lua = Lua::new();
     /// let globals = lua.globals();
     ///
     /// let tostring: Function = globals.get("tostring")?;
@@ -39,16 +39,15 @@ impl<'lua> Function<'lua> {
     /// Call a function with multiple arguments:
     ///
     /// ```
-    /// # use mlua::{Lua, Function, Result};
+    /// # use mlua::{Function, Lua, Result};
     /// # fn main() -> Result<()> {
-    /// let lua = Lua::new();
-    ///
+    /// # let lua = Lua::new();
     /// let sum: Function = lua.load(
     ///     r#"
     ///         function(a, b)
     ///             return a + b
     ///         end
-    ///     "#).eval()?;
+    /// "#).eval()?;
     ///
     /// assert_eq!(sum.call::<_, u32>((3, 4))?, 3 + 4);
     ///
@@ -95,14 +94,14 @@ impl<'lua> Function<'lua> {
     /// # Examples
     ///
     /// ```
-    /// # use mlua::{Lua, Function, Result};
+    /// # use mlua::{Function, Lua, Result};
     /// # fn main() -> Result<()> {
-    /// let lua = Lua::new();
-    ///
-    /// let sum: Function = lua_context.load(r#"
-    ///     function(a, b)
-    ///         return a + b
-    ///     end
+    /// # let lua = Lua::new();
+    /// let sum: Function = lua.load(
+    ///     r#"
+    ///         function(a, b)
+    ///             return a + b
+    ///         end
     /// "#).eval()?;
     ///
     /// let bound_a = sum.bind(1)?;

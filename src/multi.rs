@@ -62,12 +62,12 @@ impl<'lua> FromLuaMulti<'lua> for MultiValue<'lua> {
 /// # Examples
 ///
 /// ```
-/// # use mlua::{Lua, Variadic, Result};
+/// # use mlua::{Lua, Result, Variadic};
 /// # fn main() -> Result<()> {
-/// let lua = Lua::new();
+/// # let lua = Lua::new();
 /// let add = lua.create_function(|_, vals: Variadic<f64>| -> Result<f64> {
 ///     Ok(vals.iter().sum())
-/// }).unwrap();
+/// })?;
 /// lua.globals().set("add", add)?;
 /// assert_eq!(lua.load("add(3, 2, 5)").eval::<f32>()?, 10.0);
 /// # Ok(())

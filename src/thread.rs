@@ -46,26 +46,27 @@ impl<'lua> Thread<'lua> {
     /// # Examples
     ///
     /// ```
-    /// # use mlua::{Lua, Thread, Error};
+    /// # use mlua::{Error, Lua, Result, Thread};
     /// # fn main() -> Result<()> {
-    /// let lua = Lua::new();
-    /// let thread: Thread = lua.eval(r#"
+    /// # let lua = Lua::new();
+    /// let thread: Thread = lua.load(r#"
     ///     coroutine.create(function(arg)
     ///         assert(arg == 42)
     ///         local yieldarg = coroutine.yield(123)
     ///         assert(yieldarg == 43)
     ///         return 987
     ///     end)
-    /// "#, None).unwrap();
+    /// "#).eval()?;
     ///
-    /// assert_eq!(thread.resume::<_, u32>(42).unwrap(), 123);
-    /// assert_eq!(thread.resume::<_, u32>(43).unwrap(), 987);
+    /// assert_eq!(thread.resume::<_, u32>(42)?, 123);
+    /// assert_eq!(thread.resume::<_, u32>(43)?, 987);
     ///
     /// // The coroutine has now returned, so `resume` will fail
     /// match thread.resume::<_, u32>(()) {
     ///     Err(Error::CoroutineInactive) => {},
     ///     unexpected => panic!("unexpected result {:?}", unexpected),
     /// }
+    /// # Ok(())
     /// # }
     /// ```
     pub fn resume<A, R>(&self, args: A) -> Result<R>

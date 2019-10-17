@@ -212,18 +212,17 @@ pub trait UserDataMethods<'lua, T: UserData> {
 /// # Examples
 ///
 /// ```
-/// # use mlua::{Lua, UserData, Result};
+/// # use mlua::{Lua, Result, UserData};
 /// # fn main() -> Result<()> {
+/// # let lua = Lua::new();
 /// struct MyUserData(i32);
 ///
 /// impl UserData for MyUserData {}
 ///
-/// let lua = Lua::new();
-///
 /// // `MyUserData` now implements `ToLua`:
 /// lua.globals().set("myobject", MyUserData(123))?;
 ///
-/// lua.exec::<_, ()>("assert(type(myobject) == 'userdata')", None)?;
+/// lua.load("assert(type(myobject) == 'userdata')").exec()?;
 /// # Ok(())
 /// # }
 /// ```
@@ -232,8 +231,9 @@ pub trait UserDataMethods<'lua, T: UserData> {
 /// [`UserDataMethods`] for more information):
 ///
 /// ```
-/// # use mlua::{Lua, MetaMethod, UserData, UserDataMethods, Result};
+/// # use mlua::{Lua, MetaMethod, Result, UserData, UserDataMethods};
 /// # fn main() -> Result<()> {
+/// # let lua = Lua::new();
 /// struct MyUserData(i32);
 ///
 /// impl UserData for MyUserData {
@@ -253,16 +253,14 @@ pub trait UserDataMethods<'lua, T: UserData> {
 ///     }
 /// }
 ///
-/// let lua = Lua::new();
-///
 /// lua.globals().set("myobject", MyUserData(123))?;
 ///
-/// lua.exec::<_, ()>(r#"
+/// lua.load(r#"
 ///     assert(myobject:get() == 123)
 ///     myobject:add(7)
 ///     assert(myobject:get() == 130)
 ///     assert(myobject + 10 == 140)
-/// "#, None)?;
+/// "#).exec()?;
 /// # Ok(())
 /// # }
 /// ```

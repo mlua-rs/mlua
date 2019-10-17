@@ -27,12 +27,12 @@ impl<'lua> Table<'lua> {
     /// ```
     /// # use mlua::{Lua, Result};
     /// # fn main() -> Result<()> {
-    /// let lua = Lua::new();
+    /// # let lua = Lua::new();
     /// let globals = lua.globals();
     ///
     /// globals.set("assertions", cfg!(debug_assertions))?;
     ///
-    /// lua.exec::<_, ()>(r#"
+    /// lua.load(r#"
     ///     if assertions == true then
     ///         -- ...
     ///     elseif assertions == false then
@@ -40,7 +40,7 @@ impl<'lua> Table<'lua> {
     ///     else
     ///         error("assertions neither on nor off?")
     ///     end
-    /// "#, None)?;
+    /// "#).exec()?;
     /// # Ok(())
     /// # }
     /// ```
@@ -80,7 +80,7 @@ impl<'lua> Table<'lua> {
     /// ```
     /// # use mlua::{Lua, Result};
     /// # fn main() -> Result<()> {
-    /// let lua = Lua::new();
+    /// # let lua = Lua::new();
     /// let globals = lua.globals();
     ///
     /// let version: String = globals.get("_VERSION")?;
@@ -134,19 +134,21 @@ impl<'lua> Table<'lua> {
     }
 
     /// Gets the function associated to `key` from the table and executes it,
-    /// passing the table as the first argument.
+    /// passing the table itself as the first argument.
     ///
     /// # Examples
     ///
     /// Execute the table method with name "concat":
     ///
     /// ```
-    /// # use mlua::{Function, Lua, Result};
+    /// # use mlua::{Lua, Result, Table};
     /// # fn main() -> Result<()> {
     /// # let lua = Lua::new();
-    /// # let table = lua.create_table();
-    /// // Lua: table:concat("param1", "param2")
-    /// table.call("concat", ("param1", "param2"))?;
+    /// # let object = lua.create_table()?;
+    /// # let concat = lua.create_function(|_, (_, a, b): (Table, String, String)| Ok(a + &b))?;
+    /// # object.set("concat", concat)?;
+    /// // simiar to: object:concat("param1", "param2")
+    /// object.call("concat", ("param1", "param2"))?;
     /// # Ok(())
     /// # }
     /// ```
@@ -294,7 +296,7 @@ impl<'lua> Table<'lua> {
     /// ```
     /// # use mlua::{Lua, Result, Value};
     /// # fn main() -> Result<()> {
-    /// let lua = Lua::new();
+    /// # let lua = Lua::new();
     /// let globals = lua.globals();
     ///
     /// for pair in globals.pairs::<Value, Value>() {
@@ -336,7 +338,7 @@ impl<'lua> Table<'lua> {
     /// ```
     /// # use mlua::{Lua, Result, Table};
     /// # fn main() -> Result<()> {
-    /// let lua = Lua::new();
+    /// # let lua = Lua::new();
     /// let my_table: Table = lua.load(r#"
     ///     {
     ///         [1] = 4,
