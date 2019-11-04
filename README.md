@@ -1,131 +1,145 @@
-# rlua -- High level bindings between Rust and Lua
+# mlua
+[![Build Status]][circleci] [![Latest Version]][crates.io] [![API Documentation]][docs.rs]
 
-[![Build Status](https://travis-ci.org/kyren/rlua.svg?branch=master)](https://travis-ci.org/kyren/rlua)
-[![Latest Version](https://img.shields.io/crates/v/rlua.svg)](https://crates.io/crates/rlua)
-[![API Documentation](https://docs.rs/rlua/badge.svg)](https://docs.rs/rlua)
+[Build Status]: https://img.shields.io/circleci/project/github/khvzak/mlua.svg
+[circleci]: https://circleci.com/gh/khvzak/mlua
+[Latest Version]: https://img.shields.io/crates/v/mlua.svg
+[crates.io]: https://crates.io/crates/mlua
+[API Documentation]: https://docs.rs/mlua/badge.svg
+[docs.rs]: https://docs.rs/mlua
 
 [Guided Tour](examples/guided_tour.rs)
 
-This library is a high level interface between Rust and Lua.  Its major goals
-are to expose as easy to use, practical, and flexible of an API between Rust and
-Lua as possible, while also being *completely* safe.
+A fork of [rlua 0.15](https://github.com/kyren/rlua/tree/0.15.3) which provides a high level
+interface between Rust and Lua. Unlike `rlua` , `mlua` supports Lua 5.1 (including LuaJIT) and 5.3.
+The `mlua` goal is to be an easy to use, practical and flexible API between Rust and Lua but
+*__not__* always 100% safe due to the Lua VM nature. Also, `mlua` provides a way to write native lua
+modules in Rust.
 
-`rlua` is NOT designed to be a perfect zero cost wrapper over the Lua C API,
-because such a wrapper cannot maintain the safety guarantees that `rlua` is
-designed to have.  Every place where the Lua C API may trigger an error longjmp
-in any way is protected by `lua_pcall`, and the user of the library is protected
+### Usage
+
+#### standalone mode
+Add to `Cargo.toml` :
+
+``` toml
+[dependencies]
+mlua = "0.1"
+```
+
+`main.rs`
+
+``` rust
+use mlua::prelude::*;
+
+fn main() -> LuaResult<()> {
+    let lua = Lua::new();
+
+    let map_table = lua.create_table()?;
+    map_table.set(1, "one")?;
+    map_table.set("two", 2)?;
+
+    lua.globals().set("map_table", map_table)?;
+
+    lua.load("for k,v in pairs(map_table) do print(k,v) end").exec()?;
+
+    Ok(())
+}
+```
+
+#### module mode
+
+Add to `Cargo.toml` :
+
+``` toml
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+mlua = "0.1"
+mlua_derive = "0.1"
+```
+
+`lib.rs` :
+
+``` rust
+#[macro_use]
+extern crate mlua_derive;
+use mlua::prelude::*;
+
+fn hello(_: &Lua, name: String) -> LuaResult<()> {
+    println!("hello, {}!", name);
+    Ok(())
+}
+
+#[lua_module]
+fn my_module(lua: &Lua) -> LuaResult<LuaTable> {
+    let exports = lua.create_table()?;
+    exports.set("hello", lua.create_function(hello)?)?;
+    Ok(exports)
+}
+```
+
+And then (macos example):
+
+``` sh
+$ cargo build
+$ ln -s ./target/debug/libmy_module.dylib ./my_module.so
+$ lua5.3 -e 'require("my_module").hello("world")'
+```
+
+## Safety
+
+One of the `mlua` goals is to provide *safe* API between Rust and Lua.
+Every place where the Lua C API may trigger an error longjmp
+in any way is protected by `lua_pcall` , and the user of the library is protected
 from directly interacting with unsafe things like the Lua stack, and there is
-overhead associated with this safety.  However, performance *is* a focus of the
-library to the extent possible while maintaining safety, so if you encounter
-something that egregiously worse than using the Lua C API directly, or simply
-something you feel could perform better, feel free to file a bug report.
+overhead associated with this safety.
 
-There are currently a few missing pieces of this API:
+Unfortunately, `mlua` does not provide absolute safety even without using `unsafe` .
+This library contains a huge amount of unsafe code. There are almost
+certainly bugs still lurking in this library!  It is surprisingly, fiendishly
+difficult to use the Lua C API without the potential for unsafety.
 
-  * Security limits on Lua code such as total instruction limits / memory limits
-    and control over which potentially dangerous libraries (e.g. io) are
-    available to scripts.
-  * Lua profiling support
-  * "Context" or "Sandboxing" support.  There should be the ability to set the
-    `_ENV` upvalue of a loaded chunk to a table other than `_G`, so that you can
-    have different environments for different loaded chunks.
-  * Quantifying performance differences to direct use of the Lua C API.
+## Panic handling
 
-Additionally, there are ways I would like to change this API, once support lands
-in rustc.  For example:
+`mlua` wraps panics that are generated inside Rust callbacks in a regular Lua error. Panics could be
+resumed then by propagating the Lua error to Rust code.
 
-  * Currently, variadics are handled entirely with tuples and traits implemented
-    by macro for tuples up to size 16, it would be great if this was replaced
-    with real variadic generics when this is available in Rust.
+For example:
+``` rust
+    let lua = Lua::new();
+    let f = lua.create_function(|_, ()| -> LuaResult<()> {
+        panic!("test panic");
+    })?;
+    lua.globals().set("rust_func", f)?;
 
-## API stability
+    let _ = lua.load(r#"
+        local status, err = pcall(rust_func)
+        print(err) -- prints: test panic
+        error(err) -- propagate panic
+    "#).exec();
 
-This library is very much Work In Progress, so there is a some API churn.
-Currently, it follows a pre-1.0 semver, so all API changes should be accompanied
-by 0.x version bumps.
+    panic!("must be never executed")
+```
 
-## Safety and panics
-
-The goal of this library is complete safety, it should not be possible to cause
-undefined behavior whatsoever with the API, even in edge cases.  There is,
-however, QUITE a lot of unsafe code in this crate, and I would call the current
-safety level of the crate "Work In Progress".  Still, I am not *currently* aware
-of any way to cause UB, and UB is considered the most serious kind of bug, so if
-you find the ability to cause UB with this API *at all*, please file a bug
-report.
-
-Another goal of this library is complete protection from panics and aborts.
-Currently, it should not be possible for a script to trigger a panic or abort
-(with some important caveats described below).  Similarly to the safety goal,
-there ARE several internal panics and even aborts in `rlua` source, but they
-should not be possible to trigger, and if you trigger them this should be
-considered a bug.
-
-Caveats to the panic / abort guarantee:
-
-  * `rlua` reserves the right to panic on API usage errors.  Currently, the only
-    time this will happen is when passed a handle type from a `Lua` instance
-    that does not share the same main state.
-  * Currently, there are no memory or execution limits on scripts, so untrusted
-    scripts can always at minimum infinite loop or allocate arbitrary amounts of
-    memory.
-  * The internal Lua allocator is set to use `realloc` from `libc`, but it is
-    wrapped in such a way that OOM errors are guaranteed to *abort*.  This is
-    not currently such a huge deal outside of untrusted scripts, as this matches
-    the behavior of Rust itself.  Doing this allows the internals of `rlua` to,
-    in certain cases, call 'm' Lua C API functions with the garbage collector
-    disabled and know that these cannot error.  Eventually, `rlua` will support
-    memory limits on scripts, and those memory limits will cause regular memory
-    errors rather than OOM aborts.
-  * `rustc` version `1.24.0` on Windows contains a
-    [bug](https://github.com/rust-lang/rust/issues/48251) which affects `rlua`
-    error handling, turning any Lua script error into an abort.  If you are
-    using Rust `1.24.0` on windows, please upgrade to `1.24.1`.
-
-Yet another goal of the library is to, in all cases, safely handle panics
-generated by Rust callbacks.  Panic unwinds in Rust callbacks should currently
-be handled correctly -- the unwind is caught and carried across the Lua API
-boundary as a regular Lua error in a way that prevents Lua from catching it.
-This is done by overriding the normal Lua 'pcall' and 'xpcall' with custom
-versions that cannot catch errors that are actually from Rust panics, and by
-handling panic errors on the receiving Rust side by resuming the panic.
-
-`rlua` should also be panic safe in another way as well, which is that any `Lua`
-instances or handles should remain usable after a user triggered panic, and such
-panics should not break internal invariants or leak Lua stack space.  This is
-mostly important to safely use `rlua` types in Drop impls, as you should not be
+`mlua` should also be panic safe in another way as well, which is that any `Lua`
+instances or handles remains usable after a user generated panic, and such
+panics should not break internal invariants or leak Lua stack space. This is
+mostly important to safely use `mlua` types in Drop impls, as you should not be
 using panics for general error handling.
 
-In summary, here is a list of `rlua` behaviors that should be considered a bug.
+Below is a list of `mlua` behaviors that should be considered a bug.
 If you encounter them, a bug report would be very welcome:
 
-  * If you can cause UB at all with `rlua` without typing the word "unsafe",
-    this is absolutely 100% a bug.
-  * If your code panics / aborts with a message that contains the string "rlua
-    internal error", this is a bug.
-  * The above is true even for the internal panic about running out of stack
-    space!  There are a few ways to generate normal script errors by running out
-    of stack, but if you encounter a *panic* based on running out of stack, this
-    is a bug.
-  * If you load the "debug" library (which requires typing "unsafe"), every
-    safety / panic / abort guarantee goes out the window.  The debug library can
-    be used to do extremely scary things.  If you use the debug library and
-    encounter a bug, it may still very well be a bug, but try to find a
-    reproduction that does not involve the debug library first.
-  * When the internal version of Lua is built using the `gcc` crate, and
-    `cfg!(debug_assertions)` is true, Lua is built with the `LUA_USE_APICHECK`
-    define set.  Any abort caused by this internal Lua API checking is
-    *absolutely* a bug, particularly because without `LUA_USE_APICHECK` it would
-    generally cause UB.
-  * Lua C API errors are handled by lonjmp.  *ALL* instances where the Lua C API
-    would longjmp should be protected from Rust, except in internal callbacks
-    where this is intentional.  If you detect that `rlua` is triggering a
-    longjmp over your Rust stack frames, this is a bug!
-  * If you can somehow handle a panic in a Rust callback from Lua, this is a
-    bug.
-  * If you detect that, after catching a panic, a `Lua` or handle method is
-    triggering other bugs or there is a Lua stack space leak, this is a bug.
-    `rlua` instances are supposed to remain fully usable in the face of user
-    triggered panics.  This guarantee does NOT extend to panics marked with
-    "rlua internal error" simply because that is already indicative of a
-    separate bug.
+  + If your program panics with a message that contains the string "mlua internal error", this is a  bug.
+
+  + The above is true even for the internal panic about running out of stack space!  There are a few ways to generate normal script errors by running out of stack, but if you encounter a *panic* based on running out of stack, this is a bug.
+
+  + Lua C API errors are handled by lonjmp. All instances where the Lua C API would otherwise longjmp over calling stack frames should be guarded against, except in internal callbacks where this is intentional. If you detect that `mlua` is triggering a longjmp over your Rust stack frames, this is a bug!
+
+  + If you detect that, after catching a panic or during a Drop triggered from a panic, a `Lua` or handle method is triggering other bugs or there is a Lua stack space leak, this is a bug. `mlua` instances are supposed to remain fully usable in the face of user generated panics. This guarantee does not extend to panics marked with "mlua internal error" simply because that is already indicative of a separate bug.
+
+## License
+
+This project is licensed under the [MIT license](LICENSE)
+

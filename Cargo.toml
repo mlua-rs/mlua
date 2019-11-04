@@ -3,15 +3,19 @@ name = "mlua"
 version = "0.1.0"
 authors = ["Aleksandr Orlenko <zxteam@pm.me>", "kyren <catherine@chucklefish.org>"]
 edition = "2018"
-description = "High level bindings to Lua 5.1 / LuaJIT / Lua 5.3"
 repository = "https://github.com/khvzak/mlua"
 documentation = "https://docs.rs/mlua"
 readme = "README.md"
 keywords = ["lua", "luajit"]
+categories = ["api-bindings"]
 license = "MIT"
+description = """
+High level bindings to Lua 5.1/5.3 (including LuaJIT)
+with support of writing native lua modules in Rust.
+"""
 
-# [badges]
-# travis-ci = { repository = "khvzak/mlua", branch = "master" }
+[badges]
+travis-ci = { repository = "khvzak/mlua", branch = "master" }
 
 [workspace]
 members = [
