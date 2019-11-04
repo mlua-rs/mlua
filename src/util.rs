@@ -444,7 +444,7 @@ pub unsafe extern "C" fn error_traceback(state: *mut ffi::lua_State) -> c_int {
 }
 
 // Does not call lua_checkstack, uses 2 stack spaces.
-#[cfg(not(feature = "lua53"))]
+#[cfg(any(feature = "lua51", feature = "luajit"))]
 pub unsafe fn set_main_state(state: *mut ffi::lua_State) {
     ffi::lua_pushlightuserdata(state, &MAIN_THREAD_REGISTRY_KEY as *const u8 as *mut c_void);
     ffi::lua_pushthread(state);
@@ -455,7 +455,7 @@ pub unsafe fn set_main_state(state: *mut ffi::lua_State) {
 pub unsafe fn get_main_state(state: *mut ffi::lua_State) -> *mut ffi::lua_State {
     #[cfg(feature = "lua53")]
     ffi::lua_rawgeti(state, ffi::LUA_REGISTRYINDEX, ffi::LUA_RIDX_MAINTHREAD);
-    #[cfg(not(feature = "lua53"))]
+    #[cfg(any(feature = "lua51", feature = "luajit"))]
     {
         ffi::lua_pushlightuserdata(state, &MAIN_THREAD_REGISTRY_KEY as *const u8 as *mut c_void);
         ffi::lua_rawget(state, ffi::LUA_REGISTRYINDEX);
@@ -751,7 +751,7 @@ unsafe fn get_destructed_userdata_metatable(state: *mut ffi::lua_State) {
     ffi::lua_rawget(state, ffi::LUA_REGISTRYINDEX);
 }
 
-#[cfg(not(feature = "lua53"))]
+#[cfg(any(feature = "lua51", feature = "luajit"))]
 static MAIN_THREAD_REGISTRY_KEY: u8 = 0;
 static ERROR_METATABLE_REGISTRY_KEY: u8 = 0;
 static PANIC_METATABLE_REGISTRY_KEY: u8 = 0;

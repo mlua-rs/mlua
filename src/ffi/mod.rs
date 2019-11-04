@@ -39,7 +39,7 @@ pub use self::lua::{
 #[cfg(feature = "lua53")]
 pub use self::lua::{lua_KContext, lua_KFunction, lua_Unsigned};
 
-#[cfg(not(feature = "lua53"))]
+#[cfg(any(feature = "lua51", feature = "luajit"))]
 pub use self::lua::lua_setfenv;
 
 // C API functions
@@ -203,7 +203,7 @@ pub use self::lua::{
     LUA_OPUNM, LUA_RIDX_GLOBALS, LUA_RIDX_MAINTHREAD,
 };
 
-#[cfg(not(feature = "lua53"))]
+#[cfg(any(feature = "lua51", feature = "luajit"))]
 pub use self::lua::{LUA_ENVIRONINDEX, LUA_GLOBALSINDEX};
 
 // constants from lauxlib.h
@@ -226,7 +226,7 @@ mod glue {
     include!(concat!(env!("OUT_DIR"), "/glue.rs"));
 }
 
-#[cfg(not(feature = "lua53"))]
+#[cfg(any(feature = "lua51", feature = "luajit"))]
 mod compat53;
 
 mod lauxlib;

@@ -107,8 +107,14 @@ fn main() {
 
     // Find lua via pkg-config
 
-    #[cfg(all(feature = "lua53", feature = "luajit"))]
-    panic!("Cannot enable lua53 and luajit simultaneously");
+    #[cfg(not(any(feature = "lua53", feature = "lua51", feature = "luajit")))]
+    panic!("You must enable one of the features: lua53, lua51, luajit");
+
+    #[cfg(all(feature = "lua53", any(feature = "lua51", feature = "luajit")))]
+    panic!("You can enable only one of the features: lua53, lua51, luajit");
+
+    #[cfg(all(feature = "lua51", feature = "luajit"))]
+    panic!("You can enable only one of the features: lua53, lua51, luajit");
 
     #[cfg(feature = "lua53")]
     {
@@ -126,7 +132,7 @@ fn main() {
         };
     }
 
-    #[cfg(all(not(feature = "lua53"), not(feature = "luajit")))]
+    #[cfg(feature = "lua51")]
     {
         let mut lua = pkg_config::Config::new()
             .range_version((Bound::Included("5.1"), Bound::Excluded("5.2")))

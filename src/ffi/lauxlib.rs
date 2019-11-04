@@ -31,7 +31,7 @@ use super::lua::{self, lua_CFunction, lua_Integer, lua_Number, lua_State};
 #[cfg(feature = "lua53")]
 pub use super::glue::LUAL_NUMSIZES;
 
-#[cfg(not(feature = "lua53"))]
+#[cfg(any(feature = "lua51", feature = "luajit"))]
 pub use super::compat53::{
     luaL_checkversion, luaL_getmetafield, luaL_getsubtable, luaL_len, luaL_loadbufferx,
     luaL_newmetatable, luaL_requiref, luaL_setfuncs, luaL_setmetatable, luaL_testudata,
@@ -63,7 +63,7 @@ extern "C" {
 
     #[cfg(feature = "lua53")]
     pub fn luaL_getmetafield(L: *mut lua_State, obj: c_int, e: *const c_char) -> c_int;
-    #[cfg(not(feature = "lua53"))]
+    #[cfg(any(feature = "lua51", feature = "luajit"))]
     #[link_name = "luaL_getmetafield"]
     pub fn luaL_getmetafield_51(L: *mut lua_State, obj: c_int, e: *const c_char) -> c_int;
 
@@ -89,7 +89,7 @@ extern "C" {
 
     #[cfg(feature = "lua53")]
     pub fn luaL_newmetatable(L: *mut lua_State, tname: *const c_char) -> c_int;
-    #[cfg(not(feature = "lua53"))]
+    #[cfg(any(feature = "lua51", feature = "luajit"))]
     #[link_name = "luaL_newmetatable"]
     pub fn luaL_newmetatable_51(L: *mut lua_State, tname: *const c_char) -> c_int;
 
@@ -127,7 +127,7 @@ extern "C" {
     #[cfg(feature = "lua53")]
     pub fn luaL_loadfilex(L: *mut lua_State, filename: *const c_char, mode: *const c_char)
         -> c_int;
-    #[cfg(not(feature = "lua53"))]
+    #[cfg(any(feature = "lua51", feature = "luajit"))]
     pub fn luaL_loadfile(L: *mut lua_State, filename: *const c_char) -> c_int;
 }
 
@@ -146,7 +146,7 @@ extern "C" {
         name: *const c_char,
         mode: *const c_char,
     ) -> c_int;
-    #[cfg(not(feature = "lua53"))]
+    #[cfg(any(feature = "lua51", feature = "luajit"))]
     pub fn luaL_loadbuffer(
         L: *mut lua_State,
         buff: *const c_char,

@@ -21,6 +21,7 @@ members = [
 [features]
 default = ["lua53"]
 lua53 = []
+lua51 = []
 luajit = []
 
 [dependencies]

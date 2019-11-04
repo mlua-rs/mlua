@@ -16,7 +16,7 @@ use crate::table::Table;
 use crate::thread::Thread;
 use crate::types::{Callback, Integer, LightUserData, LuaRef, Number, RegistryKey};
 use crate::userdata::{AnyUserData, MetaMethod, UserData, UserDataMethods};
-#[cfg(not(feature = "lua53"))]
+#[cfg(any(feature = "lua51", feature = "luajit"))]
 use crate::util::set_main_state;
 use crate::util::{
     assert_stack, callback_error, check_stack, get_main_state, get_userdata, get_wrapped_error,
@@ -84,7 +84,7 @@ impl Lua {
             ffi::luaL_requiref(state, cstr!("package"), ffi::luaopen_package, 1);
             #[cfg(feature = "lua53")]
             ffi::lua_pop(state, 9);
-            #[cfg(not(feature = "lua53"))]
+            #[cfg(any(feature = "lua51", feature = "luajit"))]
             ffi::lua_pop(state, 7);
 
             let mut lua = Lua::init_from_ptr(state);
@@ -97,7 +97,7 @@ impl Lua {
     pub unsafe fn init_from_ptr(state: *mut ffi::lua_State) -> Lua {
         #[cfg(feature = "lua53")]
         let main_state = get_main_state(state);
-        #[cfg(not(feature = "lua53"))]
+        #[cfg(any(feature = "lua51", feature = "luajit"))]
         let main_state = {
             set_main_state(state);
             state
@@ -316,7 +316,7 @@ impl Lua {
                         self.push_value(env)?;
                         #[cfg(feature = "lua53")]
                         ffi::lua_setupvalue(self.state, -2, 1);
-                        #[cfg(not(feature = "lua53"))]
+                        #[cfg(any(feature = "lua51", feature = "luajit"))]
                         ffi::lua_setfenv(self.state, -2);
                     }
                     Ok(Function(self.pop_ref()))
@@ -507,7 +507,7 @@ impl Lua {
             assert_stack(self.state, 2);
             #[cfg(feature = "lua53")]
             ffi::lua_rawgeti(self.state, ffi::LUA_REGISTRYINDEX, ffi::LUA_RIDX_GLOBALS);
-            #[cfg(not(feature = "lua53"))]
+            #[cfg(any(feature = "lua51", feature = "luajit"))]
             ffi::lua_pushvalue(self.state, ffi::LUA_GLOBALSINDEX);
             Table(self.pop_ref())
         }
