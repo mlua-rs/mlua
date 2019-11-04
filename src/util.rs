@@ -526,7 +526,7 @@ pub unsafe fn init_error_registry(state: *mut ffi::lua_State) {
                 Ok(err_buf)
             } else if is_wrapped_panic(state, -1) {
                 let panic = get_userdata::<WrappedPanic>(state, -1);
-                if let Some(p) = (*panic).0.take() {
+                if let Some(ref p) = (*panic).0 {
                     ffi::lua_pushlightuserdata(
                         state,
                         &ERROR_PRINT_BUFFER_KEY as *const u8 as *mut c_void,
@@ -547,7 +547,7 @@ pub unsafe fn init_error_registry(state: *mut ffi::lua_State) {
                     let _ = write!(&mut (*err_buf), "{}", error);
                     Ok(err_buf)
                 } else {
-                    mlua_panic!("error during panic handling, panic was resumed twice")
+                    mlua_panic!("error during panic handling, panic was resumed")
                 }
             } else {
                 // I'm not sure whether this is possible to trigger without bugs in mlua?
