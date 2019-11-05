@@ -3,6 +3,10 @@ name = "mlua_derive"
 version = "0.1.0"
 authors = ["Aleksandr Orlenko <zxteam@protonmail.com>"]
 edition = "2018"
+description = "Procedural macros for the mlua crate."
+repository = "https://github.com/khvzak/mlua"
+keywords = ["lua", "mlua"]
+license = "MIT"
 
 [lib]
 proc-macro = true
