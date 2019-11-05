@@ -21,10 +21,10 @@ jobs:
               rustfmt --version
               cargo fmt --all -- --check --color=auto
       - run:
-        name: Install Lua
-        command: |
-            sudo apt-get update
-            sudo apt-get -y --no-install-recommends install liblua5.1-0-dev libluajit-5.1-dev liblua5.3-dev
+          name: Install Lua
+          command: |
+              sudo apt-get update
+              sudo apt-get -y --no-install-recommends install liblua5.1-0-dev libluajit-5.1-dev liblua5.3-dev
       - run:
           name: Build all targets
           command: cargo build --all --all-targets
