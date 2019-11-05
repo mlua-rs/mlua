@@ -151,7 +151,7 @@ fn main() {
     #[cfg(feature = "luajit")]
     {
         let lua = pkg_config::Config::new()
-            .range_version((Bound::Included("2.0.5"), Bound::Excluded("2.1.0")))
+            .range_version((Bound::Included("2.0.5"), Bound::Unbounded))
             .probe("luajit");
 
         match lua {
