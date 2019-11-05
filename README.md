@@ -107,19 +107,19 @@ resumed then by propagating the Lua error to Rust code.
 
 For example:
 ``` rust
-    let lua = Lua::new();
-    let f = lua.create_function(|_, ()| -> LuaResult<()> {
-        panic!("test panic");
-    })?;
-    lua.globals().set("rust_func", f)?;
+let lua = Lua::new();
+let f = lua.create_function(|_, ()| -> LuaResult<()> {
+    panic!("test panic");
+})?;
+lua.globals().set("rust_func", f)?;
 
-    let _ = lua.load(r#"
-        local status, err = pcall(rust_func)
-        print(err) -- prints: test panic
-        error(err) -- propagate panic
-    "#).exec();
+let _ = lua.load(r#"
+    local status, err = pcall(rust_func)
+    print(err) -- prints: test panic
+    error(err) -- propagate panic
+"#).exec();
 
-    panic!("must be never executed")
+unreachable!()
 ```
 
 `mlua` should also be panic safe in another way as well, which is that any `Lua`
