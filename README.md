@@ -85,6 +85,7 @@ And then (macos example):
 $ cargo build
 $ ln -s ./target/debug/libmy_module.dylib ./my_module.so
 $ lua5.3 -e 'require("my_module").hello("world")'
+hello, world!
 ```
 
 ## Safety
