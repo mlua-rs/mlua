@@ -17,7 +17,7 @@ use mlua::{Lua, Result, UserData};
 fn test_gc_control() -> Result<()> {
     let lua = Lua::new();
 
-    #[cfg(feature = "lua53")]
+    #[cfg(any(feature = "lua53", feature = "lua52"))]
     {
         assert!(lua.gc_is_running());
         lua.gc_stop();
@@ -42,7 +42,7 @@ fn test_gc_control() -> Result<()> {
     Ok(())
 }
 
-#[cfg(feature = "lua53")]
+#[cfg(any(feature = "lua53", feature = "lua52"))]
 #[test]
 fn test_gc_error() {
     use mlua::Error;

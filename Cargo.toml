@@ -10,7 +10,7 @@ keywords = ["lua", "luajit"]
 categories = ["api-bindings"]
 license = "MIT"
 description = """
-High level bindings to Lua 5.1/5.3 (including LuaJIT)
+High level bindings to Lua 5.1/5.2/5.3 (including LuaJIT)
 with support of writing native lua modules in Rust.
 """
 
@@ -25,6 +25,7 @@ members = [
 [features]
 default = ["lua53"]
 lua53 = []
+lua52 = []
 lua51 = []
 luajit = []
 

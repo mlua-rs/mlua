@@ -107,14 +107,25 @@ fn main() {
 
     // Find lua via pkg-config
 
-    #[cfg(not(any(feature = "lua53", feature = "lua51", feature = "luajit")))]
-    panic!("You must enable one of the features: lua53, lua51, luajit");
+    #[cfg(not(any(
+        feature = "lua53",
+        feature = "lua52",
+        feature = "lua51",
+        feature = "luajit"
+    )))]
+    panic!("You must enable one of the features: lua53, lua52, lua51, luajit");
 
-    #[cfg(all(feature = "lua53", any(feature = "lua51", feature = "luajit")))]
-    panic!("You can enable only one of the features: lua53, lua51, luajit");
+    #[cfg(all(
+        feature = "lua53",
+        any(feature = "lua52", feature = "lua51", feature = "luajit")
+    ))]
+    panic!("You can enable only one of the features: lua53, lua52, lua51, luajit");
+
+    #[cfg(all(feature = "lua52", any(feature = "lua51", feature = "luajit")))]
+    panic!("You can enable only one of the features: lua53, lua52, lua51, luajit");
 
     #[cfg(all(feature = "lua51", feature = "luajit"))]
-    panic!("You can enable only one of the features: lua53, lua51, luajit");
+    panic!("You can enable only one of the features: lua53, lua52, lua51, luajit");
 
     #[cfg(feature = "lua53")]
     {
@@ -129,6 +140,22 @@ fn main() {
         match lua {
             Ok(lua) => build_glue(&lua.include_paths),
             Err(err) => panic!(err),
+        };
+    }
+
+    #[cfg(feature = "lua52")]
+    {
+        let mut lua = pkg_config::Config::new()
+            .range_version((Bound::Included("5.2"), Bound::Excluded("5.3")))
+            .probe("lua");
+
+        if lua.is_err() {
+            lua = pkg_config::Config::new().probe("lua5.2");
+        }
+
+        match lua {
+            Ok(lua) => build_glue(&lua.include_paths),
+            Err(_) => panic!("Lua 5.2 not found"),
         };
     }
 

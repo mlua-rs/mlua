@@ -205,7 +205,7 @@ pub unsafe fn pop_error(state: *mut ffi::lua_State, err_code: c_int) -> Error {
                 Error::RuntimeError(err_string)
             }
             ffi::LUA_ERRMEM => Error::MemoryError(err_string),
-            #[cfg(feature = "lua53")]
+            #[cfg(any(feature = "lua53", feature = "lua52"))]
             ffi::LUA_ERRGCMM => Error::GarbageCollectorError(err_string),
             _ => mlua_panic!("unrecognized lua error code"),
         }
@@ -453,7 +453,7 @@ pub unsafe fn set_main_state(state: *mut ffi::lua_State) {
 
 // Does not call lua_checkstack, uses 1 stack space.
 pub unsafe fn get_main_state(state: *mut ffi::lua_State) -> *mut ffi::lua_State {
-    #[cfg(feature = "lua53")]
+    #[cfg(any(feature = "lua53", feature = "lua52"))]
     ffi::lua_rawgeti(state, ffi::LUA_REGISTRYINDEX, ffi::LUA_RIDX_MAINTHREAD);
     #[cfg(any(feature = "lua51", feature = "luajit"))]
     {

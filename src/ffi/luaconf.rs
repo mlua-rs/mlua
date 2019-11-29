@@ -26,7 +26,6 @@
 pub use super::glue::LUAL_BUFFERSIZE;
 pub use super::glue::LUA_INTEGER;
 pub use super::glue::LUA_NUMBER;
-#[cfg(feature = "lua53")]
 pub use super::glue::LUA_UNSIGNED;
 
 pub use super::glue::LUA_IDSIZE;

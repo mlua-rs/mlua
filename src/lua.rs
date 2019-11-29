@@ -72,7 +72,7 @@ impl Lua {
             let state = ffi::luaL_newstate();
 
             ffi::luaL_requiref(state, cstr!("_G"), ffi::luaopen_base, 1);
-            #[cfg(feature = "lua53")]
+            #[cfg(any(feature = "lua53", feature = "lua52"))]
             ffi::luaL_requiref(state, cstr!("coroutine"), ffi::luaopen_coroutine, 1);
             ffi::luaL_requiref(state, cstr!("table"), ffi::luaopen_table, 1);
             ffi::luaL_requiref(state, cstr!("io"), ffi::luaopen_io, 1);
@@ -80,9 +80,13 @@ impl Lua {
             ffi::luaL_requiref(state, cstr!("string"), ffi::luaopen_string, 1);
             #[cfg(feature = "lua53")]
             ffi::luaL_requiref(state, cstr!("utf8"), ffi::luaopen_utf8, 1);
+            #[cfg(any(feature = "lua53", feature = "lua52"))]
+            ffi::luaL_requiref(state, cstr!("bit32"), ffi::luaopen_bit32, 1);
             ffi::luaL_requiref(state, cstr!("math"), ffi::luaopen_math, 1);
             ffi::luaL_requiref(state, cstr!("package"), ffi::luaopen_package, 1);
             #[cfg(feature = "lua53")]
+            ffi::lua_pop(state, 10);
+            #[cfg(feature = "lua52")]
             ffi::lua_pop(state, 9);
             #[cfg(any(feature = "lua51", feature = "luajit"))]
             ffi::lua_pop(state, 7);
@@ -95,7 +99,7 @@ impl Lua {
 
     /// Constructs a new Lua instance from the existing state.
     pub unsafe fn init_from_ptr(state: *mut ffi::lua_State) -> Lua {
-        #[cfg(feature = "lua53")]
+        #[cfg(any(feature = "lua53", feature = "lua52"))]
         let main_state = get_main_state(state);
         #[cfg(any(feature = "lua51", feature = "luajit"))]
         let main_state = {
@@ -195,7 +199,7 @@ impl Lua {
     }
 
     /// Returns true if the garbage collector is currently running automatically.
-    #[cfg(feature = "lua53")]
+    #[cfg(any(feature = "lua53", feature = "lua52"))]
     pub fn gc_is_running(&self) -> bool {
         unsafe { ffi::lua_gc(self.main_state, ffi::LUA_GCISRUNNING, 0) != 0 }
     }
@@ -314,7 +318,7 @@ impl Lua {
                 ffi::LUA_OK => {
                     if let Some(env) = env {
                         self.push_value(env)?;
-                        #[cfg(feature = "lua53")]
+                        #[cfg(any(feature = "lua53", feature = "lua52"))]
                         ffi::lua_setupvalue(self.state, -2, 1);
                         #[cfg(any(feature = "lua51", feature = "luajit"))]
                         ffi::lua_setfenv(self.state, -2);
@@ -505,7 +509,7 @@ impl Lua {
         unsafe {
             let _sg = StackGuard::new(self.state);
             assert_stack(self.state, 2);
-            #[cfg(feature = "lua53")]
+            #[cfg(any(feature = "lua53", feature = "lua52"))]
             ffi::lua_rawgeti(self.state, ffi::LUA_REGISTRYINDEX, ffi::LUA_RIDX_GLOBALS);
             #[cfg(any(feature = "lua51", feature = "luajit"))]
             ffi::lua_pushvalue(self.state, ffi::LUA_GLOBALSINDEX);

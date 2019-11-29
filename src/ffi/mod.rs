@@ -33,11 +33,11 @@ use std::os::raw::c_int;
 // C API types
 pub use self::lua::{
     lua_Alloc, lua_CFunction, lua_Debug, lua_Hook, lua_Integer, lua_Number, lua_Reader, lua_State,
-    lua_Writer,
+    lua_Unsigned, lua_Writer,
 };
 
 #[cfg(feature = "lua53")]
-pub use self::lua::{lua_KContext, lua_KFunction, lua_Unsigned};
+pub use self::lua::{lua_KContext, lua_KFunction};
 
 #[cfg(any(feature = "lua51", feature = "luajit"))]
 pub use self::lua::lua_setfenv;
@@ -45,6 +45,7 @@ pub use self::lua::lua_setfenv;
 // C API functions
 pub use self::lua::{
     lua_absindex,
+    lua_arith,
     lua_atpanic,
     lua_call,
     lua_checkstack,
@@ -135,6 +136,7 @@ pub use self::lua::{
     lua_setupvalue,
     lua_setuservalue,
     lua_status,
+    lua_stringtonumber,
     lua_toboolean,
     lua_tocfunction,
     lua_tointeger,
@@ -153,11 +155,11 @@ pub use self::lua::{
     lua_yield,
 };
 
+#[cfg(any(feature = "lua53", feature = "lua52"))]
+pub use self::lua::{lua_callk, lua_pcallk, lua_upvalueid, lua_upvaluejoin, lua_yieldk};
+
 #[cfg(feature = "lua53")]
-pub use self::lua::{
-    lua_arith, lua_callk, lua_isyieldable, lua_pcallk, lua_stringtonumber, lua_upvalueid,
-    lua_upvaluejoin, lua_version, lua_yieldk,
-};
+pub use self::lua::{lua_isyieldable, lua_version};
 
 // auxiliary library types
 pub use self::lauxlib::luaL_Reg;
@@ -166,16 +168,17 @@ pub use self::lauxlib::luaL_Reg;
 pub use self::lauxlib::{
     luaL_argcheck, luaL_argerror, luaL_callmeta, luaL_checkany, luaL_checkint, luaL_checkinteger,
     luaL_checklong, luaL_checklstring, luaL_checknumber, luaL_checkoption, luaL_checkstack,
-    luaL_checkstring, luaL_checktype, luaL_checkudata, luaL_dofile, luaL_dostring, luaL_error,
-    luaL_getmetafield, luaL_getmetatable, luaL_getsubtable, luaL_gsub, luaL_len, luaL_loadbuffer,
-    luaL_loadbufferx, luaL_loadfile, luaL_loadstring, luaL_newlib, luaL_newlibtable,
-    luaL_newmetatable, luaL_newstate, luaL_optint, luaL_optinteger, luaL_optlong, luaL_optlstring,
-    luaL_optnumber, luaL_optstring, luaL_ref, luaL_requiref, luaL_setfuncs, luaL_setmetatable,
-    luaL_testudata, luaL_tolstring, luaL_traceback, luaL_typename, luaL_unref, luaL_where,
+    luaL_checkstring, luaL_checktype, luaL_checkudata, luaL_checkversion, luaL_dofile,
+    luaL_dostring, luaL_error, luaL_getmetafield, luaL_getmetatable, luaL_getsubtable, luaL_gsub,
+    luaL_len, luaL_loadbuffer, luaL_loadbufferx, luaL_loadfile, luaL_loadstring, luaL_newlib,
+    luaL_newlibtable, luaL_newmetatable, luaL_newstate, luaL_optint, luaL_optinteger, luaL_optlong,
+    luaL_optlstring, luaL_optnumber, luaL_optstring, luaL_ref, luaL_requiref, luaL_setfuncs,
+    luaL_setmetatable, luaL_testudata, luaL_tolstring, luaL_traceback, luaL_typename, luaL_unref,
+    luaL_where,
 };
 
-#[cfg(feature = "lua53")]
-pub use self::lauxlib::{luaL_checkversion, luaL_execresult, luaL_fileresult, luaL_loadfilex};
+#[cfg(any(feature = "lua53", feature = "lua52"))]
+pub use self::lauxlib::{luaL_execresult, luaL_fileresult, luaL_loadfilex};
 
 // lualib.h functions
 pub use self::lualib::{
@@ -183,24 +186,29 @@ pub use self::lualib::{
     luaopen_package, luaopen_string, luaopen_table,
 };
 
+#[cfg(any(feature = "lua53", feature = "lua52"))]
+pub use self::lualib::{luaopen_bit32, luaopen_coroutine};
+
 #[cfg(feature = "lua53")]
-pub use self::lualib::{luaopen_bit32, luaopen_coroutine, luaopen_utf8};
+pub use self::lualib::luaopen_utf8;
 
 // constants from lua.h
 pub use self::lua::{
     LUA_ERRERR, LUA_ERRMEM, LUA_ERRRUN, LUA_ERRSYNTAX, LUA_GCCOLLECT, LUA_GCCOUNT, LUA_GCCOUNTB,
     LUA_GCRESTART, LUA_GCSETPAUSE, LUA_GCSETSTEPMUL, LUA_GCSTEP, LUA_GCSTOP, LUA_HOOKCALL,
     LUA_HOOKCOUNT, LUA_HOOKLINE, LUA_HOOKRET, LUA_HOOKTAILCALL, LUA_MASKCALL, LUA_MASKCOUNT,
-    LUA_MASKLINE, LUA_MASKRET, LUA_MINSTACK, LUA_MULTRET, LUA_OK, LUA_OPEQ, LUA_OPLE, LUA_OPLT,
-    LUA_REGISTRYINDEX, LUA_TBOOLEAN, LUA_TFUNCTION, LUA_TLIGHTUSERDATA, LUA_TNIL, LUA_TNONE,
-    LUA_TNUMBER, LUA_TSTRING, LUA_TTABLE, LUA_TTHREAD, LUA_TUSERDATA, LUA_YIELD,
+    LUA_MASKLINE, LUA_MASKRET, LUA_MINSTACK, LUA_MULTRET, LUA_OK, LUA_OPADD, LUA_OPDIV, LUA_OPEQ,
+    LUA_OPLE, LUA_OPLT, LUA_OPMOD, LUA_OPMUL, LUA_OPPOW, LUA_OPSUB, LUA_OPUNM, LUA_REGISTRYINDEX,
+    LUA_TBOOLEAN, LUA_TFUNCTION, LUA_TLIGHTUSERDATA, LUA_TNIL, LUA_TNONE, LUA_TNUMBER, LUA_TSTRING,
+    LUA_TTABLE, LUA_TTHREAD, LUA_TUSERDATA, LUA_YIELD,
 };
+
+#[cfg(any(feature = "lua53", feature = "lua52"))]
+pub use self::lua::{LUA_ERRGCMM, LUA_GCISRUNNING, LUA_RIDX_GLOBALS, LUA_RIDX_MAINTHREAD};
 
 #[cfg(feature = "lua53")]
 pub use self::lua::{
-    LUA_ERRGCMM, LUA_GCISRUNNING, LUA_OPADD, LUA_OPBAND, LUA_OPBNOT, LUA_OPBOR, LUA_OPBXOR,
-    LUA_OPDIV, LUA_OPIDIV, LUA_OPMOD, LUA_OPMUL, LUA_OPPOW, LUA_OPSHL, LUA_OPSHR, LUA_OPSUB,
-    LUA_OPUNM, LUA_RIDX_GLOBALS, LUA_RIDX_MAINTHREAD,
+    LUA_OPBAND, LUA_OPBNOT, LUA_OPBOR, LUA_OPBXOR, LUA_OPIDIV, LUA_OPSHL, LUA_OPSHR,
 };
 
 #[cfg(any(feature = "lua51", feature = "luajit"))]
@@ -215,8 +223,11 @@ pub use self::lualib::{
     LUA_STRLIBNAME, LUA_TABLIBNAME,
 };
 
+#[cfg(any(feature = "lua53", feature = "lua52"))]
+pub use self::lualib::LUA_BITLIBNAME;
+
 #[cfg(feature = "lua53")]
-pub use self::lualib::{LUA_BITLIBNAME, LUA_UTF8LIBNAME};
+pub use self::lualib::LUA_UTF8LIBNAME;
 
 // Not actually defined in lua.h / luaconf.h
 pub const LUA_MAX_UPVALUES: c_int = 255;
@@ -226,7 +237,7 @@ mod glue {
     include!(concat!(env!("OUT_DIR"), "/glue.rs"));
 }
 
-#[cfg(any(feature = "lua51", feature = "luajit"))]
+#[cfg(any(feature = "lua52", feature = "lua51", feature = "luajit"))]
 mod compat53;
 
 mod lauxlib;

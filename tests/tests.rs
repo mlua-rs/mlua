@@ -194,8 +194,8 @@ fn test_error() -> Result<()> {
             end, 3)
 
             local function handler(err)
-                if string.match(_VERSION, ' 5%.1$') then
-                    -- Special case for Lua 5.1
+                if string.match(_VERSION, ' 5%.1$') or string.match(_VERSION, ' 5%.2$') then
+                    -- Special case for Lua 5.1/5.2
                     local caps = string.match(err, ': (%d+)$')
                     if caps then
                         err = caps
@@ -402,7 +402,7 @@ fn test_num_conversion() -> Result<()> {
     assert_eq!(lua.load("1.0").eval::<f64>()?, 1.0);
     #[cfg(feature = "lua53")]
     assert_eq!(lua.load("1.0").eval::<String>()?, "1.0");
-    #[cfg(any(feature = "lua51", feature = "luajit"))]
+    #[cfg(any(feature = "lua52", feature = "lua51", feature = "luajit"))]
     assert_eq!(lua.load("1.0").eval::<String>()?, "1");
 
     assert_eq!(lua.load("1.5").eval::<i64>()?, 1);
@@ -434,7 +434,7 @@ fn test_pcall_xpcall() -> Result<()> {
     assert!(lua.load("xpcall()").exec().is_err());
     assert!(lua.load("xpcall(function() end)").exec().is_err());
 
-    // Lua 5.3 / LuaJIT compatible version of xpcall
+    // Lua 5.3/5.2 / LuaJIT compatible version of xpcall
     #[cfg(feature = "lua51")]
     lua.load(
         r#"
@@ -477,7 +477,7 @@ fn test_pcall_xpcall() -> Result<()> {
     assert_eq!(globals.get::<_, String>("pcall_error")?, "testerror");
 
     assert_eq!(globals.get::<_, bool>("xpcall_statusr")?, false);
-    #[cfg(any(feature = "lua53", feature = "luajit"))]
+    #[cfg(any(feature = "lua53", feature = "lua52", feature = "luajit"))]
     assert_eq!(
         globals.get::<_, std::string::String>("xpcall_error")?,
         "testerror"
@@ -810,7 +810,7 @@ fn context_thread() -> Result<()> {
         )
         .into_function()?;
 
-    #[cfg(feature = "lua53")]
+    #[cfg(any(feature = "lua53", feature = "lua52"))]
     f.call::<_, ()>(lua.current_thread())?;
 
     #[cfg(any(feature = "lua51", feature = "luajit"))]

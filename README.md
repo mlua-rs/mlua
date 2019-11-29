@@ -11,7 +11,7 @@
 [Guided Tour](examples/guided_tour.rs)
 
 A fork of [rlua 0.15](https://github.com/kyren/rlua/tree/0.15.3) which provides a high level
-interface between Rust and Lua. Unlike `rlua` , `mlua` supports Lua 5.1 (including LuaJIT) and 5.3.
+interface between Rust and Lua. Unlike `rlua` , `mlua` supports Lua 5.1 (including LuaJIT), 5.2 and 5.3.
 The `mlua` goal is to be an easy to use, practical and flexible API between Rust and Lua but
 *__not__* always 100% safe due to the Lua VM nature. Also, `mlua` provides a way to write native lua
 modules in Rust.

@@ -230,8 +230,10 @@ int main(int argc, const char **argv) {
       RS_TYPE("LUA_NUMBER",
               sizeof(LUA_NUMBER) > sizeof(float) ? "c_double" : "c_float"),
       RS_TYPE("LUA_INTEGER", rs_int_type(sizeof(LUA_INTEGER))),
-#if LUA_VERSION_NUM == 503
+#if LUA_VERSION_NUM >= 502
       RS_TYPE("LUA_UNSIGNED", rs_uint_type(sizeof(LUA_UNSIGNED))),
+#else
+      RS_TYPE("LUA_UNSIGNED", rs_uint_type(sizeof(size_t))),
 #endif
 
       // == lua.h ==============================================================
@@ -263,6 +265,8 @@ int main(int argc, const char **argv) {
       RS_STR("LUA_STRLIBNAME", LUA_STRLIBNAME),
 #if LUA_VERSION_NUM == 503
       RS_STR("LUA_UTF8LIBNAME", LUA_UTF8LIBNAME),
+#endif
+#if LUA_VERSION_NUM >= 502
       RS_STR("LUA_BITLIBNAME", LUA_BITLIBNAME),
 #endif
       RS_STR("LUA_MATHLIBNAME", LUA_MATHLIBNAME),

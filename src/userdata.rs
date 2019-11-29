@@ -29,18 +29,25 @@ pub enum MetaMethod {
     Pow,
     /// The unary minus (`-`) operator.
     Unm,
+    #[cfg(feature = "lua53")]
     /// The floor division (//) operator.
     IDiv,
+    #[cfg(feature = "lua53")]
     /// The bitwise AND (&) operator.
     BAnd,
+    #[cfg(feature = "lua53")]
     /// The bitwise OR (|) operator.
     BOr,
+    #[cfg(feature = "lua53")]
     /// The bitwise XOR (binary ~) operator.
     BXor,
+    #[cfg(feature = "lua53")]
     /// The bitwise NOT (unary ~) operator.
     BNot,
+    #[cfg(feature = "lua53")]
     /// The bitwise left shift (<<) operator.
     Shl,
+    #[cfg(feature = "lua53")]
     /// The bitwise right shift (>>) operator.
     Shr,
     /// The string concatenation operator `..`.
@@ -75,12 +82,19 @@ impl MetaMethod {
             MetaMethod::Mod => b"__mod",
             MetaMethod::Pow => b"__pow",
             MetaMethod::Unm => b"__unm",
+            #[cfg(feature = "lua53")]
             MetaMethod::IDiv => b"__idiv",
+            #[cfg(feature = "lua53")]
             MetaMethod::BAnd => b"__band",
+            #[cfg(feature = "lua53")]
             MetaMethod::BOr => b"__bor",
+            #[cfg(feature = "lua53")]
             MetaMethod::BXor => b"__bxor",
+            #[cfg(feature = "lua53")]
             MetaMethod::BNot => b"__bnot",
+            #[cfg(feature = "lua53")]
             MetaMethod::Shl => b"__shl",
+            #[cfg(feature = "lua53")]
             MetaMethod::Shr => b"__shr",
             MetaMethod::Concat => b"__concat",
             MetaMethod::Len => b"__len",
@@ -333,9 +347,9 @@ impl<'lua> AnyUserData<'lua> {
     /// [`get_user_value`]: #method.get_user_value
     pub fn set_user_value<V: ToLua<'lua>>(&self, v: V) -> Result<()> {
         let lua = self.0.lua;
-        #[cfg(any(feature = "lua51", feature = "luajit"))]
+        #[cfg(any(feature = "lua52", feature = "lua51", feature = "luajit"))]
         let v = {
-            // Lua 5.1 allows to store only table. Then we will wrap the value.
+            // Lua 5.2/5.1 allows to store only table. Then we will wrap the value.
             let t = lua.create_table()?;
             t.raw_set(1, v)?;
             crate::Value::Table(t)
@@ -364,7 +378,7 @@ impl<'lua> AnyUserData<'lua> {
             ffi::lua_getuservalue(lua.state, -1);
             lua.pop_value()
         };
-        #[cfg(any(feature = "lua51", feature = "luajit"))]
+        #[cfg(any(feature = "lua52", feature = "lua51", feature = "luajit"))]
         return crate::Table::from_lua(res, lua)?.get(1);
         #[cfg(feature = "lua53")]
         V::from_lua(res, lua)
