@@ -70,6 +70,16 @@ pub enum MetaMethod {
     ///
     /// This is not an operator, but will be called by methods such as `tostring` and `print`.
     ToString,
+    #[cfg(any(feature = "lua53", feature = "lua52"))]
+    /// The `__pairs` metamethod.
+    ///
+    /// This is not an operator, but it will be called by the built-in `pairs` function.
+    Pairs,
+    #[cfg(any(feature = "lua53", feature = "lua52"))]
+    /// The `__ipairs` metamethod.
+    ///
+    /// This is not an operator, but it will be called by the built-in `ipairs` function.
+    IPairs,
 }
 
 impl MetaMethod {
@@ -105,6 +115,10 @@ impl MetaMethod {
             MetaMethod::NewIndex => b"__newindex",
             MetaMethod::Call => b"__call",
             MetaMethod::ToString => b"__tostring",
+            #[cfg(any(feature = "lua53", feature = "lua52"))]
+            MetaMethod::Pairs => b"__pairs",
+            #[cfg(any(feature = "lua53", feature = "lua52"))]
+            MetaMethod::IPairs => b"__ipairs",
         }
     }
 }

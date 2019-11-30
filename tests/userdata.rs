@@ -103,6 +103,18 @@ fn test_metamethods() -> Result<()> {
                     Err("no such custom index".to_lua_err())
                 }
             });
+            #[cfg(any(feature = "lua53", feature = "lua52"))]
+            methods.add_meta_method(MetaMethod::IPairs, |lua, data, ()| {
+                use std::iter::FromIterator;
+                let stateless_iter = lua.create_function(|_, (data, i): (MyUserData, i64)| {
+                    let i = i + 1;
+                    if i <= data.0 {
+                        return Ok(mlua::Variadic::from_iter(vec![i, i]));
+                    }
+                    return Ok(mlua::Variadic::new());
+                })?;
+                Ok((stateless_iter, data.clone(), 0))
+            });
         }
     }
 
@@ -114,9 +126,29 @@ fn test_metamethods() -> Result<()> {
         lua.load("userdata1 + userdata2").eval::<MyUserData>()?.0,
         10
     );
+
+    #[cfg(any(feature = "lua53", feature = "lua52"))]
+    let ipairs_it = {
+        lua.load(
+            r#"
+            function ipairs_it()
+                local r = 0
+                for i, v in ipairs(userdata1) do
+                    r = r + v
+                end
+                return r
+            end
+        "#,
+        )
+        .exec()?;
+        globals.get::<_, Function>("ipairs_it")?
+    };
+
     assert_eq!(lua.load("userdata1 - userdata2").eval::<MyUserData>()?.0, 4);
     assert_eq!(lua.load("userdata1:get()").eval::<i64>()?, 7);
     assert_eq!(lua.load("userdata2.inner").eval::<i64>()?, 3);
+    #[cfg(any(feature = "lua53", feature = "lua52"))]
+    assert_eq!(ipairs_it.call::<_, i64>(())?, 28);
     assert!(lua.load("userdata2.nonexist_field").eval::<()>().is_err());
 
     Ok(())
