@@ -23,7 +23,7 @@ Add to `Cargo.toml` :
 
 ``` toml
 [dependencies]
-mlua = "0.1"
+mlua = "0.2"
 ```
 
 `main.rs`
@@ -55,8 +55,8 @@ Add to `Cargo.toml` :
 crate-type = ["cdylib"]
 
 [dependencies]
-mlua = "0.1"
-mlua_derive = "0.1"
+mlua = "0.2"
+mlua_derive = "0.2"
 ```
 
 `lib.rs` :
