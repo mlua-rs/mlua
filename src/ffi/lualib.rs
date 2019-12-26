@@ -32,11 +32,14 @@ pub use super::glue::{
     LUA_STRLIBNAME, LUA_TABLIBNAME,
 };
 
-#[cfg(any(feature = "lua53", feature = "lua52"))]
-pub use super::glue::LUA_BITLIBNAME;
-
 #[cfg(feature = "lua53")]
 pub use super::glue::LUA_UTF8LIBNAME;
+
+#[cfg(any(feature = "lua52", feature = "luajit"))]
+pub use super::glue::LUA_BITLIBNAME;
+
+#[cfg(feature = "luajit")]
+pub use super::glue::{LUA_FFILIBNAME, LUA_JITLIBNAME};
 
 extern "C" {
     pub fn luaopen_base(L: *mut lua_State) -> c_int;
@@ -48,11 +51,17 @@ extern "C" {
     pub fn luaopen_string(L: *mut lua_State) -> c_int;
     #[cfg(feature = "lua53")]
     pub fn luaopen_utf8(L: *mut lua_State) -> c_int;
-    #[cfg(any(feature = "lua53", feature = "lua52"))]
+    #[cfg(feature = "lua52")]
     pub fn luaopen_bit32(L: *mut lua_State) -> c_int;
     pub fn luaopen_math(L: *mut lua_State) -> c_int;
     pub fn luaopen_debug(L: *mut lua_State) -> c_int;
     pub fn luaopen_package(L: *mut lua_State) -> c_int;
+    #[cfg(feature = "luajit")]
+    pub fn luaopen_bit(L: *mut lua_State) -> c_int;
+    #[cfg(feature = "luajit")]
+    pub fn luaopen_jit(L: *mut lua_State) -> c_int;
+    #[cfg(feature = "luajit")]
+    pub fn luaopen_ffi(L: *mut lua_State) -> c_int;
 
     pub fn luaL_openlibs(L: *mut lua_State);
 }

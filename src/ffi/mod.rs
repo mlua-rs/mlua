@@ -155,11 +155,11 @@ pub use self::lua::{
     lua_yield,
 };
 
-#[cfg(any(feature = "lua53", feature = "lua52"))]
-pub use self::lua::{lua_callk, lua_pcallk, lua_upvalueid, lua_upvaluejoin, lua_yieldk};
-
 #[cfg(feature = "lua53")]
 pub use self::lua::{lua_isyieldable, lua_version};
+
+#[cfg(any(feature = "lua53", feature = "lua52"))]
+pub use self::lua::{lua_callk, lua_pcallk, lua_upvalueid, lua_upvaluejoin, lua_yieldk};
 
 // auxiliary library types
 pub use self::lauxlib::luaL_Reg;
@@ -186,11 +186,14 @@ pub use self::lualib::{
     luaopen_package, luaopen_string, luaopen_table,
 };
 
-#[cfg(any(feature = "lua53", feature = "lua52"))]
+#[cfg(feature = "lua53")]
+pub use self::lualib::{luaopen_coroutine, luaopen_utf8};
+
+#[cfg(feature = "lua52")]
 pub use self::lualib::{luaopen_bit32, luaopen_coroutine};
 
-#[cfg(feature = "lua53")]
-pub use self::lualib::luaopen_utf8;
+#[cfg(feature = "luajit")]
+pub use self::lualib::{luaopen_bit, luaopen_ffi, luaopen_jit};
 
 // constants from lua.h
 pub use self::lua::{
@@ -203,13 +206,13 @@ pub use self::lua::{
     LUA_TTABLE, LUA_TTHREAD, LUA_TUSERDATA, LUA_YIELD,
 };
 
-#[cfg(any(feature = "lua53", feature = "lua52"))]
-pub use self::lua::{LUA_ERRGCMM, LUA_GCISRUNNING, LUA_RIDX_GLOBALS, LUA_RIDX_MAINTHREAD};
-
 #[cfg(feature = "lua53")]
 pub use self::lua::{
     LUA_OPBAND, LUA_OPBNOT, LUA_OPBOR, LUA_OPBXOR, LUA_OPIDIV, LUA_OPSHL, LUA_OPSHR,
 };
+
+#[cfg(any(feature = "lua53", feature = "lua52"))]
+pub use self::lua::{LUA_ERRGCMM, LUA_GCISRUNNING, LUA_RIDX_GLOBALS, LUA_RIDX_MAINTHREAD};
 
 #[cfg(any(feature = "lua51", feature = "luajit"))]
 pub use self::lua::{LUA_ENVIRONINDEX, LUA_GLOBALSINDEX};
@@ -223,11 +226,14 @@ pub use self::lualib::{
     LUA_STRLIBNAME, LUA_TABLIBNAME,
 };
 
-#[cfg(any(feature = "lua53", feature = "lua52"))]
-pub use self::lualib::LUA_BITLIBNAME;
-
 #[cfg(feature = "lua53")]
 pub use self::lualib::LUA_UTF8LIBNAME;
+
+#[cfg(any(feature = "lua52", feature = "luajit"))]
+pub use self::lualib::LUA_BITLIBNAME;
+
+#[cfg(feature = "luajit")]
+pub use self::lualib::{LUA_FFILIBNAME, LUA_JITLIBNAME};
 
 // Not actually defined in lua.h / luaconf.h
 pub const LUA_MAX_UPVALUES: c_int = 255;

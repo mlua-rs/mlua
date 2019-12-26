@@ -11,6 +11,7 @@ use crate::error::{Error, Result};
 use crate::ffi;
 use crate::function::Function;
 use crate::scope::Scope;
+use crate::stdlib::StdLib;
 use crate::string::String;
 use crate::table::Table;
 use crate::thread::Thread;
@@ -68,32 +69,45 @@ impl Drop for Lua {
 impl Lua {
     /// Creates a new Lua state and loads standard library without the `debug` library.
     pub fn new() -> Lua {
+        Self::new_with(StdLib::ALL_NO_DEBUG)
+    }
+
+    /// Creates a new Lua state and loads the specified set of standard libraries.
+    ///
+    /// Use the [`StdLib`] flags to specifiy the libraries you want to load.
+    ///
+    /// [`StdLib`]: struct.StdLib.html
+    pub fn new_with(libs: StdLib) -> Lua {
         unsafe {
             let state = ffi::luaL_newstate();
 
             ffi::luaL_requiref(state, cstr!("_G"), ffi::luaopen_base, 1);
-            #[cfg(any(feature = "lua53", feature = "lua52"))]
-            ffi::luaL_requiref(state, cstr!("coroutine"), ffi::luaopen_coroutine, 1);
-            ffi::luaL_requiref(state, cstr!("table"), ffi::luaopen_table, 1);
-            ffi::luaL_requiref(state, cstr!("io"), ffi::luaopen_io, 1);
-            ffi::luaL_requiref(state, cstr!("os"), ffi::luaopen_os, 1);
-            ffi::luaL_requiref(state, cstr!("string"), ffi::luaopen_string, 1);
-            #[cfg(feature = "lua53")]
-            ffi::luaL_requiref(state, cstr!("utf8"), ffi::luaopen_utf8, 1);
-            #[cfg(any(feature = "lua53", feature = "lua52"))]
-            ffi::luaL_requiref(state, cstr!("bit32"), ffi::luaopen_bit32, 1);
-            ffi::luaL_requiref(state, cstr!("math"), ffi::luaopen_math, 1);
-            ffi::luaL_requiref(state, cstr!("package"), ffi::luaopen_package, 1);
-            #[cfg(feature = "lua53")]
-            ffi::lua_pop(state, 10);
-            #[cfg(feature = "lua52")]
-            ffi::lua_pop(state, 9);
-            #[cfg(any(feature = "lua51", feature = "luajit"))]
-            ffi::lua_pop(state, 7);
+            ffi::lua_pop(state, 1);
 
             let mut lua = Lua::init_from_ptr(state);
             lua.ephemeral = false;
+
+            mlua_expect!(
+                protect_lua_closure(lua.main_state, 0, 0, |state| {
+                    load_from_std_lib(state, libs);
+                }),
+                "Error during loading standard libraries"
+            );
+
             lua
+        }
+    }
+
+    /// Loads the specified set of standard libraries into an existing Lua state.
+    ///
+    /// Use the [`StdLib`] flags to specifiy the libraries you want to load.
+    ///
+    /// [`StdLib`]: struct.StdLib.html
+    pub fn load_from_std_lib(&self, libs: StdLib) -> Result<()> {
+        unsafe {
+            protect_lua_closure(self.main_state, 0, 0, |state| {
+                load_from_std_lib(state, libs);
+            })
         }
     }
 
@@ -1213,6 +1227,101 @@ impl<'lua, 'a> Chunk<'lua, 'a> {
     pub fn into_function(self) -> Result<Function<'lua>> {
         self.lua
             .load_chunk(self.source, self.name.as_ref(), self.env)
+    }
+}
+
+unsafe fn load_from_std_lib(state: *mut ffi::lua_State, libs: StdLib) {
+    #[cfg(any(feature = "lua53", feature = "lua52"))]
+    {
+        if libs.contains(StdLib::COROUTINE) {
+            let colib_name = CString::new(ffi::LUA_COLIBNAME).unwrap();
+            ffi::luaL_requiref(state, colib_name.as_ptr(), ffi::luaopen_coroutine, 1);
+            ffi::lua_pop(state, 1);
+        }
+    }
+
+    if libs.contains(StdLib::TABLE) {
+        let tablib_name = CString::new(ffi::LUA_TABLIBNAME).unwrap();
+        ffi::luaL_requiref(state, tablib_name.as_ptr(), ffi::luaopen_table, 1);
+        ffi::lua_pop(state, 1);
+    }
+
+    if libs.contains(StdLib::IO) {
+        let iolib_name = CString::new(ffi::LUA_IOLIBNAME).unwrap();
+        ffi::luaL_requiref(state, iolib_name.as_ptr(), ffi::luaopen_io, 1);
+        ffi::lua_pop(state, 1);
+    }
+
+    if libs.contains(StdLib::OS) {
+        let oslib_name = CString::new(ffi::LUA_OSLIBNAME).unwrap();
+        ffi::luaL_requiref(state, oslib_name.as_ptr(), ffi::luaopen_os, 1);
+        ffi::lua_pop(state, 1);
+    }
+
+    if libs.contains(StdLib::STRING) {
+        let strlib_name = CString::new(ffi::LUA_STRLIBNAME).unwrap();
+        ffi::luaL_requiref(state, strlib_name.as_ptr(), ffi::luaopen_string, 1);
+        ffi::lua_pop(state, 1);
+    }
+
+    #[cfg(feature = "lua53")]
+    {
+        if libs.contains(StdLib::UTF8) {
+            let utf8lib_name = CString::new(ffi::LUA_UTF8LIBNAME).unwrap();
+            ffi::luaL_requiref(state, utf8lib_name.as_ptr(), ffi::luaopen_utf8, 1);
+            ffi::lua_pop(state, 1);
+        }
+    }
+
+    #[cfg(feature = "lua52")]
+    {
+        if libs.contains(StdLib::BIT) {
+            let bitlib_name = CString::new(ffi::LUA_BITLIBNAME).unwrap();
+            ffi::luaL_requiref(state, bitlib_name.as_ptr(), ffi::luaopen_bit32, 1);
+            ffi::lua_pop(state, 1);
+        }
+    }
+
+    #[cfg(feature = "luajit")]
+    {
+        if libs.contains(StdLib::BIT) {
+            let bitlib_name = CString::new(ffi::LUA_BITLIBNAME).unwrap();
+            ffi::luaL_requiref(state, bitlib_name.as_ptr(), ffi::luaopen_bit, 1);
+            ffi::lua_pop(state, 1);
+        }
+    }
+
+    if libs.contains(StdLib::MATH) {
+        let mathlib_name = CString::new(ffi::LUA_MATHLIBNAME).unwrap();
+        ffi::luaL_requiref(state, mathlib_name.as_ptr(), ffi::luaopen_math, 1);
+        ffi::lua_pop(state, 1);
+    }
+
+    if libs.contains(StdLib::DEBUG) {
+        let dblib_name = CString::new(ffi::LUA_DBLIBNAME).unwrap();
+        ffi::luaL_requiref(state, dblib_name.as_ptr(), ffi::luaopen_debug, 1);
+        ffi::lua_pop(state, 1);
+    }
+
+    if libs.contains(StdLib::PACKAGE) {
+        let loadlib_name = CString::new(ffi::LUA_LOADLIBNAME).unwrap();
+        ffi::luaL_requiref(state, loadlib_name.as_ptr(), ffi::luaopen_package, 1);
+        ffi::lua_pop(state, 1);
+    }
+
+    #[cfg(feature = "luajit")]
+    {
+        if libs.contains(StdLib::JIT) {
+            let jitlib_name = CString::new(ffi::LUA_JITLIBNAME).unwrap();
+            ffi::luaL_requiref(state, jitlib_name.as_ptr(), ffi::luaopen_jit, 1);
+            ffi::lua_pop(state, 1);
+        }
+
+        if libs.contains(StdLib::FFI) {
+            let ffilib_name = CString::new(ffi::LUA_FFILIBNAME).unwrap();
+            ffi::luaL_requiref(state, ffilib_name.as_ptr(), ffi::luaopen_ffi, 1);
+            ffi::lua_pop(state, 1);
+        }
     }
 }
 
