@@ -160,3 +160,9 @@ impl<'lua> Function<'lua> {
         }
     }
 }
+
+impl<'lua> PartialEq for Function<'lua> {
+    fn eq(&self, other: &Self) -> bool {
+        self.0 == other.0
+    }
+}

@@ -5,6 +5,7 @@ use std::{fmt, mem, ptr};
 use crate::error::Result;
 use crate::ffi;
 use crate::lua::Lua;
+use crate::util::{assert_stack, StackGuard};
 use crate::value::MultiValue;
 
 /// Type of Lua integer numbers.
@@ -90,5 +91,18 @@ impl<'lua> Clone for LuaRef<'lua> {
 impl<'lua> Drop for LuaRef<'lua> {
     fn drop(&mut self) {
         self.lua.drop_ref(self)
+    }
+}
+
+impl<'lua> PartialEq for LuaRef<'lua> {
+    fn eq(&self, other: &Self) -> bool {
+        let lua = self.lua;
+        unsafe {
+            let _sg = StackGuard::new(lua.state);
+            assert_stack(lua.state, 2);
+            lua.push_ref(&self);
+            lua.push_ref(&other);
+            ffi::lua_rawequal(lua.state, -1, -2) == 1
+        }
     }
 }

@@ -166,6 +166,62 @@ impl<'lua> Table<'lua> {
         self.get::<_, Function>(key)?.call(args)
     }
 
+    /// Compares two tables for equality.
+    ///
+    /// Tables are compared by reference first.
+    /// If they are not primitively equals, then mlua will try to invoke the `__eq` metamethod.
+    /// mlua will check `self` first for the metamethod, then `other` if not found.
+    ///
+    /// # Examples
+    ///
+    /// Compare two tables using `__eq` metamethod:
+    ///
+    /// ```
+    /// # use mlua::{Lua, Result, Table};
+    /// # fn main() -> Result<()> {
+    /// # let lua = Lua::new();
+    /// let table1 = lua.create_table()?;
+    /// table1.set(1, "value")?;
+    ///
+    /// let table2 = lua.create_table()?;
+    /// table2.set(2, "value")?;
+    ///
+    /// let always_equals_mt = lua.create_table()?;
+    /// always_equals_mt.set("__eq", lua.create_function(|_, (_t1, _t2): (Table, Table)| Ok(true))?)?;
+    /// table2.set_metatable(Some(always_equals_mt));
+    ///
+    /// assert!(table1.equals(&table1.clone())?);
+    /// assert!(table1.equals(&table2)?);
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn equals<T: AsRef<Self>>(&self, other: T) -> Result<bool> {
+        let other = other.as_ref();
+        if self == other {
+            return Ok(true);
+        }
+
+        // Compare using __eq metamethod if exists
+        // First, check the self for the metamethod.
+        // If self does not define it, then check the other table.
+        if let Some(mt) = self.get_metatable() {
+            if mt.contains_key("__eq")? {
+                return mt
+                    .get::<_, Function>("__eq")?
+                    .call((self.clone(), other.clone()));
+            }
+        }
+        if let Some(mt) = other.get_metatable() {
+            if mt.contains_key("__eq")? {
+                return mt
+                    .get::<_, Function>("__eq")?
+                    .call((self.clone(), other.clone()));
+            }
+        }
+
+        Ok(false)
+    }
+
     /// Removes a key from the table, returning the value at the key
     /// if the key was previously in the table.
     pub fn raw_remove<K: ToLua<'lua>>(&self, key: K) -> Result<()> {
@@ -365,6 +421,19 @@ impl<'lua> Table<'lua> {
             index: Some(1),
             _phantom: PhantomData,
         }
+    }
+}
+
+impl<'lua> PartialEq for Table<'lua> {
+    fn eq(&self, other: &Self) -> bool {
+        self.0 == other.0
+    }
+}
+
+impl<'lua> AsRef<Table<'lua>> for Table<'lua> {
+    #[inline]
+    fn as_ref(&self) -> &Self {
+        self
     }
 }
 

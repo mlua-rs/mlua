@@ -2,6 +2,7 @@ use std::iter::{self, FromIterator};
 use std::{slice, str, vec};
 
 use crate::error::{Error, Result};
+use crate::ffi;
 use crate::function::Function;
 use crate::lua::Lua;
 use crate::string::String;
@@ -60,6 +61,51 @@ impl<'lua> Value<'lua> {
             Value::Thread(_) => "thread",
             Value::UserData(_) | Value::Error(_) => "userdata",
         }
+    }
+
+    /// Compares two values for equality.
+    ///
+    /// Equality comparisons do not convert strings to numbers or vice versa.
+    /// Tables, Functions, Threads, and Userdata are compared by reference:
+    /// two objects are considered equal only if they are the same object.
+    ///
+    /// If Tables or Userdata have `__eq` metamethod then mlua will try to invoke it.
+    /// The first value is checked first. If that value does not define a metamethod
+    /// for `__eq`, then mlua will check the second value.
+    /// Then mlua calls the metamethod with the two values as arguments, if found.
+    pub fn equals<T: AsRef<Self>>(&self, other: T) -> Result<bool> {
+        match (self, other.as_ref()) {
+            (Value::Table(a), Value::Table(b)) => a.equals(b),
+            (Value::UserData(a), Value::UserData(b)) => a.equals(b),
+            _ => Ok(self == other.as_ref()),
+        }
+    }
+}
+
+impl<'lua> PartialEq for Value<'lua> {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Value::Nil, Value::Nil) => true,
+            (Value::Boolean(a), Value::Boolean(b)) => a == b,
+            (Value::LightUserData(a), Value::LightUserData(b)) => a == b,
+            (Value::Integer(a), Value::Integer(b)) => *a == *b,
+            (Value::Integer(a), Value::Number(b)) => *a as ffi::lua_Number == *b,
+            (Value::Number(a), Value::Integer(b)) => *a == *b as ffi::lua_Number,
+            (Value::Number(a), Value::Number(b)) => *a == *b,
+            (Value::String(a), Value::String(b)) => a == b,
+            (Value::Table(a), Value::Table(b)) => a == b,
+            (Value::Function(a), Value::Function(b)) => a == b,
+            (Value::Thread(a), Value::Thread(b)) => a == b,
+            (Value::UserData(a), Value::UserData(b)) => a == b,
+            _ => false,
+        }
+    }
+}
+
+impl<'lua> AsRef<Value<'lua>> for Value<'lua> {
+    #[inline]
+    fn as_ref(&self) -> &Self {
+        self
     }
 }
 

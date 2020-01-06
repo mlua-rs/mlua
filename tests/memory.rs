@@ -51,15 +51,15 @@ fn test_gc_error() {
     match lua
         .load(
             r#"
-        val = nil
-        table = {}
-        setmetatable(table, {
-            __gc = function()
-                error("gcwascalled")
-            end
-        })
-        table = nil
-        collectgarbage("collect")
+            val = nil
+            table = {}
+            setmetatable(table, {
+                __gc = function()
+                    error("gcwascalled")
+                end
+            })
+            table = nil
+            collectgarbage("collect")
     "#,
         )
         .exec()

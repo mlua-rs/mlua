@@ -13,7 +13,7 @@ use std::sync::Arc;
 
 use mlua::{
     AnyUserData, ExternalError, Function, Lua, MetaMethod, Result, String, UserData,
-    UserDataMethods,
+    UserDataMethods, Value,
 };
 
 #[test]
@@ -96,6 +96,9 @@ fn test_metamethods() -> Result<()> {
                 MetaMethod::Sub,
                 |_, (lhs, rhs): (MyUserData, MyUserData)| Ok(MyUserData(lhs.0 - rhs.0)),
             );
+            methods.add_meta_function(MetaMethod::Eq, |_, (lhs, rhs): (MyUserData, MyUserData)| {
+                Ok(lhs.0 == rhs.0)
+            });
             methods.add_meta_method(MetaMethod::Index, |_, data, index: String| {
                 if index.to_str()? == "inner" {
                     Ok(data.0)
@@ -122,6 +125,7 @@ fn test_metamethods() -> Result<()> {
     let globals = lua.globals();
     globals.set("userdata1", MyUserData(7))?;
     globals.set("userdata2", MyUserData(3))?;
+    globals.set("userdata3", MyUserData(3))?;
     assert_eq!(
         lua.load("userdata1 + userdata2").eval::<MyUserData>()?.0,
         10
@@ -151,6 +155,13 @@ fn test_metamethods() -> Result<()> {
     assert_eq!(ipairs_it.call::<_, i64>(())?, 28);
     assert!(lua.load("userdata2.nonexist_field").eval::<()>().is_err());
 
+    let userdata2: Value = globals.get("userdata2")?;
+    let userdata3: Value = globals.get("userdata3")?;
+
+    assert!(lua.load("userdata2 == userdata3").eval::<bool>()?);
+    assert!(userdata2 != userdata3); // because references are differ
+    assert!(userdata2.equals(userdata3)?);
+
     Ok(())
 }
 
@@ -175,18 +186,18 @@ fn test_gc_userdata() -> Result<()> {
     assert!(lua
         .load(
             r#"
-        local tbl = setmetatable({
-            userdata = userdata
-        }, { __gc = function(self)
-            -- resurrect userdata
-            hatch = self.userdata
-        end })
+            local tbl = setmetatable({
+                userdata = userdata
+            }, { __gc = function(self)
+                -- resurrect userdata
+                hatch = self.userdata
+            end })
 
-        tbl = nil
-        userdata = nil  -- make table and userdata collectable
-        collectgarbage("collect")
-        hatch:access()
-    "#
+            tbl = nil
+            userdata = nil  -- make table and userdata collectable
+            collectgarbage("collect")
+            hatch:access()
+        "#
         )
         .exec()
         .is_err());

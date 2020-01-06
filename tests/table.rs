@@ -149,6 +149,40 @@ fn test_metatable() -> Result<()> {
 }
 
 #[test]
+fn test_table_eq() -> Result<()> {
+    let lua = Lua::new();
+    let globals = lua.globals();
+
+    lua.load(
+        r#"
+        table1 = {1}
+        table2 = {1}
+        table3 = table1
+        table4 = {1}
+
+        setmetatable(table4, {
+            __eq = function(a, b) return a[1] == b[1] end
+        })
+    "#,
+    )
+    .exec()?;
+
+    let table1 = globals.get::<_, Table>("table1")?;
+    let table2 = globals.get::<_, Table>("table2")?;
+    let table3 = globals.get::<_, Table>("table3")?;
+    let table4 = globals.get::<_, Table>("table4")?;
+
+    assert!(table1 != table2);
+    assert!(!table1.equals(&table2)?);
+    assert!(table1 == table3);
+    assert!(table1.equals(&table3)?);
+    assert!(table1 != table4);
+    assert!(table1.equals(&table4)?);
+
+    Ok(())
+}
+
+#[test]
 fn test_table_error() -> Result<()> {
     let lua = Lua::new();
 

@@ -20,13 +20,13 @@ fn test_thread() -> Result<()> {
     let thread = lua.create_thread(
         lua.load(
             r#"
-                function (s)
-                    local sum = s
-                    for i = 1,4 do
-                        sum = sum + coroutine.yield(sum)
-                    end
-                    return sum
+            function (s)
+                local sum = s
+                for i = 1,4 do
+                    sum = sum + coroutine.yield(sum)
                 end
+                return sum
+            end
             "#,
         )
         .eval()?,
@@ -47,11 +47,11 @@ fn test_thread() -> Result<()> {
     let accumulate = lua.create_thread(
         lua.load(
             r#"
-                function (sum)
-                    while true do
-                        sum = sum + coroutine.yield(sum)
-                    end
+            function (sum)
+                while true do
+                    sum = sum + coroutine.yield(sum)
                 end
+            end
             "#,
         )
         .eval::<Function>()?,

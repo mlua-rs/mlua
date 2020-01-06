@@ -143,3 +143,9 @@ impl<'lua> Thread<'lua> {
         }
     }
 }
+
+impl<'lua> PartialEq for Thread<'lua> {
+    fn eq(&self, other: &Self) -> bool {
+        self.0 == other.0
+    }
+}

@@ -92,13 +92,13 @@ fn test_lua_multi() -> Result<()> {
 
     lua.load(
         r#"
-            function concat(arg1, arg2)
-                return arg1 .. arg2
-            end
+        function concat(arg1, arg2)
+            return arg1 .. arg2
+        end
 
-            function mreturn()
-                return 1, 2, 3, 4, 5, 6
-            end
+        function mreturn()
+            return 1, 2, 3, 4, 5, 6
+        end
     "#,
     )
     .exec()?;

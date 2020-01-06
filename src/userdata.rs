@@ -2,7 +2,9 @@ use std::cell::{Ref, RefCell, RefMut};
 
 use crate::error::{Error, Result};
 use crate::ffi;
+use crate::function::Function;
 use crate::lua::Lua;
+use crate::table::Table;
 use crate::types::LuaRef;
 use crate::util::{assert_stack, get_userdata, StackGuard};
 use crate::value::{FromLua, FromLuaMulti, ToLua, ToLuaMulti};
@@ -398,6 +400,42 @@ impl<'lua> AnyUserData<'lua> {
         V::from_lua(res, lua)
     }
 
+    fn get_metatable(&self) -> Result<Table<'lua>> {
+        unsafe {
+            let lua = self.0.lua;
+            let _sg = StackGuard::new(lua.state);
+            assert_stack(lua.state, 3);
+
+            lua.push_ref(&self.0);
+
+            if ffi::lua_getmetatable(lua.state, -1) == 0 {
+                return Err(Error::UserDataTypeMismatch);
+            }
+
+            Ok(Table(lua.pop_ref()))
+        }
+    }
+
+    pub(crate) fn equals<T: AsRef<Self>>(&self, other: T) -> Result<bool> {
+        let other = other.as_ref();
+        if self == other {
+            return Ok(true);
+        }
+
+        let mt = self.get_metatable()?;
+        if mt != other.get_metatable()? {
+            return Ok(false);
+        }
+
+        if mt.contains_key("__eq")? {
+            return mt
+                .get::<_, Function>("__eq")?
+                .call((self.clone(), other.clone()));
+        }
+
+        Ok(false)
+    }
+
     fn inspect<'a, T, R, F>(&'a self, func: F) -> Result<R>
     where
         T: 'static + UserData,
@@ -426,5 +464,18 @@ impl<'lua> AnyUserData<'lua> {
                 }
             }
         }
+    }
+}
+
+impl<'lua> PartialEq for AnyUserData<'lua> {
+    fn eq(&self, other: &Self) -> bool {
+        self.0 == other.0
+    }
+}
+
+impl<'lua> AsRef<AnyUserData<'lua>> for AnyUserData<'lua> {
+    #[inline]
+    fn as_ref(&self) -> &Self {
+        self
     }
 }
