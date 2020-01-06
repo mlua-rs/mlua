@@ -15,7 +15,7 @@ with support of writing native lua modules in Rust.
 """
 
 [badges]
-travis-ci = { repository = "khvzak/mlua", branch = "master" }
+circle-ci = { repository = "khvzak/mlua", branch = "master" }
 
 [workspace]
 members = [
