@@ -1,7 +1,7 @@
 use std::marker::PhantomData;
 use std::os::raw::c_int;
 
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::ffi;
 use crate::function::Function;
 use crate::types::{Integer, LuaRef};
@@ -222,13 +222,6 @@ impl<'lua> Table<'lua> {
         Ok(false)
     }
 
-    /// Removes a key from the table, returning the value at the key
-    /// if the key was previously in the table.
-    pub fn raw_remove<K: ToLua<'lua>>(&self, key: K) -> Result<()> {
-        self.raw_set(key, Nil)?;
-        Ok(())
-    }
-
     /// Sets a key-value pair without invoking metamethods.
     pub fn raw_set<K: ToLua<'lua>, V: ToLua<'lua>>(&self, key: K, value: V) -> Result<()> {
         let lua = self.0.lua;
@@ -267,6 +260,70 @@ impl<'lua> Table<'lua> {
             lua.pop_value()
         };
         V::from_lua(value, lua)
+    }
+
+    /// Inserts element value at position idx to the table, shifting up the elements from table[idx].
+    /// The worst case complexity is O(n), where n is the table length.
+    pub fn raw_insert<V: ToLua<'lua>>(&self, idx: Integer, value: V) -> Result<()> {
+        let lua = self.0.lua;
+        let size = self.raw_len();
+        if idx < 1 || idx > size + 1 {
+            return Err(Error::RuntimeError("index out of bounds".to_string()));
+        }
+
+        let value = value.to_lua(lua)?;
+        unsafe {
+            let _sg = StackGuard::new(lua.state);
+            assert_stack(lua.state, 6);
+
+            lua.push_ref(&self.0);
+            lua.push_value(value)?;
+
+            protect_lua_closure(lua.state, 2, 0, |state| {
+                for i in (idx..size + 1).rev() {
+                    // table[i+1] = table[i]
+                    ffi::lua_rawgeti(state, -2, i);
+                    ffi::lua_rawseti(state, -3, i + 1);
+                }
+                ffi::lua_rawseti(state, -2, idx);
+            })
+        }
+    }
+
+    /// Removes a key from the table.
+    ///
+    /// If `key` is an integer, mlua shifts down the elements from table[key+1],
+    /// and erases element table[key]. The complexity is O(n) in worst case,
+    /// where n is the table length.
+    ///
+    /// For othey key types this is equivalent to setting table[key] = nil.
+    pub fn raw_remove<K: ToLua<'lua>>(&self, key: K) -> Result<()> {
+        let lua = self.0.lua;
+        let key = key.to_lua(lua)?;
+        match key {
+            Value::Integer(idx) => {
+                let size = self.raw_len();
+                if idx < 1 || idx > size {
+                    return Err(Error::RuntimeError("index out of bounds".to_string()));
+                }
+                unsafe {
+                    let _sg = StackGuard::new(lua.state);
+                    assert_stack(lua.state, 6);
+
+                    lua.push_ref(&self.0);
+
+                    protect_lua_closure(lua.state, 1, 0, |state| {
+                        for i in idx..size {
+                            ffi::lua_rawgeti(state, -1, i + 1);
+                            ffi::lua_rawseti(state, -2, i);
+                        }
+                        ffi::lua_pushnil(state);
+                        ffi::lua_rawseti(state, -2, size);
+                    })
+                }
+            }
+            _ => self.raw_set(key, Nil),
+        }
     }
 
     /// Returns the result of the Lua `#` operator.

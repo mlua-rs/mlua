@@ -91,8 +91,30 @@ fn test_table() -> Result<()> {
     globals.set("table4", lua.create_sequence_from(vec![1, 2, 3, 4, 5])?)?;
     let table4 = globals.get::<_, Table>("table4")?;
     assert_eq!(
-        table4.pairs().collect::<Result<Vec<(i64, i64)>>>()?,
+        table4
+            .clone()
+            .pairs()
+            .collect::<Result<Vec<(i64, i64)>>>()?,
         vec![(1, 1), (2, 2), (3, 3), (4, 4), (5, 5)]
+    );
+
+    table4.raw_insert(4, 35)?;
+    table4.raw_insert(7, 7)?;
+    assert_eq!(
+        table4
+            .clone()
+            .pairs()
+            .collect::<Result<Vec<(i64, i64)>>>()?,
+        vec![(1, 1), (2, 2), (3, 3), (4, 35), (5, 4), (6, 5), (7, 7)]
+    );
+
+    table4.raw_remove(1)?;
+    assert_eq!(
+        table4
+            .clone()
+            .pairs()
+            .collect::<Result<Vec<(i64, i64)>>>()?,
+        vec![(1, 2), (2, 3), (3, 35), (4, 4), (5, 5), (6, 7)]
     );
 
     Ok(())

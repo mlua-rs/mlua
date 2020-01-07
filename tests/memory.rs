@@ -16,6 +16,7 @@ use mlua::{Lua, Result, UserData};
 #[test]
 fn test_gc_control() -> Result<()> {
     let lua = Lua::new();
+    let globals = lua.globals();
 
     #[cfg(any(feature = "lua53", feature = "lua52"))]
     {
@@ -30,9 +31,8 @@ fn test_gc_control() -> Result<()> {
     impl UserData for MyUserdata {}
 
     let rc = Arc::new(());
-    lua.globals()
-        .set("userdata", lua.create_userdata(MyUserdata(rc.clone()))?)?;
-    lua.globals().raw_remove("userdata")?;
+    globals.set("userdata", lua.create_userdata(MyUserdata(rc.clone()))?)?;
+    globals.raw_remove("userdata")?;
 
     assert_eq!(Arc::strong_count(&rc), 2);
     lua.gc_collect()?;
