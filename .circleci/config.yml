@@ -40,6 +40,9 @@ jobs:
       - run:
           name: Run all tests / LuaJIT
           command: cargo test --all --no-default-features --features luajit
+      - run:
+          name: Run all tests / LuaJIT Bundled
+          command: cargo test --all --no-default-features --features luajit-bundled
       - save_cache:
           paths:
             - /usr/local/cargo/registry

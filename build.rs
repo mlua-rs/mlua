@@ -175,7 +175,7 @@ fn main() {
         };
     }
 
-    #[cfg(feature = "luajit")]
+    #[cfg(all(feature = "luajit", not(feature = "luajit2-sys")))]
     {
         let lua = pkg_config::Config::new()
             .range_version((Bound::Included("2.0.5"), Bound::Unbounded))
@@ -185,5 +185,17 @@ fn main() {
             Ok(lua) => build_glue(&lua.include_paths),
             Err(err) => panic!(err),
         };
+    }
+
+    #[cfg(all(feature = "luajit", feature = "luajit2-sys"))]
+    {
+        let include_dir = std::env::var("DEP_LUAJIT_INCLUDE")
+            .expect("DEP_LUAJIT_INCLUDE not set by luajit2-sys");
+
+        let lib_name = std::env::var("DEP_LUAJIT_LIB_NAME")
+            .expect("DEP_LUAJIT_LIB_NAME not set by luajit2-sys");
+
+        build_glue(&[PathBuf::from(include_dir)]);
+        println!("cargo:rustc-link-lib=static={}", lib_name);
     }
 }
