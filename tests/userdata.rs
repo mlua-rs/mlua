@@ -96,7 +96,7 @@ fn test_metamethods() -> Result<()> {
                 }
             });
             #[cfg(any(feature = "lua53", feature = "lua52"))]
-            methods.add_meta_method(MetaMethod::IPairs, |lua, data, ()| {
+            methods.add_meta_method(MetaMethod::Pairs, |lua, data, ()| {
                 use std::iter::FromIterator;
                 let stateless_iter = lua.create_function(|_, (data, i): (MyUserData, i64)| {
                     let i = i + 1;
@@ -121,12 +121,12 @@ fn test_metamethods() -> Result<()> {
     );
 
     #[cfg(any(feature = "lua53", feature = "lua52"))]
-    let ipairs_it = {
+    let pairs_it = {
         lua.load(
             r#"
-            function ipairs_it()
+            function pairs_it()
                 local r = 0
-                for i, v in ipairs(userdata1) do
+                for i, v in pairs(userdata1) do
                     r = r + v
                 end
                 return r
@@ -134,14 +134,14 @@ fn test_metamethods() -> Result<()> {
         "#,
         )
         .exec()?;
-        globals.get::<_, Function>("ipairs_it")?
+        globals.get::<_, Function>("pairs_it")?
     };
 
     assert_eq!(lua.load("userdata1 - userdata2").eval::<MyUserData>()?.0, 4);
     assert_eq!(lua.load("userdata1:get()").eval::<i64>()?, 7);
     assert_eq!(lua.load("userdata2.inner").eval::<i64>()?, 3);
     #[cfg(any(feature = "lua53", feature = "lua52"))]
-    assert_eq!(ipairs_it.call::<_, i64>(())?, 28);
+    assert_eq!(pairs_it.call::<_, i64>(())?, 28);
     assert!(lua.load("userdata2.nonexist_field").eval::<()>().is_err());
 
     let userdata2: Value = globals.get("userdata2")?;
