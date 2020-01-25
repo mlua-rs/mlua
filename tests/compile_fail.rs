@@ -1,4 +1,4 @@
-#[cfg(any(feature = "lua53", feature = "lua51"))]
+#[cfg(not(windows))]
 #[test]
 fn test_compile_fail() {
     let t = trybuild::TestCases::new();

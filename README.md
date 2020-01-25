@@ -1,8 +1,8 @@
 # mlua
-[![Build Status]][circleci] [![Latest Version]][crates.io] [![API Documentation]][docs.rs]
+[![Build Status]][github-actions] [![Latest Version]][crates.io] [![API Documentation]][docs.rs]
 
-[Build Status]: https://img.shields.io/circleci/project/github/khvzak/mlua.svg
-[circleci]: https://circleci.com/gh/khvzak/mlua
+[Build Status]: https://github.com/khvzak/mlua/workflows/CI/badge.svg
+[github-actions]: https://github.com/khvzak/mlua/actions
 [Latest Version]: https://img.shields.io/crates/v/mlua.svg
 [crates.io]: https://crates.io/crates/mlua
 [API Documentation]: https://docs.rs/mlua/badge.svg

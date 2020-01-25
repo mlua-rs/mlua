@@ -17,7 +17,7 @@ with support of writing native lua modules in Rust.
 """
 
 [badges]
-circle-ci = { repository = "khvzak/mlua", branch = "master" }
+# github-actions = { repository = "khvzak/mlua", workflow = "CI" }
 
 [workspace]
 members = [
