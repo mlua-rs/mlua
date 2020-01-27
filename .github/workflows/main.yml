@@ -85,6 +85,11 @@ jobs:
     - name: Run tests (LuaJIT vendored)
       run: cargo test --release --no-default-features --features "luajit vendored"
       shell: bash
+    - name: Run compile test (Lua 5.3)
+      run: |
+        sudo apt-get update -y
+        sudo apt-get install -y --no-install-recommends liblua5.3-dev
+        cargo test --release --no-default-features --features "lua53 vendored" -- --ignored
 
   test_macos:
     name: Test on MacOS
