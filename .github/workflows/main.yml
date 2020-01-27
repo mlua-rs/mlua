@@ -10,7 +10,6 @@ jobs:
         thing:
         - stable
         - macos-x86_64
-        # - aarch64-linux
         - x86_64-msvc
         include:
         - thing: stable
@@ -21,10 +20,6 @@ jobs:
           target: x86_64-apple-darwin
           rust: stable
           os: macos-latest
-        - thing: aarch64-linux
-          target: aarch64-unknown-linux-gnu
-          rust: stable
-          os: ubuntu-latest
         - thing: x86_64-msvc
           target: x86_64-pc-windows-msvc
           rust: stable-x86_64-msvc
@@ -53,24 +48,20 @@ jobs:
       if: matrix.thing == 'aarch64-linux'
       shell: bash
     - run: rustup target add ${{ matrix.target }}
-    - name: Build (Lua 5.1/5.2/5.3 and LuaJIT vendored)
+    - name: Build (Lua 5.3/5.2/5.1 and LuaJIT vendored)
       run: |
-        for FEATURE in lua51 lua52 lua53; do
+        for FEATURE in lua53 lua52 lua51 luajit; do
           echo "Building $FEATURE"
-          cargo build --target ${{ matrix.target }} --release --no-default-features --features "$FEATURE lua-vendored"
+          cargo build --target ${{ matrix.target }} --release --no-default-features --features "$FEATURE vendored"
         done
-        echo "Building luajit"
-        cargo build --target ${{ matrix.target }} --release --no-default-features --features "luajit luajit-vendored"
       shell: bash
-    - name: Build (Lua 5.1/5.2/5.3 and LuaJIT via pkg-config)
+    - name: Build (Lua 5.3/5.2/5.1 and LuaJIT via pkg-config)
       if: matrix.os == 'ubuntu-latest'
       run: |
-        for FEATURE in lua51 lua52 lua53; do
+        for FEATURE in lua53 lua52 lua51 luajit; do
           echo "Building $FEATURE"
           cargo build --target ${{ matrix.target }} --release --no-default-features --features $FEATURE
         done
-        echo "Building luajit"
-        cargo build --target ${{ matrix.target }} --release --no-default-features --features luajit
       shell: bash
 
   test_linux:
@@ -83,16 +74,16 @@ jobs:
       run: rustup update stable --no-self-update && rustup default stable
       shell: bash
     - name: Run tests (Lua 5.3 vendored)
-      run: cargo test --release --no-default-features --features "lua53 lua-vendored"
+      run: cargo test --release --no-default-features --features "lua53 vendored"
       shell: bash
     - name: Run tests (Lua 5.2 vendored)
-      run: cargo test --release --no-default-features --features "lua53 lua-vendored"
+      run: cargo test --release --no-default-features --features "lua52 vendored"
       shell: bash
     - name: Run tests (Lua 5.1 vendored)
-      run: cargo test --release --no-default-features --features "lua53 lua-vendored"
+      run: cargo test --release --no-default-features --features "lua51 vendored"
       shell: bash
     - name: Run tests (LuaJIT vendored)
-      run: cargo test --release --no-default-features --features "luajit luajit-vendored"
+      run: cargo test --release --no-default-features --features "luajit vendored"
       shell: bash
 
   test_macos:
@@ -107,16 +98,16 @@ jobs:
         echo ::add-path::$HOME/.cargo/bin
       shell: bash
     - name: Run tests (Lua 5.3 vendored)
-      run: cargo test --release --no-default-features --features "lua53 lua-vendored"
+      run: cargo test --release --no-default-features --features "lua53 vendored"
       shell: bash
     - name: Run tests (Lua 5.2 vendored)
-      run: cargo test --release --no-default-features --features "lua53 lua-vendored"
+      run: cargo test --release --no-default-features --features "lua52 vendored"
       shell: bash
     - name: Run tests (Lua 5.1 vendored)
-      run: cargo test --release --no-default-features --features "lua53 lua-vendored"
+      run: cargo test --release --no-default-features --features "lua51 vendored"
       shell: bash
     - name: Run tests (LuaJIT vendored)
-      run: cargo test --release --no-default-features --features "luajit luajit-vendored"
+      run: cargo test --release --no-default-features --features "luajit vendored"
       shell: bash
 
   test_windows:
@@ -129,16 +120,16 @@ jobs:
       run: rustup update stable --no-self-update && rustup default stable
       shell: bash
     - name: Run tests (Lua 5.3 vendored)
-      run: cargo test --release --no-default-features --features "lua53 lua-vendored"
+      run: cargo test --release --no-default-features --features "lua53 vendored"
       shell: bash
     - name: Run tests (Lua 5.2 vendored)
-      run: cargo test --release --no-default-features --features "lua53 lua-vendored"
+      run: cargo test --release --no-default-features --features "lua52 vendored"
       shell: bash
     - name: Run tests (Lua 5.1 vendored)
-      run: cargo test --release --no-default-features --features "lua53 lua-vendored"
+      run: cargo test --release --no-default-features --features "lua51 vendored"
       shell: bash
     - name: Run tests (LuaJIT vendored)
-      run: cargo test --release --no-default-features --features "luajit luajit-vendored"
+      run: cargo test --release --no-default-features --features "luajit vendored"
       shell: bash
 
   rustfmt:

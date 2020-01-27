@@ -25,13 +25,12 @@ members = [
 ]
 
 [features]
-default = ["lua53", "lua-vendored"]
+default = ["lua53"]
 lua53 = []
 lua52 = []
 lua51 = []
 luajit = []
-lua-vendored = ["lua-src"]
-luajit-vendored = ["luajit", "luajit-src"]
+vendored = ["lua-src", "luajit-src"]
 
 [dependencies]
 num-traits = { version = "0.2.6" }

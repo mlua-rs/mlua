@@ -5,14 +5,8 @@ use std::io::{Error, ErrorKind, Result};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-#[cfg_attr(
-    any(feature = "lua-vendored", feature = "luajit-vendored"),
-    path = "find_vendored.rs"
-)]
-#[cfg_attr(
-    not(any(feature = "lua-vendored", feature = "luajit-vendored")),
-    path = "find_normal.rs"
-)]
+#[cfg_attr(feature = "vendored", path = "find_vendored.rs")]
+#[cfg_attr(not(feature = "vendored"), path = "find_normal.rs")]
 mod find;
 
 trait CommandExt {
@@ -86,9 +80,6 @@ fn main() {
 
     #[cfg(all(feature = "lua51", feature = "luajit"))]
     panic!("You can enable only one of the features: lua53, lua52, lua51, luajit");
-
-    #[cfg(all(feature = "lua-vendored", feature = "luajit"))]
-    panic!("You cannot mix lua-vendored and luajit features");
 
     let include_dir = find::probe_lua();
     build_glue(&include_dir);
