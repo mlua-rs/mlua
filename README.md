@@ -16,9 +16,27 @@ The `mlua` goal is to be an easy to use, practical and flexible API between Rust
 *__not__* always 100% safe due to the Lua VM nature. Also, `mlua` provides a way to write native lua
 modules in Rust.
 
-### Usage
+## Usage
 
-#### standalone mode
+### Choosing Lua version
+
+The following features could be used to choose Lua version: `lua53` (default), `lua52`, `lua51` and `luajit`.
+
+By default mlua uses `pkg-config` tool to find lua includes and lib.
+In most cases it works as desired, although sometimes could be more preferable to use a custom lua library.
+To achieve this, mlua supports `LUA_INC`, `LUA_LIB`, `LUA_LIB_NAME` and `LUA_LINK` environment variables.
+`LUA_LINK` is optional and may be `dylib` (a dynamic library) or `static` (a static library, `.a` archive).
+
+An example how to use them:
+``` sh
+my_project $ LUA_INC=$HOME/tmp/lua-5.2.4/src LUA_LIB=$HOME/tmp/lua-5.2.4/src LUA_LIB_NAME=lua LUA_LINK=static cargo build
+```
+
+`mlua` also supports vendored lua/luajit using the auxilary crates [lua-src](https://crates.io/crates/lua-src) and
+[luajit-src](https://crates.io/crates/luajit-src).
+Just enable the `vendored` feature and cargo will automatically build and link specified lua/luajit version. This is the easiest way to get started with mlua.
+
+### Standalone mode
 Add to `Cargo.toml` :
 
 ``` toml
@@ -46,7 +64,7 @@ fn main() -> LuaResult<()> {
 }
 ```
 
-#### module mode
+### Module mode
 
 Add to `Cargo.toml` :
 
