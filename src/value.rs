@@ -48,18 +48,19 @@ pub enum Value<'lua> {
 pub use self::Value::Nil;
 
 impl<'lua> Value<'lua> {
-    pub(crate) fn type_name(&self) -> &'static str {
+    pub fn type_name(&self) -> &'static str {
         match *self {
             Value::Nil => "nil",
             Value::Boolean(_) => "boolean",
-            Value::LightUserData(_) => "light userdata",
+            Value::LightUserData(_) => "lightuserdata",
             Value::Integer(_) => "integer",
             Value::Number(_) => "number",
             Value::String(_) => "string",
             Value::Table(_) => "table",
             Value::Function(_) => "function",
             Value::Thread(_) => "thread",
-            Value::UserData(_) | Value::Error(_) => "userdata",
+            Value::UserData(_) => "userdata",
+            Value::Error(_) => "error",
         }
     }
 

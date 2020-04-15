@@ -184,10 +184,10 @@ impl fmt::Display for Error {
             Error::MismatchedRegistryKey => {
                 write!(fmt, "RegistryKey used from different Lua state")
             }
-            Error::CallbackError { ref traceback, ref cause } => {
-                write!(fmt, "callback error: {}: {}", cause, traceback)
+            Error::CallbackError { ref traceback, .. } => {
+                write!(fmt, "callback error: {}", traceback)
             }
-            Error::ExternalError(ref err) => write!(fmt, "external error: {}", err),
+            Error::ExternalError(ref err) => write!(fmt, "{}", err),
         }
     }
 }
@@ -196,7 +196,7 @@ impl StdError for Error {
     fn source(&self) -> Option<&(dyn StdError + 'static)> {
         match *self {
             Error::CallbackError { ref cause, .. } => Some(cause.as_ref()),
-            Error::ExternalError(ref err) => Some(err.as_ref()),
+            Error::ExternalError(ref err) => err.source(),
             _ => None,
         }
     }
