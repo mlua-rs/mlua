@@ -13,11 +13,14 @@ links = "lua"
 build = "build/main.rs"
 description = """
 High level bindings to Lua 5.1/5.2/5.3 (including LuaJIT)
-with support of writing native lua modules in Rust.
+with async/await features and support of writing native lua modules in Rust.
 """
 
 [badges]
 # github-actions = { repository = "khvzak/mlua", workflow = "CI" }
+
+[package.metadata.docs.rs]
+features = ["async"]
 
 [workspace]
 members = [
