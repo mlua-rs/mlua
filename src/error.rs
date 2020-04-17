@@ -1,8 +1,11 @@
 use std::error::Error as StdError;
 use std::fmt;
+use std::io::Error as IoError;
+use std::net::AddrParseError;
+use std::rc::Rc;
 use std::result::Result as StdResult;
+use std::str::Utf8Error;
 use std::string::String as StdString;
-use std::sync::Arc;
 
 /// Error type returned by `mlua` methods.
 #[derive(Debug, Clone)]
@@ -115,7 +118,7 @@ pub enum Error {
         /// Lua call stack backtrace.
         traceback: StdString,
         /// Original error returned by the Rust code.
-        cause: Arc<Error>,
+        cause: Rc<Error>,
     },
     /// A custom error.
     ///
@@ -124,7 +127,7 @@ pub enum Error {
     /// Returning `Err(ExternalError(...))` from a Rust callback will raise the error as a Lua
     /// error. The Rust code that originally invoked the Lua code then receives a `CallbackError`,
     /// from which the original error (and a stack traceback) can be recovered.
-    ExternalError(Arc<dyn StdError + Send + Sync>),
+    ExternalError(Rc<dyn StdError>),
 }
 
 /// A specialized `Result` type used by `mlua`'s API.
@@ -203,7 +206,7 @@ impl StdError for Error {
 }
 
 impl Error {
-    pub fn external<T: Into<Box<dyn StdError + Send + Sync>>>(err: T) -> Error {
+    pub fn external<T: Into<Box<dyn StdError>>>(err: T) -> Error {
         Error::ExternalError(err.into().into())
     }
 }
@@ -214,7 +217,7 @@ pub trait ExternalError {
 
 impl<E> ExternalError for E
 where
-    E: Into<Box<dyn StdError + Send + Sync>>,
+    E: Into<Box<dyn StdError>>,
 {
     fn to_lua_err(self) -> Error {
         Error::external(self)
@@ -231,5 +234,23 @@ where
 {
     fn to_lua_err(self) -> Result<T> {
         self.map_err(|e| e.to_lua_err())
+    }
+}
+
+impl std::convert::From<AddrParseError> for Error {
+    fn from(err: AddrParseError) -> Self {
+        Error::external(err)
+    }
+}
+
+impl std::convert::From<IoError> for Error {
+    fn from(err: IoError) -> Self {
+        Error::external(err)
+    }
+}
+
+impl std::convert::From<Utf8Error> for Error {
+    fn from(err: Utf8Error) -> Self {
+        Error::external(err)
     }
 }

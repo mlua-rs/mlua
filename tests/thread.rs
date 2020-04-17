@@ -1,4 +1,11 @@
+#![allow(unused_imports)]
+
 use std::panic::catch_unwind;
+use std::rc::Rc;
+use std::time::Duration;
+
+use futures_executor::block_on;
+use futures_util::stream::TryStreamExt;
 
 use mlua::{Error, Function, Lua, Result, Thread, ThreadStatus};
 
@@ -93,6 +100,38 @@ fn test_thread() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "async")]
+#[tokio::test]
+async fn test_thread_stream() -> Result<()> {
+    let lua = Lua::new();
+
+    let thread = lua.create_thread(
+        lua.load(
+            r#"
+            function (s)
+                local sum = s
+                for i = 1,10 do
+                    sum = sum + i
+                    coroutine.yield(sum)
+                end
+                return sum
+            end
+            "#,
+        )
+        .eval()?,
+    )?;
+
+    let mut s = thread.into_async::<_, i64>(0);
+    let mut sum = 0;
+    while let Some(n) = s.try_next().await? {
+        sum += n;
+    }
+
+    assert_eq!(sum, 275);
+
+    Ok(())
+}
+
 #[test]
 fn coroutine_from_closure() -> Result<()> {
     let lua = Lua::new();
@@ -127,4 +166,31 @@ fn coroutine_panic() {
         Ok(r) => panic!("coroutine panic not propagated, instead returned {:?}", r),
         Err(p) => assert!(*p.downcast::<&str>().unwrap() == "test_panic"),
     }
+}
+
+#[cfg(feature = "async")]
+#[tokio::test]
+async fn test_thread_async() -> Result<()> {
+    let lua = Lua::new();
+
+    let cnt = Rc::new(1); // sleep 1 second
+    let cnt2 = cnt.clone();
+    let f = lua.create_async_function(move |_lua, ()| {
+        let cnt3 = cnt2.clone();
+        async move {
+            futures_timer::Delay::new(Duration::from_secs(*cnt3.as_ref())).await;
+            Ok("hello")
+        }
+    })?;
+
+    let mut thread_s = lua.create_thread(f)?.into_async(());
+    let val: String = thread_s.try_next().await?.unwrap_or_default();
+
+    // thread_s is non-resumable and subject to garbage collection
+
+    lua.gc_collect()?;
+    assert_eq!(Rc::strong_count(&cnt), 1);
+    assert_eq!(val, "hello");
+
+    Ok(())
 }

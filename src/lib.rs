@@ -49,7 +49,6 @@ mod ffi;
 mod function;
 mod lua;
 mod multi;
-mod scope;
 mod stdlib;
 mod string;
 mod table;
@@ -65,7 +64,6 @@ pub use crate::error::{Error, ExternalError, ExternalResult, Result};
 pub use crate::function::Function;
 pub use crate::lua::{Chunk, Lua};
 pub use crate::multi::Variadic;
-pub use crate::scope::Scope;
 pub use crate::stdlib::StdLib;
 pub use crate::string::String;
 pub use crate::table::{Table, TablePairs, TableSequence};
@@ -73,5 +71,8 @@ pub use crate::thread::{Thread, ThreadStatus};
 pub use crate::types::{Integer, LightUserData, Number, RegistryKey};
 pub use crate::userdata::{AnyUserData, MetaMethod, UserData, UserDataMethods};
 pub use crate::value::{FromLua, FromLuaMulti, MultiValue, Nil, ToLua, ToLuaMulti, Value};
+
+#[cfg(feature = "async")]
+pub use crate::thread::AsyncThread;
 
 pub mod prelude;

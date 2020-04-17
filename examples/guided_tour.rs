@@ -164,34 +164,6 @@ fn main() -> Result<()> {
             < f32::EPSILON
     );
 
-    // Normally, Rust types passed to `Lua` must be `Send`, because `Lua` itself is `Send`, and
-    // must be `'static`, because there is no way to be sure of their lifetime inside the Lua
-    // state.  There is, however, a limited way to lift both of these requirements.  You can
-    // call `Lua::scope` to create userdata and callbacks types that only live for as long
-    // as the call to scope, but do not have to be `Send` OR `'static`.
-
-    {
-        let mut rust_val = 0;
-
-        lua.scope(|scope| {
-            // We create a 'sketchy' Lua callback that holds a mutable reference to the variable
-            // `rust_val`.  Outside of a `Lua::scope` call, this would not be allowed
-            // because it could be unsafe.
-
-            lua.globals().set(
-                "sketchy",
-                scope.create_function_mut(|_, ()| {
-                    rust_val = 42;
-                    Ok(())
-                })?,
-            )?;
-
-            lua.load("sketchy()").exec()
-        })?;
-
-        assert_eq!(rust_val, 42);
-    }
-
     // We were able to run our 'sketchy' function inside the scope just fine.  However, if we
     // try to run our 'sketchy' function outside of the scope, the function we created will have
     // been invalidated and we will generate an error.  If our function wasn't invalidated, we

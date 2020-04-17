@@ -146,7 +146,7 @@ macro_rules! impl_tuple {
         }
 
         impl<'lua> FromLuaMulti<'lua> for () {
-            fn from_lua_multi(_: MultiValue, _: &'lua Lua) -> Result<Self> {
+            fn from_lua_multi(_: MultiValue<'lua>, _: &'lua Lua) -> Result<Self> {
                 Ok(())
             }
         }

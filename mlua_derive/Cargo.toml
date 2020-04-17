@@ -1,7 +1,7 @@
 [package]
 name = "mlua_derive"
-version = "0.2.0"
-authors = ["Aleksandr Orlenko <zxteam@protonmail.com>"]
+version = "0.3.0-alpha.1"
+authors = ["Aleksandr Orlenko <zxteam@pm.me>"]
 edition = "2018"
 description = "Procedural macros for the mlua crate."
 repository = "https://github.com/khvzak/mlua"

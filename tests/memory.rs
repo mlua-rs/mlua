@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::rc::Rc;
 
 use mlua::{Lua, Result, UserData};
 
@@ -16,17 +16,17 @@ fn test_gc_control() -> Result<()> {
         assert!(lua.gc_is_running());
     }
 
-    struct MyUserdata(Arc<()>);
+    struct MyUserdata(Rc<()>);
     impl UserData for MyUserdata {}
 
-    let rc = Arc::new(());
+    let rc = Rc::new(());
     globals.set("userdata", lua.create_userdata(MyUserdata(rc.clone()))?)?;
     globals.raw_remove("userdata")?;
 
-    assert_eq!(Arc::strong_count(&rc), 2);
+    assert_eq!(Rc::strong_count(&rc), 2);
     lua.gc_collect()?;
     lua.gc_collect()?;
-    assert_eq!(Arc::strong_count(&rc), 1);
+    assert_eq!(Rc::strong_count(&rc), 1);
 
     Ok(())
 }

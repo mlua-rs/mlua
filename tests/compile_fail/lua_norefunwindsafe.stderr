@@ -10,6 +10,21 @@ error[E0277]: the type `std::cell::UnsafeCell<()>` may contain interior mutabili
     = note: required because of the requirements on the impl of `std::panic::UnwindSafe` for `&mlua::lua::Lua`
     = note: required because it appears within the type `[closure@$DIR/tests/compile_fail/lua_norefunwindsafe.rs:7:18: 7:48 lua:&mlua::lua::Lua]`
 
+error[E0277]: the type `std::cell::UnsafeCell<usize>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+   --> $DIR/lua_norefunwindsafe.rs:7:5
+    |
+7   |     catch_unwind(|| lua.create_table().unwrap());
+    |     ^^^^^^^^^^^^ `std::cell::UnsafeCell<usize>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+    |
+    = help: within `mlua::lua::Lua`, the trait `std::panic::RefUnwindSafe` is not implemented for `std::cell::UnsafeCell<usize>`
+    = note: required because it appears within the type `std::cell::Cell<usize>`
+    = note: required because it appears within the type `std::rc::RcBox<std::cell::RefCell<mlua::lua::ExtraData>>`
+    = note: required because it appears within the type `std::marker::PhantomData<std::rc::RcBox<std::cell::RefCell<mlua::lua::ExtraData>>>`
+    = note: required because it appears within the type `std::rc::Rc<std::cell::RefCell<mlua::lua::ExtraData>>`
+    = note: required because it appears within the type `mlua::lua::Lua`
+    = note: required because of the requirements on the impl of `std::panic::UnwindSafe` for `&mlua::lua::Lua`
+    = note: required because it appears within the type `[closure@$DIR/tests/compile_fail/lua_norefunwindsafe.rs:7:18: 7:48 lua:&mlua::lua::Lua]`
+
 error[E0277]: the type `std::cell::UnsafeCell<mlua::lua::ExtraData>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
    --> $DIR/lua_norefunwindsafe.rs:7:5
     |
@@ -18,9 +33,9 @@ error[E0277]: the type `std::cell::UnsafeCell<mlua::lua::ExtraData>` may contain
     |
     = help: within `mlua::lua::Lua`, the trait `std::panic::RefUnwindSafe` is not implemented for `std::cell::UnsafeCell<mlua::lua::ExtraData>`
     = note: required because it appears within the type `std::cell::RefCell<mlua::lua::ExtraData>`
-    = note: required because it appears within the type `alloc::sync::ArcInner<std::cell::RefCell<mlua::lua::ExtraData>>`
-    = note: required because it appears within the type `std::marker::PhantomData<alloc::sync::ArcInner<std::cell::RefCell<mlua::lua::ExtraData>>>`
-    = note: required because it appears within the type `std::sync::Arc<std::cell::RefCell<mlua::lua::ExtraData>>`
+    = note: required because it appears within the type `std::rc::RcBox<std::cell::RefCell<mlua::lua::ExtraData>>`
+    = note: required because it appears within the type `std::marker::PhantomData<std::rc::RcBox<std::cell::RefCell<mlua::lua::ExtraData>>>`
+    = note: required because it appears within the type `std::rc::Rc<std::cell::RefCell<mlua::lua::ExtraData>>`
     = note: required because it appears within the type `mlua::lua::Lua`
     = note: required because of the requirements on the impl of `std::panic::UnwindSafe` for `&mlua::lua::Lua`
     = note: required because it appears within the type `[closure@$DIR/tests/compile_fail/lua_norefunwindsafe.rs:7:18: 7:48 lua:&mlua::lua::Lua]`
@@ -34,9 +49,9 @@ error[E0277]: the type `std::cell::UnsafeCell<isize>` may contain interior mutab
     = help: within `mlua::lua::Lua`, the trait `std::panic::RefUnwindSafe` is not implemented for `std::cell::UnsafeCell<isize>`
     = note: required because it appears within the type `std::cell::Cell<isize>`
     = note: required because it appears within the type `std::cell::RefCell<mlua::lua::ExtraData>`
-    = note: required because it appears within the type `alloc::sync::ArcInner<std::cell::RefCell<mlua::lua::ExtraData>>`
-    = note: required because it appears within the type `std::marker::PhantomData<alloc::sync::ArcInner<std::cell::RefCell<mlua::lua::ExtraData>>>`
-    = note: required because it appears within the type `std::sync::Arc<std::cell::RefCell<mlua::lua::ExtraData>>`
+    = note: required because it appears within the type `std::rc::RcBox<std::cell::RefCell<mlua::lua::ExtraData>>`
+    = note: required because it appears within the type `std::marker::PhantomData<std::rc::RcBox<std::cell::RefCell<mlua::lua::ExtraData>>>`
+    = note: required because it appears within the type `std::rc::Rc<std::cell::RefCell<mlua::lua::ExtraData>>`
     = note: required because it appears within the type `mlua::lua::Lua`
     = note: required because of the requirements on the impl of `std::panic::UnwindSafe` for `&mlua::lua::Lua`
     = note: required because it appears within the type `[closure@$DIR/tests/compile_fail/lua_norefunwindsafe.rs:7:18: 7:48 lua:&mlua::lua::Lua]`

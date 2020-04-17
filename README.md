@@ -18,6 +18,14 @@ modules in Rust.
 
 ## Usage
 
+### Async
+
+Starting from 0.3, mlua supports async/await for all Lua versions. This feature works using Lua [coroutines](https://www.lua.org/manual/5.3/manual.html#2.6) and require running [Thread](https://docs.rs/mlua/latest/mlua/struct.Thread.html).
+
+**Examples**:
+- [HTTP Client](examples/async_http_client.rs)
+- [TCP Server](examples/async_tcp_server.rs)
+
 ### Choosing Lua version
 
 The following features could be used to choose Lua version: `lua53` (default), `lua52`, `lua51` and `luajit`.
@@ -41,7 +49,7 @@ Add to `Cargo.toml` :
 
 ``` toml
 [dependencies]
-mlua = "0.2"
+mlua = "0.3"
 ```
 
 `main.rs`
@@ -73,8 +81,8 @@ Add to `Cargo.toml` :
 crate-type = ["cdylib"]
 
 [dependencies]
-mlua = "0.2"
-mlua_derive = "0.2"
+mlua = "0.3"
+mlua_derive = "0.3"
 ```
 
 `lib.rs` :

@@ -122,7 +122,7 @@ impl<'lua> FromLua<'lua> for AnyUserData<'lua> {
     }
 }
 
-impl<'lua, T: 'static + Send + UserData> ToLua<'lua> for T {
+impl<'lua, T: 'static + UserData> ToLua<'lua> for T {
     fn to_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
         Ok(Value::UserData(lua.create_userdata(self)?))
     }
@@ -167,7 +167,7 @@ impl<'lua> ToLua<'lua> for bool {
 }
 
 impl<'lua> FromLua<'lua> for bool {
-    fn from_lua(v: Value, _: &'lua Lua) -> Result<Self> {
+    fn from_lua(v: Value<'lua>, _: &'lua Lua) -> Result<Self> {
         match v {
             Value::Nil => Ok(false),
             Value::Boolean(b) => Ok(b),
@@ -183,7 +183,7 @@ impl<'lua> ToLua<'lua> for LightUserData {
 }
 
 impl<'lua> FromLua<'lua> for LightUserData {
-    fn from_lua(value: Value, _: &'lua Lua) -> Result<Self> {
+    fn from_lua(value: Value<'lua>, _: &'lua Lua) -> Result<Self> {
         match value {
             Value::LightUserData(ud) => Ok(ud),
             _ => Err(Error::FromLuaConversionError {

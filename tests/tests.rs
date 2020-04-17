@@ -1,6 +1,6 @@
 use std::iter::FromIterator;
 use std::panic::catch_unwind;
-use std::sync::Arc;
+use std::rc::Rc;
 use std::{error, f32, f64, fmt};
 
 use mlua::{
@@ -584,22 +584,22 @@ fn test_registry_value() -> Result<()> {
 
 #[test]
 fn test_drop_registry_value() -> Result<()> {
-    struct MyUserdata(Arc<()>);
+    struct MyUserdata(Rc<()>);
 
     impl UserData for MyUserdata {}
 
     let lua = Lua::new();
-    let rc = Arc::new(());
+    let rc = Rc::new(());
 
     let r = lua.create_registry_value(MyUserdata(rc.clone()))?;
-    assert_eq!(Arc::strong_count(&rc), 2);
+    assert_eq!(Rc::strong_count(&rc), 2);
 
     drop(r);
     lua.expire_registry_values();
 
     lua.load(r#"collectgarbage("collect")"#).exec()?;
 
-    assert_eq!(Arc::strong_count(&rc), 1);
+    assert_eq!(Rc::strong_count(&rc), 1);
 
     Ok(())
 }
