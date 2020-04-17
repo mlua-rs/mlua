@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use hyper::Client as HyperClient;
 
-use mlua::{Lua, Result, Thread, Error};
+use mlua::{Error, Lua, Result, Thread};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -18,7 +18,10 @@ async fn main() -> Result<()> {
 
         let mut headers = HashMap::new();
         for (key, value) in resp.headers().iter() {
-            headers.entry(key.as_str()).or_insert(Vec::new()).push(value.to_str().unwrap());
+            headers
+                .entry(key.as_str())
+                .or_insert(Vec::new())
+                .push(value.to_str().unwrap());
         }
         lua_resp.set("headers", headers)?;
 
