@@ -482,12 +482,14 @@ impl Lua {
     /// Wraps a Rust async function or closure, creating a callable Lua function handle to it.
     ///
     /// While executing the function Rust will poll Future and if the result is not ready, call
-    /// `lua_yield()` returning internal representation of a `Poll::Pending` value.
+    /// `yield()` passing internal representation of a `Poll::Pending` value.
     ///
-    /// The function must be called inside [`Thread`] coroutine to be able to suspend its execution.
-    /// An executor could be used together with [`ThreadStream`] and mlua will use a provided Waker
+    /// The function must be called inside Lua coroutine ([`Thread`]) to be able to suspend its execution.
+    /// An executor should be used to poll [`AsyncThread`] and mlua will take a provided Waker
     /// in that case. Otherwise noop waker will be used if try to call the function outside of Rust
     /// executors.
+    ///
+    /// The family of `call_async()` functions takes care about creating [`Thread`].
     ///
     /// # Examples
     ///
@@ -495,26 +497,22 @@ impl Lua {
     ///
     /// ```
     /// use std::time::Duration;
-    /// use futures_executor::block_on;
     /// use futures_timer::Delay;
-    /// # use mlua::{Lua, Result, Thread};
+    /// use mlua::{Lua, Result};
     ///
     /// async fn sleep(_lua: &Lua, n: u64) -> Result<&'static str> {
-    ///     Delay::new(Duration::from_secs(n)).await;
+    ///     Delay::new(Duration::from_millis(n)).await;
     ///     Ok("done")
     /// }
     ///
-    /// # fn main() -> Result<()> {
-    /// # let lua = Lua::new();
-    /// lua.globals().set("async_sleep", lua.create_async_function(sleep)?)?;
-    /// let thr = lua.load("coroutine.create(function(n) return async_sleep(n) end)").eval::<Thread>()?;
-    /// let res: String = block_on(async {
-    ///     thr.into_async(1).await // Sleep 1 second
-    /// })?;
-    ///
-    /// assert_eq!(res, "done");
-    /// # Ok(())
-    /// # }
+    /// #[tokio::main]
+    /// async fn main() -> Result<()> {
+    ///     let lua = Lua::new();
+    ///     lua.globals().set("sleep", lua.create_async_function(sleep)?)?;
+    ///     let res: String = lua.load("return sleep(...)").call_async(100).await?; // Sleep 100ms
+    ///     assert_eq!(res, "done");
+    ///     Ok(())
+    /// }
     /// ```
     ///
     /// [`Thread`]: struct.Thread.html
@@ -1347,6 +1345,19 @@ impl<'lua, 'a> Chunk<'lua, 'a> {
         Ok(())
     }
 
+    /// Asynchronously execute this chunk of code.
+    ///
+    /// See [`Chunk::exec`] for more details.
+    ///
+    /// [`Chunk::exec`]: struct.Chunk.html#method.exec
+    #[cfg(feature = "async")]
+    pub fn exec_async<'fut>(self) -> LocalBoxFuture<'fut, Result<()>>
+    where
+        'lua: 'fut,
+    {
+        self.call_async(())
+    }
+
     /// Evaluate the chunk as either an expression or block.
     ///
     /// If the chunk can be parsed as an expression, this loads and executes the chunk and returns
@@ -1356,15 +1367,36 @@ impl<'lua, 'a> Chunk<'lua, 'a> {
         // First, try interpreting the lua as an expression by adding
         // "return", then as a statement.  This is the same thing the
         // actual lua repl does.
-        let mut expression_source = b"return ".to_vec();
-        expression_source.extend(self.source);
-        if let Ok(function) =
-            self.lua
-                .load_chunk(&expression_source, self.name.as_ref(), self.env.clone())
-        {
+        if let Ok(function) = self.lua.load_chunk(
+            &self.expression_source(),
+            self.name.as_ref(),
+            self.env.clone(),
+        ) {
             function.call(())
         } else {
             self.call(())
+        }
+    }
+
+    /// Asynchronously evaluate the chunk as either an expression or block.
+    ///
+    /// See [`Chunk::eval`] for more details.
+    ///
+    /// [`Chunk::eval`]: struct.Chunk.html#method.eval
+    #[cfg(feature = "async")]
+    pub fn eval_async<'fut, R>(self) -> LocalBoxFuture<'fut, Result<R>>
+    where
+        'lua: 'fut,
+        R: FromLuaMulti<'lua> + 'fut,
+    {
+        if let Ok(function) = self.lua.load_chunk(
+            &self.expression_source(),
+            self.name.as_ref(),
+            self.env.clone(),
+        ) {
+            function.call_async(())
+        } else {
+            self.call_async(())
         }
     }
 
@@ -1375,12 +1407,37 @@ impl<'lua, 'a> Chunk<'lua, 'a> {
         self.into_function()?.call(args)
     }
 
+    /// Load the chunk function and asynchronously call it with the given arguemnts.
+    ///
+    /// See [`Chunk::call`] for more details.
+    ///
+    /// [`Chunk::call`]: struct.Chunk.html#method.call
+    #[cfg(feature = "async")]
+    pub fn call_async<'fut, A, R>(self, args: A) -> LocalBoxFuture<'fut, Result<R>>
+    where
+        'lua: 'fut,
+        A: ToLuaMulti<'lua>,
+        R: FromLuaMulti<'lua> + 'fut,
+    {
+        match self.into_function() {
+            Ok(f) => f.call_async(args),
+            Err(e) => Box::pin(futures_util::future::err(e)),
+        }
+    }
+
     /// Load this chunk into a regular `Function`.
     ///
     /// This simply compiles the chunk without actually executing it.
     pub fn into_function(self) -> Result<Function<'lua>> {
         self.lua
             .load_chunk(self.source, self.name.as_ref(), self.env)
+    }
+
+    fn expression_source(&self) -> Vec<u8> {
+        let mut buf = Vec::with_capacity(b"return ".len() + self.source.len());
+        buf.extend(b"return ");
+        buf.extend(self.source);
+        buf
     }
 }
 

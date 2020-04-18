@@ -53,10 +53,9 @@ luajit-src = { version = "210.0.0", optional = true }
 rustyline = "6.0"
 criterion = "0.3"
 trybuild = "1.0"
+futures = "0.3.4"
 hyper = "0.13"
 tokio = { version = "0.2.18", features = ["full"] }
-futures-executor = "0.3.4"
-futures-util = "0.3.4"
 futures-timer = "3.0"
 
 [[bench]]

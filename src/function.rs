@@ -9,6 +9,9 @@ use crate::util::{
 };
 use crate::value::{FromLuaMulti, MultiValue, ToLuaMulti};
 
+#[cfg(feature = "async")]
+use futures_core::future::LocalBoxFuture;
+
 /// Handle to an internal Lua function.
 #[derive(Clone, Debug)]
 pub struct Function<'lua>(pub(crate) LuaRef<'lua>);
@@ -84,6 +87,44 @@ impl<'lua> Function<'lua> {
             results
         };
         R::from_lua_multi(results, lua)
+    }
+
+    /// Returns a Feature that, when polled, calls `self`, passing `args` as function arguments,
+    /// and drives the execution.
+    ///
+    /// Internaly it wraps the function to an AsyncThread.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::time::Duration;
+    /// use futures_timer::Delay;
+    /// # use mlua::{Lua, Result};
+    /// # #[tokio::main]
+    /// # async fn main() -> Result<()> {
+    /// # let lua = Lua::new();
+    /// let sleep = lua.create_async_function(move |_lua, n: u64| async move {
+    ///     Delay::new(Duration::from_millis(n)).await;
+    ///     Ok(())
+    /// })?;
+    ///
+    /// sleep.call_async(10).await?;
+    ///
+    /// # Ok(())
+    /// # }
+    /// ```
+    #[cfg(feature = "async")]
+    pub fn call_async<'fut, A, R>(&self, args: A) -> LocalBoxFuture<'fut, Result<R>>
+    where
+        'lua: 'fut,
+        A: ToLuaMulti<'lua>,
+        R: FromLuaMulti<'lua> + 'fut,
+    {
+        let lua = self.0.lua;
+        match lua.create_thread(self.clone()) {
+            Ok(t) => Box::pin(t.into_async(args)),
+            Err(e) => Box::pin(futures_util::future::err(e)),
+        }
     }
 
     /// Returns a function that, when called, calls `self`, passing `args` as the first set of

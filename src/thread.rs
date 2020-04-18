@@ -183,13 +183,13 @@ impl<'lua> Thread<'lua> {
     /// # Examples
     ///
     /// ```
-    /// # use mlua::{Error, Lua, Result, Thread};
-    /// use futures_executor::block_on;
-    /// use futures_util::stream::TryStreamExt;
-    /// # fn main() -> Result<()> {
+    /// # use mlua::{Lua, Result, Thread};
+    /// use futures::stream::TryStreamExt;
+    /// # #[tokio::main]
+    /// # async fn main() -> Result<()> {
     /// # let lua = Lua::new();
     /// let thread: Thread = lua.load(r#"
-    ///     coroutine.create(function(sum)
+    ///     coroutine.create(function (sum)
     ///         for i = 1,10 do
     ///             sum = sum + i
     ///             coroutine.yield(sum)
@@ -198,16 +198,13 @@ impl<'lua> Thread<'lua> {
     ///     end)
     /// "#).eval()?;
     ///
-    /// let result = block_on(async {
-    ///     let mut s = thread.into_async::<_, i64>(1);
-    ///     let mut sum = 0;
-    ///     while let Some(n) = s.try_next().await? {
-    ///         sum += n;
-    ///     }
-    ///     Ok::<_, Error>(sum)
-    /// })?;
+    /// let mut stream = thread.into_async::<_, i64>(1);
+    /// let mut sum = 0;
+    /// while let Some(n) = stream.try_next().await? {
+    ///     sum += n;
+    /// }
     ///
-    /// assert_eq!(result, 286);
+    /// assert_eq!(sum, 286);
     ///
     /// # Ok(())
     /// # }
