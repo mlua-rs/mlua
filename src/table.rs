@@ -8,6 +8,12 @@ use crate::types::{Integer, LuaRef};
 use crate::util::{assert_stack, protect_lua, protect_lua_closure, StackGuard};
 use crate::value::{FromLua, FromLuaMulti, Nil, ToLua, ToLuaMulti, Value};
 
+#[cfg(feature = "async")]
+use {
+    futures_core::future::LocalBoxFuture,
+    futures_util::future::{self, FutureExt},
+};
+
 /// Handle to an internal Lua table.
 #[derive(Clone, Debug)]
 pub struct Table<'lua>(pub(crate) LuaRef<'lua>);
@@ -134,7 +140,10 @@ impl<'lua> Table<'lua> {
     }
 
     /// Gets the function associated to `key` from the table and executes it,
-    /// passing the table itself as the first argument.
+    /// passing the table itself along with `args` as function arguments.
+    ///
+    /// This function is deprecated since 0.3.1 in favor of [`call_method`]
+    /// in the `TableExt` trait.
     ///
     /// # Examples
     ///
@@ -154,6 +163,9 @@ impl<'lua> Table<'lua> {
     /// ```
     ///
     /// This might invoke the `__index` metamethod.
+    ///
+    /// [`call_method`]: trait.TableExt.html#tymethod.call_method
+    #[deprecated(since = "0.3.1", note = "Please use `call_method` instead")]
     pub fn call<K, A, R>(&self, key: K, args: A) -> Result<R>
     where
         K: ToLua<'lua>,
@@ -262,7 +274,7 @@ impl<'lua> Table<'lua> {
         V::from_lua(value, lua)
     }
 
-    /// Inserts element value at position idx to the table, shifting up the elements from table[idx].
+    /// Inserts element value at position `idx` to the table, shifting up the elements from `table[idx]`.
     /// The worst case complexity is O(n), where n is the table length.
     pub fn raw_insert<V: ToLua<'lua>>(&self, idx: Integer, value: V) -> Result<()> {
         let lua = self.0.lua;
@@ -292,11 +304,11 @@ impl<'lua> Table<'lua> {
 
     /// Removes a key from the table.
     ///
-    /// If `key` is an integer, mlua shifts down the elements from table[key+1],
-    /// and erases element table[key]. The complexity is O(n) in worst case,
+    /// If `key` is an integer, mlua shifts down the elements from `table[key+1]`,
+    /// and erases element `table[key]`. The complexity is O(n) in worst case,
     /// where n is the table length.
     ///
-    /// For othey key types this is equivalent to setting table[key] = nil.
+    /// For othey key types this is equivalent to setting `table[key] = nil`.
     pub fn raw_remove<K: ToLua<'lua>>(&self, key: K) -> Result<()> {
         let lua = self.0.lua;
         let key = key.to_lua(lua)?;
@@ -491,6 +503,118 @@ impl<'lua> AsRef<Table<'lua>> for Table<'lua> {
     #[inline]
     fn as_ref(&self) -> &Self {
         self
+    }
+}
+
+/// An extension trait for `Table`s that provides a variety of convenient functionality.
+pub trait TableExt<'lua> {
+    /// Gets the function associated to `key` from the table and executes it,
+    /// passing the table itself along with `args` as function arguments.
+    ///
+    /// This is a shortcut for
+    /// `table.get::<_, Function>(key)?.call((table.clone(), arg1, ..., argN))`
+    ///
+    /// This might invoke the `__index` metamethod.
+    fn call_method<K, A, R>(&self, key: K, args: A) -> Result<R>
+    where
+        K: ToLua<'lua>,
+        A: ToLuaMulti<'lua>,
+        R: FromLuaMulti<'lua>;
+
+    /// Gets the function associated to `key` from the table and executes it,
+    /// passing `args` as function arguments.
+    ///
+    /// This is a shortcut for
+    /// `table.get::<_, Function>(key)?.call(args)`
+    ///
+    /// This might invoke the `__index` metamethod.
+    fn call_function<K, A, R>(&self, key: K, args: A) -> Result<R>
+    where
+        K: ToLua<'lua>,
+        A: ToLuaMulti<'lua>,
+        R: FromLuaMulti<'lua>;
+
+    /// Gets the function associated to `key` from the table and asynchronously executes it,
+    /// passing the table itself along with `args` as function arguments and returning Future.
+    ///
+    /// This might invoke the `__index` metamethod.
+    #[cfg(feature = "async")]
+    fn call_async_method<'fut, K, A, R>(&self, key: K, args: A) -> LocalBoxFuture<'fut, Result<R>>
+    where
+        'lua: 'fut,
+        K: ToLua<'lua>,
+        A: ToLuaMulti<'lua>,
+        R: FromLuaMulti<'lua> + 'fut;
+
+    /// Gets the function associated to `key` from the table and asynchronously executes it,
+    /// passing `args` as function arguments and returning Future.
+    ///
+    /// This might invoke the `__index` metamethod.
+    #[cfg(feature = "async")]
+    fn call_async_function<'fut, K, A, R>(
+        &self,
+        key: K,
+        args: A,
+    ) -> LocalBoxFuture<'fut, Result<R>>
+    where
+        'lua: 'fut,
+        K: ToLua<'lua>,
+        A: ToLuaMulti<'lua>,
+        R: FromLuaMulti<'lua> + 'fut;
+}
+
+impl<'lua> TableExt<'lua> for Table<'lua> {
+    fn call_method<K, A, R>(&self, key: K, args: A) -> Result<R>
+    where
+        K: ToLua<'lua>,
+        A: ToLuaMulti<'lua>,
+        R: FromLuaMulti<'lua>,
+    {
+        let lua = self.0.lua;
+        let mut args = args.to_lua_multi(lua)?;
+        args.push_front(Value::Table(self.clone()));
+        self.get::<_, Function>(key)?.call(args)
+    }
+
+    fn call_function<K, A, R>(&self, key: K, args: A) -> Result<R>
+    where
+        K: ToLua<'lua>,
+        A: ToLuaMulti<'lua>,
+        R: FromLuaMulti<'lua>,
+    {
+        self.get::<_, Function>(key)?.call(args)
+    }
+
+    #[cfg(feature = "async")]
+    fn call_async_method<'fut, K, A, R>(&self, key: K, args: A) -> LocalBoxFuture<'fut, Result<R>>
+    where
+        'lua: 'fut,
+        K: ToLua<'lua>,
+        A: ToLuaMulti<'lua>,
+        R: FromLuaMulti<'lua> + 'fut,
+    {
+        let lua = self.0.lua;
+        let mut args = match args.to_lua_multi(lua) {
+            Ok(args) => args,
+            Err(e) => return future::err(e).boxed_local(),
+        };
+        args.push_front(Value::Table(self.clone()));
+        self.call_async_function(key, args)
+    }
+
+    #[cfg(feature = "async")]
+    fn call_async_function<'fut, K, A, R>(&self, key: K, args: A) -> LocalBoxFuture<'fut, Result<R>>
+    where
+        'lua: 'fut,
+        K: ToLua<'lua>,
+        A: ToLuaMulti<'lua>,
+        R: FromLuaMulti<'lua> + 'fut,
+    {
+        let func = match self.get::<_, Function>(key) {
+            Ok(f) => f,
+            Err(e) => return future::err(e).boxed_local(),
+        };
+        func.call_async(args)
     }
 }
 

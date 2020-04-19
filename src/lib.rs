@@ -66,7 +66,7 @@ pub use crate::lua::{Chunk, Lua};
 pub use crate::multi::Variadic;
 pub use crate::stdlib::StdLib;
 pub use crate::string::String;
-pub use crate::table::{Table, TablePairs, TableSequence};
+pub use crate::table::{Table, TableExt, TablePairs, TableSequence};
 pub use crate::thread::{Thread, ThreadStatus};
 pub use crate::types::{Integer, LightUserData, Number, RegistryKey};
 pub use crate::userdata::{AnyUserData, MetaMethod, UserData, UserDataMethods};
