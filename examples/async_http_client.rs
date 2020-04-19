@@ -1,8 +1,34 @@
+use std::cell::RefCell;
 use std::collections::HashMap;
+use std::rc::Rc;
 
-use hyper::Client as HyperClient;
+use bstr::BString;
+use hyper::{body::Body as HyperBody, Client as HyperClient};
+use tokio::stream::StreamExt;
 
-use mlua::{Error, Lua, Result, Thread};
+use mlua::{Error, Lua, Result, UserData, UserDataMethods};
+
+#[derive(Clone)]
+struct BodyReader(Rc<RefCell<HyperBody>>);
+
+impl BodyReader {
+    fn new(body: HyperBody) -> Self {
+        BodyReader(Rc::new(RefCell::new(body)))
+    }
+}
+
+impl UserData for BodyReader {
+    fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
+        methods.add_async_method("read", |_, reader, ()| async move {
+            let mut reader = reader.0.borrow_mut();
+            let bytes = reader.try_next().await.map_err(Error::external)?;
+            if let Some(bytes) = bytes {
+                return Ok(Some(BString::from(bytes.as_ref())));
+            }
+            Ok(None)
+        });
+    }
+}
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -23,10 +49,9 @@ async fn main() -> Result<()> {
                 .or_insert(Vec::new())
                 .push(value.to_str().unwrap());
         }
-        lua_resp.set("headers", headers)?;
 
-        let buf = hyper::body::to_bytes(resp).await.map_err(Error::external)?;
-        lua_resp.set("body", String::from_utf8_lossy(&buf).into_owned())?;
+        lua_resp.set("headers", headers)?;
+        lua_resp.set("body", BodyReader::new(resp.into_body()))?;
 
         Ok(lua_resp)
     })?;
@@ -34,22 +59,25 @@ async fn main() -> Result<()> {
     let globals = lua.globals();
     globals.set("fetch_url", fetch_url)?;
 
-    let thread = lua
+    let f = lua
         .load(
             r#"
-            coroutine.create(function ()
-                local res = fetch_url("http://httpbin.org/ip");
-                print(res.status)
-                for key, vals in pairs(res.headers) do
-                    for _, val in ipairs(vals) do
-                        print(key..": "..val)
-                    end
+            local res = fetch_url(...);
+            print(res.status)
+            for key, vals in pairs(res.headers) do
+                for _, val in ipairs(vals) do
+                    print(key..": "..val)
                 end
-                print(res.body)
-            end)
+            end
+            repeat
+                local body = res.body:read()
+                if body then
+                    print(body)
+                end
+            until not body
         "#,
         )
-        .eval::<Thread>()?;
+        .into_function()?;
 
-    thread.into_async(()).await
+    f.call_async("http://httpbin.org/ip").await
 }
