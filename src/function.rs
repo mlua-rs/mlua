@@ -10,7 +10,7 @@ use crate::util::{
 use crate::value::{FromLuaMulti, MultiValue, ToLuaMulti};
 
 #[cfg(feature = "async")]
-use futures_core::future::LocalBoxFuture;
+use {futures_core::future::LocalBoxFuture, futures_util::future};
 
 /// Handle to an internal Lua function.
 #[derive(Clone, Debug)]
@@ -123,7 +123,7 @@ impl<'lua> Function<'lua> {
         let lua = self.0.lua;
         match lua.create_thread(self.clone()) {
             Ok(t) => Box::pin(t.into_async(args)),
-            Err(e) => Box::pin(futures_util::future::err(e)),
+            Err(e) => Box::pin(future::err(e)),
         }
     }
 

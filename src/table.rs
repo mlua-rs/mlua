@@ -9,10 +9,7 @@ use crate::util::{assert_stack, protect_lua, protect_lua_closure, StackGuard};
 use crate::value::{FromLua, FromLuaMulti, Nil, ToLua, ToLuaMulti, Value};
 
 #[cfg(feature = "async")]
-use {
-    futures_core::future::LocalBoxFuture,
-    futures_util::future::{self, FutureExt},
-};
+use {futures_core::future::LocalBoxFuture, futures_util::future};
 
 /// Handle to an internal Lua table.
 #[derive(Clone, Debug)]
@@ -144,23 +141,6 @@ impl<'lua> Table<'lua> {
     ///
     /// This function is deprecated since 0.3.1 in favor of [`call_method`]
     /// in the `TableExt` trait.
-    ///
-    /// # Examples
-    ///
-    /// Execute the table method with name "concat":
-    ///
-    /// ```
-    /// # use mlua::{Lua, Result, Table};
-    /// # fn main() -> Result<()> {
-    /// # let lua = Lua::new();
-    /// # let object = lua.create_table()?;
-    /// # let concat = lua.create_function(|_, (_, a, b): (Table, String, String)| Ok(a + &b))?;
-    /// # object.set("concat", concat)?;
-    /// // simiar to: object:concat("param1", "param2")
-    /// object.call("concat", ("param1", "param2"))?;
-    /// # Ok(())
-    /// # }
-    /// ```
     ///
     /// This might invoke the `__index` metamethod.
     ///
@@ -596,7 +576,7 @@ impl<'lua> TableExt<'lua> for Table<'lua> {
         let lua = self.0.lua;
         let mut args = match args.to_lua_multi(lua) {
             Ok(args) => args,
-            Err(e) => return future::err(e).boxed_local(),
+            Err(e) => return Box::pin(future::err(e)),
         };
         args.push_front(Value::Table(self.clone()));
         self.call_async_function(key, args)
@@ -610,11 +590,10 @@ impl<'lua> TableExt<'lua> for Table<'lua> {
         A: ToLuaMulti<'lua>,
         R: FromLuaMulti<'lua> + 'fut,
     {
-        let func = match self.get::<_, Function>(key) {
-            Ok(f) => f,
-            Err(e) => return future::err(e).boxed_local(),
-        };
-        func.call_async(args)
+        match self.get::<_, Function>(key) {
+            Ok(func) => func.call_async(args),
+            Err(e) => Box::pin(future::err(e)),
+        }
     }
 }
 

@@ -27,13 +27,12 @@ use crate::value::{FromLua, FromLuaMulti, MultiValue, Nil, ToLua, ToLuaMulti, Va
 #[cfg(feature = "async")]
 use {
     crate::types::AsyncCallback,
-    futures_core::future::LocalBoxFuture,
-    futures_task::noop_waker,
-    futures_util::future::{self, FutureExt, TryFutureExt},
-    std::{
-        future::Future,
+    futures_core::{
+        future::{Future, LocalBoxFuture},
         task::{Context, Poll, Waker},
     },
+    futures_task::noop_waker,
+    futures_util::future::{self, TryFutureExt},
 };
 
 /// Top level Lua struct which holds the Lua state itself.
@@ -530,12 +529,10 @@ impl Lua {
     {
         self.create_async_callback(Box::new(move |lua, args| {
             let args = match A::from_lua_multi(args, lua) {
-                Ok(x) => x,
-                Err(e) => return future::err(e).boxed_local(),
+                Ok(args) => args,
+                Err(e) => return Box::pin(future::err(e)),
             };
-            func(lua, args)
-                .and_then(move |x| future::ready(x.to_lua_multi(lua)))
-                .boxed_local()
+            Box::pin(func(lua, args).and_then(move |ret| future::ready(ret.to_lua_multi(lua))))
         }))
     }
 
@@ -1420,8 +1417,8 @@ impl<'lua, 'a> Chunk<'lua, 'a> {
         R: FromLuaMulti<'lua> + 'fut,
     {
         match self.into_function() {
-            Ok(f) => f.call_async(args),
-            Err(e) => Box::pin(futures_util::future::err(e)),
+            Ok(func) => func.call_async(args),
+            Err(e) => Box::pin(future::err(e)),
         }
     }
 
@@ -1742,7 +1739,7 @@ impl<'lua, T: 'static + UserData> StaticUserDataMethods<'lua, T> {
         MR: 'static + Future<Output = Result<R>>,
     {
         Box::new(move |lua, mut args| {
-            let fut = || {
+            let fut_res = || {
                 if let Some(front) = args.pop_front() {
                     let userdata = AnyUserData::from_lua(front, lua)?;
                     let userdata = userdata.borrow::<T>()?.clone();
@@ -1755,11 +1752,9 @@ impl<'lua, T: 'static + UserData> StaticUserDataMethods<'lua, T> {
                     })
                 }
             };
-            match fut() {
-                Ok(f) => f
-                    .and_then(move |fr| future::ready(fr.to_lua_multi(lua)))
-                    .boxed_local(),
-                Err(e) => future::err(e).boxed_local(),
+            match fut_res() {
+                Ok(fut) => Box::pin(fut.and_then(move |ret| future::ready(ret.to_lua_multi(lua)))),
+                Err(e) => Box::pin(future::err(e)),
             }
         })
     }
@@ -1798,12 +1793,10 @@ impl<'lua, T: 'static + UserData> StaticUserDataMethods<'lua, T> {
     {
         Box::new(move |lua, args| {
             let args = match A::from_lua_multi(args, lua) {
-                Ok(x) => x,
-                Err(e) => return future::err(e).boxed_local(),
+                Ok(args) => args,
+                Err(e) => return Box::pin(future::err(e)),
             };
-            function(lua, args)
-                .and_then(move |x| future::ready(x.to_lua_multi(lua)))
-                .boxed_local()
+            Box::pin(function(lua, args).and_then(move |ret| future::ready(ret.to_lua_multi(lua))))
         })
     }
 }
