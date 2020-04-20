@@ -18,7 +18,7 @@ modules in Rust.
 
 ## Usage
 
-### Async
+### Async/await support
 
 Starting from 0.3, mlua supports async/await for all Lua versions. This works using Lua [coroutines](https://www.lua.org/manual/5.3/manual.html#2.6) and require running [Thread](https://docs.rs/mlua/latest/mlua/struct.Thread.html) along with enabling `async` feature in `Cargo.toml`.
 

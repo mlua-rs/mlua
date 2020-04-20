@@ -24,6 +24,12 @@
 //! The [`UserData`] trait can be implemented by user-defined types to make them available to Lua.
 //! Methods and operators to be used from Lua can be added using the [`UserDataMethods`] API.
 //!
+//! # Async/await support
+//!
+//! The [`create_async_function`] allows creating non-blocking functions that returns [`Future`].
+//! Lua code with async capabilities can be executed by [`call_async`] family of functions or polling
+//! [`AsyncThread`] using any runtime (eg. Tokio).
+//!
 //! [Lua programming language]: https://www.lua.org/
 //! [`Lua`]: struct.Lua.html
 //! [executing]: struct.Lua.html#method.exec
@@ -35,6 +41,10 @@
 //! [`FromLuaMulti`]: trait.FromLuaMulti.html
 //! [`UserData`]: trait.UserData.html
 //! [`UserDataMethods`]: trait.UserDataMethods.html
+//! [`create_async_function`]: struct.Lua.html#method.create_async_function
+//! [`call_async`]: struct.Function.html#method.call_async
+//! [`AsyncThread`]: struct.AsyncThread.html
+//! [`Future`]: ../futures_core/future/trait.Future.html
 
 // Deny warnings inside doc tests / examples. When this isn't present, rustdoc doesn't show *any*
 // warnings at all.

@@ -92,7 +92,7 @@ impl<'lua> Function<'lua> {
     /// Returns a Feature that, when polled, calls `self`, passing `args` as function arguments,
     /// and drives the execution.
     ///
-    /// Internaly it wraps the function to an AsyncThread.
+    /// Internaly it wraps the function to an [`AsyncThread`].
     ///
     /// # Examples
     ///
@@ -103,6 +103,7 @@ impl<'lua> Function<'lua> {
     /// # #[tokio::main]
     /// # async fn main() -> Result<()> {
     /// # let lua = Lua::new();
+    ///
     /// let sleep = lua.create_async_function(move |_lua, n: u64| async move {
     ///     Delay::new(Duration::from_millis(n)).await;
     ///     Ok(())
@@ -113,6 +114,8 @@ impl<'lua> Function<'lua> {
     /// # Ok(())
     /// # }
     /// ```
+    ///
+    /// [`AsyncThread`]: struct.AsyncThread.html
     #[cfg(feature = "async")]
     pub fn call_async<'fut, A, R>(&self, args: A) -> LocalBoxFuture<'fut, Result<R>>
     where

@@ -45,7 +45,10 @@ pub enum ThreadStatus {
 #[derive(Clone, Debug)]
 pub struct Thread<'lua>(pub(crate) LuaRef<'lua>);
 
-/// Thread (coroutine) representation as an async Future or Stream.
+/// Thread (coroutine) representation as an async [`Future`] or [`Stream`].
+///
+/// [`Future`]: ../futures_core/future/trait.Future.html
+/// [`Stream`]: ../futures_core/stream/trait.Stream.html
 #[cfg(feature = "async")]
 #[derive(Debug)]
 pub struct AsyncThread<'lua, R> {
