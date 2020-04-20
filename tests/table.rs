@@ -1,4 +1,4 @@
-use mlua::{Lua, Nil, Result, Table, Value};
+use mlua::{Lua, Nil, Result, Table, TableExt, Value};
 
 #[test]
 fn test_set_get() -> Result<()> {
@@ -223,6 +223,36 @@ fn test_table_error() -> Result<()> {
     assert!(bad_table.raw_set(1, 1).is_ok());
     assert!(bad_table.raw_get::<_, i32>(1).is_ok());
     assert_eq!(bad_table.raw_len(), 1);
+
+    Ok(())
+}
+
+#[test]
+fn test_table_call() -> Result<()> {
+    let lua = Lua::new();
+
+    lua.load(
+        r#"
+        table = {a = 1}
+
+        function table.func(key)
+            return "func_"..key
+        end
+
+        function table:method(key)
+            return "method_"..self[key]
+        end
+    "#,
+    )
+    .exec()?;
+
+    let table: Table = lua.globals().get("table")?;
+
+    assert_eq!(table.call_function::<_, _, String>("func", "a")?, "func_a");
+    assert_eq!(
+        table.call_method::<_, _, String>("method", "a")?,
+        "method_1"
+    );
 
     Ok(())
 }
