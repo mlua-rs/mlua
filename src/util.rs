@@ -1,18 +1,19 @@
 use std::any::{Any, TypeId};
 use std::borrow::Cow;
-use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt::Write;
 use std::os::raw::{c_char, c_int, c_void};
 use std::panic::{catch_unwind, resume_unwind, AssertUnwindSafe};
 use std::rc::Rc;
+use std::sync::Mutex;
 use std::{mem, ptr, slice};
 
 use crate::error::{Error, Result};
 use crate::ffi;
 
-thread_local! {
-    static METATABLE_CACHE: RefCell<HashMap<TypeId, c_int>> = RefCell::new(HashMap::new());
+lazy_static::lazy_static! {
+    // The capacity must(!) be greater than number of stored keys
+    static ref METATABLE_CACHE: Mutex<HashMap<TypeId, u8>> = Mutex::new(HashMap::with_capacity(32));
 }
 
 // Checks that Lua has enough free stack space for future stack operations.  On failure, this will
@@ -519,6 +520,16 @@ pub unsafe fn init_gc_metatable_for<T: Any>(
 ) {
     let type_id = TypeId::of::<T>();
 
+    let ref_addr = {
+        let mut mt_cache = mlua_expect!(METATABLE_CACHE.lock(), "cannot lock metatable cache");
+        mlua_assert!(
+            mt_cache.capacity() - mt_cache.len() > 0,
+            "out of metatable cache capacity"
+        );
+        mt_cache.insert(type_id, 0);
+        &mt_cache[&type_id] as *const u8
+    };
+
     ffi::lua_newtable(state);
 
     ffi::lua_pushstring(state, cstr!("__gc"));
@@ -533,15 +544,16 @@ pub unsafe fn init_gc_metatable_for<T: Any>(
         f(state)
     }
 
-    let ref_addr = ffi::luaL_ref(state, ffi::LUA_REGISTRYINDEX);
-    METATABLE_CACHE.with(|mc| mc.borrow_mut().insert(type_id, ref_addr));
+    ffi::lua_rawsetp(state, ffi::LUA_REGISTRYINDEX, ref_addr as *mut c_void);
 }
 
 pub unsafe fn get_gc_metatable_for<T: Any>(state: *mut ffi::lua_State) {
     let type_id = TypeId::of::<T>();
-    let ref_addr = METATABLE_CACHE
-        .with(|mc| *mlua_expect!(mc.borrow().get(&type_id), "gc metatable does not exist"));
-    ffi::lua_rawgeti(state, ffi::LUA_REGISTRYINDEX, ref_addr as ffi::lua_Integer);
+    let ref_addr = {
+        let mt_cache = mlua_expect!(METATABLE_CACHE.lock(), "cannot lock metatable cache");
+        mlua_expect!(mt_cache.get(&type_id), "gc metatable does not exist") as *const u8
+    };
+    ffi::lua_rawgetp(state, ffi::LUA_REGISTRYINDEX, ref_addr as *mut c_void);
 }
 
 // Initialize the error, panic, and destructed userdata metatables.

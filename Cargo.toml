@@ -38,6 +38,7 @@ async = ["futures-core", "futures-task", "futures-util"]
 
 [dependencies]
 bstr = { version = "0.2", features = ["std"], default_features = false }
+lazy_static = { version = "1.4" }
 num-traits = { version = "0.2.11" }
 futures-core = { version = "0.3.4", optional = true }
 futures-task = { version = "0.3.4", optional = true }
