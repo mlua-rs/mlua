@@ -1234,9 +1234,11 @@ impl Lua {
             Function(self.pop_ref())
         };
 
+        let coroutine = self.globals().get::<_, Table>("coroutine")?;
+
         let env = self.create_table()?;
         env.set("get_poll", get_poll)?;
-        env.set("coroutine", self.globals().get::<_, Value>("coroutine")?)?;
+        env.set("yield", coroutine.get::<_, Function>("yield")?)?;
         env.set(
             "unpack",
             self.create_function(|_, tbl: Table| {
@@ -1254,7 +1256,7 @@ impl Lua {
                 if ready then
                     return unpack(res)
                 end
-                coroutine.yield(res)
+                yield(res)
             end
             "#,
         )
