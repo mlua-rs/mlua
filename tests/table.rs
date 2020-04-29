@@ -110,6 +110,47 @@ fn test_table() -> Result<()> {
 }
 
 #[test]
+fn test_table_sequence_from() -> Result<()> {
+    let lua = Lua::new();
+
+    let get_table = lua.create_function(|_, t: Table| Ok(t))?;
+
+    assert_eq!(
+        get_table
+            .call::<_, Table>(vec![1, 2, 3])?
+            .sequence_values()
+            .collect::<Result<Vec<i64>>>()?,
+        vec![1, 2, 3]
+    );
+
+    assert_eq!(
+        get_table
+            .call::<_, Table>([1, 2, 3].as_ref())?
+            .sequence_values()
+            .collect::<Result<Vec<i64>>>()?,
+        vec![1, 2, 3]
+    );
+
+    assert_eq!(
+        get_table
+            .call::<_, Table>([1, 2, 3])?
+            .sequence_values()
+            .collect::<Result<Vec<i64>>>()?,
+        vec![1, 2, 3]
+    );
+
+    assert_eq!(
+        get_table
+            .call::<_, Table>(&[1, 2, 3])?
+            .sequence_values()
+            .collect::<Result<Vec<i64>>>()?,
+        vec![1, 2, 3]
+    );
+
+    Ok(())
+}
+
+#[test]
 fn test_table_scope() -> Result<()> {
     let lua = Lua::new();
 

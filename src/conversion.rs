@@ -373,6 +373,50 @@ macro_rules! lua_convert_float {
 lua_convert_float!(f32);
 lua_convert_float!(f64);
 
+impl<'lua, T> ToLua<'lua> for &'_ [T]
+where
+    T: Clone + ToLua<'lua>,
+{
+    fn to_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
+        Ok(Value::Table(
+            lua.create_sequence_from(self.into_iter().cloned())?,
+        ))
+    }
+}
+
+macro_rules! lua_convert_array {
+    ($($N:literal)+) => {
+        $(
+            impl<'lua, T> ToLua<'lua> for [T; $N]
+            where
+                T: Clone + ToLua<'lua>,
+            {
+                fn to_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
+                    (&self).to_lua(lua)
+                }
+            }
+
+            impl<'lua, T> ToLua<'lua> for &'_ [T; $N]
+            where
+                T: Clone + ToLua<'lua>,
+            {
+                fn to_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
+                    Ok(Value::Table(
+                        lua.create_sequence_from(self.iter().cloned())?,
+                    ))
+                }
+            }
+        )+
+    }
+}
+
+lua_convert_array! {
+    0  1  2  3  4  5  6  7  8  9
+   10 11 12 13 14 15 16 17 18 19
+   20 21 22 23 24 25 26 27 28 29
+   30 31 32
+}
+
 impl<'lua, T: ToLua<'lua>> ToLua<'lua> for Vec<T> {
     fn to_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
         Ok(Value::Table(lua.create_sequence_from(self)?))
