@@ -1,0 +1,35 @@
+error[E0597]: `lua` does not live long enough
+  --> $DIR/static_callback_args.rs:12:5
+   |
+12 |       lua.create_function(|_, table: Table| {
+   |       -^^
+   |       |
+   |  _____borrowed value does not live long enough
+   | |
+13 | |         BAD_TIME.with(|bt| {
+14 | |             *bt.borrow_mut() = Some(table);
+15 | |         });
+16 | |         Ok(())
+17 | |     })?
+   | |______- argument requires that `lua` is borrowed for `'static`
+...
+32 |   }
+   |   - `lua` dropped here while still borrowed
+
+error[E0505]: cannot move out of `lua` because it is borrowed
+  --> $DIR/static_callback_args.rs:22:10
+   |
+12 |       lua.create_function(|_, table: Table| {
+   |       ---
+   |       |
+   |  _____borrow of `lua` occurs here
+   | |
+13 | |         BAD_TIME.with(|bt| {
+14 | |             *bt.borrow_mut() = Some(table);
+15 | |         });
+16 | |         Ok(())
+17 | |     })?
+   | |______- argument requires that `lua` is borrowed for `'static`
+...
+22 |       drop(lua);
+   |            ^^^ move out of `lua` occurs here

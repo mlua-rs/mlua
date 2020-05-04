@@ -190,6 +190,7 @@ impl Lua {
     #[doc(hidden)]
     pub fn entrypoint1<'lua, 'callback, R, F>(&'lua self, func: F) -> Result<c_int>
     where
+        'lua: 'callback,
         R: ToLua<'callback>,
         F: 'static + Fn(&'callback Lua) -> Result<R>,
     {
@@ -446,6 +447,7 @@ impl Lua {
     /// [`ToLuaMulti`]: trait.ToLuaMulti.html
     pub fn create_function<'lua, 'callback, A, R, F>(&'lua self, func: F) -> Result<Function<'lua>>
     where
+        'lua: 'callback,
         A: FromLuaMulti<'callback>,
         R: ToLuaMulti<'callback>,
         F: 'static + Fn(&'callback Lua, A) -> Result<R>,
@@ -466,6 +468,7 @@ impl Lua {
         func: F,
     ) -> Result<Function<'lua>>
     where
+        'lua: 'callback,
         A: FromLuaMulti<'callback>,
         R: ToLuaMulti<'callback>,
         F: 'static + FnMut(&'callback Lua, A) -> Result<R>,
@@ -522,6 +525,7 @@ impl Lua {
         func: F,
     ) -> Result<Function<'lua>>
     where
+        'lua: 'callback,
         A: FromLuaMulti<'callback>,
         R: ToLuaMulti<'callback>,
         F: 'static + Fn(&'callback Lua, A) -> FR,
@@ -736,7 +740,7 @@ impl Lua {
     /// Equivalent to calling [`set_named_registry_value`] with a value of Nil.
     ///
     /// [`set_named_registry_value`]: #method.set_named_registry_value
-    pub fn unset_named_registry_value<'lua, S>(&'lua self, name: &S) -> Result<()>
+    pub fn unset_named_registry_value<S>(&self, name: &S) -> Result<()>
     where
         S: ?Sized + AsRef<[u8]>,
     {
@@ -1079,7 +1083,10 @@ impl Lua {
     pub(crate) fn create_callback<'lua, 'callback>(
         &'lua self,
         func: Callback<'callback, 'static>,
-    ) -> Result<Function<'lua>> {
+    ) -> Result<Function<'lua>>
+    where
+        'lua: 'callback,
+    {
         unsafe extern "C" fn call_callback(state: *mut ffi::lua_State) -> c_int {
             callback_error(state, |nargs| {
                 let func =
@@ -1133,7 +1140,10 @@ impl Lua {
     pub(crate) fn create_async_callback<'lua, 'callback>(
         &'lua self,
         func: AsyncCallback<'callback, 'static>,
-    ) -> Result<Function<'lua>> {
+    ) -> Result<Function<'lua>>
+    where
+        'lua: 'callback,
+    {
         #[cfg(any(feature = "lua53", feature = "lua52"))]
         self.load_from_std_lib(StdLib::COROUTINE)?;
 
