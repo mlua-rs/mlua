@@ -165,7 +165,7 @@ pub trait UserDataMethods<'lua, T: UserData> {
         A: FromLuaMulti<'lua>,
         R: ToLuaMulti<'lua>,
         M: 'static + Fn(&'lua Lua, T, A) -> MR,
-        MR: 'static + Future<Output = Result<R>>;
+        MR: 'lua + Future<Output = Result<R>>;
 
     /// Add a regular method as a function which accepts generic arguments, the first argument will
     /// be a `UserData` of type T if the method is called with Lua method syntax:
@@ -209,7 +209,7 @@ pub trait UserDataMethods<'lua, T: UserData> {
         A: FromLuaMulti<'lua>,
         R: ToLuaMulti<'lua>,
         F: 'static + Fn(&'lua Lua, A) -> FR,
-        FR: 'static + Future<Output = Result<R>>;
+        FR: 'lua + Future<Output = Result<R>>;
 
     /// Add a metamethod which accepts a `&T` as the first parameter.
     ///

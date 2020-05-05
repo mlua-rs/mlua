@@ -61,10 +61,7 @@ impl UserData for LuaTcpStream {
     }
 }
 
-#[tokio::main]
-async fn main() -> Result<()> {
-    let lua = Lua::new();
-
+async fn run_server(lua: &'static Lua) -> Result<()> {
     let spawn = lua.create_function(move |_, func: Function| {
         task::spawn_local(async move { func.call_async::<_, ()>(()).await.unwrap() });
         Ok(())
@@ -80,20 +77,33 @@ async fn main() -> Result<()> {
             local addr = ...
             local listener = tcp.bind(addr)
             print("listening on "..addr)
+
+            local accept_new = true
             while true do
                 local stream = listener:accept()
                 local peer_addr = stream:peer_addr()
                 print("connected from "..peer_addr)
+
+                if not accept_new then
+                    return
+                end
+
                 spawn(function()
                     while true do
                         local data = stream:read(100)
                         data = data:match("^%s*(.-)%s*$") -- trim
                         print("["..peer_addr.."] "..data)
-                        stream:write("got: "..data.."\n")
+                        if data == "bye" then
+                            stream:write("bye bye\n")
+                            stream:close()
+                            return
+                        end
                         if data == "exit" then
                             stream:close()
-                            break
+                            accept_new = false
+                            return
                         end
+                        stream:write("echo: "..data.."\n")
                     end
                 end)
             end
@@ -104,4 +114,16 @@ async fn main() -> Result<()> {
     task::LocalSet::new()
         .run_until(server.call_async::<_, ()>("0.0.0.0:1234"))
         .await
+}
+
+#[tokio::main]
+async fn main() {
+    let lua = Lua::new().into_static();
+
+    run_server(lua).await.unwrap();
+
+    // Consume the static reference and drop it.
+    // This is safe as long as we don't hold any other references to Lua
+    // or alive resources.
+    unsafe { Lua::from_static(lua) };
 }

@@ -75,7 +75,7 @@ impl Drop for Lua {
                     extra.registry_unref_list.try_borrow_mut(),
                     "unref list borrowed"
                 ) = None;
-                ffi::lua_close(self.state);
+                ffi::lua_close(self.main_state);
             }
         }
     }
@@ -111,6 +111,30 @@ impl Lua {
 
             lua
         }
+    }
+
+    /// Consumes and leaks `Lua` object, returning a static reference `&'static Lua`.
+    ///
+    /// This function is useful when the `Lua` object is supposed to live for the remainder
+    /// of the program's life.
+    /// In particular in asynchronous context this will allow to spawn Lua tasks to execute
+    /// in background.
+    ///
+    /// Dropping the returned reference will cause a memory leak. If this is not acceptable,
+    /// the reference should first be wrapped with the [`Lua::from_static`] function producing a `Lua`.
+    /// This `Lua` object can then be dropped which will properly release the allocated memory.
+    ///
+    /// [`Lua::from_static`]: #method.from_static
+    pub fn into_static(self) -> &'static Self {
+        Box::leak(Box::new(self))
+    }
+
+    /// Constructs a `Lua` from a static reference to it.
+    ///
+    /// # Safety
+    /// This function is unsafe because improper use may lead to memory problems or undefined behavior.
+    pub unsafe fn from_static(lua: &'static Lua) -> Self {
+        *Box::from_raw(lua as *const Lua as *mut Lua)
     }
 
     /// Loads the specified set of standard libraries into an existing Lua state.
@@ -529,7 +553,7 @@ impl Lua {
         A: FromLuaMulti<'callback>,
         R: ToLuaMulti<'callback>,
         F: 'static + Fn(&'callback Lua, A) -> FR,
-        FR: 'static + Future<Output = Result<R>>,
+        FR: 'lua + Future<Output = Result<R>>,
     {
         self.create_async_callback(Box::new(move |lua, args| {
             let args = match A::from_lua_multi(args, lua) {
@@ -1614,7 +1638,7 @@ impl<'lua, T: 'static + UserData> UserDataMethods<'lua, T> for StaticUserDataMet
         A: FromLuaMulti<'lua>,
         R: ToLuaMulti<'lua>,
         M: 'static + Fn(&'lua Lua, T, A) -> MR,
-        MR: 'static + Future<Output = Result<R>>,
+        MR: 'lua + Future<Output = Result<R>>,
     {
         self.async_methods
             .push((name.as_ref().to_vec(), Self::box_async_method(method)));
@@ -1650,7 +1674,7 @@ impl<'lua, T: 'static + UserData> UserDataMethods<'lua, T> for StaticUserDataMet
         A: FromLuaMulti<'lua>,
         R: ToLuaMulti<'lua>,
         F: 'static + Fn(&'lua Lua, A) -> FR,
-        FR: 'static + Future<Output = Result<R>>,
+        FR: 'lua + Future<Output = Result<R>>,
     {
         self.async_methods
             .push((name.as_ref().to_vec(), Self::box_async_function(function)));
@@ -1748,7 +1772,7 @@ impl<'lua, T: 'static + UserData> StaticUserDataMethods<'lua, T> {
         A: FromLuaMulti<'lua>,
         R: ToLuaMulti<'lua>,
         M: 'static + Fn(&'lua Lua, T, A) -> MR,
-        MR: 'static + Future<Output = Result<R>>,
+        MR: 'lua + Future<Output = Result<R>>,
     {
         Box::new(move |lua, mut args| {
             let fut_res = || {
@@ -1801,7 +1825,7 @@ impl<'lua, T: 'static + UserData> StaticUserDataMethods<'lua, T> {
         A: FromLuaMulti<'lua>,
         R: ToLuaMulti<'lua>,
         F: 'static + Fn(&'lua Lua, A) -> FR,
-        FR: 'static + Future<Output = Result<R>>,
+        FR: 'lua + Future<Output = Result<R>>,
     {
         Box::new(move |lua, args| {
             let args = match A::from_lua_multi(args, lua) {
