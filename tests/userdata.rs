@@ -1,4 +1,4 @@
-use std::rc::Rc;
+use std::sync::Arc;
 
 use mlua::{
     AnyUserData, ExternalError, Function, Lua, MetaMethod, Result, String, UserData,
@@ -196,22 +196,22 @@ fn test_gc_userdata() -> Result<()> {
 
 #[test]
 fn detroys_userdata() -> Result<()> {
-    struct MyUserdata(Rc<()>);
+    struct MyUserdata(Arc<()>);
 
     impl UserData for MyUserdata {}
 
-    let rc = Rc::new(());
+    let rc = Arc::new(());
 
     let lua = Lua::new();
     lua.globals().set("userdata", MyUserdata(rc.clone()))?;
 
-    assert_eq!(Rc::strong_count(&rc), 2);
+    assert_eq!(Arc::strong_count(&rc), 2);
 
     // should destroy all objects
     let _ = lua.globals().raw_remove("userdata")?;
     lua.gc_collect()?;
 
-    assert_eq!(Rc::strong_count(&rc), 1);
+    assert_eq!(Arc::strong_count(&rc), 1);
 
     Ok(())
 }

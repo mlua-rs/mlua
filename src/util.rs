@@ -4,8 +4,7 @@ use std::collections::HashMap;
 use std::fmt::Write;
 use std::os::raw::{c_char, c_int, c_void};
 use std::panic::{catch_unwind, resume_unwind, AssertUnwindSafe};
-use std::rc::Rc;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::{mem, ptr, slice};
 
 use crate::error::{Error, Result};
@@ -469,7 +468,7 @@ pub unsafe extern "C" fn error_traceback(state: *mut ffi::lua_State) -> c_int {
             ud,
             WrappedError(Error::CallbackError {
                 traceback,
-                cause: Rc::new(error),
+                cause: Arc::new(error),
             }),
         );
         get_gc_metatable_for::<WrappedError>(state);

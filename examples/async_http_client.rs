@@ -1,26 +1,25 @@
-use std::cell::RefCell;
 use std::collections::HashMap;
-use std::rc::Rc;
+use std::sync::Arc;
 
 use bstr::BString;
 use hyper::{body::Body as HyperBody, Client as HyperClient};
-use tokio::stream::StreamExt;
+use tokio::{stream::StreamExt, sync::Mutex};
 
 use mlua::{Error, Lua, Result, UserData, UserDataMethods};
 
 #[derive(Clone)]
-struct BodyReader(Rc<RefCell<HyperBody>>);
+struct BodyReader(Arc<Mutex<HyperBody>>);
 
 impl BodyReader {
     fn new(body: HyperBody) -> Self {
-        BodyReader(Rc::new(RefCell::new(body)))
+        BodyReader(Arc::new(Mutex::new(body)))
     }
 }
 
 impl UserData for BodyReader {
     fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
         methods.add_async_method("read", |_, reader, ()| async move {
-            let mut reader = reader.0.borrow_mut();
+            let mut reader = reader.0.lock().await;
             let bytes = reader.try_next().await.map_err(Error::external)?;
             if let Some(bytes) = bytes {
                 return Ok(Some(BString::from(bytes.as_ref())));

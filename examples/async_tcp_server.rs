@@ -1,10 +1,10 @@
-use std::cell::RefCell;
 use std::net::Shutdown;
-use std::rc::Rc;
+use std::sync::Arc;
 
 use bstr::BString;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::prelude::*;
+use tokio::sync::Mutex;
 use tokio::task;
 
 use mlua::{Function, Lua, Result, UserData, UserDataMethods};
@@ -13,16 +13,16 @@ use mlua::{Function, Lua, Result, UserData, UserDataMethods};
 struct LuaTcp;
 
 #[derive(Clone)]
-struct LuaTcpListener(Rc<RefCell<TcpListener>>);
+struct LuaTcpListener(Arc<Mutex<TcpListener>>);
 
 #[derive(Clone)]
-struct LuaTcpStream(Rc<RefCell<TcpStream>>);
+struct LuaTcpStream(Arc<Mutex<TcpStream>>);
 
 impl UserData for LuaTcp {
     fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
         methods.add_async_function("bind", |_, addr: String| async move {
             let listener = TcpListener::bind(addr).await?;
-            Ok(LuaTcpListener(Rc::new(RefCell::new(listener))))
+            Ok(LuaTcpListener(Arc::new(Mutex::new(listener))))
         });
     }
 }
@@ -30,8 +30,8 @@ impl UserData for LuaTcp {
 impl UserData for LuaTcpListener {
     fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
         methods.add_async_method("accept", |_, listener, ()| async move {
-            let (stream, _) = listener.0.borrow_mut().accept().await?;
-            Ok(LuaTcpStream(Rc::new(RefCell::new(stream))))
+            let (stream, _) = listener.0.lock().await.accept().await?;
+            Ok(LuaTcpStream(Arc::new(Mutex::new(stream))))
         });
     }
 }
@@ -39,23 +39,23 @@ impl UserData for LuaTcpListener {
 impl UserData for LuaTcpStream {
     fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
         methods.add_async_method("peer_addr", |_, stream, ()| async move {
-            Ok(stream.0.borrow().peer_addr()?.to_string())
+            Ok(stream.0.lock().await.peer_addr()?.to_string())
         });
 
         methods.add_async_method("read", |_, stream, size: usize| async move {
             let mut buf = vec![0; size];
-            let n = stream.0.borrow_mut().read(&mut buf).await?;
+            let n = stream.0.lock().await.read(&mut buf).await?;
             buf.truncate(n);
             Ok(BString::from(buf))
         });
 
         methods.add_async_method("write", |_, stream, data: BString| async move {
-            let n = stream.0.borrow_mut().write(&data).await?;
+            let n = stream.0.lock().await.write(&data).await?;
             Ok(n)
         });
 
-        methods.add_method("close", |_, stream, ()| {
-            stream.0.borrow().shutdown(Shutdown::Both)?;
+        methods.add_async_method("close", |_, stream, ()| async move {
+            stream.0.lock().await.shutdown(Shutdown::Both)?;
             Ok(())
         });
     }

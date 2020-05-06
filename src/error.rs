@@ -2,10 +2,10 @@ use std::error::Error as StdError;
 use std::fmt;
 use std::io::Error as IoError;
 use std::net::AddrParseError;
-use std::rc::Rc;
 use std::result::Result as StdResult;
 use std::str::Utf8Error;
 use std::string::String as StdString;
+use std::sync::Arc;
 
 /// Error type returned by `mlua` methods.
 #[derive(Debug, Clone)]
@@ -118,7 +118,7 @@ pub enum Error {
         /// Lua call stack backtrace.
         traceback: StdString,
         /// Original error returned by the Rust code.
-        cause: Rc<Error>,
+        cause: Arc<Error>,
     },
     /// A custom error.
     ///
@@ -127,7 +127,7 @@ pub enum Error {
     /// Returning `Err(ExternalError(...))` from a Rust callback will raise the error as a Lua
     /// error. The Rust code that originally invoked the Lua code then receives a `CallbackError`,
     /// from which the original error (and a stack traceback) can be recovered.
-    ExternalError(Rc<dyn StdError>),
+    ExternalError(Arc<dyn StdError + Send + Sync>),
 }
 
 /// A specialized `Result` type used by `mlua`'s API.
@@ -206,7 +206,7 @@ impl StdError for Error {
 }
 
 impl Error {
-    pub fn external<T: Into<Box<dyn StdError>>>(err: T) -> Error {
+    pub fn external<T: Into<Box<dyn StdError + Send + Sync>>>(err: T) -> Error {
         Error::ExternalError(err.into().into())
     }
 }
@@ -217,7 +217,7 @@ pub trait ExternalError {
 
 impl<E> ExternalError for E
 where
-    E: Into<Box<dyn StdError>>,
+    E: Into<Box<dyn StdError + Send + Sync>>,
 {
     fn to_lua_err(self) -> Error {
         Error::external(self)

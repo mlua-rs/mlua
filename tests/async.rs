@@ -1,7 +1,9 @@
 #![cfg(feature = "async")]
 
-use std::cell::Cell;
-use std::rc::Rc;
+use std::sync::{
+    atomic::{AtomicI64, Ordering},
+    Arc,
+};
 use std::time::Duration;
 
 use futures_timer::Delay;
@@ -180,7 +182,7 @@ async fn test_async_thread_stream() -> Result<()> {
 async fn test_async_thread() -> Result<()> {
     let lua = Lua::new();
 
-    let cnt = Rc::new(10); // sleep 10ms
+    let cnt = Arc::new(10); // sleep 10ms
     let cnt2 = cnt.clone();
     let f = lua.create_async_function(move |_lua, ()| {
         let cnt3 = cnt2.clone();
@@ -194,9 +196,9 @@ async fn test_async_thread() -> Result<()> {
 
     assert_eq!(res, "done");
 
-    assert_eq!(Rc::strong_count(&cnt), 2);
+    assert_eq!(Arc::strong_count(&cnt), 2);
     lua.gc_collect()?; // thread_s is non-resumable and subject to garbage collection
-    assert_eq!(Rc::strong_count(&cnt), 1);
+    assert_eq!(Arc::strong_count(&cnt), 1);
 
     Ok(())
 }
@@ -252,18 +254,18 @@ async fn test_async_table() -> Result<()> {
 #[tokio::test]
 async fn test_async_userdata() -> Result<()> {
     #[derive(Clone)]
-    struct MyUserData(Rc<Cell<i64>>);
+    struct MyUserData(Arc<AtomicI64>);
 
     impl UserData for MyUserData {
         fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
             methods.add_async_method("get_value", |_, data, ()| async move {
                 Delay::new(Duration::from_millis(10)).await;
-                Ok(data.0.get())
+                Ok(data.0.load(Ordering::Relaxed))
             });
 
             methods.add_async_method("set_value", |_, data, n| async move {
                 Delay::new(Duration::from_millis(10)).await;
-                data.0.set(n);
+                data.0.store(n, Ordering::Relaxed);
                 Ok(())
             });
 
@@ -277,7 +279,7 @@ async fn test_async_userdata() -> Result<()> {
     let lua = Lua::new();
     let globals = lua.globals();
 
-    let userdata = lua.create_userdata(MyUserData(Rc::new(Cell::new(11))))?;
+    let userdata = lua.create_userdata(MyUserData(Arc::new(AtomicI64::new(11))))?;
     globals.set("userdata", userdata.clone())?;
 
     lua.load(

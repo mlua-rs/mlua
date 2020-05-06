@@ -1,6 +1,5 @@
-use std::cell::RefCell;
 use std::os::raw::{c_int, c_void};
-use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 use std::{fmt, mem, ptr};
 
 #[cfg(feature = "async")]
@@ -45,7 +44,7 @@ pub(crate) type AsyncCallback<'lua, 'a> =
 /// [`UserData::get_user_value`]: struct.UserData.html#method.get_user_value
 pub struct RegistryKey {
     pub(crate) registry_id: c_int,
-    pub(crate) unref_list: Rc<RefCell<Option<Vec<c_int>>>>,
+    pub(crate) unref_list: Arc<Mutex<Option<Vec<c_int>>>>,
 }
 
 impl fmt::Debug for RegistryKey {
@@ -56,7 +55,7 @@ impl fmt::Debug for RegistryKey {
 
 impl Drop for RegistryKey {
     fn drop(&mut self) {
-        let mut unref_list = mlua_expect!(self.unref_list.try_borrow_mut(), "unref list borrowed");
+        let mut unref_list = mlua_expect!(self.unref_list.lock(), "unref list poisoned");
         if let Some(list) = unref_list.as_mut() {
             list.push(self.registry_id);
         }
