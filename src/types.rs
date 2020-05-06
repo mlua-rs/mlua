@@ -27,6 +27,16 @@ pub(crate) type Callback<'lua, 'a> =
 pub(crate) type AsyncCallback<'lua, 'a> =
     Box<dyn Fn(&'lua Lua, MultiValue<'lua>) -> LocalBoxFuture<'lua, Result<MultiValue<'lua>>> + 'a>;
 
+#[cfg(feature = "send")]
+pub trait MaybeSend: Send {}
+#[cfg(feature = "send")]
+impl<T: Send> MaybeSend for T {}
+
+#[cfg(not(feature = "send"))]
+pub trait MaybeSend {}
+#[cfg(not(feature = "send"))]
+impl<T> MaybeSend for T {}
+
 /// An auto generated key into the Lua registry.
 ///
 /// This is a handle to a value stored inside the Lua registry.  It is not automatically

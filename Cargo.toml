@@ -35,6 +35,7 @@ lua51 = []
 luajit = []
 vendored = ["lua-src", "luajit-src"]
 async = ["futures-core", "futures-task", "futures-util"]
+send = []
 
 [dependencies]
 bstr = { version = "0.2", features = ["std"], default_features = false }

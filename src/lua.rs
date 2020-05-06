@@ -14,7 +14,7 @@ use crate::stdlib::StdLib;
 use crate::string::String;
 use crate::table::Table;
 use crate::thread::Thread;
-use crate::types::{Callback, Integer, LightUserData, LuaRef, Number, RegistryKey};
+use crate::types::{Callback, Integer, LightUserData, LuaRef, Number, RegistryKey, MaybeSend};
 use crate::userdata::{AnyUserData, MetaMethod, UserData, UserDataMethods};
 use crate::util::{
     assert_stack, callback_error, check_stack, get_gc_userdata, get_main_state,
@@ -56,6 +56,7 @@ struct ExtraData {
     ref_free: Vec<c_int>,
 }
 
+#[cfg(feature = "send")]
 unsafe impl Send for Lua {}
 
 #[cfg(feature = "async")]
@@ -215,7 +216,7 @@ impl Lua {
     where
         'lua: 'callback,
         R: ToLua<'callback>,
-        F: 'static + Send + Fn(&'callback Lua) -> Result<R>,
+        F: 'static + MaybeSend + Fn(&'callback Lua) -> Result<R>,
     {
         let cb = self.create_callback(Box::new(move |lua, _| func(lua)?.to_lua_multi(lua)))?;
         unsafe { self.push_value(cb.call(())?).map(|_| 1) }
@@ -473,7 +474,7 @@ impl Lua {
         'lua: 'callback,
         A: FromLuaMulti<'callback>,
         R: ToLuaMulti<'callback>,
-        F: 'static + Send + Fn(&'callback Lua, A) -> Result<R>,
+        F: 'static + MaybeSend + Fn(&'callback Lua, A) -> Result<R>,
     {
         self.create_callback(Box::new(move |lua, args| {
             func(lua, A::from_lua_multi(args, lua)?)?.to_lua_multi(lua)
@@ -494,7 +495,7 @@ impl Lua {
         'lua: 'callback,
         A: FromLuaMulti<'callback>,
         R: ToLuaMulti<'callback>,
-        F: 'static + Send + FnMut(&'callback Lua, A) -> Result<R>,
+        F: 'static + MaybeSend + FnMut(&'callback Lua, A) -> Result<R>,
     {
         let func = RefCell::new(func);
         self.create_function(move |lua, args| {
@@ -551,7 +552,7 @@ impl Lua {
         'lua: 'callback,
         A: FromLuaMulti<'callback>,
         R: ToLuaMulti<'callback>,
-        F: 'static + Send + Fn(&'callback Lua, A) -> FR,
+        F: 'static + MaybeSend + Fn(&'callback Lua, A) -> FR,
         FR: 'lua + Future<Output = Result<R>>,
     {
         self.create_async_callback(Box::new(move |lua, args| {
@@ -583,7 +584,7 @@ impl Lua {
     /// Create a Lua userdata object from a custom userdata type.
     pub fn create_userdata<T>(&self, data: T) -> Result<AnyUserData>
     where
-        T: 'static + Send + UserData,
+        T: 'static + MaybeSend + UserData,
     {
         unsafe { self.make_userdata(data) }
     }
@@ -1607,10 +1608,10 @@ impl<'lua, T: 'static + UserData> Default for StaticUserDataMethods<'lua, T> {
 impl<'lua, T: 'static + UserData> UserDataMethods<'lua, T> for StaticUserDataMethods<'lua, T> {
     fn add_method<S, A, R, M>(&mut self, name: &S, method: M)
     where
-        S: ?Sized + AsRef<[u8]>,
+        S: AsRef<[u8]> + ?Sized,
         A: FromLuaMulti<'lua>,
         R: ToLuaMulti<'lua>,
-        M: 'static + Send + Fn(&'lua Lua, &T, A) -> Result<R>,
+        M: 'static + MaybeSend + Fn(&'lua Lua, &T, A) -> Result<R>,
     {
         self.methods
             .push((name.as_ref().to_vec(), Self::box_method(method)));
@@ -1618,10 +1619,10 @@ impl<'lua, T: 'static + UserData> UserDataMethods<'lua, T> for StaticUserDataMet
 
     fn add_method_mut<S, A, R, M>(&mut self, name: &S, method: M)
     where
-        S: ?Sized + AsRef<[u8]>,
+        S: AsRef<[u8]> + ?Sized,
         A: FromLuaMulti<'lua>,
         R: ToLuaMulti<'lua>,
-        M: 'static + Send + FnMut(&'lua Lua, &mut T, A) -> Result<R>,
+        M: 'static + MaybeSend + FnMut(&'lua Lua, &mut T, A) -> Result<R>,
     {
         self.methods
             .push((name.as_ref().to_vec(), Self::box_method_mut(method)));
@@ -1631,10 +1632,10 @@ impl<'lua, T: 'static + UserData> UserDataMethods<'lua, T> for StaticUserDataMet
     fn add_async_method<S, A, R, M, MR>(&mut self, name: &S, method: M)
     where
         T: Clone,
-        S: ?Sized + AsRef<[u8]>,
+        S: AsRef<[u8]> + ?Sized,
         A: FromLuaMulti<'lua>,
         R: ToLuaMulti<'lua>,
-        M: 'static + Send + Fn(&'lua Lua, T, A) -> MR,
+        M: 'static + MaybeSend + Fn(&'lua Lua, T, A) -> MR,
         MR: 'lua + Future<Output = Result<R>>,
     {
         self.async_methods
@@ -1643,10 +1644,10 @@ impl<'lua, T: 'static + UserData> UserDataMethods<'lua, T> for StaticUserDataMet
 
     fn add_function<S, A, R, F>(&mut self, name: &S, function: F)
     where
-        S: ?Sized + AsRef<[u8]>,
+        S: AsRef<[u8]> + ?Sized,
         A: FromLuaMulti<'lua>,
         R: ToLuaMulti<'lua>,
-        F: 'static + Send + Fn(&'lua Lua, A) -> Result<R>,
+        F: 'static + MaybeSend + Fn(&'lua Lua, A) -> Result<R>,
     {
         self.methods
             .push((name.as_ref().to_vec(), Self::box_function(function)));
@@ -1654,10 +1655,10 @@ impl<'lua, T: 'static + UserData> UserDataMethods<'lua, T> for StaticUserDataMet
 
     fn add_function_mut<S, A, R, F>(&mut self, name: &S, function: F)
     where
-        S: ?Sized + AsRef<[u8]>,
+        S: AsRef<[u8]> + ?Sized,
         A: FromLuaMulti<'lua>,
         R: ToLuaMulti<'lua>,
-        F: 'static + Send + FnMut(&'lua Lua, A) -> Result<R>,
+        F: 'static + MaybeSend + FnMut(&'lua Lua, A) -> Result<R>,
     {
         self.methods
             .push((name.as_ref().to_vec(), Self::box_function_mut(function)));
@@ -1667,10 +1668,10 @@ impl<'lua, T: 'static + UserData> UserDataMethods<'lua, T> for StaticUserDataMet
     fn add_async_function<S, A, R, F, FR>(&mut self, name: &S, function: F)
     where
         T: Clone,
-        S: ?Sized + AsRef<[u8]>,
+        S: AsRef<[u8]> + ?Sized,
         A: FromLuaMulti<'lua>,
         R: ToLuaMulti<'lua>,
-        F: 'static + Send + Fn(&'lua Lua, A) -> FR,
+        F: 'static + MaybeSend + Fn(&'lua Lua, A) -> FR,
         FR: 'lua + Future<Output = Result<R>>,
     {
         self.async_methods
@@ -1681,7 +1682,7 @@ impl<'lua, T: 'static + UserData> UserDataMethods<'lua, T> for StaticUserDataMet
     where
         A: FromLuaMulti<'lua>,
         R: ToLuaMulti<'lua>,
-        M: 'static + Send + Fn(&'lua Lua, &T, A) -> Result<R>,
+        M: 'static + MaybeSend + Fn(&'lua Lua, &T, A) -> Result<R>,
     {
         self.meta_methods.push((meta, Self::box_method(method)));
     }
@@ -1690,7 +1691,7 @@ impl<'lua, T: 'static + UserData> UserDataMethods<'lua, T> for StaticUserDataMet
     where
         A: FromLuaMulti<'lua>,
         R: ToLuaMulti<'lua>,
-        M: 'static + Send + FnMut(&'lua Lua, &mut T, A) -> Result<R>,
+        M: 'static + MaybeSend + FnMut(&'lua Lua, &mut T, A) -> Result<R>,
     {
         self.meta_methods.push((meta, Self::box_method_mut(method)));
     }
@@ -1699,7 +1700,7 @@ impl<'lua, T: 'static + UserData> UserDataMethods<'lua, T> for StaticUserDataMet
     where
         A: FromLuaMulti<'lua>,
         R: ToLuaMulti<'lua>,
-        F: 'static + Send + Fn(&'lua Lua, A) -> Result<R>,
+        F: 'static + MaybeSend + Fn(&'lua Lua, A) -> Result<R>,
     {
         self.meta_methods.push((meta, Self::box_function(function)));
     }
@@ -1708,7 +1709,7 @@ impl<'lua, T: 'static + UserData> UserDataMethods<'lua, T> for StaticUserDataMet
     where
         A: FromLuaMulti<'lua>,
         R: ToLuaMulti<'lua>,
-        F: 'static + Send + FnMut(&'lua Lua, A) -> Result<R>,
+        F: 'static + MaybeSend + FnMut(&'lua Lua, A) -> Result<R>,
     {
         self.meta_methods
             .push((meta, Self::box_function_mut(function)));
@@ -1720,7 +1721,7 @@ impl<'lua, T: 'static + UserData> StaticUserDataMethods<'lua, T> {
     where
         A: FromLuaMulti<'lua>,
         R: ToLuaMulti<'lua>,
-        M: 'static + Send + Fn(&'lua Lua, &T, A) -> Result<R>,
+        M: 'static + MaybeSend + Fn(&'lua Lua, &T, A) -> Result<R>,
     {
         Box::new(move |lua, mut args| {
             if let Some(front) = args.pop_front() {
@@ -1741,7 +1742,7 @@ impl<'lua, T: 'static + UserData> StaticUserDataMethods<'lua, T> {
     where
         A: FromLuaMulti<'lua>,
         R: ToLuaMulti<'lua>,
-        M: 'static + Send + FnMut(&'lua Lua, &mut T, A) -> Result<R>,
+        M: 'static + MaybeSend + FnMut(&'lua Lua, &mut T, A) -> Result<R>,
     {
         let method = RefCell::new(method);
         Box::new(move |lua, mut args| {
@@ -1768,7 +1769,7 @@ impl<'lua, T: 'static + UserData> StaticUserDataMethods<'lua, T> {
         T: Clone,
         A: FromLuaMulti<'lua>,
         R: ToLuaMulti<'lua>,
-        M: 'static + Send + Fn(&'lua Lua, T, A) -> MR,
+        M: 'static + MaybeSend + Fn(&'lua Lua, T, A) -> MR,
         MR: 'lua + Future<Output = Result<R>>,
     {
         Box::new(move |lua, mut args| {
@@ -1796,7 +1797,7 @@ impl<'lua, T: 'static + UserData> StaticUserDataMethods<'lua, T> {
     where
         A: FromLuaMulti<'lua>,
         R: ToLuaMulti<'lua>,
-        F: 'static + Send + Fn(&'lua Lua, A) -> Result<R>,
+        F: 'static + MaybeSend + Fn(&'lua Lua, A) -> Result<R>,
     {
         Box::new(move |lua, args| function(lua, A::from_lua_multi(args, lua)?)?.to_lua_multi(lua))
     }
@@ -1805,7 +1806,7 @@ impl<'lua, T: 'static + UserData> StaticUserDataMethods<'lua, T> {
     where
         A: FromLuaMulti<'lua>,
         R: ToLuaMulti<'lua>,
-        F: 'static + Send + FnMut(&'lua Lua, A) -> Result<R>,
+        F: 'static + MaybeSend + FnMut(&'lua Lua, A) -> Result<R>,
     {
         let function = RefCell::new(function);
         Box::new(move |lua, args| {
@@ -1821,7 +1822,7 @@ impl<'lua, T: 'static + UserData> StaticUserDataMethods<'lua, T> {
     where
         A: FromLuaMulti<'lua>,
         R: ToLuaMulti<'lua>,
-        F: 'static + Send + Fn(&'lua Lua, A) -> FR,
+        F: 'static + MaybeSend + Fn(&'lua Lua, A) -> FR,
         FR: 'lua + Future<Output = Result<R>>,
     {
         Box::new(move |lua, args| {

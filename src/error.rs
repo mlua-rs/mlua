@@ -127,7 +127,10 @@ pub enum Error {
     /// Returning `Err(ExternalError(...))` from a Rust callback will raise the error as a Lua
     /// error. The Rust code that originally invoked the Lua code then receives a `CallbackError`,
     /// from which the original error (and a stack traceback) can be recovered.
+    #[cfg(feature = "send")]
     ExternalError(Arc<dyn StdError + Send + Sync>),
+    #[cfg(not(feature = "send"))]
+    ExternalError(Arc<dyn StdError>),
 }
 
 /// A specialized `Result` type used by `mlua`'s API.
@@ -206,7 +209,13 @@ impl StdError for Error {
 }
 
 impl Error {
+    #[cfg(feature = "send")]
     pub fn external<T: Into<Box<dyn StdError + Send + Sync>>>(err: T) -> Error {
+        Error::ExternalError(err.into().into())
+    }
+
+    #[cfg(not(feature = "send"))]
+    pub fn external<T: Into<Box<dyn StdError>>>(err: T) -> Error {
         Error::ExternalError(err.into().into())
     }
 }
@@ -215,10 +224,15 @@ pub trait ExternalError {
     fn to_lua_err(self) -> Error;
 }
 
-impl<E> ExternalError for E
-where
-    E: Into<Box<dyn StdError + Send + Sync>>,
-{
+#[cfg(feature = "send")]
+impl<E: Into<Box<dyn StdError + Send + Sync>>> ExternalError for E {
+    fn to_lua_err(self) -> Error {
+        Error::external(self)
+    }
+}
+
+#[cfg(not(feature = "send"))]
+impl<E: Into<Box<dyn StdError>>> ExternalError for E {
     fn to_lua_err(self) -> Error {
         Error::external(self)
     }
