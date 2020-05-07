@@ -10,11 +10,12 @@ use std::{mem, ptr, str};
 use crate::error::{Error, Result};
 use crate::ffi;
 use crate::function::Function;
+use crate::scope::Scope;
 use crate::stdlib::StdLib;
 use crate::string::String;
 use crate::table::Table;
 use crate::thread::Thread;
-use crate::types::{Callback, Integer, LightUserData, LuaRef, Number, RegistryKey, MaybeSend};
+use crate::types::{Callback, Integer, LightUserData, LuaRef, MaybeSend, Number, RegistryKey};
 use crate::userdata::{AnyUserData, MetaMethod, UserData, UserDataMethods};
 use crate::util::{
     assert_stack, callback_error, check_stack, get_gc_userdata, get_main_state,
@@ -609,6 +610,53 @@ impl Lua {
             ffi::lua_pushthread(self.state);
             Thread(self.pop_ref())
         }
+    }
+
+    /// Calls the given function with a `Scope` parameter, giving the function the ability to create
+    /// userdata and callbacks from rust types that are !Send or non-'static.
+    ///
+    /// The lifetime of any function or userdata created through `Scope` lasts only until the
+    /// completion of this method call, on completion all such created values are automatically
+    /// dropped and Lua references to them are invalidated.  If a script accesses a value created
+    /// through `Scope` outside of this method, a Lua error will result.  Since we can ensure the
+    /// lifetime of values created through `Scope`, and we know that `Lua` cannot be sent to another
+    /// thread while `Scope` is live, it is safe to allow !Send datatypes and whose lifetimes only
+    /// outlive the scope lifetime.
+    ///
+    /// Inside the scope callback, all handles created through Scope will share the same unique 'lua
+    /// lifetime of the parent `Lua`.  This allows scoped and non-scoped values to be mixed in
+    /// API calls, which is very useful (e.g. passing a scoped userdata to a non-scoped function).
+    /// However, this also enables handles to scoped values to be trivially leaked from the given
+    /// callback. This is not dangerous, though!  After the callback returns, all scoped values are
+    /// invalidated, which means that though references may exist, the Rust types backing them have
+    /// dropped.  `Function` types will error when called, and `AnyUserData` will be typeless.  It
+    /// would be impossible to prevent handles to scoped values from escaping anyway, since you
+    /// would always be able to smuggle them through Lua state.
+    pub fn scope<'lua, 'scope, R, F>(&'lua self, f: F) -> Result<R>
+    where
+        'lua: 'scope,
+        R: 'static,
+        F: FnOnce(&Scope<'lua, 'scope>) -> Result<R>,
+    {
+        f(&Scope::new(self))
+    }
+
+    /// An asynchronous version of [`scope`] that allows to create scoped async functions and
+    /// execute them.
+    ///
+    /// [`scope`]: #method.scope
+    #[cfg(feature = "async")]
+    pub fn async_scope<'lua, 'scope, R, F, FR>(
+        &'lua self,
+        f: F,
+    ) -> LocalBoxFuture<'scope, Result<R>>
+    where
+        'lua: 'scope,
+        R: 'static,
+        F: FnOnce(Scope<'lua, 'scope>) -> FR,
+        FR: 'scope + Future<Output = Result<R>>,
+    {
+        Box::pin(f(Scope::new(self)))
     }
 
     /// Attempts to coerce a Lua value into a String in a manner consistent with Lua's internal

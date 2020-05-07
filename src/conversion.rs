@@ -12,7 +12,7 @@ use crate::lua::Lua;
 use crate::string::String;
 use crate::table::Table;
 use crate::thread::Thread;
-use crate::types::{LightUserData, Number, MaybeSend};
+use crate::types::{LightUserData, MaybeSend, Number};
 use crate::userdata::{AnyUserData, UserData};
 use crate::value::{FromLua, Nil, ToLua, Value};
 

@@ -1,0 +1,11 @@
+error: borrowed data cannot be stored outside of its closure
+ --> $DIR/scope_callback_outer.rs:7:17
+  |
+5 |     let mut outer: Option<Table> = None;
+  |         --------- ...so that variable is valid at time of its declaration
+6 |     lua.scope(|scope| {
+  |               ------- borrowed data cannot outlive this closure
+7 |         let f = scope
+  |                 ^^^^^ cannot be stored outside of its closure
+8 |             .create_function_mut(|_, t: Table| {
+  |              ------------------- cannot infer an appropriate lifetime...

@@ -1,0 +1,45 @@
+error[E0495]: cannot infer an appropriate lifetime for autoref due to conflicting requirements
+  --> $DIR/scope_callback_capture.rs:8:14
+   |
+8  |             .create_function_mut(move |_, t: Table| {
+   |              ^^^^^^^^^^^^^^^^^^^
+   |
+note: first, the lifetime cannot outlive the anonymous lifetime #2 defined on the body at 5:15...
+  --> $DIR/scope_callback_capture.rs:5:15
+   |
+5  |       lua.scope(|scope| {
+   |  _______________^
+6  | |         let mut inner: Option<Table> = None;
+7  | |         let f = scope
+8  | |             .create_function_mut(move |_, t: Table| {
+...  |
+16 | |         Ok(())
+17 | |     });
+   | |_____^
+note: ...so that reference does not outlive borrowed content
+  --> $DIR/scope_callback_capture.rs:7:17
+   |
+7  |         let f = scope
+   |                 ^^^^^
+note: but, the lifetime must be valid for the method call at 5:5...
+  --> $DIR/scope_callback_capture.rs:5:5
+   |
+5  | /     lua.scope(|scope| {
+6  | |         let mut inner: Option<Table> = None;
+7  | |         let f = scope
+8  | |             .create_function_mut(move |_, t: Table| {
+...  |
+16 | |         Ok(())
+17 | |     });
+   | |______^
+note: ...so that a type/lifetime parameter is in scope here
+  --> $DIR/scope_callback_capture.rs:5:5
+   |
+5  | /     lua.scope(|scope| {
+6  | |         let mut inner: Option<Table> = None;
+7  | |         let f = scope
+8  | |             .create_function_mut(move |_, t: Table| {
+...  |
+16 | |         Ok(())
+17 | |     });
+   | |______^

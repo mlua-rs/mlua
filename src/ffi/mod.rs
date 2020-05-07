@@ -40,7 +40,7 @@ pub use self::lua::{
 pub use self::lua::{lua_KContext, lua_KFunction};
 
 #[cfg(any(feature = "lua51", feature = "luajit"))]
-pub use self::lua::lua_setfenv;
+pub use self::lua::{lua_getfenv, lua_setfenv};
 
 // C API functions
 pub use self::lua::{

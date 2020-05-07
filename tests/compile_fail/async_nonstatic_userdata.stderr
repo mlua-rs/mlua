@@ -1,0 +1,36 @@
+error[E0495]: cannot infer an appropriate lifetime due to conflicting requirements
+  --> $DIR/scope_async_userdata.rs:11:72
+   |
+11 |               methods.add_async_method("print", |_, data, ()| async move {
+   |  ________________________________________________________________________^
+12 | |                 println!("{}", data.0);
+13 | |                 Ok(())
+14 | |             });
+   | |_____________^
+   |
+note: first, the lifetime cannot outlive the lifetime `'a` as defined on the impl at 9:10...
+  --> $DIR/scope_async_userdata.rs:9:10
+   |
+9  |     impl<'a> UserData for MyUserData<'a> {
+   |          ^^
+note: ...so that the types are compatible
+  --> $DIR/scope_async_userdata.rs:11:72
+   |
+11 |               methods.add_async_method("print", |_, data, ()| async move {
+   |  ________________________________________________________________________^
+12 | |                 println!("{}", data.0);
+13 | |                 Ok(())
+14 | |             });
+   | |_____________^
+   = note: expected  `main::MyUserData<'_>`
+              found  `main::MyUserData<'a>`
+note: but, the lifetime must be valid for the lifetime `'lua` as defined on the method body at 10:24...
+  --> $DIR/scope_async_userdata.rs:10:24
+   |
+10 |         fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
+   |                        ^^^^
+note: ...so that the type `impl std::future::Future` will meet its required lifetime bounds
+  --> $DIR/scope_async_userdata.rs:11:21
+   |
+11 |             methods.add_async_method("print", |_, data, ()| async move {
+   |                     ^^^^^^^^^^^^^^^^
