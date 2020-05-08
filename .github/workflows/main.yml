@@ -48,9 +48,9 @@ jobs:
       if: matrix.thing == 'aarch64-linux'
       shell: bash
     - run: rustup target add ${{ matrix.target }}
-    - name: Build (Lua 5.3/5.2/5.1 and LuaJIT vendored+async)
+    - name: Build (Lua 5.4/5.3/5.2/5.1 and LuaJIT vendored+async)
       run: |
-        for FEATURE in lua53 lua52 lua51 luajit; do
+        for FEATURE in lua54 lua53 lua52 lua51 luajit; do
           echo "Building $FEATURE"
           cargo build --target ${{ matrix.target }} --release --no-default-features --features "$FEATURE vendored async"
         done
@@ -73,6 +73,12 @@ jobs:
     - name: Install Rust
       run: rustup update stable --no-self-update && rustup default stable
       shell: bash
+    - name: Run tests (Lua 5.4 vendored)
+      run: cargo test --release --no-default-features --features "lua54 vendored"
+      shell: bash
+    - name: Run tests (Lua 5.4 vendored+async)
+      run: cargo test --release --no-default-features --features "lua54 vendored async"
+      shell: bash
     - name: Run tests (Lua 5.3 vendored)
       run: cargo test --release --no-default-features --features "lua53 vendored"
       shell: bash
@@ -81,6 +87,9 @@ jobs:
       shell: bash
     - name: Run tests (Lua 5.2 vendored)
       run: cargo test --release --no-default-features --features "lua52 vendored"
+      shell: bash
+    - name: Run tests (Lua 5.2 vendored+async)
+      run: cargo test --release --no-default-features --features "lua52 vendored async"
       shell: bash
     - name: Run tests (Lua 5.1 vendored)
       run: cargo test --release --no-default-features --features "lua51 vendored"
@@ -111,6 +120,9 @@ jobs:
         curl https://sh.rustup.rs | sh -s -- -y
         echo ::add-path::$HOME/.cargo/bin
       shell: bash
+    - name: Run tests (Lua 5.4 vendored)
+      run: cargo test --release --no-default-features --features "lua54 vendored"
+      shell: bash
     - name: Run tests (Lua 5.3 vendored)
       run: cargo test --release --no-default-features --features "lua53 vendored"
       shell: bash
@@ -132,6 +144,9 @@ jobs:
     - uses: actions/checkout@v1
     - name: Install Rust
       run: rustup update stable --no-self-update && rustup default stable
+      shell: bash
+    - name: Run tests (Lua 5.4 vendored)
+      run: cargo test --release --no-default-features --features "lua54 vendored"
       shell: bash
     - name: Run tests (Lua 5.3 vendored)
       run: cargo test --release --no-default-features --features "lua53 vendored"
