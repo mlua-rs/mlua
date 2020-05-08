@@ -2,6 +2,37 @@ use std::sync::Arc;
 
 use mlua::{Lua, Result, UserData};
 
+#[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+use mlua::Error;
+
+#[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+#[test]
+fn test_memory_limit() -> Result<()> {
+    let lua = Lua::new();
+
+    let initial_memory = lua.used_memory();
+    assert!(
+        initial_memory > 0,
+        "used_memory reporting is wrong, lua uses memory for stdlib"
+    );
+
+    let f = lua
+        .load("local t = {}; for i = 1,10000 do t[i] = i end")
+        .into_function()?;
+    f.call::<_, ()>(()).expect("should trigger no memory limit");
+
+    lua.set_memory_limit(initial_memory + 10000)?;
+    match f.call::<_, ()>(()) {
+        Err(Error::MemoryError(_)) => {}
+        something_else => panic!("did not trigger memory error: {:?}", something_else),
+    };
+
+    lua.set_memory_limit(0)?;
+    f.call::<_, ()>(()).expect("should trigger no memory limit");
+
+    Ok(())
+}
+
 #[test]
 fn test_gc_control() -> Result<()> {
     let lua = Lua::new();

@@ -84,6 +84,8 @@ const char *rs_int_type(int width) {
     return "i32";
   case 8:
     return "i64";
+  case 16:
+    return "i128";
   }
 }
 
@@ -96,6 +98,8 @@ const char *rs_uint_type(int width) {
     return "u32";
   case 8:
     return "u64";
+  case 16:
+    return "u128";
   }
 }
 

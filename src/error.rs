@@ -36,6 +36,11 @@ pub enum Error {
     /// The Lua VM returns this error when there is an error running a `__gc` metamethod.
     #[cfg(any(feature = "lua53", feature = "lua52"))]
     GarbageCollectorError(StdString),
+    /// Setting memory limit is not available.
+    ///
+    /// This error can only happen when Lua state was not created by us and does not have the
+    /// custom allocator attached.
+    MemoryLimitNotAvailable,
     /// A mutable callback has triggered Lua code that has called the same mutable callback again.
     ///
     /// This is an error because a mutable callback can only be borrowed mutably once.
@@ -147,6 +152,9 @@ impl fmt::Display for Error {
             #[cfg(any(feature = "lua53", feature = "lua52"))]
             Error::GarbageCollectorError(ref msg) => {
                 write!(fmt, "garbage collector error: {}", msg)
+            }
+            Error::MemoryLimitNotAvailable => {
+                write!(fmt, "setting memory limit is not available")
             }
             Error::RecursiveMutCallback => write!(fmt, "mutable callback called recursively"),
             Error::CallbackDestructed => write!(

@@ -253,6 +253,28 @@ pub use self::lualib::{LUA_FFILIBNAME, LUA_JITLIBNAME};
 // Not actually defined in lua.h / luaconf.h
 pub const LUA_MAX_UPVALUES: c_int = 255;
 
+// Copied from https://github.com/rust-lang/rust/blob/master/src/libstd/sys_common/alloc.rs
+#[cfg(all(any(
+    target_arch = "x86",
+    target_arch = "arm",
+    target_arch = "mips",
+    target_arch = "powerpc",
+    target_arch = "powerpc64",
+    target_arch = "asmjs",
+    target_arch = "wasm32",
+    target_arch = "hexagon"
+)))]
+pub const SYS_MIN_ALIGN: usize = 8;
+#[cfg(all(any(
+    target_arch = "x86_64",
+    target_arch = "aarch64",
+    target_arch = "mips64",
+    target_arch = "s390x",
+    target_arch = "sparc64",
+    target_arch = "riscv64"
+)))]
+pub const SYS_MIN_ALIGN: usize = 16;
+
 #[allow(unused_imports, dead_code, non_camel_case_types)]
 mod glue {
     include!(concat!(env!("OUT_DIR"), "/glue.rs"));
