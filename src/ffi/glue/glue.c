@@ -1,6 +1,6 @@
 // The MIT License (MIT)
 //
-// Copyright (c) 2019 A. Orlenko
+// Copyright (c) 2019-2020 A. Orlenko
 // Copyright (c) 2014 J.C. Moyer
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -53,7 +53,7 @@ typedef struct rs_item {
 #define RS_INT(name, val)                                                      \
   { TY_INT, name, .int_val = val }
 
-#if LUA_VERSION_NUM == 503
+#if LUA_VERSION_NUM >= 503
 #define TY_LUAINT 1
 #define RS_LUAINT(name, val)                                                   \
   { TY_LUAINT, name, .lua_int_val = val }
@@ -139,7 +139,7 @@ int write_int_item(FILE *f, const char *name, int value) {
   return fprintf(f, "pub const %s: c_int = %d;\n", name, value);
 }
 
-#if LUA_VERSION_NUM == 503
+#if LUA_VERSION_NUM >= 503
 int write_lua_int_item(FILE *f, const char *name, LUA_INTEGER value) {
   return fprintf(f, "pub const %s: LUA_INTEGER = " LUA_INTEGER_FMT ";\n", name,
                  value);
@@ -171,7 +171,7 @@ int write_item(FILE *f, const rs_item *c) {
   switch (c->type) {
   case TY_INT:
     return write_int_item(f, c->name, c->int_val);
-#if LUA_VERSION_NUM == 503
+#if LUA_VERSION_NUM >= 503
   case TY_LUAINT:
     return write_lua_int_item(f, c->name, c->lua_int_val);
 #endif
@@ -251,7 +251,7 @@ int main(int argc, const char **argv) {
       // == lauxlib.h ==========================================================
 
       RS_COMMENT("lauxlib.h"),
-#if LUA_VERSION_NUM == 503
+#if LUA_VERSION_NUM >= 503
       RS_INT("LUAL_NUMSIZES", LUAL_NUMSIZES),
 #endif
 

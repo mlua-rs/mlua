@@ -1,6 +1,6 @@
 // The MIT License (MIT)
 //
-// Copyright (c) 2019 A. Orlenko
+// Copyright (c) 2019-2020 A. Orlenko
 // Copyright (c) 2014 J.C. Moyer
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -30,8 +30,8 @@ pub use super::glue::LUA_UNSIGNED;
 
 pub use super::glue::LUA_IDSIZE;
 
-#[cfg(feature = "lua53")]
+#[cfg(any(feature = "lua54", feature = "lua53"))]
 pub use super::glue::LUAL_NUMSIZES;
 
-#[cfg(feature = "lua53")]
+#[cfg(any(feature = "lua54", feature = "lua53"))]
 pub type LUA_KCONTEXT = isize; // intptr_t

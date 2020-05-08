@@ -1,6 +1,6 @@
 // The MIT License (MIT)
 //
-// Copyright (c) 2019 A. Orlenko
+// Copyright (c) 2019-2020 A. Orlenko
 // Copyright (c) 2014 J.C. Moyer
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -28,7 +28,7 @@ use std::ptr;
 
 use super::lua::{self, lua_CFunction, lua_Integer, lua_Number, lua_State};
 
-#[cfg(feature = "lua53")]
+#[cfg(any(feature = "lua54", feature = "lua53"))]
 pub use super::glue::LUAL_NUMSIZES;
 
 #[cfg(any(feature = "lua52", feature = "lua51", feature = "luajit"))]
@@ -49,10 +49,10 @@ pub struct luaL_Reg {
     pub func: lua_CFunction,
 }
 
-#[cfg(any(feature = "lua53", feature = "lua52"))]
+#[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
 #[inline(always)]
 pub unsafe fn luaL_checkversion(L: *mut lua_State) {
-    #[cfg(feature = "lua53")]
+    #[cfg(any(feature = "lua54", feature = "lua53"))]
     luaL_checkversion_(
         L,
         lua::LUA_VERSION_NUM as lua_Number,
@@ -63,19 +63,19 @@ pub unsafe fn luaL_checkversion(L: *mut lua_State) {
 }
 
 extern "C" {
-    #[cfg(feature = "lua53")]
+    #[cfg(any(feature = "lua54", feature = "lua53"))]
     pub fn luaL_checkversion_(L: *mut lua_State, ver: lua_Number, sz: usize);
     #[cfg(feature = "lua52")]
     pub fn luaL_checkversion_(L: *mut lua_State, ver: lua_Number);
 
-    #[cfg(feature = "lua53")]
+    #[cfg(any(feature = "lua54", feature = "lua53"))]
     pub fn luaL_getmetafield(L: *mut lua_State, obj: c_int, e: *const c_char) -> c_int;
     #[cfg(any(feature = "lua52", feature = "lua51", feature = "luajit"))]
     #[link_name = "luaL_getmetafield"]
     pub fn luaL_getmetafield_old(L: *mut lua_State, obj: c_int, e: *const c_char) -> c_int;
 
     pub fn luaL_callmeta(L: *mut lua_State, obj: c_int, e: *const c_char) -> c_int;
-    #[cfg(feature = "lua53")]
+    #[cfg(any(feature = "lua54", feature = "lua53"))]
     pub fn luaL_tolstring(L: *mut lua_State, idx: c_int, len: *mut usize) -> *const c_char;
     pub fn luaL_argerror(L: *mut lua_State, arg: c_int, l: *const c_char) -> c_int;
     pub fn luaL_checklstring(L: *mut lua_State, arg: c_int, l: *mut usize) -> *const c_char;
@@ -90,20 +90,20 @@ extern "C" {
     pub fn luaL_checkinteger(L: *mut lua_State, arg: c_int) -> lua_Integer;
     pub fn luaL_optinteger(L: *mut lua_State, arg: c_int, def: lua_Integer) -> lua_Integer;
 
-    #[cfg(any(feature = "lua53", feature = "lua52"))]
+    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
     pub fn luaL_checkstack(L: *mut lua_State, sz: c_int, msg: *const c_char);
     pub fn luaL_checktype(L: *mut lua_State, arg: c_int, t: c_int);
     pub fn luaL_checkany(L: *mut lua_State, arg: c_int);
 
-    #[cfg(feature = "lua53")]
+    #[cfg(any(feature = "lua54", feature = "lua53"))]
     pub fn luaL_newmetatable(L: *mut lua_State, tname: *const c_char) -> c_int;
     #[cfg(any(feature = "lua52", feature = "lua51", feature = "luajit"))]
     #[link_name = "luaL_newmetatable"]
     pub fn luaL_newmetatable_old(L: *mut lua_State, tname: *const c_char) -> c_int;
 
-    #[cfg(any(feature = "lua53", feature = "lua52"))]
+    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
     pub fn luaL_setmetatable(L: *mut lua_State, tname: *const c_char);
-    #[cfg(any(feature = "lua53", feature = "lua52"))]
+    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
     pub fn luaL_testudata(L: *mut lua_State, ud: c_int, tname: *const c_char) -> *mut c_void;
     pub fn luaL_checkudata(L: *mut lua_State, ud: c_int, tname: *const c_char) -> *mut c_void;
 
@@ -118,9 +118,9 @@ extern "C" {
         lst: *const *const c_char,
     ) -> c_int;
 
-    #[cfg(any(feature = "lua53", feature = "lua52"))]
+    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
     pub fn luaL_fileresult(L: *mut lua_State, stat: c_int, fname: *const c_char) -> c_int;
-    #[cfg(any(feature = "lua53", feature = "lua52"))]
+    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
     pub fn luaL_execresult(L: *mut lua_State, stat: c_int) -> c_int;
 }
 
@@ -132,21 +132,21 @@ extern "C" {
     pub fn luaL_ref(L: *mut lua_State, t: c_int) -> c_int;
     pub fn luaL_unref(L: *mut lua_State, t: c_int, r: c_int);
 
-    #[cfg(any(feature = "lua53", feature = "lua52"))]
+    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
     pub fn luaL_loadfilex(L: *mut lua_State, filename: *const c_char, mode: *const c_char)
         -> c_int;
     #[cfg(any(feature = "lua51", feature = "luajit"))]
     pub fn luaL_loadfile(L: *mut lua_State, filename: *const c_char) -> c_int;
 }
 
-#[cfg(any(feature = "lua53", feature = "lua52"))]
+#[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
 #[inline(always)]
 pub unsafe fn luaL_loadfile(L: *mut lua_State, f: *const c_char) -> c_int {
     luaL_loadfilex(L, f, ptr::null())
 }
 
 extern "C" {
-    #[cfg(any(feature = "lua53", feature = "lua52"))]
+    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
     pub fn luaL_loadbufferx(
         L: *mut lua_State,
         buff: *const c_char,
@@ -165,8 +165,10 @@ extern "C" {
 
     pub fn luaL_newstate() -> *mut lua_State;
 
-    #[cfg(any(feature = "lua53", feature = "lua52"))]
+    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
     pub fn luaL_len(L: *mut lua_State, idx: c_int) -> lua_Integer;
+
+    // TODO (lua54): luaL_addgsub
 
     pub fn luaL_gsub(
         L: *mut lua_State,
@@ -175,17 +177,17 @@ extern "C" {
         r: *const c_char,
     ) -> *const c_char;
 
-    #[cfg(any(feature = "lua53", feature = "lua52"))]
+    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
     pub fn luaL_setfuncs(L: *mut lua_State, l: *const luaL_Reg, nup: c_int);
 
-    #[cfg(any(feature = "lua53", feature = "lua52"))]
+    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
     pub fn luaL_getsubtable(L: *mut lua_State, idx: c_int, fname: *const c_char) -> c_int;
 
-    #[cfg(any(feature = "lua53", feature = "lua52"))]
+    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
     pub fn luaL_traceback(L: *mut lua_State, L1: *mut lua_State, msg: *const c_char, level: c_int);
 
     // Skip Lua 5.2 implementation in favor of the compat53 one
-    #[cfg(feature = "lua53")]
+    #[cfg(any(feature = "lua54", feature = "lua53"))]
     pub fn luaL_requiref(
         L: *mut lua_State,
         modname: *const c_char,
@@ -288,7 +290,7 @@ pub unsafe fn luaL_getmetatable(L: *mut lua_State, n: *const c_char) {
 
 // luaL_opt would be implemented here but it is undocumented, so it's omitted
 
-#[cfg(any(feature = "lua53", feature = "lua52"))]
+#[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
 #[inline(always)]
 pub unsafe fn luaL_loadbuffer(
     L: *mut lua_State,
@@ -301,4 +303,4 @@ pub unsafe fn luaL_loadbuffer(
 
 // TODO: Add buffer API
 
-// omitted: old module system compatibility
+// omitted: old module system compatibility (removed in 5.4)

@@ -1,6 +1,6 @@
 // The MIT License (MIT)
 //
-// Copyright (c) 2019 A. Orlenko
+// Copyright (c) 2019-2020 A. Orlenko
 // Copyright (c) 2014 J.C. Moyer
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -36,7 +36,10 @@ pub use self::lua::{
     lua_Unsigned, lua_Writer,
 };
 
-#[cfg(feature = "lua53")]
+#[cfg(feature = "lua54")]
+pub use self::lua::lua_WarnFunction;
+
+#[cfg(any(feature = "lua54", feature = "lua53"))]
 pub use self::lua::{lua_KContext, lua_KFunction};
 
 #[cfg(any(feature = "lua51", feature = "luajit"))]
@@ -155,10 +158,16 @@ pub use self::lua::{
     lua_yield,
 };
 
-#[cfg(feature = "lua53")]
+#[cfg(feature = "lua54")]
+pub use self::lua::{
+    lua_getiuservalue, lua_newuserdatauv, lua_resetthread, lua_setcstacklimit, lua_setiuservalue,
+    lua_setwarnf, lua_toclose, lua_warning,
+};
+
+#[cfg(any(feature = "lua54", feature = "lua53"))]
 pub use self::lua::{lua_isyieldable, lua_version};
 
-#[cfg(any(feature = "lua53", feature = "lua52"))]
+#[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
 pub use self::lua::{lua_callk, lua_pcallk, lua_upvalueid, lua_upvaluejoin, lua_yieldk};
 
 // auxiliary library types
@@ -177,7 +186,7 @@ pub use self::lauxlib::{
     luaL_where,
 };
 
-#[cfg(any(feature = "lua53", feature = "lua52"))]
+#[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
 pub use self::lauxlib::{luaL_execresult, luaL_fileresult, luaL_loadfilex};
 
 // lualib.h functions
@@ -186,7 +195,7 @@ pub use self::lualib::{
     luaopen_package, luaopen_string, luaopen_table,
 };
 
-#[cfg(feature = "lua53")]
+#[cfg(any(feature = "lua54", feature = "lua53"))]
 pub use self::lualib::{luaopen_coroutine, luaopen_utf8};
 
 #[cfg(feature = "lua52")]
@@ -206,13 +215,19 @@ pub use self::lua::{
     LUA_TTABLE, LUA_TTHREAD, LUA_TUSERDATA, LUA_YIELD,
 };
 
-#[cfg(feature = "lua53")]
+#[cfg(any(feature = "lua54", feature = "lua53"))]
 pub use self::lua::{
     LUA_OPBAND, LUA_OPBNOT, LUA_OPBOR, LUA_OPBXOR, LUA_OPIDIV, LUA_OPSHL, LUA_OPSHR,
 };
 
+#[cfg(feature = "lua54")]
+pub use self::lua::{LUA_GCGEN, LUA_GCINC};
+
+#[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+pub use self::lua::{LUA_GCISRUNNING, LUA_RIDX_GLOBALS, LUA_RIDX_MAINTHREAD};
+
 #[cfg(any(feature = "lua53", feature = "lua52"))]
-pub use self::lua::{LUA_ERRGCMM, LUA_GCISRUNNING, LUA_RIDX_GLOBALS, LUA_RIDX_MAINTHREAD};
+pub use self::lua::LUA_ERRGCMM;
 
 #[cfg(any(feature = "lua51", feature = "luajit"))]
 pub use self::lua::{LUA_ENVIRONINDEX, LUA_GLOBALSINDEX};
@@ -226,7 +241,7 @@ pub use self::lualib::{
     LUA_STRLIBNAME, LUA_TABLIBNAME,
 };
 
-#[cfg(feature = "lua53")]
+#[cfg(any(feature = "lua54", feature = "lua53"))]
 pub use self::lualib::LUA_UTF8LIBNAME;
 
 #[cfg(any(feature = "lua52", feature = "luajit"))]

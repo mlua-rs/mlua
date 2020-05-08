@@ -1,6 +1,6 @@
 // The MIT License (MIT)
 //
-// Copyright (c) 2019 A. Orlenko
+// Copyright (c) 2019-2020 A. Orlenko
 // Copyright (c) 2014 J.C. Moyer
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -32,7 +32,7 @@ pub use super::glue::{
     LUA_STRLIBNAME, LUA_TABLIBNAME,
 };
 
-#[cfg(feature = "lua53")]
+#[cfg(any(feature = "lua54", feature = "lua53"))]
 pub use super::glue::LUA_UTF8LIBNAME;
 
 #[cfg(any(feature = "lua52", feature = "luajit"))]
@@ -43,13 +43,13 @@ pub use super::glue::{LUA_FFILIBNAME, LUA_JITLIBNAME};
 
 extern "C" {
     pub fn luaopen_base(L: *mut lua_State) -> c_int;
-    #[cfg(any(feature = "lua53", feature = "lua52"))]
+    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
     pub fn luaopen_coroutine(L: *mut lua_State) -> c_int;
     pub fn luaopen_table(L: *mut lua_State) -> c_int;
     pub fn luaopen_io(L: *mut lua_State) -> c_int;
     pub fn luaopen_os(L: *mut lua_State) -> c_int;
     pub fn luaopen_string(L: *mut lua_State) -> c_int;
-    #[cfg(feature = "lua53")]
+    #[cfg(any(feature = "lua54", feature = "lua53"))]
     pub fn luaopen_utf8(L: *mut lua_State) -> c_int;
     #[cfg(feature = "lua52")]
     pub fn luaopen_bit32(L: *mut lua_State) -> c_int;
