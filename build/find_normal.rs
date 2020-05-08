@@ -22,6 +22,19 @@ pub fn probe_lua() -> PathBuf {
 
     // Find using via pkg-config
 
+    #[cfg(feature = "lua54")]
+    {
+        let mut lua = pkg_config::Config::new()
+            .range_version((Bound::Included("5.4"), Bound::Excluded("5.5")))
+            .probe("lua");
+
+        if lua.is_err() {
+            lua = pkg_config::Config::new().probe("lua5.4");
+        }
+
+        return lua.unwrap().include_paths[0].clone();
+    }
+
     #[cfg(feature = "lua53")]
     {
         let mut lua = pkg_config::Config::new()

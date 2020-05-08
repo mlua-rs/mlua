@@ -6,13 +6,13 @@ use std::u32;
 pub struct StdLib(u32);
 
 impl StdLib {
-    #[cfg(any(feature = "lua53", feature = "lua52"))]
+    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
     pub const COROUTINE: StdLib = StdLib(1 << 0);
     pub const TABLE: StdLib = StdLib(1 << 1);
     pub const IO: StdLib = StdLib(1 << 2);
     pub const OS: StdLib = StdLib(1 << 3);
     pub const STRING: StdLib = StdLib(1 << 4);
-    #[cfg(feature = "lua53")]
+    #[cfg(any(feature = "lua54", feature = "lua53"))]
     pub const UTF8: StdLib = StdLib(1 << 5);
     #[cfg(any(feature = "lua52", feature = "luajit"))]
     pub const BIT: StdLib = StdLib(1 << 6);

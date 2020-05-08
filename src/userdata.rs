@@ -34,25 +34,25 @@ pub enum MetaMethod {
     Pow,
     /// The unary minus (`-`) operator.
     Unm,
-    #[cfg(feature = "lua53")]
+    #[cfg(any(feature = "lua54", feature = "lua53"))]
     /// The floor division (//) operator.
     IDiv,
-    #[cfg(feature = "lua53")]
+    #[cfg(any(feature = "lua54", feature = "lua53"))]
     /// The bitwise AND (&) operator.
     BAnd,
-    #[cfg(feature = "lua53")]
+    #[cfg(any(feature = "lua54", feature = "lua53"))]
     /// The bitwise OR (|) operator.
     BOr,
-    #[cfg(feature = "lua53")]
+    #[cfg(any(feature = "lua54", feature = "lua53"))]
     /// The bitwise XOR (binary ~) operator.
     BXor,
-    #[cfg(feature = "lua53")]
+    #[cfg(any(feature = "lua54", feature = "lua53"))]
     /// The bitwise NOT (unary ~) operator.
     BNot,
-    #[cfg(feature = "lua53")]
+    #[cfg(any(feature = "lua54", feature = "lua53"))]
     /// The bitwise left shift (<<) operator.
     Shl,
-    #[cfg(feature = "lua53")]
+    #[cfg(any(feature = "lua54", feature = "lua53"))]
     /// The bitwise right shift (>>) operator.
     Shr,
     /// The string concatenation operator `..`.
@@ -75,7 +75,7 @@ pub enum MetaMethod {
     ///
     /// This is not an operator, but will be called by methods such as `tostring` and `print`.
     ToString,
-    #[cfg(any(feature = "lua53", feature = "lua52"))]
+    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
     /// The `__pairs` metamethod.
     ///
     /// This is not an operator, but it will be called by the built-in `pairs` function.
@@ -92,19 +92,19 @@ impl MetaMethod {
             MetaMethod::Mod => b"__mod",
             MetaMethod::Pow => b"__pow",
             MetaMethod::Unm => b"__unm",
-            #[cfg(feature = "lua53")]
+            #[cfg(any(feature = "lua54", feature = "lua53"))]
             MetaMethod::IDiv => b"__idiv",
-            #[cfg(feature = "lua53")]
+            #[cfg(any(feature = "lua54", feature = "lua53"))]
             MetaMethod::BAnd => b"__band",
-            #[cfg(feature = "lua53")]
+            #[cfg(any(feature = "lua54", feature = "lua53"))]
             MetaMethod::BOr => b"__bor",
-            #[cfg(feature = "lua53")]
+            #[cfg(any(feature = "lua54", feature = "lua53"))]
             MetaMethod::BXor => b"__bxor",
-            #[cfg(feature = "lua53")]
+            #[cfg(any(feature = "lua54", feature = "lua53"))]
             MetaMethod::BNot => b"__bnot",
-            #[cfg(feature = "lua53")]
+            #[cfg(any(feature = "lua54", feature = "lua53"))]
             MetaMethod::Shl => b"__shl",
-            #[cfg(feature = "lua53")]
+            #[cfg(any(feature = "lua54", feature = "lua53"))]
             MetaMethod::Shr => b"__shr",
             MetaMethod::Concat => b"__concat",
             MetaMethod::Len => b"__len",
@@ -115,7 +115,7 @@ impl MetaMethod {
             MetaMethod::NewIndex => b"__newindex",
             MetaMethod::Call => b"__call",
             MetaMethod::ToString => b"__tostring",
-            #[cfg(any(feature = "lua53", feature = "lua52"))]
+            #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
             MetaMethod::Pairs => b"__pairs",
         }
     }
@@ -387,18 +387,19 @@ impl<'lua> AnyUserData<'lua> {
     /// Sets an associated value to this `AnyUserData`.
     ///
     /// The value may be any Lua value whatsoever, and can be retrieved with [`get_user_value`].
+    /// As Lua < 5.3 allows to store only tables, the value will be stored in a table at index 1.
     ///
     /// [`get_user_value`]: #method.get_user_value
     pub fn set_user_value<V: ToLua<'lua>>(&self, v: V) -> Result<()> {
         let lua = self.0.lua;
         #[cfg(any(feature = "lua52", feature = "lua51", feature = "luajit"))]
         let v = {
-            // Lua 5.2/5.1 allows to store only table. Then we will wrap the value.
+            // Lua 5.2/5.1 allows to store only a table. Then we will wrap the value.
             let t = lua.create_table()?;
             t.raw_set(1, v)?;
             crate::Value::Table(t)
         };
-        #[cfg(feature = "lua53")]
+        #[cfg(any(feature = "lua54", feature = "lua53"))]
         let v = v.to_lua(lua)?;
         unsafe {
             let _sg = StackGuard::new(lua.state);
@@ -412,6 +413,8 @@ impl<'lua> AnyUserData<'lua> {
 
     /// Returns an associated value set by [`set_user_value`].
     ///
+    /// For Lua < 5.3 the value will be automatically extracted from the table wrapper from index 1.
+    ///
     /// [`set_user_value`]: #method.set_user_value
     pub fn get_user_value<V: FromLua<'lua>>(&self) -> Result<V> {
         let lua = self.0.lua;
@@ -424,7 +427,7 @@ impl<'lua> AnyUserData<'lua> {
         };
         #[cfg(any(feature = "lua52", feature = "lua51", feature = "luajit"))]
         return crate::Table::from_lua(res, lua)?.get(1);
-        #[cfg(feature = "lua53")]
+        #[cfg(any(feature = "lua54", feature = "lua53"))]
         V::from_lua(res, lua)
     }
 

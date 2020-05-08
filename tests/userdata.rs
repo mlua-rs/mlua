@@ -95,7 +95,7 @@ fn test_metamethods() -> Result<()> {
                     Err("no such custom index".to_lua_err())
                 }
             });
-            #[cfg(any(feature = "lua53", feature = "lua52"))]
+            #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
             methods.add_meta_method(MetaMethod::Pairs, |lua, data, ()| {
                 use std::iter::FromIterator;
                 let stateless_iter = lua.create_function(|_, (data, i): (MyUserData, i64)| {
@@ -120,7 +120,7 @@ fn test_metamethods() -> Result<()> {
         10
     );
 
-    #[cfg(any(feature = "lua53", feature = "lua52"))]
+    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
     let pairs_it = {
         lua.load(
             r#"
@@ -140,7 +140,7 @@ fn test_metamethods() -> Result<()> {
     assert_eq!(lua.load("userdata1 - userdata2").eval::<MyUserData>()?.0, 4);
     assert_eq!(lua.load("userdata1:get()").eval::<i64>()?, 7);
     assert_eq!(lua.load("userdata2.inner").eval::<i64>()?, 3);
-    #[cfg(any(feature = "lua53", feature = "lua52"))]
+    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
     assert_eq!(pairs_it.call::<_, i64>(())?, 28);
     assert!(lua.load("userdata2.nonexist_field").eval::<()>().is_err());
 

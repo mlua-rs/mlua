@@ -59,27 +59,36 @@ fn build_glue<P: AsRef<Path> + std::fmt::Debug>(include_path: &P) {
 
 fn main() {
     #[cfg(not(any(
+        feature = "lua54",
         feature = "lua53",
         feature = "lua52",
         feature = "lua51",
         feature = "luajit"
     )))]
-    panic!("You must enable one of the features: lua53, lua52, lua51, luajit");
+    panic!("You must enable one of the features: lua54, lua53, lua52, lua51, luajit");
+
+    #[cfg(all(
+        feature = "lua54",
+        any(
+            feature = "lua53",
+            feature = "lua52",
+            feature = "lua51",
+            feature = "luajit"
+        )
+    ))]
+    panic!("You can enable only one of the features: lua54, lua53, lua52, lua51, luajit");
 
     #[cfg(all(
         feature = "lua53",
         any(feature = "lua52", feature = "lua51", feature = "luajit")
     ))]
-    panic!("You can enable only one of the features: lua53, lua52, lua51, luajit");
+    panic!("You can enable only one of the features: lua54, lua53, lua52, lua51, luajit");
 
     #[cfg(all(feature = "lua52", any(feature = "lua51", feature = "luajit")))]
-    panic!("You can enable only one of the features: lua53, lua52, lua51, luajit");
+    panic!("You can enable only one of the features: lua54, lua53, lua52, lua51, luajit");
 
     #[cfg(all(feature = "lua51", feature = "luajit"))]
-    panic!("You can enable only one of the features: lua53, lua52, lua51, luajit");
-
-    #[cfg(all(feature = "lua51", feature = "luajit"))]
-    panic!("You can enable only one of the features: lua53, lua52, lua51, luajit");
+    panic!("You can enable only one of the features: lua54, lua53, lua52, lua51, luajit");
 
     let include_dir = find::probe_lua();
     build_glue(&include_dir);

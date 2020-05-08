@@ -57,13 +57,27 @@ struct ExtraData {
     ref_free: Vec<c_int>,
 }
 
-#[cfg(feature = "send")]
-unsafe impl Send for Lua {}
+/// Mode of the Lua garbage collector (GC).
+///
+/// In Lua 5.4 GC can work in two modes: incremental and generational.
+/// Previous Lua versions support only incremental GC.
+///
+/// More information can be found in the Lua 5.x [documentation][lua_doc].
+///
+/// [lua_doc]: https://www.lua.org/manual/5.4/manual.html#2.5
+pub enum GCMode {
+    Incremental,
+    #[cfg(feature = "lua54")]
+    Generational,
+}
 
 #[cfg(feature = "async")]
 pub(crate) struct AsyncPollPending;
 #[cfg(feature = "async")]
 pub(crate) static WAKER_REGISTRY_KEY: u8 = 0;
+
+#[cfg(feature = "send")]
+unsafe impl Send for Lua {}
 
 impl Drop for Lua {
     fn drop(&mut self) {
@@ -224,7 +238,7 @@ impl Lua {
     }
 
     /// Returns true if the garbage collector is currently running automatically.
-    #[cfg(any(feature = "lua53", feature = "lua52"))]
+    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
     pub fn gc_is_running(&self) -> bool {
         unsafe { ffi::lua_gc(self.main_state, ffi::LUA_GCISRUNNING, 0) != 0 }
     }
@@ -287,11 +301,76 @@ impl Lua {
     /// Sets the 'step multiplier' value of the collector.
     ///
     /// Returns the previous value of the 'step multiplier'.  More information can be found in the
-    /// [Lua 5.3 documentation][lua_doc].
+    /// Lua 5.x [documentation][lua_doc].
     ///
     /// [lua_doc]: https://www.lua.org/manual/5.3/manual.html#2.5
     pub fn gc_set_step_multiplier(&self, step_multiplier: c_int) -> c_int {
         unsafe { ffi::lua_gc(self.main_state, ffi::LUA_GCSETSTEPMUL, step_multiplier) }
+    }
+
+    /// Changes the collector to incremental mode with the given parameters.
+    ///
+    /// Returns the previous mode (always `GCMode::Incremental` in Lua < 5.4).
+    /// More information can be found in the Lua 5.x [documentation][lua_doc].
+    ///
+    /// [lua_doc]: https://www.lua.org/manual/5.4/manual.html#2.5.1
+    pub fn gc_inc(&self, pause: c_int, step_multiplier: c_int, step_size: c_int) -> GCMode {
+        #[cfg(any(
+            feature = "lua53",
+            feature = "lua52",
+            feature = "lua51",
+            feature = "luajit"
+        ))]
+        {
+            if pause > 0 {
+                unsafe { ffi::lua_gc(self.main_state, ffi::LUA_GCSETPAUSE, pause) };
+            }
+            if step_multiplier > 0 {
+                unsafe { ffi::lua_gc(self.main_state, ffi::LUA_GCSETSTEPMUL, step_multiplier) };
+            }
+            let _ = step_size; // Ignored
+            return GCMode::Incremental;
+        }
+
+        #[cfg(feature = "lua54")]
+        let prev_mode = unsafe {
+            ffi::lua_gc(
+                self.main_state,
+                ffi::LUA_GCSETPAUSE,
+                pause,
+                step_multiplier,
+                step_size,
+            )
+        };
+        #[cfg(feature = "lua54")]
+        match prev_mode {
+            ffi::LUA_GCINC => GCMode::Incremental,
+            ffi::LUA_GCGEN => GCMode::Generational,
+            _ => unreachable!(),
+        }
+    }
+
+    /// Changes the collector to generational mode with the given parameters.
+    ///
+    /// Returns the previous mode. More information about the generational GC
+    /// can be found in the Lua 5.4 [documentation][lua_doc].
+    ///
+    /// [lua_doc]: https://www.lua.org/manual/5.4/manual.html#2.5.2
+    #[cfg(feature = "lua54")]
+    pub fn gc_gen(&self, minor_multiplier: c_int, major_multiplier: c_int) -> GCMode {
+        let prev_mode = unsafe {
+            ffi::lua_gc(
+                self.main_state,
+                ffi::LUA_GCGEN,
+                minor_multiplier,
+                major_multiplier,
+            )
+        };
+        match prev_mode {
+            ffi::LUA_GCGEN => GCMode::Generational,
+            ffi::LUA_GCINC => GCMode::Incremental,
+            _ => unreachable!(),
+        }
     }
 
     /// Returns Lua source code as a `Chunk` builder type.
@@ -343,7 +422,7 @@ impl Lua {
                 ffi::LUA_OK => {
                     if let Some(env) = env {
                         self.push_value(env)?;
-                        #[cfg(any(feature = "lua53", feature = "lua52"))]
+                        #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
                         ffi::lua_setupvalue(self.state, -2, 1);
                         #[cfg(any(feature = "lua51", feature = "luajit"))]
                         ffi::lua_setfenv(self.state, -2);
@@ -595,7 +674,7 @@ impl Lua {
         unsafe {
             let _sg = StackGuard::new(self.state);
             assert_stack(self.state, 2);
-            #[cfg(any(feature = "lua53", feature = "lua52"))]
+            #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
             ffi::lua_rawgeti(self.state, ffi::LUA_REGISTRYINDEX, ffi::LUA_RIDX_GLOBALS);
             #[cfg(any(feature = "lua51", feature = "luajit"))]
             ffi::lua_pushvalue(self.state, ffi::LUA_GLOBALSINDEX);
@@ -1214,7 +1293,7 @@ impl Lua {
     where
         'lua: 'callback,
     {
-        #[cfg(any(feature = "lua53", feature = "lua52"))]
+        #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
         self.load_from_std_lib(StdLib::COROUTINE)?;
 
         unsafe extern "C" fn call_callback(state: *mut ffi::lua_State) -> c_int {
@@ -1521,7 +1600,7 @@ impl<'lua, 'a> Chunk<'lua, 'a> {
 }
 
 unsafe fn load_from_std_lib(state: *mut ffi::lua_State, libs: StdLib) {
-    #[cfg(any(feature = "lua53", feature = "lua52"))]
+    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
     {
         if libs.contains(StdLib::COROUTINE) {
             let colib_name = CString::new(ffi::LUA_COLIBNAME).unwrap();
@@ -1554,7 +1633,7 @@ unsafe fn load_from_std_lib(state: *mut ffi::lua_State, libs: StdLib) {
         ffi::lua_pop(state, 1);
     }
 
-    #[cfg(feature = "lua53")]
+    #[cfg(any(feature = "lua54", feature = "lua53"))]
     {
         if libs.contains(StdLib::UTF8) {
             let utf8lib_name = CString::new(ffi::LUA_UTF8LIBNAME).unwrap();

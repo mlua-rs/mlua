@@ -1,11 +1,18 @@
 use std::path::PathBuf;
 
-#[cfg(any(feature = "lua53", feature = "lua52", feature = "lua51"))]
+#[cfg(any(
+    feature = "lua54",
+    feature = "lua53",
+    feature = "lua52",
+    feature = "lua51"
+))]
 use lua_src;
 #[cfg(feature = "luajit")]
 use luajit_src;
 
 pub fn probe_lua() -> PathBuf {
+    #[cfg(feature = "lua54")]
+    let artifacts = lua_src::Build::new().build(lua_src::Lua54);
     #[cfg(feature = "lua53")]
     let artifacts = lua_src::Build::new().build(lua_src::Lua53);
     #[cfg(feature = "lua52")]

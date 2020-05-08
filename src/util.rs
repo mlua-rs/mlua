@@ -485,7 +485,7 @@ pub unsafe extern "C" fn error_traceback(state: *mut ffi::lua_State) -> c_int {
 
 // Does not call lua_checkstack, uses 1 stack space.
 pub unsafe fn get_main_state(state: *mut ffi::lua_State) -> *mut ffi::lua_State {
-    #[cfg(any(feature = "lua53", feature = "lua52"))]
+    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
     {
         ffi::lua_rawgeti(state, ffi::LUA_REGISTRYINDEX, ffi::LUA_RIDX_MAINTHREAD);
         let main_state = ffi::lua_tothread(state, -1);

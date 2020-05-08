@@ -389,7 +389,7 @@ fn test_num_conversion() -> Result<()> {
 
     assert_eq!(lua.load("1.0").eval::<i64>()?, 1);
     assert_eq!(lua.load("1.0").eval::<f64>()?, 1.0);
-    #[cfg(feature = "lua53")]
+    #[cfg(any(feature = "lua54", feature = "lua53"))]
     assert_eq!(lua.load("1.0").eval::<String>()?, "1.0");
     #[cfg(any(feature = "lua52", feature = "lua51", feature = "luajit"))]
     assert_eq!(lua.load("1.0").eval::<String>()?, "1");
@@ -466,7 +466,12 @@ fn test_pcall_xpcall() -> Result<()> {
     assert_eq!(globals.get::<_, String>("pcall_error")?, "testerror");
 
     assert_eq!(globals.get::<_, bool>("xpcall_statusr")?, false);
-    #[cfg(any(feature = "lua53", feature = "lua52", feature = "luajit"))]
+    #[cfg(any(
+        feature = "lua54",
+        feature = "lua53",
+        feature = "lua52",
+        feature = "luajit"
+    ))]
     assert_eq!(
         globals.get::<_, std::string::String>("xpcall_error")?,
         "testerror"
@@ -799,7 +804,7 @@ fn context_thread() -> Result<()> {
         )
         .into_function()?;
 
-    #[cfg(any(feature = "lua53", feature = "lua52"))]
+    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
     f.call::<_, ()>(lua.current_thread())?;
 
     #[cfg(any(feature = "lua51", feature = "luajit"))]

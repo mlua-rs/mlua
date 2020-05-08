@@ -7,7 +7,7 @@ fn test_gc_control() -> Result<()> {
     let lua = Lua::new();
     let globals = lua.globals();
 
-    #[cfg(any(feature = "lua53", feature = "lua52"))]
+    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
     {
         assert!(lua.gc_is_running());
         lua.gc_stop();
