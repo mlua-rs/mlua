@@ -661,12 +661,19 @@ pub unsafe fn init_error_registry(state: *mut ffi::lua_State) {
         cstr!("__mod"),
         cstr!("__pow"),
         cstr!("__unm"),
+        #[cfg(any(feature = "lua54", feature = "lua53"))]
         cstr!("__idiv"),
+        #[cfg(any(feature = "lua54", feature = "lua53"))]
         cstr!("__band"),
+        #[cfg(any(feature = "lua54", feature = "lua53"))]
         cstr!("__bor"),
+        #[cfg(any(feature = "lua54", feature = "lua53"))]
         cstr!("__bxor"),
+        #[cfg(any(feature = "lua54", feature = "lua53"))]
         cstr!("__bnot"),
+        #[cfg(any(feature = "lua54", feature = "lua53"))]
         cstr!("__shl"),
+        #[cfg(any(feature = "lua54", feature = "lua53"))]
         cstr!("__shr"),
         cstr!("__concat"),
         cstr!("__len"),
@@ -677,8 +684,12 @@ pub unsafe fn init_error_registry(state: *mut ffi::lua_State) {
         cstr!("__newindex"),
         cstr!("__call"),
         cstr!("__tostring"),
+        #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
         cstr!("__pairs"),
+        #[cfg(any(feature = "lua53", feature = "lua52"))]
         cstr!("__ipairs"),
+        #[cfg(feature = "lua54")]
+        cstr!("__close"),
     ] {
         ffi::lua_pushstring(state, method);
         ffi::lua_pushcfunction(state, destructed_error);

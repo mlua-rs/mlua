@@ -1,5 +1,8 @@
 use std::sync::Arc;
 
+#[cfg(feature = "lua54")]
+use std::sync::atomic::{AtomicI64, Ordering};
+
 use mlua::{
     AnyUserData, ExternalError, Function, Lua, MetaMethod, Result, String, UserData,
     UserDataMethods, Value,
@@ -150,6 +153,52 @@ fn test_metamethods() -> Result<()> {
     assert!(lua.load("userdata2 == userdata3").eval::<bool>()?);
     assert!(userdata2 != userdata3); // because references are differ
     assert!(userdata2.equals(userdata3)?);
+
+    Ok(())
+}
+
+#[test]
+#[cfg(feature = "lua54")]
+fn test_metamethod_close() -> Result<()> {
+    #[derive(Clone)]
+    struct MyUserData(Arc<AtomicI64>);
+
+    impl UserData for MyUserData {
+        fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
+            methods.add_method("get", |_, data, ()| Ok(data.0.load(Ordering::Relaxed)));
+            methods.add_meta_method(MetaMethod::Close, |_, data, _err: Value| {
+                data.0.store(0, Ordering::Relaxed);
+                Ok(())
+            });
+        }
+    }
+
+    let lua = Lua::new();
+    let globals = lua.globals();
+
+    let ud = MyUserData(Arc::new(AtomicI64::new(-1)));
+    let ud2 = ud.clone();
+
+    globals.set(
+        "new_userdata",
+        lua.create_function(move |_lua, val: i64| {
+            let ud = ud2.clone();
+            ud.0.store(val, Ordering::Relaxed);
+            Ok(ud)
+        })?,
+    )?;
+
+    lua.load(
+        r#"
+        do
+            local ud <close> = new_userdata(7)
+            assert(ud:get() == 7)
+        end
+    "#,
+    )
+    .exec()?;
+
+    assert_eq!(ud.0.load(Ordering::Relaxed), 0);
 
     Ok(())
 }

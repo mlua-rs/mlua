@@ -80,6 +80,16 @@ pub enum MetaMethod {
     ///
     /// This is not an operator, but it will be called by the built-in `pairs` function.
     Pairs,
+    /// The `__close` metamethod.
+    ///
+    /// Executed when a variable, that marked as to-be-closed, goes out of scope.
+    ///
+    /// More information about to-be-closed variabled can be found in the Lua 5.4
+    /// [documentation][lua_doc].
+    ///
+    /// [lua_doc]: https://www.lua.org/manual/5.4/manual.html#3.3.8
+    #[cfg(feature = "lua54")]
+    Close,
 }
 
 impl MetaMethod {
@@ -92,6 +102,7 @@ impl MetaMethod {
             MetaMethod::Mod => b"__mod",
             MetaMethod::Pow => b"__pow",
             MetaMethod::Unm => b"__unm",
+
             #[cfg(any(feature = "lua54", feature = "lua53"))]
             MetaMethod::IDiv => b"__idiv",
             #[cfg(any(feature = "lua54", feature = "lua53"))]
@@ -106,6 +117,7 @@ impl MetaMethod {
             MetaMethod::Shl => b"__shl",
             #[cfg(any(feature = "lua54", feature = "lua53"))]
             MetaMethod::Shr => b"__shr",
+
             MetaMethod::Concat => b"__concat",
             MetaMethod::Len => b"__len",
             MetaMethod::Eq => b"__eq",
@@ -115,8 +127,12 @@ impl MetaMethod {
             MetaMethod::NewIndex => b"__newindex",
             MetaMethod::Call => b"__call",
             MetaMethod::ToString => b"__tostring",
+
             #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
             MetaMethod::Pairs => b"__pairs",
+
+            #[cfg(feature = "lua54")]
+            MetaMethod::Close => b"__close",
         }
     }
 }
