@@ -20,12 +20,15 @@ impl StdLib {
     pub const PACKAGE: StdLib = StdLib(1 << 8);
     #[cfg(feature = "luajit")]
     pub const JIT: StdLib = StdLib(1 << 9);
+
+    /// `ffi` (unsafe) module `feature = "luajit"`
     #[cfg(feature = "luajit")]
-    pub const FFI: StdLib = StdLib(1 << 10);
-    pub const DEBUG: StdLib = StdLib(1 << 31); // always highest bit
+    pub const FFI: StdLib = StdLib(1 << 30);
+    /// `debug` (unsafe) module
+    pub const DEBUG: StdLib = StdLib(1 << 31);
 
     pub const ALL: StdLib = StdLib(u32::MAX);
-    pub const ALL_NO_DEBUG: StdLib = StdLib((1 << 31) - 1);
+    pub const ALL_SAFE: StdLib = StdLib((1 << 30) - 1);
 
     pub fn contains(self, lib: Self) -> bool {
         (self & lib).0 != 0

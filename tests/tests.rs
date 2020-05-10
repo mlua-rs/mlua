@@ -4,8 +4,48 @@ use std::sync::Arc;
 use std::{error, f32, f64, fmt};
 
 use mlua::{
-    Error, ExternalError, Function, Lua, Nil, Result, String, Table, UserData, Value, Variadic,
+    Error, ExternalError, Function, Lua, Nil, Result, StdLib, String, Table, UserData, Value,
+    Variadic,
 };
+
+#[test]
+fn test_safety() -> Result<()> {
+    let lua = Lua::new();
+    assert!(lua.load(r#"require "debug""#).exec().is_err());
+    match lua.load_from_std_lib(StdLib::DEBUG) {
+        Err(Error::SafetyError(_)) => {}
+        Err(e) => panic!("expected SafetyError, got {:?}", e),
+        Ok(_) => panic!("expected SafetyError, got no error"),
+    }
+    drop(lua);
+
+    let lua = unsafe { Lua::unsafe_new() };
+    assert!(lua.load(r#"require "debug""#).exec().is_ok());
+    drop(lua);
+
+    match Lua::new_with(StdLib::DEBUG) {
+        Err(Error::SafetyError(_)) => {}
+        Err(e) => panic!("expected SafetyError, got {:?}", e),
+        Ok(_) => panic!("expected SafetyError, got new Lua state"),
+    }
+
+    let lua = Lua::new();
+    match lua.load(r#"package.loadlib()"#).exec() {
+        Err(Error::CallbackError { ref cause, .. }) => match cause.as_ref() {
+            Error::SafetyError(_) => {}
+            e => panic!("expected SafetyError cause, got {:?}", e),
+        },
+        Err(e) => panic!("expected CallbackError, got {:?}", e),
+        Ok(_) => panic!("expected CallbackError, got no error"),
+    };
+    match lua.load(r#"require "fake_ffi""#).exec() {
+        Err(Error::RuntimeError(msg)) => assert!(msg.contains("can't load C modules in safe mode")),
+        Err(e) => panic!("expected RuntimeError, got {:?}", e),
+        Ok(_) => panic!("expected RuntimeError, got no error"),
+    }
+
+    Ok(())
+}
 
 #[test]
 fn test_load() -> Result<()> {

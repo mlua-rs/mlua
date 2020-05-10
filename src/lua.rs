@@ -43,6 +43,7 @@ pub struct Lua {
     main_state: *mut ffi::lua_State,
     extra: Arc<Mutex<ExtraData>>,
     ephemeral: bool,
+    safe: bool,
     // Lua has lots of interior mutability, should not be RefUnwindSafe
     _no_ref_unwind_safe: PhantomData<UnsafeCell<()>>,
 }
@@ -108,17 +109,63 @@ impl Drop for Lua {
 }
 
 impl Lua {
-    /// Creates a new Lua state and loads standard library without the `debug` library.
+    /// Creates a new Lua state and loads the safe subset of the standard libraries.
+    ///
+    /// The created Lua state would have safety guarantees and would not allow to load unsafe
+    /// standard libraries or C modules.
     pub fn new() -> Lua {
-        Self::new_with(StdLib::ALL_NO_DEBUG)
+        mlua_expect!(
+            Self::new_with(StdLib::ALL_SAFE),
+            "can't create new safe Lua state"
+        )
     }
 
-    /// Creates a new Lua state and loads the specified set of standard libraries.
+    /// Creates a new Lua state and loads all the standard libraries.
+    ///
+    /// The created Lua state would not have safety guarantees and would allow to load C modules.
+    pub unsafe fn unsafe_new() -> Lua {
+        Self::unsafe_new_with(StdLib::ALL)
+    }
+
+    /// Creates a new Lua state and loads the specified safe subset of the standard libraries.
     ///
     /// Use the [`StdLib`] flags to specifiy the libraries you want to load.
     ///
+    /// The created Lua state would have safety guarantees and would not allow to load unsafe
+    /// standard libraries or C modules.
+    ///
     /// [`StdLib`]: struct.StdLib.html
-    pub fn new_with(libs: StdLib) -> Lua {
+    pub fn new_with(libs: StdLib) -> Result<Lua> {
+        if libs.contains(StdLib::DEBUG) {
+            return Err(Error::SafetyError(
+                "the unsafe `debug` module can't be loaded using safe `new_with`".to_string(),
+            ));
+        }
+        #[cfg(feature = "luajit")]
+        {
+            if libs.contains(StdLib::FFI) {
+                return Err(Error::SafetyError(
+                    "the unsafe `ffi` module can't be loaded using safe `new_with`".to_string(),
+                ));
+            }
+        }
+
+        let mut lua = unsafe { Self::unsafe_new_with(libs) };
+
+        mlua_expect!(lua.disable_c_modules(), "Error during disabling C modules");
+        lua.safe = true;
+
+        Ok(lua)
+    }
+
+    /// Creates a new Lua state and loads the specified subset of the standard libraries.
+    ///
+    /// Use the [`StdLib`] flags to specifiy the libraries you want to load.
+    ///
+    /// The created Lua state would not have safety guarantees and would allow to load C modules.
+    ///
+    /// [`StdLib`]: struct.StdLib.html
+    pub unsafe fn unsafe_new_with(libs: StdLib) -> Lua {
         unsafe extern "C" fn allocator(
             extra_data: *mut c_void,
             ptr: *mut c_void,
@@ -173,67 +220,28 @@ impl Lua {
             new_ptr
         }
 
-        unsafe {
-            let mem_info = Box::into_raw(Box::new(MemoryInfo {
-                used_memory: 0,
-                memory_limit: 0,
-            }));
+        let mem_info = Box::into_raw(Box::new(MemoryInfo {
+            used_memory: 0,
+            memory_limit: 0,
+        }));
 
-            let state = ffi::lua_newstate(allocator, mem_info as *mut c_void);
+        let state = ffi::lua_newstate(allocator, mem_info as *mut c_void);
 
-            ffi::luaL_requiref(state, cstr!("_G"), ffi::luaopen_base, 1);
-            ffi::lua_pop(state, 1);
+        ffi::luaL_requiref(state, cstr!("_G"), ffi::luaopen_base, 1);
+        ffi::lua_pop(state, 1);
 
-            let mut lua = Lua::init_from_ptr(state);
-            lua.ephemeral = false;
-            lua.extra.lock().unwrap().mem_info = mem_info;
+        let mut lua = Lua::init_from_ptr(state);
+        lua.ephemeral = false;
+        lua.extra.lock().unwrap().mem_info = mem_info;
 
-            mlua_expect!(
-                protect_lua_closure(lua.main_state, 0, 0, |state| {
-                    load_from_std_lib(state, libs);
-                }),
-                "Error during loading standard libraries"
-            );
-
-            lua
-        }
-    }
-
-    /// Consumes and leaks `Lua` object, returning a static reference `&'static Lua`.
-    ///
-    /// This function is useful when the `Lua` object is supposed to live for the remainder
-    /// of the program's life.
-    /// In particular in asynchronous context this will allow to spawn Lua tasks to execute
-    /// in background.
-    ///
-    /// Dropping the returned reference will cause a memory leak. If this is not acceptable,
-    /// the reference should first be wrapped with the [`Lua::from_static`] function producing a `Lua`.
-    /// This `Lua` object can then be dropped which will properly release the allocated memory.
-    ///
-    /// [`Lua::from_static`]: #method.from_static
-    pub fn into_static(self) -> &'static Self {
-        Box::leak(Box::new(self))
-    }
-
-    /// Constructs a `Lua` from a static reference to it.
-    ///
-    /// # Safety
-    /// This function is unsafe because improper use may lead to memory problems or undefined behavior.
-    pub unsafe fn from_static(lua: &'static Lua) -> Self {
-        *Box::from_raw(lua as *const Lua as *mut Lua)
-    }
-
-    /// Loads the specified set of standard libraries into an existing Lua state.
-    ///
-    /// Use the [`StdLib`] flags to specifiy the libraries you want to load.
-    ///
-    /// [`StdLib`]: struct.StdLib.html
-    pub fn load_from_std_lib(&self, libs: StdLib) -> Result<()> {
-        unsafe {
-            protect_lua_closure(self.main_state, 0, 0, |state| {
+        mlua_expect!(
+            protect_lua_closure(lua.main_state, 0, 0, |state| {
                 load_from_std_lib(state, libs);
-            })
-        }
+            }),
+            "Error during loading standard libraries"
+        );
+
+        lua
     }
 
     /// Constructs a new Lua instance from the existing state.
@@ -292,8 +300,60 @@ impl Lua {
             main_state: main_state,
             extra: extra,
             ephemeral: true,
+            safe: false,
             _no_ref_unwind_safe: PhantomData,
         }
+    }
+
+    /// Loads the specified subset of the standard libraries into an existing Lua state.
+    ///
+    /// Use the [`StdLib`] flags to specifiy the libraries you want to load.
+    ///
+    /// [`StdLib`]: struct.StdLib.html
+    pub fn load_from_std_lib(&self, libs: StdLib) -> Result<()> {
+        if self.safe && libs.contains(StdLib::DEBUG) {
+            return Err(Error::SafetyError(
+                "the unsafe `debug` module can't be loaded in safe mode".to_string(),
+            ));
+        }
+        #[cfg(feature = "luajit")]
+        {
+            if self.safe && libs.contains(StdLib::FFI) {
+                return Err(Error::SafetyError(
+                    "the unsafe `ffi` module can't be loaded in safe mode".to_string(),
+                ));
+            }
+        }
+
+        unsafe {
+            protect_lua_closure(self.main_state, 0, 0, |state| {
+                load_from_std_lib(state, libs);
+            })
+        }
+    }
+
+    /// Consumes and leaks `Lua` object, returning a static reference `&'static Lua`.
+    ///
+    /// This function is useful when the `Lua` object is supposed to live for the remainder
+    /// of the program's life.
+    /// In particular in asynchronous context this will allow to spawn Lua tasks to execute
+    /// in background.
+    ///
+    /// Dropping the returned reference will cause a memory leak. If this is not acceptable,
+    /// the reference should first be wrapped with the [`Lua::from_static`] function producing a `Lua`.
+    /// This `Lua` object can then be dropped which will properly release the allocated memory.
+    ///
+    /// [`Lua::from_static`]: #method.from_static
+    pub fn into_static(self) -> &'static Self {
+        Box::leak(Box::new(self))
+    }
+
+    /// Constructs a `Lua` from a static reference to it.
+    ///
+    /// # Safety
+    /// This function is unsafe because improper use may lead to memory problems or undefined behavior.
+    pub unsafe fn from_static(lua: &'static Lua) -> Self {
+        *Box::from_raw(lua as *const Lua as *mut Lua)
     }
 
     // Executes module entrypoint function, which returns only one Value.
@@ -1556,8 +1616,35 @@ impl Lua {
             main_state: self.main_state,
             extra: self.extra.clone(),
             ephemeral: true,
+            safe: self.safe,
             _no_ref_unwind_safe: PhantomData,
         }
+    }
+
+    fn disable_c_modules(&self) -> Result<()> {
+        let package: Table = self.globals().get("package")?;
+
+        package.set(
+            "loadlib",
+            self.create_function(|_, ()| -> Result<()> {
+                Err(Error::SafetyError(
+                    "package.loadlib is disabled in safe mode".to_string(),
+                ))
+            })?,
+        )?;
+
+        #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+        let searchers: Table = package.get("searchers")?;
+        #[cfg(any(feature = "lua51", feature = "luajit"))]
+        let searchers: Table = package.get("loaders")?;
+
+        let loader = self.create_function(|_, ()| Ok("\n\tcan't load C modules in safe mode"))?;
+
+        // The third and fourth searchers looks for a loader as a C library
+        searchers.raw_set(3, loader.clone())?;
+        searchers.raw_remove(4)?;
+
+        Ok(())
     }
 }
 
