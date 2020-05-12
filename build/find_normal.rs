@@ -1,14 +1,13 @@
 use std::env;
-use std::ffi::OsString;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Result};
 use std::ops::Bound;
 use std::path::{Path, PathBuf};
 
 pub fn probe_lua() -> PathBuf {
-    let include_dir = env::var_os("LUA_INC").unwrap_or(OsString::new());
-    let lib_dir = env::var_os("LUA_LIB").unwrap_or(OsString::new());
-    let lua_lib = env::var_os("LUA_LIB_NAME").unwrap_or(OsString::new());
+    let include_dir = env::var_os("LUA_INC").unwrap_or_default();
+    let lib_dir = env::var_os("LUA_LIB").unwrap_or_default();
+    let lua_lib = env::var_os("LUA_LIB_NAME").unwrap_or_default();
 
     println!("cargo:rerun-if-env-changed=LUA_INC");
     println!("cargo:rerun-if-env-changed=LUA_LIB");
@@ -32,7 +31,7 @@ pub fn probe_lua() -> PathBuf {
             lua = pkg_config::Config::new().probe("lua5.4");
         }
 
-        return lua.unwrap().include_paths[0].clone();
+        lua.unwrap().include_paths[0].clone()
     }
 
     #[cfg(feature = "lua53")]
@@ -45,7 +44,7 @@ pub fn probe_lua() -> PathBuf {
             lua = pkg_config::Config::new().probe("lua5.3");
         }
 
-        return lua.unwrap().include_paths[0].clone();
+        lua.unwrap().include_paths[0].clone()
     }
 
     #[cfg(feature = "lua52")]
@@ -58,7 +57,7 @@ pub fn probe_lua() -> PathBuf {
             lua = pkg_config::Config::new().probe("lua5.2");
         }
 
-        return lua.unwrap().include_paths[0].clone();
+        lua.unwrap().include_paths[0].clone()
     }
 
     #[cfg(feature = "lua51")]
@@ -71,7 +70,7 @@ pub fn probe_lua() -> PathBuf {
             lua = pkg_config::Config::new().probe("lua5.1");
         }
 
-        return lua.unwrap().include_paths[0].clone();
+        lua.unwrap().include_paths[0].clone()
     }
 
     #[cfg(feature = "luajit")]
@@ -80,7 +79,7 @@ pub fn probe_lua() -> PathBuf {
             .range_version((Bound::Included("2.1.0"), Bound::Unbounded))
             .probe("luajit");
 
-        return lua.unwrap().include_paths[0].clone();
+        lua.unwrap().include_paths[0].clone()
     }
 }
 
@@ -100,10 +99,10 @@ fn use_custom_lua<S: AsRef<Path>>(include_dir: &S, lib_dir: &S, lua_lib: &S) -> 
         }
     }
 
-    let mut link_lib = String::new();
-    if env::var("LUA_LINK").unwrap_or(String::new()) == "static" {
-        link_lib = "static=".to_string();
-    }
+    let link_lib = match env::var("LUA_LINK") {
+        Ok(s) if s == "static" => "static=",
+        _ => "",
+    };
 
     println!(
         "cargo:rustc-link-search=native={}",

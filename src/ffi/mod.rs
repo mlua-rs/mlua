@@ -276,6 +276,7 @@ pub const SYS_MIN_ALIGN: usize = 8;
 pub const SYS_MIN_ALIGN: usize = 16;
 
 #[allow(unused_imports, dead_code, non_camel_case_types)]
+#[allow(clippy::unreadable_literal)]
 mod glue {
     include!(concat!(env!("OUT_DIR"), "/glue.rs"));
 }

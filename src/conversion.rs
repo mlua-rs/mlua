@@ -379,7 +379,7 @@ where
 {
     fn to_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
         Ok(Value::Table(
-            lua.create_sequence_from(self.into_iter().cloned())?,
+            lua.create_sequence_from(self.iter().cloned())?,
         ))
     }
 }

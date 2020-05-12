@@ -15,6 +15,7 @@ use {futures_core::future::LocalBoxFuture, futures_util::future};
 #[derive(Clone, Debug)]
 pub struct Table<'lua>(pub(crate) LuaRef<'lua>);
 
+#[allow(clippy::len_without_is_empty)]
 impl<'lua> Table<'lua> {
     /// Sets a key-value pair in the table.
     ///
@@ -627,9 +628,10 @@ where
                     lua.push_ref(&self.table);
                     lua.push_value(next_key)?;
 
-                    if protect_lua_closure(lua.state, 2, ffi::LUA_MULTRET, |state| {
+                    let next = protect_lua_closure(lua.state, 2, ffi::LUA_MULTRET, |state| {
                         ffi::lua_next(state, -2) != 0
-                    })? {
+                    })?;
+                    if next {
                         ffi::lua_pushvalue(lua.state, -2);
                         let key = lua.pop_value();
                         let value = lua.pop_value();

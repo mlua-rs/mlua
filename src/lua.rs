@@ -111,8 +111,10 @@ impl Drop for Lua {
 impl Lua {
     /// Creates a new Lua state and loads the safe subset of the standard libraries.
     ///
+    /// # Safety
     /// The created Lua state would have safety guarantees and would not allow to load unsafe
     /// standard libraries or C modules.
+    #[allow(clippy::new_without_default)]
     pub fn new() -> Lua {
         mlua_expect!(
             Self::new_with(StdLib::ALL_SAFE),
@@ -122,6 +124,7 @@ impl Lua {
 
     /// Creates a new Lua state and loads all the standard libraries.
     ///
+    /// # Safety
     /// The created Lua state would not have safety guarantees and would allow to load C modules.
     pub unsafe fn unsafe_new() -> Lua {
         Self::unsafe_new_with(StdLib::ALL)
@@ -131,6 +134,7 @@ impl Lua {
     ///
     /// Use the [`StdLib`] flags to specifiy the libraries you want to load.
     ///
+    /// # Safety
     /// The created Lua state would have safety guarantees and would not allow to load unsafe
     /// standard libraries or C modules.
     ///
@@ -162,6 +166,7 @@ impl Lua {
     ///
     /// Use the [`StdLib`] flags to specifiy the libraries you want to load.
     ///
+    /// # Safety
     /// The created Lua state would not have safety guarantees and would allow to load C modules.
     ///
     /// [`StdLib`]: struct.StdLib.html
@@ -244,7 +249,8 @@ impl Lua {
         lua
     }
 
-    /// Constructs a new Lua instance from the existing state.
+    /// Constructs a new Lua instance from an existing raw state.
+    #[allow(clippy::missing_safety_doc)]
     pub unsafe fn init_from_ptr(state: *mut ffi::lua_State) -> Lua {
         let main_state = get_main_state(state);
         let main_state_top = ffi::lua_gettop(state);
@@ -297,8 +303,8 @@ impl Lua {
 
         Lua {
             state,
-            main_state: main_state,
-            extra: extra,
+            main_state,
+            extra,
             ephemeral: true,
             safe: false,
             _no_ref_unwind_safe: PhantomData,
@@ -495,7 +501,7 @@ impl Lua {
                 unsafe { ffi::lua_gc(self.main_state, ffi::LUA_GCSETSTEPMUL, step_multiplier) };
             }
             let _ = step_size; // Ignored
-            return GCMode::Incremental;
+            GCMode::Incremental
         }
 
         #[cfg(feature = "lua54")]
@@ -850,7 +856,7 @@ impl Lua {
 
     /// Returns a handle to the active `Thread`.  For calls to `Lua` this will be the main Lua thread,
     /// for parameters given to a callback, this will be whatever Lua thread called the callback.
-    pub fn current_thread<'lua>(&'lua self) -> Thread<'lua> {
+    pub fn current_thread(&self) -> Thread {
         unsafe {
             ffi::lua_pushthread(self.state);
             Thread(self.pop_ref())
@@ -917,9 +923,10 @@ impl Lua {
                 assert_stack(self.state, 4);
 
                 self.push_value(v)?;
-                if protect_lua_closure(self.state, 1, 1, |state| {
+                let ok = protect_lua_closure(self.state, 1, 1, |state| {
                     !ffi::lua_tostring(state, -1).is_null()
-                })? {
+                })?;
+                if ok {
                     Some(String(self.pop_ref()))
                 } else {
                     None
@@ -1294,7 +1301,7 @@ impl Lua {
     // used stack.  The implementation is somewhat biased towards the use case of a relatively small
     // number of short term references being created, and `RegistryKey` being used for long term
     // references.
-    pub(crate) unsafe fn pop_ref<'lua>(&'lua self) -> LuaRef<'lua> {
+    pub(crate) unsafe fn pop_ref(&self) -> LuaRef {
         let mut extra = mlua_expect!(self.extra.lock(), "extra is poisoned");
         ffi::lua_xmove(self.state, extra.ref_thread, 1);
         let index = ref_stack_pop(&mut extra);

@@ -31,6 +31,7 @@ use {
 /// See [`Lua::scope`] for more details.
 ///
 /// [`Lua::scope`]: struct.Lua.html#method.scope
+#[allow(clippy::type_complexity)]
 pub struct Scope<'lua, 'scope> {
     lua: &'lua Lua,
     destructors: RefCell<Vec<(LuaRef<'lua>, fn(LuaRef<'lua>) -> Vec<Box<dyn Any>>)>>,
@@ -229,21 +230,17 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
 
             match method {
                 NonStaticMethod::Method(method) => {
-                    let method_data = data.clone();
                     let f = Box::new(move |lua, mut args: MultiValue<'callback>| {
                         if !check_ud_type(lua, args.pop_front()) {
                             return Err(Error::UserDataTypeMismatch);
                         }
-                        let data = method_data
-                            .try_borrow()
-                            .map_err(|_| Error::UserDataBorrowError)?;
+                        let data = data.try_borrow().map_err(|_| Error::UserDataBorrowError)?;
                         method(lua, &*data, args)
                     });
                     unsafe { scope.create_callback(f) }
                 }
                 NonStaticMethod::MethodMut(method) => {
                     let method = RefCell::new(method);
-                    let method_data = data.clone();
                     let f = Box::new(move |lua, mut args: MultiValue<'callback>| {
                         if !check_ud_type(lua, args.pop_front()) {
                             return Err(Error::UserDataTypeMismatch);
@@ -251,7 +248,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
                         let mut method = method
                             .try_borrow_mut()
                             .map_err(|_| Error::RecursiveMutCallback)?;
-                        let mut data = method_data
+                        let mut data = data
                             .try_borrow_mut()
                             .map_err(|_| Error::UserDataBorrowMutError)?;
                         (&mut *method)(lua, &mut *data, args)

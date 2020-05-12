@@ -57,10 +57,11 @@ impl Drop for StackGuard {
     fn drop(&mut self) {
         unsafe {
             let top = ffi::lua_gettop(self.state);
+            if top < self.top {
+                mlua_panic!("{} too many stack values popped", self.top - top)
+            }
             if top > self.top {
                 ffi::lua_settop(self.state, self.top);
-            } else if top < self.top {
-                mlua_panic!("{} too many stack values popped", self.top - top);
             }
         }
     }
@@ -473,12 +474,12 @@ pub unsafe extern "C" fn error_traceback(state: *mut ffi::lua_State) -> c_int {
         );
         get_gc_metatable_for::<WrappedError>(state);
         ffi::lua_setmetatable(state, -2);
-    } else if let None = get_gc_userdata::<WrappedPanic>(state, -1).as_ref() {
-        if ffi::lua_checkstack(state, LUA_TRACEBACK_STACK) != 0 {
-            let s = ffi::luaL_tolstring(state, -1, ptr::null_mut());
-            ffi::luaL_traceback(state, state, s, 0);
-            ffi::lua_remove(state, -2);
-        }
+    } else if get_gc_userdata::<WrappedPanic>(state, -1).is_null()
+        && ffi::lua_checkstack(state, LUA_TRACEBACK_STACK) != 0
+    {
+        let s = ffi::luaL_tolstring(state, -1, ptr::null_mut());
+        ffi::luaL_traceback(state, state, s, 0);
+        ffi::lua_remove(state, -2);
     }
     1
 }

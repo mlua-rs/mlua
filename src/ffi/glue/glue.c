@@ -156,7 +156,7 @@ int write_str_item(FILE *f, const char *name, const char *value) {
   char *buf = malloc(bufsz);
   int ret;
   escape(value, buf, bufsz);
-  ret = fprintf(f, "pub const %s: &'static str = \"%s\";\n", name, buf);
+  ret = fprintf(f, "pub const %s: &str = \"%s\";\n", name, buf);
   free(buf);
   return ret;
 }

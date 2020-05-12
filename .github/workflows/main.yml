@@ -82,3 +82,18 @@ jobs:
         components: rustfmt
         override: true
     - run: cargo fmt -- --check
+
+  clippy:
+    name: Clippy check
+    runs-on: ubuntu-18.04
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+            toolchain: nightly
+            components: clippy
+            override: true
+      - uses: actions-rs/clippy-check@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          args: --features async,send,vendored

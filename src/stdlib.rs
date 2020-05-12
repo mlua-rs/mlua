@@ -7,7 +7,7 @@ pub struct StdLib(u32);
 
 impl StdLib {
     #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
-    pub const COROUTINE: StdLib = StdLib(1 << 0);
+    pub const COROUTINE: StdLib = StdLib(1);
     pub const TABLE: StdLib = StdLib(1 << 1);
     pub const IO: StdLib = StdLib(1 << 2);
     pub const OS: StdLib = StdLib(1 << 3);

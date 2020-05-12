@@ -159,7 +159,7 @@ impl<'a, 'lua> IntoIterator for &'a MultiValue<'lua> {
     type IntoIter = iter::Rev<slice::Iter<'a, Value<'lua>>>;
 
     fn into_iter(self) -> Self::IntoIter {
-        (&self.0).into_iter().rev()
+        (&self.0).iter().rev()
     }
 }
 
