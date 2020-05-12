@@ -7,165 +7,77 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        thing:
-        - stable
-        - macos-x86_64
-        - x86_64-msvc
+        os: [ubuntu-18.04, macos-latest, windows-latest]
+        rust: [stable]
+        lua: [lua54, lua53, lua52, lua51, luajit]
         include:
-        - thing: stable
+        - os: ubuntu-18.04
           target: x86_64-unknown-linux-gnu
-          rust: stable
-          os: ubuntu-latest
-        - thing: macos-x86_64
+        - os: macos-latest
           target: x86_64-apple-darwin
-          rust: stable
-          os: macos-latest
-        - thing: x86_64-msvc
+        - os: windows-latest
           target: x86_64-pc-windows-msvc
-          rust: stable-x86_64-msvc
-          os: windows-latest
     steps:
-    - uses: actions/checkout@v1
-    - name: Install Rust (rustup)
-      if: matrix.os != 'macos-latest'
-      run: rustup update ${{ matrix.rust }} --no-self-update && rustup default ${{ matrix.rust }}
+    - uses: actions/checkout@v2
+    - uses: actions-rs/toolchain@v1
+      with:
+        toolchain: ${{ matrix.rust }}
+        target: ${{ matrix.target }}
+        override: true
+    - name: Build ${{ matrix.lua }} vendored
+      run: |
+        cargo build --release --no-default-features --features "${{ matrix.lua }} vendored"
+        cargo build --release --no-default-features --features "${{ matrix.lua }} vendored async send"
       shell: bash
-    - name: Install Lua (ubuntu)
-      if: matrix.os == 'ubuntu-latest'
+    - name: Build ${{ matrix.lua }} pkg-config
+      if: ${{ matrix.os == 'ubuntu-18.04' && matrix.lua != 'lua54' }}
       run: |
         sudo apt-get update -y
         sudo apt-get install -y --no-install-recommends liblua5.3-dev liblua5.2-dev liblua5.1-0-dev libluajit-5.1-dev
-    - name: Install Rust (macos)
-      if: matrix.os == 'macos-latest'
-      run: |
-        curl https://sh.rustup.rs | sh -s -- -y
-        echo ::add-path::$HOME/.cargo/bin
-      shell: bash
-    - name: Install GCC (aarch64-linux)
-      run: |
-        sudo apt-get update -y
-        sudo apt-get install -y --no-install-recommends gcc-aarch64-linux-gnu libc6-dev-arm64-cross
-      if: matrix.thing == 'aarch64-linux'
-      shell: bash
-    - run: rustup target add ${{ matrix.target }}
-    - name: Build (Lua 5.4/5.3/5.2/5.1 and LuaJIT vendored+async)
-      run: |
-        for FEATURE in lua54 lua53 lua52 lua51 luajit; do
-          echo "Building $FEATURE"
-          cargo build --target ${{ matrix.target }} --release --no-default-features --features "$FEATURE vendored async"
-        done
-      shell: bash
-    - name: Build (Lua 5.3/5.2/5.1 and LuaJIT via pkg-config)
-      if: matrix.os == 'ubuntu-latest'
-      run: |
-        for FEATURE in lua53 lua52 lua51 luajit; do
-          echo "Building $FEATURE"
-          cargo build --target ${{ matrix.target }} --release --no-default-features --features $FEATURE
-        done
-      shell: bash
+        cargo build --release --no-default-features --features "${{ matrix.lua }}"
 
-  test_linux:
-    name: Test on Linux
-    runs-on: ubuntu-latest
+  test:
+    name: Test
+    runs-on: ${{ matrix.os }}
     needs: build
+    strategy:
+      matrix:
+        os: [ubuntu-18.04, macos-latest, windows-latest]
+        rust: [stable]
+        lua: [lua54, lua53, lua52, lua51, luajit]
+        include:
+        - os: ubuntu-18.04
+          target: x86_64-unknown-linux-gnu
+        - os: macos-latest
+          target: x86_64-apple-darwin
+        - os: windows-latest
+          target: x86_64-pc-windows-msvc
     steps:
-    - uses: actions/checkout@v1
-    - name: Install Rust
-      run: rustup update stable --no-self-update && rustup default stable
-      shell: bash
-    - name: Run tests (Lua 5.4 vendored)
-      run: cargo test --release --no-default-features --features "lua54 vendored"
-      shell: bash
-    - name: Run tests (Lua 5.4 vendored+async)
-      run: cargo test --release --no-default-features --features "lua54 vendored async"
-      shell: bash
-    - name: Run tests (Lua 5.3 vendored)
-      run: cargo test --release --no-default-features --features "lua53 vendored"
-      shell: bash
-    - name: Run tests (Lua 5.3 vendored+async)
-      run: cargo test --release --no-default-features --features "lua53 vendored async"
-      shell: bash
-    - name: Run tests (Lua 5.2 vendored)
-      run: cargo test --release --no-default-features --features "lua52 vendored"
-      shell: bash
-    - name: Run tests (Lua 5.2 vendored+async)
-      run: cargo test --release --no-default-features --features "lua52 vendored async"
-      shell: bash
-    - name: Run tests (Lua 5.1 vendored)
-      run: cargo test --release --no-default-features --features "lua51 vendored"
-      shell: bash
-    - name: Run tests (Lua 5.1 vendored+async)
-      run: cargo test --release --no-default-features --features "lua51 vendored async"
-      shell: bash
-    - name: Run tests (LuaJIT vendored)
-      run: cargo test --release --no-default-features --features "luajit vendored"
-      shell: bash
-    - name: Run tests (LuaJIT vendored+async)
-      run: cargo test --release --no-default-features --features "luajit vendored async"
-      shell: bash
-    - name: Run compile test (Lua 5.3)
+    - uses: actions/checkout@v2
+    - uses: actions-rs/toolchain@v1
+      with:
+        toolchain: ${{ matrix.rust }}
+        target: ${{ matrix.target }}
+        override: true
+    - name: Run ${{ matrix.lua }} tests
       run: |
-        sudo apt-get update -y
-        sudo apt-get install -y --no-install-recommends liblua5.3-dev
-        cargo test --release --no-default-features --features "lua53 vendored" -- --ignored
-
-  test_macos:
-    name: Test on MacOS
-    runs-on: macos-latest
-    needs: build
-    steps:
-    - uses: actions/checkout@v1
-    - name: Install Rust
+        cargo test --release --no-default-features --features "${{ matrix.lua }} vendored"
+        cargo test --release --no-default-features --features "${{ matrix.lua }} vendored async send"
+      shell: bash
+    - name: Run compile tests
+      if: ${{ matrix.os == 'ubuntu-18.04' && matrix.lua == 'lua53' }}
       run: |
-        curl https://sh.rustup.rs | sh -s -- -y
-        echo ::add-path::$HOME/.cargo/bin
-      shell: bash
-    - name: Run tests (Lua 5.4 vendored)
-      run: cargo test --release --no-default-features --features "lua54 vendored"
-      shell: bash
-    - name: Run tests (Lua 5.3 vendored)
-      run: cargo test --release --no-default-features --features "lua53 vendored"
-      shell: bash
-    - name: Run tests (Lua 5.2 vendored)
-      run: cargo test --release --no-default-features --features "lua52 vendored"
-      shell: bash
-    - name: Run tests (Lua 5.1 vendored)
-      run: cargo test --release --no-default-features --features "lua51 vendored"
-      shell: bash
-    - name: Run tests (LuaJIT vendored)
-      run: cargo test --release --no-default-features --features "luajit vendored"
-      shell: bash
-
-  test_windows:
-    name: Test on Windows
-    runs-on: windows-latest
-    needs: build
-    steps:
-    - uses: actions/checkout@v1
-    - name: Install Rust
-      run: rustup update stable --no-self-update && rustup default stable
-      shell: bash
-    - name: Run tests (Lua 5.4 vendored)
-      run: cargo test --release --no-default-features --features "lua54 vendored"
-      shell: bash
-    - name: Run tests (Lua 5.3 vendored)
-      run: cargo test --release --no-default-features --features "lua53 vendored"
-      shell: bash
-    - name: Run tests (Lua 5.2 vendored)
-      run: cargo test --release --no-default-features --features "lua52 vendored"
-      shell: bash
-    - name: Run tests (Lua 5.1 vendored)
-      run: cargo test --release --no-default-features --features "lua51 vendored"
-      shell: bash
-    - name: Run tests (LuaJIT vendored)
-      run: cargo test --release --no-default-features --features "luajit vendored"
+        cargo test --release --no-default-features --features "lua53 vendored async send" -- --ignored
       shell: bash
 
   rustfmt:
     name: Rustfmt
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-18.04
     steps:
-    - uses: actions/checkout@v1
-    - name: Install Rust
-      run: rustup update stable && rustup default stable && rustup component add rustfmt
+    - uses: actions/checkout@v2
+    - uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        components: rustfmt
+        override: true
     - run: cargo fmt -- --check
