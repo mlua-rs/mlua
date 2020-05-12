@@ -1,0 +1,14 @@
+error[E0277]: `std::rc::Rc<std::cell::Cell<i32>>` cannot be sent between threads safely
+  --> $DIR/non_send.rs:11:9
+   |
+11 |       lua.create_function(move |_, ()| {
+   |  _________^^^^^^^^^^^^^^^_-
+   | |         |
+   | |         `std::rc::Rc<std::cell::Cell<i32>>` cannot be sent between threads safely
+12 | |         Ok(data.get())
+13 | |     })?
+   | |_____- within this `[closure@$DIR/tests/compile/non_send.rs:11:25: 13:6 data:std::rc::Rc<std::cell::Cell<i32>>]`
+   |
+   = help: within `[closure@$DIR/tests/compile/non_send.rs:11:25: 13:6 data:std::rc::Rc<std::cell::Cell<i32>>]`, the trait `std::marker::Send` is not implemented for `std::rc::Rc<std::cell::Cell<i32>>`
+   = note: required because it appears within the type `[closure@$DIR/tests/compile/non_send.rs:11:25: 13:6 data:std::rc::Rc<std::cell::Cell<i32>>]`
+   = note: required because of the requirements on the impl of `mlua::types::MaybeSend` for `[closure@$DIR/tests/compile/non_send.rs:11:25: 13:6 data:std::rc::Rc<std::cell::Cell<i32>>]`
