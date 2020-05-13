@@ -216,7 +216,7 @@ impl<'lua> FromLua<'lua> for StdString {
     }
 }
 
-impl<'lua, 'a> ToLua<'lua> for &'a str {
+impl<'lua> ToLua<'lua> for &str {
     fn to_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
         Ok(Value::String(lua.create_string(self)?))
     }
@@ -250,13 +250,13 @@ impl<'lua> FromLua<'lua> for CString {
     }
 }
 
-impl<'lua, 'a> ToLua<'lua> for &'a CStr {
+impl<'lua> ToLua<'lua> for &CStr {
     fn to_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
         Ok(Value::String(lua.create_string(self.to_bytes())?))
     }
 }
 
-impl<'lua, 'a> ToLua<'lua> for BString {
+impl<'lua> ToLua<'lua> for BString {
     fn to_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
         Ok(Value::String(lua.create_string(&self)?))
     }
@@ -278,7 +278,7 @@ impl<'lua> FromLua<'lua> for BString {
     }
 }
 
-impl<'lua, 'a> ToLua<'lua> for &BStr {
+impl<'lua> ToLua<'lua> for &BStr {
     fn to_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
         Ok(Value::String(lua.create_string(&self)?))
     }
@@ -373,7 +373,7 @@ macro_rules! lua_convert_float {
 lua_convert_float!(f32);
 lua_convert_float!(f64);
 
-impl<'lua, T> ToLua<'lua> for &'_ [T]
+impl<'lua, T> ToLua<'lua> for &[T]
 where
     T: Clone + ToLua<'lua>,
 {
@@ -396,7 +396,7 @@ macro_rules! lua_convert_array {
                 }
             }
 
-            impl<'lua, T> ToLua<'lua> for &'_ [T; $N]
+            impl<'lua, T> ToLua<'lua> for &[T; $N]
             where
                 T: Clone + ToLua<'lua>,
             {
