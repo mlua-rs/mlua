@@ -66,9 +66,13 @@ name = "benchmark"
 harness = false
 
 [[example]]
-name = "async_tcp_server"
+name = "async_http_client"
 required-features = ["async"]
 
 [[example]]
-name = "async_http_client"
+name = "async_http_server"
+required-features = ["async", "send"]
+
+[[example]]
+name = "async_tcp_server"
 required-features = ["async"]

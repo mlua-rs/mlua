@@ -24,6 +24,7 @@ Starting from 0.3, mlua supports async/await for all Lua versions. This works us
 
 **Examples**:
 - [HTTP Client](examples/async_http_client.rs)
+- [HTTP Server](examples/async_http_server.rs)
 - [TCP Server](examples/async_tcp_server.rs)
 
 ### Choosing Lua version
