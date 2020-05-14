@@ -137,28 +137,6 @@ impl<'lua> Table<'lua> {
         }
     }
 
-    /// Gets the function associated to `key` from the table and executes it,
-    /// passing the table itself along with `args` as function arguments.
-    ///
-    /// This function is deprecated since 0.3.1 in favor of [`call_method`]
-    /// in the `TableExt` trait.
-    ///
-    /// This might invoke the `__index` metamethod.
-    ///
-    /// [`call_method`]: trait.TableExt.html#tymethod.call_method
-    #[deprecated(since = "0.3.1", note = "Please use `call_method` instead")]
-    pub fn call<K, A, R>(&self, key: K, args: A) -> Result<R>
-    where
-        K: ToLua<'lua>,
-        A: ToLuaMulti<'lua>,
-        R: FromLuaMulti<'lua>,
-    {
-        let lua = self.0.lua;
-        let mut args = args.to_lua_multi(lua)?;
-        args.push_front(Value::Table(self.clone()));
-        self.get::<_, Function>(key)?.call(args)
-    }
-
     /// Compares two tables for equality.
     ///
     /// Tables are compared by reference first.
