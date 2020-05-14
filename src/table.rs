@@ -518,6 +518,8 @@ pub trait TableExt<'lua> {
     /// Gets the function associated to `key` from the table and asynchronously executes it,
     /// passing the table itself along with `args` as function arguments and returning Future.
     ///
+    /// Requires `feature = "async"`
+    ///
     /// This might invoke the `__index` metamethod.
     #[cfg(feature = "async")]
     fn call_async_method<'fut, K, A, R>(&self, key: K, args: A) -> LocalBoxFuture<'fut, Result<R>>
@@ -529,6 +531,8 @@ pub trait TableExt<'lua> {
 
     /// Gets the function associated to `key` from the table and asynchronously executes it,
     /// passing `args` as function arguments and returning Future.
+    ///
+    /// Requires `feature = "async"`
     ///
     /// This might invoke the `__index` metamethod.
     #[cfg(feature = "async")]

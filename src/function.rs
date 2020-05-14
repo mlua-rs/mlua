@@ -94,6 +94,8 @@ impl<'lua> Function<'lua> {
     ///
     /// Internaly it wraps the function to an [`AsyncThread`].
     ///
+    /// Requires `feature = "async"`
+    ///
     /// # Examples
     ///
     /// ```

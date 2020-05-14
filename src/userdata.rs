@@ -34,26 +34,31 @@ pub enum MetaMethod {
     Pow,
     /// The unary minus (`-`) operator.
     Unm,
-    #[cfg(any(feature = "lua54", feature = "lua53"))]
     /// The floor division (//) operator.
+    /// Requires `feature = "lua54/lua53"`
+    #[cfg(any(feature = "lua54", feature = "lua53", doc))]
     IDiv,
-    #[cfg(any(feature = "lua54", feature = "lua53"))]
     /// The bitwise AND (&) operator.
+    /// Requires `feature = "lua54/lua53"`
+    #[cfg(any(feature = "lua54", feature = "lua53", doc))]
     BAnd,
-    #[cfg(any(feature = "lua54", feature = "lua53"))]
     /// The bitwise OR (|) operator.
+    /// Requires `feature = "lua54/lua53"`
+    #[cfg(any(feature = "lua54", feature = "lua53", doc))]
     BOr,
-    #[cfg(any(feature = "lua54", feature = "lua53"))]
     /// The bitwise XOR (binary ~) operator.
+    /// Requires `feature = "lua54/lua53"`
+    #[cfg(any(feature = "lua54", feature = "lua53", doc))]
     BXor,
-    #[cfg(any(feature = "lua54", feature = "lua53"))]
     /// The bitwise NOT (unary ~) operator.
+    /// Requires `feature = "lua54/lua53"`
+    #[cfg(any(feature = "lua54", feature = "lua53", doc))]
     BNot,
-    #[cfg(any(feature = "lua54", feature = "lua53"))]
     /// The bitwise left shift (<<) operator.
+    #[cfg(any(feature = "lua54", feature = "lua53", doc))]
     Shl,
-    #[cfg(any(feature = "lua54", feature = "lua53"))]
     /// The bitwise right shift (>>) operator.
+    #[cfg(any(feature = "lua54", feature = "lua53", doc))]
     Shr,
     /// The string concatenation operator `..`.
     Concat,
@@ -75,10 +80,12 @@ pub enum MetaMethod {
     ///
     /// This is not an operator, but will be called by methods such as `tostring` and `print`.
     ToString,
-    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
     /// The `__pairs` metamethod.
     ///
     /// This is not an operator, but it will be called by the built-in `pairs` function.
+    ///
+    /// Requires `feature = "lua54/lua53/lua52"`
+    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", doc))]
     Pairs,
     /// The `__close` metamethod.
     ///
@@ -87,8 +94,10 @@ pub enum MetaMethod {
     /// More information about to-be-closed variabled can be found in the Lua 5.4
     /// [documentation][lua_doc].
     ///
+    /// Requires `feature = "lua54"`
+    ///
     /// [lua_doc]: https://www.lua.org/manual/5.4/manual.html#3.3.8
-    #[cfg(feature = "lua54")]
+    #[cfg(any(feature = "lua54", doc))]
     Close,
 }
 
@@ -172,6 +181,8 @@ pub trait UserDataMethods<'lua, T: UserData> {
     ///
     /// Refer to [`add_method`] for more information about the implementation.
     ///
+    /// Requires `feature = "async"`
+    ///
     /// [`add_method`]: #method.add_method
     #[cfg(feature = "async")]
     fn add_async_method<S, A, R, M, MR>(&mut self, name: &S, method: M)
@@ -215,6 +226,8 @@ pub trait UserDataMethods<'lua, T: UserData> {
     /// and returns Future.
     ///
     /// This is an async version of [`add_function`].
+    ///
+    /// Requires `feature = "async"`
     ///
     /// [`add_function`]: #method.add_function
     #[cfg(feature = "async")]

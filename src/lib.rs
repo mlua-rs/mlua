@@ -30,6 +30,12 @@
 //! Lua code with async capabilities can be executed by [`call_async`] family of functions or polling
 //! [`AsyncThread`] using any runtime (eg. Tokio).
 //!
+//! Requires `feature = "async"`.
+//!
+//! # `Send` requirement
+//! By default `mlua` is `!Send`. This can be changed by enabling `feature = "send"` that adds `Send` requirement
+//! to `Function`s and [`UserData`].
+//!
 //! [Lua programming language]: https://www.lua.org/
 //! [`Lua`]: struct.Lua.html
 //! [executing]: struct.Lua.html#method.exec

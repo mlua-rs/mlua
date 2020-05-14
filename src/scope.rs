@@ -106,6 +106,8 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
     /// This is a version of [`Lua::create_async_function`] that creates a callback which expires on
     /// scope drop.  See [`Lua::scope`] and [`Lua::async_scope`] for more details.
     ///
+    /// Requires `feature = "async"`
+    ///
     /// [`Lua::create_async_function`]: struct.Lua.html#method.create_async_function
     /// [`Lua::scope`]: struct.Lua.html#method.scope
     /// [`Lua::async_scope`]: struct.Lua.html#method.async_scope

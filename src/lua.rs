@@ -76,7 +76,8 @@ struct MemoryInfo {
 /// [lua_doc]: https://www.lua.org/manual/5.4/manual.html#2.5
 pub enum GCMode {
     Incremental,
-    #[cfg(feature = "lua54")]
+    /// Requires `feature = "lua54"`
+    #[cfg(any(feature = "lua54", doc))]
     Generational,
 }
 
@@ -85,6 +86,7 @@ pub(crate) struct AsyncPollPending;
 #[cfg(feature = "async")]
 pub(crate) static WAKER_REGISTRY_KEY: u8 = 0;
 
+/// Requires `feature = "send"`
 #[cfg(feature = "send")]
 unsafe impl Send for Lua {}
 
@@ -396,7 +398,9 @@ impl Lua {
     /// Returns previous limit (zero means no limit).
     ///
     /// Does not work on module mode where Lua state is managed externally.
-    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+    ///
+    /// Requires `feature = "lua54/lua53/lua52"`
+    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", doc))]
     pub fn set_memory_limit(&self, memory_limit: usize) -> Result<usize> {
         let mut extra = mlua_expect!(self.extra.lock(), "extra is poisoned");
         if extra.mem_info.is_null() {
@@ -410,7 +414,9 @@ impl Lua {
     }
 
     /// Returns true if the garbage collector is currently running automatically.
-    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+    ///
+    /// Requires `feature = "lua54/lua53/lua52"`
+    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", doc))]
     pub fn gc_is_running(&self) -> bool {
         unsafe { ffi::lua_gc(self.main_state, ffi::LUA_GCISRUNNING, 0) != 0 }
     }
@@ -527,8 +533,10 @@ impl Lua {
     /// Returns the previous mode. More information about the generational GC
     /// can be found in the Lua 5.4 [documentation][lua_doc].
     ///
+    /// Requires `feature = "lua54"`
+    ///
     /// [lua_doc]: https://www.lua.org/manual/5.4/manual.html#2.5.2
-    #[cfg(feature = "lua54")]
+    #[cfg(any(feature = "lua54", doc))]
     pub fn gc_gen(&self, minor_multiplier: c_int, major_multiplier: c_int) -> GCMode {
         let prev_mode = unsafe {
             ffi::lua_gc(
@@ -769,6 +777,8 @@ impl Lua {
     ///
     /// The family of `call_async()` functions takes care about creating [`Thread`].
     ///
+    /// Requires `feature = "async"`
+    ///
     /// # Examples
     ///
     /// Non blocking sleep:
@@ -894,6 +904,8 @@ impl Lua {
 
     /// An asynchronous version of [`scope`] that allows to create scoped async functions and
     /// execute them.
+    ///
+    /// Requires `feature = "async"`
     ///
     /// [`scope`]: #method.scope
     #[cfg(feature = "async")]
@@ -1707,6 +1719,8 @@ impl<'lua, 'a> Chunk<'lua, 'a> {
     ///
     /// See [`Chunk::exec`] for more details.
     ///
+    /// Requires `feature = "async"`
+    ///
     /// [`Chunk::exec`]: struct.Chunk.html#method.exec
     #[cfg(feature = "async")]
     pub fn exec_async<'fut>(self) -> LocalBoxFuture<'fut, Result<()>>
@@ -1740,6 +1754,8 @@ impl<'lua, 'a> Chunk<'lua, 'a> {
     ///
     /// See [`Chunk::eval`] for more details.
     ///
+    /// Requires `feature = "async"`
+    ///
     /// [`Chunk::eval`]: struct.Chunk.html#method.eval
     #[cfg(feature = "async")]
     pub fn eval_async<'fut, R>(self) -> LocalBoxFuture<'fut, Result<R>>
@@ -1768,6 +1784,8 @@ impl<'lua, 'a> Chunk<'lua, 'a> {
     /// Load the chunk function and asynchronously call it with the given arguemnts.
     ///
     /// See [`Chunk::call`] for more details.
+    ///
+    /// Requires `feature = "async"`
     ///
     /// [`Chunk::call`]: struct.Chunk.html#method.call
     #[cfg(feature = "async")]

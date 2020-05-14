@@ -47,6 +47,8 @@ pub struct Thread<'lua>(pub(crate) LuaRef<'lua>);
 
 /// Thread (coroutine) representation as an async [`Future`] or [`Stream`].
 ///
+/// Requires `feature = "async"`
+///
 /// [`Future`]: ../futures_core/future/trait.Future.html
 /// [`Stream`]: ../futures_core/stream/trait.Stream.html
 #[cfg(feature = "async")]
@@ -183,6 +185,8 @@ impl<'lua> Thread<'lua> {
     /// Using AsyncThread as a Stream allows to iterate through `coroutine.yield()`
     /// values whereas Future version discards that values and poll until the final
     /// one (returned from the thread function).
+    ///
+    /// Requires `feature = "async"`
     ///
     /// # Examples
     ///
