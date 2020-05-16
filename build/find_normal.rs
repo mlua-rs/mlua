@@ -76,7 +76,7 @@ pub fn probe_lua() -> PathBuf {
     #[cfg(feature = "luajit")]
     {
         let lua = pkg_config::Config::new()
-            .range_version((Bound::Included("2.1.0"), Bound::Unbounded))
+            .range_version((Bound::Included("2.0.5"), Bound::Unbounded))
             .probe("luajit");
 
         lua.unwrap().include_paths[0].clone()

@@ -1,4 +1,3 @@
-use std::alloc;
 use std::any::TypeId;
 use std::cell::{RefCell, UnsafeCell};
 use std::collections::HashMap;
@@ -61,6 +60,7 @@ struct ExtraData {
     ref_free: Vec<c_int>,
 }
 
+#[cfg_attr(any(feature = "lua51", feature = "luajit"), allow(dead_code))]
 struct MemoryInfo {
     used_memory: isize,
     memory_limit: isize,
@@ -173,12 +173,15 @@ impl Lua {
     ///
     /// [`StdLib`]: struct.StdLib.html
     pub unsafe fn unsafe_new_with(libs: StdLib) -> Lua {
+        #[cfg_attr(any(feature = "lua51", feature = "luajit"), allow(dead_code))]
         unsafe extern "C" fn allocator(
             extra_data: *mut c_void,
             ptr: *mut c_void,
             osize: usize,
             nsize: usize,
         ) -> *mut c_void {
+            use std::alloc;
+
             let mem_info = &mut *(extra_data as *mut MemoryInfo);
 
             if nsize == 0 {
@@ -227,19 +230,26 @@ impl Lua {
             new_ptr
         }
 
+        #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
         let mem_info = Box::into_raw(Box::new(MemoryInfo {
             used_memory: 0,
             memory_limit: 0,
         }));
 
+        #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
         let state = ffi::lua_newstate(allocator, mem_info as *mut c_void);
+        #[cfg(any(feature = "lua51", feature = "luajit"))]
+        let state = ffi::luaL_newstate();
 
         ffi::luaL_requiref(state, cstr!("_G"), ffi::luaopen_base, 1);
         ffi::lua_pop(state, 1);
 
         let mut lua = Lua::init_from_ptr(state);
         lua.ephemeral = false;
-        lua.extra.lock().unwrap().mem_info = mem_info;
+        #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+        {
+            lua.extra.lock().unwrap().mem_info = mem_info;
+        }
 
         mlua_expect!(
             protect_lua_closure(lua.main_state, 0, 0, |state| {
@@ -1536,7 +1546,7 @@ impl Lua {
                 // Try to get an outer poll waker
                 ffi::lua_pushlightuserdata(
                     state,
-                    &WAKER_REGISTRY_KEY as *const u8 as *mut ::std::os::raw::c_void,
+                    &WAKER_REGISTRY_KEY as *const u8 as *mut c_void,
                 );
                 ffi::lua_rawget(state, ffi::LUA_REGISTRYINDEX);
                 if let Some(w) = get_gc_userdata::<Waker>(state, -1).as_ref() {

@@ -60,6 +60,7 @@ jobs:
         target: ${{ matrix.target }}
         override: true
     - name: Run ${{ matrix.lua }} tests
+      if: ${{ matrix.os != 'macos-latest' || matrix.lua != 'luajit' }}
       run: |
         cargo test --release --no-default-features --features "${{ matrix.lua }} vendored"
         cargo test --release --no-default-features --features "${{ matrix.lua }} vendored async send"
@@ -69,6 +70,27 @@ jobs:
       run: |
         cargo test --release --no-default-features --features "${{ matrix.lua }} vendored" -- --ignored
         cargo test --release --no-default-features --features "${{ matrix.lua }} vendored async send" -- --ignored
+      shell: bash
+
+  test_luajit20:
+    name: Test LuaJIT on macOS
+    runs-on: macos-latest
+    needs: build
+    steps:
+    - uses: actions/checkout@v2
+    - uses: actions-rs/toolchain@v1
+      with:
+        toolchain: nightly
+        target: x86_64-apple-darwin
+        override: true
+    - name: Run LuaJIT 2.0.5 tests
+      run: |
+        brew install luajit pkg-config
+        cargo test --tests --release --no-default-features --features "luajit async send"
+      shell: bash
+    - name: Run LuaJIT vendored tests
+      run: |
+        cargo test --release --no-default-features --features "luajit vendored async send"
       shell: bash
 
   rustfmt:

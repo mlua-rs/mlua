@@ -1,3 +1,15 @@
+#![cfg_attr(
+    all(feature = "luajit", target_os = "macos", target_arch = "x86_64"),
+    feature(link_args)
+)]
+
+#[cfg_attr(
+    all(feature = "luajit", target_os = "macos", target_arch = "x86_64"),
+    link_args = "-pagezero_size 10000 -image_base 100000000",
+    allow(unused_attributes)
+)]
+extern "system" {}
+
 use mlua::{Lua, Nil, Result, Table, TableExt, Value};
 
 #[test]
