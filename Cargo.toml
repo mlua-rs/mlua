@@ -12,12 +12,13 @@ license = "MIT"
 links = "lua"
 build = "build/main.rs"
 description = """
-High level bindings to Lua 5.1/5.2/5.3 (including LuaJIT)
+High level bindings to Lua 5.1/5.2/5.3/5.4 (including LuaJIT)
 with async/await features and support of writing native lua modules in Rust.
 """
 
 [badges]
 # github-actions = { repository = "khvzak/mlua", workflow = "CI" }
+maintenance = { status = "actively-developed" }
 
 [package.metadata.docs.rs]
 features = ["async"]

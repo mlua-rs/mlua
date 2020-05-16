@@ -10,17 +10,26 @@
 
 [Guided Tour](examples/guided_tour.rs)
 
-A fork of [rlua 0.15](https://github.com/kyren/rlua/tree/0.15.3) which provides a high level
-interface between Rust and Lua. Unlike `rlua` , `mlua` supports Lua 5.1 (including LuaJIT), 5.2 and 5.3.
-The `mlua` goal is to be an easy to use, practical and flexible API between Rust and Lua but
-*__not__* always 100% safe due to the Lua VM nature. Also, `mlua` provides a way to write native lua
-modules in Rust.
+`mlua` is bindings to [Lua](https://www.lua.org) programming language for Rust with a goal to provide
+_safe_ (as far as it's possible), high level, easy to use, practical and flexible API.
+
+Started as [rlua v0.15](https://github.com/amethyst/rlua/tree/0.15.3) fork, `mlua` supports *__all__* major Lua versions (including LuaJIT) and allows to write native Lua modules on Rust as well as use Lua a standalone mode.
+
+`mlua` supports the following Lua versions (and tested on Windows/macOS/Linux):
+- Lua 5.4 (`feature = "lua54"`)
+- Lua 5.3 (`feature = "lua53"`, enabled by default)
+- Lua 5.2 (`feature = "lua52"`)
+- Lua 5.1 (`feature = "lua51"`)
+- LuaJIT 2.0.5 stable (`feature = "luajit"`), although I'm not encouraging to use this version
+- LuaJIT 2.1.0 beta (`feature = "luajit"`)
+
+Additional `feature = "vendored"` enables building Lua from sources during `mlua` compilation.
 
 ## Usage
 
 ### Async/await support
 
-Starting from 0.3, mlua supports async/await for all Lua versions. This works using Lua [coroutines](https://www.lua.org/manual/5.3/manual.html#2.6) and require running [Thread](https://docs.rs/mlua/latest/mlua/struct.Thread.html) along with enabling `async` feature in `Cargo.toml`.
+Starting from v0.3, `mlua` supports async/await for all Lua versions. This works using Lua [coroutines](https://www.lua.org/manual/5.3/manual.html#2.6) and require running [Thread](https://docs.rs/mlua/latest/mlua/struct.Thread.html) along with enabling `feature = "async"` in `Cargo.toml`.
 
 **Examples**:
 - [HTTP Client](examples/async_http_client.rs)
@@ -29,9 +38,10 @@ Starting from 0.3, mlua supports async/await for all Lua versions. This works us
 
 ### Choosing Lua version
 
-The following features could be used to choose Lua version: `lua53` (default), `lua52`, `lua51` and `luajit`.
+The following features could be used to choose Lua version: `lua54`, `lua53` (default), `lua52`, `lua51` and `luajit`.
+To switch between Lua versions it's required to set `default_features = false` in `mlua` dependency.
 
-By default mlua uses `pkg-config` tool to find lua includes and lib.
+By default `mlua` uses `pkg-config` tool to find lua includes and libraries for the chosen Lua version.
 In most cases it works as desired, although sometimes could be more preferable to use a custom lua library.
 To achieve this, mlua supports `LUA_INC`, `LUA_LIB`, `LUA_LIB_NAME` and `LUA_LINK` environment variables.
 `LUA_LINK` is optional and may be `dylib` (a dynamic library) or `static` (a static library, `.a` archive).
@@ -43,14 +53,14 @@ my_project $ LUA_INC=$HOME/tmp/lua-5.2.4/src LUA_LIB=$HOME/tmp/lua-5.2.4/src LUA
 
 `mlua` also supports vendored lua/luajit using the auxilary crates [lua-src](https://crates.io/crates/lua-src) and
 [luajit-src](https://crates.io/crates/luajit-src).
-Just enable the `vendored` feature and cargo will automatically build and link specified lua/luajit version. This is the easiest way to get started with mlua.
+Just enable the `vendored` feature and cargo will automatically build and link specified lua/luajit version. This is the easiest way to get started with `mlua`.
 
 ### Standalone mode
 Add to `Cargo.toml` :
 
 ``` toml
 [dependencies]
-mlua = "0.3"
+mlua = "0.4"
 ```
 
 `main.rs`
@@ -82,8 +92,8 @@ Add to `Cargo.toml` :
 crate-type = ["cdylib"]
 
 [dependencies]
-mlua = "0.3"
-mlua_derive = "0.3"
+mlua = "0.4"
+mlua_derive = "0.4"
 ```
 
 `lib.rs` :
@@ -106,7 +116,7 @@ fn my_module(lua: &Lua) -> LuaResult<LuaTable> {
 }
 ```
 
-And then (macos example):
+And then (macOS example):
 
 ``` sh
 $ cargo build
@@ -118,15 +128,13 @@ hello, world!
 ## Safety
 
 One of the `mlua` goals is to provide *safe* API between Rust and Lua.
-Every place where the Lua C API may trigger an error longjmp
-in any way is protected by `lua_pcall` , and the user of the library is protected
-from directly interacting with unsafe things like the Lua stack, and there is
-overhead associated with this safety.
+Every place where the Lua C API may trigger an error longjmp in any way is protected by `lua_pcall`,
+and the user of the library is protected from directly interacting with unsafe things like the Lua stack,
+and there is overhead associated with this safety.
 
 Unfortunately, `mlua` does not provide absolute safety even without using `unsafe` .
-This library contains a huge amount of unsafe code. There are almost
-certainly bugs still lurking in this library!  It is surprisingly, fiendishly
-difficult to use the Lua C API without the potential for unsafety.
+This library contains a huge amount of unsafe code. There are almost certainly bugs still lurking in this library!
+It is surprisingly, fiendishly difficult to use the Lua C API without the potential for unsafety.
 
 ## Panic handling
 
@@ -150,10 +158,9 @@ let _ = lua.load(r#"
 unreachable!()
 ```
 
-`mlua` should also be panic safe in another way as well, which is that any `Lua`
-instances or handles remains usable after a user generated panic, and such
-panics should not break internal invariants or leak Lua stack space. This is
-mostly important to safely use `mlua` types in Drop impls, as you should not be
+`mlua` should also be panic safe in another way as well, which is that any `Lua` instances or handles
+remains usable after a user generated panic, and such panics should not break internal invariants or
+leak Lua stack space. This is mostly important to safely use `mlua` types in Drop impls, as you should not be
 using panics for general error handling.
 
 Below is a list of `mlua` behaviors that should be considered a bug.

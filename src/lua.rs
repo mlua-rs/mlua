@@ -114,7 +114,7 @@ impl Lua {
     /// Creates a new Lua state and loads the safe subset of the standard libraries.
     ///
     /// # Safety
-    /// The created Lua state would have safety guarantees and would not allow to load unsafe
+    /// The created Lua state would have _some_ safety guarantees and would not allow to load unsafe
     /// standard libraries or C modules.
     #[allow(clippy::new_without_default)]
     pub fn new() -> Lua {
@@ -137,7 +137,7 @@ impl Lua {
     /// Use the [`StdLib`] flags to specifiy the libraries you want to load.
     ///
     /// # Safety
-    /// The created Lua state would have safety guarantees and would not allow to load unsafe
+    /// The created Lua state would have _some_ safety guarantees and would not allow to load unsafe
     /// standard libraries or C modules.
     ///
     /// [`StdLib`]: struct.StdLib.html
