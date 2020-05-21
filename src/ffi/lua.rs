@@ -739,7 +739,7 @@ pub const LUA_MASKLINE: c_int = 1 << (LUA_HOOKLINE as usize);
 pub const LUA_MASKCOUNT: c_int = 1 << (LUA_HOOKCOUNT as usize);
 
 /// Type for functions to be called on debug events.
-pub type lua_Hook = extern "C" fn(L: *mut lua_State, ar: *mut lua_Debug);
+pub type lua_Hook = unsafe extern "C" fn(L: *mut lua_State, ar: *mut lua_Debug);
 
 extern "C" {
     pub fn lua_getstack(L: *mut lua_State, level: c_int, ar: *mut lua_Debug) -> c_int;
@@ -754,7 +754,7 @@ extern "C" {
     #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
     pub fn lua_upvaluejoin(L: *mut lua_State, fidx1: c_int, n1: c_int, fidx2: c_int, n2: c_int);
 
-    pub fn lua_sethook(L: *mut lua_State, func: lua_Hook, mask: c_int, count: c_int);
+    pub fn lua_sethook(L: *mut lua_State, func: Option<lua_Hook>, mask: c_int, count: c_int);
     pub fn lua_gethook(L: *mut lua_State) -> Option<lua_Hook>;
     pub fn lua_gethookmask(L: *mut lua_State) -> c_int;
     pub fn lua_gethookcount(L: *mut lua_State) -> c_int;

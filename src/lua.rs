@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::ffi::CString;
 use std::marker::PhantomData;
 use std::os::raw::{c_char, c_int, c_void};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, Weak};
 use std::{mem, ptr, str};
 
 use crate::error::{Error, Result};
@@ -15,7 +15,9 @@ use crate::stdlib::StdLib;
 use crate::string::String;
 use crate::table::Table;
 use crate::thread::Thread;
-use crate::types::{Callback, Integer, LightUserData, LuaRef, MaybeSend, Number, RegistryKey};
+use crate::types::{
+    Callback, HookCallback, Integer, LightUserData, LuaRef, MaybeSend, Number, RegistryKey,
+};
 use crate::userdata::{AnyUserData, MetaMethod, UserData, UserDataMethods};
 use crate::util::{
     assert_stack, callback_error, check_stack, get_gc_userdata, get_main_state,
@@ -24,6 +26,15 @@ use crate::util::{
     push_meta_gc_userdata, push_string, push_userdata, push_wrapped_error, StackGuard,
 };
 use crate::value::{FromLua, FromLuaMulti, MultiValue, Nil, ToLua, ToLuaMulti, Value};
+
+#[cfg(any(
+    feature = "lua54",
+    feature = "lua53",
+    feature = "lua52",
+    feature = "lua51",
+    doc
+))]
+use crate::hook::{hook_proc, Debug, HookTriggers};
 
 #[cfg(feature = "async")]
 use {
@@ -58,6 +69,8 @@ struct ExtraData {
     ref_stack_size: c_int,
     ref_stack_max: c_int,
     ref_free: Vec<c_int>,
+
+    hook_callback: Option<HookCallback>,
 }
 
 #[cfg_attr(any(feature = "lua51", feature = "luajit"), allow(dead_code))]
@@ -85,6 +98,7 @@ pub enum GCMode {
 pub(crate) struct AsyncPollPending;
 #[cfg(feature = "async")]
 pub(crate) static WAKER_REGISTRY_KEY: u8 = 0;
+pub(crate) static EXTRA_REGISTRY_KEY: u8 = 0;
 
 /// Requires `feature = "send"`
 #[cfg(feature = "send")]
@@ -276,6 +290,7 @@ impl Lua {
 
                 init_gc_metatable_for::<Callback>(state, None);
                 init_gc_metatable_for::<Lua>(state, None);
+                init_gc_metatable_for::<Weak<Mutex<ExtraData>>>(state, None);
                 #[cfg(feature = "async")]
                 {
                     init_gc_metatable_for::<AsyncCallback>(state, None);
@@ -305,7 +320,23 @@ impl Lua {
             ref_stack_size: ffi::LUA_MINSTACK - 1,
             ref_stack_max: 0,
             ref_free: Vec::new(),
+            hook_callback: None,
         }));
+
+        mlua_expect!(
+            push_gc_userdata(state, Arc::downgrade(&extra)),
+            "Error while storing extra data",
+        );
+        mlua_expect!(
+            protect_lua_closure(main_state, 1, 0, |state| {
+                ffi::lua_rawsetp(
+                    state,
+                    ffi::LUA_REGISTRYINDEX,
+                    &EXTRA_REGISTRY_KEY as *const u8 as *mut c_void,
+                );
+            }),
+            "Error while storing extra data"
+        );
 
         mlua_debug_assert!(
             ffi::lua_gettop(main_state) == main_state_top,
@@ -385,6 +416,90 @@ impl Lua {
     {
         let cb = self.create_callback(Box::new(move |lua, _| func(lua)?.to_lua_multi(lua)))?;
         unsafe { self.push_value(cb.call(())?).map(|_| 1) }
+    }
+
+    /// Sets a 'hook' function that will periodically be called as Lua code executes.
+    ///
+    /// When exactly the hook function is called depends on the contents of the `triggers`
+    /// parameter, see [`HookTriggers`] for more details.
+    ///
+    /// The provided hook function can error, and this error will be propagated through the Lua code
+    /// that was executing at the time the hook was triggered.  This can be used to implement a
+    /// limited form of execution limits by setting [`HookTriggers.every_nth_instruction`] and
+    /// erroring once an instruction limit has been reached.
+    ///
+    /// Requires `feature = "lua54/lua53/lua52/lua51"`
+    ///
+    /// # Example
+    ///
+    /// Shows each line number of code being executed by the Lua interpreter.
+    ///
+    /// ```
+    /// # #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "lua51"))]
+    /// # use mlua::{Lua, HookTriggers, Result};
+    /// # #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "lua51"))]
+    /// # fn main() -> Result<()> {
+    /// let lua = Lua::new();
+    /// lua.set_hook(HookTriggers {
+    ///     every_line: true, ..Default::default()
+    /// }, |_lua, debug| {
+    ///     println!("line {}", debug.curr_line());
+    ///     Ok(())
+    /// });
+    ///
+    /// lua.load(r#"
+    ///     local x = 2 + 3
+    ///     local y = x * 63
+    ///     local z = string.len(x..", "..y)
+    /// "#).exec()
+    /// # }
+    ///
+    /// # #[cfg(not(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "lua51")))]
+    /// # fn main() {}
+    /// ```
+    ///
+    /// [`HookTriggers`]: struct.HookTriggers.html
+    /// [`HookTriggers.every_nth_instruction`]: struct.HookTriggers.html#field.every_nth_instruction
+    #[cfg(any(
+        feature = "lua54",
+        feature = "lua53",
+        feature = "lua52",
+        feature = "lua51",
+        doc
+    ))]
+    pub fn set_hook<F>(&self, triggers: HookTriggers, callback: F)
+    where
+        F: 'static + MaybeSend + FnMut(&Lua, Debug) -> Result<()>,
+    {
+        unsafe {
+            let mut extra = mlua_expect!(self.extra.lock(), "extra is poisoned");
+            extra.hook_callback = Some(Arc::new(RefCell::new(callback)));
+            ffi::lua_sethook(
+                self.main_state,
+                Some(hook_proc),
+                triggers.mask(),
+                triggers.count(),
+            );
+        }
+    }
+
+    /// Remove any hook previously set by `set_hook`. This function has no effect if a hook was not
+    /// previously set.
+    ///
+    /// Requires `feature = "lua54/lua53/lua52/lua51"`
+    #[cfg(any(
+        feature = "lua54",
+        feature = "lua53",
+        feature = "lua52",
+        feature = "lua51",
+        doc
+    ))]
+    pub fn remove_hook(&self) {
+        let mut extra = mlua_expect!(self.extra.lock(), "extra is poisoned");
+        unsafe {
+            extra.hook_callback = None;
+            ffi::lua_sethook(self.main_state, None, 0, 0);
+        }
     }
 
     /// Returns the amount of memory (in bytes) currently used inside this Lua state.
@@ -1544,10 +1659,7 @@ impl Lua {
                 let mut waker = noop_waker();
 
                 // Try to get an outer poll waker
-                ffi::lua_pushlightuserdata(
-                    state,
-                    &WAKER_REGISTRY_KEY as *const u8 as *mut c_void,
-                );
+                ffi::lua_pushlightuserdata(state, &WAKER_REGISTRY_KEY as *const u8 as *mut c_void);
                 ffi::lua_rawget(state, ffi::LUA_REGISTRYINDEX);
                 if let Some(w) = get_gc_userdata::<Waker>(state, -1).as_ref() {
                     waker = (*w).clone();
@@ -1674,6 +1786,36 @@ impl Lua {
         searchers.raw_remove(4)?;
 
         Ok(())
+    }
+
+    pub(crate) unsafe fn make_from_ptr(state: *mut ffi::lua_State) -> Self {
+        let _sg = StackGuard::new(state);
+        assert_stack(state, 3);
+
+        ffi::lua_rawgetp(
+            state,
+            ffi::LUA_REGISTRYINDEX,
+            &EXTRA_REGISTRY_KEY as *const u8 as *mut c_void,
+        );
+        let extra = mlua_expect!(
+            (*get_gc_userdata::<Weak<Mutex<ExtraData>>>(state, -1)).upgrade(),
+            "extra is destroyed"
+        );
+        ffi::lua_pop(state, 1);
+
+        Lua {
+            state,
+            main_state: get_main_state(state),
+            extra,
+            ephemeral: true,
+            safe: true, // TODO: Inherit the attribute
+            _no_ref_unwind_safe: PhantomData,
+        }
+    }
+
+    pub(crate) unsafe fn hook_callback(&self) -> Option<HookCallback> {
+        let extra = mlua_expect!(self.extra.lock(), "extra is poisoned");
+        extra.hook_callback.clone()
     }
 }
 

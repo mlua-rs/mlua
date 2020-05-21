@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::os::raw::{c_int, c_void};
 use std::sync::{Arc, Mutex};
 use std::{fmt, mem, ptr};
@@ -7,6 +8,7 @@ use futures_core::future::LocalBoxFuture;
 
 use crate::error::Result;
 use crate::ffi;
+use crate::hook::Debug;
 use crate::lua::Lua;
 use crate::util::{assert_stack, StackGuard};
 use crate::value::MultiValue;
@@ -26,6 +28,8 @@ pub(crate) type Callback<'lua, 'a> =
 #[cfg(feature = "async")]
 pub(crate) type AsyncCallback<'lua, 'a> =
     Box<dyn Fn(&'lua Lua, MultiValue<'lua>) -> LocalBoxFuture<'lua, Result<MultiValue<'lua>>> + 'a>;
+
+pub(crate) type HookCallback = Arc<RefCell<dyn FnMut(&Lua, Debug) -> Result<()>>>;
 
 #[cfg(feature = "send")]
 pub trait MaybeSend: Send {}
