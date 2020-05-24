@@ -166,6 +166,12 @@ fn test_metamethods() -> Result<()> {
     assert!(userdata2 != userdata3); // because references are differ
     assert!(userdata2.equals(userdata3)?);
 
+    let userdata1: AnyUserData = globals.get("userdata1")?;
+    assert!(userdata1.has_metamethod(MetaMethod::Add)?);
+    assert!(userdata1.has_metamethod(MetaMethod::Sub)?);
+    assert!(userdata1.has_metamethod(MetaMethod::Index)?);
+    assert!(!userdata1.has_metamethod(MetaMethod::Pow)?);
+
     Ok(())
 }
 

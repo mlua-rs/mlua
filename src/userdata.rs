@@ -10,7 +10,7 @@ use crate::lua::Lua;
 use crate::table::Table;
 use crate::types::{LuaRef, MaybeSend};
 use crate::util::{assert_stack, get_userdata, StackGuard};
-use crate::value::{FromLua, FromLuaMulti, ToLua, ToLuaMulti};
+use crate::value::{FromLua, FromLuaMulti, ToLua, ToLuaMulti, Value};
 
 /// Kinds of metamethods that can be overridden.
 ///
@@ -458,6 +458,22 @@ impl<'lua> AnyUserData<'lua> {
         return crate::Table::from_lua(res, lua)?.get(1);
         #[cfg(any(feature = "lua54", feature = "lua53"))]
         V::from_lua(res, lua)
+    }
+
+    /// Checks for a metamethod in this `AnyUserData`
+    pub fn has_metamethod(&self, method: MetaMethod) -> Result<bool> {
+        match self.get_metatable() {
+            Ok(mt) => {
+                let name = self.0.lua.create_string(method.name())?;
+                if let Value::Nil = mt.raw_get(name)? {
+                    Ok(false)
+                } else {
+                    Ok(true)
+                }
+            }
+            Err(Error::UserDataTypeMismatch) => Ok(false),
+            Err(e) => Err(e),
+        }
     }
 
     fn get_metatable(&self) -> Result<Table<'lua>> {
