@@ -493,7 +493,19 @@ pub unsafe fn get_main_state(state: *mut ffi::lua_State) -> *mut ffi::lua_State 
         ffi::lua_pop(state, 1);
         main_state
     }
-    #[cfg(any(feature = "lua51", feature = "luajit"))]
+    #[cfg(feature = "lua51")]
+    {
+        // Check the current state first
+        let is_main_state = ffi::lua_pushthread(state) == 1;
+        ffi::lua_pop(state, 1);
+        if is_main_state {
+            state
+        } else {
+            // The function below is a dirty hack and uses Lua private internals
+            ffi::lua_getmainstate(state)
+        }
+    }
+    #[cfg(feature = "luajit")]
     state
 }
 

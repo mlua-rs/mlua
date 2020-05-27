@@ -170,6 +170,9 @@ pub use self::lua::{lua_isyieldable, lua_version};
 #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
 pub use self::lua::{lua_callk, lua_pcallk, lua_upvalueid, lua_upvaluejoin, lua_yieldk};
 
+#[cfg(feature = "lua51")]
+pub use self::internals51::lua_getmainstate;
+
 // auxiliary library types
 pub use self::lauxlib::luaL_Reg;
 
@@ -283,6 +286,9 @@ mod glue {
 
 #[cfg(any(feature = "lua52", feature = "lua51", feature = "luajit"))]
 mod compat53;
+
+#[cfg(feature = "lua51")]
+mod internals51;
 
 mod lauxlib;
 mod lua;

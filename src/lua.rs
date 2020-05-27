@@ -279,7 +279,7 @@ impl Lua {
     #[allow(clippy::missing_safety_doc)]
     pub unsafe fn init_from_ptr(state: *mut ffi::lua_State) -> Lua {
         let main_state = get_main_state(state);
-        let main_state_top = ffi::lua_gettop(state);
+        let main_state_top = ffi::lua_gettop(main_state);
 
         let ref_thread = mlua_expect!(
             protect_lua_closure(main_state, 0, 0, |state| {
@@ -324,7 +324,7 @@ impl Lua {
         }));
 
         mlua_expect!(
-            push_gc_userdata(state, Arc::downgrade(&extra)),
+            push_gc_userdata(main_state, Arc::downgrade(&extra)),
             "Error while storing extra data",
         );
         mlua_expect!(
