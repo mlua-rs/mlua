@@ -26,15 +26,15 @@ jobs:
         override: true
     - name: Build ${{ matrix.lua }} vendored
       run: |
-        cargo build --release --no-default-features --features "${{ matrix.lua }} vendored"
-        cargo build --release --no-default-features --features "${{ matrix.lua }} vendored async send"
+        cargo build --release --features "${{ matrix.lua }} vendored"
+        cargo build --release --features "${{ matrix.lua }} vendored async send"
       shell: bash
     - name: Build ${{ matrix.lua }} pkg-config
       if: ${{ matrix.os == 'ubuntu-18.04' && matrix.lua != 'lua54' }}
       run: |
         sudo apt-get update -y
         sudo apt-get install -y --no-install-recommends liblua5.3-dev liblua5.2-dev liblua5.1-0-dev libluajit-5.1-dev
-        cargo build --release --no-default-features --features "${{ matrix.lua }}"
+        cargo build --release --features "${{ matrix.lua }}"
 
   test:
     name: Test
@@ -62,14 +62,14 @@ jobs:
     - name: Run ${{ matrix.lua }} tests
       if: ${{ matrix.os != 'macos-latest' || matrix.lua != 'luajit' }}
       run: |
-        cargo test --release --no-default-features --features "${{ matrix.lua }} vendored"
-        cargo test --release --no-default-features --features "${{ matrix.lua }} vendored async send"
+        cargo test --release --features "${{ matrix.lua }} vendored"
+        cargo test --release --features "${{ matrix.lua }} vendored async send"
       shell: bash
     - name: Run compile tests
       if: ${{ matrix.os == 'ubuntu-18.04' && matrix.lua == 'lua53' }}
       run: |
-        cargo test --release --no-default-features --features "${{ matrix.lua }} vendored" -- --ignored
-        cargo test --release --no-default-features --features "${{ matrix.lua }} vendored async send" -- --ignored
+        cargo test --release --features "${{ matrix.lua }} vendored" -- --ignored
+        cargo test --release --features "${{ matrix.lua }} vendored async send" -- --ignored
       shell: bash
 
   test_luajit20:
@@ -86,11 +86,11 @@ jobs:
     - name: Run LuaJIT 2.0.5 tests
       run: |
         brew install luajit pkg-config
-        cargo test --tests --release --no-default-features --features "luajit async send"
+        cargo test --tests --release --features "luajit async send"
       shell: bash
     - name: Run LuaJIT vendored tests
       run: |
-        cargo test --release --no-default-features --features "luajit vendored async send"
+        cargo test --release --features "luajit vendored async send"
       shell: bash
 
   rustfmt:

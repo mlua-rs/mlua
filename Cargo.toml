@@ -29,7 +29,6 @@ members = [
 ]
 
 [features]
-default = ["lua53"]
 lua54 = []
 lua53 = []
 lua52 = []
