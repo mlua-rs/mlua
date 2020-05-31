@@ -72,7 +72,7 @@ jobs:
         cargo test --release --features "${{ matrix.lua }} vendored async send" -- --ignored
       shell: bash
 
-  test_luajit20:
+  test_luajit_macos:
     name: Test LuaJIT on macOS
     runs-on: macos-latest
     needs: build
@@ -92,6 +92,59 @@ jobs:
       run: |
         cargo test --release --features "luajit vendored async send"
       shell: bash
+
+  test_modules:
+    name: Test modules on Linux and macOS
+    runs-on: ${{ matrix.os }}
+    needs: build
+    strategy:
+      matrix:
+        os: [ubuntu-18.04, macos-latest]
+        rust: [stable]
+        lua: [lua54, lua53, lua52, lua51, luajit]
+        include:
+        - os: ubuntu-18.04
+          target: x86_64-unknown-linux-gnu
+        - os: macos-latest
+          target: x86_64-apple-darwin
+    steps:
+    - uses: actions/checkout@v2
+    - uses: actions-rs/toolchain@v1
+      with:
+        toolchain: ${{ matrix.rust }}
+        target: ${{ matrix.target }}
+        override: true
+    - name: Run ${{ matrix.lua }} module tests
+      run: |
+        (cd examples/module && cargo build --release --features "${{ matrix.lua }} vendored")
+        (cd tests/module && cargo test --release --features "${{ matrix.lua }} vendored")
+      shell: bash
+
+  test_modules_windows:
+    name: Test modules on Windows
+    runs-on: windows-latest
+    needs: build
+    strategy:
+      matrix:
+        lua: [lua53, lua51, luajit]
+    defaults:
+      run:
+        shell: bash.exe --login -eo pipefail "{0}"
+    env:
+      MSYSTEM: MINGW64
+      CHERE_INVOKING: 1
+    steps:
+    - uses: actions/checkout@v2
+    - name: Set up shell
+      run: echo ::add-path::C:\msys64\usr\bin\
+      shell: pwsh
+    - name: Install Rust & Lua
+      run: |
+        pacman -S --noconfirm mingw-w64-x86_64-rust mingw-w64-x86_64-lua mingw-w64-x86_64-lua51 mingw-w64-x86_64-luajit
+    - name: Run ${{ matrix.lua }} module tests
+      run: |
+        (cd examples/module && cargo build --release --features "${{ matrix.lua }}")
+        (cd tests/module && cargo test --release --features "${{ matrix.lua }}")
 
   rustfmt:
     name: Rustfmt
@@ -118,4 +171,4 @@ jobs:
       - uses: actions-rs/clippy-check@v1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          args: --features async,send,vendored
+          args: --features lua53,async,send,vendored

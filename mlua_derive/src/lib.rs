@@ -21,6 +21,8 @@ pub fn lua_module(attr: TokenStream, item: TokenStream) -> TokenStream {
     let ext_entrypoint_name = Ident::new(&format!("luaopen_{}", item.sig.ident), Span::call_site());
 
     let wrapped = quote_spanned! { span =>
+        mlua::require_module_feature!();
+
         #[no_mangle]
         unsafe extern "C" fn #ext_entrypoint_name(state: *mut mlua::lua_State) -> std::os::raw::c_int {
             #item

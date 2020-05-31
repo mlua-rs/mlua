@@ -5,8 +5,42 @@ use std::io::{Error, ErrorKind, Result};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-#[cfg_attr(feature = "vendored", path = "find_vendored.rs")]
-#[cfg_attr(not(feature = "vendored"), path = "find_normal.rs")]
+#[cfg_attr(
+    all(
+        feature = "vendored",
+        any(
+            feature = "lua54",
+            feature = "lua53",
+            feature = "lua52",
+            feature = "lua51",
+            feature = "luajit"
+        )
+    ),
+    path = "find_vendored.rs"
+)]
+#[cfg_attr(
+    all(
+        not(feature = "vendored"),
+        any(
+            feature = "lua54",
+            feature = "lua53",
+            feature = "lua52",
+            feature = "lua51",
+            feature = "luajit"
+        )
+    ),
+    path = "find_normal.rs"
+)]
+#[cfg_attr(
+    not(any(
+        feature = "lua54",
+        feature = "lua53",
+        feature = "lua52",
+        feature = "lua51",
+        feature = "luajit"
+    )),
+    path = "find_dummy.rs"
+)]
 mod find;
 
 trait CommandExt {
@@ -89,6 +123,13 @@ fn main() {
 
     #[cfg(all(feature = "lua51", feature = "luajit"))]
     panic!("You can enable only one of the features: lua54, lua53, lua52, lua51, luajit");
+
+    // We don't support "vendored module" mode on windows
+    #[cfg(all(feature = "vendored", feature = "module", target_os = "windows"))]
+    panic!(
+        "Vendored (static) builds are not supported for modules on Windows.\n"
+            + "Please, use `pkg-config` or custom mode to link to a Lua dll."
+    );
 
     let include_dir = find::probe_lua();
     build_glue(&include_dir);

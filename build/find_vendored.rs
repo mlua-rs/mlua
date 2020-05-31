@@ -12,6 +12,8 @@ pub fn probe_lua() -> PathBuf {
     #[cfg(feature = "luajit")]
     let artifacts = luajit_src::Build::new().build();
 
+    #[cfg(not(feature = "module"))]
     artifacts.print_cargo_metadata();
+
     artifacts.include_dir().to_owned()
 }

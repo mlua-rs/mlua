@@ -78,3 +78,19 @@ macro_rules! mlua_expect {
         mlua_expect!($res, $msg)
     };
 }
+
+#[cfg(feature = "module")]
+#[doc(hidden)]
+#[macro_export]
+macro_rules! require_module_feature {
+    () => {};
+}
+
+#[cfg(not(feature = "module"))]
+#[doc(hidden)]
+#[macro_export]
+macro_rules! require_module_feature {
+    () => {
+        compile_error!("Feature `module` must be enabled in the `mlua` crate");
+    };
+}
