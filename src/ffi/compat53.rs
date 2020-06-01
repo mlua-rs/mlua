@@ -22,6 +22,8 @@
 
 // Based on github.com/keplerproject/lua-compat-5.3
 
+#![allow(clippy::needless_return)]
+
 use std::ffi::CStr;
 use std::mem;
 use std::os::raw::{c_char, c_int, c_void};
@@ -114,7 +116,7 @@ unsafe fn compat53_checkmode(
         }
     }
 
-    if mode != ptr::null() && strchr(mode, *modename) == ptr::null() {
+    if !mode.is_null() && strchr(mode, *modename).is_null() {
         lua_pushfstring(
             L,
             cstr!("attempt to load a %s chunk (mode is '%s')"),
@@ -234,7 +236,7 @@ pub unsafe fn lua_absindex(L: *mut lua_State, mut idx: c_int) -> c_int {
 }
 
 #[cfg(any(feature = "lua51", feature = "luajit"))]
-static COMPAT53_ARITH_CODE: &'static str = r#"
+static COMPAT53_ARITH_CODE: &str = r#"
 local op,a,b=...
 if op == 0 then return a+b
 elseif op == 1 then return a-b
@@ -287,7 +289,7 @@ pub unsafe fn lua_isinteger(L: *mut lua_State, idx: c_int) -> c_int {
     if lua_type(L, idx) == lua::LUA_TNUMBER {
         let n = lua_tonumber(L, idx);
         let i = lua_tointeger(L, idx);
-        if i as f64 == n {
+        if (n - i as lua_Number).abs() < lua_Number::EPSILON {
             return 1;
         }
     }
@@ -297,7 +299,7 @@ pub unsafe fn lua_isinteger(L: *mut lua_State, idx: c_int) -> c_int {
 #[cfg(any(feature = "lua51", feature = "luajit"))]
 pub unsafe fn lua_tonumberx(L: *mut lua_State, i: c_int, isnum: *mut c_int) -> lua_Number {
     let n = lua_tonumber(L, i);
-    if isnum != ptr::null_mut() {
+    if !isnum.is_null() {
         *isnum = if n != 0.0 || lua_isnumber(L, i) != 0 {
             1
         } else {
@@ -312,15 +314,14 @@ pub unsafe fn lua_tonumberx(L: *mut lua_State, i: c_int, isnum: *mut c_int) -> l
 pub unsafe fn lua_tointegerx(L: *mut lua_State, i: c_int, isnum: *mut c_int) -> lua_Integer {
     let mut ok = 0;
     let n = lua_tonumberx(L, i, &mut ok);
-    if ok != 0 {
-        if n == n as lua_Integer as lua_Number {
-            if isnum != ptr::null_mut() {
-                *isnum = 1;
-            }
-            return n as lua_Integer;
+    let n_int = n as lua_Integer;
+    if ok != 0 && (n - n_int as lua_Number).abs() < lua_Number::EPSILON {
+        if !isnum.is_null() {
+            *isnum = 1;
         }
+        return n_int;
     }
-    if isnum != ptr::null_mut() {
+    if !isnum.is_null() {
         *isnum = 0;
     }
     return 0;
@@ -531,7 +532,7 @@ pub unsafe fn lua_getextraspace(L: *mut lua_State) -> *mut c_void {
     let is_main = lua_pushthread(L);
     lua_rawget(L, -2);
     let mut _ptr = lua_touserdata(L, -1);
-    if _ptr == ptr::null_mut() {
+    if _ptr.is_null() {
         lua_pop(L, 1);
         _ptr = lua_newuserdata(L, LUA_EXTRASPACE as usize);
         if is_main != 0 {
@@ -547,7 +548,7 @@ pub unsafe fn lua_getextraspace(L: *mut lua_State) -> *mut c_void {
             lua_pushboolean(L, 1);
             lua_rawget(L, -3);
             let mptr = lua_touserdata(L, -1);
-            if mptr != ptr::null_mut() {
+            if !mptr.is_null() {
                 ptr::copy_nonoverlapping(mptr, _ptr, LUA_EXTRASPACE as usize)
             } else {
                 ptr::write_bytes(_ptr, 0, LUA_EXTRASPACE as usize);
@@ -575,7 +576,7 @@ pub unsafe fn lua_pushglobaltable(L: *mut lua_State) {
 #[cfg(any(feature = "lua51", feature = "luajit"))]
 pub unsafe fn luaL_checkstack(L: *mut lua_State, sz: c_int, msg: *const c_char) {
     if lua_checkstack(L, sz + lua::LUA_MINSTACK) == 0 {
-        if msg != ptr::null() {
+        if !msg.is_null() {
             luaL_error(L, cstr!("stack overflow (%s)"), msg);
         } else {
             lua_pushliteral(L, "stack overflow");
@@ -654,7 +655,7 @@ pub unsafe fn luaL_traceback(
         0
     };
 
-    if msg != ptr::null() {
+    if !msg.is_null() {
         lua_pushfstring(L, cstr!("%s\n"), msg);
     }
     lua_pushliteral(L, "stack traceback:");
@@ -708,10 +709,8 @@ pub unsafe fn luaL_tolstring(L: *mut lua_State, idx: c_int, len: *mut usize) -> 
                 }
             }
         };
-    } else {
-        if lua_isstring(L, -1) == 0 {
-            luaL_error(L, cstr!("'__tostring' must return a string"));
-        }
+    } else if lua_isstring(L, -1) == 0 {
+        luaL_error(L, cstr!("'__tostring' must return a string"));
     }
     lua_tolstring(L, -1, len)
 }
@@ -727,7 +726,7 @@ pub unsafe fn luaL_setmetatable(L: *mut lua_State, tname: *const c_char) {
 pub unsafe fn luaL_testudata(L: *mut lua_State, i: c_int, tname: *const c_char) -> *mut c_void {
     let mut p = lua_touserdata(L, i);
     luaL_checkstack(L, 2, cstr!("not enough stack slots"));
-    if p == ptr::null_mut() || lua_getmetatable(L, i) == 0 {
+    if p.is_null() || lua_getmetatable(L, i) == 0 {
         return ptr::null_mut();
     } else {
         luaL_getmetatable(L, tname);
@@ -743,7 +742,7 @@ pub unsafe fn luaL_testudata(L: *mut lua_State, i: c_int, tname: *const c_char) 
 #[cfg(any(feature = "lua51", feature = "luajit"))]
 pub unsafe fn luaL_setfuncs(L: *mut lua_State, mut l: *const luaL_Reg, nup: c_int) {
     luaL_checkstack(L, nup + 1, cstr!("too many upvalues"));
-    while (*l).name != ptr::null() {
+    while !(*l).name.is_null() {
         // fill the table with given functions
         l = l.offset(1);
         lua_pushstring(L, (*l).name);

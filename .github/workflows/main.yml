@@ -161,6 +161,9 @@ jobs:
   clippy:
     name: Clippy check
     runs-on: ubuntu-18.04
+    strategy:
+      matrix:
+        lua: [lua54, lua53, lua52, lua51, luajit]
     steps:
       - uses: actions/checkout@v2
       - uses: actions-rs/toolchain@v1
@@ -171,4 +174,4 @@ jobs:
       - uses: actions-rs/clippy-check@v1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          args: --features lua53,async,send,vendored
+          args: --features "${{ matrix.lua }},async,send,vendored
