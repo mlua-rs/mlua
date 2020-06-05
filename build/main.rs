@@ -99,7 +99,7 @@ fn main() {
         feature = "lua51",
         feature = "luajit"
     )))]
-    panic!("You must enable one of the features: lua54, lua53, lua52, lua51, luajit");
+    compile_error!("You must enable one of the features: lua54, lua53, lua52, lua51, luajit");
 
     #[cfg(all(
         feature = "lua54",
@@ -110,23 +110,23 @@ fn main() {
             feature = "luajit"
         )
     ))]
-    panic!("You can enable only one of the features: lua54, lua53, lua52, lua51, luajit");
+    compile_error!("You can enable only one of the features: lua54, lua53, lua52, lua51, luajit");
 
     #[cfg(all(
         feature = "lua53",
         any(feature = "lua52", feature = "lua51", feature = "luajit")
     ))]
-    panic!("You can enable only one of the features: lua54, lua53, lua52, lua51, luajit");
+    compile_error!("You can enable only one of the features: lua54, lua53, lua52, lua51, luajit");
 
     #[cfg(all(feature = "lua52", any(feature = "lua51", feature = "luajit")))]
-    panic!("You can enable only one of the features: lua54, lua53, lua52, lua51, luajit");
+    compile_error!("You can enable only one of the features: lua54, lua53, lua52, lua51, luajit");
 
     #[cfg(all(feature = "lua51", feature = "luajit"))]
-    panic!("You can enable only one of the features: lua54, lua53, lua52, lua51, luajit");
+    compile_error!("You can enable only one of the features: lua54, lua53, lua52, lua51, luajit");
 
     // We don't support "vendored module" mode on windows
     #[cfg(all(feature = "vendored", feature = "module", target_os = "windows"))]
-    panic!(
+    compile_error!(
         "Vendored (static) builds are not supported for modules on Windows.\n"
             + "Please, use `pkg-config` or custom mode to link to a Lua dll."
     );
