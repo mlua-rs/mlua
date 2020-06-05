@@ -13,17 +13,17 @@
 `mlua` is bindings to [Lua](https://www.lua.org) programming language for Rust with a goal to provide
 _safe_ (as far as it's possible), high level, easy to use, practical and flexible API.
 
-Started as [rlua v0.15](https://github.com/amethyst/rlua/tree/0.15.3) fork, `mlua` supports *__all__* major Lua versions (including LuaJIT) and allows to write native Lua modules on Rust as well as use Lua a standalone mode.
+Started as [rlua v0.15](https://github.com/amethyst/rlua/tree/0.15.3) fork, `mlua` supports *__all__* major Lua versions (including LuaJIT) and allows to write native Lua modules in Rust as well as use Lua in a standalone mode.
 
 `mlua` supports the following Lua versions (and tested on Windows/macOS/Linux):
 - Lua 5.4 (`feature = "lua54"`)
-- Lua 5.3 (`feature = "lua53"`, enabled by default)
+- Lua 5.3 (`feature = "lua53"`)
 - Lua 5.2 (`feature = "lua52"`)
 - Lua 5.1 (`feature = "lua51"`)
-- LuaJIT 2.0.5 stable (`feature = "luajit"`), although I'm not encouraging to use this version
 - LuaJIT 2.1.0 beta (`feature = "luajit"`)
+- LuaJIT 2.0.5 stable (`feature = "luajit"`)
 
-Additional `feature = "vendored"` enables building Lua from sources during `mlua` compilation.
+Additional `feature = "vendored"` enables building static Lua from sources during `mlua` compilation.
 
 ## Usage
 
@@ -36,10 +36,9 @@ Starting from v0.3, `mlua` supports async/await for all Lua versions. This works
 - [HTTP Server](examples/async_http_server.rs)
 - [TCP Server](examples/async_tcp_server.rs)
 
-### Choosing Lua version
+### Compiling
 
-The following features could be used to choose Lua version: `lua54`, `lua53` (default), `lua52`, `lua51` and `luajit`.
-To switch between Lua versions it's required to set `default_features = false` in `mlua` dependency.
+You have to enable one of the features `lua54`, `lua53`, `lua52`, `lua51` or `luajit`, according to the choosen Lua version.
 
 By default `mlua` uses `pkg-config` tool to find lua includes and libraries for the chosen Lua version.
 In most cases it works as desired, although sometimes could be more preferable to use a custom lua library.
@@ -60,7 +59,7 @@ Add to `Cargo.toml` :
 
 ``` toml
 [dependencies]
-mlua = "0.4"
+mlua = { version = "0.4", features = ["lua53"] }
 ```
 
 `main.rs`
@@ -85,6 +84,8 @@ fn main() -> LuaResult<()> {
 
 ### Module mode
 
+[Example](examples/module)
+
 Add to `Cargo.toml` :
 
 ``` toml
@@ -92,7 +93,7 @@ Add to `Cargo.toml` :
 crate-type = ["cdylib"]
 
 [dependencies]
-mlua = "0.4"
+mlua = { version = "0.4", features = ["lua53", "module"] }
 mlua_derive = "0.4"
 ```
 
@@ -116,14 +117,31 @@ fn my_module(lua: &Lua) -> LuaResult<LuaTable> {
 }
 ```
 
-And then (macOS example):
+And then (**macOS** example):
 
 ``` sh
-$ cargo build
+$ cargo rustc -- -C link-arg=-undefined -C link-arg=dynamic_lookup
 $ ln -s ./target/debug/libmy_module.dylib ./my_module.so
 $ lua5.3 -e 'require("my_module").hello("world")'
 hello, world!
 ```
+
+On macOS, you need to set additional linker arguments. One option is to compile with `cargo rustc --release -- -C link-arg=-undefined -C link-arg=dynamic_lookup`, the other is to create a `.cargo/config` with the following content:
+``` toml
+[target.x86_64-apple-darwin]
+rustflags = [
+  "-C", "link-arg=-undefined",
+  "-C", "link-arg=dynamic_lookup",
+]
+```
+On Linux you can build modules normally with `cargo build --release`.
+Vendored and non-vendored builds are supported for these OS.
+
+On Windows `vendored` mode is not supported since you need to link to a Lua dll.
+Easiest way is to use either MinGW64 (as part of [MSYS2](https://github.com/msys2/msys2) package) with `pkg-config` or
+MSVC with `LUA_INC` / `LUA_LIB` / `LUA_LIB_NAME` environment variables.
+
+More details about compiling and linking Lua modules can be found on the [Building Modules](http://lua-users.org/wiki/BuildingModules) page.
 
 ## Safety
 
