@@ -15,6 +15,33 @@ fn test_module() -> Result<()> {
     .exec()
 }
 
+#[cfg(any(
+    feature = "lua54",
+    feature = "lua53",
+    feature = "lua52",
+    feature = "lua51"
+))]
+#[test]
+fn test_module_from_thread() -> Result<()> {
+    let lua = make_lua()?;
+    lua.load(
+        r#"
+        local mod
+
+        local co = coroutine.create(function(a, b)
+            mod = require("rust_module")
+            assert(mod.sum(a, b) == a + b)
+        end)
+
+        coroutine.resume(co, 3, 5)
+        collectgarbage()
+
+        assert(mod.used_memory() > 0)
+    "#,
+    )
+    .exec()
+}
+
 fn make_lua() -> Result<Lua> {
     let (dylib_path, dylib_ext, separator);
     if cfg!(target_os = "macos") {
