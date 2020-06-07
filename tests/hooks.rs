@@ -1,9 +1,14 @@
-#![cfg(any(
-    feature = "lua54",
-    feature = "lua53",
-    feature = "lua52",
-    feature = "lua51"
-))]
+#![cfg_attr(
+    all(feature = "luajit", target_os = "macos", target_arch = "x86_64"),
+    feature(link_args)
+)]
+
+#[cfg_attr(
+    all(feature = "luajit", target_os = "macos", target_arch = "x86_64"),
+    link_args = "-pagezero_size 10000 -image_base 100000000",
+    allow(unused_attributes)
+)]
+extern "system" {}
 
 use std::cell::RefCell;
 use std::ops::Deref;
@@ -37,8 +42,14 @@ fn line_counts() -> Result<()> {
     )
     .exec()?;
 
+    lua.remove_hook();
+
     let output = output.lock().unwrap();
-    assert_eq!(*output, vec![2, 3, 4]);
+    if cfg!(feature = "luajit") && lua.load("jit.version_num").eval::<i64>()? >= 20100 {
+        assert_eq!(*output, vec![2, 3, 4, 0, 4]);
+    } else {
+        assert_eq!(*output, vec![2, 3, 4]);
+    }
 
     Ok(())
 }
@@ -71,14 +82,26 @@ fn function_calls() -> Result<()> {
     )
     .exec()?;
 
+    lua.remove_hook();
+
     let output = output.lock().unwrap();
-    assert_eq!(
-        *output,
-        vec![
-            (None, Some("main".to_string())),
-            (Some("len".to_string()), Some("C".to_string()))
-        ]
-    );
+    if cfg!(feature = "luajit") && lua.load("jit.version_num").eval::<i64>()? >= 20100 {
+        assert_eq!(
+            *output,
+            vec![
+                (None, Some("main".to_string())),
+                (Some("len".to_string()), Some("Lua".to_string()))
+            ]
+        );
+    } else {
+        assert_eq!(
+            *output,
+            vec![
+                (None, Some("main".to_string())),
+                (Some("len".to_string()), Some("C".to_string()))
+            ]
+        );
+    }
 
     Ok(())
 }
@@ -118,6 +141,10 @@ fn error_within_hook() -> Result<()> {
 fn limit_execution_instructions() -> Result<()> {
     let lua = Lua::new();
     let mut max_instructions = 10000;
+
+    #[cfg(feature = "luajit")]
+    // For LuaJIT disable JIT, as compiled code does not trigger hooks
+    lua.load("jit.off()").exec()?;
 
     lua.set_hook(
         HookTriggers {

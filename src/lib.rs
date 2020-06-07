@@ -80,6 +80,7 @@ pub use crate::ffi::lua_State;
 
 pub use crate::error::{Error, ExternalError, ExternalResult, Result};
 pub use crate::function::Function;
+pub use crate::hook::{Debug, DebugNames, DebugSource, DebugStack, HookTriggers};
 pub use crate::lua::{Chunk, GCMode, Lua};
 pub use crate::multi::Variadic;
 pub use crate::scope::Scope;
@@ -90,15 +91,6 @@ pub use crate::thread::{Thread, ThreadStatus};
 pub use crate::types::{Integer, LightUserData, Number, RegistryKey};
 pub use crate::userdata::{AnyUserData, MetaMethod, UserData, UserDataMethods};
 pub use crate::value::{FromLua, FromLuaMulti, MultiValue, Nil, ToLua, ToLuaMulti, Value};
-
-#[cfg(any(
-    feature = "lua54",
-    feature = "lua53",
-    feature = "lua52",
-    feature = "lua51",
-    doc
-))]
-pub use crate::hook::{Debug, DebugNames, DebugSource, DebugStack, HookTriggers};
 
 #[cfg(feature = "async")]
 pub use crate::thread::AsyncThread;

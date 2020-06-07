@@ -1,8 +1,3 @@
-#![cfg_attr(
-    not(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "lua51")),
-    allow(dead_code)
-)]
-
 use std::ffi::CStr;
 use std::marker::PhantomData;
 use std::os::raw::{c_char, c_int};
@@ -17,8 +12,6 @@ use crate::util::callback_error;
 /// [`Lua::set_hook`].  You may call the methods on this structure to retrieve information about the
 /// Lua code executing at the time that the hook function was called.  Further information can be
 /// found in the [Lua 5.3 documentaton][lua_doc].
-///
-/// Requires `feature = "lua54/lua53/lua52/lua51"`
 ///
 /// [lua_doc]: https://www.lua.org/manual/5.3/manual.html#lua_Debug
 /// [`Lua::set_hook`]: struct.Lua.html#method.set_hook
@@ -93,9 +86,9 @@ impl<'a> Debug<'a> {
             );
             DebugStack {
                 num_ups: (*self.ar).nups as i32,
-                #[cfg(any(feature = "lua52", feature = "lua53", feature = "lua54"))]
+                #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
                 num_params: (*self.ar).nparams as i32,
-                #[cfg(any(feature = "lua52", feature = "lua53", feature = "lua54"))]
+                #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
                 is_vararg: (*self.ar).isvararg != 0,
             }
         }
@@ -129,8 +122,6 @@ pub struct DebugStack {
 }
 
 /// Determines when a hook function will be called by Lua.
-///
-/// Requires `feature = "lua54/lua53/lua52/lua51"`
 #[derive(Clone, Copy, Debug, Default)]
 pub struct HookTriggers {
     /// Before a function call.

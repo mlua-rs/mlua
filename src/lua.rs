@@ -10,6 +10,7 @@ use std::{mem, ptr, str};
 use crate::error::{Error, Result};
 use crate::ffi;
 use crate::function::Function;
+use crate::hook::{hook_proc, Debug, HookTriggers};
 use crate::scope::Scope;
 use crate::stdlib::StdLib;
 use crate::string::String;
@@ -26,15 +27,6 @@ use crate::util::{
     push_meta_gc_userdata, push_string, push_userdata, push_wrapped_error, StackGuard,
 };
 use crate::value::{FromLua, FromLuaMulti, MultiValue, Nil, ToLua, ToLuaMulti, Value};
-
-#[cfg(any(
-    feature = "lua54",
-    feature = "lua53",
-    feature = "lua52",
-    feature = "lua51",
-    doc
-))]
-use crate::hook::{hook_proc, Debug, HookTriggers};
 
 #[cfg(feature = "async")]
 use {
@@ -430,16 +422,12 @@ impl Lua {
     /// limited form of execution limits by setting [`HookTriggers.every_nth_instruction`] and
     /// erroring once an instruction limit has been reached.
     ///
-    /// Requires `feature = "lua54/lua53/lua52/lua51"`
-    ///
     /// # Example
     ///
     /// Shows each line number of code being executed by the Lua interpreter.
     ///
     /// ```
-    /// # #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "lua51"))]
     /// # use mlua::{Lua, HookTriggers, Result};
-    /// # #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "lua51"))]
     /// # fn main() -> Result<()> {
     /// let lua = Lua::new();
     /// lua.set_hook(HookTriggers {
@@ -455,20 +443,10 @@ impl Lua {
     ///     local z = string.len(x..", "..y)
     /// "#).exec()
     /// # }
-    ///
-    /// # #[cfg(not(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "lua51")))]
-    /// # fn main() {}
     /// ```
     ///
     /// [`HookTriggers`]: struct.HookTriggers.html
     /// [`HookTriggers.every_nth_instruction`]: struct.HookTriggers.html#field.every_nth_instruction
-    #[cfg(any(
-        feature = "lua54",
-        feature = "lua53",
-        feature = "lua52",
-        feature = "lua51",
-        doc
-    ))]
     pub fn set_hook<F>(&self, triggers: HookTriggers, callback: F) -> Result<()>
     where
         F: 'static + MaybeSend + FnMut(&Lua, Debug) -> Result<()>,
@@ -484,15 +462,6 @@ impl Lua {
 
     /// Remove any hook previously set by `set_hook`. This function has no effect if a hook was not
     /// previously set.
-    ///
-    /// Requires `feature = "lua54/lua53/lua52/lua51"`
-    #[cfg(any(
-        feature = "lua54",
-        feature = "lua53",
-        feature = "lua52",
-        feature = "lua51",
-        doc
-    ))]
     pub fn remove_hook(&self) {
         // If main_state is not available, then sethook wasn't called.
         let state = match self.main_state {
