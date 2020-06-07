@@ -1975,6 +1975,10 @@ impl<'lua, 'a> Chunk<'lua, 'a> {
 }
 
 unsafe fn load_from_std_lib(state: *mut ffi::lua_State, libs: StdLib) {
+    #[cfg(feature = "luajit")]
+    // Stop collector during library initialization
+    ffi::lua_gc(state, ffi::LUA_GCSTOP, 0);
+
     #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
     {
         if libs.contains(StdLib::COROUTINE) {
@@ -2067,6 +2071,9 @@ unsafe fn load_from_std_lib(state: *mut ffi::lua_State, libs: StdLib) {
             ffi::lua_pop(state, 1);
         }
     }
+
+    #[cfg(feature = "luajit")]
+    ffi::lua_gc(state, ffi::LUA_GCRESTART, -1);
 }
 
 unsafe fn ref_stack_pop(extra: &mut ExtraData) -> c_int {

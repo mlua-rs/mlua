@@ -885,3 +885,15 @@ fn context_thread_51() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+#[cfg(feature = "luajit")]
+fn test_jit_version() -> Result<()> {
+    let lua = Lua::new();
+    let jit: Table = lua.globals().get("jit")?;
+    assert!(jit
+        .get::<_, String>("version")?
+        .to_str()?
+        .contains("LuaJIT"));
+    Ok(())
+}

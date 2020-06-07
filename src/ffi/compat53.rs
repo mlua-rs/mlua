@@ -44,18 +44,18 @@ use super::lua::{
     lua_createtable, lua_dump_old, lua_error, lua_getfield_old, lua_getstack, lua_gettable_old,
     lua_gettop, lua_insert, lua_isstring, lua_istable, lua_newuserdata, lua_pop, lua_pushboolean,
     lua_pushcfunction, lua_pushfstring, lua_pushinteger, lua_pushliteral, lua_pushlstring_old,
-    lua_pushnumber, lua_pushthread, lua_pushvalue, lua_rawget_old, lua_rawgeti_old, lua_rawset,
-    lua_replace, lua_setfield, lua_setglobal, lua_setmetatable, lua_settable, lua_toboolean,
-    lua_tointeger, lua_tolstring, lua_tonumber, lua_topointer, lua_tostring, lua_touserdata,
-    lua_type, lua_typename,
+    lua_pushnil, lua_pushnumber, lua_pushthread, lua_pushvalue, lua_rawget_old, lua_rawgeti_old,
+    lua_rawset, lua_replace, lua_setfield, lua_setglobal, lua_setmetatable, lua_settable,
+    lua_toboolean, lua_tointeger, lua_tolstring, lua_tonumber, lua_topointer, lua_tostring,
+    lua_touserdata, lua_type, lua_typename,
 };
 
 #[cfg(any(feature = "lua51", feature = "luajit"))]
 use super::lua::{
     lua_checkstack, lua_concat, lua_equal, lua_getfenv, lua_getinfo, lua_getmetatable,
     lua_isnumber, lua_lessthan, lua_newtable, lua_next, lua_objlen, lua_pushcclosure,
-    lua_pushlightuserdata, lua_pushnil, lua_pushstring_old, lua_rawequal, lua_remove,
-    lua_resume_old, lua_setfenv, lua_settop, LUA_OPADD, LUA_OPUNM,
+    lua_pushlightuserdata, lua_pushstring_old, lua_rawequal, lua_remove, lua_resume_old,
+    lua_setfenv, lua_settop, LUA_OPADD, LUA_OPUNM,
 };
 
 #[cfg(feature = "lua52")]
@@ -785,12 +785,24 @@ pub unsafe fn luaL_requiref(
         lua_pop(L, 1);
         lua_pushcfunction(L, openf);
         lua_pushstring(L, modname);
-        lua_call(L, 1, 1);
-        lua_pushvalue(L, -1);
-        lua_setfield(L, -3, modname);
+        #[cfg(any(feature = "lua52", feature = "lua51"))]
+        {
+            lua_call(L, 1, 1);
+            lua_pushvalue(L, -1);
+            lua_setfield(L, -3, modname);
+        }
+        #[cfg(feature = "luajit")]
+        {
+            lua_call(L, 1, 0);
+            lua_getfield(L, -1, modname);
+        }
     }
-    if glb != 0 {
+    if cfg!(any(feature = "lua52", feature = "lua51")) && glb != 0 {
         lua_pushvalue(L, -1);
+        lua_setglobal(L, modname);
+    }
+    if cfg!(feature = "luajit") && glb == 0 {
+        lua_pushnil(L);
         lua_setglobal(L, modname);
     }
     lua_replace(L, -2);
