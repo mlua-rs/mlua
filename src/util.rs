@@ -485,28 +485,25 @@ pub unsafe extern "C" fn error_traceback(state: *mut ffi::lua_State) -> c_int {
 }
 
 // Does not call lua_checkstack, uses 1 stack space.
-pub unsafe fn get_main_state(state: *mut ffi::lua_State) -> *mut ffi::lua_State {
+pub unsafe fn get_main_state(state: *mut ffi::lua_State) -> Option<*mut ffi::lua_State> {
     #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
     {
         ffi::lua_rawgeti(state, ffi::LUA_REGISTRYINDEX, ffi::LUA_RIDX_MAINTHREAD);
         let main_state = ffi::lua_tothread(state, -1);
         ffi::lua_pop(state, 1);
-        main_state
+        Some(main_state)
     }
-    #[cfg(feature = "lua51")]
+    #[cfg(any(feature = "lua51", feature = "luajit"))]
     {
         // Check the current state first
         let is_main_state = ffi::lua_pushthread(state) == 1;
         ffi::lua_pop(state, 1);
         if is_main_state {
-            state
+            Some(state)
         } else {
-            // The function below is a dirty hack and uses Lua private internals
-            ffi::lua_getmainstate(state)
+            None
         }
     }
-    #[cfg(feature = "luajit")]
-    state
 }
 
 // Pushes a WrappedError to the top of the stack.  Uses two stack spaces and does not call

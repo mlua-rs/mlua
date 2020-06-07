@@ -43,6 +43,11 @@ pub enum Error {
     /// This error can only happen when Lua state was not created by us and does not have the
     /// custom allocator attached.
     MemoryLimitNotAvailable,
+    /// Main thread is not available.
+    ///
+    /// This error can only happen in Lua5.1/LuaJIT module mode, when module loaded within a coroutine.
+    /// These Lua versions does not have `LUA_RIDX_MAINTHREAD` registry key.
+    MainThreadNotAvailable,
     /// A mutable callback has triggered Lua code that has called the same mutable callback again.
     ///
     /// This is an error because a mutable callback can only be borrowed mutably once.
@@ -160,6 +165,9 @@ impl fmt::Display for Error {
             },
             Error::MemoryLimitNotAvailable => {
                 write!(fmt, "setting memory limit is not available")
+            }
+            Error::MainThreadNotAvailable => {
+                write!(fmt, "main thread is not available in Lua 5.1")
             }
             Error::RecursiveMutCallback => write!(fmt, "mutable callback called recursively"),
             Error::CallbackDestructed => write!(

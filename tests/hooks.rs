@@ -27,7 +27,7 @@ fn line_counts() -> Result<()> {
             hook_output.lock().unwrap().push(debug.curr_line());
             Ok(())
         },
-    );
+    )?;
     lua.load(
         r#"
             local x = 2 + 3
@@ -62,7 +62,7 @@ fn function_calls() -> Result<()> {
             hook_output.lock().unwrap().push((name, what));
             Ok(())
         },
-    );
+    )?;
 
     lua.load(
         r#"
@@ -84,7 +84,7 @@ fn function_calls() -> Result<()> {
 }
 
 #[test]
-fn error_within_hook() {
+fn error_within_hook() -> Result<()> {
     let lua = Lua::new();
     lua.set_hook(
         HookTriggers {
@@ -96,7 +96,7 @@ fn error_within_hook() {
                 "Something happened in there!".to_string(),
             ))
         },
-    );
+    )?;
 
     let err = lua
         .load("x = 1")
@@ -110,10 +110,12 @@ fn error_within_hook() {
         },
         _ => panic!("wrong error kind caught"),
     };
+
+    Ok(())
 }
 
 #[test]
-fn limit_execution_instructions() {
+fn limit_execution_instructions() -> Result<()> {
     let lua = Lua::new();
     let mut max_instructions = 10000;
 
@@ -130,9 +132,9 @@ fn limit_execution_instructions() {
                 Ok(())
             }
         },
-    );
+    )?;
 
-    lua.globals().set("x", Value::Integer(0)).unwrap();
+    lua.globals().set("x", Value::Integer(0))?;
     let _ = lua
         .load(
             r#"
@@ -143,10 +145,12 @@ fn limit_execution_instructions() {
         )
         .exec()
         .expect_err("instruction limit didn't occur");
+
+    Ok(())
 }
 
 #[test]
-fn hook_removal() {
+fn hook_removal() -> Result<()> {
     let lua = Lua::new();
 
     lua.set_hook(
@@ -159,15 +163,17 @@ fn hook_removal() {
                 "this hook should've been removed by this time".to_string(),
             ))
         },
-    );
+    )?;
 
     assert!(lua.load("local x = 1").exec().is_err());
     lua.remove_hook();
     assert!(lua.load("local x = 1").exec().is_ok());
+
+    Ok(())
 }
 
 #[test]
-fn hook_swap_within_hook() {
+fn hook_swap_within_hook() -> Result<()> {
     thread_local! {
         static TL_LUA: RefCell<Option<Lua>> = RefCell::new(None);
     }
@@ -183,7 +189,7 @@ fn hook_swap_within_hook() {
                 ..Default::default()
             },
             move |lua, _debug| {
-                lua.globals().set("ok", 1i64).unwrap();
+                lua.globals().set("ok", 1i64)?;
                 TL_LUA.with(|tl| {
                     tl.borrow().as_ref().unwrap().set_hook(
                         HookTriggers {
@@ -205,26 +211,24 @@ fn hook_swap_within_hook() {
                             });
                             Ok(())
                         },
-                    );
-                });
-                Ok(())
+                    )
+                })
             },
-        );
-    });
+        )
+    })?;
 
     TL_LUA.with(|tl| {
         let tl = tl.borrow();
         let lua = tl.as_ref().unwrap();
-        assert!(lua
-            .load(
-                r#"
-                    local x = 1
-                    x = 2
-                    local y = 3
-                "#,
-            )
-            .exec()
-            .is_ok());
-        assert_eq!(lua.globals().get::<_, i64>("ok").unwrap_or(-1), 2);
-    });
+        lua.load(
+            r#"
+                local x = 1
+                x = 2
+                local y = 3
+            "#,
+        )
+        .exec()?;
+        assert_eq!(lua.globals().get::<_, i64>("ok")?, 2);
+        Ok(())
+    })
 }
