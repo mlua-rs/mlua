@@ -86,7 +86,7 @@ jobs:
     - name: Run LuaJIT 2.0.5 tests
       run: |
         brew install luajit pkg-config
-        cargo test --tests --release --features "luajit async send"
+        cargo test --tests --release --features "luajit async send" -- --test-threads=1
       shell: bash
     - name: Run LuaJIT vendored tests
       run: |
