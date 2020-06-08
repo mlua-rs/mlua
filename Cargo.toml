@@ -1,6 +1,6 @@
 [package]
 name = "mlua"
-version = "0.4.0"
+version = "0.4.1"
 authors = ["Aleksandr Orlenko <zxteam@pm.me>", "kyren <catherine@chucklefish.org>"]
 edition = "2018"
 repository = "https://github.com/khvzak/mlua"
@@ -12,7 +12,7 @@ license = "MIT"
 links = "lua"
 build = "build/main.rs"
 description = """
-High level bindings to Lua 5.1/5.2/5.3/5.4 (including LuaJIT)
+High level bindings to Lua 5.4/5.3/5.2/5.1 (including LuaJIT)
 with async/await features and support of writing native lua modules in Rust.
 """
 
@@ -21,7 +21,7 @@ with async/await features and support of writing native lua modules in Rust.
 maintenance = { status = "actively-developed" }
 
 [package.metadata.docs.rs]
-features = ["async"]
+features = ["async", "send", "lua53"]
 
 [workspace]
 members = [

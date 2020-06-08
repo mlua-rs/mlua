@@ -903,7 +903,7 @@ impl Lua {
     /// ```
     ///
     /// [`Thread`]: struct.Thread.html
-    /// [`ThreadStream`]: struct.ThreadStream.html
+    /// [`AsyncThread`]: struct.AsyncThread.html
     #[cfg(feature = "async")]
     pub fn create_async_function<'lua, 'callback, A, R, F, FR>(
         &'lua self,
