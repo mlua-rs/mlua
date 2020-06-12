@@ -72,6 +72,7 @@ fn build_glue<P: AsRef<Path> + std::fmt::Debug>(include_path: &P) {
 
     let mut config = cc::Build::new();
     config.include(include_path);
+    config.target(&env::var("HOST").unwrap());
 
     // Compile and run glue.c
     let glue = build_dir.join("glue");
