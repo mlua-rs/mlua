@@ -16,8 +16,8 @@ use std::sync::Arc;
 use std::{error, f32, f64, fmt};
 
 use mlua::{
-    Error, ExternalError, Function, Lua, Nil, Result, StdLib, String, Table, UserData, Value,
-    Variadic,
+    ChunkMode, Error, ExternalError, Function, Lua, Nil, Result, StdLib, String, Table, UserData,
+    Value, Variadic,
 };
 
 #[test]
@@ -54,6 +54,23 @@ fn test_safety() -> Result<()> {
         Err(Error::RuntimeError(msg)) => assert!(msg.contains("can't load C modules in safe mode")),
         Err(e) => panic!("expected RuntimeError, got {:?}", e),
         Ok(_) => panic!("expected RuntimeError, got no error"),
+    }
+
+    match lua.load("1 + 1").set_mode(ChunkMode::Binary).exec() {
+        Err(Error::SafetyError(msg)) => {
+            assert!(msg.contains("binary chunks are disabled in safe mode"))
+        }
+        Err(e) => panic!("expected SafetyError, got {:?}", e),
+        Ok(_) => panic!("expected SafetyError, got no error"),
+    }
+
+    let bytecode = lua.load("return 1 + 1").into_function()?.dump(true)?;
+    match lua.load(&bytecode).exec() {
+        Err(Error::SafetyError(msg)) => {
+            assert!(msg.contains("binary chunks are disabled in safe mode"))
+        }
+        Err(e) => panic!("expected SafetyError, got {:?}", e),
+        Ok(_) => panic!("expected SafetyError, got no error"),
     }
 
     Ok(())
@@ -123,6 +140,41 @@ fn test_eval() -> Result<()> {
             r
         ),
     }
+
+    Ok(())
+}
+
+#[test]
+fn test_load_mode() -> Result<()> {
+    let lua = unsafe { Lua::unsafe_new() };
+
+    assert_eq!(
+        lua.load("1 + 1").set_mode(ChunkMode::Text).eval::<i32>()?,
+        2
+    );
+    match lua.load("1 + 1").set_mode(ChunkMode::Binary).exec() {
+        Ok(_) => panic!("expected SyntaxError, got no error"),
+        Err(Error::SyntaxError { message: msg, .. }) => {
+            assert!(msg.contains("attempt to load a text chunk"))
+        }
+        Err(e) => panic!("expected SyntaxError, got {:?}", e),
+    };
+
+    let bytecode = lua.load("return 1 + 1").into_function()?.dump(true)?;
+    assert_eq!(lua.load(&bytecode).eval::<i32>()?, 2);
+    assert_eq!(
+        lua.load(&bytecode)
+            .set_mode(ChunkMode::Binary)
+            .eval::<i32>()?,
+        2
+    );
+    match lua.load(&bytecode).set_mode(ChunkMode::Text).exec() {
+        Ok(_) => panic!("expected SyntaxError, got no error"),
+        Err(Error::SyntaxError { message: msg, .. }) => {
+            assert!(msg.contains("attempt to load a binary chunk"))
+        }
+        Err(e) => panic!("expected SyntaxError, got {:?}", e),
+    };
 
     Ok(())
 }

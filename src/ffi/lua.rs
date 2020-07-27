@@ -38,7 +38,10 @@ pub use super::glue::LUA_REGISTRYINDEX;
 #[cfg(any(feature = "lua51", feature = "luajit"))]
 pub use super::glue::{LUA_ENVIRONINDEX, LUA_GLOBALSINDEX};
 
+#[cfg(not(feature = "luajit"))]
 pub const LUA_SIGNATURE: &[u8] = b"\x1bLua";
+#[cfg(feature = "luajit")]
+pub const LUA_SIGNATURE: &[u8] = b"\x1bLJ";
 
 // option for multiple returns in 'lua_pcall' and 'lua_call'
 pub const LUA_MULTRET: c_int = -1;

@@ -671,6 +671,7 @@ impl Lua {
             source: source.as_ref(),
             name: None,
             env: None,
+            mode: None,
         }
     }
 
@@ -679,32 +680,35 @@ impl Lua {
         source: &[u8],
         name: Option<&CString>,
         env: Option<Value<'lua>>,
+        mode: Option<ChunkMode>,
     ) -> Result<Function<'lua>> {
         unsafe {
             let _sg = StackGuard::new(self.state);
             assert_stack(self.state, 1);
-            let mode_string = match self.safe {
-                true => cstr!("t"),
-                false => cstr!("bt"),
+
+            let mode_str = match mode {
+                Some(ChunkMode::Binary) if self.safe => {
+                    return Err(Error::SafetyError(
+                        "binary chunks are disabled in safe mode".to_string(),
+                    ))
+                }
+                Some(ChunkMode::Binary) => cstr!("b"),
+                Some(ChunkMode::Text) => cstr!("t"),
+                None if source.starts_with(ffi::LUA_SIGNATURE) && self.safe => {
+                    return Err(Error::SafetyError(
+                        "binary chunks are disabled in safe mode".to_string(),
+                    ))
+                }
+                None => cstr!("bt"),
             };
 
-            match if let Some(name) = name {
-                ffi::luaL_loadbufferx(
-                    self.state,
-                    source.as_ptr() as *const c_char,
-                    source.len(),
-                    name.as_ptr() as *const c_char,
-                    mode_string,
-                )
-            } else {
-                ffi::luaL_loadbufferx(
-                    self.state,
-                    source.as_ptr() as *const c_char,
-                    source.len(),
-                    ptr::null(),
-                    mode_string,
-                )
-            } {
+            match ffi::luaL_loadbufferx(
+                self.state,
+                source.as_ptr() as *const c_char,
+                source.len(),
+                name.map(|n| n.as_ptr()).unwrap_or_else(|| ptr::null()),
+                mode_str,
+            ) {
                 ffi::LUA_OK => {
                     if let Some(env) = env {
                         self.push_value(env)?;
@@ -1809,6 +1813,14 @@ pub struct Chunk<'lua, 'a> {
     source: &'a [u8],
     name: Option<CString>,
     env: Option<Value<'lua>>,
+    mode: Option<ChunkMode>,
+}
+
+/// Represents chunk mode (text or binary).
+#[derive(Clone, Copy)]
+pub enum ChunkMode {
+    Text,
+    Binary,
 }
 
 impl<'lua, 'a> Chunk<'lua, 'a> {
@@ -1838,6 +1850,17 @@ impl<'lua, 'a> Chunk<'lua, 'a> {
     pub fn set_environment<V: ToLua<'lua>>(mut self, env: V) -> Result<Chunk<'lua, 'a>> {
         self.env = Some(env.to_lua(self.lua)?);
         Ok(self)
+    }
+
+    /// Sets whether the chunk is text or binary (autodetected by default).
+    ///
+    /// Lua does not check the consistency of binary chunks, therefore this mode is allowed only
+    /// for instances created with [`Lua::unsafe_new`].
+    ///
+    /// [`Lua::unsafe_new`]: struct.Lua.html#method.unsafe_new
+    pub fn set_mode(mut self, mode: ChunkMode) -> Chunk<'lua, 'a> {
+        self.mode = Some(mode);
+        self
     }
 
     /// Execute this chunk of code.
@@ -1879,6 +1902,7 @@ impl<'lua, 'a> Chunk<'lua, 'a> {
             &self.expression_source(),
             self.name.as_ref(),
             self.env.clone(),
+            self.mode,
         ) {
             function.call(())
         } else {
@@ -1905,6 +1929,7 @@ impl<'lua, 'a> Chunk<'lua, 'a> {
             &self.expression_source(),
             self.name.as_ref(),
             self.env.clone(),
+            self.mode,
         ) {
             function.call_async(())
         } else {
@@ -1944,7 +1969,7 @@ impl<'lua, 'a> Chunk<'lua, 'a> {
     /// This simply compiles the chunk without actually executing it.
     pub fn into_function(self) -> Result<Function<'lua>> {
         self.lua
-            .load_chunk(self.source, self.name.as_ref(), self.env)
+            .load_chunk(self.source, self.name.as_ref(), self.env, self.mode)
     }
 
     fn expression_source(&self) -> Vec<u8> {
