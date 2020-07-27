@@ -1869,10 +1869,13 @@ impl<'lua, 'a> Chunk<'lua, 'a> {
     /// the value that it evaluates to.  Otherwise, the chunk is interpreted as a block as normal,
     /// and this is equivalent to calling `exec`.
     pub fn eval<R: FromLuaMulti<'lua>>(self) -> Result<R> {
-        // First, try interpreting the lua as an expression by adding
+        // Bytecode is always interpreted as a statement.
+        // For source code, first try interpreting the lua as an expression by adding
         // "return", then as a statement.  This is the same thing the
         // actual lua repl does.
-        if let Ok(function) = self.lua.load_chunk(
+        if self.source.starts_with(ffi::LUA_SIGNATURE) {
+            self.call(())
+        } else if let Ok(function) = self.lua.load_chunk(
             &self.expression_source(),
             self.name.as_ref(),
             self.env.clone(),
@@ -1896,7 +1899,9 @@ impl<'lua, 'a> Chunk<'lua, 'a> {
         'lua: 'fut,
         R: FromLuaMulti<'lua> + 'fut,
     {
-        if let Ok(function) = self.lua.load_chunk(
+        if self.source.starts_with(ffi::LUA_SIGNATURE) {
+            self.call_async(())
+        } else if let Ok(function) = self.lua.load_chunk(
             &self.expression_source(),
             self.name.as_ref(),
             self.env.clone(),

@@ -10,7 +10,7 @@
 )]
 extern "system" {}
 
-use mlua::{Function, Lua, Result, String};
+use mlua::{Error, Function, Lua, Result, String};
 
 #[test]
 fn test_function() -> Result<()> {
@@ -84,6 +84,30 @@ fn test_rust_function() -> Result<()> {
 
     globals.set("rust_function", rust_function)?;
     assert_eq!(lua_function.call::<_, String>(())?, "hello");
+
+    Ok(())
+}
+
+#[test]
+fn test_dump() -> Result<()> {
+    let lua = unsafe { Lua::unsafe_new() };
+
+    let concat_tmp = lua
+        .load(r#"function(arg1, arg2) return arg1 .. arg2 end"#)
+        .eval::<Function>()?;
+    let concat_bytecode = concat_tmp.dump(false)?;
+    let concat = lua.load(&concat_bytecode).into_function()?;
+
+    assert_eq!(concat.call::<_, String>(("foo", "bar"))?, "foobar");
+
+    let lua = Lua::new();
+    match lua.load(&concat_bytecode).exec() {
+        Ok(_) => panic!("expected SyntaxError, got no error"),
+        Err(Error::SyntaxError { message: msg, .. }) => {
+            assert!(msg.contains("attempt to load a binary chunk"))
+        }
+        Err(e) => panic!("expected SyntaxError, got {:?}", e),
+    }
 
     Ok(())
 }

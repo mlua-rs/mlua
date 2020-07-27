@@ -1,5 +1,5 @@
-use std::os::raw::c_int;
-use std::ptr;
+use std::os::raw::{c_int, c_void};
+use std::{ptr, slice};
 
 use crate::error::{Error, Result};
 use crate::ffi;
@@ -204,6 +204,42 @@ impl<'lua> Function<'lua> {
 
             Ok(Function(lua.pop_ref()))
         }
+    }
+
+    /// Dumps the function as a binary chunk.
+    ///
+    /// If `strip` is true, the binary representation may not include all debug information
+    /// about the function, to save space.
+    pub fn dump(&self, strip: bool) -> Result<Vec<u8>> {
+        unsafe extern "C" fn writer(
+            _state: *mut ffi::lua_State,
+            buf: *const c_void,
+            buf_len: usize,
+            data: *mut c_void,
+        ) -> c_int {
+            let data = &mut *(data as *mut Vec<u8>);
+            let buf = slice::from_raw_parts(buf as *const u8, buf_len);
+            data.extend_from_slice(buf);
+            0
+        }
+
+        let lua = self.0.lua;
+        let mut data: Vec<u8> = Vec::new();
+        unsafe {
+            let _sg = StackGuard::new(lua.state);
+            assert_stack(lua.state, 1);
+            lua.push_ref(&self.0);
+            let strip = if strip { 1 } else { 0 };
+            ffi::lua_dump(
+                lua.state,
+                writer,
+                &mut data as *mut Vec<u8> as *mut c_void,
+                strip,
+            );
+            ffi::lua_pop(lua.state, 1);
+        }
+
+        Ok(data)
     }
 }
 
