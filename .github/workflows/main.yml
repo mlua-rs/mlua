@@ -65,8 +65,8 @@ jobs:
         cargo test --release --features "${{ matrix.lua }} vendored"
         cargo test --release --features "${{ matrix.lua }} vendored async send"
       shell: bash
-    - name: Run compile tests
-      if: ${{ matrix.os == 'ubuntu-18.04' && matrix.lua == 'lua53' }}
+    - name: Run compile tests (macos lua53)
+      if: ${{ matrix.os == 'macos-latest' && matrix.lua == 'lua53' }}
       run: |
         cargo test --release --features "${{ matrix.lua }} vendored" -- --ignored
         cargo test --release --features "${{ matrix.lua }} vendored async send" -- --ignored
