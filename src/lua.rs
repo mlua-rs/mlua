@@ -658,6 +658,9 @@ impl Lua {
     /// similar on the returned builder.  Code is not even parsed until one of these methods is
     /// called.
     ///
+    /// If this `Lua` was created with `unsafe_new`, `load` will automatically detect and load
+    /// chunks of either text or binary type, as if passing `bt` mode to `luaL_loadbufferx`.
+    ///
     /// [`Chunk::exec`]: struct.Chunk.html#method.exec
     pub fn load<'lua, 'a, S>(&'lua self, source: &'a S) -> Chunk<'lua, 'a>
     where
@@ -680,6 +683,10 @@ impl Lua {
         unsafe {
             let _sg = StackGuard::new(self.state);
             assert_stack(self.state, 1);
+            let mode_string = match self.safe {
+                true => cstr!("t"),
+                false => cstr!("bt"),
+            };
 
             match if let Some(name) = name {
                 ffi::luaL_loadbufferx(
@@ -687,7 +694,7 @@ impl Lua {
                     source.as_ptr() as *const c_char,
                     source.len(),
                     name.as_ptr() as *const c_char,
-                    cstr!("t"),
+                    mode_string,
                 )
             } else {
                 ffi::luaL_loadbufferx(
@@ -695,7 +702,7 @@ impl Lua {
                     source.as_ptr() as *const c_char,
                     source.len(),
                     ptr::null(),
-                    cstr!("t"),
+                    mode_string,
                 )
             } {
                 ffi::LUA_OK => {
