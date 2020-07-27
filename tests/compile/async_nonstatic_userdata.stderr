@@ -22,8 +22,8 @@ note: ...so that the types are compatible
 13 | |                 Ok(())
 14 | |             });
    | |_____________^
-   = note: expected  `main::MyUserData<'_>`
-              found  `main::MyUserData<'a>`
+   = note: expected `main::MyUserData<'_>`
+              found `main::MyUserData<'a>`
 note: but, the lifetime must be valid for the lifetime `'lua` as defined on the method body at 10:24...
   --> $DIR/async_nonstatic_userdata.rs:10:24
    |

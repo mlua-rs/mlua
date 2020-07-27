@@ -4,6 +4,11 @@ error[E0277]: the type `std::cell::UnsafeCell<()>` may contain interior mutabili
 7   |     catch_unwind(|| lua.create_table().unwrap());
     |     ^^^^^^^^^^^^ `std::cell::UnsafeCell<()>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
     |
+   ::: $RUST/src/libstd/panic.rs:393:40
+    |
+393 | pub fn catch_unwind<F: FnOnce() -> R + UnwindSafe, R>(f: F) -> Result<R> {
+    |                                        ---------- required by this bound in `std::panic::catch_unwind`
+    |
     = help: within `mlua::lua::Lua`, the trait `std::panic::RefUnwindSafe` is not implemented for `std::cell::UnsafeCell<()>`
     = note: required because it appears within the type `std::marker::PhantomData<std::cell::UnsafeCell<()>>`
     = note: required because it appears within the type `mlua::lua::Lua`

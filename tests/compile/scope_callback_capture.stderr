@@ -1,45 +1,26 @@
-error[E0495]: cannot infer an appropriate lifetime for autoref due to conflicting requirements
-  --> $DIR/scope_callback_capture.rs:8:14
-   |
-8  |             .create_function_mut(move |_, t: Table| {
-   |              ^^^^^^^^^^^^^^^^^^^
-   |
-note: first, the lifetime cannot outlive the anonymous lifetime #2 defined on the body at 5:15...
-  --> $DIR/scope_callback_capture.rs:5:15
-   |
-5  |       lua.scope(|scope| {
-   |  _______________^
-6  | |         let mut inner: Option<Table> = None;
-7  | |         let f = scope
-8  | |             .create_function_mut(move |_, t: Table| {
-...  |
-16 | |         Ok(())
-17 | |     });
-   | |_____^
-note: ...so that reference does not outlive borrowed content
+warning: unused variable: `old`
+ --> $DIR/scope_callback_capture.rs:9:29
+  |
+9 |                 if let Some(old) = inner.take() {
+  |                             ^^^ help: if this is intentional, prefix it with an underscore: `_old`
+  |
+  = note: `#[warn(unused_variables)]` on by default
+
+error[E0521]: borrowed data escapes outside of closure
   --> $DIR/scope_callback_capture.rs:7:17
    |
-7  |         let f = scope
-   |                 ^^^^^
-note: but, the lifetime must be valid for the method call at 5:5...
-  --> $DIR/scope_callback_capture.rs:5:5
-   |
-5  | /     lua.scope(|scope| {
-6  | |         let mut inner: Option<Table> = None;
-7  | |         let f = scope
+5  |       lua.scope(|scope| {
+   |                  -----
+   |                  |
+   |                  `scope` declared here, outside of the closure body
+   |                  `scope` is a reference that is only valid in the closure body
+6  |           let mut inner: Option<Table> = None;
+7  |           let f = scope
+   |  _________________^
 8  | |             .create_function_mut(move |_, t: Table| {
+9  | |                 if let Some(old) = inner.take() {
+10 | |                     // Access old callback `Lua`.
 ...  |
-16 | |         Ok(())
-17 | |     });
-   | |______^
-note: ...so that a type/lifetime parameter is in scope here
-  --> $DIR/scope_callback_capture.rs:5:5
-   |
-5  | /     lua.scope(|scope| {
-6  | |         let mut inner: Option<Table> = None;
-7  | |         let f = scope
-8  | |             .create_function_mut(move |_, t: Table| {
-...  |
-16 | |         Ok(())
-17 | |     });
-   | |______^
+13 | |                 Ok(())
+14 | |             })?;
+   | |______________^ `scope` escapes the closure body here

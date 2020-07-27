@@ -1,11 +1,30 @@
-error: borrowed data cannot be stored outside of its closure
- --> $DIR/scope_callback_outer.rs:7:17
-  |
-5 |     let mut outer: Option<Table> = None;
-  |         --------- ...so that variable is valid at time of its declaration
-6 |     lua.scope(|scope| {
-  |               ------- borrowed data cannot outlive this closure
-7 |         let f = scope
-  |                 ^^^^^ cannot be stored outside of its closure
-8 |             .create_function_mut(|_, t: Table| {
-  |              ------------------- cannot infer an appropriate lifetime...
+error[E0521]: borrowed data escapes outside of closure
+  --> $DIR/scope_callback_outer.rs:7:17
+   |
+6  |       lua.scope(|scope| {
+   |                  -----
+   |                  |
+   |                  `scope` declared here, outside of the closure body
+   |                  `scope` is a reference that is only valid in the closure body
+7  |           let f = scope
+   |  _________________^
+8  | |             .create_function_mut(|_, t: Table| {
+9  | |                 outer = Some(t);
+10 | |                 Ok(())
+11 | |             })?;
+   | |______________^ `scope` escapes the closure body here
+
+error[E0597]: `outer` does not live long enough
+  --> $DIR/scope_callback_outer.rs:9:17
+   |
+6  |     lua.scope(|scope| {
+   |               ------- value captured here
+...
+9  |                 outer = Some(t);
+   |                 ^^^^^ borrowed value does not live long enough
+...
+15 | }
+   | -
+   | |
+   | `outer` dropped here while still borrowed
+   | borrow might be used here, when `outer` is dropped and runs the destructor for type `std::option::Option<mlua::table::Table<'_>>`
