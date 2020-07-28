@@ -100,13 +100,15 @@ impl Drop for Lua {
     fn drop(&mut self) {
         unsafe {
             if !self.ephemeral {
-                let mut extra = mlua_expect!(self.extra.lock(), "extra is poisoned");
+                let extra = mlua_expect!(self.extra.lock(), "extra is poisoned");
                 mlua_debug_assert!(
                     ffi::lua_gettop(extra.ref_thread) == extra.ref_stack_max
                         && extra.ref_stack_max as usize == extra.ref_free.len(),
                     "reference leak detected"
                 );
-                *mlua_expect!(extra.registry_unref_list.lock(), "unref list poisoned") = None;
+                let mut unref_list =
+                    mlua_expect!(extra.registry_unref_list.lock(), "unref list poisoned");
+                *unref_list = None;
                 ffi::lua_close(self.main_state.expect("main_state is null"));
                 if !extra.mem_info.is_null() {
                     Box::from_raw(extra.mem_info);
@@ -706,7 +708,7 @@ impl Lua {
                 self.state,
                 source.as_ptr() as *const c_char,
                 source.len(),
-                name.map(|n| n.as_ptr()).unwrap_or_else(|| ptr::null()),
+                name.map(|n| n.as_ptr()).unwrap_or_else(ptr::null),
                 mode_str,
             ) {
                 ffi::LUA_OK => {
@@ -1285,11 +1287,10 @@ impl Lua {
     /// by `Lua::remove_registry_value`.
     pub fn expire_registry_values(&self) {
         unsafe {
-            let mut extra = mlua_expect!(self.extra.lock(), "extra is poisoned");
-            let unref_list = mem::replace(
-                &mut *mlua_expect!(extra.registry_unref_list.lock(), "unref list poisoned"),
-                Some(Vec::new()),
-            );
+            let extra = mlua_expect!(self.extra.lock(), "extra is poisoned");
+            let mut unref_list =
+                mlua_expect!(extra.registry_unref_list.lock(), "unref list poisoned");
+            let unref_list = mem::replace(&mut *unref_list, Some(Vec::new()));
             for id in mlua_expect!(unref_list, "unref list not set") {
                 ffi::luaL_unref(self.state, ffi::LUA_REGISTRYINDEX, id);
             }
