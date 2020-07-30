@@ -492,7 +492,7 @@ impl Lua {
         unsafe { (*extra.mem_info).used_memory as usize }
     }
 
-    /// Sets a memory limit on this Lua state.
+    /// Sets a memory limit (in bytes) on this Lua state.
     ///
     /// Once an allocation occurs that would pass this memory limit,
     /// a `Error::MemoryError` is generated instead.
