@@ -1,3 +1,9 @@
+## v0.4.2
+
+- Added `Function::dump()` to dump lua function to a binary chunk
+- Added `ChunkMode` enum to mark chunks as text or binary
+- Updated `set_memory_limit` doc
+
 ## v0.4.0
 
 - Lua 5.4 support with `MetaMethod::Close`.
