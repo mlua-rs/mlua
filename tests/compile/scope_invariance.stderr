@@ -2,7 +2,7 @@ error[E0373]: closure may outlive the current function, but it borrows `test`, w
   --> $DIR/scope_invariance.rs:14:38
    |
 9  |     lua.scope(|scope| {
-   |                ----- has type `&mlua::scope::Scope<'_, '1>`
+   |                ----- has type `&mlua::Scope<'_, '1>`
 ...
 14 |                 .create_function_mut(|_, ()| {
    |                                      ^^^^^^^ may outlive borrowed value `test`
