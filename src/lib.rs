@@ -77,6 +77,7 @@ mod util;
 mod value;
 
 pub use crate::ffi::lua_State;
+pub use crate::ffi::luaL_Reg;
 
 pub use crate::error::{Error, ExternalError, ExternalResult, Result};
 pub use crate::function::Function;
