@@ -211,8 +211,8 @@ impl fmt::Display for Error {
             Error::MismatchedRegistryKey => {
                 write!(fmt, "RegistryKey used from different Lua state")
             }
-            Error::CallbackError { ref traceback, .. } => {
-                write!(fmt, "callback error: {}", traceback)
+            Error::CallbackError { ref traceback, ref cause } => {
+                write!(fmt, "callback error: {}\n{}", cause, traceback)
             }
             Error::ExternalError(ref err) => write!(fmt, "{}", err),
         }
