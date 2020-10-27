@@ -68,8 +68,8 @@ jobs:
     - name: Run compile tests (macos lua53)
       if: ${{ matrix.os == 'macos-latest' && matrix.lua == 'lua53' }}
       run: |
-        cargo test --release --features "${{ matrix.lua }} vendored" -- --ignored
-        cargo test --release --features "${{ matrix.lua }} vendored async send" -- --ignored
+        TRYBUILD=overwrite cargo test --release --features "${{ matrix.lua }} vendored" -- --ignored
+        TRYBUILD=overwrite cargo test --release --features "${{ matrix.lua }} vendored async send" -- --ignored
       shell: bash
 
   test_luajit_macos:
