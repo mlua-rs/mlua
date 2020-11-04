@@ -509,7 +509,9 @@ fn test_num_conversion() -> Result<()> {
     assert!(lua.load("math.huge").eval::<i64>().is_err());
 
     assert_eq!(lua.unpack::<f64>(lua.pack(f32::MAX)?)?, f32::MAX as f64);
-    assert!(lua.unpack::<f32>(lua.pack(f64::MAX)?).is_err());
+    assert_eq!(lua.unpack::<f64>(lua.pack(f32::MIN)?)?, f32::MIN as f64);
+    assert_eq!(lua.unpack::<f32>(lua.pack(f64::MAX)?)?, f32::INFINITY);
+    assert_eq!(lua.unpack::<f32>(lua.pack(f64::MIN)?)?, f32::NEG_INFINITY);
 
     assert_eq!(lua.unpack::<i128>(lua.pack(1i128 << 64)?)?, 1i128 << 64);
 
