@@ -1,15 +1,21 @@
-use std::cell::{Ref, RefCell, RefMut};
+use std::cell::{Ref, RefMut};
 
 #[cfg(feature = "async")]
 use std::future::Future;
+
+#[cfg(feature = "serialize")]
+use {
+    serde::ser::{self, Serialize, Serializer},
+    std::result::Result as StdResult,
+};
 
 use crate::error::{Error, Result};
 use crate::ffi;
 use crate::function::Function;
 use crate::lua::Lua;
 use crate::table::Table;
-use crate::types::{LuaRef, MaybeSend};
-use crate::util::{assert_stack, get_userdata, StackGuard};
+use crate::types::{LuaRef, MaybeSend, UserDataCell};
+use crate::util::{assert_stack, get_destructed_userdata_metatable, get_userdata, StackGuard};
 use crate::value::{FromLua, FromLuaMulti, ToLua, ToLuaMulti, Value};
 
 /// Kinds of metamethods that can be overridden.
@@ -360,6 +366,71 @@ pub trait UserData: Sized {
     fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(_methods: &mut M) {}
 }
 
+pub(crate) struct UserDataWrapped<T> {
+    pub(crate) data: *mut T,
+    #[cfg(feature = "serialize")]
+    ser: *mut dyn erased_serde::Serialize,
+}
+
+impl<T> Drop for UserDataWrapped<T> {
+    fn drop(&mut self) {
+        unsafe {
+            drop(Box::from_raw(self.data));
+            #[cfg(feature = "serialize")]
+            if self.data as *mut () != self.ser as *mut () {
+                drop(Box::from_raw(self.ser));
+            }
+        }
+    }
+}
+
+impl<T> UserDataWrapped<T> {
+    pub(crate) fn new(data: T) -> Self {
+        UserDataWrapped {
+            data: Box::into_raw(Box::new(data)),
+            #[cfg(feature = "serialize")]
+            ser: Box::into_raw(Box::new(UserDataSerializeError)),
+        }
+    }
+
+    #[cfg(feature = "serialize")]
+    pub(crate) fn new_ser(data: T) -> Self
+    where
+        T: 'static + Serialize,
+    {
+        let data_raw = Box::into_raw(Box::new(data));
+        UserDataWrapped {
+            data: data_raw,
+            ser: data_raw,
+        }
+    }
+}
+
+impl<T> AsRef<T> for UserDataWrapped<T> {
+    fn as_ref(&self) -> &T {
+        unsafe { &*self.data }
+    }
+}
+
+impl<T> AsMut<T> for UserDataWrapped<T> {
+    fn as_mut(&mut self) -> &mut T {
+        unsafe { &mut *self.data }
+    }
+}
+
+#[cfg(feature = "serialize")]
+pub(crate) struct UserDataSerializeError;
+
+#[cfg(feature = "serialize")]
+impl Serialize for UserDataSerializeError {
+    fn serialize<S>(&self, _serializer: S) -> StdResult<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        Err(ser::Error::custom("cannot serialize <userdata>"))
+    }
+}
+
 /// Handle to an internal Lua userdata for any type that implements [`UserData`].
 ///
 /// Similar to `std::any::Any`, this provides an interface for dynamic type checking via the [`is`]
@@ -382,7 +453,7 @@ pub struct AnyUserData<'lua>(pub(crate) LuaRef<'lua>);
 impl<'lua> AnyUserData<'lua> {
     /// Checks whether the type of this userdata is `T`.
     pub fn is<T: 'static + UserData>(&self) -> bool {
-        match self.inspect(|_: &RefCell<T>| Ok(())) {
+        match self.inspect(|_: &UserDataCell<T>| Ok(())) {
             Ok(()) => true,
             Err(Error::UserDataTypeMismatch) => false,
             Err(_) => unreachable!(),
@@ -396,7 +467,10 @@ impl<'lua> AnyUserData<'lua> {
     /// Returns a `UserDataBorrowError` if the userdata is already mutably borrowed. Returns a
     /// `UserDataTypeMismatch` if the userdata is not of type `T`.
     pub fn borrow<T: 'static + UserData>(&self) -> Result<Ref<T>> {
-        self.inspect(|cell| Ok(cell.try_borrow().map_err(|_| Error::UserDataBorrowError)?))
+        self.inspect(|cell| {
+            let cell_ref = cell.try_borrow().map_err(|_| Error::UserDataBorrowError)?;
+            Ok(Ref::map(cell_ref, |x| unsafe { &*x.data }))
+        })
     }
 
     /// Borrow this userdata mutably if it is of type `T`.
@@ -407,9 +481,10 @@ impl<'lua> AnyUserData<'lua> {
     /// `UserDataTypeMismatch` if the userdata is not of type `T`.
     pub fn borrow_mut<T: 'static + UserData>(&self) -> Result<RefMut<T>> {
         self.inspect(|cell| {
-            Ok(cell
+            let cell_ref = cell
                 .try_borrow_mut()
-                .map_err(|_| Error::UserDataBorrowMutError)?)
+                .map_err(|_| Error::UserDataBorrowMutError)?;
+            Ok(RefMut::map(cell_ref, |x| unsafe { &mut *x.data }))
         })
     }
 
@@ -515,7 +590,7 @@ impl<'lua> AnyUserData<'lua> {
     fn inspect<'a, T, R, F>(&'a self, func: F) -> Result<R>
     where
         T: 'static + UserData,
-        F: FnOnce(&'a RefCell<T>) -> Result<R>,
+        F: FnOnce(&'a UserDataCell<T>) -> Result<R>,
     {
         unsafe {
             let lua = self.0.lua;
@@ -534,9 +609,16 @@ impl<'lua> AnyUserData<'lua> {
                 );
 
                 if ffi::lua_rawequal(lua.state, -1, -2) == 0 {
-                    Err(Error::UserDataTypeMismatch)
+                    // Maybe UserData destructed?
+                    ffi::lua_pop(lua.state, 1);
+                    get_destructed_userdata_metatable(lua.state);
+                    if ffi::lua_rawequal(lua.state, -1, -2) == 1 {
+                        Err(Error::UserDataDestructed)
+                    } else {
+                        Err(Error::UserDataTypeMismatch)
+                    }
                 } else {
-                    func(&*get_userdata::<RefCell<T>>(lua.state, -3))
+                    func(&*get_userdata::<UserDataCell<T>>(lua.state, -3))
                 }
             }
         }
@@ -553,5 +635,26 @@ impl<'lua> AsRef<AnyUserData<'lua>> for AnyUserData<'lua> {
     #[inline]
     fn as_ref(&self) -> &Self {
         self
+    }
+}
+
+#[cfg(feature = "serialize")]
+impl<'lua> Serialize for AnyUserData<'lua> {
+    fn serialize<S>(&self, serializer: S) -> StdResult<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let f = || unsafe {
+            let lua = self.0.lua;
+            let _sg = StackGuard::new(lua.state);
+            assert_stack(lua.state, 2);
+
+            lua.push_userdata_ref(&self.0)?;
+            let ud = &*get_userdata::<UserDataCell<()>>(lua.state, -1);
+            (*ud.try_borrow().map_err(|_| Error::UserDataBorrowError)?.ser)
+                .serialize(serializer)
+                .map_err(|err| Error::SerializeError(err.to_string()))
+        };
+        f().map_err(ser::Error::custom)
     }
 }

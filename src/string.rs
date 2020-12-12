@@ -1,5 +1,11 @@
 use std::{slice, str};
 
+#[cfg(feature = "serialize")]
+use {
+    serde::ser::{Serialize, Serializer},
+    std::result::Result as StdResult,
+};
+
 use crate::error::{Error, Result};
 use crate::ffi;
 use crate::types::LuaRef;
@@ -103,5 +109,18 @@ where
 {
     fn eq(&self, other: &T) -> bool {
         self.as_bytes() == other.as_ref()
+    }
+}
+
+#[cfg(feature = "serialize")]
+impl<'lua> Serialize for String<'lua> {
+    fn serialize<S>(&self, serializer: S) -> StdResult<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match self.to_str() {
+            Ok(s) => serializer.serialize_str(s),
+            Err(_) => serializer.serialize_bytes(self.as_bytes()),
+        }
     }
 }

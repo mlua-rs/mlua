@@ -1,6 +1,12 @@
 use std::marker::PhantomData;
 use std::os::raw::c_int;
 
+#[cfg(feature = "serialize")]
+use {
+    serde::ser::{Serialize, SerializeMap, SerializeSeq, Serializer},
+    std::result::Result as StdResult,
+};
+
 use crate::error::{Error, Result};
 use crate::ffi;
 use crate::function::Function;
@@ -447,7 +453,51 @@ impl<'lua> Table<'lua> {
         TableSequence {
             table: self.0,
             index: Some(1),
+            len: None,
+            raw: false,
             _phantom: PhantomData,
+        }
+    }
+
+    /// Consume this table and return an iterator over all values in the sequence part of the table.
+    ///
+    /// Unlike the `sequence_values`, does not invoke `__index` metamethod when iterating.
+    ///
+    /// [`sequence_values`]: #method.sequence_values
+    pub fn raw_sequence_values<V: FromLua<'lua>>(self) -> TableSequence<'lua, V> {
+        TableSequence {
+            table: self.0,
+            index: Some(1),
+            len: None,
+            raw: true,
+            _phantom: PhantomData,
+        }
+    }
+
+    #[cfg(feature = "serialize")]
+    pub(crate) fn raw_sequence_values_by_len<V: FromLua<'lua>>(self) -> TableSequence<'lua, V> {
+        let len = self.raw_len();
+        TableSequence {
+            table: self.0,
+            index: Some(1),
+            len: Some(len),
+            raw: true,
+            _phantom: PhantomData,
+        }
+    }
+
+    #[cfg(feature = "serialize")]
+    pub(crate) fn is_array(&self) -> bool {
+        let lua = self.0.lua;
+        unsafe {
+            let _sg = StackGuard::new(lua.state);
+            assert_stack(lua.state, 3);
+            lua.push_ref(&self.0);
+            if ffi::lua_getmetatable(lua.state, -1) == 0 {
+                return false;
+            }
+            crate::serde::push_array_metatable(lua.state);
+            ffi::lua_rawequal(lua.state, -1, -2) != 0
         }
     }
 }
@@ -580,6 +630,31 @@ impl<'lua> TableExt<'lua> for Table<'lua> {
     }
 }
 
+#[cfg(feature = "serialize")]
+impl<'lua> Serialize for Table<'lua> {
+    fn serialize<S>(&self, serializer: S) -> StdResult<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let len = self.raw_len() as usize;
+        if len > 0 || self.is_array() {
+            let mut seq = serializer.serialize_seq(Some(len))?;
+            for v in self.clone().raw_sequence_values_by_len::<Value>() {
+                let v = v.map_err(serde::ser::Error::custom)?;
+                seq.serialize_element(&v)?;
+            }
+            return seq.end();
+        }
+
+        let mut map = serializer.serialize_map(None)?;
+        for kv in self.clone().pairs::<Value, Value>() {
+            let (k, v) = kv.map_err(serde::ser::Error::custom)?;
+            map.serialize_entry(&k, &v)?;
+        }
+        map.end()
+    }
+}
+
 /// An iterator over the pairs of a Lua table.
 ///
 /// This struct is created by the [`Table::pairs`] method.
@@ -651,6 +726,8 @@ where
 pub struct TableSequence<'lua, V> {
     table: LuaRef<'lua>,
     index: Option<Integer>,
+    len: Option<Integer>,
+    raw: bool,
     _phantom: PhantomData<V>,
 }
 
@@ -669,9 +746,13 @@ where
                 assert_stack(lua.state, 5);
 
                 lua.push_ref(&self.table);
-                match protect_lua_closure(lua.state, 1, 1, |state| ffi::lua_geti(state, -1, index))
-                {
-                    Ok(ffi::LUA_TNIL) => None,
+                let lua_geti = if self.raw {
+                    ffi::lua_rawgeti
+                } else {
+                    ffi::lua_geti
+                };
+                match protect_lua_closure(lua.state, 1, 1, |state| lua_geti(state, -1, index)) {
+                    Ok(ffi::LUA_TNIL) if index > self.len.unwrap_or(0) => None,
                     Ok(_) => {
                         let value = lua.pop_value();
                         self.index = Some(index + 1);

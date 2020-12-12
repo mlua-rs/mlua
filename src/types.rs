@@ -10,6 +10,7 @@ use crate::error::Result;
 use crate::ffi;
 use crate::hook::Debug;
 use crate::lua::Lua;
+use crate::userdata::UserDataWrapped;
 use crate::util::{assert_stack, StackGuard};
 use crate::value::MultiValue;
 
@@ -30,6 +31,8 @@ pub(crate) type AsyncCallback<'lua, 'a> =
     Box<dyn Fn(&'lua Lua, MultiValue<'lua>) -> LocalBoxFuture<'lua, Result<MultiValue<'lua>>> + 'a>;
 
 pub(crate) type HookCallback = Arc<RefCell<dyn FnMut(&Lua, Debug) -> Result<()>>>;
+
+pub(crate) type UserDataCell<T> = RefCell<UserDataWrapped<T>>;
 
 #[cfg(feature = "send")]
 pub trait MaybeSend: Send {}

@@ -105,6 +105,11 @@ pub enum Error {
     /// [`AnyUserData`]: struct.AnyUserData.html
     /// [`UserDataMethods`]: trait.UserDataMethods.html
     UserDataTypeMismatch,
+    /// An [`AnyUserData`] borrow failed because it has been destructed.
+    ///
+    /// This error can happen either due to to being destructed in a previous __gc, or due to being
+    /// destructed from exiting a `Lua::scope` call.
+    UserDataDestructed,
     /// An [`AnyUserData`] immutable borrow failed because it is already borrowed mutably.
     ///
     /// This error can occur when a method on a [`UserData`] type calls back into Lua, which then
@@ -132,6 +137,12 @@ pub enum Error {
         /// Original error returned by the Rust code.
         cause: Arc<Error>,
     },
+    /// Serialization error.
+    #[cfg(feature = "serialize")]
+    SerializeError(StdString),
+    /// Deserialization error.
+    #[cfg(feature = "serialize")]
+    DeserializeError(StdString),
     /// A custom error.
     ///
     /// This can be used for returning user-defined errors from callbacks.
@@ -206,6 +217,7 @@ impl fmt::Display for Error {
             }
             Error::CoroutineInactive => write!(fmt, "cannot resume inactive coroutine"),
             Error::UserDataTypeMismatch => write!(fmt, "userdata is not expected type"),
+            Error::UserDataDestructed => write!(fmt, "userdata has been destructed"),
             Error::UserDataBorrowError => write!(fmt, "userdata already mutably borrowed"),
             Error::UserDataBorrowMutError => write!(fmt, "userdata already borrowed"),
             Error::MismatchedRegistryKey => {
@@ -214,6 +226,14 @@ impl fmt::Display for Error {
             Error::CallbackError { ref traceback, .. } => {
                 write!(fmt, "callback error: {}", traceback)
             }
+            #[cfg(feature = "serialize")]
+            Error::SerializeError(ref err) => {
+                write!(fmt, "serialize error: {}", err)
+            },
+            #[cfg(feature = "serialize")]
+            Error::DeserializeError(ref err) => {
+                write!(fmt, "deserialize error: {}", err)
+            },
             Error::ExternalError(ref err) => write!(fmt, "{}", err),
         }
     }
@@ -287,5 +307,19 @@ impl std::convert::From<IoError> for Error {
 impl std::convert::From<Utf8Error> for Error {
     fn from(err: Utf8Error) -> Self {
         Error::external(err)
+    }
+}
+
+#[cfg(feature = "serialize")]
+impl serde::ser::Error for Error {
+    fn custom<T: fmt::Display>(msg: T) -> Self {
+        Self::SerializeError(msg.to_string())
+    }
+}
+
+#[cfg(feature = "serialize")]
+impl serde::de::Error for Error {
+    fn custom<T: fmt::Display>(msg: T) -> Self {
+        Self::DeserializeError(msg.to_string())
     }
 }

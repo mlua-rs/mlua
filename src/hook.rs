@@ -37,7 +37,7 @@ impl<'a> Debug<'a> {
         }
     }
 
-    /// Corresponds to the `n` what mask.
+    /// Corresponds to the `S` what mask.
     pub fn source(&self) -> DebugSource<'a> {
         unsafe {
             mlua_assert!(

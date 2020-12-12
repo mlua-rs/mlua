@@ -24,6 +24,18 @@
 //! The [`UserData`] trait can be implemented by user-defined types to make them available to Lua.
 //! Methods and operators to be used from Lua can be added using the [`UserDataMethods`] API.
 //!
+//! # Serde support
+//!
+//! The [`LuaSerdeExt`] trait implemented for [`Lua`] allow conversion from Rust types to Lua values
+//! and vice versa using serde. Any user defined data type that implements `serde::Serialize` or
+//! `serde::Deserialize` can be converted.
+//! For convenience, additional functionality to handle NULL values and arrays is provided.
+//!
+//! The [`Value`] struct implements `serde::Serialize` trait to support serializing Lua values
+//! (including [`UserData`]) into Rust values.
+//!
+//! Requires `feature = "serialize"`.
+//!
 //! # Async/await support
 //!
 //! The [`create_async_function`] allows creating non-blocking functions that returns [`Future`].
@@ -47,6 +59,8 @@
 //! [`FromLuaMulti`]: trait.FromLuaMulti.html
 //! [`UserData`]: trait.UserData.html
 //! [`UserDataMethods`]: trait.UserDataMethods.html
+//! [`LuaSerdeExt`]: trait.LuaSerdeExt.html
+//! [`Value`]: struct.Value.html
 //! [`create_async_function`]: struct.Lua.html#method.create_async_function
 //! [`call_async`]: struct.Function.html#method.call_async
 //! [`AsyncThread`]: struct.AsyncThread.html
@@ -95,4 +109,9 @@ pub use crate::value::{FromLua, FromLuaMulti, MultiValue, Nil, ToLua, ToLuaMulti
 #[cfg(feature = "async")]
 pub use crate::thread::AsyncThread;
 
+#[cfg(feature = "serialize")]
+pub use crate::serde::LuaSerdeExt;
+
 pub mod prelude;
+#[cfg(feature = "serialize")]
+pub mod serde;

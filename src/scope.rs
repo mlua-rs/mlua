@@ -1,16 +1,19 @@
 use std::any::Any;
-use std::cell::{Cell, RefCell};
+use std::cell::{Cell, Ref, RefCell, RefMut};
 use std::marker::PhantomData;
 use std::mem;
 use std::os::raw::c_void;
 use std::rc::Rc;
 
+#[cfg(feature = "serialize")]
+use serde::Serialize;
+
 use crate::error::{Error, Result};
 use crate::ffi;
 use crate::function::Function;
 use crate::lua::Lua;
-use crate::types::{Callback, LuaRef, MaybeSend};
-use crate::userdata::{AnyUserData, MetaMethod, UserData, UserDataMethods};
+use crate::types::{Callback, LuaRef, MaybeSend, UserDataCell};
+use crate::userdata::{AnyUserData, MetaMethod, UserData, UserDataMethods, UserDataWrapped};
 use crate::util::{
     assert_stack, init_userdata_metatable, protect_lua_closure, push_string, push_userdata,
     take_userdata, StackGuard,
@@ -146,6 +149,32 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
     where
         T: 'static + UserData,
     {
+        self.create_userdata_inner(UserDataWrapped::new(data))
+    }
+
+    /// Create a Lua userdata object from a custom serializable userdata type.
+    ///
+    /// This is a version of [`Lua::create_ser_userdata`] that creates a userdata which expires on
+    /// scope drop, and does not require that the userdata type be Send (but still requires that the
+    /// UserData be 'static).
+    /// See [`Lua::scope`] for more details.
+    ///
+    /// Requires `feature = "serialize"`
+    ///
+    /// [`Lua::create_ser_userdata`]: struct.Lua.html#method.create_ser_userdata
+    /// [`Lua::scope`]: struct.Lua.html#method.scope
+    #[cfg(feature = "serialize")]
+    pub fn create_ser_userdata<T>(&self, data: T) -> Result<AnyUserData<'lua>>
+    where
+        T: 'static + UserData + Serialize,
+    {
+        self.create_userdata_inner(UserDataWrapped::new_ser(data))
+    }
+
+    fn create_userdata_inner<T>(&self, data: UserDataWrapped<T>) -> Result<AnyUserData<'lua>>
+    where
+        T: 'static + UserData,
+    {
         // Safe even though T may not be Send, because the parent Lua cannot be sent to another
         // thread while the Scope is alive (or the returned AnyUserData handle even).
         unsafe {
@@ -156,7 +185,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
                 u.lua.push_ref(&u);
                 // We know the destructor has not run yet because we hold a reference to the
                 // userdata.
-                vec![Box::new(take_userdata::<RefCell<T>>(state))]
+                vec![Box::new(take_userdata::<UserDataCell<T>>(state))]
             }));
             Ok(u)
         }
@@ -189,7 +218,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
     where
         T: 'scope + UserData,
     {
-        let data = Rc::new(RefCell::new(data));
+        let data = Rc::new(RefCell::new(UserDataWrapped::new(data)));
 
         // 'callback outliving 'scope is a lie to make the types work out, required due to the
         // inability to work with the more correct callback type that is universally quantified over
@@ -198,7 +227,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
         // parameters.
         fn wrap_method<'scope, 'lua, 'callback: 'scope, T: 'scope>(
             scope: &Scope<'lua, 'scope>,
-            data: Rc<RefCell<T>>,
+            data: Rc<UserDataCell<T>>,
             method: NonStaticMethod<'callback, T>,
         ) -> Result<Function<'lua>> {
             // On methods that actually receive the userdata, we fake a type check on the passed in
@@ -210,20 +239,18 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
             // first argument).
             let check_data = data.clone();
             let check_ud_type = move |lua: &'callback Lua, value| {
-                if let Some(value) = value {
-                    if let Value::UserData(u) = value {
-                        unsafe {
-                            assert_stack(lua.state, 1);
-                            lua.push_ref(&u.0);
-                            ffi::lua_getuservalue(lua.state, -1);
-                            #[cfg(any(feature = "lua52", feature = "lua51", feature = "luajit"))]
-                            {
-                                ffi::lua_rawgeti(lua.state, -1, 1);
-                                ffi::lua_remove(lua.state, -2);
-                            }
-                            return ffi::lua_touserdata(lua.state, -1)
-                                == check_data.as_ptr() as *mut c_void;
+                if let Some(Value::UserData(ud)) = value {
+                    unsafe {
+                        assert_stack(lua.state, 1);
+                        lua.push_ref(&ud.0);
+                        ffi::lua_getuservalue(lua.state, -1);
+                        #[cfg(any(feature = "lua52", feature = "lua51", feature = "luajit"))]
+                        {
+                            ffi::lua_rawgeti(lua.state, -1, 1);
+                            ffi::lua_remove(lua.state, -2);
                         }
+                        return ffi::lua_touserdata(lua.state, -1)
+                            == check_data.as_ptr() as *mut c_void;
                     }
                 }
 
@@ -236,7 +263,10 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
                         if !check_ud_type(lua, args.pop_front()) {
                             return Err(Error::UserDataTypeMismatch);
                         }
-                        let data = data.try_borrow().map_err(|_| Error::UserDataBorrowError)?;
+                        let data = data
+                            .try_borrow()
+                            .map(|cell| Ref::map(cell, AsRef::as_ref))
+                            .map_err(|_| Error::UserDataBorrowError)?;
                         method(lua, &*data, args)
                     });
                     unsafe { scope.create_callback(f) }
@@ -252,6 +282,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
                             .map_err(|_| Error::RecursiveMutCallback)?;
                         let mut data = data
                             .try_borrow_mut()
+                            .map(|cell| RefMut::map(cell, AsMut::as_mut))
                             .map_err(|_| Error::UserDataBorrowMutError)?;
                         (&mut *method)(lua, &mut *data, args)
                     });

@@ -27,7 +27,7 @@ jobs:
     - name: Build ${{ matrix.lua }} vendored
       run: |
         cargo build --release --features "${{ matrix.lua }} vendored"
-        cargo build --release --features "${{ matrix.lua }} vendored async send"
+        cargo build --release --features "${{ matrix.lua }} vendored async send serialize"
       shell: bash
     - name: Build ${{ matrix.lua }} pkg-config
       if: ${{ matrix.os == 'ubuntu-18.04' && matrix.lua != 'lua54' }}
@@ -63,13 +63,13 @@ jobs:
       if: ${{ matrix.os != 'macos-latest' || matrix.lua != 'luajit' }}
       run: |
         cargo test --release --features "${{ matrix.lua }} vendored"
-        cargo test --release --features "${{ matrix.lua }} vendored async send"
+        cargo test --release --features "${{ matrix.lua }} vendored async send serialize"
       shell: bash
     - name: Run compile tests (macos lua53)
       if: ${{ matrix.os == 'macos-latest' && matrix.lua == 'lua53' }}
       run: |
         TRYBUILD=overwrite cargo test --release --features "${{ matrix.lua }} vendored" -- --ignored
-        TRYBUILD=overwrite cargo test --release --features "${{ matrix.lua }} vendored async send" -- --ignored
+        TRYBUILD=overwrite cargo test --release --features "${{ matrix.lua }} vendored async send serialize" -- --ignored
       shell: bash
 
   test_luajit_macos:
@@ -85,12 +85,12 @@ jobs:
         override: true
     - name: Run LuaJIT 2.0.5 tests
       run: |
-        brew install luajit pkg-config
-        cargo test --tests --release --features "luajit async send" -- --test-threads=1
+        brew install luajit
+        cargo test --tests --release --features "luajit async send serialize" -- --test-threads=1
       shell: bash
     - name: Run LuaJIT vendored tests
       run: |
-        cargo test --release --features "luajit vendored async send"
+        cargo test --release --features "luajit vendored async send serialize"
       shell: bash
 
   test_modules:
@@ -126,21 +126,16 @@ jobs:
     needs: build
     strategy:
       matrix:
-        lua: [lua53, lua51, luajit]
+        lua: [lua53, luajit]
     defaults:
       run:
-        shell: bash.exe --login -eo pipefail "{0}"
-    env:
-      MSYSTEM: MINGW64
-      CHERE_INVOKING: 1
+        shell: msys2 {0}
     steps:
+    - uses: msys2/setup-msys2@v2
     - uses: actions/checkout@v2
-    - name: Set up shell
-      run: echo ::add-path::C:\msys64\usr\bin\
-      shell: pwsh
     - name: Install Rust & Lua
       run: |
-        pacman -S --noconfirm mingw-w64-x86_64-rust mingw-w64-x86_64-lua mingw-w64-x86_64-lua51 mingw-w64-x86_64-luajit
+        pacman -S --noconfirm mingw-w64-x86_64-rust mingw-w64-x86_64-lua mingw-w64-x86_64-luajit mingw-w64-x86_64-pkg-config
     - name: Run ${{ matrix.lua }} module tests
       run: |
         (cd examples/module && cargo build --release --features "${{ matrix.lua }}")
@@ -174,4 +169,4 @@ jobs:
       - uses: actions-rs/clippy-check@v1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          args: --features "${{ matrix.lua }},async,send,vendored
+          args: --features "${{ matrix.lua }},vendored,async,send,serialize

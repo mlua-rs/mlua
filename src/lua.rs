@@ -1,11 +1,14 @@
 use std::any::TypeId;
 use std::cell::{RefCell, UnsafeCell};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::ffi::CString;
 use std::marker::PhantomData;
 use std::os::raw::{c_char, c_int, c_void};
 use std::sync::{Arc, Mutex, Weak};
 use std::{mem, ptr, str};
+
+#[cfg(feature = "serialize")]
+use serde::Serialize;
 
 use crate::error::{Error, Result};
 use crate::ffi;
@@ -18,13 +21,15 @@ use crate::table::Table;
 use crate::thread::Thread;
 use crate::types::{
     Callback, HookCallback, Integer, LightUserData, LuaRef, MaybeSend, Number, RegistryKey,
+    UserDataCell,
 };
-use crate::userdata::{AnyUserData, MetaMethod, UserData, UserDataMethods};
+use crate::userdata::{AnyUserData, MetaMethod, UserData, UserDataMethods, UserDataWrapped};
 use crate::util::{
-    assert_stack, callback_error, check_stack, get_gc_userdata, get_main_state,
-    get_meta_gc_userdata, get_wrapped_error, init_error_registry, init_gc_metatable_for,
-    init_userdata_metatable, pop_error, protect_lua, protect_lua_closure, push_gc_userdata,
-    push_meta_gc_userdata, push_string, push_userdata, push_wrapped_error, StackGuard,
+    assert_stack, callback_error, check_stack, get_destructed_userdata_metatable, get_gc_userdata,
+    get_main_state, get_meta_gc_userdata, get_wrapped_error, init_error_registry,
+    init_gc_metatable_for, init_userdata_metatable, pop_error, protect_lua, protect_lua_closure,
+    push_gc_userdata, push_meta_gc_userdata, push_string, push_userdata, push_wrapped_error,
+    StackGuard,
 };
 use crate::value::{FromLua, FromLuaMulti, MultiValue, Nil, ToLua, ToLuaMulti, Value};
 
@@ -53,6 +58,7 @@ pub struct Lua {
 // Data associated with the lua_State.
 struct ExtraData {
     registered_userdata: HashMap<TypeId, c_int>,
+    registered_userdata_mt: HashSet<isize>,
     registry_unref_list: Arc<Mutex<Option<Vec<c_int>>>>,
 
     mem_info: *mut MemoryInfo,
@@ -294,6 +300,10 @@ impl Lua {
                     init_gc_metatable_for::<Waker>(state, None);
                 }
 
+                // Init serde metatables
+                #[cfg(feature = "serialize")]
+                crate::serde::init_metatables(state);
+
                 // Create ref stack thread and place it in the registry to prevent it from being garbage
                 // collected.
 
@@ -308,6 +318,7 @@ impl Lua {
 
         let extra = Arc::new(Mutex::new(ExtraData {
             registered_userdata: HashMap::new(),
+            registered_userdata_mt: HashSet::new(),
             registry_unref_list: Arc::new(Mutex::new(Some(Vec::new()))),
             ref_thread,
             mem_info: ptr::null_mut(),
@@ -741,7 +752,7 @@ impl Lua {
         }
     }
 
-    /// Creates and returns a new table.
+    /// Creates and returns a new empty table.
     pub fn create_table(&self) -> Result<Table> {
         unsafe {
             let _sg = StackGuard::new(self.state);
@@ -751,6 +762,21 @@ impl Lua {
                 1
             }
             protect_lua(self.state, 0, new_table)?;
+            Ok(Table(self.pop_ref()))
+        }
+    }
+
+    /// Creates and returns a new empty table, with the specified capacity.
+    /// `narr` is a hint for how many elements the table will have as a sequence;
+    /// `nrec` is a hint for how many other elements the table will have.
+    /// Lua may use these hints to preallocate memory for the new table.
+    pub fn create_table_with_capacity(&self, narr: c_int, nrec: c_int) -> Result<Table> {
+        unsafe {
+            let _sg = StackGuard::new(self.state);
+            assert_stack(self.state, 4);
+            protect_lua_closure(self.state, 0, 1, |state| {
+                ffi::lua_createtable(state, narr, nrec)
+            })?;
             Ok(Table(self.pop_ref()))
         }
     }
@@ -960,7 +986,18 @@ impl Lua {
     where
         T: 'static + MaybeSend + UserData,
     {
-        unsafe { self.make_userdata(data) }
+        unsafe { self.make_userdata(UserDataWrapped::new(data)) }
+    }
+
+    /// Create a Lua userdata object from a custom serializable userdata type.
+    ///
+    /// Requires `feature = "serialize"`
+    #[cfg(feature = "serialize")]
+    pub fn create_ser_userdata<T>(&self, data: T) -> Result<AnyUserData>
+    where
+        T: 'static + MaybeSend + UserData + Serialize,
+    {
+        unsafe { self.make_userdata(UserDataWrapped::new_ser(data)) }
     }
 
     /// Returns a handle to the global environment.
@@ -1481,7 +1518,7 @@ impl Lua {
         let no_methods = methods.methods.is_empty();
 
         if no_methods {
-            init_userdata_metatable::<RefCell<T>>(self.state, -1, None)?;
+            init_userdata_metatable::<UserDataCell<T>>(self.state, -1, None)?;
         } else {
             protect_lua_closure(self.state, 0, 1, |state| {
                 ffi::lua_newtable(state);
@@ -1502,19 +1539,47 @@ impl Lua {
                 })?;
             }
 
-            init_userdata_metatable::<RefCell<T>>(self.state, -2, Some(-1))?;
+            init_userdata_metatable::<UserDataCell<T>>(self.state, -2, Some(-1))?;
             ffi::lua_pop(self.state, 1);
         }
 
-        let id = protect_lua_closure(self.state, 1, 0, |state| {
-            ffi::luaL_ref(state, ffi::LUA_REGISTRYINDEX)
+        let (ptr, id) = protect_lua_closure(self.state, 1, 0, |state| {
+            let ptr = ffi::lua_topointer(state, -1) as isize;
+            let id = ffi::luaL_ref(state, ffi::LUA_REGISTRYINDEX);
+            (ptr, id)
         })?;
 
-        mlua_expect!(self.extra.lock(), "extra is poisoned")
-            .registered_userdata
-            .insert(TypeId::of::<T>(), id);
+        let mut extra = mlua_expect!(self.extra.lock(), "extra is poisoned");
+        extra.registered_userdata.insert(TypeId::of::<T>(), id);
+        extra.registered_userdata_mt.insert(ptr);
 
         Ok(id)
+    }
+
+    // Pushes a LuaRef value onto the stack, checking that it's any registered userdata
+    // Uses 2 stack spaces, does not call checkstack
+    #[cfg(feature = "serialize")]
+    pub(crate) unsafe fn push_userdata_ref(&self, lref: &LuaRef) -> Result<()> {
+        self.push_ref(lref);
+        if ffi::lua_getmetatable(self.state, -1) == 0 {
+            Err(Error::UserDataTypeMismatch)
+        } else {
+            // Check that this is our metatable
+            let ptr = ffi::lua_topointer(self.state, -1) as isize;
+            let extra = mlua_expect!(self.extra.lock(), "extra is poisoned");
+            if !extra.registered_userdata_mt.contains(&ptr) {
+                // Maybe UserData destructed?
+                get_destructed_userdata_metatable(self.state);
+                if ffi::lua_rawequal(self.state, -1, -2) == 1 {
+                    Err(Error::UserDataDestructed)
+                } else {
+                    Err(Error::UserDataTypeMismatch)
+                }
+            } else {
+                ffi::lua_pop(self.state, 1);
+                Ok(())
+            }
+        }
     }
 
     // Creates a Function out of a Callback containing a 'static Fn.  This is safe ONLY because the
@@ -1717,7 +1782,7 @@ impl Lua {
         .into_function()
     }
 
-    pub(crate) unsafe fn make_userdata<T>(&self, data: T) -> Result<AnyUserData>
+    pub(crate) unsafe fn make_userdata<T>(&self, data: UserDataWrapped<T>) -> Result<AnyUserData>
     where
         T: 'static + UserData,
     {
@@ -1725,7 +1790,7 @@ impl Lua {
         assert_stack(self.state, 4);
 
         let ud_index = self.userdata_metatable::<T>()?;
-        push_userdata::<RefCell<T>>(self.state, RefCell::new(data))?;
+        push_userdata::<UserDataCell<T>>(self.state, RefCell::new(data))?;
 
         ffi::lua_rawgeti(
             self.state,

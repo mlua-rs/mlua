@@ -759,7 +759,7 @@ unsafe fn to_string<'a>(state: *mut ffi::lua_State, index: c_int) -> Cow<'a, str
     }
 }
 
-unsafe fn get_destructed_userdata_metatable(state: *mut ffi::lua_State) {
+pub(crate) unsafe fn get_destructed_userdata_metatable(state: *mut ffi::lua_State) {
     ffi::lua_pushlightuserdata(
         state,
         &DESTRUCTED_USERDATA_METATABLE as *const u8 as *mut c_void,

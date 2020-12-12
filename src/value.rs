@@ -1,6 +1,12 @@
 use std::iter::{self, FromIterator};
 use std::{slice, str, vec};
 
+#[cfg(feature = "serialize")]
+use {
+    serde::ser::{self, Serialize, Serializer},
+    std::result::Result as StdResult,
+};
+
 use crate::error::{Error, Result};
 use crate::ffi;
 use crate::function::Function;
@@ -107,6 +113,29 @@ impl<'lua> AsRef<Value<'lua>> for Value<'lua> {
     #[inline]
     fn as_ref(&self) -> &Self {
         self
+    }
+}
+
+#[cfg(feature = "serialize")]
+impl<'lua> Serialize for Value<'lua> {
+    fn serialize<S>(&self, serializer: S) -> StdResult<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match self {
+            Value::Nil => serializer.serialize_unit(),
+            Value::Boolean(b) => serializer.serialize_bool(*b),
+            Value::Integer(i) => serializer.serialize_i64(*i),
+            Value::Number(n) => serializer.serialize_f64(*n),
+            Value::String(s) => s.serialize(serializer),
+            Value::Table(t) => t.serialize(serializer),
+            Value::UserData(ud) => ud.serialize(serializer),
+            Value::LightUserData(ud) if ud.0.is_null() => serializer.serialize_none(),
+            Value::Error(_) | Value::LightUserData(_) | Value::Function(_) | Value::Thread(_) => {
+                let msg = format!("cannot serialize <{}>", self.type_name());
+                Err(ser::Error::custom(msg))
+            }
+        }
     }
 }
 
