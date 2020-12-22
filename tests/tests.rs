@@ -72,6 +72,20 @@ fn test_safety() -> Result<()> {
         Err(e) => panic!("expected SafetyError, got {:?}", e),
         Ok(_) => panic!("expected SafetyError, got no error"),
     }
+    drop(lua);
+
+    // Test safety rules after dynamically loading `package` library
+    let lua = Lua::new_with(StdLib::NONE)?;
+    assert!(lua.globals().get::<_, Option<Value>>("require")?.is_none());
+    lua.load_from_std_lib(StdLib::PACKAGE)?;
+    match lua.load(r#"package.loadlib()"#).exec() {
+        Err(Error::CallbackError { ref cause, .. }) => match cause.as_ref() {
+            Error::SafetyError(_) => {}
+            e => panic!("expected SafetyError cause, got {:?}", e),
+        },
+        Err(e) => panic!("expected CallbackError, got {:?}", e),
+        Ok(_) => panic!("expected CallbackError, got no error"),
+    };
 
     Ok(())
 }
