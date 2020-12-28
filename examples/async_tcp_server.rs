@@ -2,8 +2,8 @@ use std::net::Shutdown;
 use std::sync::Arc;
 
 use bstr::BString;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
-use tokio::prelude::*;
 use tokio::sync::Mutex;
 use tokio::task;
 

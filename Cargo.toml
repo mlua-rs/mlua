@@ -59,11 +59,12 @@ lua-src = { version = ">= 540.0.0, < 550.0.0", optional = true }
 luajit-src = { version = ">= 210.1.0, < 220.0.0", optional = true }
 
 [dev-dependencies]
-rustyline = "6.0"
+rustyline = "7.0"
 criterion = "0.3"
 trybuild = "1.0"
 futures = "0.3.5"
 hyper = "0.13"
+reqwest = { version = "0.10", features = ["json"] }
 tokio = { version = "0.2", features = ["full"] }
 futures-timer = "3.0"
 serde_json = "1.0"
@@ -75,6 +76,10 @@ harness = false
 [[example]]
 name = "async_http_client"
 required-features = ["async"]
+
+[[example]]
+name = "async_http_reqwest"
+required-features = ["async", "serialize"]
 
 [[example]]
 name = "async_http_server"
