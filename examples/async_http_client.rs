@@ -61,7 +61,7 @@ async fn main() -> Result<()> {
     let f = lua
         .load(
             r#"
-            local res = fetch_url(...);
+            local res = fetch_url(...)
             print(res.status)
             for key, vals in pairs(res.headers) do
                 for _, val in ipairs(vals) do

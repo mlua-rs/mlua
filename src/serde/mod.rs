@@ -65,9 +65,11 @@ pub trait LuaSerdeExt<'lua> {
     /// ```
     fn array_metatable(&'lua self) -> Result<Table<'lua>>;
 
-    /// Convert a `T` into Lua `Value` instance.
+    /// Converts `T` into a `Value` instance.
     ///
     /// Requires `feature = "serialize"`
+    ///
+    /// [`Value`]: enum.Value.html
     ///
     /// # Example
     ///
@@ -96,9 +98,11 @@ pub trait LuaSerdeExt<'lua> {
     /// ```
     fn to_value<T: Serialize + ?Sized>(&'lua self, t: &T) -> Result<Value<'lua>>;
 
-    /// Deserialize a Lua `Value` into any serde deserializable object.
+    /// Deserializes a `Value` into any serde deserializable object.
     ///
     /// Requires `feature = "serialize"`
+    ///
+    /// [`Value`]: enum.Value.html
     ///
     /// # Example
     ///

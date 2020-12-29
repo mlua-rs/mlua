@@ -63,7 +63,7 @@ impl UserData for LuaTcpStream {
 
 async fn run_server(lua: &'static Lua) -> Result<()> {
     let spawn = lua.create_function(move |_, func: Function| {
-        task::spawn_local(async move { func.call_async::<_, ()>(()).await.unwrap() });
+        task::spawn_local(async move { func.call_async::<_, ()>(()).await });
         Ok(())
     })?;
 

@@ -7,9 +7,6 @@ use std::os::raw::{c_char, c_int, c_void};
 use std::sync::{Arc, Mutex, Weak};
 use std::{mem, ptr, str};
 
-#[cfg(feature = "serialize")]
-use serde::Serialize;
-
 use crate::error::{Error, Result};
 use crate::ffi;
 use crate::function::Function;
@@ -25,11 +22,10 @@ use crate::types::{
 };
 use crate::userdata::{AnyUserData, MetaMethod, UserData, UserDataMethods, UserDataWrapped};
 use crate::util::{
-    assert_stack, callback_error, check_stack, get_destructed_userdata_metatable, get_gc_userdata,
-    get_main_state, get_meta_gc_userdata, get_wrapped_error, init_error_registry,
-    init_gc_metatable_for, init_userdata_metatable, pop_error, protect_lua, protect_lua_closure,
-    push_gc_userdata, push_meta_gc_userdata, push_string, push_userdata, push_wrapped_error,
-    StackGuard,
+    assert_stack, callback_error, check_stack, get_gc_userdata, get_main_state,
+    get_meta_gc_userdata, get_wrapped_error, init_error_registry, init_gc_metatable_for,
+    init_userdata_metatable, pop_error, protect_lua, protect_lua_closure, push_gc_userdata,
+    push_meta_gc_userdata, push_string, push_userdata, push_wrapped_error, StackGuard,
 };
 use crate::value::{FromLua, FromLuaMulti, MultiValue, Nil, ToLua, ToLuaMulti, Value};
 
@@ -43,6 +39,9 @@ use {
     futures_task::noop_waker,
     futures_util::future::{self, TryFutureExt},
 };
+
+#[cfg(feature = "serialize")]
+use {crate::util::get_destructed_userdata_metatable, serde::Serialize};
 
 /// Top level Lua struct which holds the Lua state itself.
 pub struct Lua {

@@ -33,8 +33,19 @@ Starting from v0.3, `mlua` supports async/await for all Lua versions. This works
 
 **Examples**:
 - [HTTP Client](examples/async_http_client.rs)
+- [HTTP Client (json)](examples/async_http_reqwest.rs)
 - [HTTP Server](examples/async_http_server.rs)
 - [TCP Server](examples/async_tcp_server.rs)
+
+### Serialization (serde) support
+
+With `serialize` feature flag enabled, `mlua` allows you to serialize/deserialize any type that implements [`serde::Serialize`] and [`serde::Deserialize`] into/from [`mlua::Value`]. In addition `mlua` provides [`serde::Serialize`] trait implementation for it (including user data support).
+
+[Example](examples/serialize.rs)
+
+[`serde::Serialize`]: https://docs.serde.rs/serde/ser/trait.Serialize.html
+[`serde::Deserialize`]: https://docs.serde.rs/serde/de/trait.Deserialize.html
+[`mlua::Value`]: https://docs.rs/mlua/latest/mlua/enum.Value.html
 
 ### Compiling
 
