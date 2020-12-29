@@ -33,12 +33,13 @@ lua52 = []
 lua51 = []
 luajit = []
 vendored = ["lua-src", "luajit-src"]
-module = []
+module = ["mlua_derive"]
 async = ["futures-core", "futures-task", "futures-util"]
 send = []
 serialize = ["serde", "erased-serde"]
 
 [dependencies]
+mlua_derive = { version = "0.4", optional = true, path = "mlua_derive" }
 bstr = { version = "0.2", features = ["std"], default_features = false }
 lazy_static = { version = "1.4" }
 num-traits = { version = "0.2.14" }

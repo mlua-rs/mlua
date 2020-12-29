@@ -105,14 +105,11 @@ crate-type = ["cdylib"]
 
 [dependencies]
 mlua = { version = "0.4", features = ["lua53", "module"] }
-mlua_derive = "0.4"
 ```
 
 `lib.rs` :
 
 ``` rust
-#[macro_use]
-extern crate mlua_derive;
 use mlua::prelude::*;
 
 fn hello(_: &Lua, name: String) -> LuaResult<()> {
@@ -120,7 +117,7 @@ fn hello(_: &Lua, name: String) -> LuaResult<()> {
     Ok(())
 }
 
-#[lua_module]
+#[mlua::lua_module]
 fn my_module(lua: &Lua) -> LuaResult<LuaTable> {
     let exports = lua.create_table()?;
     exports.set("hello", lua.create_function(hello)?)?;

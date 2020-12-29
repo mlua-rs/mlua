@@ -115,3 +115,12 @@ pub use crate::serde::LuaSerdeExt;
 pub mod prelude;
 #[cfg(feature = "serialize")]
 pub mod serde;
+
+// Re-export #[mlua_derive::lua_module].
+#[cfg(feature = "mlua_derive")]
+#[allow(unused_imports)]
+#[macro_use]
+extern crate mlua_derive;
+#[cfg(feature = "mlua_derive")]
+#[doc(hidden)]
+pub use mlua_derive::*;

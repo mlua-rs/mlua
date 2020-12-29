@@ -8,7 +8,7 @@ fn used_memory(lua: &Lua, _: ()) -> LuaResult<usize> {
     Ok(lua.used_memory())
 }
 
-#[mlua_derive::lua_module]
+#[mlua::lua_module]
 fn rust_module(lua: &Lua) -> LuaResult<LuaTable> {
     let exports = lua.create_table()?;
     exports.set("sum", lua.create_function(sum)?)?;

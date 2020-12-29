@@ -17,4 +17,3 @@ vendored = ["mlua/vendored"]
 
 [dependencies]
 mlua = { path = "../..", features = ["module"] }
-mlua_derive = { path = "../../mlua_derive" }
