@@ -27,4 +27,4 @@ error[E0597]: `outer` does not live long enough
    | -
    | |
    | `outer` dropped here while still borrowed
-   | borrow might be used here, when `outer` is dropped and runs the destructor for type `std::option::Option<mlua::Table<'_>>`
+   | borrow might be used here, when `outer` is dropped and runs the destructor for type `Option<LuaTable<'_>>`
