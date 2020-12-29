@@ -1,3 +1,8 @@
+## v0.5.0
+
+- Serde support under `serialize` feature flag.
+- Re-export `mlua_derive`.
+
 ## v0.4.2
 
 - Added `Function::dump()` to dump lua function to a binary chunk

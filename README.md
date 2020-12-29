@@ -70,7 +70,7 @@ Add to `Cargo.toml` :
 
 ``` toml
 [dependencies]
-mlua = { version = "0.4", features = ["lua53"] }
+mlua = { version = "0.5", features = ["lua53"] }
 ```
 
 `main.rs`
@@ -104,7 +104,7 @@ Add to `Cargo.toml` :
 crate-type = ["cdylib"]
 
 [dependencies]
-mlua = { version = "0.4", features = ["lua53", "module"] }
+mlua = { version = "0.5", features = ["lua53", "module"] }
 ```
 
 `lib.rs` :

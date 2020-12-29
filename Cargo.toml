@@ -1,6 +1,6 @@
 [package]
 name = "mlua"
-version = "0.4.2"
+version = "0.5.0" # remember to update html_root_url and mlua_derive
 authors = ["Aleksandr Orlenko <zxteam@pm.me>", "kyren <catherine@chucklefish.org>"]
 edition = "2018"
 repository = "https://github.com/khvzak/mlua"
@@ -40,7 +40,7 @@ send = []
 serialize = ["serde", "erased-serde"]
 
 [dependencies]
-mlua_derive = { version = "0.4", optional = true, path = "mlua_derive" }
+mlua_derive = { version = "0.5", optional = true, path = "mlua_derive" }
 bstr = { version = "0.2", features = ["std"], default_features = false }
 lazy_static = { version = "1.4" }
 num-traits = { version = "0.2.14" }

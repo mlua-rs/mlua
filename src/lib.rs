@@ -69,11 +69,12 @@
 //! [`serde::Serialize`]: https://docs.serde.rs/serde/ser/trait.Serialize.html
 //! [`serde::Deserialize`]: https://docs.serde.rs/serde/de/trait.Deserialize.html
 
-#![cfg_attr(docsrs, feature(doc_cfg))]
-
+// mlua types in rustdoc of other crates get linked to here.
+#![doc(html_root_url = "https://docs.rs/mlua/0.5.0")]
 // Deny warnings inside doc tests / examples. When this isn't present, rustdoc doesn't show *any*
 // warnings at all.
 #![doc(test(attr(deny(warnings))))]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 
 #[macro_use]
 mod macros;
