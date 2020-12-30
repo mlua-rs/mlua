@@ -26,12 +26,12 @@
 //!
 //! # Serde support
 //!
-//! The [`LuaSerdeExt`] trait implemented for [`Lua`] allow conversion from Rust types to Lua values
-//! and vice versa using serde. Any user defined data type that implements `serde::Serialize` or
-//! `serde::Deserialize` can be converted.
-//! For convenience, additional functionality to handle NULL values and arrays is provided.
+//! The [`LuaSerdeExt`] trait implemented for [`Lua`] allows conversion from Rust types to Lua values
+//! and vice versa using serde. Any user defined data type that implements [`serde::Serialize`] or
+//! [`serde::Deserialize`] can be converted.
+//! For convenience, additional functionality to handle `NULL` values and arrays is provided.
 //!
-//! The [`Value`] struct implements `serde::Serialize` trait to support serializing Lua values
+//! The [`Value`] enum implements [`serde::Serialize`] trait to support serializing Lua values
 //! (including [`UserData`]) into Rust values.
 //!
 //! Requires `feature = "serialize"`.
@@ -46,7 +46,7 @@
 //!
 //! # `Send` requirement
 //! By default `mlua` is `!Send`. This can be changed by enabling `feature = "send"` that adds `Send` requirement
-//! to `Function`s and [`UserData`].
+//! to [`Function`]s and [`UserData`].
 //!
 //! [Lua programming language]: https://www.lua.org/
 //! [`Lua`]: struct.Lua.html
@@ -57,14 +57,19 @@
 //! [`FromLua`]: trait.FromLua.html
 //! [`ToLuaMulti`]: trait.ToLuaMulti.html
 //! [`FromLuaMulti`]: trait.FromLuaMulti.html
+//! [`Function`]: struct.Function.html
 //! [`UserData`]: trait.UserData.html
 //! [`UserDataMethods`]: trait.UserDataMethods.html
-//! [`LuaSerdeExt`]: trait.LuaSerdeExt.html
-//! [`Value`]: struct.Value.html
+//! [`LuaSerdeExt`]: serde/trait.LuaSerdeExt.html
+//! [`Value`]: enum.Value.html
 //! [`create_async_function`]: struct.Lua.html#method.create_async_function
 //! [`call_async`]: struct.Function.html#method.call_async
 //! [`AsyncThread`]: struct.AsyncThread.html
 //! [`Future`]: ../futures_core/future/trait.Future.html
+//! [`serde::Serialize`]: https://docs.serde.rs/serde/ser/trait.Serialize.html
+//! [`serde::Deserialize`]: https://docs.serde.rs/serde/de/trait.Deserialize.html
+
+#![cfg_attr(docsrs, feature(doc_cfg))]
 
 // Deny warnings inside doc tests / examples. When this isn't present, rustdoc doesn't show *any*
 // warnings at all.
@@ -114,6 +119,7 @@ pub use crate::serde::LuaSerdeExt;
 
 pub mod prelude;
 #[cfg(feature = "serialize")]
+#[cfg_attr(docsrs, doc(cfg(feature = "serialize")))]
 pub mod serde;
 
 // Re-export #[mlua_derive::lua_module].

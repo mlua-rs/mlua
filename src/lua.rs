@@ -100,6 +100,7 @@ pub(crate) static EXTRA_REGISTRY_KEY: u8 = 0;
 
 /// Requires `feature = "send"`
 #[cfg(feature = "send")]
+#[cfg_attr(docsrs, doc(cfg(feature = "send")))]
 unsafe impl Send for Lua {}
 
 impl Drop for Lua {
@@ -957,6 +958,7 @@ impl Lua {
     /// [`Thread`]: struct.Thread.html
     /// [`AsyncThread`]: struct.AsyncThread.html
     #[cfg(feature = "async")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
     pub fn create_async_function<'lua, 'callback, A, R, F, FR>(
         &'lua self,
         func: F,
@@ -1006,6 +1008,7 @@ impl Lua {
     ///
     /// Requires `feature = "serialize"`
     #[cfg(feature = "serialize")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "serialize")))]
     pub fn create_ser_userdata<T>(&self, data: T) -> Result<AnyUserData>
     where
         T: 'static + MaybeSend + UserData + Serialize,
@@ -1071,6 +1074,7 @@ impl Lua {
     ///
     /// [`scope`]: #method.scope
     #[cfg(feature = "async")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
     pub fn async_scope<'lua, 'scope, R, F, FR>(
         &'lua self,
         f: F,
@@ -1963,6 +1967,7 @@ impl<'lua, 'a> Chunk<'lua, 'a> {
     ///
     /// [`Chunk::exec`]: struct.Chunk.html#method.exec
     #[cfg(feature = "async")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
     pub fn exec_async<'fut>(self) -> LocalBoxFuture<'fut, Result<()>>
     where
         'lua: 'fut,
@@ -2002,6 +2007,7 @@ impl<'lua, 'a> Chunk<'lua, 'a> {
     ///
     /// [`Chunk::eval`]: struct.Chunk.html#method.eval
     #[cfg(feature = "async")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
     pub fn eval_async<'fut, R>(self) -> LocalBoxFuture<'fut, Result<R>>
     where
         'lua: 'fut,
@@ -2036,6 +2042,7 @@ impl<'lua, 'a> Chunk<'lua, 'a> {
     ///
     /// [`Chunk::call`]: struct.Chunk.html#method.call
     #[cfg(feature = "async")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
     pub fn call_async<'fut, A, R>(self, args: A) -> LocalBoxFuture<'fut, Result<R>>
     where
         'lua: 'fut,

@@ -550,6 +550,7 @@ pub trait TableExt<'lua> {
     ///
     /// This might invoke the `__index` metamethod.
     #[cfg(feature = "async")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
     fn call_async_method<'fut, K, A, R>(&self, key: K, args: A) -> LocalBoxFuture<'fut, Result<R>>
     where
         'lua: 'fut,
@@ -564,6 +565,7 @@ pub trait TableExt<'lua> {
     ///
     /// This might invoke the `__index` metamethod.
     #[cfg(feature = "async")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
     fn call_async_function<'fut, K, A, R>(
         &self,
         key: K,

@@ -191,6 +191,7 @@ pub trait UserDataMethods<'lua, T: UserData> {
     ///
     /// [`add_method`]: #method.add_method
     #[cfg(feature = "async")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
     fn add_async_method<S, A, R, M, MR>(&mut self, name: &S, method: M)
     where
         T: Clone,
@@ -237,6 +238,7 @@ pub trait UserDataMethods<'lua, T: UserData> {
     ///
     /// [`add_function`]: #method.add_function
     #[cfg(feature = "async")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
     fn add_async_function<S, A, R, F, FR>(&mut self, name: &S, function: F)
     where
         T: Clone,

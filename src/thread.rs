@@ -52,6 +52,7 @@ pub struct Thread<'lua>(pub(crate) LuaRef<'lua>);
 /// [`Future`]: ../futures_core/future/trait.Future.html
 /// [`Stream`]: ../futures_core/stream/trait.Stream.html
 #[cfg(feature = "async")]
+#[cfg_attr(docsrs, doc(cfg(feature = "async")))]
 #[derive(Debug)]
 pub struct AsyncThread<'lua, R> {
     thread: Thread<'lua>,
@@ -218,6 +219,7 @@ impl<'lua> Thread<'lua> {
     /// # }
     /// ```
     #[cfg(feature = "async")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
     pub fn into_async<A, R>(self, args: A) -> AsyncThread<'lua, R>
     where
         A: ToLuaMulti<'lua>,

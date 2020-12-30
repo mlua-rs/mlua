@@ -119,6 +119,7 @@ impl<'lua> Function<'lua> {
     ///
     /// [`AsyncThread`]: struct.AsyncThread.html
     #[cfg(feature = "async")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
     pub fn call_async<'fut, A, R>(&self, args: A) -> LocalBoxFuture<'fut, Result<R>>
     where
         'lua: 'fut,

@@ -115,6 +115,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
     /// [`Lua::scope`]: struct.Lua.html#method.scope
     /// [`Lua::async_scope`]: struct.Lua.html#method.async_scope
     #[cfg(feature = "async")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
     pub fn create_async_function<'callback, A, R, F, FR>(
         &'callback self,
         func: F,
@@ -164,6 +165,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
     /// [`Lua::create_ser_userdata`]: struct.Lua.html#method.create_ser_userdata
     /// [`Lua::scope`]: struct.Lua.html#method.scope
     #[cfg(feature = "serialize")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "serialize")))]
     pub fn create_ser_userdata<T>(&self, data: T) -> Result<AnyUserData<'lua>>
     where
         T: 'static + UserData + Serialize,

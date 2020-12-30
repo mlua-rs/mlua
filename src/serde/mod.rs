@@ -1,3 +1,5 @@
+//! (De)Serialization support using serde.
+
 use std::os::raw::{c_int, c_void};
 use std::ptr;
 

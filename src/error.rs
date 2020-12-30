@@ -109,6 +109,8 @@ pub enum Error {
     ///
     /// This error can happen either due to to being destructed in a previous __gc, or due to being
     /// destructed from exiting a `Lua::scope` call.
+    ///
+    /// [`AnyUserData`]: struct.AnyUserData.html
     UserDataDestructed,
     /// An [`AnyUserData`] immutable borrow failed because it is already borrowed mutably.
     ///
@@ -139,9 +141,11 @@ pub enum Error {
     },
     /// Serialization error.
     #[cfg(feature = "serialize")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "serialize")))]
     SerializeError(StdString),
     /// Deserialization error.
     #[cfg(feature = "serialize")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "serialize")))]
     DeserializeError(StdString),
     /// A custom error.
     ///

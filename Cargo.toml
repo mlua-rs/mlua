@@ -18,6 +18,7 @@ with async/await features and support of writing native lua modules in Rust.
 
 [package.metadata.docs.rs]
 features = ["lua53", "async", "send", "serialize"]
+rustdoc-args = ["--cfg", "docsrs"]
 
 [workspace]
 members = [
