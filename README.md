@@ -141,11 +141,17 @@ rustflags = [
   "-C", "link-arg=-undefined",
   "-C", "link-arg=dynamic_lookup",
 ]
+
+[target.aarch64-apple-darwin]
+rustflags = [
+  "-C", "link-arg=-undefined",
+  "-C", "link-arg=dynamic_lookup",
+]
 ```
 On Linux you can build modules normally with `cargo build --release`.
 Vendored and non-vendored builds are supported for these OS.
 
-On Windows `vendored` mode is not supported since you need to link to a Lua dll.
+On Windows `vendored` mode for modules is not supported since you need to link to a Lua dll.
 Easiest way is to use either MinGW64 (as part of [MSYS2](https://github.com/msys2/msys2) package) with `pkg-config` or
 MSVC with `LUA_INC` / `LUA_LIB` / `LUA_LIB_NAME` environment variables.
 
