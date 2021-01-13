@@ -108,7 +108,7 @@ jobs:
     - name: Install ARM compiler toolchain
       run: |
         sudo apt-get update -y
-        sudo apt-get install -y --no-install-recommends gcc-arm-linux-gnueabihf
+        sudo apt-get install -y --no-install-recommends gcc-arm-linux-gnueabihf libc-dev-armhf-cross
     - name: Cross compile
       run: cargo build --target armv7-unknown-linux-gnueabihf --features "${{ matrix.lua }} async send serialize vendored"
       shell: bash
