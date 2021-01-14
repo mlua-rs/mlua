@@ -72,6 +72,47 @@ jobs:
         TRYBUILD=overwrite cargo test --release --features "${{ matrix.lua }} vendored async send serialize" -- --ignored
       shell: bash
 
+  test_arm_cross_macos:
+    name: Test Cross compilation for ARM from Intel on macOS
+    runs-on: macos-11.0
+    strategy:
+      matrix:
+        lua: [lua54, lua53, lua52, lua51]
+    steps:
+    - uses: actions/checkout@v2
+    - uses: actions-rs/toolchain@v1
+      with:
+        toolchain: nightly
+        target: x86_64-apple-darwin
+        override: true
+    - name: Add ARM target
+      run: rustup target add aarch64-apple-darwin
+    - name: Cross compile
+      run: cargo build --target aarch64-apple-darwin --features "${{ matrix.lua }} async send serialize vendored"
+
+  test_arm_cross_ubuntu:
+    name: Test cross compilation for ARM from Intel on Linux
+    runs-on: ubuntu-18.04
+    strategy:
+      matrix:
+        lua: [lua54, lua53, lua52, lua51]
+    steps:
+    - uses: actions/checkout@v2
+    - uses: actions-rs/toolchain@v1
+      with:
+        toolchain: nightly
+        target: x86_64-unknown-linux-gnu
+        override: true
+    - name: Add ARM target
+      run: rustup target add armv7-unknown-linux-gnueabihf
+    - name: Install ARM compiler toolchain
+      run: |
+        sudo apt-get update -y
+        sudo apt-get install -y --no-install-recommends gcc-arm-linux-gnueabihf libc-dev-armhf-cross
+    - name: Cross compile
+      run: cargo build --target armv7-unknown-linux-gnueabihf --features "${{ matrix.lua }} async send serialize vendored"
+      shell: bash
+
   test_luajit_macos:
     name: Test LuaJIT on macOS
     runs-on: macos-latest
