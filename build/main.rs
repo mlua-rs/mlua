@@ -141,7 +141,6 @@ fn generate_glue() -> std::io::Result<()> {
     write!(glue, "pub type LUA_UNSIGNED = u64;\n")?;
 
     let version = if cfg!(feature = "luajit") || cfg!(feature = "lua51") {
-        // Note: luajit is ~lua 5.1, but it doesn't itself cross compile
         (5, 1, 0)
     } else if cfg!(feature = "lua52") {
         (5, 2, 0)
@@ -192,7 +191,11 @@ fn generate_glue() -> std::io::Result<()> {
     write!(
         glue,
         r#"
+#[cfg(feature = "luajit")]
+pub const LUA_BITLIBNAME: &str = "bit";
+#[cfg(not(feature = "luajit"))]
 pub const LUA_BITLIBNAME: &str = "bit32";
+
 pub const LUA_COLIBNAME: &str = "coroutine";
 pub const LUA_DBLIBNAME: &str = "debug";
 pub const LUA_IOLIBNAME: &str = "io";
@@ -203,6 +206,8 @@ pub const LUA_STRLIBNAME: &str = "string";
 pub const LUA_TABLIBNAME: &str = "table";
 pub const LUA_UTF8LIBNAME: &str = "utf8";
 
+pub const LUA_JITLIBNAME: &str = "jit";
+pub const LUA_FFILIBNAME: &str = "ffi";
 "#
     )?;
 
