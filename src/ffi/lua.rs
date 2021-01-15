@@ -32,11 +32,9 @@ use std::ptr;
 
 use super::luaconf;
 
-pub use super::glue::{LUA_RELEASE, LUA_VERSION, LUA_VERSION_NUM};
-
-pub use super::glue::LUA_REGISTRYINDEX;
 #[cfg(any(feature = "lua51", feature = "luajit"))]
 pub use super::glue::{LUA_ENVIRONINDEX, LUA_GLOBALSINDEX};
+pub use super::glue::{LUA_REGISTRYINDEX, LUA_VERSION_NUM};
 
 #[cfg(not(feature = "luajit"))]
 pub const LUA_SIGNATURE: &[u8] = b"\x1bLua";

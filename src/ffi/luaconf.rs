@@ -23,7 +23,6 @@
 
 //! Contains definitions from `luaconf.h`.
 
-pub use super::glue::LUAL_BUFFERSIZE;
 pub use super::glue::LUA_INTEGER;
 pub use super::glue::LUA_NUMBER;
 pub use super::glue::LUA_UNSIGNED;

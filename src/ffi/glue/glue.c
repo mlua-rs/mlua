@@ -225,12 +225,8 @@ int main(int argc, const char **argv) {
       // == luaconf.h ==========================================================
 
       RS_COMMENT("luaconf.h"),
-      RS_STR("LUA_PATH_DEFAULT", LUA_PATH_DEFAULT),
-      RS_STR("LUA_CPATH_DEFAULT", LUA_CPATH_DEFAULT),
-      RS_STR("LUA_DIRSEP", LUA_DIRSEP),
       RS_INT("LUA_EXTRASPACE", LUA_EXTRASPACE),
       RS_INT("LUA_IDSIZE", LUA_IDSIZE),
-      RS_INT("LUAL_BUFFERSIZE", LUAL_BUFFERSIZE),
       RS_TYPE("LUA_NUMBER",
               sizeof(LUA_NUMBER) > sizeof(float) ? "c_double" : "c_float"),
       RS_TYPE("LUA_INTEGER", rs_int_type(sizeof(LUA_INTEGER))),
@@ -244,8 +240,6 @@ int main(int argc, const char **argv) {
 
       RS_COMMENT("lua.h"),
       RS_INT("LUA_VERSION_NUM", LUA_VERSION_NUM),
-      RS_STR("LUA_VERSION", LUA_VERSION),
-      RS_STR("LUA_RELEASE", LUA_RELEASE),
       RS_INT("LUA_REGISTRYINDEX", LUA_REGISTRYINDEX),
 #if LUA_VERSION_NUM == 501
       RS_INT("LUA_ENVIRONINDEX", LUA_ENVIRONINDEX),
