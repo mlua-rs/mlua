@@ -19,7 +19,8 @@ fn test_module() -> Result<()> {
     feature = "lua54",
     feature = "lua53",
     feature = "lua52",
-    feature = "lua51"
+    feature = "lua51",
+    feature = "lua51Coco"
 ))]
 #[test]
 fn test_module_from_thread() -> Result<()> {

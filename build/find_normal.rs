@@ -74,7 +74,7 @@ pub fn probe_lua() -> PathBuf {
         lua.unwrap().include_paths[0].clone()
     }
 
-    #[cfg(feature = "lua51")]
+    #[cfg(any(feature = "lua51", feature = "lua51Coco"))]
     {
         let mut lua = pkg_config::Config::new()
             .range_version((Bound::Included("5.1"), Bound::Excluded("5.2")))

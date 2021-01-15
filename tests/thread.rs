@@ -119,7 +119,7 @@ fn coroutine_from_closure() -> Result<()> {
         feature = "luajit"
     ))]
     let thrd: Thread = lua.load("coroutine.create(main)").eval()?;
-    #[cfg(feature = "lua51")]
+    #[cfg(any(feature = "lua51", feature = "lua51Coco"))]
     let thrd: Thread = lua
         .load("coroutine.create(function(...) return main(unpack(arg)) end)")
         .eval()?;

@@ -71,7 +71,7 @@ struct ExtraData {
     hook_callback: Option<HookCallback>,
 }
 
-#[cfg_attr(any(feature = "lua51", feature = "luajit"), allow(dead_code))]
+#[cfg_attr(any(feature = "lua51", feature = "lua51Coco", feature = "luajit"), allow(dead_code))]
 struct MemoryInfo {
     used_memory: isize,
     memory_limit: isize,
@@ -190,7 +190,7 @@ impl Lua {
     ///
     /// [`StdLib`]: struct.StdLib.html
     pub unsafe fn unsafe_new_with(libs: StdLib) -> Lua {
-        #[cfg_attr(any(feature = "lua51", feature = "luajit"), allow(dead_code))]
+        #[cfg_attr(any(feature = "lua51", feature = "lua51Coco", feature = "luajit"), allow(dead_code))]
         unsafe extern "C" fn allocator(
             extra_data: *mut c_void,
             ptr: *mut c_void,
@@ -255,7 +255,7 @@ impl Lua {
 
         #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
         let state = ffi::lua_newstate(allocator, mem_info as *mut c_void);
-        #[cfg(any(feature = "lua51", feature = "luajit"))]
+        #[cfg(any(feature = "lua51", feature = "lua51Coco", feature = "luajit"))]
         let state = ffi::luaL_newstate();
 
         ffi::luaL_requiref(state, cstr!("_G"), ffi::luaopen_base, 1);
@@ -628,6 +628,7 @@ impl Lua {
             feature = "lua53",
             feature = "lua52",
             feature = "lua51",
+            feature = "lua51Coco",
             feature = "luajit"
         ))]
         {
@@ -741,7 +742,7 @@ impl Lua {
                         self.push_value(env)?;
                         #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
                         ffi::lua_setupvalue(self.state, -2, 1);
-                        #[cfg(any(feature = "lua51", feature = "luajit"))]
+                        #[cfg(any(feature = "lua51", feature = "lua51Coco", feature = "luajit"))]
                         ffi::lua_setfenv(self.state, -2);
                     }
                     Ok(Function(self.pop_ref()))
@@ -1023,7 +1024,7 @@ impl Lua {
             assert_stack(self.state, 2);
             #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
             ffi::lua_rawgeti(self.state, ffi::LUA_REGISTRYINDEX, ffi::LUA_RIDX_GLOBALS);
-            #[cfg(any(feature = "lua51", feature = "luajit"))]
+            #[cfg(any(feature = "lua51", feature = "lua51Coco", feature = "luajit"))]
             ffi::lua_pushvalue(self.state, ffi::LUA_GLOBALSINDEX);
             Table(self.pop_ref())
         }
@@ -1849,7 +1850,7 @@ impl Lua {
 
         #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
         let searchers: Table = package.get("searchers")?;
-        #[cfg(any(feature = "lua51", feature = "luajit"))]
+        #[cfg(any(feature = "lua51", feature = "lua51Coco", feature = "luajit"))]
         let searchers: Table = package.get("loaders")?;
 
         let loader = self.create_function(|_, ()| Ok("\n\tcan't load C modules in safe mode"))?;
