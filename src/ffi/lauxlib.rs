@@ -31,7 +31,12 @@ use super::lua::{self, lua_CFunction, lua_Integer, lua_Number, lua_State};
 #[cfg(any(feature = "lua54", feature = "lua53"))]
 pub use super::glue::LUAL_NUMSIZES;
 
-#[cfg(any(feature = "lua52", feature = "lua51", feature = "lua51Coco", feature = "luajit"))]
+#[cfg(any(
+    feature = "lua52",
+    feature = "lua51",
+    feature = "lua51Coco",
+    feature = "luajit"
+))]
 pub use super::compat53::{luaL_getmetafield, luaL_newmetatable, luaL_requiref, luaL_tolstring};
 
 #[cfg(any(feature = "lua51", feature = "lua51Coco", feature = "luajit"))]
@@ -70,7 +75,12 @@ extern "C" {
 
     #[cfg(any(feature = "lua54", feature = "lua53"))]
     pub fn luaL_getmetafield(L: *mut lua_State, obj: c_int, e: *const c_char) -> c_int;
-    #[cfg(any(feature = "lua52", feature = "lua51", feature = "lua51Coco", feature = "luajit"))]
+    #[cfg(any(
+        feature = "lua52",
+        feature = "lua51",
+        feature = "lua51Coco",
+        feature = "luajit"
+    ))]
     #[link_name = "luaL_getmetafield"]
     pub fn luaL_getmetafield_old(L: *mut lua_State, obj: c_int, e: *const c_char) -> c_int;
 
@@ -97,7 +107,12 @@ extern "C" {
 
     #[cfg(any(feature = "lua54", feature = "lua53"))]
     pub fn luaL_newmetatable(L: *mut lua_State, tname: *const c_char) -> c_int;
-    #[cfg(any(feature = "lua52", feature = "lua51", feature = "lua51Coco", feature = "luajit"))]
+    #[cfg(any(
+        feature = "lua52",
+        feature = "lua51",
+        feature = "lua51Coco",
+        feature = "luajit"
+    ))]
     #[link_name = "luaL_newmetatable"]
     pub fn luaL_newmetatable_old(L: *mut lua_State, tname: *const c_char) -> c_int;
 

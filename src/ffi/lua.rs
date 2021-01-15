@@ -46,7 +46,12 @@ pub const LUA_SIGNATURE: &[u8] = b"\x1bLJ";
 // option for multiple returns in 'lua_pcall' and 'lua_call'
 pub const LUA_MULTRET: c_int = -1;
 
-#[cfg(any(feature = "lua52", feature = "lua51", feature = "lua51Coco", feature = "luajit"))]
+#[cfg(any(
+    feature = "lua52",
+    feature = "lua51",
+    feature = "lua51Coco",
+    feature = "luajit"
+))]
 pub use super::compat53::{
     lua_dump, lua_getextraspace, lua_getfield, lua_geti, lua_gettable, lua_getuservalue,
     lua_isinteger, lua_pushlstring, lua_rawget, lua_rawgeti, lua_rawgetp, lua_rotate, lua_seti,
@@ -77,7 +82,12 @@ pub const LUA_ERRSYNTAX: c_int = 3;
 pub const LUA_ERRMEM: c_int = 4;
 #[cfg(any(feature = "lua53", feature = "lua52"))]
 pub const LUA_ERRGCMM: c_int = 5;
-#[cfg(any(feature = "lua54", feature = "lua51", feature = "lua51Coco", feature = "luajit"))]
+#[cfg(any(
+    feature = "lua54",
+    feature = "lua51",
+    feature = "lua51Coco",
+    feature = "luajit"
+))]
 pub const LUA_ERRERR: c_int = 5;
 #[cfg(any(feature = "lua53", feature = "lua52"))]
 pub const LUA_ERRERR: c_int = 6;
@@ -174,11 +184,26 @@ extern "C" {
     pub fn lua_gettop(L: *mut lua_State) -> c_int;
     pub fn lua_settop(L: *mut lua_State, idx: c_int);
     pub fn lua_pushvalue(L: *mut lua_State, idx: c_int);
-    #[cfg(any(feature = "lua52", feature = "lua51", feature = "lua51Coco", feature = "luajit"))]
+    #[cfg(any(
+        feature = "lua52",
+        feature = "lua51",
+        feature = "lua51Coco",
+        feature = "luajit"
+    ))]
     pub fn lua_remove(L: *mut lua_State, idx: c_int);
-    #[cfg(any(feature = "lua52", feature = "lua51", feature = "lua51Coco", feature = "luajit"))]
+    #[cfg(any(
+        feature = "lua52",
+        feature = "lua51",
+        feature = "lua51Coco",
+        feature = "luajit"
+    ))]
     pub fn lua_insert(L: *mut lua_State, idx: c_int);
-    #[cfg(any(feature = "lua52", feature = "lua51", feature = "lua51Coco", feature = "luajit"))]
+    #[cfg(any(
+        feature = "lua52",
+        feature = "lua51",
+        feature = "lua51Coco",
+        feature = "luajit"
+    ))]
     pub fn lua_replace(L: *mut lua_State, idx: c_int);
     #[cfg(any(feature = "lua54", feature = "lua53"))]
     pub fn lua_rotate(L: *mut lua_State, idx: c_int, n: c_int);
@@ -223,13 +248,33 @@ pub const LUA_OPADD: c_int = 0;
 pub const LUA_OPSUB: c_int = 1;
 pub const LUA_OPMUL: c_int = 2;
 
-#[cfg(any(feature = "lua52", feature = "lua51", feature = "lua51Coco", feature = "luajit"))]
+#[cfg(any(
+    feature = "lua52",
+    feature = "lua51",
+    feature = "lua51Coco",
+    feature = "luajit"
+))]
 pub const LUA_OPDIV: c_int = 3;
-#[cfg(any(feature = "lua52", feature = "lua51", feature = "lua51Coco", feature = "luajit"))]
+#[cfg(any(
+    feature = "lua52",
+    feature = "lua51",
+    feature = "lua51Coco",
+    feature = "luajit"
+))]
 pub const LUA_OPMOD: c_int = 4;
-#[cfg(any(feature = "lua52", feature = "lua51", feature = "lua51Coco", feature = "luajit"))]
+#[cfg(any(
+    feature = "lua52",
+    feature = "lua51",
+    feature = "lua51Coco",
+    feature = "luajit"
+))]
 pub const LUA_OPPOW: c_int = 5;
-#[cfg(any(feature = "lua52", feature = "lua51", feature = "lua51Coco", feature = "luajit"))]
+#[cfg(any(
+    feature = "lua52",
+    feature = "lua51",
+    feature = "lua51Coco",
+    feature = "luajit"
+))]
 pub const LUA_OPUNM: c_int = 6;
 
 #[cfg(any(feature = "lua54", feature = "lua53"))]
@@ -282,7 +327,12 @@ extern "C" {
 
     #[cfg(any(feature = "lua54", feature = "lua53"))]
     pub fn lua_pushlstring(L: *mut lua_State, s: *const c_char, l: usize) -> *const c_char;
-    #[cfg(any(feature = "lua52", feature = "lua51", feature = "lua51Coco", feature = "luajit"))]
+    #[cfg(any(
+        feature = "lua52",
+        feature = "lua51",
+        feature = "lua51Coco",
+        feature = "luajit"
+    ))]
     #[link_name = "lua_pushlstring"]
     pub fn lua_pushlstring_old(L: *mut lua_State, s: *const c_char, l: usize) -> *const c_char;
 
@@ -311,13 +361,23 @@ extern "C" {
 
     #[cfg(any(feature = "lua54", feature = "lua53"))]
     pub fn lua_gettable(L: *mut lua_State, idx: c_int) -> c_int;
-    #[cfg(any(feature = "lua52", feature = "lua51", feature = "lua51Coco", feature = "luajit"))]
+    #[cfg(any(
+        feature = "lua52",
+        feature = "lua51",
+        feature = "lua51Coco",
+        feature = "luajit"
+    ))]
     #[link_name = "lua_gettable"]
     pub fn lua_gettable_old(L: *mut lua_State, idx: c_int);
 
     #[cfg(any(feature = "lua54", feature = "lua53"))]
     pub fn lua_getfield(L: *mut lua_State, idx: c_int, k: *const c_char) -> c_int;
-    #[cfg(any(feature = "lua52", feature = "lua51", feature = "lua51Coco", feature = "luajit"))]
+    #[cfg(any(
+        feature = "lua52",
+        feature = "lua51",
+        feature = "lua51Coco",
+        feature = "luajit"
+    ))]
     #[link_name = "lua_getfield"]
     pub fn lua_getfield_old(L: *mut lua_State, idx: c_int, k: *const c_char);
 
@@ -326,13 +386,23 @@ extern "C" {
 
     #[cfg(any(feature = "lua54", feature = "lua53"))]
     pub fn lua_rawget(L: *mut lua_State, idx: c_int) -> c_int;
-    #[cfg(any(feature = "lua52", feature = "lua51", feature = "lua51Coco", feature = "luajit"))]
+    #[cfg(any(
+        feature = "lua52",
+        feature = "lua51",
+        feature = "lua51Coco",
+        feature = "luajit"
+    ))]
     #[link_name = "lua_rawget"]
     pub fn lua_rawget_old(L: *mut lua_State, idx: c_int);
 
     #[cfg(any(feature = "lua54", feature = "lua53"))]
     pub fn lua_rawgeti(L: *mut lua_State, idx: c_int, n: lua_Integer) -> c_int;
-    #[cfg(any(feature = "lua52", feature = "lua51", feature = "lua51Coco", feature = "luajit"))]
+    #[cfg(any(
+        feature = "lua52",
+        feature = "lua51",
+        feature = "lua51Coco",
+        feature = "luajit"
+    ))]
     #[link_name = "lua_rawgeti"]
     pub fn lua_rawgeti_old(L: *mut lua_State, idx: c_int, n: lua_Integer);
 
@@ -467,7 +537,12 @@ extern "C" {
         data: *mut c_void,
         strip: c_int,
     ) -> c_int;
-    #[cfg(any(feature = "lua52", feature = "lua51", feature = "lua51Coco", feature = "luajit"))]
+    #[cfg(any(
+        feature = "lua52",
+        feature = "lua51",
+        feature = "lua51Coco",
+        feature = "luajit"
+    ))]
     #[link_name = "lua_dump"]
     pub fn lua_dump_old(L: *mut lua_State, writer: lua_Writer, data: *mut c_void) -> c_int;
 }

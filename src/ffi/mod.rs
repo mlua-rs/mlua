@@ -281,7 +281,12 @@ mod glue {
     include!(concat!(env!("OUT_DIR"), "/glue.rs"));
 }
 
-#[cfg(any(feature = "lua52", feature = "lua51", feature = "lua51Coco", feature = "luajit"))]
+#[cfg(any(
+    feature = "lua52",
+    feature = "lua51",
+    feature = "lua51Coco",
+    feature = "luajit"
+))]
 mod compat53;
 
 mod lauxlib;

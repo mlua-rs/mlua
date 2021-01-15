@@ -143,17 +143,18 @@ fn generate_glue() -> std::io::Result<()> {
     write!(glue, "pub type LUA_INTEGER = i64;\n")?;
     write!(glue, "pub type LUA_UNSIGNED = u64;\n")?;
 
-    let version = if cfg!(feature = "luajit") || cfg!(feature = "lua51") || cfg!(feature = "lua51Coco") {
-        (5, 1, 0)
-    } else if cfg!(feature = "lua52") {
-        (5, 2, 0)
-    } else if cfg!(feature = "lua53") {
-        (5, 3, 0)
-    } else if cfg!(feature = "lua54") {
-        (5, 4, 0)
-    } else {
-        unreachable!();
-    };
+    let version =
+        if cfg!(feature = "luajit") || cfg!(feature = "lua51") || cfg!(feature = "lua51Coco") {
+            (5, 1, 0)
+        } else if cfg!(feature = "lua52") {
+            (5, 2, 0)
+        } else if cfg!(feature = "lua53") {
+            (5, 3, 0)
+        } else if cfg!(feature = "lua54") {
+            (5, 4, 0)
+        } else {
+            unreachable!();
+        };
 
     write!(
         glue,
@@ -226,7 +227,9 @@ fn main() {
         feature = "lua51Coco",
         feature = "luajit"
     )))]
-    compile_error!("You must enable one of the features: lua54, lua53, lua52, lua51, lua51Coco, luajit");
+    compile_error!(
+        "You must enable one of the features: lua54, lua53, lua52, lua51, lua51Coco, luajit"
+    );
 
     #[cfg(all(
         feature = "lua54",
@@ -238,22 +241,40 @@ fn main() {
             feature = "luajit"
         )
     ))]
-    compile_error!("You can enable only one of the features: lua54, lua53, lua52, lua51, lua51Coco, luajit");
+    compile_error!(
+        "You can enable only one of the features: lua54, lua53, lua52, lua51, lua51Coco, luajit"
+    );
 
     #[cfg(all(
         feature = "lua53",
-        any(feature = "lua52", feature = "lua51", feature = "lua51Coco", feature = "luajit")
+        any(
+            feature = "lua52",
+            feature = "lua51",
+            feature = "lua51Coco",
+            feature = "luajit"
+        )
     ))]
-    compile_error!("You can enable only one of the features: lua54, lua53, lua52, lua51, lua51Coco, luajit");
+    compile_error!(
+        "You can enable only one of the features: lua54, lua53, lua52, lua51, lua51Coco, luajit"
+    );
 
-    #[cfg(all(feature = "lua52", any(feature = "lua51", feature = "lua51Coco", feature = "luajit")))]
-    compile_error!("You can enable only one of the features: lua54, lua53, lua52, lua51, lua51Coco, luajit");
+    #[cfg(all(
+        feature = "lua52",
+        any(feature = "lua51", feature = "lua51Coco", feature = "luajit")
+    ))]
+    compile_error!(
+        "You can enable only one of the features: lua54, lua53, lua52, lua51, lua51Coco, luajit"
+    );
 
     #[cfg(all(feature = "lua51", any(feature = "lua51Coco", feature = "luajit")))]
-    compile_error!("You can enable only one of the features: lua54, lua53, lua52, lua51, lua51Coco, luajit");
+    compile_error!(
+        "You can enable only one of the features: lua54, lua53, lua52, lua51, lua51Coco, luajit"
+    );
 
     #[cfg(all(feature = "lua51Coco", feature = "luajit"))]
-    compile_error!("You can enable only one of the features: lua54, lua53, lua52, lua51, lua51Coco, luajit");
+    compile_error!(
+        "You can enable only one of the features: lua54, lua53, lua52, lua51, lua51Coco, luajit"
+    );
 
     // We don't support "vendored module" mode on windows
     #[cfg(all(feature = "vendored", feature = "module", target_os = "windows"))]

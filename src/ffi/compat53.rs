@@ -797,7 +797,12 @@ pub unsafe fn luaL_requiref(
             lua_getfield(L, -1, modname);
         }
     }
-    if cfg!(any(feature = "lua52", feature = "lua51", feature = "lua51Coco")) && glb != 0 {
+    if cfg!(any(
+        feature = "lua52",
+        feature = "lua51",
+        feature = "lua51Coco"
+    )) && glb != 0
+    {
         lua_pushvalue(L, -1);
         lua_setglobal(L, modname);
     }

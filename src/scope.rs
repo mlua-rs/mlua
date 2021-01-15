@@ -246,7 +246,12 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
                         assert_stack(lua.state, 1);
                         lua.push_ref(&ud.0);
                         ffi::lua_getuservalue(lua.state, -1);
-                        #[cfg(any(feature = "lua52", feature = "lua51", feature = "lua51Coco", feature = "luajit"))]
+                        #[cfg(any(
+                            feature = "lua52",
+                            feature = "lua51",
+                            feature = "lua51Coco",
+                            feature = "luajit"
+                        ))]
                         {
                             ffi::lua_rawgeti(lua.state, -1, 1);
                             ffi::lua_remove(lua.state, -2);
@@ -316,7 +321,12 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
             push_userdata(lua.state, ())?;
             #[cfg(any(feature = "lua54", feature = "lua53"))]
             ffi::lua_pushlightuserdata(lua.state, data.as_ptr() as *mut c_void);
-            #[cfg(any(feature = "lua52", feature = "lua51", feature = "lua51Coco", feature = "luajit"))]
+            #[cfg(any(
+                feature = "lua52",
+                feature = "lua51",
+                feature = "lua51Coco",
+                feature = "luajit"
+            ))]
             protect_lua_closure(lua.state, 0, 1, |state| {
                 // Lua 5.2/5.1 allows to store only table. Then we will wrap the value.
                 ffi::lua_createtable(state, 1, 0);

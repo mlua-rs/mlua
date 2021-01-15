@@ -71,7 +71,10 @@ struct ExtraData {
     hook_callback: Option<HookCallback>,
 }
 
-#[cfg_attr(any(feature = "lua51", feature = "lua51Coco", feature = "luajit"), allow(dead_code))]
+#[cfg_attr(
+    any(feature = "lua51", feature = "lua51Coco", feature = "luajit"),
+    allow(dead_code)
+)]
 struct MemoryInfo {
     used_memory: isize,
     memory_limit: isize,
@@ -190,7 +193,10 @@ impl Lua {
     ///
     /// [`StdLib`]: struct.StdLib.html
     pub unsafe fn unsafe_new_with(libs: StdLib) -> Lua {
-        #[cfg_attr(any(feature = "lua51", feature = "lua51Coco", feature = "luajit"), allow(dead_code))]
+        #[cfg_attr(
+            any(feature = "lua51", feature = "lua51Coco", feature = "luajit"),
+            allow(dead_code)
+        )]
         unsafe extern "C" fn allocator(
             extra_data: *mut c_void,
             ptr: *mut c_void,

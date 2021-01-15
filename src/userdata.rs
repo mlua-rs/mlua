@@ -498,7 +498,12 @@ impl<'lua> AnyUserData<'lua> {
     /// [`get_user_value`]: #method.get_user_value
     pub fn set_user_value<V: ToLua<'lua>>(&self, v: V) -> Result<()> {
         let lua = self.0.lua;
-        #[cfg(any(feature = "lua52", feature = "lua51", feature = "lua51Coco", feature = "luajit"))]
+        #[cfg(any(
+            feature = "lua52",
+            feature = "lua51",
+            feature = "lua51Coco",
+            feature = "luajit"
+        ))]
         let v = {
             // Lua 5.2/5.1 allows to store only a table. Then we will wrap the value.
             let t = lua.create_table()?;
@@ -531,7 +536,12 @@ impl<'lua> AnyUserData<'lua> {
             ffi::lua_getuservalue(lua.state, -1);
             lua.pop_value()
         };
-        #[cfg(any(feature = "lua52", feature = "lua51", feature = "lua51Coco", feature = "luajit"))]
+        #[cfg(any(
+            feature = "lua52",
+            feature = "lua51",
+            feature = "lua51Coco",
+            feature = "luajit"
+        ))]
         return crate::Table::from_lua(res, lua)?.get(1);
         #[cfg(any(feature = "lua54", feature = "lua53"))]
         V::from_lua(res, lua)
