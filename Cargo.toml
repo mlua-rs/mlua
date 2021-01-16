@@ -61,9 +61,9 @@ rustyline = "7.0"
 criterion = "0.3"
 trybuild = "1.0"
 futures = "0.3.5"
-hyper = "0.13"
-reqwest = { version = "0.10", features = ["json"] }
-tokio = { version = "0.2", features = ["full"] }
+hyper = { version = "0.14", features = ["client", "server"] }
+reqwest = { version = "0.11", features = ["json"] }
+tokio = { version = "1.0", features = ["full"] }
 futures-timer = "3.0"
 serde_json = "1.0"
 

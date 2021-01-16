@@ -1,4 +1,3 @@
-use std::net::Shutdown;
 use std::sync::Arc;
 
 use bstr::BString;
@@ -55,7 +54,7 @@ impl UserData for LuaTcpStream {
         });
 
         methods.add_async_method("close", |_, stream, ()| async move {
-            stream.0.lock().await.shutdown(Shutdown::Both)?;
+            stream.0.lock().await.shutdown().await?;
             Ok(())
         });
     }

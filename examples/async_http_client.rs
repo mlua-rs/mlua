@@ -2,8 +2,9 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use bstr::BString;
-use hyper::{body::Body as HyperBody, Client as HyperClient};
-use tokio::{stream::StreamExt, sync::Mutex};
+use hyper::body::{Body as HyperBody, HttpBody as _};
+use hyper::Client as HyperClient;
+use tokio::sync::Mutex;
 
 use mlua::{Error, Lua, Result, UserData, UserDataMethods};
 
@@ -20,8 +21,8 @@ impl UserData for BodyReader {
     fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
         methods.add_async_method("read", |_, reader, ()| async move {
             let mut reader = reader.0.lock().await;
-            let bytes = reader.try_next().await.map_err(Error::external)?;
-            if let Some(bytes) = bytes {
+            if let Some(bytes) = reader.data().await {
+                let bytes = bytes.map_err(Error::external)?;
                 return Ok(Some(BString::from(bytes.as_ref())));
             }
             Ok(None)
