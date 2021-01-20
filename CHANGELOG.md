@@ -1,7 +1,14 @@
+## v0.5.1
+
+- Support cross compilation that should work well for vendored builds (including LuaJIT with some restrictions)
+- Fix numeric types conversion for 32bit Lua
+- Update tokio to 1.0 for async examples
+
 ## v0.5.0
 
 - Serde support under `serialize` feature flag.
 - Re-export `mlua_derive`.
+- impl `ToLua` and `FromLua` for `HashSet` and `BTreeSet`
 
 ## v0.4.2
 
