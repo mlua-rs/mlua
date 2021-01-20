@@ -20,8 +20,8 @@ impl<'lua, 'de> serde::Deserializer<'de> for Deserializer<'lua> {
         match self.0 {
             Value::Nil => visitor.visit_unit(),
             Value::Boolean(b) => visitor.visit_bool(b),
-            Value::Integer(i) => visitor.visit_i64(i),
-            Value::Number(n) => visitor.visit_f64(n),
+            Value::Integer(i) => visitor.visit_i64(i.into()),
+            Value::Number(n) => visitor.visit_f64(n.into()),
             Value::String(s) => match s.to_str() {
                 Ok(s) => visitor.visit_str(s),
                 Err(_) => visitor.visit_bytes(s.as_bytes()),

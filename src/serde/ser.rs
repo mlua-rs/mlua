@@ -8,18 +8,18 @@ use crate::ffi;
 use crate::lua::Lua;
 use crate::string::String;
 use crate::table::Table;
-use crate::types::{Integer, Number};
+use crate::types::Integer;
 use crate::util::{assert_stack, protect_lua, StackGuard};
-use crate::value::Value;
+use crate::value::{ToLua, Value};
 
 /// A struct for serializing Rust values into Lua values.
 pub struct Serializer<'lua>(pub &'lua Lua);
 
-macro_rules! lua_serialize_integer {
+macro_rules! lua_serialize_number {
     ($name:ident, $t:ty) => {
         #[inline]
         fn $name(self, value: $t) -> Result<Value<'lua>> {
-            Ok(Value::Integer(value as Integer))
+            value.to_lua(self.0)
         }
     };
 }
@@ -43,28 +43,17 @@ impl<'lua> ser::Serializer for Serializer<'lua> {
         Ok(Value::Boolean(value))
     }
 
-    lua_serialize_integer!(serialize_i8, i8);
-    lua_serialize_integer!(serialize_u8, u8);
-    lua_serialize_integer!(serialize_i16, i16);
-    lua_serialize_integer!(serialize_u16, u16);
-    lua_serialize_integer!(serialize_i32, i32);
-    lua_serialize_integer!(serialize_u32, u32);
-    lua_serialize_integer!(serialize_u64, u64);
+    lua_serialize_number!(serialize_i8, i8);
+    lua_serialize_number!(serialize_u8, u8);
+    lua_serialize_number!(serialize_i16, i16);
+    lua_serialize_number!(serialize_u16, u16);
+    lua_serialize_number!(serialize_i32, i32);
+    lua_serialize_number!(serialize_u32, u32);
+    lua_serialize_number!(serialize_i64, i64);
+    lua_serialize_number!(serialize_u64, u64);
 
-    #[inline]
-    fn serialize_i64(self, value: i64) -> Result<Value<'lua>> {
-        Ok(Value::Integer(value))
-    }
-
-    #[inline]
-    fn serialize_f32(self, value: f32) -> Result<Value<'lua>> {
-        Ok(Value::Number(value as Number))
-    }
-
-    #[inline]
-    fn serialize_f64(self, value: f64) -> Result<Value<'lua>> {
-        Ok(Value::Number(value))
-    }
+    lua_serialize_number!(serialize_f32, f32);
+    lua_serialize_number!(serialize_f64, f64);
 
     #[inline]
     fn serialize_char(self, value: char) -> Result<Value<'lua>> {

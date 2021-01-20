@@ -125,8 +125,8 @@ impl<'lua> Serialize for Value<'lua> {
         match self {
             Value::Nil => serializer.serialize_unit(),
             Value::Boolean(b) => serializer.serialize_bool(*b),
-            Value::Integer(i) => serializer.serialize_i64(*i),
-            Value::Number(n) => serializer.serialize_f64(*n),
+            Value::Integer(i) => serializer.serialize_i64((*i).into()),
+            Value::Number(n) => serializer.serialize_f64((*n).into()),
             Value::String(s) => s.serialize(serializer),
             Value::Table(t) => t.serialize(serializer),
             Value::UserData(ud) => ud.serialize(serializer),

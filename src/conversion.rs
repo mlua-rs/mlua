@@ -12,7 +12,7 @@ use crate::lua::Lua;
 use crate::string::String;
 use crate::table::Table;
 use crate::thread::Thread;
-use crate::types::{LightUserData, MaybeSend, Number};
+use crate::types::{LightUserData, MaybeSend};
 use crate::userdata::{AnyUserData, UserData};
 use crate::value::{FromLua, Nil, ToLua, Value};
 
@@ -345,7 +345,13 @@ macro_rules! lua_convert_float {
     ($x:ty) => {
         impl<'lua> ToLua<'lua> for $x {
             fn to_lua(self, _: &'lua Lua) -> Result<Value<'lua>> {
-                Ok(Value::Number(self as Number))
+                cast(self)
+                    .ok_or_else(|| Error::ToLuaConversionError {
+                        from: stringify!($x),
+                        to: "number",
+                        message: Some("out of range".to_string()),
+                    })
+                    .map(Value::Number)
             }
         }
 
