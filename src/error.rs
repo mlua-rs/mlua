@@ -131,6 +131,18 @@ pub enum Error {
     /// [`AnyUserData`]: struct.AnyUserData.html
     /// [`UserData`]: trait.UserData.html
     UserDataBorrowMutError,
+    /// A [`MetaMethod`] operation is restricted (typically for `__gc` or `__metatable`).
+    ///
+    /// [`MetaMethod`]: enum.MetaMethod.html
+    MetaMethodRestricted(StdString),
+    /// A [`MetaMethod`] (eg. `__index` or `__newindex`) has invalid type.
+    ///
+    /// [`MetaMethod`]: enum.MetaMethod.html
+    MetaMethodTypeError {
+        method: StdString,
+        type_name: &'static str,
+        message: Option<StdString>,
+    },
     /// A `RegistryKey` produced from a different Lua state was used.
     MismatchedRegistryKey,
     /// A Rust callback returned `Err`, raising the contained `Error` as a Lua error.
@@ -203,22 +215,14 @@ impl fmt::Display for Error {
                 fmt,
                 "too many arguments to Function::bind"
             ),
-            Error::ToLuaConversionError {
-                from,
-                to,
-                ref message,
-            } => {
+            Error::ToLuaConversionError { from, to, ref message } => {
                 write!(fmt, "error converting {} to Lua {}", from, to)?;
                 match *message {
                     None => Ok(()),
                     Some(ref message) => write!(fmt, " ({})", message),
                 }
             }
-            Error::FromLuaConversionError {
-                from,
-                to,
-                ref message,
-            } => {
+            Error::FromLuaConversionError { from, to, ref message } => {
                 write!(fmt, "error converting Lua {} to {}", from, to)?;
                 match *message {
                     None => Ok(()),
@@ -230,6 +234,14 @@ impl fmt::Display for Error {
             Error::UserDataDestructed => write!(fmt, "userdata has been destructed"),
             Error::UserDataBorrowError => write!(fmt, "userdata already mutably borrowed"),
             Error::UserDataBorrowMutError => write!(fmt, "userdata already borrowed"),
+            Error::MetaMethodRestricted(ref method) => write!(fmt, "metamethod {} is restricted", method),
+            Error::MetaMethodTypeError { ref method, type_name, ref message } => {
+                write!(fmt, "metamethod {} has unsupported type {}", method, type_name)?;
+                match *message {
+                    None => Ok(()),
+                    Some(ref message) => write!(fmt, " ({})", message),
+                }
+            }
             Error::MismatchedRegistryKey => {
                 write!(fmt, "RegistryKey used from different Lua state")
             }

@@ -23,6 +23,7 @@
 //!
 //! The [`UserData`] trait can be implemented by user-defined types to make them available to Lua.
 //! Methods and operators to be used from Lua can be added using the [`UserDataMethods`] API.
+//! Fields are supported using the [`UserDataFields`] API.
 //!
 //! # Serde support
 //!
@@ -59,6 +60,7 @@
 //! [`FromLuaMulti`]: trait.FromLuaMulti.html
 //! [`Function`]: struct.Function.html
 //! [`UserData`]: trait.UserData.html
+//! [`UserDataFields`]: trait.UserDataFields.html
 //! [`UserDataMethods`]: trait.UserDataMethods.html
 //! [`LuaSerdeExt`]: serde/trait.LuaSerdeExt.html
 //! [`Value`]: enum.Value.html
@@ -109,7 +111,7 @@ pub use crate::string::String;
 pub use crate::table::{Table, TableExt, TablePairs, TableSequence};
 pub use crate::thread::{Thread, ThreadStatus};
 pub use crate::types::{Integer, LightUserData, Number, RegistryKey};
-pub use crate::userdata::{AnyUserData, MetaMethod, UserData, UserDataMethods};
+pub use crate::userdata::{AnyUserData, MetaMethod, UserData, UserDataFields, UserDataMethods};
 pub use crate::value::{FromLua, FromLuaMulti, MultiValue, Nil, ToLua, ToLuaMulti, Value};
 
 #[cfg(feature = "async")]

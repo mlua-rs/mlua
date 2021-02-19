@@ -4,8 +4,8 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicI64, Ordering};
 
 use mlua::{
-    AnyUserData, ExternalError, Function, Lua, MetaMethod, Result, String, UserData,
-    UserDataMethods, Value,
+    AnyUserData, Error, ExternalError, Function, Lua, MetaMethod, Nil, Result, String, UserData,
+    UserDataFields, UserDataMethods, Value,
 };
 
 #[test]
@@ -155,10 +155,10 @@ fn test_metamethods() -> Result<()> {
     assert!(userdata2.equals(userdata3)?);
 
     let userdata1: AnyUserData = globals.get("userdata1")?;
-    assert!(userdata1.has_metamethod(MetaMethod::Add)?);
-    assert!(userdata1.has_metamethod(MetaMethod::Sub)?);
-    assert!(userdata1.has_metamethod(MetaMethod::Index)?);
-    assert!(!userdata1.has_metamethod(MetaMethod::Pow)?);
+    assert!(userdata1.get_metatable()?.contains(MetaMethod::Add)?);
+    assert!(userdata1.get_metatable()?.contains(MetaMethod::Sub)?);
+    assert!(userdata1.get_metatable()?.contains(MetaMethod::Index)?);
+    assert!(!userdata1.get_metatable()?.contains(MetaMethod::Pow)?);
 
     Ok(())
 }
@@ -250,7 +250,7 @@ fn test_gc_userdata() -> Result<()> {
 }
 
 #[test]
-fn detroys_userdata() -> Result<()> {
+fn test_destroy_userdata() -> Result<()> {
     struct MyUserdata(Arc<()>);
 
     impl UserData for MyUserdata {}
@@ -272,7 +272,7 @@ fn detroys_userdata() -> Result<()> {
 }
 
 #[test]
-fn user_value() -> Result<()> {
+fn test_user_value() -> Result<()> {
     struct MyUserData;
 
     impl UserData for MyUserData {}
@@ -332,6 +332,104 @@ fn test_functions() -> Result<()> {
     set.call::<_, ()>(100)?;
     assert_eq!(get.call::<_, i64>(())?, 100);
     assert_eq!(get_constant.call::<_, i64>(())?, 7);
+
+    Ok(())
+}
+
+#[test]
+fn test_fields() -> Result<()> {
+    #[derive(Copy, Clone)]
+    struct MyUserData(i64);
+
+    impl UserData for MyUserData {
+        fn add_fields<'lua, F: UserDataFields<'lua, Self>>(fields: &mut F) {
+            fields.add_field_method_get("val", |_, data| Ok(data.0));
+            fields.add_field_method_set("val", |_, data, val| {
+                data.0 = val;
+                Ok(())
+            });
+
+            fields.add_meta_field_with(MetaMethod::Index, |lua| {
+                let index = lua.create_table()?;
+                index.set("f", 321)?;
+                Ok(index)
+            });
+        }
+    }
+
+    let lua = Lua::new();
+    let globals = lua.globals();
+    globals.set("ud", MyUserData(7))?;
+    lua.load(
+        r#"
+        assert(ud.val == 7)
+        ud.val = 10
+        assert(ud.val == 10)
+        assert(ud.f == 321)
+    "#,
+    )
+    .exec()?;
+
+    Ok(())
+}
+
+#[test]
+fn test_metatable() -> Result<()> {
+    #[derive(Copy, Clone)]
+    struct MyUserData(i64);
+
+    impl UserData for MyUserData {
+        fn add_fields<'lua, F: UserDataFields<'lua, Self>>(fields: &mut F) {
+            fields.add_meta_field_with("__type_name", |_| Ok("MyUserData"));
+        }
+
+        fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
+            methods.add_function("my_type_name", |_, data: AnyUserData| {
+                let metatable = data.get_metatable()?;
+                metatable.get::<_, String>("__type_name")
+            });
+        }
+    }
+
+    let lua = Lua::new();
+    let globals = lua.globals();
+    globals.set("ud", MyUserData(7))?;
+    lua.load(
+        r#"
+        assert(ud:my_type_name() == "MyUserData")
+    "#,
+    )
+    .exec()?;
+
+    let ud: AnyUserData = globals.get("ud")?;
+    let metatable = ud.get_metatable()?;
+
+    match metatable.get::<_, Value>("__gc") {
+        Ok(_) => panic!("expected MetaMethodRestricted, got no error"),
+        Err(Error::MetaMethodRestricted(_)) => {}
+        Err(e) => panic!("expected MetaMethodRestricted, got {:?}", e),
+    }
+
+    match metatable.set(MetaMethod::Index, Nil) {
+        Ok(_) => panic!("expected MetaMethodRestricted, got no error"),
+        Err(Error::MetaMethodRestricted(_)) => {}
+        Err(e) => panic!("expected MetaMethodRestricted, got {:?}", e),
+    }
+
+    #[derive(Copy, Clone)]
+    struct MyUserData2(i64);
+
+    impl UserData for MyUserData2 {
+        fn add_fields<'lua, F: UserDataFields<'lua, Self>>(fields: &mut F) {
+            fields.add_meta_field_with("__index", |_| Ok(1));
+        }
+    }
+
+    match lua.create_userdata(MyUserData2(1)) {
+        Ok(_) => panic!("expected MetaMethodTypeError, got no error"),
+        Err(Error::MetaMethodTypeError { .. }) => {}
+        Err(e) => panic!("expected MetaMethodTypeError, got {:?}", e),
+    }
 
     Ok(())
 }

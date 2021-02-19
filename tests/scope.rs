@@ -2,7 +2,8 @@ use std::cell::Cell;
 use std::rc::Rc;
 
 use mlua::{
-    AnyUserData, Error, Function, Lua, MetaMethod, Result, String, UserData, UserDataMethods,
+    AnyUserData, Error, Function, Lua, MetaMethod, Result, String, UserData, UserDataFields,
+    UserDataMethods,
 };
 
 #[test]
@@ -135,6 +136,41 @@ fn outer_lua_access() -> Result<()> {
             .call::<_, ()>(())
     })?;
     assert_eq!(table.get::<_, String>("a")?, "b");
+
+    Ok(())
+}
+
+#[test]
+fn scope_userdata_fields() -> Result<()> {
+    struct MyUserData<'a>(&'a Cell<i64>);
+
+    impl<'a> UserData for MyUserData<'a> {
+        fn add_fields<'lua, F: UserDataFields<'lua, Self>>(fields: &mut F) {
+            fields.add_field_method_get("val", |_, data| Ok(data.0.get()));
+            fields.add_field_method_set("val", |_, data, val| {
+                data.0.set(val);
+                Ok(())
+            });
+        }
+    }
+
+    let lua = Lua::new();
+
+    let i = Cell::new(42);
+    let f: Function = lua
+        .load(
+            r#"
+            function(u)
+                assert(u.val == 42)
+                u.val = 44
+            end
+        "#,
+        )
+        .eval()?;
+
+    lua.scope(|scope| f.call::<_, ()>(scope.create_nonstatic_userdata(MyUserData(&i))?))?;
+
+    assert_eq!(i.get(), 44);
 
     Ok(())
 }

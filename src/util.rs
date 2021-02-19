@@ -293,56 +293,149 @@ pub unsafe fn get_gc_userdata<T: Any>(state: *mut ffi::lua_State, index: c_int) 
 }
 
 // Populates the given table with the appropriate members to be a userdata metatable for the given
-// type.  This function takes the given table at the `metatable` index, and adds an appropriate __gc
-// member to it for the given type and a __metatable entry to protect the table from script access.
-// The function also, if given a `members` table index, will set up an __index metamethod to return
-// the appropriate member on __index.  Additionally, if there is already an __index entry on the
-// given metatable, instead of simply overwriting the __index, instead the created __index method
-// will capture the previous one, and use it as a fallback only if the given key is not found in the
-// provided members table.  Internally uses 6 stack spaces and does not call checkstack.
+// type.  This function takes the given table at the `metatable` index, and adds an appropriate `__gc`
+// member to it for the given type and a `__metatable` entry to protect the table from script access.
+// The function also, if given a `field_getters` or `methods` tables, will create an `__index` metamethod
+// (capturing previous one) to lookup in `field_getters` first, then `methods` and falling back to the
+// captured `__index` if no matches found.
+// The same is also applicable for `__newindex` metamethod and `field_setters` table.
+// Internally uses 8 stack spaces and does not call checkstack.
 pub unsafe fn init_userdata_metatable<T>(
     state: *mut ffi::lua_State,
     metatable: c_int,
-    members: Option<c_int>,
+    field_getters: Option<c_int>,
+    field_setters: Option<c_int>,
+    methods: Option<c_int>,
 ) -> Result<()> {
-    // Used if both an __index metamethod is set and regular methods, checks methods table
-    // first, then __index metamethod.
+    // Wrapper to lookup in `field_getters` first, then `methods`, ending original `__index`.
+    // Used only if `field_getters` or `methods` set.
     unsafe extern "C" fn meta_index_impl(state: *mut ffi::lua_State) -> c_int {
+        // stack: self, key
         ffi::luaL_checkstack(state, 2, ptr::null());
 
-        ffi::lua_pushvalue(state, -1);
-        ffi::lua_gettable(state, ffi::lua_upvalueindex(2));
-        if ffi::lua_isnil(state, -1) == 0 {
-            ffi::lua_insert(state, -3);
-            ffi::lua_pop(state, 2);
-            1
-        } else {
-            ffi::lua_pop(state, 1);
-            ffi::lua_pushvalue(state, ffi::lua_upvalueindex(1));
-            ffi::lua_insert(state, -3);
-            ffi::lua_call(state, 2, 1);
-            1
+        // lookup in `field_getters` table
+        if ffi::lua_isnil(state, ffi::lua_upvalueindex(2)) == 0 {
+            ffi::lua_pushvalue(state, -1); // `key` arg
+            if ffi::lua_rawget(state, ffi::lua_upvalueindex(2)) != ffi::LUA_TNIL {
+                ffi::lua_insert(state, -3); // move function
+                ffi::lua_pop(state, 1); // remove `key`
+                ffi::lua_call(state, 1, 1);
+                return 1;
+            }
+            ffi::lua_pop(state, 1); // pop the nil value
         }
+        // lookup in `methods` table
+        if ffi::lua_isnil(state, ffi::lua_upvalueindex(3)) == 0 {
+            ffi::lua_pushvalue(state, -1); // `key` arg
+            if ffi::lua_rawget(state, ffi::lua_upvalueindex(3)) != ffi::LUA_TNIL {
+                ffi::lua_insert(state, -3);
+                ffi::lua_pop(state, 2);
+                return 1;
+            }
+            ffi::lua_pop(state, 1); // pop the nil value
+        }
+
+        // lookup in `__index`
+        ffi::lua_pushvalue(state, ffi::lua_upvalueindex(1));
+        match ffi::lua_type(state, -1) {
+            ffi::LUA_TNIL => {
+                ffi::lua_pop(state, 1); // pop the nil value
+                let field = ffi::lua_tostring(state, -1);
+                ffi::luaL_error(state, cstr!("attempt to get an unknown field '%s'"), field);
+            }
+            ffi::LUA_TTABLE => {
+                ffi::lua_insert(state, -2);
+                ffi::lua_gettable(state, -2);
+            }
+            ffi::LUA_TFUNCTION => {
+                ffi::lua_insert(state, -3);
+                ffi::lua_call(state, 2, 1);
+            }
+            _ => unreachable!(),
+        }
+
+        1
     }
 
-    let members = members.map(|i| ffi::lua_absindex(state, i));
+    // Similar to `meta_index_impl`, checks `field_setters` table first, then `__newindex` metamethod.
+    // Used only if `field_setters` set.
+    unsafe extern "C" fn meta_newindex_impl(state: *mut ffi::lua_State) -> c_int {
+        // stack: self, key, value
+        ffi::luaL_checkstack(state, 2, ptr::null());
+
+        // lookup in `field_setters` table
+        ffi::lua_pushvalue(state, -2); // `key` arg
+        if ffi::lua_rawget(state, ffi::lua_upvalueindex(2)) != ffi::LUA_TNIL {
+            ffi::lua_remove(state, -3); // remove `key`
+            ffi::lua_insert(state, -3); // move function
+            ffi::lua_call(state, 2, 0);
+            return 0;
+        }
+        ffi::lua_pop(state, 1); // pop the nil value
+
+        // lookup in `__newindex`
+        ffi::lua_pushvalue(state, ffi::lua_upvalueindex(1));
+        match ffi::lua_type(state, -1) {
+            ffi::LUA_TNIL => {
+                ffi::lua_pop(state, 1); // pop the nil value
+                let field = ffi::lua_tostring(state, -2);
+                ffi::luaL_error(state, cstr!("attempt to set an unknown field '%s'"), field);
+            }
+            ffi::LUA_TTABLE => {
+                ffi::lua_insert(state, -3);
+                ffi::lua_settable(state, -3);
+            }
+            ffi::LUA_TFUNCTION => {
+                ffi::lua_insert(state, -4);
+                ffi::lua_call(state, 3, 0);
+            }
+            _ => unreachable!(),
+        }
+
+        0
+    }
+
     ffi::lua_pushvalue(state, metatable);
 
-    if let Some(members) = members {
+    if field_getters.is_some() || methods.is_some() {
         push_string(state, "__index")?;
-        ffi::lua_pushvalue(state, -1);
 
+        ffi::lua_pushvalue(state, -1);
         let index_type = ffi::lua_rawget(state, -3);
-        if index_type == ffi::LUA_TNIL {
-            ffi::lua_pop(state, 1);
-            ffi::lua_pushvalue(state, members);
-        } else if index_type == ffi::LUA_TFUNCTION {
-            ffi::lua_pushvalue(state, members);
-            protect_lua_closure(state, 2, 1, |state| {
-                ffi::lua_pushcclosure(state, meta_index_impl, 2);
-            })?;
-        } else {
-            mlua_panic!("improper __index type {}", index_type);
+        match index_type {
+            ffi::LUA_TNIL | ffi::LUA_TTABLE | ffi::LUA_TFUNCTION => {
+                for &idx in &[field_getters, methods] {
+                    if let Some(idx) = idx {
+                        ffi::lua_pushvalue(state, idx);
+                    } else {
+                        ffi::lua_pushnil(state);
+                    }
+                }
+                protect_lua_closure(state, 3, 1, |state| {
+                    ffi::lua_pushcclosure(state, meta_index_impl, 3);
+                })?;
+            }
+            _ => mlua_panic!("improper __index type {}", index_type),
+        }
+
+        protect_lua_closure(state, 3, 1, |state| {
+            ffi::lua_rawset(state, -3);
+        })?;
+    }
+
+    if let Some(field_setters) = field_setters {
+        push_string(state, "__newindex")?;
+
+        ffi::lua_pushvalue(state, -1);
+        let newindex_type = ffi::lua_rawget(state, -3);
+        match newindex_type {
+            ffi::LUA_TNIL | ffi::LUA_TTABLE | ffi::LUA_TFUNCTION => {
+                ffi::lua_pushvalue(state, field_setters);
+                protect_lua_closure(state, 2, 1, |state| {
+                    ffi::lua_pushcclosure(state, meta_newindex_impl, 2);
+                })?;
+            }
+            _ => mlua_panic!("improper __newindex type {}", newindex_type),
         }
 
         protect_lua_closure(state, 3, 1, |state| {
