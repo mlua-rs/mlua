@@ -186,6 +186,14 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
                 let state = u.lua.state;
                 assert_stack(state, 2);
                 u.lua.push_ref(&u);
+
+                // Clear uservalue
+                #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+                ffi::lua_pushnil(state);
+                #[cfg(any(feature = "lua51", feature = "luajit"))]
+                ffi::lua_newtable(state);
+                ffi::lua_setuservalue(state, -2);
+
                 // We know the destructor has not run yet because we hold a reference to the
                 // userdata.
                 vec![Box::new(take_userdata::<UserDataCell<T>>(state))]
@@ -244,28 +252,28 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
             let check_ud_type = move |lua: &'callback Lua, value| {
                 if let Some(Value::UserData(ud)) = value {
                     unsafe {
-                        assert_stack(lua.state, 1);
+                        let _sg = StackGuard::new(lua.state);
+                        assert_stack(lua.state, 3);
                         lua.push_ref(&ud.0);
-                        ffi::lua_getuservalue(lua.state, -1);
-                        #[cfg(any(feature = "lua52", feature = "lua51", feature = "luajit"))]
-                        {
-                            ffi::lua_rawgeti(lua.state, -1, 1);
-                            ffi::lua_remove(lua.state, -2);
+                        if ffi::lua_getmetatable(lua.state, -1) == 0 {
+                            return Err(Error::UserDataTypeMismatch);
                         }
-                        return ffi::lua_touserdata(lua.state, -1)
-                            == check_data.as_ptr() as *mut c_void;
+                        ffi::lua_pushstring(lua.state, cstr!("__mlua"));
+                        if ffi::lua_rawget(lua.state, -2) == ffi::LUA_TLIGHTUSERDATA {
+                            let ud_ptr = ffi::lua_touserdata(lua.state, -1);
+                            if ud_ptr == check_data.as_ptr() as *mut c_void {
+                                return Ok(());
+                            }
+                        }
                     }
-                }
-
-                false
+                };
+                Err(Error::UserDataTypeMismatch)
             };
 
             match method {
                 NonStaticMethod::Method(method) => {
                     let f = Box::new(move |lua, mut args: MultiValue<'callback>| {
-                        if !check_ud_type(lua, args.pop_front()) {
-                            return Err(Error::UserDataTypeMismatch);
-                        }
+                        check_ud_type(lua, args.pop_front())?;
                         let data = data
                             .try_borrow()
                             .map(|cell| Ref::map(cell, AsRef::as_ref))
@@ -277,9 +285,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
                 NonStaticMethod::MethodMut(method) => {
                     let method = RefCell::new(method);
                     let f = Box::new(move |lua, mut args: MultiValue<'callback>| {
-                        if !check_ud_type(lua, args.pop_front()) {
-                            return Err(Error::UserDataTypeMismatch);
-                        }
+                        check_ud_type(lua, args.pop_front())?;
                         let mut method = method
                             .try_borrow_mut()
                             .map_err(|_| Error::RecursiveMutCallback)?;
@@ -314,24 +320,19 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
         unsafe {
             let lua = self.lua;
             let _sg = StackGuard::new(lua.state);
-            assert_stack(lua.state, 6);
+            assert_stack(lua.state, 13);
 
             // We need to wrap dummy userdata because their memory can be accessed by serializer
             push_userdata(lua.state, UserDataCell::new(UserDataWrapped::new(())))?;
-            #[cfg(any(feature = "lua54", feature = "lua53"))]
-            ffi::lua_pushlightuserdata(lua.state, data.as_ptr() as *mut c_void);
-            #[cfg(any(feature = "lua52", feature = "lua51", feature = "luajit"))]
-            protect_lua_closure(lua.state, 0, 1, |state| {
-                // Lua 5.2/5.1 allows to store only table. Then we will wrap the value.
-                ffi::lua_createtable(state, 1, 0);
-                ffi::lua_pushlightuserdata(state, data.as_ptr() as *mut c_void);
-                ffi::lua_rawseti(state, -2, 1);
-            })?;
-            ffi::lua_setuservalue(lua.state, -2);
 
             // Prepare metatable, add meta methods first and then meta fields
-            protect_lua_closure(lua.state, 0, 1, move |state| {
+            protect_lua_closure(lua.state, 0, 1, |state| {
                 ffi::lua_newtable(state);
+
+                // Add internal metamethod to store reference to the data
+                ffi::lua_pushstring(state, cstr!("__mlua"));
+                ffi::lua_pushlightuserdata(lua.state, data.as_ptr() as *mut c_void);
+                ffi::lua_rawset(state, -3);
             })?;
             for (k, m) in ud_methods.meta_methods {
                 push_string(lua.state, k.validate()?.name())?;
@@ -415,19 +416,31 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
 
             let mt_id = ffi::lua_topointer(lua.state, -1);
             ffi::lua_setmetatable(lua.state, -2);
-
             let ud = AnyUserData(lua.pop_ref());
             lua.register_userdata_metatable(mt_id as isize);
+
             self.destructors.borrow_mut().push((ud.0.clone(), |ud| {
+                // We know the destructor has not run yet because we hold a reference to the userdata.
                 let state = ud.lua.state;
                 assert_stack(state, 2);
                 ud.lua.push_ref(&ud);
+
+                // Deregister metatable
                 ffi::lua_getmetatable(state, -1);
                 let mt_id = ffi::lua_topointer(state, -1);
                 ffi::lua_pop(state, 1);
                 ud.lua.deregister_userdata_metatable(mt_id as isize);
+
+                // Clear uservalue
+                #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+                ffi::lua_pushnil(state);
+                #[cfg(any(feature = "lua51", feature = "luajit"))]
+                ffi::lua_newtable(state);
+                ffi::lua_setuservalue(state, -2);
+
                 vec![Box::new(take_userdata::<UserDataCell<()>>(state))]
             }));
+
             Ok(ud)
         }
     }

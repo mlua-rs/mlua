@@ -186,6 +186,7 @@ impl MetaMethod {
             MetaMethod::Custom(name) if name == "__metatable" => {
                 Err(Error::MetaMethodRestricted(name))
             }
+            MetaMethod::Custom(name) if name == "__mlua" => Err(Error::MetaMethodRestricted(name)),
             _ => Ok(self),
         }
     }
