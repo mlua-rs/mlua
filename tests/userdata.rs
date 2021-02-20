@@ -416,6 +416,14 @@ fn test_metatable() -> Result<()> {
         Err(e) => panic!("expected MetaMethodRestricted, got {:?}", e),
     }
 
+    let mut methods = metatable
+        .pairs()
+        .into_iter()
+        .map(|kv: Result<(_, Value)>| Ok(kv?.0))
+        .collect::<Result<Vec<_>>>()?;
+    methods.sort_by_cached_key(|k| k.name().to_owned());
+    assert_eq!(methods, vec![MetaMethod::Index, "__type_name".into()]);
+
     #[derive(Copy, Clone)]
     struct MyUserData2(i64);
 

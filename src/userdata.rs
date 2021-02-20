@@ -135,7 +135,8 @@ impl fmt::Display for MetaMethod {
 }
 
 impl MetaMethod {
-    pub(crate) fn name(&self) -> &str {
+    /// Returns Lua metamethod name, usually prefixed by two underscores.
+    pub fn name(&self) -> &str {
         match self {
             MetaMethod::Add => "__add",
             MetaMethod::Sub => "__sub",
@@ -871,7 +872,7 @@ impl<'lua> UserDataMetatable<'lua> {
     /// The pairs are wrapped in a [`Result`], since they are lazily converted to `V` type.
     ///
     /// [`Result`]: type.Result.html
-    pub fn pairs<K: FromLua<'lua>, V: FromLua<'lua>>(self) -> UserDataMetatablePairs<'lua, V> {
+    pub fn pairs<V: FromLua<'lua>>(self) -> UserDataMetatablePairs<'lua, V> {
         UserDataMetatablePairs(self.0.pairs())
     }
 }
