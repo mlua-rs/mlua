@@ -23,9 +23,8 @@ use crate::value::{FromLuaMulti, MultiValue, ToLuaMulti, Value};
 #[cfg(feature = "async")]
 use {
     crate::types::AsyncCallback,
-    futures_core::future::Future,
+    futures_core::future::{Future, LocalBoxFuture},
     futures_util::future::{self, TryFutureExt},
-    std::os::raw::c_char,
 };
 
 /// Constructed by the [`Lua::scope`] method, allows temporarily creating Lua userdata and
@@ -420,12 +419,11 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
             #[cfg(any(feature = "lua51", feature = "luajit"))]
             ffi::lua_getfenv(state, -1);
 
-            // Then, get the get_poll() closure using the corresponding key
-            let key = "get_poll";
-            ffi::lua_pushlstring(state, key.as_ptr() as *const c_char, key.len());
+            // Second, get the `get_poll()` closure using the corresponding key
+            ffi::lua_pushstring(state, cstr!("get_poll"));
             ffi::lua_rawget(state, -2);
 
-            // Finally, destroy all upvalues
+            // Destroy all upvalues
             ffi::lua_getupvalue(state, -1, 1);
             let ud1 = take_userdata::<AsyncCallback>(state);
             ffi::lua_pushnil(state);
@@ -437,8 +435,25 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
             ffi::lua_setupvalue(state, -2, 2);
 
             ffi::lua_pop(state, 1);
+            let mut data: Vec<Box<dyn Any>> = vec![Box::new(ud1), Box::new(ud2)];
 
-            vec![Box::new(ud1), Box::new(ud2)]
+            // Finally, get polled future and destroy it
+            ffi::lua_pushstring(state, cstr!("poll"));
+            if ffi::lua_rawget(state, -2) == ffi::LUA_TFUNCTION {
+                ffi::lua_getupvalue(state, -1, 1);
+                let ud3 = take_userdata::<LocalBoxFuture<Result<MultiValue>>>(state);
+                ffi::lua_pushnil(state);
+                ffi::lua_setupvalue(state, -2, 1);
+                data.push(Box::new(ud3));
+
+                ffi::lua_getupvalue(state, -1, 2);
+                let ud4 = take_userdata::<Lua>(state);
+                ffi::lua_pushnil(state);
+                ffi::lua_setupvalue(state, -2, 2);
+                data.push(Box::new(ud4));
+            }
+
+            data
         }));
 
         Ok(f)

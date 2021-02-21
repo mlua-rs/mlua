@@ -1787,9 +1787,11 @@ impl Lua {
             })?,
         )?;
 
+        // We set `poll` variable in the env table to be able to destroy upvalues
         self.load(
             r#"
-            local poll = get_poll(...)
+            poll = get_poll(...)
+            local poll = poll
             while true do
                 ready, res = poll()
                 if ready then

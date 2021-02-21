@@ -22,7 +22,9 @@ use std::time::Duration;
 use futures_timer::Delay;
 use futures_util::stream::TryStreamExt;
 
-use mlua::{Error, Function, Lua, Result, Table, TableExt, UserData, UserDataMethods};
+use mlua::{
+    Error, Function, Lua, Result, Table, TableExt, Thread, UserData, UserDataMethods, Value,
+};
 
 #[tokio::test]
 async fn test_async_function() -> Result<()> {
@@ -332,11 +334,18 @@ async fn test_async_scope() -> Result<()> {
         let _ = f.call_async::<u64, ()>(10).await?;
         assert_eq!(Rc::strong_count(rc), 1);
 
+        // Create future in partialy polled state (Poll::Pending)
+        let g = lua.create_thread(f)?;
+        g.resume::<u64, ()>(10)?;
+        lua.globals().set("g", g)?;
+        assert_eq!(Rc::strong_count(rc), 2);
+
         Ok(())
     });
 
     assert_eq!(Rc::strong_count(rc), 1);
     let _ = fut.await?;
+    assert_eq!(Rc::strong_count(rc), 1);
 
     match lua
         .globals()
@@ -344,6 +353,14 @@ async fn test_async_scope() -> Result<()> {
         .call_async::<_, ()>(10)
         .await
     {
+        Err(Error::CallbackError { ref cause, .. }) => match cause.as_ref() {
+            Error::CallbackDestructed => {}
+            e => panic!("expected `CallbackDestructed` error cause, got {:?}", e),
+        },
+        r => panic!("improper return for destructed function: {:?}", r),
+    };
+
+    match lua.globals().get::<_, Thread>("g")?.resume::<_, Value>(()) {
         Err(Error::CallbackError { ref cause, .. }) => match cause.as_ref() {
             Error::CallbackDestructed => {}
             e => panic!("expected `CallbackDestructed` error cause, got {:?}", e),
