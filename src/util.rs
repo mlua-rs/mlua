@@ -279,15 +279,11 @@ pub unsafe fn push_meta_gc_userdata<MT: Any, T>(state: *mut ffi::lua_State, t: T
 
 // Uses 2 stack spaces, does not call checkstack
 pub unsafe fn get_gc_userdata<T: Any>(state: *mut ffi::lua_State, index: c_int) -> *mut T {
-    get_meta_gc_userdata::<T, T>(state, index)
-}
-
-pub unsafe fn get_meta_gc_userdata<MT: Any, T>(state: *mut ffi::lua_State, index: c_int) -> *mut T {
     let ud = ffi::lua_touserdata(state, index) as *mut T;
     if ud.is_null() || ffi::lua_getmetatable(state, index) == 0 {
         return ptr::null_mut();
     }
-    get_gc_metatable_for::<MT>(state);
+    get_gc_metatable_for::<T>(state);
     let res = ffi::lua_rawequal(state, -1, -2) != 0;
     ffi::lua_pop(state, 2);
     if !res {

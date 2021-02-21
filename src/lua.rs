@@ -22,10 +22,10 @@ use crate::types::{
 };
 use crate::userdata::{AnyUserData, MetaMethod, UserData, UserDataMethods, UserDataWrapped};
 use crate::util::{
-    assert_stack, callback_error, check_stack, get_gc_userdata, get_main_state,
-    get_meta_gc_userdata, get_wrapped_error, init_error_registry, init_gc_metatable_for,
-    init_userdata_metatable, pop_error, protect_lua, protect_lua_closure, push_gc_userdata,
-    push_meta_gc_userdata, push_string, push_userdata, push_wrapped_error, StackGuard,
+    assert_stack, callback_error, check_stack, get_gc_userdata, get_main_state, get_userdata,
+    get_wrapped_error, init_error_registry, init_gc_metatable_for, init_userdata_metatable,
+    pop_error, protect_lua, protect_lua_closure, push_gc_userdata, push_meta_gc_userdata,
+    push_string, push_userdata, push_wrapped_error, StackGuard,
 };
 use crate::value::{FromLua, FromLuaMulti, MultiValue, Nil, ToLua, ToLuaMulti, Value};
 
@@ -1504,9 +1504,10 @@ impl Lua {
     }
 
     pub(crate) unsafe fn userdata_metatable<T: 'static + UserData>(&self) -> Result<c_int> {
+        let type_id = TypeId::of::<T>();
         if let Some(table_id) = mlua_expect!(self.extra.lock(), "extra is poisoned")
             .registered_userdata
-            .get(&TypeId::of::<T>())
+            .get(&type_id)
         {
             return Ok(*table_id);
         }
@@ -1567,7 +1568,7 @@ impl Lua {
         })?;
 
         let mut extra = mlua_expect!(self.extra.lock(), "extra is poisoned");
-        extra.registered_userdata.insert(TypeId::of::<T>(), id);
+        extra.registered_userdata.insert(type_id, id);
         extra.registered_userdata_mt.insert(ptr);
 
         Ok(id)
@@ -1616,12 +1617,13 @@ impl Lua {
     {
         unsafe extern "C" fn call_callback(state: *mut ffi::lua_State) -> c_int {
             callback_error(state, |nargs| {
-                let func =
-                    get_meta_gc_userdata::<Callback, Callback>(state, ffi::lua_upvalueindex(1));
-                let lua = get_gc_userdata::<Lua>(state, ffi::lua_upvalueindex(2));
-                if func.is_null() || lua.is_null() {
+                if ffi::lua_type(state, ffi::lua_upvalueindex(1)) == ffi::LUA_TNIL
+                    || ffi::lua_type(state, ffi::lua_upvalueindex(2)) == ffi::LUA_TNIL
+                {
                     return Err(Error::CallbackDestructed);
                 }
+                let func = get_userdata::<Callback>(state, ffi::lua_upvalueindex(1));
+                let lua = get_userdata::<Lua>(state, ffi::lua_upvalueindex(2));
 
                 if nargs < ffi::LUA_MINSTACK {
                     check_stack(state, ffi::LUA_MINSTACK - nargs)?;
@@ -1681,14 +1683,13 @@ impl Lua {
 
         unsafe extern "C" fn call_callback(state: *mut ffi::lua_State) -> c_int {
             callback_error(state, |nargs| {
-                let func = get_meta_gc_userdata::<AsyncCallback, AsyncCallback>(
-                    state,
-                    ffi::lua_upvalueindex(1),
-                );
-                let lua = get_gc_userdata::<Lua>(state, ffi::lua_upvalueindex(2));
-                if func.is_null() || lua.is_null() {
+                if ffi::lua_type(state, ffi::lua_upvalueindex(1)) == ffi::LUA_TNIL
+                    || ffi::lua_type(state, ffi::lua_upvalueindex(2)) == ffi::LUA_TNIL
+                {
                     return Err(Error::CallbackDestructed);
                 }
+                let func = get_userdata::<AsyncCallback>(state, ffi::lua_upvalueindex(1));
+                let lua = get_userdata::<Lua>(state, ffi::lua_upvalueindex(2));
 
                 if nargs < ffi::LUA_MINSTACK {
                     check_stack(state, ffi::LUA_MINSTACK - nargs)?;
@@ -1715,14 +1716,16 @@ impl Lua {
 
         unsafe extern "C" fn poll_future(state: *mut ffi::lua_State) -> c_int {
             callback_error(state, |nargs| {
-                let fut = get_gc_userdata::<LocalBoxFuture<Result<MultiValue>>>(
+                if ffi::lua_type(state, ffi::lua_upvalueindex(1)) == ffi::LUA_TNIL
+                    || ffi::lua_type(state, ffi::lua_upvalueindex(2)) == ffi::LUA_TNIL
+                {
+                    return Err(Error::CallbackDestructed);
+                }
+                let fut = get_userdata::<LocalBoxFuture<Result<MultiValue>>>(
                     state,
                     ffi::lua_upvalueindex(1),
                 );
-                let lua = get_gc_userdata::<Lua>(state, ffi::lua_upvalueindex(2));
-                if fut.is_null() || lua.is_null() {
-                    return Err(Error::CallbackDestructed);
-                }
+                let lua = get_userdata::<Lua>(state, ffi::lua_upvalueindex(2));
 
                 if nargs < ffi::LUA_MINSTACK {
                     check_stack(state, ffi::LUA_MINSTACK - nargs)?;
@@ -1791,7 +1794,7 @@ impl Lua {
         self.load(
             r#"
             poll = get_poll(...)
-            local poll = poll
+            local poll, yield, unpack = poll, yield, unpack
             while true do
                 ready, res = poll()
                 if ready then
