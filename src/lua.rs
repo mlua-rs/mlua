@@ -1,6 +1,6 @@
 use std::any::TypeId;
 use std::cell::{RefCell, UnsafeCell};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::ffi::CString;
 use std::marker::PhantomData;
 use std::os::raw::{c_char, c_int, c_void};
@@ -57,7 +57,6 @@ pub struct Lua {
 // Data associated with the lua_State.
 struct ExtraData {
     registered_userdata: HashMap<TypeId, c_int>,
-    registered_userdata_mt: HashSet<isize>,
     registry_unref_list: Arc<Mutex<Option<Vec<c_int>>>>,
 
     libs: StdLib,
@@ -322,7 +321,6 @@ impl Lua {
 
         let extra = Arc::new(Mutex::new(ExtraData {
             registered_userdata: HashMap::new(),
-            registered_userdata_mt: HashSet::new(),
             registry_unref_list: Arc::new(Mutex::new(Some(Vec::new()))),
             ref_thread,
             libs: StdLib::NONE,
@@ -1561,20 +1559,17 @@ impl Lua {
             ffi::lua_pop(self.state, 1);
         }
 
-        let (ptr, id) = protect_lua_closure(self.state, 1, 0, |state| {
-            let ptr = ffi::lua_topointer(state, -1) as isize;
-            let id = ffi::luaL_ref(state, ffi::LUA_REGISTRYINDEX);
-            (ptr, id)
+        let id = protect_lua_closure(self.state, 1, 0, |state| {
+            ffi::luaL_ref(state, ffi::LUA_REGISTRYINDEX)
         })?;
 
         let mut extra = mlua_expect!(self.extra.lock(), "extra is poisoned");
         extra.registered_userdata.insert(type_id, id);
-        extra.registered_userdata_mt.insert(ptr);
 
         Ok(id)
     }
 
-    // Pushes a LuaRef value onto the stack, checking that it's any registered userdata
+    // Pushes a LuaRef value onto the stack, checking that it's not destructed
     // Uses 2 stack spaces, does not call checkstack
     #[cfg(feature = "serialize")]
     pub(crate) unsafe fn push_userdata_ref(&self, lref: &LuaRef) -> Result<()> {
@@ -1582,19 +1577,13 @@ impl Lua {
         if ffi::lua_getmetatable(self.state, -1) == 0 {
             Err(Error::UserDataTypeMismatch)
         } else {
-            // Check that this is our metatable
-            let ptr = ffi::lua_topointer(self.state, -1) as isize;
-            let extra = mlua_expect!(self.extra.lock(), "extra is poisoned");
-            if !extra.registered_userdata_mt.contains(&ptr) {
-                // Maybe UserData destructed?
-                get_destructed_userdata_metatable(self.state);
-                if ffi::lua_rawequal(self.state, -1, -2) == 1 {
-                    Err(Error::UserDataDestructed)
-                } else {
-                    Err(Error::UserDataTypeMismatch)
-                }
+            // Check that userdata is not destructed
+            get_destructed_userdata_metatable(self.state);
+            let eq = ffi::lua_rawequal(self.state, -1, -2) == 1;
+            ffi::lua_pop(self.state, 2);
+            if eq {
+                Err(Error::UserDataDestructed)
             } else {
-                ffi::lua_pop(self.state, 1);
                 Ok(())
             }
         }
