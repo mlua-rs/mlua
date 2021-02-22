@@ -10,8 +10,8 @@
 )]
 extern "system" {}
 
-use std::time::Duration;
 use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
+use std::time::Duration;
 use tokio::runtime::Runtime;
 
 use mlua::prelude::*;
