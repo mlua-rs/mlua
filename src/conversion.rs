@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::ffi::{CStr, CString};
 use std::hash::{BuildHasher, Hash};
@@ -222,6 +223,12 @@ impl<'lua> ToLua<'lua> for &str {
     }
 }
 
+impl<'lua> ToLua<'lua> for Cow<'_, str> {
+    fn to_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
+        Ok(Value::String(lua.create_string(self.as_bytes())?))
+    }
+}
+
 impl<'lua> ToLua<'lua> for CString {
     fn to_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
         Ok(Value::String(lua.create_string(self.as_bytes())?))
@@ -251,6 +258,12 @@ impl<'lua> FromLua<'lua> for CString {
 }
 
 impl<'lua> ToLua<'lua> for &CStr {
+    fn to_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
+        Ok(Value::String(lua.create_string(self.to_bytes())?))
+    }
+}
+
+impl<'lua> ToLua<'lua> for Cow<'_, CStr> {
     fn to_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
         Ok(Value::String(lua.create_string(self.to_bytes())?))
     }
