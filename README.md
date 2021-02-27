@@ -1,5 +1,5 @@
 # mlua
-[![Build Status]][github-actions] [![Latest Version]][crates.io] [![API Documentation]][docs.rs]
+[![Build Status]][github-actions] [![Latest Version]][crates.io] [![API Documentation]][docs.rs] [![Coverage Status]][codecov.io]
 
 [Build Status]: https://github.com/khvzak/mlua/workflows/CI/badge.svg
 [github-actions]: https://github.com/khvzak/mlua/actions
@@ -7,6 +7,8 @@
 [crates.io]: https://crates.io/crates/mlua
 [API Documentation]: https://docs.rs/mlua/badge.svg
 [docs.rs]: https://docs.rs/mlua
+[Coverage Status]: https://codecov.io/gh/khvzak/mlua/branch/master/graph/badge.svg?token=99339FS1CG
+[codecov.io]: https://codecov.io/gh/khvzak/mlua
 
 [Guided Tour](examples/guided_tour.rs)
 
