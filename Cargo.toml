@@ -1,6 +1,6 @@
 [package]
 name = "mlua"
-version = "0.5.1" # remember to update html_root_url and mlua_derive
+version = "0.5.2" # remember to update html_root_url and mlua_derive
 authors = ["Aleksandr Orlenko <zxteam@pm.me>", "kyren <catherine@chucklefish.org>"]
 edition = "2018"
 repository = "https://github.com/khvzak/mlua"

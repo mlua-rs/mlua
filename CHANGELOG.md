@@ -1,3 +1,9 @@
+## v0.5.2
+
+- Some performance optimisations (callbacks)
+- `ToLua` implementation for `Cow<str>` and `Cow<CStr>`
+- Fixed bug with `Scope` destruction of partially polled futures
+
 ## v0.5.1
 
 - Support cross compilation that should work well for vendored builds (including LuaJIT with some restrictions)
