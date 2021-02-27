@@ -13,23 +13,45 @@
 `mlua` is bindings to [Lua](https://www.lua.org) programming language for Rust with a goal to provide
 _safe_ (as far as it's possible), high level, easy to use, practical and flexible API.
 
-Started as [rlua v0.15](https://github.com/amethyst/rlua/tree/0.15.3) fork, `mlua` supports *__all__* major Lua versions (including LuaJIT) and allows to write native Lua modules in Rust as well as use Lua in a standalone mode.
+Started as [rlua](https://github.com/amethyst/rlua/tree/0.15.3) fork, `mlua` supports Lua 5.4, 5.3, 5.2 and 5.1 including LuaJIT (2.0.5 and 2.1 beta) and allows to write native Lua modules in Rust as well as use Lua in a standalone mode.
 
-`mlua` supports the following Lua versions (and tested on Windows/macOS/Linux):
-- Lua 5.4 (`feature = "lua54"`)
-- Lua 5.3 (`feature = "lua53"`)
-- Lua 5.2 (`feature = "lua52"`)
-- Lua 5.1 (`feature = "lua51"`)
-- LuaJIT 2.1.0 beta (`feature = "luajit"`)
-- LuaJIT 2.0.5 stable (`feature = "luajit"`)
+`mlua` tested on Windows/macOS/Linux including module mode in [GitHub Actions] on `x86_64` platform and cross-compilation to `aarch64` (other targes are also supported).
 
-Additional `feature = "vendored"` enables building static Lua from sources during `mlua` compilation.
+[GitHub Actions]: https://github.com/khvzak/mlua/actions
 
 ## Usage
 
+### Feature flags
+
+`mlua` uses feature flags to reduce the amount of depenendies, compiled code and allow to choose only required set of features.
+Below is a list of the available feature flags. By default `mlua` does not enable any features.
+
+* `lua54`: activate Lua [5.4] support
+* `lua53`: activate Lua [5.3] support
+* `lua52`: activate Lua [5.2] support
+* `lua51`: activate Lua [5.1] support
+* `luajit`: activate [LuaJIT] support
+* `vendored`: build static Lua(JIT) library from sources during `mlua` compilation using [lua-src] or [luajit-src] crates
+* `module`: enable module mode (building loadable `cdylib` library for Lua)
+* `async`: enable async/await support (any executor can be used, eg. [tokio] or [async-std])
+* `send`: make `mlua::Lua` transferable across thread boundaries (adds [`Send`] requirement to `mlua::Function` and `mlua::UserData`)
+* `serialize`: add serialization and deserialization support to `mlua` types usign [serde] framework
+
+[5.4]: https://www.lua.org/manual/5.4/manual.html
+[5.3]: https://www.lua.org/manual/5.3/manual.html
+[5.2]: https://www.lua.org/manual/5.2/manual.html
+[5.1]: https://www.lua.org/manual/5.1/manual.html
+[LuaJIT]: https://luajit.org/
+[lua-src]: https://github.com/khvzak/lua-src-rs
+[luajit-src]: https://github.com/khvzak/luajit-src-rs
+[tokio]: https://github.com/tokio-rs/tokio
+[async-std]: https://github.com/async-rs/async-std
+[`Send`]: https://doc.rust-lang.org/std/marker/trait.Send.html
+[serde]: https://github.com/serde-rs/serde
+
 ### Async/await support
 
-Starting from v0.3, `mlua` supports async/await for all Lua versions. This works using Lua [coroutines](https://www.lua.org/manual/5.3/manual.html#2.6) and require running [Thread](https://docs.rs/mlua/latest/mlua/struct.Thread.html) along with enabling `feature = "async"` in `Cargo.toml`.
+`mlua` supports async/await for all Lua versions. This works using Lua [coroutines](https://www.lua.org/manual/5.3/manual.html#2.6) and require running [Thread](https://docs.rs/mlua/latest/mlua/struct.Thread.html) along with enabling `feature = "async"` in `Cargo.toml`.
 
 **Examples**:
 - [HTTP Client](examples/async_http_client.rs)
@@ -39,7 +61,7 @@ Starting from v0.3, `mlua` supports async/await for all Lua versions. This works
 
 ### Serialization (serde) support
 
-With `serialize` feature flag enabled, `mlua` allows you to serialize/deserialize any type that implements [`serde::Serialize`] and [`serde::Deserialize`] into/from [`mlua::Value`]. In addition `mlua` provides [`serde::Serialize`] trait implementation for it (including user data support).
+With `serialize` feature flag enabled, `mlua` allows you to serialize/deserialize any type that implements [`serde::Serialize`] and [`serde::Deserialize`] into/from [`mlua::Value`]. In addition `mlua` provides [`serde::Serialize`] trait implementation for it (including `UserData` support).
 
 [Example](examples/serialize.rs)
 
@@ -66,11 +88,13 @@ my_project $ LUA_INC=$HOME/tmp/lua-5.2.4/src LUA_LIB=$HOME/tmp/lua-5.2.4/src LUA
 Just enable the `vendored` feature and cargo will automatically build and link specified lua/luajit version. This is the easiest way to get started with `mlua`.
 
 ### Standalone mode
+In a standalone mode `mlua` allows to add to your application scripting support with a gently configured Lua runtime to ensure  safety and soundness.
+
 Add to `Cargo.toml` :
 
 ``` toml
 [dependencies]
-mlua = { version = "0.5", features = ["lua53"] }
+mlua = { version = "0.5", features = ["lua53", "vendored"] }
 ```
 
 `main.rs`
@@ -94,6 +118,7 @@ fn main() -> LuaResult<()> {
 ```
 
 ### Module mode
+In a module mode `mlua` allows to create a compiled Lua module that can be loaded from Lua code using [`require`](https://www.lua.org/manual/5.3/manual.html#pdf-require). In this case `mlua` uses an external Lua runtime which could lead to potential unsafety due to unpredictability of the Lua environment and usage of libraries such as [`debug`](https://www.lua.org/manual/5.3/manual.html#6.10).
 
 [Example](examples/module)
 
@@ -104,7 +129,7 @@ Add to `Cargo.toml` :
 crate-type = ["cdylib"]
 
 [dependencies]
-mlua = { version = "0.5", features = ["lua53", "module"] }
+mlua = { version = "0.5", features = ["lua53", "vendored", "module"] }
 ```
 
 `lib.rs` :
