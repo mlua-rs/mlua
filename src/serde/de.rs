@@ -20,7 +20,9 @@ impl<'lua, 'de> serde::Deserializer<'de> for Deserializer<'lua> {
         match self.0 {
             Value::Nil => visitor.visit_unit(),
             Value::Boolean(b) => visitor.visit_bool(b),
+            #[allow(clippy::useless_conversion)]
             Value::Integer(i) => visitor.visit_i64(i.into()),
+            #[allow(clippy::useless_conversion)]
             Value::Number(n) => visitor.visit_f64(n.into()),
             Value::String(s) => match s.to_str() {
                 Ok(s) => visitor.visit_str(s),

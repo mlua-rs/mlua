@@ -34,7 +34,7 @@ impl<'lua, T: ToLua<'lua>> ToLuaMulti<'lua> for T {
 
 impl<'lua, T: FromLua<'lua>> FromLuaMulti<'lua> for T {
     fn from_lua_multi(mut values: MultiValue<'lua>, lua: &'lua Lua) -> Result<Self> {
-        Ok(T::from_lua(values.pop_front().unwrap_or(Nil), lua)?)
+        T::from_lua(values.pop_front().unwrap_or(Nil), lua)
     }
 }
 

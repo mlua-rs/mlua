@@ -125,7 +125,9 @@ impl<'lua> Serialize for Value<'lua> {
         match self {
             Value::Nil => serializer.serialize_unit(),
             Value::Boolean(b) => serializer.serialize_bool(*b),
+            #[allow(clippy::useless_conversion)]
             Value::Integer(i) => serializer.serialize_i64((*i).into()),
+            #[allow(clippy::useless_conversion)]
             Value::Number(n) => serializer.serialize_f64((*n).into()),
             Value::String(s) => s.serialize(serializer),
             Value::Table(t) => t.serialize(serializer),
