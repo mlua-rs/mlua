@@ -25,8 +25,8 @@ fn test_user_data() -> Result<()> {
     struct UserData1(i64);
     struct UserData2(Box<i64>);
 
-    impl UserData for UserData1 {};
-    impl UserData for UserData2 {};
+    impl UserData for UserData1 {}
+    impl UserData for UserData2 {}
 
     let lua = Lua::new();
     let userdata1 = lua.create_userdata(UserData1(1))?;

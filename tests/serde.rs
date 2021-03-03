@@ -19,7 +19,7 @@ fn test_serialize() -> Result<(), Box<dyn std::error::Error>> {
     #[derive(Serialize)]
     struct MyUserData(i64, String);
 
-    impl UserData for MyUserData {};
+    impl UserData for MyUserData {}
 
     let lua = Lua::new();
     let globals = lua.globals();
@@ -81,7 +81,7 @@ fn test_serialize_in_scope() -> LuaResult<()> {
     #[derive(Serialize, Clone)]
     struct MyUserData(i64, String);
 
-    impl UserData for MyUserData {};
+    impl UserData for MyUserData {}
 
     let lua = Lua::new();
     lua.scope(|scope| {
@@ -112,7 +112,7 @@ fn test_serialize_failure() -> Result<(), Box<dyn std::error::Error>> {
     #[derive(Serialize)]
     struct MyUserData(i64);
 
-    impl UserData for MyUserData {};
+    impl UserData for MyUserData {}
 
     let lua = Lua::new();
 
@@ -148,7 +148,7 @@ fn test_to_value_struct() -> LuaResult<()> {
         name: String,
         key: i64,
         data: Option<bool>,
-    };
+    }
 
     let test = Test {
         name: "alex".to_string(),
@@ -178,7 +178,7 @@ fn test_to_value_enum() -> LuaResult<()> {
         name: String,
         key: i64,
         data: Option<bool>,
-    };
+    }
 
     let test = Test {
         name: "alex".to_string(),
