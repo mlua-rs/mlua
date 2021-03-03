@@ -1741,11 +1741,14 @@ impl Lua {
                         Ok(2)
                     }
                     Poll::Ready(results) => {
-                        let results = lua.create_sequence_from(results?)?;
-                        check_stack(state, 2)?;
+                        let results = results?;
+                        let nresults = results.len() as Integer;
+                        let results = lua.create_sequence_from(results)?;
+                        check_stack(state, 3)?;
                         ffi::lua_pushboolean(state, 1);
                         lua.push_value(Value::Table(results))?;
-                        Ok(2)
+                        lua.push_value(Value::Integer(nresults))?;
+                        Ok(3)
                     }
                 }
             })
@@ -1772,9 +1775,10 @@ impl Lua {
         env.set("yield", coroutine.get::<_, Function>("yield")?)?;
         env.set(
             "unpack",
-            self.create_function(|_, tbl: Table| {
+            self.create_function(|_, (tbl, len): (Table, Integer)| {
                 Ok(MultiValue::from_vec(
-                    tbl.sequence_values().collect::<Result<Vec<Value>>>()?,
+                    tbl.raw_sequence_values_by_len(Some(len))
+                        .collect::<Result<Vec<Value>>>()?,
                 ))
             })?,
         )?;
@@ -1785,9 +1789,9 @@ impl Lua {
             poll = get_poll(...)
             local poll, yield, unpack = poll, yield, unpack
             while true do
-                ready, res = poll()
+                local ready, res, nres = poll()
                 if ready then
-                    return unpack(res)
+                    return unpack(res, nres)
                 end
                 yield(res)
             end

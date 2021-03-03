@@ -137,6 +137,24 @@ async fn test_async_handle_yield() -> Result<()> {
 }
 
 #[tokio::test]
+async fn test_async_multi_return_nil() -> Result<()> {
+    let lua = Lua::new();
+    lua.globals().set(
+        "func",
+        lua.create_async_function(|_, _: ()| async { Ok((Option::<String>::None, "error")) })?,
+    )?;
+
+    lua.load(
+        r#"
+        local ok, err = func()
+        assert(err == "error")
+    "#,
+    )
+    .exec_async()
+    .await
+}
+
+#[tokio::test]
 async fn test_async_return_async_closure() -> Result<()> {
     let lua = Lua::new();
 

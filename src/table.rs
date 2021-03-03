@@ -474,9 +474,11 @@ impl<'lua> Table<'lua> {
         }
     }
 
-    #[cfg(feature = "serialize")]
-    pub(crate) fn raw_sequence_values_by_len<V: FromLua<'lua>>(self) -> TableSequence<'lua, V> {
-        let len = self.raw_len();
+    pub(crate) fn raw_sequence_values_by_len<V: FromLua<'lua>>(
+        self,
+        len: Option<Integer>,
+    ) -> TableSequence<'lua, V> {
+        let len = len.unwrap_or_else(|| self.raw_len());
         TableSequence {
             table: self.0,
             index: Some(1),
@@ -641,7 +643,7 @@ impl<'lua> Serialize for Table<'lua> {
         let len = self.raw_len() as usize;
         if len > 0 || self.is_array() {
             let mut seq = serializer.serialize_seq(Some(len))?;
-            for v in self.clone().raw_sequence_values_by_len::<Value>() {
+            for v in self.clone().raw_sequence_values_by_len::<Value>(None) {
                 let v = v.map_err(serde::ser::Error::custom)?;
                 seq.serialize_element(&v)?;
             }
