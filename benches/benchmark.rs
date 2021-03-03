@@ -13,6 +13,7 @@ extern "system" {}
 use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
 use std::time::Duration;
 use tokio::runtime::Runtime;
+use tokio::task;
 
 use mlua::prelude::*;
 
@@ -117,7 +118,10 @@ fn call_sum_callback(c: &mut Criterion) {
 fn call_async_sum_callback(c: &mut Criterion) {
     let lua = Lua::new();
     let callback = lua
-        .create_async_function(|_, (a, b, c): (i64, i64, i64)| async move { Ok(a + b + c) })
+        .create_async_function(|_, (a, b, c): (i64, i64, i64)| async move {
+            task::yield_now().await;
+            Ok(a + b + c)
+        })
         .unwrap();
     lua.globals().set("callback", callback).unwrap();
 

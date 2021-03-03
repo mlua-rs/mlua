@@ -1735,10 +1735,9 @@ impl Lua {
 
                 match (*fut).as_mut().poll(&mut ctx) {
                     Poll::Pending => {
-                        check_stack(state, 6)?;
+                        check_stack(state, 1)?;
                         ffi::lua_pushboolean(state, 0);
-                        push_gc_userdata(state, AsyncPollPending)?;
-                        Ok(2)
+                        Ok(1)
                     }
                     Poll::Ready(results) => {
                         let results = results?;
@@ -1782,18 +1781,24 @@ impl Lua {
                 ))
             })?,
         )?;
+        env.set("pending", unsafe {
+            let _sg = StackGuard::new(self.state);
+            check_stack(self.state, 5)?;
+            push_gc_userdata(self.state, AsyncPollPending)?;
+            self.pop_value()
+        })?;
 
         // We set `poll` variable in the env table to be able to destroy upvalues
         self.load(
             r#"
             poll = get_poll(...)
-            local poll, yield, unpack = poll, yield, unpack
+            local poll, pending, yield, unpack = poll, pending, yield, unpack
             while true do
                 local ready, res, nres = poll()
                 if ready then
                     return unpack(res, nres)
                 end
-                yield(res)
+                yield(pending)
             end
             "#,
         )
