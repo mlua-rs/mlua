@@ -1,3 +1,8 @@
+## v0.5.3
+
+- Fixed bug when returning nil-prefixed multi values from async function (+ test)
+- Performance optimisation for async callbacks (polling)
+
 ## v0.5.2
 
 - Some performance optimisations (callbacks)
