@@ -258,7 +258,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
                         if ffi::lua_getmetatable(lua.state, -1) == 0 {
                             return Err(Error::UserDataTypeMismatch);
                         }
-                        ffi::lua_pushstring(lua.state, cstr!("__mlua"));
+                        ffi::lua_pushstring(lua.state, cstr!("__mlua_ptr"));
                         if ffi::lua_rawget(lua.state, -2) == ffi::LUA_TLIGHTUSERDATA {
                             let ud_ptr = ffi::lua_touserdata(lua.state, -1);
                             if ud_ptr == check_data.as_ptr() as *mut c_void {
@@ -330,7 +330,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
                 ffi::lua_newtable(state);
 
                 // Add internal metamethod to store reference to the data
-                ffi::lua_pushstring(state, cstr!("__mlua"));
+                ffi::lua_pushstring(state, cstr!("__mlua_ptr"));
                 ffi::lua_pushlightuserdata(lua.state, data.as_ptr() as *mut c_void);
                 ffi::lua_rawset(state, -3);
             })?;
@@ -353,7 +353,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
             let metatable_index = ffi::lua_absindex(lua.state, -1);
 
             let mut field_getters_index = None;
-            if ud_fields.field_getters.len() > 0 {
+            if !ud_fields.field_getters.is_empty() {
                 protect_lua_closure(lua.state, 0, 1, |state| {
                     ffi::lua_newtable(state);
                 })?;
@@ -369,7 +369,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
             }
 
             let mut field_setters_index = None;
-            if ud_fields.field_setters.len() > 0 {
+            if !ud_fields.field_setters.is_empty() {
                 protect_lua_closure(lua.state, 0, 1, |state| {
                     ffi::lua_newtable(state);
                 })?;
@@ -385,7 +385,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
             }
 
             let mut methods_index = None;
-            if ud_methods.methods.len() > 0 {
+            if !ud_methods.methods.is_empty() {
                 // Create table used for methods lookup
                 protect_lua_closure(lua.state, 0, 1, |state| {
                     ffi::lua_newtable(state);
@@ -738,6 +738,7 @@ impl<'lua, T: UserData> UserDataMethods<'lua, T> for NonStaticUserDataMethods<'l
 struct NonStaticUserDataFields<'lua, T: UserData> {
     field_getters: Vec<(Vec<u8>, NonStaticMethod<'lua, T>)>,
     field_setters: Vec<(Vec<u8>, NonStaticMethod<'lua, T>)>,
+    #[allow(clippy::type_complexity)]
     meta_fields: Vec<(MetaMethod, Box<dyn Fn(&'lua Lua) -> Result<Value<'lua>>>)>,
 }
 

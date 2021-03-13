@@ -250,6 +250,7 @@ end
 
 #[cfg(any(feature = "lua51", feature = "luajit"))]
 pub unsafe fn lua_arith(L: *mut lua_State, op: c_int) {
+    #[allow(clippy::manual_range_contains)]
     if op < LUA_OPADD || op > LUA_OPUNM {
         luaL_error(L, cstr!("invalid 'op' argument for lua_arith"));
     }

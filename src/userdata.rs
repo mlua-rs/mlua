@@ -187,7 +187,9 @@ impl MetaMethod {
             MetaMethod::Custom(name) if name == "__metatable" => {
                 Err(Error::MetaMethodRestricted(name))
             }
-            MetaMethod::Custom(name) if name == "__mlua" => Err(Error::MetaMethodRestricted(name)),
+            MetaMethod::Custom(name) if name.starts_with("__mlua") => {
+                Err(Error::MetaMethodRestricted(name))
+            }
             _ => Ok(self),
         }
     }
@@ -714,7 +716,9 @@ impl<'lua> AnyUserData<'lua> {
     /// Returns a metatable of this `UserData`.
     ///
     /// Returned [`UserDataMetatable`] object wraps the original metatable and
-    /// allows to provide safe access to it methods.
+    /// provides safe access to it methods.
+    ///
+    /// For `T: UserData + 'static` returned metatable is shared among all instances of type `T`.
     ///
     /// [`UserDataMetatable`]: struct.UserDataMetatable.html
     pub fn get_metatable(&self) -> Result<UserDataMetatable<'lua>> {

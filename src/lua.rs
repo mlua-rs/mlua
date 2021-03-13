@@ -1557,7 +1557,7 @@ impl Lua {
         let mut extra_tables_count = 0;
 
         let mut field_getters_index = None;
-        let has_field_getters = fields.field_getters.len() > 0;
+        let has_field_getters = !fields.field_getters.is_empty();
         if has_field_getters {
             protect_lua_closure(self.state, 0, 1, |state| {
                 ffi::lua_newtable(state);
@@ -1575,7 +1575,7 @@ impl Lua {
         }
 
         let mut field_setters_index = None;
-        let has_field_setters = fields.field_setters.len() > 0;
+        let has_field_setters = !fields.field_setters.is_empty();
         if has_field_setters {
             protect_lua_closure(self.state, 0, 1, |state| {
                 ffi::lua_newtable(state);
@@ -1594,9 +1594,9 @@ impl Lua {
 
         let mut methods_index = None;
         #[cfg(feature = "async")]
-        let has_methods = methods.methods.len() > 0 || methods.async_methods.len() > 0;
+        let has_methods = !methods.methods.is_empty() || !methods.async_methods.is_empty();
         #[cfg(not(feature = "async"))]
-        let has_methods = methods.methods.len() > 0;
+        let has_methods = !methods.methods.is_empty();
         if has_methods {
             protect_lua_closure(self.state, 0, 1, |state| {
                 ffi::lua_newtable(state);
@@ -2546,6 +2546,7 @@ impl<'lua, T: 'static + UserData> StaticUserDataMethods<'lua, T> {
 struct StaticUserDataFields<'lua, T: 'static + UserData> {
     field_getters: Vec<(Vec<u8>, Callback<'lua, 'static>)>,
     field_setters: Vec<(Vec<u8>, Callback<'lua, 'static>)>,
+    #[allow(clippy::type_complexity)]
     meta_fields: Vec<(
         MetaMethod,
         Box<dyn Fn(&'lua Lua) -> Result<Value<'lua>> + 'static>,
