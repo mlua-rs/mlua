@@ -531,6 +531,7 @@ pub unsafe fn lua_yield(L: *mut lua_State, n: c_int) -> c_int {
     feature = "lua51",
     feature = "luajit"
 ))]
+#[inline(always)]
 pub unsafe fn lua_resume(
     L: *mut lua_State,
     from: *mut lua_State,

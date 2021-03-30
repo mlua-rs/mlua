@@ -228,6 +228,7 @@ pub fn lua_upvalueindex(i: c_int) -> c_int {
 }
 
 #[cfg(any(feature = "lua51", feature = "luajit"))]
+#[inline(always)]
 pub unsafe fn lua_absindex(L: *mut lua_State, mut idx: c_int) -> c_int {
     if idx < 0 && idx > lua::LUA_REGISTRYINDEX {
         idx += lua_gettop(L) + 1;
@@ -279,6 +280,7 @@ pub unsafe fn lua_rotate(L: *mut lua_State, mut idx: c_int, mut n: c_int) {
 }
 
 #[cfg(any(feature = "lua51", feature = "luajit"))]
+#[inline(always)]
 pub unsafe fn lua_copy(L: *mut lua_State, fromidx: c_int, toidx: c_int) {
     let abs_to = lua_absindex(L, toidx);
     luaL_checkstack(L, 1, cstr!("not enough stack slots"));
@@ -286,6 +288,7 @@ pub unsafe fn lua_copy(L: *mut lua_State, fromidx: c_int, toidx: c_int) {
     lua_replace(L, abs_to);
 }
 
+#[inline(always)]
 pub unsafe fn lua_isinteger(L: *mut lua_State, idx: c_int) -> c_int {
     if lua_type(L, idx) == lua::LUA_TNUMBER {
         let n = lua_tonumber(L, idx);
@@ -298,6 +301,7 @@ pub unsafe fn lua_isinteger(L: *mut lua_State, idx: c_int) -> c_int {
 }
 
 #[cfg(any(feature = "lua51", feature = "luajit"))]
+#[inline(always)]
 pub unsafe fn lua_tonumberx(L: *mut lua_State, i: c_int, isnum: *mut c_int) -> lua_Number {
     let n = lua_tonumber(L, i);
     if !isnum.is_null() {
@@ -312,6 +316,7 @@ pub unsafe fn lua_tonumberx(L: *mut lua_State, i: c_int, isnum: *mut c_int) -> l
 
 // Implemented for Lua 5.2 as well
 // See https://github.com/keplerproject/lua-compat-5.3/issues/40
+#[inline(always)]
 pub unsafe fn lua_tointegerx(L: *mut lua_State, i: c_int, isnum: *mut c_int) -> lua_Integer {
     let mut ok = 0;
     let n = lua_tonumberx(L, i, &mut ok);
@@ -329,11 +334,13 @@ pub unsafe fn lua_tointegerx(L: *mut lua_State, i: c_int, isnum: *mut c_int) -> 
 }
 
 #[cfg(any(feature = "lua51", feature = "luajit"))]
+#[inline(always)]
 pub unsafe fn lua_rawlen(L: *mut lua_State, idx: c_int) -> usize {
     lua_objlen(L, idx)
 }
 
 #[cfg(any(feature = "lua51", feature = "luajit"))]
+#[inline(always)]
 pub unsafe fn lua_compare(L: *mut lua_State, mut idx1: c_int, mut idx2: c_int, op: c_int) -> c_int {
     match op {
         lua::LUA_OPEQ => lua_equal(L, idx1, idx2),
@@ -354,6 +361,7 @@ pub unsafe fn lua_compare(L: *mut lua_State, mut idx1: c_int, mut idx2: c_int, o
 }
 
 #[cfg(any(feature = "lua51", feature = "luajit"))]
+#[inline(always)]
 pub unsafe fn lua_pushlstring(L: *mut lua_State, s: *const c_char, l: usize) -> *const c_char {
     if l == 0 {
         lua_pushlstring_old(L, cstr!(""), 0);
@@ -364,6 +372,7 @@ pub unsafe fn lua_pushlstring(L: *mut lua_State, s: *const c_char, l: usize) -> 
 }
 
 #[cfg(feature = "lua52")]
+#[inline(always)]
 pub unsafe fn lua_pushlstring(L: *mut lua_State, s: *const c_char, l: usize) -> *const c_char {
     if l == 0 {
         lua_pushlstring_old(L, cstr!(""), 0)
@@ -373,27 +382,32 @@ pub unsafe fn lua_pushlstring(L: *mut lua_State, s: *const c_char, l: usize) -> 
 }
 
 #[cfg(any(feature = "lua51", feature = "luajit"))]
+#[inline(always)]
 pub unsafe fn lua_pushstring(L: *mut lua_State, s: *const c_char) -> *const c_char {
     lua_pushstring_old(L, s);
     lua_tostring(L, -1)
 }
 
 #[cfg(feature = "lua52")]
+#[inline(always)]
 pub unsafe fn lua_getglobal(L: *mut lua_State, var: *const c_char) -> c_int {
     lua_getglobal_old(L, var);
     lua_type(L, -1)
 }
 
+#[inline(always)]
 pub unsafe fn lua_gettable(L: *mut lua_State, idx: c_int) -> c_int {
     lua_gettable_old(L, idx);
     lua_type(L, -1)
 }
 
+#[inline(always)]
 pub unsafe fn lua_getfield(L: *mut lua_State, idx: c_int, k: *const c_char) -> c_int {
     lua_getfield_old(L, idx, k);
     lua_type(L, -1)
 }
 
+#[inline(always)]
 pub unsafe fn lua_geti(L: *mut lua_State, mut idx: c_int, n: lua_Integer) -> c_int {
     idx = lua_absindex(L, idx);
     lua_pushinteger(L, n);
@@ -402,18 +416,21 @@ pub unsafe fn lua_geti(L: *mut lua_State, mut idx: c_int, n: lua_Integer) -> c_i
 }
 
 // A new version which returns c_int
+#[inline(always)]
 pub unsafe fn lua_rawget(L: *mut lua_State, idx: c_int) -> c_int {
     lua_rawget_old(L, idx);
     lua_type(L, -1)
 }
 
 // A new version which returns c_int
+#[inline(always)]
 pub unsafe fn lua_rawgeti(L: *mut lua_State, idx: c_int, n: lua_Integer) -> c_int {
     lua_rawgeti_old(L, idx, n);
     lua_type(L, -1)
 }
 
 #[cfg(any(feature = "lua51", feature = "luajit"))]
+#[inline(always)]
 pub unsafe fn lua_rawgetp(L: *mut lua_State, idx: c_int, p: *const c_void) -> c_int {
     let abs_i = lua_absindex(L, idx);
     lua_pushlightuserdata(L, p as *mut c_void);
@@ -422,23 +439,27 @@ pub unsafe fn lua_rawgetp(L: *mut lua_State, idx: c_int, p: *const c_void) -> c_
 }
 
 #[cfg(feature = "lua52")]
+#[inline(always)]
 pub unsafe fn lua_rawgetp(L: *mut lua_State, idx: c_int, p: *const c_void) -> c_int {
     lua_rawgetp_old(L, idx, p);
     lua_type(L, -1)
 }
 
 #[cfg(any(feature = "lua51", feature = "luajit"))]
+#[inline(always)]
 pub unsafe fn lua_getuservalue(L: *mut lua_State, idx: c_int) -> c_int {
     lua_getfenv(L, idx);
     lua_type(L, -1)
 }
 
 #[cfg(feature = "lua52")]
+#[inline(always)]
 pub unsafe fn lua_getuservalue(L: *mut lua_State, idx: c_int) -> c_int {
     lua_getuservalue_old(L, idx);
     lua_type(L, -1)
 }
 
+#[inline(always)]
 pub unsafe fn lua_seti(L: *mut lua_State, mut idx: c_int, n: lua_Integer) {
     luaL_checkstack(L, 1, cstr!("not enough stack slots available"));
     idx = lua_absindex(L, idx);
@@ -448,6 +469,7 @@ pub unsafe fn lua_seti(L: *mut lua_State, mut idx: c_int, n: lua_Integer) {
 }
 
 #[cfg(any(feature = "lua51", feature = "luajit"))]
+#[inline(always)]
 pub unsafe fn lua_rawsetp(L: *mut lua_State, idx: c_int, p: *const c_void) {
     let abs_i = lua_absindex(L, idx);
     luaL_checkstack(L, 1, cstr!("not enough stack slots"));
@@ -457,11 +479,13 @@ pub unsafe fn lua_rawsetp(L: *mut lua_State, idx: c_int, p: *const c_void) {
 }
 
 #[cfg(any(feature = "lua51", feature = "luajit"))]
+#[inline(always)]
 pub unsafe fn lua_setuservalue(L: *mut lua_State, idx: c_int) {
     luaL_checktype(L, -1, lua::LUA_TTABLE);
     lua_setfenv(L, idx);
 }
 
+#[inline(always)]
 pub unsafe fn lua_dump(
     L: *mut lua_State,
     writer: lua_Writer,
@@ -472,11 +496,13 @@ pub unsafe fn lua_dump(
 }
 
 #[cfg(any(feature = "lua51", feature = "luajit"))]
+#[inline(always)]
 pub unsafe fn lua_resume(L: *mut lua_State, _from: *mut lua_State, narg: c_int) -> c_int {
     lua_resume_old(L, narg)
 }
 
 #[cfg(any(feature = "lua51", feature = "luajit"))]
+#[inline(always)]
 pub unsafe fn lua_len(L: *mut lua_State, idx: c_int) {
     match lua_type(L, idx) {
         lua::LUA_TSTRING => {
@@ -498,6 +524,7 @@ pub unsafe fn lua_len(L: *mut lua_State, idx: c_int) {
     }
 }
 
+#[inline(always)]
 pub unsafe fn lua_stringtonumber(L: *mut lua_State, s: *const c_char) -> usize {
     use std::str::FromStr;
 
@@ -575,6 +602,7 @@ pub unsafe fn lua_pushglobaltable(L: *mut lua_State) {
 //
 
 #[cfg(any(feature = "lua51", feature = "luajit"))]
+#[inline(always)]
 pub unsafe fn luaL_checkstack(L: *mut lua_State, sz: c_int, msg: *const c_char) {
     if lua_checkstack(L, sz + lua::LUA_MINSTACK) == 0 {
         if !msg.is_null() {
@@ -590,6 +618,7 @@ pub unsafe fn luaL_checkversion(_L: *mut lua_State) {
     // Void
 }
 
+#[inline(always)]
 pub unsafe fn luaL_getmetafield(L: *mut lua_State, obj: c_int, e: *const c_char) -> c_int {
     if luaL_getmetafield_old(L, obj, e) != 0 {
         lua_type(L, -1)
@@ -598,6 +627,7 @@ pub unsafe fn luaL_getmetafield(L: *mut lua_State, obj: c_int, e: *const c_char)
     }
 }
 
+#[inline(always)]
 pub unsafe fn luaL_newmetatable(L: *mut lua_State, tname: *const c_char) -> c_int {
     if luaL_newmetatable_old(L, tname) != 0 {
         lua_pushstring(L, tname);
@@ -609,6 +639,7 @@ pub unsafe fn luaL_newmetatable(L: *mut lua_State, tname: *const c_char) -> c_in
 }
 
 #[cfg(any(feature = "lua51", feature = "luajit"))]
+#[inline(always)]
 pub unsafe fn luaL_loadbufferx(
     L: *mut lua_State,
     buff: *const c_char,
@@ -628,6 +659,7 @@ pub unsafe fn luaL_loadbufferx(
 }
 
 #[cfg(any(feature = "lua51", feature = "luajit"))]
+#[inline(always)]
 pub unsafe fn luaL_len(L: *mut lua_State, idx: c_int) -> lua_Integer {
     let mut isnum = 0;
     luaL_checkstack(L, 1, cstr!("not enough stack slots"));
@@ -668,7 +700,7 @@ pub unsafe fn luaL_traceback(
             level = numlevels - COMPAT53_LEVELS2; // and skip to last ones
         } else {
             lua_getinfo(L1, cstr!("Slnt"), &mut ar);
-            lua_pushfstring(L, cstr!("\n\t%s:"), cstr!("ok") /*ar.short_src*/);
+            lua_pushfstring(L, cstr!("\n\t%s:"), ar.short_src.as_ptr());
             if ar.currentline > 0 {
                 lua_pushfstring(L, cstr!("%d:"), ar.currentline);
             }
@@ -717,6 +749,7 @@ pub unsafe fn luaL_tolstring(L: *mut lua_State, idx: c_int, len: *mut usize) -> 
 }
 
 #[cfg(any(feature = "lua51", feature = "luajit"))]
+#[inline(always)]
 pub unsafe fn luaL_setmetatable(L: *mut lua_State, tname: *const c_char) {
     luaL_checkstack(L, 1, cstr!("not enough stack slots"));
     luaL_getmetatable(L, tname);
@@ -724,6 +757,7 @@ pub unsafe fn luaL_setmetatable(L: *mut lua_State, tname: *const c_char) {
 }
 
 #[cfg(any(feature = "lua51", feature = "luajit"))]
+#[inline(always)]
 pub unsafe fn luaL_testudata(L: *mut lua_State, i: c_int, tname: *const c_char) -> *mut c_void {
     let mut p = lua_touserdata(L, i);
     luaL_checkstack(L, 2, cstr!("not enough stack slots"));
@@ -741,6 +775,7 @@ pub unsafe fn luaL_testudata(L: *mut lua_State, i: c_int, tname: *const c_char) 
 }
 
 #[cfg(any(feature = "lua51", feature = "luajit"))]
+#[inline(always)]
 pub unsafe fn luaL_setfuncs(L: *mut lua_State, mut l: *const luaL_Reg, nup: c_int) {
     luaL_checkstack(L, nup + 1, cstr!("too many upvalues"));
     while !(*l).name.is_null() {
