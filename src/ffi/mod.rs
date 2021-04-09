@@ -288,3 +288,5 @@ mod lauxlib;
 mod lua;
 mod luaconf;
 mod lualib;
+
+pub mod safe;

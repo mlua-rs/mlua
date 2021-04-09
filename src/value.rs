@@ -1,3 +1,4 @@
+// OK
 use std::iter::{self, FromIterator};
 use std::{slice, str, vec};
 
@@ -8,7 +9,6 @@ use {
 };
 
 use crate::error::{Error, Result};
-use crate::ffi;
 use crate::function::Function;
 use crate::lua::Lua;
 use crate::string::String;
@@ -96,8 +96,8 @@ impl<'lua> PartialEq for Value<'lua> {
             (Value::Boolean(a), Value::Boolean(b)) => a == b,
             (Value::LightUserData(a), Value::LightUserData(b)) => a == b,
             (Value::Integer(a), Value::Integer(b)) => *a == *b,
-            (Value::Integer(a), Value::Number(b)) => *a as ffi::lua_Number == *b,
-            (Value::Number(a), Value::Integer(b)) => *a == *b as ffi::lua_Number,
+            (Value::Integer(a), Value::Number(b)) => *a as Number == *b,
+            (Value::Number(a), Value::Integer(b)) => *a == *b as Number,
             (Value::Number(a), Value::Number(b)) => *a == *b,
             (Value::String(a), Value::String(b)) => a == b,
             (Value::Table(a), Value::Table(b)) => a == b,

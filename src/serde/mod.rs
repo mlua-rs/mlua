@@ -1,6 +1,6 @@
 //! (De)Serialization support using serde.
 
-use std::os::raw::{c_int, c_void};
+use std::os::raw::c_void;
 use std::ptr;
 
 use serde::{Deserialize, Serialize};
@@ -9,7 +9,8 @@ use crate::error::Result;
 use crate::ffi;
 use crate::lua::Lua;
 use crate::table::Table;
-use crate::util::{assert_stack, protect_lua, StackGuard};
+use crate::types::LightUserData;
+use crate::util::{assert_stack, StackGuard};
 use crate::value::Value;
 
 pub trait LuaSerdeExt<'lua> {
@@ -133,29 +134,17 @@ pub trait LuaSerdeExt<'lua> {
 
 impl<'lua> LuaSerdeExt<'lua> for Lua {
     fn null(&'lua self) -> Result<Value<'lua>> {
-        unsafe {
-            let _sg = StackGuard::new(self.state);
-            assert_stack(self.state, 3);
-
-            unsafe extern "C" fn push_null(state: *mut ffi::lua_State) -> c_int {
-                ffi::lua_pushlightuserdata(state, ptr::null_mut());
-                1
-            }
-            protect_lua(self.state, 0, push_null)?;
-            Ok(self.pop_value())
-        }
+        // TODO: Remove Result?
+        Ok(Value::LightUserData(LightUserData(ptr::null_mut())))
     }
 
     fn array_metatable(&'lua self) -> Result<Table<'lua>> {
         unsafe {
             let _sg = StackGuard::new(self.state);
-            assert_stack(self.state, 3);
+            assert_stack(self.state, 1);
 
-            unsafe extern "C" fn get_array_mt(state: *mut ffi::lua_State) -> c_int {
-                push_array_metatable(state);
-                1
-            }
-            protect_lua(self.state, 0, get_array_mt)?;
+            push_array_metatable(self.state);
+
             Ok(Table(self.pop_ref()))
         }
     }
@@ -175,18 +164,17 @@ impl<'lua> LuaSerdeExt<'lua> for Lua {
     }
 }
 
-pub(crate) unsafe fn init_metatables(state: *mut ffi::lua_State) {
+pub(crate) unsafe fn init_metatables(state: *mut ffi::lua_State) -> Result<()> {
     ffi::lua_pushlightuserdata(
         state,
         &ARRAY_METATABLE_REGISTRY_KEY as *const u8 as *mut c_void,
     );
-    ffi::lua_newtable(state);
+    ffi::safe::lua_createtable(state, 0, 1)?;
 
-    ffi::lua_pushstring(state, cstr!("__metatable"));
     ffi::lua_pushboolean(state, 0);
-    ffi::lua_rawset(state, -3);
+    ffi::safe::lua_rawsetfield(state, -2, "__metatable")?;
 
-    ffi::lua_rawset(state, ffi::LUA_REGISTRYINDEX);
+    ffi::safe::lua_rawset(state, ffi::LUA_REGISTRYINDEX)
 }
 
 pub(crate) unsafe fn push_array_metatable(state: *mut ffi::lua_State) {

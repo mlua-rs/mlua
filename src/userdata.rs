@@ -1,3 +1,4 @@
+// OK
 use std::cell::{Ref, RefMut};
 use std::fmt;
 use std::hash::{Hash, Hasher};
@@ -17,7 +18,7 @@ use crate::ffi;
 use crate::function::Function;
 use crate::lua::Lua;
 use crate::table::{Table, TablePairs};
-use crate::types::{LuaRef, MaybeSend, UserDataCell};
+use crate::types::{Integer, LuaRef, MaybeSend, UserDataCell};
 use crate::util::{assert_stack, get_destructed_userdata_metatable, get_userdata, StackGuard};
 use crate::value::{FromLua, FromLuaMulti, ToLua, ToLuaMulti, Value};
 
@@ -679,7 +680,7 @@ impl<'lua> AnyUserData<'lua> {
             // Lua 5.2/5.1 allows to store only a table. Then we will wrap the value.
             let t = lua.create_table()?;
             t.raw_set(1, v)?;
-            crate::Value::Table(t)
+            Value::Table(t)
         };
         #[cfg(any(feature = "lua54", feature = "lua53"))]
         let v = v.to_lua(lua)?;
@@ -702,13 +703,13 @@ impl<'lua> AnyUserData<'lua> {
         let lua = self.0.lua;
         let res = unsafe {
             let _sg = StackGuard::new(lua.state);
-            assert_stack(lua.state, 3);
+            assert_stack(lua.state, 2);
             lua.push_ref(&self.0);
             ffi::lua_getuservalue(lua.state, -1);
             lua.pop_value()
         };
         #[cfg(any(feature = "lua52", feature = "lua51", feature = "luajit"))]
-        return crate::Table::from_lua(res, lua)?.get(1);
+        return Table::from_lua(res, lua)?.get(1);
         #[cfg(any(feature = "lua54", feature = "lua53"))]
         V::from_lua(res, lua)
     }
@@ -754,10 +755,9 @@ impl<'lua> AnyUserData<'lua> {
         unsafe {
             let lua = self.0.lua;
             let _sg = StackGuard::new(lua.state);
-            assert_stack(lua.state, 3);
+            assert_stack(lua.state, 2);
 
             lua.push_ref(&self.0);
-
             if ffi::lua_getmetatable(lua.state, -1) == 0 {
                 return Err(Error::UserDataTypeMismatch);
             }
@@ -798,28 +798,26 @@ impl<'lua> AnyUserData<'lua> {
             assert_stack(lua.state, 3);
 
             lua.push_ref(&self.0);
-
             if ffi::lua_getmetatable(lua.state, -1) == 0 {
-                Err(Error::UserDataTypeMismatch)
-            } else {
-                ffi::lua_rawgeti(
-                    lua.state,
-                    ffi::LUA_REGISTRYINDEX,
-                    lua.userdata_metatable::<T>()? as ffi::lua_Integer,
-                );
+                return Err(Error::UserDataTypeMismatch);
+            }
+            ffi::lua_rawgeti(
+                lua.state,
+                ffi::LUA_REGISTRYINDEX,
+                lua.userdata_metatable::<T>()? as Integer,
+            );
 
-                if ffi::lua_rawequal(lua.state, -1, -2) == 0 {
-                    // Maybe UserData destructed?
-                    ffi::lua_pop(lua.state, 1);
-                    get_destructed_userdata_metatable(lua.state);
-                    if ffi::lua_rawequal(lua.state, -1, -2) == 1 {
-                        Err(Error::UserDataDestructed)
-                    } else {
-                        Err(Error::UserDataTypeMismatch)
-                    }
+            if ffi::lua_rawequal(lua.state, -1, -2) == 0 {
+                // Maybe UserData destructed?
+                ffi::lua_pop(lua.state, 1);
+                get_destructed_userdata_metatable(lua.state);
+                if ffi::lua_rawequal(lua.state, -1, -2) == 1 {
+                    Err(Error::UserDataDestructed)
                 } else {
-                    func(&*get_userdata::<UserDataCell<T>>(lua.state, -3))
+                    Err(Error::UserDataTypeMismatch)
                 }
+            } else {
+                func(&*get_userdata::<UserDataCell<T>>(lua.state, -3))
             }
         }
     }
@@ -918,17 +916,17 @@ impl<'lua> Serialize for AnyUserData<'lua> {
     where
         S: Serializer,
     {
-        let f = || unsafe {
+        let res = (|| unsafe {
             let lua = self.0.lua;
             let _sg = StackGuard::new(lua.state);
-            assert_stack(lua.state, 2);
+            assert_stack(lua.state, 3);
 
             lua.push_userdata_ref(&self.0)?;
             let ud = &*get_userdata::<UserDataCell<()>>(lua.state, -1);
             (*ud.try_borrow().map_err(|_| Error::UserDataBorrowError)?.ser)
                 .serialize(serializer)
                 .map_err(|err| Error::SerializeError(err.to_string()))
-        };
-        f().map_err(ser::Error::custom)
+        })();
+        res.map_err(ser::Error::custom)
     }
 }

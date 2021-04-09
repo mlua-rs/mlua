@@ -9,7 +9,7 @@ use crate::lua::Lua;
 use crate::string::String;
 use crate::table::Table;
 use crate::types::Integer;
-use crate::util::{assert_stack, protect_lua, StackGuard};
+use crate::util::{assert_stack, StackGuard};
 use crate::value::{ToLua, Value};
 
 /// A struct for serializing Rust values into Lua values.
@@ -208,18 +208,12 @@ impl<'lua> ser::SerializeSeq for SerializeVec<'lua> {
         let value = lua.to_value(value)?;
         unsafe {
             let _sg = StackGuard::new(lua.state);
-            assert_stack(lua.state, 4);
+            assert_stack(lua.state, 5);
 
             lua.push_ref(&self.table.0);
             lua.push_value(value)?;
-
-            unsafe extern "C" fn push_to_table(state: *mut ffi::lua_State) -> c_int {
-                let len = ffi::lua_rawlen(state, -2) as Integer;
-                ffi::lua_rawseti(state, -2, len + 1);
-                1
-            }
-
-            protect_lua(lua.state, 2, push_to_table)
+            let len = ffi::lua_rawlen(lua.state, -2) as Integer;
+            ffi::safe::lua_rawseti(lua.state, -2, len + 1)
         }
     }
 

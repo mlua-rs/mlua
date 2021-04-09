@@ -221,6 +221,7 @@ fn test_coercion() -> Result<()> {
         int = 123
         str = "123"
         num = 123.0
+        func = function() end
     "#,
     )
     .exec()?;
@@ -229,6 +230,7 @@ fn test_coercion() -> Result<()> {
     assert_eq!(globals.get::<_, String>("int")?, "123");
     assert_eq!(globals.get::<_, i32>("str")?, 123);
     assert_eq!(globals.get::<_, i32>("num")?, 123);
+    assert!(globals.get::<_, String>("func").is_err());
 
     Ok(())
 }

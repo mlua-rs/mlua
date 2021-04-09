@@ -3,9 +3,7 @@ use std::os::raw::c_int;
 use crate::error::{Error, Result};
 use crate::ffi;
 use crate::types::LuaRef;
-use crate::util::{
-    assert_stack, check_stack, error_traceback, pop_error, protect_lua_closure, StackGuard,
-};
+use crate::util::{assert_stack, check_stack, pop_error, StackGuard};
 use crate::value::{FromLuaMulti, MultiValue, ToLuaMulti};
 
 #[cfg(feature = "async")]
@@ -111,17 +109,16 @@ impl<'lua> Thread<'lua> {
         let args = args.to_lua_multi(lua)?;
         let results = unsafe {
             let _sg = StackGuard::new(lua.state);
-            assert_stack(lua.state, 3);
+            assert_stack(lua.state, 2);
 
             lua.push_ref(&self.0);
             let thread_state = ffi::lua_tothread(lua.state, -1);
+            ffi::lua_pop(lua.state, 1);
 
             let status = ffi::lua_status(thread_state);
             if status != ffi::LUA_YIELD && ffi::lua_gettop(thread_state) == 0 {
                 return Err(Error::CoroutineInactive);
             }
-
-            ffi::lua_pop(lua.state, 1);
 
             let nargs = args.len() as c_int;
             check_stack(lua.state, nargs)?;
@@ -136,14 +133,12 @@ impl<'lua> Thread<'lua> {
 
             let ret = ffi::lua_resume(thread_state, lua.state, nargs, &mut nresults as *mut c_int);
             if ret != ffi::LUA_OK && ret != ffi::LUA_YIELD {
-                protect_lua_closure(lua.state, 0, 0, |_| {
-                    error_traceback(thread_state);
-                    0
-                })?;
+                ffi::safe::error_traceback2(lua.state, thread_state)?;
                 return Err(pop_error(thread_state, ret));
             }
 
             let mut results = MultiValue::new();
+            check_stack(lua.state, nresults)?;
             ffi::lua_xmove(thread_state, lua.state, nresults);
 
             assert_stack(lua.state, 2);
@@ -343,7 +338,7 @@ impl WakerGuard {
 
             ffi::lua_pushlightuserdata(state, &WAKER_REGISTRY_KEY as *const u8 as *mut c_void);
             push_gc_userdata(state, waker)?;
-            ffi::lua_rawset(state, ffi::LUA_REGISTRYINDEX);
+            ffi::safe::lua_rawset(state, ffi::LUA_REGISTRYINDEX)?;
 
             Ok(WakerGuard(state))
         }
@@ -360,7 +355,7 @@ impl Drop for WakerGuard {
 
             ffi::lua_pushlightuserdata(state, &WAKER_REGISTRY_KEY as *const u8 as *mut c_void);
             ffi::lua_pushnil(state);
-            ffi::lua_rawset(state, ffi::LUA_REGISTRYINDEX);
+            ffi::lua_rawset(state, ffi::LUA_REGISTRYINDEX); // TODO: make safe
         }
     }
 }
