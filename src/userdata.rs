@@ -685,8 +685,8 @@ impl<'lua> AnyUserData<'lua> {
         let v = v.to_lua(lua)?;
         unsafe {
             let _sg = StackGuard::new(lua.state);
-            assert_stack(lua.state, 2);
-            lua.push_ref(&self.0);
+            assert_stack(lua.state, 3);
+            lua.push_userdata_ref(&self.0)?;
             lua.push_value(v)?;
             ffi::lua_setuservalue(lua.state, -2);
             Ok(())
@@ -702,8 +702,8 @@ impl<'lua> AnyUserData<'lua> {
         let lua = self.0.lua;
         let res = unsafe {
             let _sg = StackGuard::new(lua.state);
-            assert_stack(lua.state, 2);
-            lua.push_ref(&self.0);
+            assert_stack(lua.state, 3);
+            lua.push_userdata_ref(&self.0)?;
             ffi::lua_getuservalue(lua.state, -1);
             lua.pop_value()
         };
@@ -754,9 +754,9 @@ impl<'lua> AnyUserData<'lua> {
         unsafe {
             let lua = self.0.lua;
             let _sg = StackGuard::new(lua.state);
-            assert_stack(lua.state, 2);
+            assert_stack(lua.state, 3);
 
-            lua.push_ref(&self.0);
+            lua.push_userdata_ref(&self.0)?;
             if ffi::lua_getmetatable(lua.state, -1) == 0 {
                 return Err(Error::UserDataTypeMismatch);
             }

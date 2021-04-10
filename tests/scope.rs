@@ -286,6 +286,15 @@ fn scope_userdata_drop() -> Result<()> {
         Err(err) => panic!("improper borrow error for destructed userdata: {:?}", err),
     }
 
+    match ud.get_metatable() {
+        Ok(_) => panic!("successful metatable retrieval of destructed userdata"),
+        Err(Error::UserDataDestructed) => {}
+        Err(err) => panic!(
+            "improper metatable error for destructed userdata: {:?}",
+            err
+        ),
+    }
+
     Ok(())
 }
 
@@ -335,6 +344,14 @@ fn scope_nonstatic_userdata_drop() -> Result<()> {
         Ok(_) => panic!("succesfull borrow for destructed userdata"),
         Err(Error::UserDataDestructed) => {}
         Err(err) => panic!("improper borrow error for destructed userdata: {:?}", err),
+    }
+    match ud.get_metatable() {
+        Ok(_) => panic!("successful metatable retrieval of destructed userdata"),
+        Err(Error::UserDataDestructed) => {}
+        Err(err) => panic!(
+            "improper metatable error for destructed userdata: {:?}",
+            err
+        ),
     }
 
     Ok(())

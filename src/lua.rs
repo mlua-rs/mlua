@@ -25,10 +25,10 @@ use crate::userdata::{
     AnyUserData, MetaMethod, UserData, UserDataFields, UserDataMethods, UserDataWrapped,
 };
 use crate::util::{
-    assert_stack, callback_error, check_stack, get_gc_userdata, get_main_state, get_userdata,
-    get_wrapped_error, init_error_registry, init_gc_metatable_for, init_userdata_metatable,
-    pop_error, push_gc_userdata, push_userdata, push_wrapped_error, StackGuard, WrappedError,
-    WrappedPanic,
+    assert_stack, callback_error, check_stack, get_destructed_userdata_metatable, get_gc_userdata,
+    get_main_state, get_userdata, get_wrapped_error, init_error_registry, init_gc_metatable_for,
+    init_userdata_metatable, pop_error, push_gc_userdata, push_userdata, push_wrapped_error,
+    StackGuard, WrappedError, WrappedPanic,
 };
 use crate::value::{FromLua, FromLuaMulti, MultiValue, Nil, ToLua, ToLuaMulti, Value};
 
@@ -44,7 +44,7 @@ use {
 };
 
 #[cfg(feature = "serialize")]
-use {crate::util::get_destructed_userdata_metatable, serde::Serialize};
+use serde::Serialize;
 
 /// Top level Lua struct which holds the Lua state itself.
 pub struct Lua {
@@ -1588,7 +1588,6 @@ impl Lua {
     // Pushes a LuaRef value onto the stack, checking that it's a registered
     // and not destructed UserData.
     // Uses 3 stack spaces, does not call checkstack
-    #[cfg(feature = "serialize")]
     pub(crate) unsafe fn push_userdata_ref(&self, lref: &LuaRef) -> Result<()> {
         self.push_ref(lref);
         if ffi::lua_getmetatable(self.state, -1) == 0 {
