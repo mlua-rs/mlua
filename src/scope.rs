@@ -34,12 +34,13 @@ use {
 /// See [`Lua::scope`] for more details.
 ///
 /// [`Lua::scope`]: struct.Lua.html#method.scope
-#[allow(clippy::type_complexity)]
 pub struct Scope<'lua, 'scope> {
     lua: &'lua Lua,
-    destructors: RefCell<Vec<(LuaRef<'lua>, Box<dyn Fn(LuaRef<'lua>) -> Vec<Box<dyn Any>> + 'lua>)>>,
+    destructors: RefCell<Vec<(LuaRef<'lua>, DestructorCallback<'lua>)>>,
     _scope_invariant: PhantomData<Cell<&'scope ()>>,
 }
+
+type DestructorCallback<'lua> = Box<dyn Fn(LuaRef<'lua>) -> Vec<Box<dyn Any>> + 'lua>;
 
 impl<'lua, 'scope> Scope<'lua, 'scope> {
     pub(crate) fn new(lua: &'lua Lua) -> Scope<'lua, 'scope> {
@@ -184,7 +185,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
 
             #[cfg(any(feature = "lua51", feature = "luajit"))]
             let newtable = self.lua.create_table()?;
-            self.destructors.borrow_mut().push((ud.0.clone(), Box::new(move |u| {
+            let destructor: DestructorCallback = Box::new(move |u| {
                 let state = u.lua.state;
                 assert_stack(state, 2);
                 u.lua.push_ref(&u);
@@ -199,7 +200,10 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
                 // We know the destructor has not run yet because we hold a reference to the
                 // userdata.
                 vec![Box::new(take_userdata::<UserDataCell<T>>(state))]
-            })));
+            });
+            self.destructors
+                .borrow_mut()
+                .push((ud.0.clone(), destructor));
 
             Ok(ud)
         }
@@ -399,7 +403,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
 
             #[cfg(any(feature = "lua51", feature = "luajit"))]
             let newtable = lua.create_table()?;
-            self.destructors.borrow_mut().push((ud.0.clone(), Box::new(move |ud| {
+            let destructor: DestructorCallback = Box::new(move |ud| {
                 // We know the destructor has not run yet because we hold a reference to the userdata.
                 let state = ud.lua.state;
                 assert_stack(state, 2);
@@ -419,7 +423,10 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
                 ffi::lua_setuservalue(state, -2);
 
                 vec![Box::new(take_userdata::<UserDataCell<()>>(state))]
-            })));
+            });
+            self.destructors
+                .borrow_mut()
+                .push((ud.0.clone(), destructor));
 
             Ok(ud)
         }
@@ -437,7 +444,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
         let f = mem::transmute::<Callback<'callback, 'scope>, Callback<'lua, 'static>>(f);
         let f = self.lua.create_callback(f)?;
 
-        self.destructors.borrow_mut().push((f.0.clone(), Box::new(|f| {
+        let destructor: DestructorCallback = Box::new(|f| {
             let state = f.lua.state;
             assert_stack(state, 3);
             f.lua.push_ref(&f);
@@ -456,7 +463,11 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
 
             ffi::lua_pop(state, 1);
             vec![Box::new(ud1), Box::new(ud2)]
-        })));
+        });
+        self.destructors
+            .borrow_mut()
+            .push((f.0.clone(), destructor));
+
         Ok(f)
     }
 
@@ -471,8 +482,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
         // We need to pre-allocate strings to avoid failures in destructor.
         let get_poll_str = self.lua.create_string("get_poll")?;
         let poll_str = self.lua.create_string("poll")?;
-
-        self.destructors.borrow_mut().push((f.0.clone(), Box::new(move |f| {
+        let destructor: DestructorCallback = Box::new(move |f| {
             let state = f.lua.state;
             assert_stack(state, 4);
             f.lua.push_ref(&f);
@@ -520,7 +530,10 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
             }
 
             data
-        })));
+        });
+        self.destructors
+            .borrow_mut()
+            .push((f.0.clone(), destructor));
 
         Ok(f)
     }

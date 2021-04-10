@@ -385,14 +385,6 @@ pub unsafe fn get_wrapped_error(state: *mut ffi::lua_State, index: c_int) -> *co
     &(*ud).0
 }
 
-#[no_mangle]
-pub unsafe extern "C" fn mlua_get_wrapped_error(
-    state: *mut ffi::lua_State,
-    index: c_int,
-) -> *const c_void {
-    get_wrapped_error(state, index) as *const c_void
-}
-
 // Initialize the internal (with __gc) metatable for a type T
 pub unsafe fn init_gc_metatable_for<T: Any>(
     state: *mut ffi::lua_State,

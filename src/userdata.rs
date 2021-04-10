@@ -1,4 +1,3 @@
-// OK
 use std::cell::{Ref, RefMut};
 use std::fmt;
 use std::hash::{Hash, Hasher};

@@ -1,4 +1,3 @@
-// OK
 use std::iter::{self, FromIterator};
 use std::{slice, str, vec};
 

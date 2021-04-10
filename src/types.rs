@@ -1,4 +1,3 @@
-// OK
 use std::cell::RefCell;
 use std::os::raw::{c_int, c_void};
 use std::sync::{Arc, Mutex};
