@@ -6,13 +6,15 @@ use std::panic::{catch_unwind, resume_unwind, AssertUnwindSafe};
 use std::sync::{Arc, Mutex};
 use std::{mem, ptr, slice};
 
+use once_cell::sync::Lazy;
+
 use crate::error::{Error, Result};
 use crate::ffi;
 
-lazy_static::lazy_static! {
+static METATABLE_CACHE: Lazy<Mutex<HashMap<TypeId, u8>>> = Lazy::new(|| {
     // The capacity must(!) be greater than number of stored keys
-    static ref METATABLE_CACHE: Mutex<HashMap<TypeId, u8>> = Mutex::new(HashMap::with_capacity(32));
-}
+    Mutex::new(HashMap::with_capacity(32))
+});
 
 // Checks that Lua has enough free stack space for future stack operations.  On failure, this will
 // panic with an internal error message.
