@@ -708,7 +708,10 @@ impl<'lua> AnyUserData<'lua> {
             lua.pop_value()
         };
         #[cfg(any(feature = "lua52", feature = "lua51", feature = "luajit"))]
-        return Table::from_lua(res, lua)?.get(1);
+        return match <Option<Table>>::from_lua(res, lua)? {
+            Some(t) => t.get(1),
+            None => V::from_lua(Value::Nil, lua),
+        };
         #[cfg(any(feature = "lua54", feature = "lua53"))]
         V::from_lua(res, lua)
     }

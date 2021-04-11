@@ -295,7 +295,7 @@ fn test_functions() -> Result<()> {
             methods.add_function("get_value", |_, ud: AnyUserData| {
                 Ok(ud.borrow::<MyUserData>()?.0)
             });
-            methods.add_function("set_value", |_, (ud, value): (AnyUserData, i64)| {
+            methods.add_function_mut("set_value", |_, (ud, value): (AnyUserData, i64)| {
                 ud.borrow_mut::<MyUserData>()?.0 = value;
                 Ok(())
             });
@@ -349,6 +349,11 @@ fn test_fields() -> Result<()> {
                 Ok(())
             });
 
+            // Use userdata "uservalue" storage
+            fields.add_field_function_get("uval", |_, ud| ud.get_user_value::<Option<String>>());
+            fields
+                .add_field_function_set("uval", |_, ud, s| ud.set_user_value::<Option<String>>(s));
+
             fields.add_meta_field_with(MetaMethod::Index, |lua| {
                 let index = lua.create_table()?;
                 index.set("f", 321)?;
@@ -365,6 +370,11 @@ fn test_fields() -> Result<()> {
         assert(ud.val == 7)
         ud.val = 10
         assert(ud.val == 10)
+
+        assert(ud.uval == nil)
+        ud.uval = "hello"
+        assert(ud.uval == "hello")
+
         assert(ud.f == 321)
     "#,
     )
