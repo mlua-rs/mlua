@@ -9,6 +9,7 @@ use std::sync::Arc;
 
 /// Error type returned by `mlua` methods.
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub enum Error {
     /// Syntax error while parsing Lua source code.
     SyntaxError {
