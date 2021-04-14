@@ -17,7 +17,7 @@ pub fn probe_lua() -> PathBuf {
     let need_lua_lib = cfg!(any(not(feature = "module"), target_os = "windows"));
 
     if include_dir != "" && (!need_lua_lib || lib_dir != "") {
-        if lua_lib == "" {
+        if need_lua_lib && lua_lib == "" {
             panic!("LUA_LIB_NAME is not set");
         }
         let _version = use_custom_lua(&include_dir, &lib_dir, &lua_lib).unwrap();
