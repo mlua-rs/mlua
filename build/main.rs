@@ -236,5 +236,8 @@ fn main() {
         generate_glue().unwrap();
     } else {
         build_glue(&include_dir);
+        println!("cargo:rerun-if-changed=src/ffi/glue/glue.c");
     }
+
+    println!("cargo:rerun-if-changed=build");
 }
