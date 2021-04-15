@@ -139,6 +139,11 @@ pub enum Error {
         /// Original error returned by the Rust code.
         cause: Arc<Error>,
     },
+    /// A Rust panic that was previosly resumed, returned again.
+    ///
+    /// This error can occur only when a Rust panic resumed previously was recovered
+    /// and returned again.
+    PreviouslyResumedPanic,
     /// Serialization error.
     #[cfg(feature = "serialize")]
     #[cfg_attr(docsrs, doc(cfg(feature = "serialize")))]
@@ -229,6 +234,9 @@ impl fmt::Display for Error {
             }
             Error::CallbackError { ref traceback, .. } => {
                 write!(fmt, "callback error: {}", traceback)
+            }
+            Error::PreviouslyResumedPanic => {
+                write!(fmt, "previously resumed panic returned again")
             }
             #[cfg(feature = "serialize")]
             Error::SerializeError(ref err) => {

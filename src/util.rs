@@ -186,7 +186,7 @@ pub unsafe fn pop_error(state: *mut ffi::lua_State, err_code: c_int) -> Error {
         if let Some(p) = (*panic).0.take() {
             resume_unwind(p);
         } else {
-            mlua_panic!("error during panic handling, panic was resumed twice")
+            Error::PreviouslyResumedPanic
         }
     } else {
         let err_string = to_string(state, -1).into_owned();
@@ -587,27 +587,22 @@ pub unsafe fn init_error_registry(state: *mut ffi::lua_State) {
                 Ok(err_buf)
             } else if let Some(panic) = get_gc_userdata::<WrappedPanic>(state, -1).as_ref() {
                 if let Some(ref p) = (*panic).0 {
-                    ffi::lua_pushlightuserdata(
-                        state,
-                        &ERROR_PRINT_BUFFER_KEY as *const u8 as *mut c_void,
-                    );
-                    ffi::lua_rawget(state, ffi::LUA_REGISTRYINDEX);
+                    let err_buf_key = &ERROR_PRINT_BUFFER_KEY as *const u8 as *const c_void;
+                    ffi::lua_rawgetp(state, ffi::LUA_REGISTRYINDEX, err_buf_key);
                     let err_buf = ffi::lua_touserdata(state, -1) as *mut String;
+                    (*err_buf).clear();
                     ffi::lua_pop(state, 2);
 
-                    let error = if let Some(x) = p.downcast_ref::<&str>() {
-                        x.to_string()
-                    } else if let Some(x) = p.downcast_ref::<String>() {
-                        x.to_string()
+                    if let Some(msg) = p.downcast_ref::<&str>() {
+                        let _ = write!(&mut (*err_buf), "{}", msg);
+                    } else if let Some(msg) = p.downcast_ref::<String>() {
+                        let _ = write!(&mut (*err_buf), "{}", msg);
                     } else {
-                        "panic".to_string()
+                        let _ = write!(&mut (*err_buf), "<panic>");
                     };
-
-                    (*err_buf).clear();
-                    let _ = write!(&mut (*err_buf), "{}", error);
                     Ok(err_buf)
                 } else {
-                    mlua_panic!("error during panic handling, panic was resumed")
+                    Err(Error::PreviouslyResumedPanic)
                 }
             } else {
                 // I'm not sure whether this is possible to trigger without bugs in mlua?
@@ -721,7 +716,7 @@ pub unsafe fn init_error_registry(state: *mut ffi::lua_State) {
 }
 
 struct WrappedError(pub Error);
-struct WrappedPanic(pub Option<Box<dyn Any + Send + 'static>>);
+pub(crate) struct WrappedPanic(pub Option<Box<dyn Any + Send + 'static>>);
 
 // Converts the given lua value to a string in a reasonable format without causing a Lua error or
 // panicking.

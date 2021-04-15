@@ -11,7 +11,7 @@
 extern "system" {}
 
 use std::iter::FromIterator;
-use std::panic::catch_unwind;
+use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::Arc;
 use std::{error, f32, f64, fmt};
 
@@ -384,62 +384,92 @@ fn test_error() -> Result<()> {
 
     assert!(understand_recursion.call::<_, ()>(()).is_err());
 
-    match catch_unwind(|| -> Result<()> {
-        let lua = Lua::new();
-        let globals = lua.globals();
+    Ok(())
+}
 
+#[test]
+fn test_panic() -> Result<()> {
+    fn make_lua() -> Result<Lua> {
+        let lua = Lua::new();
+        let rust_panic_function =
+            lua.create_function(|_, ()| -> Result<()> { panic!("rust panic") })?;
+        lua.globals()
+            .set("rust_panic_function", rust_panic_function)?;
+        Ok(lua)
+    }
+
+    // Test triggerting Lua error passing Rust panic (must be resumed)
+    {
+        let lua = make_lua()?;
+
+        match catch_unwind(AssertUnwindSafe(|| -> Result<()> {
+            lua.load(
+                r#"
+                _, err = pcall(rust_panic_function)
+                error(err)
+            "#,
+            )
+            .exec()
+        })) {
+            Ok(Ok(_)) => panic!("no panic was detected"),
+            Ok(Err(e)) => panic!("error during panic test {:?}", e),
+            Err(p) => assert!(*p.downcast::<&str>().unwrap() == "rust panic"),
+        };
+
+        // Trigger same panic again
+        match lua.load("error(err)").exec() {
+            Ok(_) => panic!("no error was detected"),
+            Err(Error::PreviouslyResumedPanic) => {}
+            Err(e) => panic!("expected PreviouslyResumedPanic, got {:?}", e),
+        }
+    }
+
+    // Test returning Rust panic (must be resumed)
+    {
+        let lua = make_lua()?;
+        match catch_unwind(AssertUnwindSafe(|| -> Result<()> {
+            let _catched_panic = lua
+                .load(
+                    r#"
+                    -- Set global
+                    _, err = pcall(rust_panic_function)
+                    return err
+                "#,
+                )
+                .eval::<Value>()?;
+            Ok(())
+        })) {
+            Ok(_) => panic!("no panic was detected"),
+            Err(_) => {}
+        };
+
+        assert!(lua.globals().get::<_, Value>("err")? == Value::Nil);
+        match lua.load("tostring(err)").exec() {
+            Ok(_) => panic!("no error was detected"),
+            Err(Error::CallbackError { ref cause, .. }) => match cause.as_ref() {
+                Error::PreviouslyResumedPanic => {}
+                e => panic!("expected PreviouslyResumedPanic, got {:?}", e),
+            },
+            Err(e) => panic!("expected CallbackError, got {:?}", e),
+        }
+    }
+
+    // Test representing rust panic as a string
+    match catch_unwind(|| -> Result<()> {
+        let lua = make_lua()?;
         lua.load(
             r#"
-            function rust_panic()
-                local _, err = pcall(function () rust_panic_function() end)
-                if err ~= nil then
-                    error(err)
-                end
-            end
+            local _, err = pcall(rust_panic_function)
+            error(tostring(err))
         "#,
         )
-        .exec()?;
-        let rust_panic_function =
-            lua.create_function(|_, ()| -> Result<()> { panic!("test_panic") })?;
-        globals.set("rust_panic_function", rust_panic_function)?;
-
-        let rust_panic = globals.get::<_, Function>("rust_panic")?;
-
-        rust_panic.call::<_, ()>(())
-    }) {
-        Ok(Ok(_)) => panic!("no panic was detected"),
-        Ok(Err(e)) => panic!("error during panic test {:?}", e),
-        Err(p) => assert!(*p.downcast::<&str>().unwrap() == "test_panic"),
-    };
-
-    match catch_unwind(|| -> Result<()> {
-        let lua = Lua::new();
-        let globals = lua.globals();
-
-        lua.load(
-            r#"
-            function rust_panic()
-                local _, err = pcall(function () rust_panic_function() end)
-                if err ~= nil then
-                    error(tostring(err))
-                end
-            end
-        "#,
-        )
-        .exec()?;
-        let rust_panic_function =
-            lua.create_function(|_, ()| -> Result<()> { panic!("test_panic") })?;
-        globals.set("rust_panic_function", rust_panic_function)?;
-
-        let rust_panic = globals.get::<_, Function>("rust_panic")?;
-
-        rust_panic.call::<_, ()>(())
+        .exec()
     }) {
         Ok(Ok(_)) => panic!("no error was detected"),
         Ok(Err(Error::RuntimeError(_))) => {}
-        Ok(Err(e)) => panic!("unexpected error during panic test {:?}", e),
+        Ok(Err(e)) => panic!("expected RuntimeError, got {:?}", e),
         Err(_) => panic!("panic was detected"),
-    };
+    }
 
     Ok(())
 }

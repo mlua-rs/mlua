@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::ffi::CString;
 use std::marker::PhantomData;
 use std::os::raw::{c_char, c_int, c_void};
+use std::panic::resume_unwind;
 use std::sync::{Arc, Mutex, Weak};
 use std::{mem, ptr, str};
 
@@ -25,7 +26,7 @@ use crate::util::{
     assert_stack, callback_error, check_stack, get_gc_userdata, get_main_state, get_userdata,
     get_wrapped_error, init_error_registry, init_gc_metatable_for, init_userdata_metatable,
     pop_error, protect_lua, protect_lua_closure, push_gc_userdata, push_meta_gc_userdata,
-    push_string, push_userdata, push_wrapped_error, StackGuard,
+    push_string, push_userdata, push_wrapped_error, StackGuard, WrappedPanic,
 };
 use crate::value::{FromLua, FromLuaMulti, MultiValue, Nil, ToLua, ToLuaMulti, Value};
 
@@ -1402,32 +1403,33 @@ impl Lua {
 
     // Uses 2 stack spaces, does not call checkstack
     pub(crate) unsafe fn pop_value(&self) -> Value {
-        match ffi::lua_type(self.state, -1) {
+        let state = self.state;
+        match ffi::lua_type(state, -1) {
             ffi::LUA_TNIL => {
-                ffi::lua_pop(self.state, 1);
+                ffi::lua_pop(state, 1);
                 Nil
             }
 
             ffi::LUA_TBOOLEAN => {
-                let b = Value::Boolean(ffi::lua_toboolean(self.state, -1) != 0);
-                ffi::lua_pop(self.state, 1);
+                let b = Value::Boolean(ffi::lua_toboolean(state, -1) != 0);
+                ffi::lua_pop(state, 1);
                 b
             }
 
             ffi::LUA_TLIGHTUSERDATA => {
-                let ud = Value::LightUserData(LightUserData(ffi::lua_touserdata(self.state, -1)));
-                ffi::lua_pop(self.state, 1);
+                let ud = Value::LightUserData(LightUserData(ffi::lua_touserdata(state, -1)));
+                ffi::lua_pop(state, 1);
                 ud
             }
 
             ffi::LUA_TNUMBER => {
-                if ffi::lua_isinteger(self.state, -1) != 0 {
-                    let i = Value::Integer(ffi::lua_tointeger(self.state, -1));
-                    ffi::lua_pop(self.state, 1);
+                if ffi::lua_isinteger(state, -1) != 0 {
+                    let i = Value::Integer(ffi::lua_tointeger(state, -1));
+                    ffi::lua_pop(state, 1);
                     i
                 } else {
-                    let n = Value::Number(ffi::lua_tonumber(self.state, -1));
-                    ffi::lua_pop(self.state, 1);
+                    let n = Value::Number(ffi::lua_tonumber(state, -1));
+                    ffi::lua_pop(state, 1);
                     n
                 }
             }
@@ -1439,12 +1441,20 @@ impl Lua {
             ffi::LUA_TFUNCTION => Value::Function(Function(self.pop_ref())),
 
             ffi::LUA_TUSERDATA => {
-                // It should not be possible to interact with userdata types other than custom
-                // UserData types OR a WrappedError.  WrappedPanic should not be here.
-                if let Some(err) = get_wrapped_error(self.state, -1).as_ref() {
+                // We must prevent interaction with userdata types other than UserData OR a WrappedError.
+                // WrappedPanics are automatically resumed.
+                if let Some(err) = get_wrapped_error(state, -1).as_ref() {
                     let err = err.clone();
-                    ffi::lua_pop(self.state, 1);
+                    ffi::lua_pop(state, 1);
                     Value::Error(err)
+                } else if let Some(panic) = get_gc_userdata::<WrappedPanic>(state, -1).as_mut() {
+                    if let Some(panic) = (*panic).0.take() {
+                        ffi::lua_pop(state, 1);
+                        resume_unwind(panic);
+                    }
+                    // Previously resumed panic?
+                    ffi::lua_pop(state, 1);
+                    Nil
                 } else {
                     Value::UserData(AnyUserData(self.pop_ref()))
                 }
