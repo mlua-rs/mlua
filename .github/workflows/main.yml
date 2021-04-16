@@ -123,7 +123,6 @@ jobs:
         target: ${{ matrix.target }}
         override: true
     - name: Run ${{ matrix.lua }} tests
-      if: ${{ matrix.os != 'macos-latest' || matrix.lua != 'luajit' }}
       run: |
         cargo test --release --features "${{ matrix.lua }} vendored"
         cargo test --release --features "${{ matrix.lua }} vendored async send serialize"
@@ -133,27 +132,6 @@ jobs:
       run: |
         TRYBUILD=overwrite cargo test --release --features "${{ matrix.lua }} vendored" -- --ignored
         TRYBUILD=overwrite cargo test --release --features "${{ matrix.lua }} vendored async send serialize" -- --ignored
-      shell: bash
-
-  test_luajit_macos:
-    name: Test LuaJIT on macOS
-    runs-on: macos-latest
-    needs: build
-    steps:
-    - uses: actions/checkout@v2
-    - uses: actions-rs/toolchain@v1
-      with:
-        toolchain: nightly
-        target: x86_64-apple-darwin
-        override: true
-    - name: Run LuaJIT 2.0.5 tests
-      run: |
-        brew install luajit
-        cargo test --tests --release --features "luajit async send serialize" -- --test-threads=1
-      shell: bash
-    - name: Run LuaJIT vendored tests
-      run: |
-        cargo test --release --features "luajit vendored async send serialize"
       shell: bash
 
   test_modules:
