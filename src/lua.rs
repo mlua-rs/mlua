@@ -1,6 +1,6 @@
 use std::any::TypeId;
 use std::cell::{RefCell, UnsafeCell};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::ffi::CString;
 use std::marker::PhantomData;
 use std::os::raw::{c_char, c_int, c_void};
@@ -58,6 +58,7 @@ pub struct Lua {
 // Data associated with the lua_State.
 struct ExtraData {
     registered_userdata: HashMap<TypeId, c_int>,
+    registered_userdata_mt: HashSet<isize>,
     registry_unref_list: Arc<Mutex<Option<Vec<c_int>>>>,
 
     libs: StdLib,
@@ -322,6 +323,7 @@ impl Lua {
 
         let extra = Arc::new(Mutex::new(ExtraData {
             registered_userdata: HashMap::new(),
+            registered_userdata_mt: HashSet::new(),
             registry_unref_list: Arc::new(Mutex::new(Some(Vec::new()))),
             ref_thread,
             libs: StdLib::NONE,
@@ -1569,34 +1571,52 @@ impl Lua {
             ffi::lua_pop(self.state, 1);
         }
 
+        let ptr = ffi::lua_topointer(self.state, -1);
         let id = protect_lua_closure(self.state, 1, 0, |state| {
             ffi::luaL_ref(state, ffi::LUA_REGISTRYINDEX)
         })?;
 
         let mut extra = mlua_expect!(self.extra.lock(), "extra is poisoned");
         extra.registered_userdata.insert(type_id, id);
+        extra.registered_userdata_mt.insert(ptr as isize);
 
         Ok(id)
     }
 
-    // Pushes a LuaRef value onto the stack, checking that it's not destructed
+    pub(crate) fn register_userdata_metatable(&self, id: isize) {
+        let mut extra = mlua_expect!(self.extra.lock(), "extra is poisoned");
+        extra.registered_userdata_mt.insert(id);
+    }
+
+    pub(crate) fn deregister_userdata_metatable(&self, id: isize) {
+        let mut extra = mlua_expect!(self.extra.lock(), "extra is poisoned");
+        extra.registered_userdata_mt.remove(&id);
+    }
+
+    // Pushes a LuaRef value onto the stack, checking that it's a registered
+    // and not destructed UserData.
     // Uses 2 stack spaces, does not call checkstack
     #[cfg(feature = "serialize")]
     pub(crate) unsafe fn push_userdata_ref(&self, lref: &LuaRef) -> Result<()> {
         self.push_ref(lref);
         if ffi::lua_getmetatable(self.state, -1) == 0 {
-            Err(Error::UserDataTypeMismatch)
-        } else {
-            // Check that userdata is not destructed
-            get_destructed_userdata_metatable(self.state);
-            let eq = ffi::lua_rawequal(self.state, -1, -2) == 1;
-            ffi::lua_pop(self.state, 2);
-            if eq {
-                Err(Error::UserDataDestructed)
-            } else {
-                Ok(())
-            }
+            return Err(Error::UserDataTypeMismatch);
         }
+        // Check that userdata is registered
+        let ptr = ffi::lua_topointer(self.state, -1);
+        let extra = mlua_expect!(self.extra.lock(), "extra is poisoned");
+        if extra.registered_userdata_mt.contains(&(ptr as isize)) {
+            ffi::lua_pop(self.state, 1);
+            return Ok(());
+        }
+        // Maybe userdata was destructed?
+        get_destructed_userdata_metatable(self.state);
+        if ffi::lua_rawequal(self.state, -1, -2) != 0 {
+            ffi::lua_pop(self.state, 2);
+            return Err(Error::UserDataDestructed);
+        }
+        ffi::lua_pop(self.state, 2);
+        Err(Error::UserDataTypeMismatch)
     }
 
     // Creates a Function out of a Callback containing a 'static Fn.  This is safe ONLY because the

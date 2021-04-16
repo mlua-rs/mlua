@@ -312,7 +312,8 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
             let _sg = StackGuard::new(lua.state);
             assert_stack(lua.state, 6);
 
-            push_userdata(lua.state, ())?;
+            // We need to wrap dummy userdata because their memory can be accessed by serializer
+            push_userdata(lua.state, UserDataCell::new(UserDataWrapped::new(())))?;
             #[cfg(any(feature = "lua54", feature = "lua53"))]
             ffi::lua_pushlightuserdata(lua.state, data.as_ptr() as *mut c_void);
             #[cfg(any(feature = "lua52", feature = "lua51", feature = "luajit"))]
@@ -355,9 +356,22 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
                 ffi::lua_pop(lua.state, 1);
             }
 
+            let mt_id = ffi::lua_topointer(lua.state, -1);
             ffi::lua_setmetatable(lua.state, -2);
 
-            Ok(AnyUserData(lua.pop_ref()))
+            let ud = AnyUserData(lua.pop_ref());
+            lua.register_userdata_metatable(mt_id as isize);
+            self.destructors.borrow_mut().push((ud.0.clone(), |ud| {
+                let state = ud.lua.state;
+                assert_stack(state, 2);
+                ud.lua.push_ref(&ud);
+                ffi::lua_getmetatable(state, -1);
+                let mt_id = ffi::lua_topointer(state, -1);
+                ffi::lua_pop(state, 1);
+                ud.lua.deregister_userdata_metatable(mt_id as isize);
+                vec![Box::new(take_userdata::<UserDataCell<()>>(state))]
+            }));
+            Ok(ud)
         }
     }
 

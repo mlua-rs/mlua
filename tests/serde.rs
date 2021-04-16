@@ -104,6 +104,19 @@ fn test_serialize_in_scope() -> LuaResult<()> {
         Err(e) => panic!("expected destructed error, got {}", e),
     }
 
+    struct MyUserDataRef<'a>(&'a ());
+
+    impl<'a> UserData for MyUserDataRef<'a> {}
+
+    lua.scope(|scope| {
+        let ud = scope.create_nonstatic_userdata(MyUserDataRef(&()))?;
+        match serde_json::to_value(&ud) {
+            Ok(v) => panic!("expected serialization error, got {}", v),
+            Err(serde_json::Error { .. }) => {}
+        };
+        Ok(())
+    })?;
+
     Ok(())
 }
 

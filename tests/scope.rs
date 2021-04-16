@@ -13,7 +13,9 @@ extern "system" {}
 use std::cell::Cell;
 use std::rc::Rc;
 
-use mlua::{Error, Function, Lua, MetaMethod, Result, String, UserData, UserDataMethods};
+use mlua::{
+    AnyUserData, Error, Function, Lua, MetaMethod, Result, String, UserData, UserDataMethods,
+};
 
 #[test]
 fn scope_func() -> Result<()> {
@@ -57,16 +59,61 @@ fn scope_drop() -> Result<()> {
 
     lua.scope(|scope| {
         lua.globals()
-            .set("test", scope.create_userdata(MyUserdata(rc.clone()))?)?;
+            .set("static_ud", scope.create_userdata(MyUserdata(rc.clone()))?)?;
         assert_eq!(Rc::strong_count(&rc), 2);
         Ok(())
     })?;
     assert_eq!(Rc::strong_count(&rc), 1);
 
-    match lua.load("test:method()").exec() {
-        Err(Error::CallbackError { .. }) => {}
+    match lua.load("static_ud:method()").exec() {
+        Err(Error::CallbackError { ref cause, .. }) => match cause.as_ref() {
+            Error::CallbackDestructed => {}
+            e => panic!("expected CallbackDestructed, got {:?}", e),
+        },
         r => panic!("improper return for destructed userdata: {:?}", r),
     };
+
+    let static_ud = lua.globals().get::<_, AnyUserData>("static_ud")?;
+    match static_ud.borrow::<MyUserdata>() {
+        Ok(_) => panic!("borrowed destructed userdata"),
+        Err(Error::UserDataDestructed) => {}
+        Err(e) => panic!("expected UserDataDestructed, got {:?}", e),
+    }
+
+    // Check non-static UserData drop
+    struct MyUserDataRef<'a>(&'a Cell<i64>);
+
+    impl<'a> UserData for MyUserDataRef<'a> {
+        fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
+            methods.add_method("inc", |_, data, ()| {
+                data.0.set(data.0.get() + 1);
+                Ok(())
+            });
+        }
+    }
+
+    let i = Cell::new(1);
+    lua.scope(|scope| {
+        lua.globals().set(
+            "nonstatic_ud",
+            scope.create_nonstatic_userdata(MyUserDataRef(&i))?,
+        )
+    })?;
+
+    match lua.load("nonstatic_ud:inc(1)").exec() {
+        Err(Error::CallbackError { ref cause, .. }) => match cause.as_ref() {
+            Error::CallbackDestructed => {}
+            e => panic!("expected CallbackDestructed, got {:?}", e),
+        },
+        r => panic!("improper return for destructed userdata: {:?}", r),
+    };
+
+    let nonstatic_ud = lua.globals().get::<_, AnyUserData>("nonstatic_ud")?;
+    match nonstatic_ud.borrow::<MyUserDataRef>() {
+        Ok(_) => panic!("borrowed destructed userdata"),
+        Err(Error::UserDataDestructed) => {}
+        Err(e) => panic!("expected UserDataDestructed, got {:?}", e),
+    }
 
     Ok(())
 }
