@@ -1,3 +1,10 @@
+## v0.5.4
+
+- Build script improvements
+- Improvements in panic handling (resume panic on value popping)
+- Fixed bug serializing 3rd party userdata (causes segfault)
+- Make error::Error non exhaustive
+
 ## v0.5.3
 
 - Fixed bug when returning nil-prefixed multi values from async function (+ test)
