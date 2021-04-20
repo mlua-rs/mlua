@@ -1,13 +1,19 @@
 use std::env;
-use std::fs::File;
-use std::io::{BufRead, BufReader, Result};
 use std::ops::Bound;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
+
+fn get_env_var(name: &str) -> String {
+    match env::var(name) {
+        Ok(val) => val,
+        Err(env::VarError::NotPresent) => String::new(),
+        Err(err) => panic!("cannot get {}: {}", name, err),
+    }
+}
 
 pub fn probe_lua() -> PathBuf {
-    let include_dir = env::var_os("LUA_INC").unwrap_or_default();
-    let lib_dir = env::var_os("LUA_LIB").unwrap_or_default();
-    let lua_lib = env::var_os("LUA_LIB_NAME").unwrap_or_default();
+    let include_dir = get_env_var("LUA_INC");
+    let lib_dir = get_env_var("LUA_LIB");
+    let lua_lib = get_env_var("LUA_LIB_NAME");
 
     println!("cargo:rerun-if-env-changed=LUA_INC");
     println!("cargo:rerun-if-env-changed=LUA_LIB");
@@ -16,11 +22,22 @@ pub fn probe_lua() -> PathBuf {
 
     let need_lua_lib = cfg!(any(not(feature = "module"), target_os = "windows"));
 
-    if include_dir != "" && (!need_lua_lib || lib_dir != "") {
-        if need_lua_lib && lua_lib == "" {
-            panic!("LUA_LIB_NAME is not set");
+    if include_dir != "" {
+        if need_lua_lib {
+            if lib_dir == "" {
+                panic!("LUA_LIB is not set");
+            }
+            if lua_lib == "" {
+                panic!("LUA_LIB_NAME is not set");
+            }
+
+            let mut link_lib = "";
+            if get_env_var("LUA_LINK") == "static" {
+                link_lib = "static=";
+            };
+            println!("cargo:rustc-link-search=native={}", lib_dir);
+            println!("cargo:rustc-link-lib={}{}", link_lib, lua_lib);
         }
-        let _version = use_custom_lua(&include_dir, &lib_dir, &lua_lib).unwrap();
         return PathBuf::from(include_dir);
     }
 
@@ -99,40 +116,4 @@ pub fn probe_lua() -> PathBuf {
 
         lua.unwrap().include_paths[0].clone()
     }
-}
-
-fn use_custom_lua<S: AsRef<Path>>(include_dir: &S, lib_dir: &S, lua_lib: &S) -> Result<String> {
-    let mut version_found = String::new();
-
-    // Find LUA_VERSION_NUM
-    let mut lua_h_path = include_dir.as_ref().to_owned();
-    lua_h_path.push("lua.h");
-    let f = File::open(lua_h_path)?;
-    let reader = BufReader::new(f);
-    for line in reader.lines() {
-        let line = line?;
-        let parts = line.split_whitespace().collect::<Vec<_>>();
-        if parts.len() == 3 && parts[1] == "LUA_VERSION_NUM" {
-            version_found = parts[2].to_string();
-        }
-    }
-
-    let link_lib = match env::var("LUA_LINK") {
-        Ok(s) if s == "static" => "static=",
-        _ => "",
-    };
-
-    if cfg!(any(not(feature = "module"), target_os = "windows")) {
-        println!(
-            "cargo:rustc-link-search=native={}",
-            lib_dir.as_ref().display()
-        );
-        println!(
-            "cargo:rustc-link-lib={}{}",
-            link_lib,
-            lua_lib.as_ref().display()
-        );
-    }
-
-    Ok(version_found)
 }
