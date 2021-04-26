@@ -17,10 +17,10 @@ fn test_serialize() -> Result<(), Box<dyn std::error::Error>> {
 
     let ud = lua.create_ser_userdata(MyUserData(123, "test userdata".into()))?;
     globals.set("ud", ud)?;
-    globals.set("null", lua.null()?)?;
+    globals.set("null", lua.null())?;
 
     let empty_array = lua.create_table()?;
-    empty_array.set_metatable(Some(lua.array_metatable()?));
+    empty_array.set_metatable(Some(lua.array_metatable()));
     globals.set("empty_array", empty_array)?;
 
     let val = lua
@@ -145,7 +145,7 @@ fn test_serialize_failure() -> Result<(), Box<dyn std::error::Error>> {
 fn test_to_value_struct() -> LuaResult<()> {
     let lua = Lua::new();
     let globals = lua.globals();
-    globals.set("null", lua.null()?)?;
+    globals.set("null", lua.null())?;
 
     #[derive(Serialize)]
     struct Test {
@@ -175,7 +175,7 @@ fn test_to_value_struct() -> LuaResult<()> {
 fn test_to_value_enum() -> LuaResult<()> {
     let lua = Lua::new();
     let globals = lua.globals();
-    globals.set("null", lua.null()?)?;
+    globals.set("null", lua.null())?;
 
     #[derive(Serialize)]
     struct Test {
@@ -236,7 +236,7 @@ fn test_to_value_enum() -> LuaResult<()> {
 fn test_to_value_with_options() -> Result<(), Box<dyn std::error::Error>> {
     let lua = Lua::new();
     let globals = lua.globals();
-    globals.set("null", lua.null()?)?;
+    globals.set("null", lua.null())?;
 
     // set_array_metatable
     let data = lua.to_value_with(
@@ -386,7 +386,7 @@ fn test_from_value_enum() -> Result<(), Box<dyn std::error::Error>> {
 #[test]
 fn test_from_value_enum_untagged() -> Result<(), Box<dyn std::error::Error>> {
     let lua = Lua::new();
-    lua.globals().set("null", lua.null()?)?;
+    lua.globals().set("null", lua.null())?;
 
     #[derive(Deserialize, PartialEq, Debug)]
     #[serde(untagged)]

@@ -4,7 +4,7 @@ use mlua::{Error, Lua, LuaSerdeExt, Result};
 async fn main() -> Result<()> {
     let lua = Lua::new();
     let globals = lua.globals();
-    globals.set("null", lua.null()?)?;
+    globals.set("null", lua.null())?;
 
     let fetch_json = lua.create_async_function(|lua, uri: String| async move {
         let resp = reqwest::get(&uri)

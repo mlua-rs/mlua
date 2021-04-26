@@ -26,7 +26,7 @@ pub trait LuaSerdeExt<'lua> {
     ///
     /// fn main() -> Result<()> {
     ///     let lua = Lua::new();
-    ///     lua.globals().set("null", lua.null()?)?;
+    ///     lua.globals().set("null", lua.null())?;
     ///
     ///     let val = lua.load(r#"{a = null}"#).eval()?;
     ///     let map: HashMap<String, Option<String>> = lua.from_value(val)?;
@@ -35,7 +35,7 @@ pub trait LuaSerdeExt<'lua> {
     ///     Ok(())
     /// }
     /// ```
-    fn null(&'lua self) -> Result<Value<'lua>>;
+    fn null(&'lua self) -> Value<'lua>;
 
     /// A metatable attachable to a Lua table to systematically encode it as Array (instead of Map).
     /// As result, encoded Array will contain only sequence part of the table, with the same length
@@ -51,7 +51,7 @@ pub trait LuaSerdeExt<'lua> {
     ///
     /// fn main() -> Result<()> {
     ///     let lua = Lua::new();
-    ///     lua.globals().set("array_mt", lua.array_metatable()?)?;
+    ///     lua.globals().set("array_mt", lua.array_metatable())?;
     ///
     ///     // Encode as an empty array (no sequence part in the lua table)
     ///     let val = lua.load("setmetatable({a = 5}, array_mt)").eval()?;
@@ -66,7 +66,7 @@ pub trait LuaSerdeExt<'lua> {
     ///     Ok(())
     /// }
     /// ```
-    fn array_metatable(&'lua self) -> Result<Table<'lua>>;
+    fn array_metatable(&'lua self) -> Table<'lua>;
 
     /// Converts `T` into a `Value` instance.
     ///
@@ -162,19 +162,18 @@ pub trait LuaSerdeExt<'lua> {
 }
 
 impl<'lua> LuaSerdeExt<'lua> for Lua {
-    fn null(&'lua self) -> Result<Value<'lua>> {
-        // TODO: Remove Result?
-        Ok(Value::LightUserData(LightUserData(ptr::null_mut())))
+    fn null(&'lua self) -> Value<'lua> {
+        Value::LightUserData(LightUserData(ptr::null_mut()))
     }
 
-    fn array_metatable(&'lua self) -> Result<Table<'lua>> {
+    fn array_metatable(&'lua self) -> Table<'lua> {
         unsafe {
             let _sg = StackGuard::new(self.state);
             assert_stack(self.state, 1);
 
             push_array_metatable(self.state);
 
-            Ok(Table(self.pop_ref()))
+            Table(self.pop_ref())
         }
     }
 

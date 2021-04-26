@@ -33,8 +33,8 @@ fn main() -> Result<()> {
     "#).eval()?)?;
 
     // Set it as (serializable) userdata
-    globals.set("null", lua.null()?)?;
-    globals.set("array_mt", lua.array_metatable()?)?;
+    globals.set("null", lua.null())?;
+    globals.set("array_mt", lua.array_metatable())?;
     globals.set("car", lua.create_ser_userdata(car)?)?;
 
     // Create a Lua table with multiple data types

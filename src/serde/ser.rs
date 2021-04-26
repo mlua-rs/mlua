@@ -128,7 +128,7 @@ impl<'lua> ser::Serializer for Serializer<'lua> {
     #[inline]
     fn serialize_none(self) -> Result<Value<'lua>> {
         if self.options.serialize_none_to_null {
-            self.lua.null()
+            Ok(self.lua.null())
         } else {
             Ok(Value::Nil)
         }
@@ -145,7 +145,7 @@ impl<'lua> ser::Serializer for Serializer<'lua> {
     #[inline]
     fn serialize_unit(self) -> Result<Value<'lua>> {
         if self.options.serialize_unit_to_null {
-            self.lua.null()
+            Ok(self.lua.null())
         } else {
             Ok(Value::Nil)
         }
@@ -154,7 +154,7 @@ impl<'lua> ser::Serializer for Serializer<'lua> {
     #[inline]
     fn serialize_unit_struct(self, _name: &'static str) -> Result<Value<'lua>> {
         if self.options.serialize_unit_to_null {
-            self.lua.null()
+            Ok(self.lua.null())
         } else {
             Ok(Value::Nil)
         }
@@ -201,7 +201,7 @@ impl<'lua> ser::Serializer for Serializer<'lua> {
         let len = len.unwrap_or(0) as c_int;
         let table = self.lua.create_table_with_capacity(len, 0)?;
         if self.options.set_array_metatable {
-            table.set_metatable(Some(self.lua.array_metatable()?));
+            table.set_metatable(Some(self.lua.array_metatable()));
         }
         let options = self.options;
         Ok(SerializeVec { table, options })
