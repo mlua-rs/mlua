@@ -118,7 +118,7 @@ pub use crate::value::{FromLua, FromLuaMulti, MultiValue, Nil, ToLua, ToLuaMulti
 pub use crate::thread::AsyncThread;
 
 #[cfg(feature = "serialize")]
-pub use crate::serde::LuaSerdeExt;
+pub use crate::serde::{ser::Options as SerializeOptions, LuaSerdeExt};
 
 pub mod prelude;
 #[cfg(feature = "serialize")]

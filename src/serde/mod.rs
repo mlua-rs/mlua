@@ -101,6 +101,35 @@ pub trait LuaSerdeExt<'lua> {
     /// ```
     fn to_value<T: Serialize + ?Sized>(&'lua self, t: &T) -> Result<Value<'lua>>;
 
+    /// Converts `T` into a `Value` instance with options.
+    ///
+    /// Requires `feature = "serialize"`
+    ///
+    /// [`Value`]: enum.Value.html
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use mlua::{Lua, Result, LuaSerdeExt, SerializeOptions};
+    ///
+    /// fn main() -> Result<()> {
+    ///     let lua = Lua::new();
+    ///     let v = vec![1, 2, 3];
+    ///     lua.globals().set("v", lua.to_value_with(&v, SerializeOptions {
+    ///         set_array_metatable: false,
+    ///         ..SerializeOptions::default()
+    ///     })?)?;
+    ///
+    ///     lua.load(r#"
+    ///         assert(#v == 3 and v[1] == 1 and v[2] == 2 and v[3] == 3)
+    ///         assert(getmetatable(v) == nil)
+    ///     "#).exec()
+    /// }
+    /// ```
+    fn to_value_with<T>(&'lua self, t: &T, options: ser::Options) -> Result<Value<'lua>>
+    where
+        T: Serialize + ?Sized;
+
     /// Deserializes a `Value` into any serde deserializable object.
     ///
     /// Requires `feature = "serialize"`
@@ -153,7 +182,14 @@ impl<'lua> LuaSerdeExt<'lua> for Lua {
     where
         T: Serialize + ?Sized,
     {
-        t.serialize(ser::Serializer(self))
+        t.serialize(ser::Serializer::new(self))
+    }
+
+    fn to_value_with<T>(&'lua self, t: &T, options: ser::Options) -> Result<Value<'lua>>
+    where
+        T: Serialize + ?Sized,
+    {
+        t.serialize(ser::Serializer::new_with_options(self, options))
     }
 
     fn from_value<T>(&'lua self, value: Value<'lua>) -> Result<T>

@@ -1,6 +1,8 @@
 #![cfg(feature = "serialize")]
 
-use mlua::{Error, Lua, LuaSerdeExt, Result as LuaResult, UserData, Value};
+use std::collections::HashMap;
+
+use mlua::{Error, Lua, LuaSerdeExt, Result as LuaResult, SerializeOptions, UserData, Value};
 use serde::{Deserialize, Serialize};
 
 #[test]
@@ -227,6 +229,85 @@ fn test_to_value_enum() -> LuaResult<()> {
     let s = E::Struct { a: 1 };
     globals.set("value", lua.to_value(&s)?)?;
     lua.load(r#"assert(value["Struct"]["a"] == 1)"#).exec()?;
+    Ok(())
+}
+
+#[test]
+fn test_to_value_with_options() -> Result<(), Box<dyn std::error::Error>> {
+    let lua = Lua::new();
+    let globals = lua.globals();
+    globals.set("null", lua.null()?)?;
+
+    // set_array_metatable
+    let data = lua.to_value_with(
+        &Vec::<i32>::new(),
+        SerializeOptions {
+            set_array_metatable: false,
+            ..SerializeOptions::default()
+        },
+    )?;
+    globals.set("data", data)?;
+    lua.load(
+        r#"
+        assert(type(data) == "table" and #data == 0)
+        assert(getmetatable(data) == nil)
+    "#,
+    )
+    .exec()?;
+
+    #[derive(Serialize)]
+    struct UnitStruct;
+
+    #[derive(Serialize)]
+    struct MyData {
+        map: HashMap<&'static str, Option<i32>>,
+        unit: (),
+        unitstruct: UnitStruct,
+    }
+
+    // serialize_none_to_null
+    let mut map = HashMap::new();
+    map.insert("key", None);
+    let mydata = MyData {
+        map,
+        unit: (),
+        unitstruct: UnitStruct,
+    };
+    let data2 = lua.to_value_with(
+        &mydata,
+        SerializeOptions {
+            serialize_none_to_null: false,
+            ..SerializeOptions::default()
+        },
+    )?;
+    globals.set("data2", data2)?;
+    lua.load(
+        r#"
+        assert(data2.map.key == nil)
+        assert(data2.unit == null)
+        assert(data2.unitstruct == null)
+    "#,
+    )
+    .exec()?;
+
+    // serialize_unit_to_null
+    let data3 = lua.to_value_with(
+        &mydata,
+        SerializeOptions {
+            serialize_unit_to_null: false,
+            ..SerializeOptions::default()
+        },
+    )?;
+    globals.set("data3", data3)?;
+    lua.load(
+        r#"
+        assert(data3.map.key == null)
+        assert(data3.unit == nil)
+        assert(data3.unitstruct == nil)
+    "#,
+    )
+    .exec()?;
+
     Ok(())
 }
 

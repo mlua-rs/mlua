@@ -14,3 +14,6 @@ pub use crate::{
 
 #[cfg(feature = "async")]
 pub use crate::AsyncThread as LuaAsyncThread;
+
+#[cfg(feature = "serialize")]
+pub use crate::{LuaSerdeExt, SerializeOptions as LuaSerializeOptions};
