@@ -167,7 +167,7 @@ jobs:
     needs: build
     strategy:
       matrix:
-        lua: [lua53, luajit]
+        lua: [lua54, luajit]
     defaults:
       run:
         shell: msys2 {0}
