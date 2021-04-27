@@ -2,8 +2,7 @@ use std::any::Any;
 use std::cell::{Cell, Ref, RefCell, RefMut};
 use std::marker::PhantomData;
 use std::mem;
-use std::os::raw::{c_int, c_void};
-use std::rc::Rc;
+use std::os::raw::c_int;
 
 #[cfg(feature = "serialize")]
 use serde::Serialize;
@@ -17,7 +16,7 @@ use crate::userdata::{
     AnyUserData, MetaMethod, UserData, UserDataFields, UserDataMethods, UserDataWrapped,
 };
 use crate::util::{
-    assert_stack, init_userdata_metatable, push_userdata, take_userdata, StackGuard,
+    assert_stack, get_userdata, init_userdata_metatable, push_userdata, take_userdata, StackGuard,
 };
 use crate::value::{FromLua, FromLuaMulti, MultiValue, ToLua, ToLuaMulti, Value};
 
@@ -187,8 +186,11 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
             let newtable = self.lua.create_table()?;
             let destructor: DestructorCallback = Box::new(move |ud| {
                 let state = ud.lua.state;
+                let _sg = StackGuard::new(state);
                 assert_stack(state, 2);
                 ud.lua.push_ref(&ud);
+
+                // We know the destructor has not run yet because we hold a reference to the userdata.
 
                 // Clear uservalue
                 #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
@@ -197,8 +199,6 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
                 ud.lua.push_ref(&newtable.0);
                 ffi::lua_setuservalue(state, -2);
 
-                // We know the destructor has not run yet because we hold a reference to the
-                // userdata.
                 vec![Box::new(take_userdata::<UserDataCell<T>>(state))]
             });
             self.destructors
@@ -236,7 +236,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
     where
         T: 'scope + UserData,
     {
-        let data = Rc::new(RefCell::new(UserDataWrapped::new(data)));
+        let data = UserDataCell::new(UserDataWrapped::new(data));
 
         // 'callback outliving 'scope is a lie to make the types work out, required due to the
         // inability to work with the more correct callback type that is universally quantified over
@@ -245,7 +245,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
         // parameters.
         fn wrap_method<'scope, 'lua, 'callback: 'scope, T: 'scope>(
             scope: &Scope<'lua, 'scope>,
-            data: Rc<UserDataCell<T>>,
+            data: *mut UserDataCell<T>,
             method: NonStaticMethod<'callback, T>,
         ) -> Result<Function<'lua>> {
             // On methods that actually receive the userdata, we fake a type check on the passed in
@@ -255,22 +255,15 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
             // with a type mismatch, but here without this check would proceed as though you had
             // called the method on the original value (since we otherwise completely ignore the
             // first argument).
-            let check_data = data.clone();
+            let check_data = data;
             let check_ud_type = move |lua: &'callback Lua, value| {
                 if let Some(Value::UserData(ud)) = value {
                     unsafe {
                         let _sg = StackGuard::new(lua.state);
                         assert_stack(lua.state, 3);
-                        lua.push_ref(&ud.0);
-                        if ffi::lua_getmetatable(lua.state, -1) == 0 {
-                            return Err(Error::UserDataTypeMismatch);
-                        }
-                        ffi::safe::lua_pushstring(lua.state, "__mlua_ptr")?;
-                        if ffi::lua_rawget(lua.state, -2) == ffi::LUA_TLIGHTUSERDATA {
-                            let ud_ptr = ffi::lua_touserdata(lua.state, -1);
-                            if ud_ptr == check_data.as_ptr() as *mut c_void {
-                                return Ok(());
-                            }
+                        lua.push_userdata_ref(&ud.0)?;
+                        if get_userdata(lua.state, -1) == check_data {
+                            return Ok(());
                         }
                     }
                 };
@@ -281,7 +274,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
                 NonStaticMethod::Method(method) => {
                     let f = Box::new(move |lua, mut args: MultiValue<'callback>| {
                         check_ud_type(lua, args.pop_front())?;
-                        let data = data
+                        let data = unsafe { &*data }
                             .try_borrow()
                             .map(|cell| Ref::map(cell, AsRef::as_ref))
                             .map_err(|_| Error::UserDataBorrowError)?;
@@ -296,7 +289,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
                         let mut method = method
                             .try_borrow_mut()
                             .map_err(|_| Error::RecursiveMutCallback)?;
-                        let mut data = data
+                        let mut data = unsafe { &mut *data }
                             .try_borrow_mut()
                             .map(|cell| RefMut::map(cell, AsMut::as_mut))
                             .map_err(|_| Error::UserDataBorrowMutError)?;
@@ -329,18 +322,15 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
             let _sg = StackGuard::new(lua.state);
             assert_stack(lua.state, 13);
 
-            // We need to wrap dummy userdata because their memory can be accessed by serializer
-            push_userdata(lua.state, UserDataCell::new(UserDataWrapped::new(())))?;
+            push_userdata(lua.state, data)?;
+            let data = get_userdata::<UserDataCell<T>>(lua.state, -1);
 
             // Prepare metatable, add meta methods first and then meta fields
             let meta_methods_nrec = ud_methods.meta_methods.len() + ud_fields.meta_fields.len() + 1;
             ffi::safe::lua_createtable(lua.state, 0, meta_methods_nrec as c_int)?;
 
-            ffi::lua_pushlightuserdata(lua.state, data.as_ptr() as *mut c_void);
-            ffi::safe::lua_rawsetfield(lua.state, -2, "__mlua_ptr")?;
-
             for (k, m) in ud_methods.meta_methods {
-                lua.push_value(Value::Function(wrap_method(self, data.clone(), m)?))?;
+                lua.push_value(Value::Function(wrap_method(self, data, m)?))?;
                 ffi::safe::lua_rawsetfield(lua.state, -2, k.validate()?.name())?;
             }
             for (k, f) in ud_fields.meta_fields {
@@ -354,7 +344,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
             if field_getters_nrec > 0 {
                 ffi::safe::lua_createtable(lua.state, 0, field_getters_nrec as c_int)?;
                 for (k, m) in ud_fields.field_getters {
-                    lua.push_value(Value::Function(wrap_method(self, data.clone(), m)?))?;
+                    lua.push_value(Value::Function(wrap_method(self, data, m)?))?;
                     ffi::safe::lua_rawsetfield(lua.state, -2, &k)?;
                 }
                 field_getters_index = Some(ffi::lua_absindex(lua.state, -1));
@@ -365,7 +355,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
             if field_setters_nrec > 0 {
                 ffi::safe::lua_createtable(lua.state, 0, field_setters_nrec as c_int)?;
                 for (k, m) in ud_fields.field_setters {
-                    lua.push_value(Value::Function(wrap_method(self, data.clone(), m)?))?;
+                    lua.push_value(Value::Function(wrap_method(self, data, m)?))?;
                     ffi::safe::lua_rawsetfield(lua.state, -2, &k)?;
                 }
                 field_setters_index = Some(ffi::lua_absindex(lua.state, -1));
@@ -377,7 +367,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
                 // Create table used for methods lookup
                 ffi::safe::lua_createtable(lua.state, 0, methods_nrec as c_int)?;
                 for (k, m) in ud_methods.methods {
-                    lua.push_value(Value::Function(wrap_method(self, data.clone(), m)?))?;
+                    lua.push_value(Value::Function(wrap_method(self, data, m)?))?;
                     ffi::safe::lua_rawsetfield(lua.state, -2, &k)?;
                 }
                 methods_index = Some(ffi::lua_absindex(lua.state, -1));
@@ -404,10 +394,12 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
             #[cfg(any(feature = "lua51", feature = "luajit"))]
             let newtable = lua.create_table()?;
             let destructor: DestructorCallback = Box::new(move |ud| {
-                // We know the destructor has not run yet because we hold a reference to the userdata.
                 let state = ud.lua.state;
+                let _sg = StackGuard::new(state);
                 assert_stack(state, 2);
                 ud.lua.push_ref(&ud);
+
+                // We know the destructor has not run yet because we hold a reference to the userdata.
 
                 // Deregister metatable
                 ffi::lua_getmetatable(state, -1);
@@ -422,7 +414,9 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
                 ud.lua.push_ref(&newtable.0);
                 ffi::lua_setuservalue(state, -2);
 
-                vec![Box::new(take_userdata::<UserDataCell<()>>(state))]
+                // We cannot put `T` into the vec because `T` does not implement `Any`
+                drop(take_userdata::<UserDataCell<T>>(state));
+                vec![]
             });
             self.destructors
                 .borrow_mut()
@@ -446,6 +440,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
 
         let destructor: DestructorCallback = Box::new(|f| {
             let state = f.lua.state;
+            let _sg = StackGuard::new(state);
             assert_stack(state, 3);
             f.lua.push_ref(&f);
 
@@ -461,7 +456,6 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
             ffi::lua_pushnil(state);
             ffi::lua_setupvalue(state, -2, 3);
 
-            ffi::lua_pop(state, 1);
             vec![Box::new(ud1), Box::new(ud2)]
         });
         self.destructors
@@ -484,6 +478,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
         let poll_str = self.lua.create_string("poll")?;
         let destructor: DestructorCallback = Box::new(move |f| {
             let state = f.lua.state;
+            let _sg = StackGuard::new(state);
             assert_stack(state, 4);
             f.lua.push_ref(&f);
 

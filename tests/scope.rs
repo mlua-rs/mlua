@@ -302,7 +302,7 @@ fn scope_userdata_drop() -> Result<()> {
 fn scope_nonstatic_userdata_drop() -> Result<()> {
     let lua = Lua::new();
 
-    struct MyUserData<'a>(&'a Cell<i64>);
+    struct MyUserData<'a>(&'a Cell<i64>, Arc<()>);
 
     impl<'a> UserData for MyUserData<'a> {
         fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
@@ -320,11 +320,11 @@ fn scope_nonstatic_userdata_drop() -> Result<()> {
     let i = Cell::new(1);
     let arc = Arc::new(());
     lua.scope(|scope| {
-        let ud = scope.create_nonstatic_userdata(MyUserData(&i))?;
+        let ud = scope.create_nonstatic_userdata(MyUserData(&i, arc.clone()))?;
         ud.set_user_value(MyUserDataArc(arc.clone()))?;
         lua.globals().set("ud", ud)?;
         lua.load("ud:inc()").exec()?;
-        assert_eq!(Arc::strong_count(&arc), 2);
+        assert_eq!(Arc::strong_count(&arc), 3);
         Ok(())
     })?;
 
