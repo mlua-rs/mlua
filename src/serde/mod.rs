@@ -13,6 +13,7 @@ use crate::types::LightUserData;
 use crate::util::{assert_stack, StackGuard};
 use crate::value::Value;
 
+/// Trait for serializing/deserializing Lua values using Serde.
 pub trait LuaSerdeExt<'lua> {
     /// A special value (lightuserdata) to encode/decode optional (none) values.
     ///
@@ -195,7 +196,7 @@ impl<'lua> LuaSerdeExt<'lua> for Lua {
     where
         T: Deserialize<'lua>,
     {
-        T::deserialize(de::Deserializer(value))
+        T::deserialize(de::Deserializer::new(value))
     }
 }
 
@@ -221,3 +222,8 @@ static ARRAY_METATABLE_REGISTRY_KEY: u8 = 0;
 
 pub mod de;
 pub mod ser;
+
+#[doc(inline)]
+pub use de::Deserializer;
+#[doc(inline)]
+pub use ser::Serializer;

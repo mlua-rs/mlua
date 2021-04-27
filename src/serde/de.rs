@@ -7,7 +7,14 @@ use crate::table::{TablePairs, TableSequence};
 use crate::value::Value;
 
 /// A struct for deserializing Lua values into Rust values.
-pub struct Deserializer<'lua>(pub Value<'lua>);
+pub struct Deserializer<'lua>(Value<'lua>);
+
+impl<'lua> Deserializer<'lua> {
+    /// Creates a new Lua Deserializer for the `Value`.
+    pub fn new(value: Value<'lua>) -> Self {
+        Deserializer(value)
+    }
+}
 
 impl<'lua, 'de> serde::Deserializer<'de> for Deserializer<'lua> {
     type Error = Error;

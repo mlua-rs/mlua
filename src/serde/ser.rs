@@ -26,7 +26,7 @@ pub struct Options {
     ///
     /// Default: true
     ///
-    /// [`array_metatable`]: trait.LuaSerdeExt.html#tymethod.array_metatable
+    /// [`array_metatable`]: ../trait.LuaSerdeExt.html#tymethod.array_metatable
     pub set_array_metatable: bool,
 
     /// If true, serialize `None` (part of `Option` type) to [`null`].
@@ -34,8 +34,8 @@ pub struct Options {
     ///
     /// Default: true
     ///
-    /// [`null`]: trait.LuaSerdeExt.html#tymethod.null
-    /// [`Nil`]: ../enum.Value.html#variant.Nil
+    /// [`null`]: ../trait.LuaSerdeExt.html#tymethod.null
+    /// [`Nil`]: ../../enum.Value.html#variant.Nil
     pub serialize_none_to_null: bool,
 
     /// If true, serialize `Unit` (type of `()` in Rust) and Unit structs to [`null`].
@@ -43,8 +43,8 @@ pub struct Options {
     ///
     /// Default: true
     ///
-    /// [`null`]: trait.LuaSerdeExt.html#tymethod.null
-    /// [`Nil`]: ../enum.Value.html#variant.Nil
+    /// [`null`]: ../trait.LuaSerdeExt.html#tymethod.null
+    /// [`Nil`]: ../../enum.Value.html#variant.Nil
     pub serialize_unit_to_null: bool,
 }
 
@@ -59,12 +59,12 @@ impl Default for Options {
 }
 
 impl<'lua> Serializer<'lua> {
-    /// Creates a new instance of Lua Serializer with default options
+    /// Creates a new Lua Serializer with default options.
     pub fn new(lua: &'lua Lua) -> Self {
         Self::new_with_options(lua, Options::default())
     }
 
-    /// Creates a new instance of Lua Serializer with custom options
+    /// Creates a new Lua Serializer with custom options.
     pub fn new_with_options(lua: &'lua Lua, options: Options) -> Self {
         Serializer { lua, options }
     }
@@ -267,6 +267,7 @@ impl<'lua> ser::Serializer for Serializer<'lua> {
     }
 }
 
+#[doc(hidden)]
 pub struct SerializeVec<'lua> {
     table: Table<'lua>,
     options: Options,
@@ -330,6 +331,7 @@ impl<'lua> ser::SerializeTupleStruct for SerializeVec<'lua> {
     }
 }
 
+#[doc(hidden)]
 pub struct SerializeTupleVariant<'lua> {
     name: String<'lua>,
     table: Table<'lua>,
@@ -358,6 +360,7 @@ impl<'lua> ser::SerializeTupleVariant for SerializeTupleVariant<'lua> {
     }
 }
 
+#[doc(hidden)]
 pub struct SerializeMap<'lua> {
     table: Table<'lua>,
     key: Option<Value<'lua>>,
@@ -412,6 +415,7 @@ impl<'lua> ser::SerializeStruct for SerializeMap<'lua> {
     }
 }
 
+#[doc(hidden)]
 pub struct SerializeStructVariant<'lua> {
     name: String<'lua>,
     table: Table<'lua>,
