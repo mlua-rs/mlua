@@ -19,10 +19,9 @@ use crate::table::Table;
 use crate::thread::Thread;
 use crate::types::{
     Callback, HookCallback, Integer, LightUserData, LuaRef, MaybeSend, Number, RegistryKey,
-    UserDataCell,
 };
 use crate::userdata::{
-    AnyUserData, MetaMethod, UserData, UserDataFields, UserDataMethods, UserDataWrapped,
+    AnyUserData, MetaMethod, UserData, UserDataCell, UserDataFields, UserDataMethods,
 };
 use crate::util::{
     assert_stack, callback_error, check_stack, get_destructed_userdata_metatable, get_gc_userdata,
@@ -982,7 +981,7 @@ impl Lua {
     where
         T: 'static + MaybeSend + UserData,
     {
-        unsafe { self.make_userdata(UserDataWrapped::new(data)) }
+        unsafe { self.make_userdata(UserDataCell::new(data)) }
     }
 
     /// Create a Lua userdata object from a custom serializable userdata type.
@@ -994,7 +993,7 @@ impl Lua {
     where
         T: 'static + MaybeSend + UserData + Serialize,
     {
-        unsafe { self.make_userdata(UserDataWrapped::new_ser(data)) }
+        unsafe { self.make_userdata(UserDataCell::new_ser(data)) }
     }
 
     /// Returns a handle to the global environment.
@@ -1825,7 +1824,7 @@ impl Lua {
         .into_function()
     }
 
-    pub(crate) unsafe fn make_userdata<T>(&self, data: UserDataWrapped<T>) -> Result<AnyUserData>
+    pub(crate) unsafe fn make_userdata<T>(&self, data: UserDataCell<T>) -> Result<AnyUserData>
     where
         T: 'static + UserData,
     {
@@ -1833,7 +1832,7 @@ impl Lua {
         assert_stack(self.state, 4);
 
         let ud_index = self.userdata_metatable::<T>()?;
-        push_userdata::<UserDataCell<T>>(self.state, RefCell::new(data))?;
+        push_userdata(self.state, data)?;
 
         ffi::lua_rawgeti(self.state, ffi::LUA_REGISTRYINDEX, ud_index as Integer);
         ffi::lua_setmetatable(self.state, -2);

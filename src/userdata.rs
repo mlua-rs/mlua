@@ -1,7 +1,9 @@
-use std::cell::{Ref, RefMut};
+use std::cell::{Ref, RefCell, RefMut};
 use std::fmt;
 use std::hash::{Hash, Hasher};
+use std::ops::Deref;
 use std::string::String as StdString;
+use std::sync::Arc;
 
 #[cfg(feature = "async")]
 use std::future::Future;
@@ -17,7 +19,7 @@ use crate::ffi;
 use crate::function::Function;
 use crate::lua::Lua;
 use crate::table::{Table, TablePairs};
-use crate::types::{Integer, LuaRef, MaybeSend, UserDataCell};
+use crate::types::{Integer, LuaRef, MaybeSend};
 use crate::util::{assert_stack, get_destructed_userdata_metatable, get_userdata, StackGuard};
 use crate::value::{FromLua, FromLuaMulti, ToLua, ToLuaMulti, Value};
 
@@ -544,6 +546,61 @@ pub trait UserData: Sized {
     fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(_methods: &mut M) {}
 }
 
+pub(crate) enum UserDataCell<T> {
+    Arc(Arc<RefCell<UserDataWrapped<T>>>),
+    Plain(RefCell<UserDataWrapped<T>>),
+}
+
+impl<T> UserDataCell<T> {
+    pub(crate) fn new(data: T) -> Self {
+        UserDataCell::Plain(RefCell::new(UserDataWrapped {
+            data: Box::into_raw(Box::new(data)),
+            #[cfg(feature = "serialize")]
+            ser: Box::into_raw(Box::new(UserDataSerializeError)),
+        }))
+    }
+
+    pub(crate) fn new_arc(data: T) -> Self {
+        UserDataCell::Arc(Arc::new(RefCell::new(UserDataWrapped {
+            data: Box::into_raw(Box::new(data)),
+            #[cfg(feature = "serialize")]
+            ser: Box::into_raw(Box::new(UserDataSerializeError)),
+        })))
+    }
+
+    #[cfg(feature = "serialize")]
+    pub(crate) fn new_ser(data: T) -> Self
+    where
+        T: 'static + Serialize,
+    {
+        let data_raw = Box::into_raw(Box::new(data));
+        UserDataCell::Plain(RefCell::new(UserDataWrapped {
+            data: data_raw,
+            ser: data_raw,
+        }))
+    }
+}
+
+impl<T> Deref for UserDataCell<T> {
+    type Target = RefCell<UserDataWrapped<T>>;
+
+    fn deref(&self) -> &Self::Target {
+        match self {
+            UserDataCell::Arc(t) => &*t,
+            UserDataCell::Plain(t) => &*t,
+        }
+    }
+}
+
+impl<T> Clone for UserDataCell<T> {
+    fn clone(&self) -> Self {
+        match self {
+            UserDataCell::Arc(t) => UserDataCell::Arc(t.clone()),
+            UserDataCell::Plain(_) => mlua_panic!("cannot clone plain userdata"),
+        }
+    }
+}
+
 pub(crate) struct UserDataWrapped<T> {
     pub(crate) data: *mut T,
     #[cfg(feature = "serialize")]
@@ -558,28 +615,6 @@ impl<T> Drop for UserDataWrapped<T> {
             if self.data as *mut () != self.ser as *mut () {
                 drop(Box::from_raw(self.ser));
             }
-        }
-    }
-}
-
-impl<T> UserDataWrapped<T> {
-    pub(crate) fn new(data: T) -> Self {
-        UserDataWrapped {
-            data: Box::into_raw(Box::new(data)),
-            #[cfg(feature = "serialize")]
-            ser: Box::into_raw(Box::new(UserDataSerializeError)),
-        }
-    }
-
-    #[cfg(feature = "serialize")]
-    pub(crate) fn new_ser(data: T) -> Self
-    where
-        T: 'static + Serialize,
-    {
-        let data_raw = Box::into_raw(Box::new(data));
-        UserDataWrapped {
-            data: data_raw,
-            ser: data_raw,
         }
     }
 }
