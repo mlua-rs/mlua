@@ -185,16 +185,16 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
 
             #[cfg(any(feature = "lua51", feature = "luajit"))]
             let newtable = self.lua.create_table()?;
-            let destructor: DestructorCallback = Box::new(move |u| {
-                let state = u.lua.state;
+            let destructor: DestructorCallback = Box::new(move |ud| {
+                let state = ud.lua.state;
                 assert_stack(state, 2);
-                u.lua.push_ref(&u);
+                ud.lua.push_ref(&ud);
 
                 // Clear uservalue
                 #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
                 ffi::lua_pushnil(state);
                 #[cfg(any(feature = "lua51", feature = "luajit"))]
-                u.lua.push_ref(&newtable.0);
+                ud.lua.push_ref(&newtable.0);
                 ffi::lua_setuservalue(state, -2);
 
                 // We know the destructor has not run yet because we hold a reference to the
@@ -419,7 +419,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
                 #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
                 ffi::lua_pushnil(state);
                 #[cfg(any(feature = "lua51", feature = "luajit"))]
-                u.lua.push_ref(&newtable.0);
+                ud.lua.push_ref(&newtable.0);
                 ffi::lua_setuservalue(state, -2);
 
                 vec![Box::new(take_userdata::<UserDataCell<()>>(state))]
