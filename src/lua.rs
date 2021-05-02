@@ -5,7 +5,7 @@ use std::ffi::CString;
 use std::marker::PhantomData;
 use std::os::raw::{c_char, c_int, c_void};
 use std::panic::resume_unwind;
-use std::sync::{Arc, Mutex, Weak};
+use std::sync::{Arc, Mutex, MutexGuard, Weak};
 use std::{mem, ptr, str};
 
 use crate::error::{Error, Result};
@@ -67,7 +67,7 @@ struct ExtraData {
 
     ref_thread: *mut ffi::lua_State,
     ref_stack_size: c_int,
-    ref_stack_max: c_int,
+    ref_stack_top: c_int,
     ref_free: Vec<c_int>,
 
     hook_callback: Option<HookCallback>,
@@ -111,8 +111,8 @@ impl Drop for Lua {
             if !self.ephemeral {
                 let extra = mlua_expect!(self.extra.lock(), "extra is poisoned");
                 mlua_debug_assert!(
-                    ffi::lua_gettop(extra.ref_thread) == extra.ref_stack_max
-                        && extra.ref_stack_max as usize == extra.ref_free.len(),
+                    ffi::lua_gettop(extra.ref_thread) == extra.ref_stack_top
+                        && extra.ref_stack_top as usize == extra.ref_free.len(),
                     "reference leak detected"
                 );
                 let mut unref_list =
@@ -351,7 +351,7 @@ impl Lua {
             mem_info: ptr::null_mut(),
             // We need 1 extra stack space to move values in and out of the ref stack.
             ref_stack_size: ffi::LUA_MINSTACK - 1,
-            ref_stack_max: 0,
+            ref_stack_top: 0,
             ref_free: Vec::new(),
             hook_callback: None,
         }));
@@ -1475,17 +1475,17 @@ impl Lua {
     // number of short term references being created, and `RegistryKey` being used for long term
     // references.
     pub(crate) unsafe fn pop_ref(&self) -> LuaRef {
-        let mut extra = mlua_expect!(self.extra.lock(), "extra is poisoned");
+        let extra = mlua_expect!(self.extra.lock(), "extra is poisoned");
         ffi::lua_xmove(self.state, extra.ref_thread, 1);
-        let index = ref_stack_pop(&mut extra);
+        let index = ref_stack_pop(extra);
         LuaRef { lua: self, index }
     }
 
     pub(crate) fn clone_ref<'lua>(&'lua self, lref: &LuaRef<'lua>) -> LuaRef<'lua> {
         unsafe {
-            let mut extra = mlua_expect!(self.extra.lock(), "extra is poisoned");
+            let extra = mlua_expect!(self.extra.lock(), "extra is poisoned");
             ffi::lua_pushvalue(extra.ref_thread, lref.index);
-            let index = ref_stack_pop(&mut extra);
+            let index = ref_stack_pop(extra);
             LuaRef { lua: self, index }
         }
     }
@@ -2194,22 +2194,35 @@ unsafe fn load_from_std_lib(state: *mut ffi::lua_State, libs: StdLib) -> Result<
     Ok(())
 }
 
-unsafe fn ref_stack_pop(extra: &mut ExtraData) -> c_int {
+unsafe fn ref_stack_pop(mut extra: MutexGuard<ExtraData>) -> c_int {
     if let Some(free) = extra.ref_free.pop() {
         ffi::lua_replace(extra.ref_thread, free);
-        free
-    } else {
-        if extra.ref_stack_max >= extra.ref_stack_size {
+        return free;
+    }
+
+    // Try to grow max stack size
+    if extra.ref_stack_top >= extra.ref_stack_size {
+        let mut inc = extra.ref_stack_size; // Try to double stack size
+        while inc > 0 && ffi::lua_checkstack(extra.ref_thread, inc) == 0 {
+            inc /= 2;
+        }
+        if inc == 0 {
+            // Pop item on top of the stack to avoid stack leaking and successfully run destructors
+            // during unwinding.
+            ffi::lua_pop(extra.ref_thread, 1);
+            let top = extra.ref_stack_top;
+            drop(extra);
             // It is a user error to create enough references to exhaust the Lua max stack size for
             // the ref thread.
-            if ffi::lua_checkstack(extra.ref_thread, extra.ref_stack_size) == 0 {
-                mlua_panic!("cannot create a Lua reference, out of auxiliary stack space");
-            }
-            extra.ref_stack_size *= 2;
+            panic!(
+                "cannot create a Lua reference, out of auxiliary stack space (used {} slots)",
+                top
+            );
         }
-        extra.ref_stack_max += 1;
-        extra.ref_stack_max
+        extra.ref_stack_size += inc;
     }
+    extra.ref_stack_top += 1;
+    extra.ref_stack_top
 }
 
 struct StaticUserDataMethods<'lua, T: 'static + UserData> {

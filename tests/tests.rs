@@ -1,5 +1,6 @@
 use std::iter::FromIterator;
 use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::string::String as StdString;
 use std::sync::Arc;
 use std::{error, f32, f64, fmt};
 
@@ -836,6 +837,24 @@ fn too_many_binds() -> Result<()> {
         .is_err());
 
     Ok(())
+}
+
+#[test]
+fn test_ref_stack_exhaustion() {
+    match catch_unwind(AssertUnwindSafe(|| -> Result<()> {
+        let lua = Lua::new();
+        let mut vals = Vec::new();
+        for _ in 0..1000000 {
+            vals.push(lua.create_table()?);
+        }
+        Ok(())
+    })) {
+        Ok(_) => panic!("no panic was detected"),
+        Err(p) => assert!(p
+            .downcast::<StdString>()
+            .unwrap()
+            .starts_with("cannot create a Lua reference, out of auxiliary stack space")),
+    }
 }
 
 #[test]
