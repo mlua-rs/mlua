@@ -37,7 +37,7 @@ Below is a list of the available feature flags. By default `mlua` does not enabl
 * `module`: enable module mode (building loadable `cdylib` library for Lua)
 * `async`: enable async/await support (any executor can be used, eg. [tokio] or [async-std])
 * `send`: make `mlua::Lua` transferable across thread boundaries (adds [`Send`] requirement to `mlua::Function` and `mlua::UserData`)
-* `serialize`: add serialization and deserialization support to `mlua` types usign [serde] framework
+* `serialize`: add serialization and deserialization support to `mlua` types using [serde] framework
 
 [5.4]: https://www.lua.org/manual/5.4/manual.html
 [5.3]: https://www.lua.org/manual/5.3/manual.html
