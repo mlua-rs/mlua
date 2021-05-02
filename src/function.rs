@@ -187,7 +187,7 @@ impl<'lua> Function<'lua> {
     ///
     /// If `strip` is true, the binary representation may not include all debug information
     /// about the function, to save space.
-    pub fn dump(&self, strip: bool) -> Result<Vec<u8>> {
+    pub fn dump(&self, strip: bool) -> Vec<u8> {
         unsafe extern "C" fn writer(
             _state: *mut ffi::lua_State,
             buf: *const c_void,
@@ -213,7 +213,7 @@ impl<'lua> Function<'lua> {
             ffi::lua_pop(lua.state, 1);
         }
 
-        Ok(data)
+        data
     }
 }
 

@@ -52,7 +52,7 @@ fn test_safety() -> Result<()> {
         Ok(_) => panic!("expected SafetyError, got no error"),
     }
 
-    let bytecode = lua.load("return 1 + 1").into_function()?.dump(true)?;
+    let bytecode = lua.load("return 1 + 1").into_function()?.dump(true);
     match lua.load(&bytecode).exec() {
         Err(Error::SafetyError(msg)) => {
             assert!(msg.contains("binary chunks are disabled in safe mode"))
@@ -162,7 +162,7 @@ fn test_load_mode() -> Result<()> {
         Err(e) => panic!("expected SyntaxError, got {:?}", e),
     };
 
-    let bytecode = lua.load("return 1 + 1").into_function()?.dump(true)?;
+    let bytecode = lua.load("return 1 + 1").into_function()?.dump(true);
     assert_eq!(lua.load(&bytecode).eval::<i32>()?, 2);
     assert_eq!(
         lua.load(&bytecode)

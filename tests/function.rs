@@ -83,7 +83,7 @@ fn test_dump() -> Result<()> {
     let concat_lua = lua
         .load(r#"function(arg1, arg2) return arg1 .. arg2 end"#)
         .eval::<Function>()?;
-    let concat = lua.load(&concat_lua.dump(false)?).into_function()?;
+    let concat = lua.load(&concat_lua.dump(false)).into_function()?;
 
     assert_eq!(concat.call::<_, String>(("foo", "bar"))?, "foobar");
 
