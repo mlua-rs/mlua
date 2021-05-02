@@ -11,8 +11,8 @@ use crate::value::{FromLuaMulti, MultiValue, ToLuaMulti};
 use {
     crate::{
         error::ExternalError,
-        lua::{AsyncPollPending, Lua, WAKER_REGISTRY_KEY},
-        util::{get_gc_userdata, push_gc_userdata},
+        lua::{ASYNC_POLL_PENDING, WAKER_REGISTRY_KEY},
+        util::push_gc_userdata,
         value::Value,
     },
     futures_core::{future::Future, stream::Stream},
@@ -255,7 +255,7 @@ where
             self.thread.resume(())?
         };
 
-        if is_poll_pending(lua, &ret) {
+        if is_poll_pending(&ret) {
             return Poll::Pending;
         }
 
@@ -286,7 +286,7 @@ where
             self.thread.resume(())?
         };
 
-        if is_poll_pending(lua, &ret) {
+        if is_poll_pending(&ret) {
             return Poll::Pending;
         }
 
@@ -301,25 +301,13 @@ where
 }
 
 #[cfg(feature = "async")]
-fn is_poll_pending(lua: &Lua, val: &MultiValue) -> bool {
-    if val.len() != 1 {
-        return false;
-    }
-
-    if let Some(Value::UserData(ud)) = val.iter().next() {
-        unsafe {
-            let _sg = StackGuard::new(lua.state);
-            assert_stack(lua.state, 3);
-
-            lua.push_ref(&ud.0);
-            let is_pending = !get_gc_userdata::<AsyncPollPending>(lua.state, -1).is_null();
-            ffi::lua_pop(lua.state, 1);
-
-            return is_pending;
+fn is_poll_pending(val: &MultiValue) -> bool {
+    match val.iter().enumerate().last() {
+        Some((1, Value::LightUserData(ud))) => {
+            ud.0 == &ASYNC_POLL_PENDING as *const u8 as *mut c_void
         }
+        _ => false,
     }
-
-    false
 }
 
 #[cfg(feature = "async")]

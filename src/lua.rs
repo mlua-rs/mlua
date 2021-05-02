@@ -95,7 +95,7 @@ pub enum GCMode {
 }
 
 #[cfg(feature = "async")]
-pub(crate) struct AsyncPollPending;
+pub(crate) static ASYNC_POLL_PENDING: u8 = 0;
 #[cfg(feature = "async")]
 pub(crate) static WAKER_REGISTRY_KEY: u8 = 0;
 pub(crate) static EXTRA_REGISTRY_KEY: u8 = 0;
@@ -317,7 +317,6 @@ impl Lua {
                 {
                     init_gc_metatable_for::<AsyncCallback>(state, None)?;
                     init_gc_metatable_for::<LocalBoxFuture<Result<MultiValue>>>(state, None)?;
-                    init_gc_metatable_for::<AsyncPollPending>(state, None)?;
                     init_gc_metatable_for::<Waker>(state, None)?;
                 }
 
@@ -1818,11 +1817,8 @@ impl Lua {
                 ))
             })?,
         )?;
-        env.set("pending", unsafe {
-            let _sg = StackGuard::new(self.state);
-            check_stack(self.state, 3)?;
-            push_gc_userdata(self.state, AsyncPollPending)?;
-            self.pop_value()
+        env.set("pending", {
+            LightUserData(&ASYNC_POLL_PENDING as *const u8 as *mut c_void)
         })?;
 
         // We set `poll` variable in the env table to be able to destroy upvalues
