@@ -9,7 +9,7 @@ use crate::lua::Lua;
 use crate::string::String;
 use crate::table::Table;
 use crate::types::Integer;
-use crate::util::{assert_stack, StackGuard};
+use crate::util::{check_stack, StackGuard};
 use crate::value::{ToLua, Value};
 
 /// A struct for serializing Rust values into Lua values.
@@ -137,7 +137,7 @@ impl<'lua> ser::Serializer for Serializer<'lua> {
     #[inline]
     fn serialize_some<T>(self, value: &T) -> Result<Value<'lua>>
     where
-        T: ?Sized + Serialize,
+        T: Serialize + ?Sized,
     {
         value.serialize(self)
     }
@@ -173,7 +173,7 @@ impl<'lua> ser::Serializer for Serializer<'lua> {
     #[inline]
     fn serialize_newtype_struct<T>(self, _name: &'static str, value: &T) -> Result<Value<'lua>>
     where
-        T: ?Sized + Serialize,
+        T: Serialize + ?Sized,
     {
         value.serialize(self)
     }
@@ -187,7 +187,7 @@ impl<'lua> ser::Serializer for Serializer<'lua> {
         value: &T,
     ) -> Result<Value<'lua>>
     where
-        T: ?Sized + Serialize,
+        T: Serialize + ?Sized,
     {
         let table = self.lua.create_table()?;
         let variant = self.lua.create_string(variant)?;
@@ -279,13 +279,13 @@ impl<'lua> ser::SerializeSeq for SerializeVec<'lua> {
 
     fn serialize_element<T>(&mut self, value: &T) -> Result<()>
     where
-        T: ?Sized + Serialize,
+        T: Serialize + ?Sized,
     {
         let lua = self.table.0.lua;
         let value = lua.to_value_with(value, self.options)?;
         unsafe {
             let _sg = StackGuard::new(lua.state);
-            assert_stack(lua.state, 5);
+            check_stack(lua.state, 6)?;
 
             lua.push_ref(&self.table.0);
             lua.push_value(value)?;
@@ -305,7 +305,7 @@ impl<'lua> ser::SerializeTuple for SerializeVec<'lua> {
 
     fn serialize_element<T>(&mut self, value: &T) -> Result<()>
     where
-        T: ?Sized + Serialize,
+        T: Serialize + ?Sized,
     {
         ser::SerializeSeq::serialize_element(self, value)
     }
@@ -321,7 +321,7 @@ impl<'lua> ser::SerializeTupleStruct for SerializeVec<'lua> {
 
     fn serialize_field<T>(&mut self, value: &T) -> Result<()>
     where
-        T: ?Sized + Serialize,
+        T: Serialize + ?Sized,
     {
         ser::SerializeSeq::serialize_element(self, value)
     }
@@ -344,7 +344,7 @@ impl<'lua> ser::SerializeTupleVariant for SerializeTupleVariant<'lua> {
 
     fn serialize_field<T>(&mut self, value: &T) -> Result<()>
     where
-        T: ?Sized + Serialize,
+        T: Serialize + ?Sized,
     {
         let lua = self.table.0.lua;
         let idx = self.table.raw_len() + 1;
@@ -373,7 +373,7 @@ impl<'lua> ser::SerializeMap for SerializeMap<'lua> {
 
     fn serialize_key<T>(&mut self, key: &T) -> Result<()>
     where
-        T: ?Sized + Serialize,
+        T: Serialize + ?Sized,
     {
         let lua = self.table.0.lua;
         self.key = Some(lua.to_value_with(key, self.options)?);
@@ -382,7 +382,7 @@ impl<'lua> ser::SerializeMap for SerializeMap<'lua> {
 
     fn serialize_value<T>(&mut self, value: &T) -> Result<()>
     where
-        T: ?Sized + Serialize,
+        T: Serialize + ?Sized,
     {
         let lua = self.table.0.lua;
         let key = mlua_expect!(
@@ -404,7 +404,7 @@ impl<'lua> ser::SerializeStruct for SerializeMap<'lua> {
 
     fn serialize_field<T>(&mut self, key: &'static str, value: &T) -> Result<()>
     where
-        T: ?Sized + Serialize,
+        T: Serialize + ?Sized,
     {
         ser::SerializeMap::serialize_key(self, key)?;
         ser::SerializeMap::serialize_value(self, value)
@@ -428,7 +428,7 @@ impl<'lua> ser::SerializeStructVariant for SerializeStructVariant<'lua> {
 
     fn serialize_field<T>(&mut self, key: &'static str, value: &T) -> Result<()>
     where
-        T: ?Sized + Serialize,
+        T: Serialize + ?Sized,
     {
         let lua = self.table.0.lua;
         self.table

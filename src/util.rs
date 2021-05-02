@@ -16,10 +16,10 @@ static METATABLE_CACHE: Lazy<Mutex<HashMap<TypeId, u8>>> = Lazy::new(|| {
     Mutex::new(HashMap::with_capacity(32))
 });
 
-// Checks that Lua has enough free stack space for future stack operations.  On failure, this will
+// Checks that Lua has enough free stack space for future stack operations. On failure, this will
 // panic with an internal error message.
 pub unsafe fn assert_stack(state: *mut ffi::lua_State, amount: c_int) {
-    // TODO: This should only be triggered when there is a logic error in `mlua`.  In the future,
+    // TODO: This should only be triggered when there is a logic error in `mlua`. In the future,
     // when there is a way to be confident about stack safety and test it, this could be enabled
     // only when `cfg!(debug_assertions)` is true.
     mlua_assert!(
@@ -40,16 +40,27 @@ pub unsafe fn check_stack(state: *mut ffi::lua_State, amount: c_int) -> Result<(
 pub struct StackGuard {
     state: *mut ffi::lua_State,
     top: c_int,
+    extra: c_int,
 }
 
 impl StackGuard {
     // Creates a StackGuard instance with wa record of the stack size, and on Drop will check the
-    // stack size and drop any extra elements.  If the stack size at the end is *smaller* than at
+    // stack size and drop any extra elements. If the stack size at the end is *smaller* than at
     // the beginning, this is considered a fatal logic error and will result in a panic.
     pub unsafe fn new(state: *mut ffi::lua_State) -> StackGuard {
         StackGuard {
             state,
             top: ffi::lua_gettop(state),
+            extra: 0,
+        }
+    }
+
+    // Similar to `new`, but checks and keeps `extra` elements from top of the stack on Drop.
+    pub unsafe fn new_extra(state: *mut ffi::lua_State, extra: c_int) -> StackGuard {
+        StackGuard {
+            state,
+            top: ffi::lua_gettop(state),
+            extra,
         }
     }
 }
@@ -58,11 +69,14 @@ impl Drop for StackGuard {
     fn drop(&mut self) {
         unsafe {
             let top = ffi::lua_gettop(self.state);
-            if top < self.top {
+            if top < self.top + self.extra {
                 mlua_panic!("{} too many stack values popped", self.top - top)
             }
-            if top > self.top {
-                ffi::lua_settop(self.state, self.top);
+            if top > self.top + self.extra {
+                if self.extra > 0 {
+                    ffi::lua_rotate(self.state, self.top + 1, self.extra);
+                }
+                ffi::lua_settop(self.state, self.top + self.extra);
             }
         }
     }
@@ -135,7 +149,7 @@ pub unsafe fn pop_error(state: *mut ffi::lua_State, err_code: c_int) -> Error {
             ffi::LUA_ERRERR => {
                 // This error is raised when the error handler raises an error too many times
                 // recursively, and continuing to trigger the error handler would cause a stack
-                // overflow.  It is not very useful to differentiate between this and "ordinary"
+                // overflow. It is not very useful to differentiate between this and "ordinary"
                 // runtime errors, so we handle them the same way.
                 Error::RuntimeError(err_string)
             }
@@ -147,7 +161,7 @@ pub unsafe fn pop_error(state: *mut ffi::lua_State, err_code: c_int) -> Error {
     }
 }
 
-// Internally uses 3 stack spaces, does not call checkstack
+// Internally uses 3 stack spaces, does not call checkstack.
 pub unsafe fn push_userdata<T>(state: *mut ffi::lua_State, t: T) -> Result<()> {
     let ud = ffi::safe::lua_newuserdata(state, mem::size_of::<T>())? as *mut T;
     ptr::write(ud, t);
@@ -166,19 +180,18 @@ pub unsafe fn get_userdata<T>(state: *mut ffi::lua_State, index: c_int) -> *mut 
 // Uses 1 extra stack space and does not call checkstack.
 pub unsafe fn take_userdata<T>(state: *mut ffi::lua_State) -> T {
     // We set the metatable of userdata on __gc to a special table with no __gc method and with
-    // metamethods that trigger an error on access.  We do this so that it will not be double
+    // metamethods that trigger an error on access. We do this so that it will not be double
     // dropped, and also so that it cannot be used or identified as any particular userdata type
     // after the first call to __gc.
     get_destructed_userdata_metatable(state);
     ffi::lua_setmetatable(state, -2);
-    let ud = ffi::lua_touserdata(state, -1) as *mut T;
-    mlua_debug_assert!(!ud.is_null(), "userdata pointer is null");
+    let ud = get_userdata(state, -1);
     ffi::lua_pop(state, 1);
     ptr::read(ud)
 }
 
 // Pushes the userdata and attaches a metatable with __gc method.
-// Internally uses 4 stack spaces, does not call checkstack.
+// Internally uses 3 stack spaces, does not call checkstack.
 pub unsafe fn push_gc_userdata<T: Any>(state: *mut ffi::lua_State, t: T) -> Result<()> {
     push_userdata(state, t)?;
     get_gc_metatable_for::<T>(state);
@@ -193,9 +206,9 @@ pub unsafe fn get_gc_userdata<T: Any>(state: *mut ffi::lua_State, index: c_int) 
         return ptr::null_mut();
     }
     get_gc_metatable_for::<T>(state);
-    let res = ffi::lua_rawequal(state, -1, -2) != 0;
+    let res = ffi::lua_rawequal(state, -1, -2);
     ffi::lua_pop(state, 2);
-    if !res {
+    if res == 0 {
         return ptr::null_mut();
     }
     ud
@@ -208,7 +221,7 @@ pub unsafe fn get_gc_userdata<T: Any>(state: *mut ffi::lua_State, index: c_int) 
 // (capturing previous one) to lookup in `field_getters` first, then `methods` and falling back to the
 // captured `__index` if no matches found.
 // The same is also applicable for `__newindex` metamethod and `field_setters` table.
-// Internally uses 8 stack spaces and does not call checkstack.
+// Internally uses 9 stack spaces and does not call checkstack.
 pub unsafe fn init_userdata_metatable<T>(
     state: *mut ffi::lua_State,
     metatable: c_int,
@@ -277,15 +290,15 @@ pub unsafe extern "C" fn userdata_destructor<T>(state: *mut ffi::lua_State) -> c
 
 // In the context of a lua callback, this will call the given function and if the given function
 // returns an error, *or if the given function panics*, this will result in a call to lua_error (a
-// longjmp).  The error or panic is wrapped in such a way that when calling pop_error back on
-// the rust side, it will resume the panic.
+// longjmp) by a C shim. The error or panic is wrapped in such a way that when calling pop_error back
+// on the rust side, it will resume the panic (or when popping a panic value from the stack).
 //
 // This function assumes the structure of the stack at the beginning of a callback, that the only
 // elements on the stack are the arguments to the callback.
 //
 // This function uses some of the bottom of the stack for error handling, the given callback will be
 // given the number of arguments available as an argument, and should return the number of returns
-// as normal, but cannot assume that the arguments available start at 0.
+// as normal, but cannot assume that the arguments available start at 1.
 pub unsafe fn callback_error<F>(state: *mut ffi::lua_State, f: F) -> c_int
 where
     F: FnOnce(c_int) -> Result<c_int>,
@@ -315,6 +328,9 @@ where
     }
 }
 
+// A part of the C shim (error_traceback).
+// Receives absolute index of error in the stack, a pointer to pre-allocated WrappedError memory,
+// and optional boolean flag if a traceback value is on top of the stack.
 #[no_mangle]
 pub unsafe extern "C" fn wrapped_error_traceback(
     state: *mut ffi::lua_State,
@@ -348,6 +364,7 @@ pub unsafe extern "C" fn wrapped_error_traceback(
     ffi::lua_setmetatable(state, -2);
 }
 
+// Returns Lua main thread for Lua >= 5.2 or checks that the passed thread is main for Lua 5.1.
 // Does not call lua_checkstack, uses 1 stack space.
 pub unsafe fn get_main_state(state: *mut ffi::lua_State) -> Option<*mut ffi::lua_State> {
     #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
@@ -370,10 +387,14 @@ pub unsafe fn get_main_state(state: *mut ffi::lua_State) -> Option<*mut ffi::lua
     }
 }
 
-// Pushes a WrappedError to the top of the stack.  Uses two stack spaces and does not call
-// lua_checkstack.
+// Pushes a WrappedError to the top of the stack.
+// Uses 2 stack spaces and does not call checkstack.
 pub unsafe fn push_wrapped_error(state: *mut ffi::lua_State, err: Error) -> Result<()> {
-    push_gc_userdata::<WrappedError>(state, WrappedError(err))
+    let error_ud = ffi::safe::lua_newwrappederror(state)? as *mut WrappedError;
+    ptr::write(error_ud, WrappedError(err));
+    get_gc_metatable_for::<WrappedError>(state);
+    ffi::lua_setmetatable(state, -2);
+    Ok(())
 }
 
 // Checks if the value at the given index is a WrappedError, and if it is returns a pointer to it,
@@ -387,13 +408,15 @@ pub unsafe fn get_wrapped_error(state: *mut ffi::lua_State, index: c_int) -> *co
     &(*ud).0
 }
 
-// Initialize the internal (with __gc) metatable for a type T
+// Initialize the internal (with __gc method) metatable for a type T.
+// Uses 6 stack spaces and calls checkstack.
 pub unsafe fn init_gc_metatable_for<T: Any>(
     state: *mut ffi::lua_State,
     customize_fn: Option<fn(*mut ffi::lua_State) -> Result<()>>,
 ) -> Result<*const u8> {
-    let type_id = TypeId::of::<T>();
+    check_stack(state, 6)?;
 
+    let type_id = TypeId::of::<T>();
     let ref_addr = {
         let mut mt_cache = mlua_expect!(METATABLE_CACHE.lock(), "cannot lock metatable cache");
         mlua_assert!(
@@ -433,7 +456,7 @@ pub unsafe fn get_gc_metatable_for<T: Any>(state: *mut ffi::lua_State) {
 // Initialize the error, panic, and destructed userdata metatables.
 // Returns address of WrappedError and WrappedPanic metatables in Lua registry.
 pub unsafe fn init_error_registry(state: *mut ffi::lua_State) -> Result<(*const u8, *const u8)> {
-    assert_stack(state, 8);
+    check_stack(state, 7)?;
 
     // Create error and panic metatables
 
@@ -442,11 +465,8 @@ pub unsafe fn init_error_registry(state: *mut ffi::lua_State) -> Result<(*const 
             check_stack(state, 3)?;
 
             let err_buf = if let Some(error) = get_wrapped_error(state, -1).as_ref() {
-                ffi::lua_pushlightuserdata(
-                    state,
-                    &ERROR_PRINT_BUFFER_KEY as *const u8 as *mut c_void,
-                );
-                ffi::lua_rawget(state, ffi::LUA_REGISTRYINDEX);
+                let err_buf_key = &ERROR_PRINT_BUFFER_KEY as *const u8 as *const c_void;
+                ffi::lua_rawgetp(state, ffi::LUA_REGISTRYINDEX, err_buf_key);
                 let err_buf = ffi::lua_touserdata(state, -1) as *mut String;
                 ffi::lua_pop(state, 2);
 
@@ -507,22 +527,16 @@ pub unsafe fn init_error_registry(state: *mut ffi::lua_State) -> Result<(*const 
 
     unsafe extern "C" fn destructed_error(state: *mut ffi::lua_State) -> c_int {
         callback_error(state, |_| {
-            check_stack(state, 3)?;
-            let ud = ffi::safe::lua_newuserdata(state, mem::size_of::<WrappedError>())?
-                as *mut WrappedError;
-            ptr::write(ud, WrappedError(Error::CallbackDestructed));
+            check_stack(state, 2)?;
+            let error_ud = ffi::safe::lua_newwrappederror(state)? as *mut WrappedError;
+            ptr::write(error_ud, WrappedError(Error::CallbackDestructed));
             get_gc_metatable_for::<WrappedError>(state);
             ffi::lua_setmetatable(state, -2);
             Ok(-1) // to trigger lua_error
         })
     }
 
-    ffi::lua_pushlightuserdata(
-        state,
-        &DESTRUCTED_USERDATA_METATABLE as *const u8 as *mut c_void,
-    );
     ffi::safe::lua_createtable(state, 0, 26)?;
-
     ffi::safe::lua_pushrclosure(state, destructed_error, 0)?;
     for &method in &[
         "__add",
@@ -567,22 +581,14 @@ pub unsafe fn init_error_registry(state: *mut ffi::lua_State) -> Result<(*const 
     }
     ffi::lua_pop(state, 1);
 
-    ffi::safe::lua_rawset(state, ffi::LUA_REGISTRYINDEX)?;
+    let destructed_metatable_key = &DESTRUCTED_USERDATA_METATABLE as *const u8 as *const c_void;
+    ffi::safe::lua_rawsetp(state, ffi::LUA_REGISTRYINDEX, destructed_metatable_key)?;
 
     // Create error print buffer
-
-    ffi::lua_pushlightuserdata(state, &ERROR_PRINT_BUFFER_KEY as *const u8 as *mut c_void);
-
-    let ud = ffi::safe::lua_newuserdata(state, mem::size_of::<String>())? as *mut String;
-    ptr::write(ud, String::new());
-
-    ffi::safe::lua_createtable(state, 0, 1)?;
-    ffi::safe::lua_pushrclosure(state, userdata_destructor::<String>, 0)?;
-    ffi::safe::lua_rawsetfield(state, -2, "__gc")?;
-
-    ffi::lua_setmetatable(state, -2);
-
-    ffi::safe::lua_rawset(state, ffi::LUA_REGISTRYINDEX)?;
+    init_gc_metatable_for::<String>(state, None)?;
+    push_gc_userdata(state, String::new())?;
+    let err_buf_key = &ERROR_PRINT_BUFFER_KEY as *const u8 as *const c_void;
+    ffi::safe::lua_rawsetp(state, ffi::LUA_REGISTRYINDEX, err_buf_key)?;
 
     Ok((wrapped_error_key, wrapped_panic_key))
 }
@@ -625,11 +631,8 @@ unsafe fn to_string(state: *mut ffi::lua_State, index: c_int) -> String {
 }
 
 pub(crate) unsafe fn get_destructed_userdata_metatable(state: *mut ffi::lua_State) {
-    ffi::lua_pushlightuserdata(
-        state,
-        &DESTRUCTED_USERDATA_METATABLE as *const u8 as *mut c_void,
-    );
-    ffi::lua_rawget(state, ffi::LUA_REGISTRYINDEX);
+    let key = &DESTRUCTED_USERDATA_METATABLE as *const u8 as *const c_void;
+    ffi::lua_rawgetp(state, ffi::LUA_REGISTRYINDEX, key);
 }
 
 static DESTRUCTED_USERDATA_METATABLE: u8 = 0;

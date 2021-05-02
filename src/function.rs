@@ -207,13 +207,9 @@ impl<'lua> Function<'lua> {
             assert_stack(lua.state, 1);
 
             lua.push_ref(&self.0);
+            let data_ptr = &mut data as *mut Vec<u8> as *mut c_void;
             let strip = if strip { 1 } else { 0 };
-            ffi::lua_dump(
-                lua.state,
-                writer,
-                &mut data as *mut Vec<u8> as *mut c_void,
-                strip,
-            );
+            ffi::lua_dump(lua.state, writer, data_ptr, strip);
             ffi::lua_pop(lua.state, 1);
         }
 

@@ -1,3 +1,4 @@
+use std::cmp;
 use std::os::raw::c_int;
 
 use crate::error::{Error, Result};
@@ -107,9 +108,10 @@ impl<'lua> Thread<'lua> {
     {
         let lua = self.0.lua;
         let args = args.to_lua_multi(lua)?;
+        let nargs = args.len() as c_int;
         let results = unsafe {
             let _sg = StackGuard::new(lua.state);
-            assert_stack(lua.state, 2);
+            check_stack(lua.state, cmp::min(nargs + 1, 3))?;
 
             lua.push_ref(&self.0);
             let thread_state = ffi::lua_tothread(lua.state, -1);
@@ -120,10 +122,7 @@ impl<'lua> Thread<'lua> {
                 return Err(Error::CoroutineInactive);
             }
 
-            let nargs = args.len() as c_int;
-            check_stack(lua.state, nargs)?;
-            check_stack(thread_state, nargs + 1)?;
-
+            check_stack(thread_state, nargs)?;
             for arg in args {
                 lua.push_value(arg)?;
             }
@@ -138,10 +137,9 @@ impl<'lua> Thread<'lua> {
             }
 
             let mut results = MultiValue::new();
-            check_stack(lua.state, nresults)?;
+            check_stack(lua.state, nresults + 2)?; // 2 is extra for `lua.pop_value()` below
             ffi::lua_xmove(thread_state, lua.state, nresults);
 
-            assert_stack(lua.state, 2);
             for _ in 0..nresults {
                 results.push_front(lua.pop_value());
             }
@@ -314,9 +312,7 @@ fn is_poll_pending(lua: &Lua, val: &MultiValue) -> bool {
             assert_stack(lua.state, 3);
 
             lua.push_ref(&ud.0);
-            let is_pending = get_gc_userdata::<AsyncPollPending>(lua.state, -1)
-                .as_ref()
-                .is_some();
+            let is_pending = !get_gc_userdata::<AsyncPollPending>(lua.state, -1).is_null();
             ffi::lua_pop(lua.state, 1);
 
             return is_pending;
@@ -334,11 +330,11 @@ impl WakerGuard {
     pub fn new(state: *mut ffi::lua_State, waker: Waker) -> Result<WakerGuard> {
         unsafe {
             let _sg = StackGuard::new(state);
-            assert_stack(state, 6);
+            check_stack(state, 5)?;
 
-            ffi::lua_pushlightuserdata(state, &WAKER_REGISTRY_KEY as *const u8 as *mut c_void);
             push_gc_userdata(state, waker)?;
-            ffi::safe::lua_rawset(state, ffi::LUA_REGISTRYINDEX)?;
+            let waker_key = &WAKER_REGISTRY_KEY as *const u8 as *const c_void;
+            ffi::safe::lua_rawsetp(state, ffi::LUA_REGISTRYINDEX, waker_key)?;
 
             Ok(WakerGuard(state))
         }
@@ -348,14 +344,14 @@ impl WakerGuard {
 #[cfg(feature = "async")]
 impl Drop for WakerGuard {
     fn drop(&mut self) {
+        let state = self.0;
         unsafe {
-            let state = self.0;
             let _sg = StackGuard::new(state);
-            assert_stack(state, 2);
+            assert_stack(state, 1);
 
-            ffi::lua_pushlightuserdata(state, &WAKER_REGISTRY_KEY as *const u8 as *mut c_void);
             ffi::lua_pushnil(state);
-            ffi::lua_rawset(state, ffi::LUA_REGISTRYINDEX); // TODO: make safe
+            let waker_key = &WAKER_REGISTRY_KEY as *const u8 as *const c_void;
+            ffi::lua_rawsetp(state, ffi::LUA_REGISTRYINDEX, waker_key); // TODO: make safe
         }
     }
 }

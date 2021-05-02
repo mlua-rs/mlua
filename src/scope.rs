@@ -16,7 +16,8 @@ use crate::userdata::{
     AnyUserData, MetaMethod, UserData, UserDataCell, UserDataFields, UserDataMethods,
 };
 use crate::util::{
-    assert_stack, get_userdata, init_userdata_metatable, push_userdata, take_userdata, StackGuard,
+    assert_stack, check_stack, get_userdata, init_userdata_metatable, push_userdata, take_userdata,
+    StackGuard,
 };
 use crate::value::{FromLua, FromLuaMulti, MultiValue, ToLua, ToLuaMulti, Value};
 
@@ -53,7 +54,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
     /// Wraps a Rust function or closure, creating a callable Lua function handle to it.
     ///
     /// This is a version of [`Lua::create_function`] that creates a callback which expires on
-    /// scope drop.  See [`Lua::scope`] for more details.
+    /// scope drop. See [`Lua::scope`] for more details.
     ///
     /// [`Lua::create_function`]: struct.Lua.html#method.create_function
     /// [`Lua::scope`]: struct.Lua.html#method.scope
@@ -65,7 +66,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
     {
         // Safe, because 'scope must outlive 'callback (due to Self containing 'scope), however the
         // callback itself must be 'scope lifetime, so the function should not be able to capture
-        // anything of 'callback lifetime.  'scope can't be shortened due to being invariant, and
+        // anything of 'callback lifetime. 'scope can't be shortened due to being invariant, and
         // the 'callback lifetime here can't be enlarged due to coming from a universal
         // quantification in Lua::scope.
         //
@@ -82,7 +83,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
     /// Wraps a Rust mutable closure, creating a callable Lua function handle to it.
     ///
     /// This is a version of [`Lua::create_function_mut`] that creates a callback which expires
-    /// on scope drop.  See [`Lua::scope`] and [`Scope::create_function`] for more details.
+    /// on scope drop. See [`Lua::scope`] and [`Scope::create_function`] for more details.
     ///
     /// [`Lua::create_function_mut`]: struct.Lua.html#method.create_function_mut
     /// [`Lua::scope`]: struct.Lua.html#method.scope
@@ -107,7 +108,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
     /// Wraps a Rust async function or closure, creating a callable Lua function handle to it.
     ///
     /// This is a version of [`Lua::create_async_function`] that creates a callback which expires on
-    /// scope drop.  See [`Lua::scope`] and [`Lua::async_scope`] for more details.
+    /// scope drop. See [`Lua::scope`] and [`Lua::async_scope`] for more details.
     ///
     /// Requires `feature = "async"`
     ///
@@ -188,6 +189,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
                 let state = ud.lua.state;
                 let _sg = StackGuard::new(state);
                 assert_stack(state, 2);
+
                 ud.lua.push_ref(&ud);
 
                 // We know the destructor has not run yet because we hold a reference to the userdata.
@@ -221,10 +223,10 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
     ///
     /// The main limitation that comes from using non-'static userdata is that the produced userdata
     /// will no longer have a `TypeId` associated with it, becuase `TypeId` can only work for
-    /// 'static types.  This means that it is impossible, once the userdata is created, to get a
-    /// reference to it back *out* of an `AnyUserData` handle.  This also implies that the
+    /// 'static types. This means that it is impossible, once the userdata is created, to get a
+    /// reference to it back *out* of an `AnyUserData` handle. This also implies that the
     /// "function" type methods that can be added via [`UserDataMethods`] (the ones that accept
-    /// `AnyUserData` as a first parameter) are vastly less useful.  Also, there is no way to re-use
+    /// `AnyUserData` as a first parameter) are vastly less useful. Also, there is no way to re-use
     /// a single metatable for multiple non-'static types, so there is a higher cost associated with
     /// creating the userdata metatable each time a new userdata is created.
     ///
@@ -240,7 +242,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
 
         // 'callback outliving 'scope is a lie to make the types work out, required due to the
         // inability to work with the more correct callback type that is universally quantified over
-        // 'lua.  This is safe though, because `UserData::add_methods` does not get to pick the 'lua
+        // 'lua. This is safe though, because `UserData::add_methods` does not get to pick the 'lua
         // lifetime, so none of the static methods UserData types can add can possibly capture
         // parameters.
         fn wrap_method<'scope, 'lua, 'callback: 'scope, T: 'scope>(
@@ -251,7 +253,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
         ) -> Result<Function<'lua>> {
             // On methods that actually receive the userdata, we fake a type check on the passed in
             // userdata, where we pretend there is a unique type per call to
-            // `Scope::create_nonstatic_userdata`.  You can grab a method from a userdata and call
+            // `Scope::create_nonstatic_userdata`. You can grab a method from a userdata and call
             // it on a mismatched userdata type, which when using normal 'static userdata will fail
             // with a type mismatch, but here without this check would proceed as though you had
             // called the method on the original value (since we otherwise completely ignore the
@@ -260,7 +262,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
                 if let Some(Value::UserData(ud)) = value {
                     unsafe {
                         let _sg = StackGuard::new(lua.state);
-                        assert_stack(lua.state, 3);
+                        check_stack(lua.state, 3)?;
                         lua.push_userdata_ref(&ud.0)?;
                         if get_userdata(lua.state, -1) == data_ptr {
                             return Ok(());
@@ -320,7 +322,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
         unsafe {
             let lua = self.lua;
             let _sg = StackGuard::new(lua.state);
-            assert_stack(lua.state, 13);
+            check_stack(lua.state, 13)?;
 
             push_userdata(lua.state, data.clone())?;
             let data_ptr = ffi::lua_touserdata(lua.state, -1);
@@ -401,6 +403,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
                 let state = ud.lua.state;
                 let _sg = StackGuard::new(state);
                 assert_stack(state, 2);
+
                 ud.lua.push_ref(&ud);
 
                 // We know the destructor has not run yet because we hold a reference to the userdata.
@@ -437,7 +440,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
     // Unsafe, because the callback can improperly capture any value with 'callback scope, such as
     // improperly capturing an argument. Since the 'callback lifetime is chosen by the user and the
     // lifetime of the callback itself is 'scope (non-'static), the borrow checker will happily pick
-    // a 'callback that outlives 'scope to allow this.  In order for this to be safe, the callback
+    // a 'callback that outlives 'scope to allow this. In order for this to be safe, the callback
     // must NOT capture any parameters.
     unsafe fn create_callback<'callback>(
         &self,
@@ -450,6 +453,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
             let state = f.lua.state;
             let _sg = StackGuard::new(state);
             assert_stack(state, 3);
+
             f.lua.push_ref(&f);
 
             // We know the destructor has not run yet because we hold a reference to the callback.
@@ -487,7 +491,8 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
         let destructor: DestructorCallback = Box::new(move |f| {
             let state = f.lua.state;
             let _sg = StackGuard::new(state);
-            assert_stack(state, 4);
+            assert_stack(state, 5);
+
             f.lua.push_ref(&f);
 
             // We know the destructor has not run yet because we hold a reference to the callback.
@@ -545,7 +550,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
 impl<'lua, 'scope> Drop for Scope<'lua, 'scope> {
     fn drop(&mut self) {
         // We separate the action of invalidating the userdata in Lua and actually dropping the
-        // userdata type into two phases.  This is so that, in the event a userdata drop panics, we
+        // userdata type into two phases. This is so that, in the event a userdata drop panics, we
         // can be sure that all of the userdata in Lua is actually invalidated.
 
         // All destructors are non-panicking, so this is fine

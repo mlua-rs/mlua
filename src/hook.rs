@@ -9,8 +9,8 @@ use crate::util::callback_error;
 /// Contains information about currently executing Lua code.
 ///
 /// The `Debug` structure is provided as a parameter to the hook function set with
-/// [`Lua::set_hook`].  You may call the methods on this structure to retrieve information about the
-/// Lua code executing at the time that the hook function was called.  Further information can be
+/// [`Lua::set_hook`]. You may call the methods on this structure to retrieve information about the
+/// Lua code executing at the time that the hook function was called. Further information can be
 /// found in the [Lua 5.3 documentaton][lua_doc].
 ///
 /// [lua_doc]: https://www.lua.org/manual/5.3/manual.html#lua_Debug
@@ -130,7 +130,7 @@ pub struct HookTriggers {
     pub on_returns: bool,
     /// Before executing a new line, or returning from a function call.
     pub every_line: bool,
-    /// After a certain number of VM instructions have been executed.  When set to `Some(count)`,
+    /// After a certain number of VM instructions have been executed. When set to `Some(count)`,
     /// `count` is the number of VM instructions to execute before calling the hook.
     ///
     /// # Performance

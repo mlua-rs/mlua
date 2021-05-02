@@ -29,11 +29,13 @@ extern "C" {
     fn lua_tolstring_s(L: *mut lua_State) -> c_int;
     fn lua_newthread_s(L: *mut lua_State) -> c_int;
     fn lua_newuserdata_s(L: *mut lua_State) -> c_int;
+    fn lua_newwrappederror_s(L: *mut lua_State) -> c_int;
     fn lua_pushcclosure_s(L: *mut lua_State) -> c_int;
     fn lua_pushrclosure_s(L: *mut lua_State) -> c_int;
     fn luaL_requiref_s(L: *mut lua_State) -> c_int;
     fn error_traceback_s(L: *mut lua_State) -> c_int;
 
+    fn lua_newtable_s(L: *mut lua_State) -> c_int;
     fn lua_createtable_s(L: *mut lua_State) -> c_int;
     fn lua_gettable_s(L: *mut lua_State) -> c_int;
     fn lua_settable_s(L: *mut lua_State) -> c_int;
@@ -118,21 +120,25 @@ pub unsafe fn lua_newuserdata(state: *mut lua_State, size: usize) -> Result<*mut
     Ok(super::lua_touserdata(state, -1))
 }
 
-// Uses 4 stack spaces
-pub unsafe fn lua_pushcclosure(state: *mut lua_State, f: lua_CFunction, n: c_int) -> Result<()> {
-    super::lua_pushlightuserdata(state, f as *mut c_void);
-    super::lua_pushinteger(state, n as lua_Integer);
-    protect_lua(state, n + 2, lua_pushcclosure_s)
+// Uses 2 stack spaces
+pub unsafe fn lua_newwrappederror(state: *mut lua_State) -> Result<*mut c_void> {
+    protect_lua(state, 0, lua_newwrappederror_s)?;
+    Ok(super::lua_touserdata(state, -1))
 }
 
-// Uses 4 stack spaces
+// Uses 3 stack spaces
+pub unsafe fn lua_pushcclosure(state: *mut lua_State, f: lua_CFunction, n: c_int) -> Result<()> {
+    super::lua_pushlightuserdata(state, f as *mut c_void);
+    protect_lua(state, n + 1, lua_pushcclosure_s)
+}
+
+// Uses 3 stack spaces
 pub unsafe fn lua_pushrclosure(state: *mut lua_State, f: lua_CFunction, n: c_int) -> Result<()> {
     super::lua_pushlightuserdata(state, f as *mut c_void);
     if n > 0 {
         super::lua_rotate(state, -n - 1, 1);
     }
-    super::lua_pushinteger(state, n as lua_Integer + 1);
-    protect_lua(state, n + 2, lua_pushrclosure_s)
+    protect_lua(state, n + 1, lua_pushrclosure_s)
 }
 
 // Uses 5 stack spaces
@@ -162,6 +168,11 @@ pub unsafe fn error_traceback2(state: *mut lua_State, state2: *mut lua_State) ->
 //
 // Table functions
 //
+
+// Uses 2 stack spaces
+pub unsafe fn lua_newtable(state: *mut lua_State) -> Result<()> {
+    protect_lua(state, 0, lua_newtable_s)
+}
 
 // Uses 4 stack spaces
 pub unsafe fn lua_createtable(state: *mut lua_State, narr: c_int, nrec: c_int) -> Result<()> {

@@ -135,16 +135,21 @@ int lua_newuserdata_s(lua_State *L) {
   return 1;
 }
 
+int lua_newwrappederror_s(lua_State *L) {
+  lua_newuserdata(L, MLUA_WRAPPED_ERROR_SIZE);
+  return 1;
+}
+
 int lua_pushcclosure_s(lua_State *L) {
-  lua_CFunction fn = lua_touserdata(L, -2);
-  lua_Integer n = lua_tointeger(L, -1);
-  lua_pop(L, 2);
+  int n = lua_gettop(L) - 1;
+  lua_CFunction fn = lua_touserdata(L, -1);
+  lua_pop(L, 1);
   lua_pushcclosure(L, fn, n);
   return 1;
 }
 
 int lua_pushrclosure_s(lua_State *L) {
-  lua_Integer n = lua_popinteger(L);
+  int n = lua_gettop(L);
   lua_pushcclosure(L, lua_call_rust, n);
   return 1;
 }
@@ -161,6 +166,11 @@ int luaL_requiref_s(lua_State *L) {
 //
 // Table functions
 //
+
+int lua_newtable_s(lua_State *L) {
+  lua_createtable(L, 0, 0);
+  return 1;
+}
 
 int lua_createtable_s(lua_State *L) {
   int nrec = lua_popinteger(L);
@@ -344,7 +354,7 @@ int meta_newindex_impl(lua_State *state) {
   return 0;
 }
 
-// See function::bind
+// See Function::bind
 int bind_call_impl(lua_State *state) {
   int nargs = lua_gettop(state);
   int nbinds = lua_tointeger(state, lua_upvalueindex(2));

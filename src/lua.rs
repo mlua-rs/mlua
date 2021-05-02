@@ -84,9 +84,9 @@ struct MemoryInfo {
 /// In Lua 5.4 GC can work in two modes: incremental and generational.
 /// Previous Lua versions support only incremental GC.
 ///
-/// More information can be found in the Lua 5.x [documentation][lua_doc].
+/// More information can be found in the Lua 5.x [documentation].
 ///
-/// [lua_doc]: https://www.lua.org/manual/5.4/manual.html#2.5
+/// [documentation]: https://www.lua.org/manual/5.4/manual.html#2.5
 pub enum GCMode {
     Incremental,
     /// Requires `feature = "lua54"`
@@ -128,11 +128,15 @@ impl Drop for Lua {
 }
 
 impl Lua {
-    /// Creates a new Lua state and loads the safe subset of the standard libraries.
+    /// Creates a new Lua state and loads the **safe** subset of the standard libraries.
     ///
     /// # Safety
     /// The created Lua state would have _some_ safety guarantees and would not allow to load unsafe
     /// standard libraries or C modules.
+    ///
+    /// See [`StdLib`] documentation for a list of unsafe modules that cannot be loaded.
+    ///
+    /// [`StdLib`]: struct.StdLib.html
     #[allow(clippy::new_without_default)]
     pub fn new() -> Lua {
         mlua_expect!(
@@ -156,6 +160,8 @@ impl Lua {
     /// # Safety
     /// The created Lua state would have _some_ safety guarantees and would not allow to load unsafe
     /// standard libraries or C modules.
+    ///
+    /// See [`StdLib`] documentation for a list of unsafe modules that cannot be loaded.
     ///
     /// [`StdLib`]: struct.StdLib.html
     pub fn new_with(libs: StdLib) -> Result<Lua> {
@@ -188,7 +194,7 @@ impl Lua {
     /// Use the [`StdLib`] flags to specifiy the libraries you want to load.
     ///
     /// # Safety
-    /// The created Lua state would not have safety guarantees and would allow to load C modules.
+    /// The created Lua state will not have safety guarantees and allow to load C modules.
     ///
     /// [`StdLib`]: struct.StdLib.html
     pub unsafe fn unsafe_new_with(libs: StdLib) -> Lua {
@@ -289,9 +295,17 @@ impl Lua {
         let main_state = maybe_main_state.unwrap_or(state);
         let main_state_top = ffi::lua_gettop(main_state);
 
-        let (ref_thread, wrapped_error_key, wrapped_panic_key) = mlua_expect!(
+        let ref_thread = mlua_expect!(
             (|state| {
+                // Before initializing the error registry, we must set Error/Panic size.
+                // Error/Panic keys are not needed during the registry initialization.
+                ffi::safe::WRAPPED_ERROR_SIZE = mem::size_of::<WrappedError>();
+                ffi::safe::WRAPPED_PANIC_SIZE = mem::size_of::<WrappedPanic>();
+
                 let (wrapped_error_key, wrapped_panic_key) = init_error_registry(state)?;
+
+                ffi::safe::WRAPPED_ERROR_KEY = wrapped_error_key as *const c_void;
+                ffi::safe::WRAPPED_PANIC_KEY = wrapped_panic_key as *const c_void;
 
                 // Create the internal metatables and place them in the registry
                 // to prevent them from being garbage collected.
@@ -317,7 +331,7 @@ impl Lua {
                 let ref_thread = ffi::safe::lua_newthread(state)?;
                 ffi::safe::luaL_ref(state, ffi::LUA_REGISTRYINDEX)?;
 
-                Ok::<_, Error>((ref_thread, wrapped_error_key, wrapped_panic_key))
+                Ok::<_, Error>(ref_thread)
             })(main_state),
             "Error during Lua construction",
         );
@@ -342,12 +356,9 @@ impl Lua {
             push_gc_userdata(main_state, Arc::downgrade(&extra)),
             "Error while storing extra data",
         );
+        let extra_key = &EXTRA_REGISTRY_KEY as *const u8 as *const c_void;
         mlua_expect!(
-            ffi::safe::lua_rawsetp(
-                main_state,
-                ffi::LUA_REGISTRYINDEX,
-                &EXTRA_REGISTRY_KEY as *const u8 as *const c_void
-            ),
+            ffi::safe::lua_rawsetp(main_state, ffi::LUA_REGISTRYINDEX, extra_key,),
             "Error while storing extra data"
         );
 
@@ -356,11 +367,6 @@ impl Lua {
             "stack leak during creation"
         );
         assert_stack(main_state, ffi::LUA_MINSTACK);
-
-        ffi::safe::WRAPPED_ERROR_SIZE = mem::size_of::<WrappedError>();
-        ffi::safe::WRAPPED_PANIC_SIZE = mem::size_of::<WrappedPanic>();
-        ffi::safe::WRAPPED_ERROR_KEY = wrapped_error_key as *const c_void;
-        ffi::safe::WRAPPED_PANIC_KEY = wrapped_panic_key as *const c_void;
 
         Lua {
             state,
@@ -448,7 +454,7 @@ impl Lua {
     /// parameter, see [`HookTriggers`] for more details.
     ///
     /// The provided hook function can error, and this error will be propagated through the Lua code
-    /// that was executing at the time the hook was triggered.  This can be used to implement a
+    /// that was executing at the time the hook was triggered. This can be used to implement a
     /// limited form of execution limits by setting [`HookTriggers.every_nth_instruction`] and
     /// erroring once an instruction limit has been reached.
     ///
@@ -571,7 +577,7 @@ impl Lua {
     /// Perform a full garbage-collection cycle.
     ///
     /// It may be necessary to call this function twice to collect all currently unreachable
-    /// objects.  Once to finish the current gc cycle, and once to start and finish the next cycle.
+    /// objects. Once to finish the current gc cycle, and once to start and finish the next cycle.
     pub fn gc_collect(&self) -> Result<()> {
         let state = self.main_state.unwrap_or(self.state);
         unsafe { ffi::safe::lua_gc(state, ffi::LUA_GCCOLLECT, 0).map(|_| ()) }
@@ -586,7 +592,7 @@ impl Lua {
 
     /// Steps the garbage collector as though memory had been allocated.
     ///
-    /// if `kbytes` is 0, then this is the same as calling `gc_step`.  Returns true if this step has
+    /// if `kbytes` is 0, then this is the same as calling `gc_step`. Returns true if this step has
     /// finished a collection cycle.
     pub fn gc_step_kbytes(&self, kbytes: c_int) -> Result<bool> {
         let state = self.main_state.unwrap_or(self.state);
@@ -595,7 +601,7 @@ impl Lua {
 
     /// Sets the 'pause' value of the collector.
     ///
-    /// Returns the previous value of 'pause'.  More information can be found in the [Lua 5.3
+    /// Returns the previous value of 'pause'. More information can be found in the [Lua 5.3
     /// documentation][lua_doc].
     ///
     /// [lua_doc]: https://www.lua.org/manual/5.3/manual.html#2.5
@@ -606,7 +612,7 @@ impl Lua {
 
     /// Sets the 'step multiplier' value of the collector.
     ///
-    /// Returns the previous value of the 'step multiplier'.  More information can be found in the
+    /// Returns the previous value of the 'step multiplier'. More information can be found in the
     /// Lua 5.x [documentation][lua_doc].
     ///
     /// [lua_doc]: https://www.lua.org/manual/5.3/manual.html#2.5
@@ -642,15 +648,8 @@ impl Lua {
         }
 
         #[cfg(feature = "lua54")]
-        let prev_mode = unsafe {
-            ffi::lua_gc(
-                state,
-                ffi::LUA_GCSETPAUSE,
-                pause,
-                step_multiplier,
-                step_size,
-            )
-        };
+        let prev_mode =
+            unsafe { ffi::lua_gc(state, ffi::LUA_GCINC, pause, step_multiplier, step_size) };
         #[cfg(feature = "lua54")]
         match prev_mode {
             ffi::LUA_GCINC => GCMode::Incremental,
@@ -682,7 +681,7 @@ impl Lua {
     /// Returns Lua source code as a `Chunk` builder type.
     ///
     /// In order to actually compile or run the resulting code, you must call [`Chunk::exec`] or
-    /// similar on the returned builder.  Code is not even parsed until one of these methods is
+    /// similar on the returned builder. Code is not even parsed until one of these methods is
     /// called.
     ///
     /// If this `Lua` was created with `unsafe_new`, `load` will automatically detect and load
@@ -691,7 +690,7 @@ impl Lua {
     /// [`Chunk::exec`]: struct.Chunk.html#method.exec
     pub fn load<'lua, 'a, S>(&'lua self, source: &'a S) -> Chunk<'lua, 'a>
     where
-        S: ?Sized + AsRef<[u8]>,
+        S: AsRef<[u8]> + ?Sized,
     {
         Chunk {
             lua: self,
@@ -711,7 +710,7 @@ impl Lua {
     ) -> Result<Function<'lua>> {
         unsafe {
             let _sg = StackGuard::new(self.state);
-            assert_stack(self.state, 1);
+            check_stack(self.state, 1)?;
 
             let mode_str = match mode {
                 Some(ChunkMode::Binary) if self.safe => {
@@ -751,16 +750,16 @@ impl Lua {
         }
     }
 
-    /// Create and return an interned Lua string.  Lua strings can be arbitrary [u8] data including
+    /// Create and return an interned Lua string. Lua strings can be arbitrary [u8] data including
     /// embedded nulls, so in addition to `&str` and `&String`, you can also pass plain `&[u8]`
     /// here.
     pub fn create_string<S>(&self, s: &S) -> Result<String>
     where
-        S: ?Sized + AsRef<[u8]>,
+        S: AsRef<[u8]> + ?Sized,
     {
         unsafe {
             let _sg = StackGuard::new(self.state);
-            assert_stack(self.state, 4);
+            check_stack(self.state, 3)?;
             ffi::safe::lua_pushstring(self.state, s)?;
             Ok(String(self.pop_ref()))
         }
@@ -768,7 +767,12 @@ impl Lua {
 
     /// Creates and returns a new empty table.
     pub fn create_table(&self) -> Result<Table> {
-        self.create_table_with_capacity(0, 0)
+        unsafe {
+            let _sg = StackGuard::new(self.state);
+            check_stack(self.state, 2)?;
+            ffi::safe::lua_newtable(self.state)?;
+            Ok(Table(self.pop_ref()))
+        }
     }
 
     /// Creates and returns a new empty table, with the specified capacity.
@@ -778,14 +782,14 @@ impl Lua {
     pub fn create_table_with_capacity(&self, narr: c_int, nrec: c_int) -> Result<Table> {
         unsafe {
             let _sg = StackGuard::new(self.state);
-            assert_stack(self.state, 4);
+            check_stack(self.state, 4)?;
             ffi::safe::lua_createtable(self.state, narr, nrec)?;
             Ok(Table(self.pop_ref()))
         }
     }
 
     /// Creates a table and fills it with values from an iterator.
-    pub fn create_table_from<'lua, K, V, I>(&'lua self, cont: I) -> Result<Table<'lua>>
+    pub fn create_table_from<'lua, K, V, I>(&'lua self, iter: I) -> Result<Table<'lua>>
     where
         K: ToLua<'lua>,
         V: ToLua<'lua>,
@@ -793,12 +797,12 @@ impl Lua {
     {
         unsafe {
             let _sg = StackGuard::new(self.state);
-            // `Lua` instance assumes that on any callback, the Lua stack has at least LUA_MINSTACK
-            // slots available to avoid panics.
-            check_stack(self.state, 5 + ffi::LUA_MINSTACK)?;
+            check_stack(self.state, 6)?;
 
-            ffi::safe::lua_createtable(self.state, 0, 0)?;
-            for (k, v) in cont {
+            let iter = iter.into_iter();
+            let lower_bound = iter.size_hint().0;
+            ffi::safe::lua_createtable(self.state, 0, lower_bound as c_int)?;
+            for (k, v) in iter {
                 self.push_value(k.to_lua(self)?)?;
                 self.push_value(v.to_lua(self)?)?;
                 ffi::safe::lua_rawset(self.state, -3)?;
@@ -809,12 +813,25 @@ impl Lua {
     }
 
     /// Creates a table from an iterator of values, using `1..` as the keys.
-    pub fn create_sequence_from<'lua, T, I>(&'lua self, cont: I) -> Result<Table<'lua>>
+    pub fn create_sequence_from<'lua, T, I>(&'lua self, iter: I) -> Result<Table<'lua>>
     where
         T: ToLua<'lua>,
         I: IntoIterator<Item = T>,
     {
-        self.create_table_from(cont.into_iter().enumerate().map(|(k, v)| (k + 1, v)))
+        unsafe {
+            let _sg = StackGuard::new(self.state);
+            check_stack(self.state, 6)?;
+
+            let iter = iter.into_iter();
+            let lower_bound = iter.size_hint().0;
+            ffi::safe::lua_createtable(self.state, lower_bound as c_int, 0)?;
+            for (i, v) in iter.enumerate() {
+                self.push_value(v.to_lua(self)?)?;
+                ffi::safe::lua_rawseti(self.state, -2, (i + 1) as Integer)?;
+            }
+
+            Ok(Table(self.pop_ref()))
+        }
     }
 
     /// Wraps a Rust function or closure, creating a callable Lua function handle to it.
@@ -876,7 +893,7 @@ impl Lua {
 
     /// Wraps a Rust mutable closure, creating a callable Lua function handle to it.
     ///
-    /// This is a version of [`create_function`] that accepts a FnMut argument.  Refer to
+    /// This is a version of [`create_function`] that accepts a FnMut argument. Refer to
     /// [`create_function`] for more information about the implementation.
     ///
     /// [`create_function`]: #method.create_function
@@ -966,7 +983,7 @@ impl Lua {
     pub fn create_thread<'lua>(&'lua self, func: Function<'lua>) -> Result<Thread<'lua>> {
         unsafe {
             let _sg = StackGuard::new(self.state);
-            assert_stack(self.state, 2);
+            check_stack(self.state, 2)?;
 
             let thread_state = ffi::safe::lua_newthread(self.state)?;
             self.push_ref(&func.0);
@@ -1000,7 +1017,7 @@ impl Lua {
     pub fn globals(&self) -> Table {
         unsafe {
             let _sg = StackGuard::new(self.state);
-            assert_stack(self.state, 2);
+            assert_stack(self.state, 1);
             #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
             ffi::lua_rawgeti(self.state, ffi::LUA_REGISTRYINDEX, ffi::LUA_RIDX_GLOBALS);
             #[cfg(any(feature = "lua51", feature = "luajit"))]
@@ -1009,10 +1026,12 @@ impl Lua {
         }
     }
 
-    /// Returns a handle to the active `Thread`.  For calls to `Lua` this will be the main Lua thread,
+    /// Returns a handle to the active `Thread`. For calls to `Lua` this will be the main Lua thread,
     /// for parameters given to a callback, this will be whatever Lua thread called the callback.
     pub fn current_thread(&self) -> Thread {
         unsafe {
+            let _sg = StackGuard::new(self.state);
+            assert_stack(self.state, 1);
             ffi::lua_pushthread(self.state);
             Thread(self.pop_ref())
         }
@@ -1023,19 +1042,19 @@ impl Lua {
     ///
     /// The lifetime of any function or userdata created through `Scope` lasts only until the
     /// completion of this method call, on completion all such created values are automatically
-    /// dropped and Lua references to them are invalidated.  If a script accesses a value created
-    /// through `Scope` outside of this method, a Lua error will result.  Since we can ensure the
+    /// dropped and Lua references to them are invalidated. If a script accesses a value created
+    /// through `Scope` outside of this method, a Lua error will result. Since we can ensure the
     /// lifetime of values created through `Scope`, and we know that `Lua` cannot be sent to another
     /// thread while `Scope` is live, it is safe to allow !Send datatypes and whose lifetimes only
     /// outlive the scope lifetime.
     ///
     /// Inside the scope callback, all handles created through Scope will share the same unique 'lua
-    /// lifetime of the parent `Lua`.  This allows scoped and non-scoped values to be mixed in
+    /// lifetime of the parent `Lua`. This allows scoped and non-scoped values to be mixed in
     /// API calls, which is very useful (e.g. passing a scoped userdata to a non-scoped function).
     /// However, this also enables handles to scoped values to be trivially leaked from the given
     /// callback. This is not dangerous, though!  After the callback returns, all scoped values are
     /// invalidated, which means that though references may exist, the Rust types backing them have
-    /// dropped.  `Function` types will error when called, and `AnyUserData` will be typeless.  It
+    /// dropped. `Function` types will error when called, and `AnyUserData` will be typeless. It
     /// would be impossible to prevent handles to scoped values from escaping anyway, since you
     /// would always be able to smuggle them through Lua state.
     pub fn scope<'lua, 'scope, R, F>(&'lua self, f: F) -> Result<R>
@@ -1078,7 +1097,7 @@ impl Lua {
             Value::String(s) => Some(s),
             v => unsafe {
                 let _sg = StackGuard::new(self.state);
-                assert_stack(self.state, 4);
+                check_stack(self.state, 5)?;
 
                 self.push_value(v)?;
                 if !ffi::safe::lua_tolstring(self.state, -1, ptr::null_mut())?.is_null() {
@@ -1101,7 +1120,7 @@ impl Lua {
             Value::Integer(i) => Some(i),
             v => unsafe {
                 let _sg = StackGuard::new(self.state);
-                assert_stack(self.state, 2);
+                check_stack(self.state, 2)?;
 
                 self.push_value(v)?;
                 let mut isint = 0;
@@ -1125,7 +1144,7 @@ impl Lua {
             Value::Number(n) => Some(n),
             v => unsafe {
                 let _sg = StackGuard::new(self.state);
-                assert_stack(self.state, 2);
+                check_stack(self.state, 2)?;
 
                 self.push_value(v)?;
                 let mut isnum = 0;
@@ -1168,13 +1187,13 @@ impl Lua {
     /// state.
     pub fn set_named_registry_value<'lua, S, T>(&'lua self, name: &S, t: T) -> Result<()>
     where
-        S: ?Sized + AsRef<[u8]>,
+        S: AsRef<[u8]> + ?Sized,
         T: ToLua<'lua>,
     {
         let t = t.to_lua(self)?;
         unsafe {
             let _sg = StackGuard::new(self.state);
-            assert_stack(self.state, 5);
+            check_stack(self.state, 5)?;
 
             self.push_value(t)?;
             ffi::safe::lua_rawsetfield(self.state, ffi::LUA_REGISTRYINDEX, name)
@@ -1189,12 +1208,12 @@ impl Lua {
     /// [`set_named_registry_value`]: #method.set_named_registry_value
     pub fn named_registry_value<'lua, S, T>(&'lua self, name: &S) -> Result<T>
     where
-        S: ?Sized + AsRef<[u8]>,
+        S: AsRef<[u8]> + ?Sized,
         T: FromLua<'lua>,
     {
         let value = unsafe {
             let _sg = StackGuard::new(self.state);
-            assert_stack(self.state, 4);
+            check_stack(self.state, 3)?;
 
             ffi::safe::lua_pushstring(self.state, name)?;
             ffi::lua_rawget(self.state, ffi::LUA_REGISTRYINDEX);
@@ -1211,7 +1230,7 @@ impl Lua {
     /// [`set_named_registry_value`]: #method.set_named_registry_value
     pub fn unset_named_registry_value<S>(&self, name: &S) -> Result<()>
     where
-        S: ?Sized + AsRef<[u8]>,
+        S: AsRef<[u8]> + ?Sized,
     {
         self.set_named_registry_value(name, Nil)
     }
@@ -1229,7 +1248,7 @@ impl Lua {
         let t = t.to_lua(self)?;
         unsafe {
             let _sg = StackGuard::new(self.state);
-            assert_stack(self.state, 2);
+            check_stack(self.state, 4)?;
 
             self.push_value(t)?;
             let registry_id = ffi::safe::luaL_ref(self.state, ffi::LUA_REGISTRYINDEX)?;
@@ -1250,13 +1269,13 @@ impl Lua {
     ///
     /// [`create_registry_value`]: #method.create_registry_value
     pub fn registry_value<'lua, T: FromLua<'lua>>(&'lua self, key: &RegistryKey) -> Result<T> {
-        let value = unsafe {
-            if !self.owns_registry_value(key) {
-                return Err(Error::MismatchedRegistryKey);
-            }
+        if !self.owns_registry_value(key) {
+            return Err(Error::MismatchedRegistryKey);
+        }
 
+        let value = unsafe {
             let _sg = StackGuard::new(self.state);
-            assert_stack(self.state, 2);
+            check_stack(self.state, 1)?;
 
             ffi::lua_rawgeti(
                 self.state,
@@ -1278,14 +1297,13 @@ impl Lua {
     /// [`create_registry_value`]: #method.create_registry_value
     /// [`expire_registry_values`]: #method.expire_registry_values
     pub fn remove_registry_value(&self, key: RegistryKey) -> Result<()> {
-        unsafe {
-            if !self.owns_registry_value(&key) {
-                return Err(Error::MismatchedRegistryKey);
-            }
-
-            ffi::luaL_unref(self.state, ffi::LUA_REGISTRYINDEX, key.take());
-            Ok(())
+        if !self.owns_registry_value(&key) {
+            return Err(Error::MismatchedRegistryKey);
         }
+        unsafe {
+            ffi::luaL_unref(self.state, ffi::LUA_REGISTRYINDEX, key.take());
+        }
+        Ok(())
     }
 
     /// Returns true if the given `RegistryKey` was created by a `Lua` which shares the underlying
@@ -1443,13 +1461,13 @@ impl Lua {
         ffi::lua_xmove(extra.ref_thread, self.state, 1);
     }
 
-    // Pops the topmost element of the stack and stores a reference to it.  This pins the object,
+    // Pops the topmost element of the stack and stores a reference to it. This pins the object,
     // preventing garbage collection until the returned `LuaRef` is dropped.
     //
     // References are stored in the stack of a specially created auxiliary thread that exists only
-    // to store reference values.  This is much faster than storing these in the registry, and also
+    // to store reference values. This is much faster than storing these in the registry, and also
     // much more flexible and requires less bookkeeping than storing them directly in the currently
-    // used stack.  The implementation is somewhat biased towards the use case of a relatively small
+    // used stack. The implementation is somewhat biased towards the use case of a relatively small
     // number of short term references being created, and `RegistryKey` being used for long term
     // references.
     pub(crate) unsafe fn pop_ref(&self) -> LuaRef {
@@ -1477,17 +1495,18 @@ impl Lua {
         }
     }
 
-    pub(crate) unsafe fn userdata_metatable<T: 'static + UserData>(&self) -> Result<c_int> {
+    pub(crate) unsafe fn push_userdata_metatable<T: 'static + UserData>(&self) -> Result<()> {
         let type_id = TypeId::of::<T>();
-        if let Some(table_id) = mlua_expect!(self.extra.lock(), "extra is poisoned")
+        if let Some(&table_id) = mlua_expect!(self.extra.lock(), "extra is poisoned")
             .registered_userdata
             .get(&type_id)
         {
-            return Ok(*table_id);
+            ffi::lua_rawgeti(self.state, ffi::LUA_REGISTRYINDEX, table_id as Integer);
+            return Ok(());
         }
 
-        let _sg = StackGuard::new(self.state);
-        assert_stack(self.state, 10);
+        let _sg = StackGuard::new_extra(self.state, 1);
+        check_stack(self.state, 13)?;
 
         let mut fields = StaticUserDataFields::default();
         let mut methods = StaticUserDataMethods::default();
@@ -1565,13 +1584,14 @@ impl Lua {
         ffi::lua_pop(self.state, extra_tables_count);
 
         let ptr = ffi::lua_topointer(self.state, -1);
+        ffi::lua_pushvalue(self.state, -1);
         let id = ffi::safe::luaL_ref(self.state, ffi::LUA_REGISTRYINDEX)?;
 
         let mut extra = mlua_expect!(self.extra.lock(), "extra is poisoned");
         extra.registered_userdata.insert(type_id, id);
         extra.registered_userdata_mt.insert(ptr as isize);
 
-        Ok(id)
+        Ok(())
     }
 
     pub(crate) fn register_userdata_metatable(&self, id: isize) {
@@ -1586,7 +1606,7 @@ impl Lua {
 
     // Pushes a LuaRef value onto the stack, checking that it's a registered
     // and not destructed UserData.
-    // Uses 3 stack spaces, does not call checkstack
+    // Uses 3 stack spaces, does not call checkstack.
     pub(crate) unsafe fn push_userdata_ref(&self, lref: &LuaRef) -> Result<()> {
         self.push_ref(lref);
         if ffi::lua_getmetatable(self.state, -1) == 0 {
@@ -1609,8 +1629,8 @@ impl Lua {
         Err(Error::UserDataTypeMismatch)
     }
 
-    // Creates a Function out of a Callback containing a 'static Fn.  This is safe ONLY because the
-    // Fn is 'static, otherwise it could capture 'callback arguments improperly.  Without ATCs, we
+    // Creates a Function out of a Callback containing a 'static Fn. This is safe ONLY because the
+    // Fn is 'static, otherwise it could capture 'callback arguments improperly. Without ATCs, we
     // cannot easily deal with the "correct" callback type of:
     //
     // Box<for<'lua> Fn(&'lua Lua, MultiValue<'lua>) -> Result<MultiValue<'lua>>)>
@@ -1663,7 +1683,7 @@ impl Lua {
 
         unsafe {
             let _sg = StackGuard::new(self.state);
-            assert_stack(self.state, 6);
+            check_stack(self.state, 5)?;
 
             push_gc_userdata::<Callback>(self.state, mem::transmute(func))?;
             push_gc_userdata(self.state, self.clone())?;
@@ -1744,8 +1764,8 @@ impl Lua {
                 let mut waker = noop_waker();
 
                 // Try to get an outer poll waker
-                ffi::lua_pushlightuserdata(state, &WAKER_REGISTRY_KEY as *const u8 as *mut c_void);
-                ffi::lua_rawget(state, ffi::LUA_REGISTRYINDEX);
+                let waker_key = &WAKER_REGISTRY_KEY as *const u8 as *const c_void;
+                ffi::lua_rawgetp(state, ffi::LUA_REGISTRYINDEX, waker_key);
                 if let Some(w) = get_gc_userdata::<Waker>(state, -1).as_ref() {
                     waker = (*w).clone();
                 }
@@ -1775,7 +1795,7 @@ impl Lua {
 
         let get_poll = unsafe {
             let _sg = StackGuard::new(self.state);
-            assert_stack(self.state, 6);
+            check_stack(self.state, 5)?;
 
             push_gc_userdata::<AsyncCallback>(self.state, mem::transmute(func))?;
             push_gc_userdata(self.state, self.clone())?;
@@ -1786,7 +1806,7 @@ impl Lua {
 
         let coroutine = self.globals().get::<_, Table>("coroutine")?;
 
-        let env = self.create_table()?;
+        let env = self.create_table_with_capacity(0, 4)?;
         env.set("get_poll", get_poll)?;
         env.set("yield", coroutine.get::<_, Function>("yield")?)?;
         env.set(
@@ -1800,7 +1820,7 @@ impl Lua {
         )?;
         env.set("pending", unsafe {
             let _sg = StackGuard::new(self.state);
-            check_stack(self.state, 5)?;
+            check_stack(self.state, 3)?;
             push_gc_userdata(self.state, AsyncPollPending)?;
             self.pop_value()
         })?;
@@ -1829,12 +1849,10 @@ impl Lua {
         T: 'static + UserData,
     {
         let _sg = StackGuard::new(self.state);
-        assert_stack(self.state, 4);
+        check_stack(self.state, 2)?;
 
-        let ud_index = self.userdata_metatable::<T>()?;
         push_userdata(self.state, data)?;
-
-        ffi::lua_rawgeti(self.state, ffi::LUA_REGISTRYINDEX, ud_index as Integer);
+        self.push_userdata_metatable::<T>()?;
         ffi::lua_setmetatable(self.state, -2);
 
         Ok(AnyUserData(self.pop_ref()))
@@ -1879,13 +1897,10 @@ impl Lua {
 
     pub(crate) unsafe fn make_from_ptr(state: *mut ffi::lua_State) -> Self {
         let _sg = StackGuard::new(state);
-        assert_stack(state, 3);
+        assert_stack(state, 1);
 
-        ffi::lua_rawgetp(
-            state,
-            ffi::LUA_REGISTRYINDEX,
-            &EXTRA_REGISTRY_KEY as *const u8 as *mut c_void,
-        );
+        let extra_key = &EXTRA_REGISTRY_KEY as *const u8 as *const c_void;
+        ffi::lua_rawgetp(state, ffi::LUA_REGISTRYINDEX, extra_key);
         let extra = mlua_expect!(
             (*get_gc_userdata::<Weak<Mutex<ExtraData>>>(state, -1)).upgrade(),
             "extra is destroyed"
@@ -1929,7 +1944,7 @@ pub enum ChunkMode {
 
 impl<'lua, 'a> Chunk<'lua, 'a> {
     /// Sets the name of this chunk, which results in more informative error traces.
-    pub fn set_name<S: ?Sized + AsRef<[u8]>>(mut self, name: &S) -> Result<Chunk<'lua, 'a>> {
+    pub fn set_name<S: AsRef<[u8]> + ?Sized>(mut self, name: &S) -> Result<Chunk<'lua, 'a>> {
         let name =
             CString::new(name.as_ref().to_vec()).map_err(|e| Error::ToLuaConversionError {
                 from: "&str",
@@ -1943,7 +1958,7 @@ impl<'lua, 'a> Chunk<'lua, 'a> {
     /// Sets the first upvalue (`_ENV`) of the loaded chunk to the given value.
     ///
     /// Lua main chunks always have exactly one upvalue, and this upvalue is used as the `_ENV`
-    /// variable inside the chunk.  By default this value is set to the global environment.
+    /// variable inside the chunk. By default this value is set to the global environment.
     ///
     /// Calling this method changes the `_ENV` upvalue to the value provided, and variables inside
     /// the chunk will refer to the given environment rather than the global one.
@@ -1994,12 +2009,12 @@ impl<'lua, 'a> Chunk<'lua, 'a> {
     /// Evaluate the chunk as either an expression or block.
     ///
     /// If the chunk can be parsed as an expression, this loads and executes the chunk and returns
-    /// the value that it evaluates to.  Otherwise, the chunk is interpreted as a block as normal,
+    /// the value that it evaluates to. Otherwise, the chunk is interpreted as a block as normal,
     /// and this is equivalent to calling `exec`.
     pub fn eval<R: FromLuaMulti<'lua>>(self) -> Result<R> {
         // Bytecode is always interpreted as a statement.
         // For source code, first try interpreting the lua as an expression by adding
-        // "return", then as a statement.  This is the same thing the
+        // "return", then as a statement. This is the same thing the
         // actual lua repl does.
         if self.source.starts_with(ffi::LUA_SIGNATURE) {
             self.call(())

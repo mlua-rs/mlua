@@ -39,17 +39,17 @@ impl StdLib {
     #[cfg(any(feature = "luajit", doc))]
     pub const JIT: StdLib = StdLib(1 << 9);
 
-    /// (unsafe) [`ffi`](http://luajit.org/ext_ffi.html) library
+    /// (**unsafe**) [`ffi`](http://luajit.org/ext_ffi.html) library
     ///
     /// Requires `feature = "luajit"`
     #[cfg(any(feature = "luajit", doc))]
     pub const FFI: StdLib = StdLib(1 << 30);
-    /// (unsafe) [`debug`](https://www.lua.org/manual/5.3/manual.html#6.10) library
+    /// (**unsafe**) [`debug`](https://www.lua.org/manual/5.3/manual.html#6.10) library
     pub const DEBUG: StdLib = StdLib(1 << 31);
 
     /// No libraries
     pub const NONE: StdLib = StdLib(0);
-    /// (unsafe) All standard libraries
+    /// (**unsafe**) All standard libraries
     pub const ALL: StdLib = StdLib(u32::MAX);
     /// The safe subset of the standard libraries
     pub const ALL_SAFE: StdLib = StdLib((1 << 30) - 1);

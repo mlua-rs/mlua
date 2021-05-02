@@ -16,10 +16,9 @@ use crate::thread::Thread;
 use crate::types::{Integer, LightUserData, Number};
 use crate::userdata::AnyUserData;
 
-/// A dynamically typed Lua value.  The `String`, `Table`, `Function`, `Thread`, and `UserData`
-/// variants contain handle types into the internal Lua state.  It is a logic error to mix handle
-/// types between separate `Lua` instances, or between a parent `Lua` instance and one received as a
-/// parameter in a Rust callback, and doing so will result in a panic.
+/// A dynamically typed Lua value. The `String`, `Table`, `Function`, `Thread`, and `UserData`
+/// variants contain handle types into the internal Lua state. It is a logic error to mix handle
+/// types between separate `Lua` instances, and doing so will result in a panic.
 #[derive(Debug, Clone)]
 pub enum Value<'lua> {
     /// The Lua value `nil`.
@@ -47,7 +46,7 @@ pub enum Value<'lua> {
     /// Reference to a userdata object that holds a custom type which implements `UserData`.
     /// Special builtin userdata types will be represented as other `Value` variants.
     UserData(AnyUserData<'lua>),
-    /// `Error` is a special builtin userdata type.  When received from Lua it is implicitly cloned.
+    /// `Error` is a special builtin userdata type. When received from Lua it is implicitly cloned.
     Error(Error),
 }
 pub use self::Value::Nil;
