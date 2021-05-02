@@ -317,7 +317,12 @@ impl Lua {
                 {
                     init_gc_metatable_for::<AsyncCallback>(state, None)?;
                     init_gc_metatable_for::<LocalBoxFuture<Result<MultiValue>>>(state, None)?;
-                    init_gc_metatable_for::<Waker>(state, None)?;
+                    init_gc_metatable_for::<Option<Waker>>(state, None)?;
+
+                    // Create empty Waker slot
+                    push_gc_userdata::<Option<Waker>>(state, None)?;
+                    let waker_key = &WAKER_REGISTRY_KEY as *const u8 as *const c_void;
+                    ffi::safe::lua_rawsetp(state, ffi::LUA_REGISTRYINDEX, waker_key)?;
                 }
 
                 // Init serde metatables
@@ -1760,14 +1765,14 @@ impl Lua {
                 }
 
                 let lua = &mut *lua;
-                let mut waker = noop_waker();
 
                 // Try to get an outer poll waker
                 let waker_key = &WAKER_REGISTRY_KEY as *const u8 as *const c_void;
                 ffi::lua_rawgetp(state, ffi::LUA_REGISTRYINDEX, waker_key);
-                if let Some(w) = get_gc_userdata::<Waker>(state, -1).as_ref() {
-                    waker = (*w).clone();
-                }
+                let waker = match get_gc_userdata::<Option<Waker>>(state, -1).as_ref() {
+                    Some(Some(waker)) => waker.clone(),
+                    _ => noop_waker(),
+                };
                 ffi::lua_pop(state, 1);
 
                 let mut ctx = Context::from_waker(&waker);

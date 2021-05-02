@@ -12,13 +12,14 @@ use {
     crate::{
         error::ExternalError,
         lua::{ASYNC_POLL_PENDING, WAKER_REGISTRY_KEY},
-        util::push_gc_userdata,
+        util::get_gc_userdata,
         value::Value,
     },
     futures_core::{future::Future, stream::Stream},
     std::{
         cell::RefCell,
         marker::PhantomData,
+        mem,
         os::raw::c_void,
         pin::Pin,
         task::{Context, Poll, Waker},
@@ -311,20 +312,21 @@ fn is_poll_pending(val: &MultiValue) -> bool {
 }
 
 #[cfg(feature = "async")]
-struct WakerGuard(*mut ffi::lua_State);
+struct WakerGuard(*mut ffi::lua_State, Option<Waker>);
 
 #[cfg(feature = "async")]
 impl WakerGuard {
     pub fn new(state: *mut ffi::lua_State, waker: Waker) -> Result<WakerGuard> {
         unsafe {
             let _sg = StackGuard::new(state);
-            check_stack(state, 5)?;
+            check_stack(state, 3)?;
 
-            push_gc_userdata(state, waker)?;
             let waker_key = &WAKER_REGISTRY_KEY as *const u8 as *const c_void;
-            ffi::safe::lua_rawsetp(state, ffi::LUA_REGISTRYINDEX, waker_key)?;
+            ffi::lua_rawgetp(state, ffi::LUA_REGISTRYINDEX, waker_key);
+            let waker_slot = get_gc_userdata::<Option<Waker>>(state, -1).as_mut();
+            let old = mlua_expect!(waker_slot, "Waker is destroyed").replace(waker);
 
-            Ok(WakerGuard(state))
+            Ok(WakerGuard(state, old))
         }
     }
 }
@@ -335,11 +337,12 @@ impl Drop for WakerGuard {
         let state = self.0;
         unsafe {
             let _sg = StackGuard::new(state);
-            assert_stack(state, 1);
+            assert_stack(state, 3);
 
-            ffi::lua_pushnil(state);
             let waker_key = &WAKER_REGISTRY_KEY as *const u8 as *const c_void;
-            ffi::lua_rawsetp(state, ffi::LUA_REGISTRYINDEX, waker_key); // TODO: make safe
+            ffi::lua_rawgetp(state, ffi::LUA_REGISTRYINDEX, waker_key);
+            let waker_slot = get_gc_userdata::<Option<Waker>>(state, -1).as_mut();
+            mem::swap(mlua_expect!(waker_slot, "Waker is destroyed"), &mut self.1);
         }
     }
 }
