@@ -1,3 +1,16 @@
+## v0.6.0-beta.1
+
+- New `UserDataFields` API
+- Allow to define arbitrary MetaMethods
+- `MetaMethods::name()` is public
+- Do not trigger longjmp in Rust to prevent unwinding across FFI boundaries. See https://github.com/rust-lang/rust/issues/83541
+- Added `SerializeOptions` to to change default Lua serializer behaviour (eg. nil/null/array serialization)
+- [**Breaking**] Removed `Result` from `LuaSerdeExt::null()` and `LuaSerdeExt::array_metatable()` (never fails)
+- [**Breaking**] Removed `Result` from `Function::dump()` (never fails)
+- `ToLua`/`FromLua` implementation for `Box<str>` and `Box<[T]>`
+- [**Breaking**] Added `LuaOptions` to customize Lua/Rust behaviour (currently panic handling)
+- Various bugfixes and performance improvements
+
 ## v0.5.4
 
 - Build script improvements
