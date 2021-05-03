@@ -10,7 +10,6 @@ use crate::value::{FromLuaMulti, MultiValue, ToLuaMulti};
 #[cfg(feature = "async")]
 use {
     crate::{
-        error::ExternalError,
         lua::{ASYNC_POLL_PENDING, WAKER_REGISTRY_KEY},
         util::get_gc_userdata,
         value::Value,
@@ -277,7 +276,7 @@ where
 
         match self.thread.status() {
             ThreadStatus::Resumable => {}
-            _ => return Poll::Ready(Err("Thread already finished".to_lua_err())),
+            _ => return Poll::Ready(Err(Error::CoroutineInactive)),
         };
 
         let _wg = WakerGuard::new(lua.state, cx.waker().clone());
