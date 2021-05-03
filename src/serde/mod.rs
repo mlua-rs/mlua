@@ -116,10 +116,8 @@ pub trait LuaSerdeExt<'lua> {
     /// fn main() -> Result<()> {
     ///     let lua = Lua::new();
     ///     let v = vec![1, 2, 3];
-    ///     lua.globals().set("v", lua.to_value_with(&v, SerializeOptions {
-    ///         set_array_metatable: false,
-    ///         ..SerializeOptions::default()
-    ///     })?)?;
+    ///     let options = SerializeOptions::new().set_array_metatable(false);
+    ///     lua.globals().set("v", lua.to_value_with(&v, options)?)?;
     ///
     ///     lua.load(r#"
     ///         assert(#v == 3 and v[1] == 1 and v[2] == 2 and v[3] == 3)

@@ -241,10 +241,7 @@ fn test_to_value_with_options() -> Result<(), Box<dyn std::error::Error>> {
     // set_array_metatable
     let data = lua.to_value_with(
         &Vec::<i32>::new(),
-        SerializeOptions {
-            set_array_metatable: false,
-            ..SerializeOptions::default()
-        },
+        SerializeOptions::new().set_array_metatable(false),
     )?;
     globals.set("data", data)?;
     lua.load(
@@ -275,10 +272,7 @@ fn test_to_value_with_options() -> Result<(), Box<dyn std::error::Error>> {
     };
     let data2 = lua.to_value_with(
         &mydata,
-        SerializeOptions {
-            serialize_none_to_null: false,
-            ..SerializeOptions::default()
-        },
+        SerializeOptions::new().serialize_none_to_null(false),
     )?;
     globals.set("data2", data2)?;
     lua.load(
@@ -293,10 +287,7 @@ fn test_to_value_with_options() -> Result<(), Box<dyn std::error::Error>> {
     // serialize_unit_to_null
     let data3 = lua.to_value_with(
         &mydata,
-        SerializeOptions {
-            serialize_unit_to_null: false,
-            ..SerializeOptions::default()
-        },
+        SerializeOptions::new().serialize_unit_to_null(false),
     )?;
     globals.set("data3", data3)?;
     lua.load(

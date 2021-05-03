@@ -21,11 +21,12 @@ pub struct Serializer<'lua> {
 
 /// A struct with options to change default serializer behaviour.
 #[derive(Debug, Clone, Copy)]
+#[non_exhaustive]
 pub struct Options {
     /// If true, sequence serialization to a Lua table will create table
     /// with the [`array_metatable`] attached.
     ///
-    /// Default: true
+    /// Default: **true**
     ///
     /// [`array_metatable`]: ../trait.LuaSerdeExt.html#tymethod.array_metatable
     pub set_array_metatable: bool,
@@ -33,7 +34,7 @@ pub struct Options {
     /// If true, serialize `None` (part of `Option` type) to [`null`].
     /// Otherwise it will be set to Lua [`Nil`].
     ///
-    /// Default: true
+    /// Default: **true**
     ///
     /// [`null`]: ../trait.LuaSerdeExt.html#tymethod.null
     /// [`Nil`]: ../../enum.Value.html#variant.Nil
@@ -42,7 +43,7 @@ pub struct Options {
     /// If true, serialize `Unit` (type of `()` in Rust) and Unit structs to [`null`].
     /// Otherwise it will be set to Lua [`Nil`].
     ///
-    /// Default: true
+    /// Default: **true**
     ///
     /// [`null`]: ../trait.LuaSerdeExt.html#tymethod.null
     /// [`Nil`]: ../../enum.Value.html#variant.Nil
@@ -56,6 +57,37 @@ impl Default for Options {
             serialize_none_to_null: true,
             serialize_unit_to_null: true,
         }
+    }
+}
+
+impl Options {
+    /// Retruns a new instance of `Options` with default parameters.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Sets [`set_array_metatable`] option.
+    ///
+    /// [`set_array_metatable`]: #structfield.set_array_metatable
+    pub fn set_array_metatable(mut self, enabled: bool) -> Self {
+        self.set_array_metatable = enabled;
+        self
+    }
+
+    /// Sets [`serialize_none_to_null`] option.
+    ///
+    /// [`serialize_none_to_null`]: #structfield.serialize_none_to_null
+    pub fn serialize_none_to_null(mut self, enabled: bool) -> Self {
+        self.serialize_none_to_null = enabled;
+        self
+    }
+
+    /// Sets [`serialize_unit_to_null`] option.
+    ///
+    /// [`serialize_unit_to_null`]: #structfield.serialize_unit_to_null
+    pub fn serialize_unit_to_null(mut self, enabled: bool) -> Self {
+        self.serialize_unit_to_null = enabled;
+        self
     }
 }
 
