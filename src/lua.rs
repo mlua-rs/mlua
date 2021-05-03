@@ -97,6 +97,48 @@ pub enum GCMode {
     Generational,
 }
 
+/// Controls Lua interpreter behaviour such as Rust panics handling.
+#[derive(Clone, Debug)]
+#[non_exhaustive]
+pub struct LuaOptions {
+    /// Catch Rust panics when using [`pcall`]/[`xpcall`].
+    ///
+    /// If disabled, wraps these functions and automatically resumes panic if found.
+    /// Also in Lua 5.1 adds ability to provide arguments to [`xpcall`] similar to Lua >= 5.2.
+    ///
+    /// If enabled, keeps [`pcall`]/[`xpcall`] unmodified.
+    /// Panics are still automatically resumed if returned back to the Rust side.
+    ///
+    /// Default: **true**
+    ///
+    /// [`pcall`]: https://www.lua.org/manual/5.3/manual.html#pdf-pcall
+    /// [`xpcall`]: https://www.lua.org/manual/5.3/manual.html#pdf-xpcall
+    pub catch_rust_panics: bool,
+}
+
+impl Default for LuaOptions {
+    fn default() -> Self {
+        LuaOptions {
+            catch_rust_panics: true,
+        }
+    }
+}
+
+impl LuaOptions {
+    /// Retruns a new instance of `LuaOptions` with default parameters.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Sets [`catch_rust_panics`] option.
+    ///
+    /// [`catch_rust_panics`]: #structfield.catch_rust_panics
+    pub fn catch_rust_panics(mut self, enabled: bool) -> Self {
+        self.catch_rust_panics = enabled;
+        self
+    }
+}
+
 #[cfg(feature = "async")]
 pub(crate) static ASYNC_POLL_PENDING: u8 = 0;
 #[cfg(feature = "async")]
@@ -149,7 +191,7 @@ impl Lua {
     #[allow(clippy::new_without_default)]
     pub fn new() -> Lua {
         mlua_expect!(
-            Self::new_with(StdLib::ALL_SAFE),
+            Self::new_with(StdLib::ALL_SAFE, LuaOptions::default()),
             "can't create new safe Lua state"
         )
     }
@@ -159,7 +201,7 @@ impl Lua {
     /// # Safety
     /// The created Lua state would not have safety guarantees and would allow to load C modules.
     pub unsafe fn unsafe_new() -> Lua {
-        Self::unsafe_new_with(StdLib::ALL)
+        Self::unsafe_new_with(StdLib::ALL, LuaOptions::default())
     }
 
     /// Creates a new Lua state and loads the specified safe subset of the standard libraries.
@@ -173,7 +215,7 @@ impl Lua {
     /// See [`StdLib`] documentation for a list of unsafe modules that cannot be loaded.
     ///
     /// [`StdLib`]: struct.StdLib.html
-    pub fn new_with(libs: StdLib) -> Result<Lua> {
+    pub fn new_with(libs: StdLib, options: LuaOptions) -> Result<Lua> {
         if libs.contains(StdLib::DEBUG) {
             return Err(Error::SafetyError(
                 "the unsafe `debug` module can't be loaded using safe `new_with`".to_string(),
@@ -188,7 +230,7 @@ impl Lua {
             }
         }
 
-        let mut lua = unsafe { Self::unsafe_new_with(libs) };
+        let mut lua = unsafe { Self::unsafe_new_with(libs, options) };
 
         if libs.contains(StdLib::PACKAGE) {
             mlua_expect!(lua.disable_c_modules(), "Error during disabling C modules");
@@ -207,7 +249,7 @@ impl Lua {
     /// The created Lua state will not have safety guarantees and allow to load C modules.
     ///
     /// [`StdLib`]: struct.StdLib.html
-    pub unsafe fn unsafe_new_with(libs: StdLib) -> Lua {
+    pub unsafe fn unsafe_new_with(libs: StdLib, options: LuaOptions) -> Lua {
         #[cfg_attr(any(feature = "lua51", feature = "luajit"), allow(dead_code))]
         unsafe extern "C" fn allocator(
             extra_data: *mut c_void,
@@ -294,6 +336,28 @@ impl Lua {
             "Error during loading standard libraries"
         );
         mlua_expect!(lua.extra.lock(), "extra is poisoned").libs |= libs;
+
+        if !options.catch_rust_panics {
+            mlua_expect!(
+                (|| -> Result<()> {
+                    let _sg = StackGuard::new(lua.state);
+
+                    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+                    ffi::lua_rawgeti(lua.state, ffi::LUA_REGISTRYINDEX, ffi::LUA_RIDX_GLOBALS);
+                    #[cfg(any(feature = "lua51", feature = "luajit"))]
+                    ffi::lua_pushvalue(lua.state, ffi::LUA_GLOBALSINDEX);
+
+                    ffi::lua_pushcfunction(lua.state, ffi::safe::lua_nopanic_pcall);
+                    ffi::safe::lua_rawsetfield(lua.state, -2, "pcall")?;
+
+                    ffi::lua_pushcfunction(lua.state, ffi::safe::lua_nopanic_xpcall);
+                    ffi::safe::lua_rawsetfield(lua.state, -2, "xpcall")?;
+
+                    Ok(())
+                })(),
+                "Error during applying option `catch_rust_panics`"
+            )
+        }
 
         lua
     }

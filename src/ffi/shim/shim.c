@@ -440,3 +440,70 @@ int error_traceback_s(lua_State *L) {
   lua_pop(L, 1);
   return error_traceback(L1);
 }
+
+// A `pcall` implementation that does not allow Lua to catch Rust panics.
+// Instead, panics automatically resumed.
+int lua_nopanic_pcall(lua_State *state) {
+  luaL_checkstack(state, 2, NULL);
+
+  int top = lua_gettop(state);
+  if (top == 0) {
+    lua_pushstring(state, "not enough arguments to pcall");
+    lua_error(state);
+  }
+
+  if (lua_pcall(state, top - 1, LUA_MULTRET, 0) == LUA_OK) {
+    lua_pushboolean(state, 1);
+    lua_insert(state, 1);
+    return lua_gettop(state);
+  }
+
+  if (is_wrapped_struct(state, -1, MLUA_WRAPPED_PANIC_KEY)) {
+    lua_error(state);
+  }
+  lua_pushboolean(state, 0);
+  lua_insert(state, -2);
+  return 2;
+}
+
+// A `xpcall` implementation that does not allow Lua to catch Rust panics.
+// Instead, panics automatically resumed.
+
+static int xpcall_msgh(lua_State *state) {
+  luaL_checkstack(state, 2, NULL);
+  if (is_wrapped_struct(state, -1, MLUA_WRAPPED_PANIC_KEY)) {
+    return 1;
+  }
+  lua_pushvalue(state, lua_upvalueindex(1));
+  lua_insert(state, 1);
+  lua_call(state, lua_gettop(state) - 1, LUA_MULTRET);
+  return lua_gettop(state);
+}
+
+int lua_nopanic_xpcall(lua_State *state) {
+  luaL_checkstack(state, 2, NULL);
+
+  int top = lua_gettop(state);
+  if (top < 2) {
+    lua_pushstring(state, "not enough arguments to xpcall");
+    lua_error(state);
+  }
+
+  lua_pushvalue(state, 2);
+  lua_pushcclosure(state, xpcall_msgh, 1);
+  lua_copy(state, 1, 2);
+  lua_replace(state, 1);
+
+  if (lua_pcall(state, lua_gettop(state) - 2, LUA_MULTRET, 1) == LUA_OK) {
+    lua_pushboolean(state, 1);
+    lua_insert(state, 2);
+    return lua_gettop(state) - 1;
+  }
+
+  if (is_wrapped_struct(state, -1, MLUA_WRAPPED_PANIC_KEY)) {
+    lua_error(state);
+  }
+  lua_pushboolean(state, 0);
+  lua_insert(state, -2);
+  return 2;
+}

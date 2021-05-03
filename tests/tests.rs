@@ -5,8 +5,8 @@ use std::sync::Arc;
 use std::{error, f32, f64, fmt};
 
 use mlua::{
-    ChunkMode, Error, ExternalError, Function, Lua, Nil, Result, StdLib, String, Table, UserData,
-    Value, Variadic,
+    ChunkMode, Error, ExternalError, Function, Lua, LuaOptions, Nil, Result, StdLib, String, Table,
+    UserData, Value, Variadic,
 };
 
 #[test]
@@ -24,7 +24,7 @@ fn test_safety() -> Result<()> {
     assert!(lua.load(r#"require "debug""#).exec().is_ok());
     drop(lua);
 
-    match Lua::new_with(StdLib::DEBUG) {
+    match Lua::new_with(StdLib::DEBUG, LuaOptions::default()) {
         Err(Error::SafetyError(_)) => {}
         Err(e) => panic!("expected SafetyError, got {:?}", e),
         Ok(_) => panic!("expected SafetyError, got new Lua state"),
@@ -64,7 +64,7 @@ fn test_safety() -> Result<()> {
     drop(lua);
 
     // Test safety rules after dynamically loading `package` library
-    let lua = Lua::new_with(StdLib::NONE)?;
+    let lua = Lua::new_with(StdLib::NONE, LuaOptions::default())?;
     assert!(lua.globals().get::<_, Option<Value>>("require")?.is_none());
     lua.load_from_std_lib(StdLib::PACKAGE)?;
     match lua.load(r#"package.loadlib()"#).exec() {
@@ -380,10 +380,15 @@ fn test_error() -> Result<()> {
 
 #[test]
 fn test_panic() -> Result<()> {
-    fn make_lua() -> Result<Lua> {
-        let lua = Lua::new();
+    fn make_lua(options: LuaOptions) -> Result<Lua> {
+        let lua = Lua::new_with(StdLib::ALL_SAFE, options)?;
         let rust_panic_function =
-            lua.create_function(|_, ()| -> Result<()> { panic!("rust panic") })?;
+            lua.create_function(|_, msg: Option<StdString>| -> Result<()> {
+                if let Some(msg) = msg {
+                    panic!("{}", msg)
+                }
+                panic!("rust panic")
+            })?;
         lua.globals()
             .set("rust_panic_function", rust_panic_function)?;
         Ok(lua)
@@ -391,7 +396,7 @@ fn test_panic() -> Result<()> {
 
     // Test triggerting Lua error passing Rust panic (must be resumed)
     {
-        let lua = make_lua()?;
+        let lua = make_lua(LuaOptions::default())?;
 
         match catch_unwind(AssertUnwindSafe(|| -> Result<()> {
             lua.load(
@@ -417,7 +422,7 @@ fn test_panic() -> Result<()> {
 
     // Test returning Rust panic (must be resumed)
     {
-        let lua = make_lua()?;
+        let lua = make_lua(LuaOptions::default())?;
         match catch_unwind(AssertUnwindSafe(|| -> Result<()> {
             let _catched_panic = lua
                 .load(
@@ -447,7 +452,7 @@ fn test_panic() -> Result<()> {
 
     // Test representing rust panic as a string
     match catch_unwind(|| -> Result<()> {
-        let lua = make_lua()?;
+        let lua = make_lua(LuaOptions::default())?;
         lua.load(
             r#"
             local _, err = pcall(rust_panic_function)
@@ -460,6 +465,48 @@ fn test_panic() -> Result<()> {
         Ok(Err(Error::RuntimeError(_))) => {}
         Ok(Err(e)) => panic!("expected RuntimeError, got {:?}", e),
         Err(_) => panic!("panic was detected"),
+    }
+
+    // Test disabling `catch_rust_panics` option / pcall correctness
+    match catch_unwind(|| -> Result<()> {
+        let lua = make_lua(LuaOptions::new().catch_rust_panics(false))?;
+        lua.load(
+            r#"
+            local ok, err = pcall(function(msg) error(msg) end, "hello")
+            assert(not ok and err:find("hello") ~= nil)
+
+            ok, err = pcall(rust_panic_function, "rust panic from lua")
+            -- Nothing to return, panic should be automatically resumed
+        "#,
+        )
+        .exec()
+    }) {
+        Ok(r) => panic!("no panic was detected: {:?}", r),
+        Err(p) => assert!(*p.downcast::<StdString>().unwrap() == "rust panic from lua"),
+    }
+
+    // Test enabling `catch_rust_panics` option / xpcall correctness
+    match catch_unwind(|| -> Result<()> {
+        let lua = make_lua(LuaOptions::new().catch_rust_panics(false))?;
+        lua.load(
+            r#"
+            local msgh_ok = false
+            local msgh = function(err)
+                msgh_ok = err ~= nil and err:find("hello") ~= nil
+                return err
+            end
+            local ok, err = xpcall(function(msg) error(msg) end, msgh, "hello")
+            assert(not ok and err:find("hello") ~= nil)
+            assert(msgh_ok)
+
+            ok, err = xpcall(rust_panic_function, msgh, "rust panic from lua")
+            -- Nothing to return, panic should be automatically resumed
+        "#,
+        )
+        .exec()
+    }) {
+        Ok(r) => panic!("no panic was detected: {:?}", r),
+        Err(p) => assert!(*p.downcast::<StdString>().unwrap() == "rust panic from lua"),
     }
 
     Ok(())

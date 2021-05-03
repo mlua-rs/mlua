@@ -22,6 +22,8 @@ extern "C" {
     pub fn meta_newindex_impl(state: *mut lua_State) -> c_int;
     pub fn bind_call_impl(state: *mut lua_State) -> c_int;
     pub fn error_traceback(state: *mut lua_State) -> c_int;
+    pub fn lua_nopanic_pcall(state: *mut lua_State) -> c_int;
+    pub fn lua_nopanic_xpcall(state: *mut lua_State) -> c_int;
 
     fn lua_gc_s(L: *mut lua_State) -> c_int;
     fn luaL_ref_s(L: *mut lua_State) -> c_int;

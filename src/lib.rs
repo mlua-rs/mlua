@@ -103,7 +103,7 @@ pub use crate::ffi::lua_State;
 pub use crate::error::{Error, ExternalError, ExternalResult, Result};
 pub use crate::function::Function;
 pub use crate::hook::{Debug, DebugNames, DebugSource, DebugStack, HookTriggers};
-pub use crate::lua::{Chunk, ChunkMode, GCMode, Lua};
+pub use crate::lua::{Chunk, ChunkMode, GCMode, Lua, LuaOptions};
 pub use crate::multi::Variadic;
 pub use crate::scope::Scope;
 pub use crate::stdlib::StdLib;
