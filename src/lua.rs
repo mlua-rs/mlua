@@ -57,7 +57,7 @@ pub struct Lua {
     _no_ref_unwind_safe: PhantomData<UnsafeCell<()>>,
 }
 
-// Data associated with the lua_State.
+// Data associated with the Lua.
 struct ExtraData {
     registered_userdata: HashMap<TypeId, c_int>,
     registered_userdata_mt: HashSet<isize>,

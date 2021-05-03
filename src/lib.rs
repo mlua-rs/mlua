@@ -51,8 +51,8 @@
 //!
 //! [Lua programming language]: https://www.lua.org/
 //! [`Lua`]: struct.Lua.html
-//! [executing]: struct.Lua.html#method.exec
-//! [evaluating]: struct.Lua.html#method.eval
+//! [executing]: struct.Chunk.html#method.exec
+//! [evaluating]: struct.Chunk.html#method.eval
 //! [globals]: struct.Lua.html#method.globals
 //! [`ToLua`]: trait.ToLua.html
 //! [`FromLua`]: trait.FromLua.html
