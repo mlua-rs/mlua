@@ -64,6 +64,7 @@ struct ExtraData {
 
     libs: StdLib,
     mem_info: *mut MemoryInfo,
+    safe: bool, // Same as in the Lua struct
 
     ref_thread: *mut ffi::lua_State,
     ref_stack_size: c_int,
@@ -185,6 +186,7 @@ impl Lua {
             mlua_expect!(lua.disable_c_modules(), "Error during disabling C modules");
         }
         lua.safe = true;
+        mlua_expect!(lua.extra.lock(), "extra is poisoned").safe = true;
 
         Ok(lua)
     }
@@ -349,6 +351,7 @@ impl Lua {
             ref_thread,
             libs: StdLib::NONE,
             mem_info: ptr::null_mut(),
+            safe: false,
             // We need 1 extra stack space to move values in and out of the ref stack.
             ref_stack_size: ffi::LUA_MINSTACK - 1,
             ref_stack_top: 0,
@@ -1908,12 +1911,14 @@ impl Lua {
         );
         ffi::lua_pop(state, 1);
 
+        let safe = mlua_expect!(extra.lock(), "extra is poisoned").safe;
+
         Lua {
             state,
             main_state: get_main_state(state),
             extra,
             ephemeral: true,
-            safe: true, // TODO: Inherit the attribute
+            safe,
             _no_ref_unwind_safe: PhantomData,
         }
     }
