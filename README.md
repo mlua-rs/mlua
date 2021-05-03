@@ -198,7 +198,7 @@ It is surprisingly, fiendishly difficult to use the Lua C API without the potent
 ## Panic handling
 
 `mlua` wraps panics that are generated inside Rust callbacks in a regular Lua error. Panics could be
-resumed then by propagating the Lua error to Rust code.
+resumed then by returning or propagating the Lua error to Rust code.
 
 For example:
 ``` rust
@@ -217,6 +217,10 @@ let _ = lua.load(r#"
 unreachable!()
 ```
 
+Optionally `mlua` can disable Rust panics catching in Lua via `pcall`/`xpcall` and automatically resume
+them across the Lua API boundary. This is controlled via `LuaOptions` and done by wrapping the Lua `pcall`/`xpcall`
+functions on a way to prevent catching errors that are wrapped Rust panics.
+
 `mlua` should also be panic safe in another way as well, which is that any `Lua` instances or handles
 remains usable after a user generated panic, and such panics should not break internal invariants or
 leak Lua stack space. This is mostly important to safely use `mlua` types in Drop impls, as you should not be
@@ -225,9 +229,9 @@ using panics for general error handling.
 Below is a list of `mlua` behaviors that should be considered a bug.
 If you encounter them, a bug report would be very welcome:
 
-  + If your program panics with a message that contains the string "mlua internal error", this is a  bug.
+  + If you can cause UB with `mlua` without typing the word "unsafe", this is a bug.
 
-  + The above is true even for the internal panic about running out of stack space!  There are a few ways to generate normal script errors by running out of stack, but if you encounter a *panic* based on running out of stack, this is a bug.
+  + If your program panics with a message that contains the string "mlua internal error", this is a bug.
 
   + Lua C API errors are handled by lonjmp. All instances where the Lua C API would otherwise longjmp over calling stack frames should be guarded against, except in internal callbacks where this is intentional. If you detect that `mlua` is triggering a longjmp over your Rust stack frames, this is a bug!
 
@@ -236,4 +240,3 @@ If you encounter them, a bug report would be very welcome:
 ## License
 
 This project is licensed under the [MIT license](LICENSE)
-
