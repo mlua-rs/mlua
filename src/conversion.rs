@@ -229,6 +229,28 @@ impl<'lua> ToLua<'lua> for Cow<'_, str> {
     }
 }
 
+impl<'lua> ToLua<'lua> for Box<str> {
+    fn to_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
+        Ok(Value::String(lua.create_string(&*self)?))
+    }
+}
+
+impl<'lua> FromLua<'lua> for Box<str> {
+    fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> Result<Self> {
+        let ty = value.type_name();
+        Ok(lua
+            .coerce_string(value)?
+            .ok_or_else(|| Error::FromLuaConversionError {
+                from: ty,
+                to: "Box<str>",
+                message: Some("expected string or number".to_string()),
+            })?
+            .to_str()?
+            .to_owned()
+            .into_boxed_str())
+    }
+}
+
 impl<'lua> ToLua<'lua> for CString {
     fn to_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
         Ok(Value::String(lua.create_string(self.as_bytes())?))
@@ -434,6 +456,26 @@ lua_convert_array! {
    10 11 12 13 14 15 16 17 18 19
    20 21 22 23 24 25 26 27 28 29
    30 31 32
+}
+
+impl<'lua, T: ToLua<'lua>> ToLua<'lua> for Box<[T]> {
+    fn to_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
+        Ok(Value::Table(lua.create_sequence_from(self.into_vec())?))
+    }
+}
+
+impl<'lua, T: FromLua<'lua>> FromLua<'lua> for Box<[T]> {
+    fn from_lua(value: Value<'lua>, _: &'lua Lua) -> Result<Self> {
+        if let Value::Table(table) = value {
+            table.sequence_values().collect()
+        } else {
+            Err(Error::FromLuaConversionError {
+                from: value.type_name(),
+                to: "Box<[T]>",
+                message: Some("expected table".to_string()),
+            })
+        }
+    }
 }
 
 impl<'lua, T: ToLua<'lua>> ToLua<'lua> for Vec<T> {

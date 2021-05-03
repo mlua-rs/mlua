@@ -88,3 +88,27 @@ fn test_conv_cow() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn test_conv_boxed_str() -> Result<()> {
+    let lua = Lua::new();
+
+    let s = String::from("hello").into_boxed_str();
+    lua.globals().set("s", s.clone())?;
+    let s2: Box<str> = lua.globals().get("s")?;
+    assert!(s == s2);
+
+    Ok(())
+}
+
+#[test]
+fn test_conv_boxed_slice() -> Result<()> {
+    let lua = Lua::new();
+
+    let v = vec![1, 2, 3].into_boxed_slice();
+    lua.globals().set("v", v.clone())?;
+    let v2: Box<[i32]> = lua.globals().get("v")?;
+    assert!(v == v2);
+
+    Ok(())
+}
