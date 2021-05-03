@@ -13,6 +13,7 @@ use crate::util::{check_stack, StackGuard};
 use crate::value::{ToLua, Value};
 
 /// A struct for serializing Rust values into Lua values.
+#[derive(Debug)]
 pub struct Serializer<'lua> {
     lua: &'lua Lua,
     options: Options,

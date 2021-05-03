@@ -2,6 +2,7 @@ use std::any::TypeId;
 use std::cell::{RefCell, UnsafeCell};
 use std::collections::{HashMap, HashSet};
 use std::ffi::CString;
+use std::fmt;
 use std::marker::PhantomData;
 use std::os::raw::{c_char, c_int, c_void};
 use std::panic::resume_unwind;
@@ -88,6 +89,7 @@ struct MemoryInfo {
 /// More information can be found in the Lua 5.x [documentation].
 ///
 /// [documentation]: https://www.lua.org/manual/5.4/manual.html#2.5
+#[derive(Clone, Copy, Debug)]
 pub enum GCMode {
     Incremental,
     /// Requires `feature = "lua54"`
@@ -125,6 +127,12 @@ impl Drop for Lua {
                 }
             }
         }
+    }
+}
+
+impl fmt::Debug for Lua {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Lua({:p})", self.state)
     }
 }
 
@@ -1942,7 +1950,7 @@ pub struct Chunk<'lua, 'a> {
 }
 
 /// Represents chunk mode (text or binary).
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum ChunkMode {
     Text,
     Binary,
