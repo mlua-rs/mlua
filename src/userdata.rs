@@ -767,31 +767,6 @@ impl<'lua> AnyUserData<'lua> {
         self.get_raw_metatable().map(UserDataMetatable)
     }
 
-    /// Checks for a metamethod in this `AnyUserData`.
-    ///
-    /// This function is deprecated and will be removed in v0.7.
-    /// Please use [`get_metatable`] function instead.
-    ///
-    /// [`get_metatable`]: #method.get_metatable
-    #[deprecated(
-        since = "0.6.0",
-        note = "Please use the get_metatable function instead"
-    )]
-    pub fn has_metamethod(&self, method: MetaMethod) -> Result<bool> {
-        match self.get_raw_metatable() {
-            Ok(mt) => {
-                let name = self.0.lua.create_string(method.validate()?.name())?;
-                if let Value::Nil = mt.raw_get(name)? {
-                    Ok(false)
-                } else {
-                    Ok(true)
-                }
-            }
-            Err(Error::UserDataTypeMismatch) => Ok(false),
-            Err(e) => Err(e),
-        }
-    }
-
     fn get_raw_metatable(&self) -> Result<Table<'lua>> {
         unsafe {
             let lua = self.0.lua;
