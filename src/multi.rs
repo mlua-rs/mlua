@@ -1,3 +1,5 @@
+#![allow(clippy::wrong_self_convention)]
+
 use std::iter::FromIterator;
 use std::ops::{Deref, DerefMut};
 use std::result::Result as StdResult;

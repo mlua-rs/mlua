@@ -538,6 +538,7 @@ pub unsafe fn lua_stringtonumber(L: *mut lua_State, s: *const c_char) -> usize {
     0
 }
 
+#[allow(clippy::branches_sharing_code)]
 pub unsafe fn lua_getextraspace(L: *mut lua_State) -> *mut c_void {
     use super::glue::LUA_EXTRASPACE;
 

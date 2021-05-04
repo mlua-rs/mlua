@@ -22,12 +22,12 @@ pub fn probe_lua() -> PathBuf {
 
     let need_lua_lib = cfg!(any(not(feature = "module"), target_os = "windows"));
 
-    if include_dir != "" {
+    if !include_dir.is_empty() {
         if need_lua_lib {
-            if lib_dir == "" {
+            if lib_dir.is_empty() {
                 panic!("LUA_LIB is not set");
             }
-            if lua_lib == "" {
+            if lua_lib.is_empty() {
                 panic!("LUA_LIB_NAME is not set");
             }
 

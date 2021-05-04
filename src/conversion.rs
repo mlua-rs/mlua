@@ -1,3 +1,5 @@
+#![allow(clippy::wrong_self_convention)]
+
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::ffi::{CStr, CString};
