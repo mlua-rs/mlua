@@ -253,16 +253,18 @@ pub use self::lualib::{LUA_FFILIBNAME, LUA_JITLIBNAME};
 // Not actually defined in lua.h / luaconf.h
 pub const LUA_MAX_UPVALUES: c_int = 255;
 
-// Copied from https://github.com/rust-lang/rust/blob/master/src/libstd/sys_common/alloc.rs
+// Copied from https://github.com/rust-lang/rust/blob/master/library/std/src/sys/common/alloc.rs
 #[cfg(all(any(
     target_arch = "x86",
     target_arch = "arm",
     target_arch = "mips",
     target_arch = "powerpc",
     target_arch = "powerpc64",
+    target_arch = "sparc",
     target_arch = "asmjs",
     target_arch = "wasm32",
-    target_arch = "hexagon"
+    target_arch = "hexagon",
+    target_arch = "riscv32"
 )))]
 pub const SYS_MIN_ALIGN: usize = 8;
 #[cfg(all(any(
