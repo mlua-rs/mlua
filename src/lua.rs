@@ -1840,6 +1840,7 @@ impl Lua {
                 }
 
                 let lua = &mut *lua;
+                lua.state = state;
 
                 // Try to get an outer poll waker
                 let waker_key = &WAKER_REGISTRY_KEY as *const u8 as *const c_void;
