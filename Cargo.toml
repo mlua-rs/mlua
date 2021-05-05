@@ -17,7 +17,7 @@ with async/await features and support of writing native lua modules in Rust.
 """
 
 [package.metadata.docs.rs]
-features = ["lua53", "async", "send", "serialize"]
+features = ["lua53", "async", "send", "serialize", "macros"]
 rustdoc-args = ["--cfg", "docsrs"]
 
 [workspace]
@@ -38,6 +38,7 @@ module = ["mlua_derive"]
 async = ["futures-core", "futures-task", "futures-util"]
 send = []
 serialize = ["serde", "erased-serde"]
+macros = ["mlua_derive/macros"]
 
 [dependencies]
 mlua_derive = { version = "0.5", optional = true, path = "mlua_derive" }

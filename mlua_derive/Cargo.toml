@@ -11,7 +11,14 @@ license = "MIT"
 [lib]
 proc-macro = true
 
+[features]
+macros = ["proc-macro-error", "itertools", "regex", "once_cell"]
+
 [dependencies]
-proc-macro2 = "1.0"
 quote = "1.0"
+proc-macro2 = { version = "1.0", features = ["span-locations"] }
+proc-macro-error = { version = "1.0", optional = true }
 syn = { version = "1.0", features = ["full"] }
+itertools = { version = "0.10", optional = true }
+regex = { version = "1.4", optional = true }
+once_cell = { version = "1.5", optional = true }

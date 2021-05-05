@@ -98,12 +98,13 @@ mod userdata;
 mod util;
 mod value;
 
+#[doc(hidden)]
 pub use crate::ffi::lua_State;
 
 pub use crate::error::{Error, ExternalError, ExternalResult, Result};
 pub use crate::function::Function;
 pub use crate::hook::{Debug, DebugNames, DebugSource, DebugStack, HookTriggers};
-pub use crate::lua::{Chunk, ChunkMode, GCMode, Lua, LuaOptions};
+pub use crate::lua::{AsChunk, Chunk, ChunkMode, GCMode, Lua, LuaOptions};
 pub use crate::multi::Variadic;
 pub use crate::scope::Scope;
 pub use crate::stdlib::StdLib;
@@ -126,11 +127,60 @@ pub mod prelude;
 #[cfg_attr(docsrs, doc(cfg(feature = "serialize")))]
 pub mod serde;
 
-// Re-export #[mlua_derive::lua_module].
-#[cfg(feature = "mlua_derive")]
+#[cfg(any(feature = "mlua_derive"))]
 #[allow(unused_imports)]
 #[macro_use]
 extern crate mlua_derive;
-#[cfg(feature = "mlua_derive")]
-#[doc(hidden)]
-pub use mlua_derive::*;
+
+/// Create a type that implements [`AsChunk`] and can capture Rust variables.
+///
+/// This macro allows to write Lua code directly in Rust code.
+///
+/// Rust variables can be referenced from Lua using `$` prefix, as shown in the example below.
+/// User Rust types needs to implement [`UserData`] or [`ToLua`] traits.
+///
+/// Captured variables are moved into the chunk.
+///
+/// ```
+/// use mlua::{Lua, Result, chunk};
+///
+/// fn main() -> Result<()> {
+///     let lua = Lua::new();
+///     let name = "Rustacean";
+///     lua.load(chunk! {
+///         print("hello, " .. $name)
+///     }).exec()
+/// }
+/// ```
+///
+/// ## Syntax issues
+///
+/// Since the Rust tokenizer will tokenize Lua code, this imposes some restrictions.
+/// The main thing to remember is:
+///
+/// - Use double quoted strings (`""`) instead of single quoted strings (`''`).
+///
+///   (Single quoted strings only work if they contain a single character, since in Rust,
+///   `'a'` is a character literal).
+///
+/// Other minor limitations:
+///
+/// - Certain escape codes in string literals.
+///   (Specifically: `\a`, `\b`, `\f`, `\v`, `\123` (octal escape codes), `\u`, and `\U`).
+///
+///   These are accepted: : `\\`, `\n`, `\t`, `\r`, `\xAB` (hex escape codes), and `\0`
+///
+/// - The `//` (floor division) operator is unusable, as its start a comment.
+///
+/// Everything else should work.
+///
+/// [`AsChunk`]: trait.AsChunk.html
+/// [`UserData`]: trait.UserData.html
+/// [`ToLua`]: trait.ToLua.html
+#[cfg(any(feature = "macros"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "macros")))]
+pub use mlua_derive::chunk;
+
+#[cfg(any(feature = "module"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "module")))]
+pub use mlua_derive::lua_module;

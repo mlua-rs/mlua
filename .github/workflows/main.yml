@@ -26,8 +26,8 @@ jobs:
         override: true
     - name: Build ${{ matrix.lua }} vendored
       run: |
-        cargo build --release --features "${{ matrix.lua }} vendored"
-        cargo build --release --features "${{ matrix.lua }} vendored async send serialize"
+        cargo build --release --features "${{ matrix.lua }},vendored"
+        cargo build --release --features "${{ matrix.lua }},vendored,async,send,serialize,macros"
       shell: bash
     - name: Build ${{ matrix.lua }} pkg-config
       if: ${{ matrix.os == 'ubuntu-18.04' && matrix.lua != 'lua54' }}
@@ -51,7 +51,7 @@ jobs:
         target: aarch64-apple-darwin
         override: true
     - name: Cross-compile
-      run: cargo build --target aarch64-apple-darwin --features "${{ matrix.lua }} async send serialize vendored"
+      run: cargo build --target aarch64-apple-darwin --features "${{ matrix.lua }},vendored,async,send,serialize,macros"
 
   build_aarch64_cross_ubuntu:
     name: Cross-compile to aarch64-unknown-linux-gnu
@@ -73,7 +73,7 @@ jobs:
         sudo apt-get install -y --no-install-recommends gcc-aarch64-linux-gnu libc6-dev-arm64-cross
       shell: bash
     - name: Cross-compile
-      run: cargo build --target aarch64-unknown-linux-gnu --features "${{ matrix.lua }} async send serialize vendored"
+      run: cargo build --target aarch64-unknown-linux-gnu --features "${{ matrix.lua }},vendored,async,send,serialize,macros"
       shell: bash
 
   build_armv7_cross_ubuntu:
@@ -96,7 +96,7 @@ jobs:
         sudo apt-get install -y --no-install-recommends gcc-arm-linux-gnueabihf libc-dev-armhf-cross
       shell: bash
     - name: Cross-compile
-      run: cargo build --target armv7-unknown-linux-gnueabihf --features "${{ matrix.lua }} async send serialize vendored"
+      run: cargo build --target armv7-unknown-linux-gnueabihf --features "${{ matrix.lua }},vendored,async,send,serialize,macros"
       shell: bash
 
   test:
@@ -124,14 +124,14 @@ jobs:
         override: true
     - name: Run ${{ matrix.lua }} tests
       run: |
-        cargo test --release --features "${{ matrix.lua }} vendored"
-        cargo test --release --features "${{ matrix.lua }} vendored async send serialize"
+        cargo test --release --features "${{ matrix.lua }},vendored"
+        cargo test --release --features "${{ matrix.lua }},vendored,async,send,serialize,macros"
       shell: bash
     - name: Run compile tests (macos lua53)
       if: ${{ matrix.os == 'macos-latest' && matrix.lua == 'lua53' }}
       run: |
-        TRYBUILD=overwrite cargo test --release --features "${{ matrix.lua }} vendored" -- --ignored
-        TRYBUILD=overwrite cargo test --release --features "${{ matrix.lua }} vendored async send serialize" -- --ignored
+        TRYBUILD=overwrite cargo test --release --features "${{ matrix.lua }},vendored" -- --ignored
+        TRYBUILD=overwrite cargo test --release --features "${{ matrix.lua }},vendored,async,send,serialize,macros" -- --ignored
       shell: bash
 
   test_modules:
@@ -157,8 +157,8 @@ jobs:
         override: true
     - name: Run ${{ matrix.lua }} module tests
       run: |
-        (cd examples/module && cargo build --release --features "${{ matrix.lua }} vendored")
-        (cd tests/module && cargo test --release --features "${{ matrix.lua }} vendored")
+        (cd examples/module && cargo build --release --features "${{ matrix.lua }},vendored")
+        (cd tests/module && cargo test --release --features "${{ matrix.lua }},vendored")
       shell: bash
 
   test_modules_windows:
@@ -210,4 +210,4 @@ jobs:
       - uses: actions-rs/clippy-check@v1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          args: --features "${{ matrix.lua }},vendored,async,send,serialize
+          args: --features "${{ matrix.lua }},vendored,async,send,serialize,macros"

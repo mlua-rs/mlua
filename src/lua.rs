@@ -769,14 +769,14 @@ impl Lua {
     /// [`Chunk::exec`]: struct.Chunk.html#method.exec
     pub fn load<'lua, 'a, S>(&'lua self, source: &'a S) -> Chunk<'lua, 'a>
     where
-        S: AsRef<[u8]> + ?Sized,
+        S: AsChunk<'lua> + ?Sized,
     {
         Chunk {
             lua: self,
-            source: source.as_ref(),
-            name: None,
-            env: None,
-            mode: None,
+            source: source.source(),
+            name: source.name(),
+            env: source.env(self),
+            mode: source.mode(),
         }
     }
 
@@ -2010,7 +2010,7 @@ pub struct Chunk<'lua, 'a> {
     lua: &'lua Lua,
     source: &'a [u8],
     name: Option<CString>,
-    env: Option<Value<'lua>>,
+    env: Option<Result<Value<'lua>>>,
     mode: Option<ChunkMode>,
 }
 
@@ -2019,6 +2019,32 @@ pub struct Chunk<'lua, 'a> {
 pub enum ChunkMode {
     Text,
     Binary,
+}
+
+/// Trait for types [loadable by Lua] and convertible to a [`Chunk`]
+///
+/// [loadable by Lua]: https://www.lua.org/manual/5.3/manual.html#3.3.2
+/// [`Chunk`]: struct.Chunk.html
+pub trait AsChunk<'lua> {
+    /// Returns chunk data (can be text or binary)
+    fn source(&self) -> &[u8];
+
+    /// Returns optional chunk name
+    fn name(&self) -> Option<CString> {
+        None
+    }
+
+    /// Returns optional chunk [environment]
+    ///
+    /// [environment]: https://www.lua.org/manual/5.3/manual.html#2.2
+    fn env(&self, _lua: &'lua Lua) -> Option<Result<Value<'lua>>> {
+        None
+    }
+
+    /// Returns optional chunk mode (text or binary)
+    fn mode(&self) -> Option<ChunkMode> {
+        None
+    }
 }
 
 impl<'lua, 'a> Chunk<'lua, 'a> {
@@ -2046,7 +2072,8 @@ impl<'lua, 'a> Chunk<'lua, 'a> {
     /// necessary to populate the environment in order for scripts using custom environments to be
     /// useful.
     pub fn set_environment<V: ToLua<'lua>>(mut self, env: V) -> Result<Chunk<'lua, 'a>> {
-        self.env = Some(env.to_lua(self.lua)?);
+        // Prefer to propagate errors here and wrap to `Ok`
+        self.env = Some(Ok(env.to_lua(self.lua)?));
         Ok(self)
     }
 
@@ -2100,7 +2127,7 @@ impl<'lua, 'a> Chunk<'lua, 'a> {
         } else if let Ok(function) = self.lua.load_chunk(
             &self.expression_source(),
             self.name.as_ref(),
-            self.env.clone(),
+            self.env()?,
             self.mode,
         ) {
             function.call(())
@@ -2128,7 +2155,10 @@ impl<'lua, 'a> Chunk<'lua, 'a> {
         } else if let Ok(function) = self.lua.load_chunk(
             &self.expression_source(),
             self.name.as_ref(),
-            self.env.clone(),
+            match self.env() {
+                Ok(env) => env,
+                Err(e) => return Box::pin(future::err(e)),
+            },
             self.mode,
         ) {
             function.call_async(())
@@ -2170,7 +2200,14 @@ impl<'lua, 'a> Chunk<'lua, 'a> {
     /// This simply compiles the chunk without actually executing it.
     pub fn into_function(self) -> Result<Function<'lua>> {
         self.lua
-            .load_chunk(self.source, self.name.as_ref(), self.env, self.mode)
+            .load_chunk(self.source, self.name.as_ref(), self.env()?, self.mode)
+    }
+
+    fn env(&self) -> Result<Option<Value<'lua>>> {
+        match self.env {
+            None => Ok(None),
+            Some(ref env) => env.clone().map(Some),
+        }
     }
 
     fn expression_source(&self) -> Vec<u8> {
@@ -2178,6 +2215,12 @@ impl<'lua, 'a> Chunk<'lua, 'a> {
         buf.extend(b"return ");
         buf.extend(self.source);
         buf
+    }
+}
+
+impl<'lua, T: AsRef<[u8]> + ?Sized> AsChunk<'lua> for T {
+    fn source(&self) -> &[u8] {
+        self.as_ref()
     }
 }
 
