@@ -14,7 +14,7 @@ pub fn lua_module(attr: TokenStream, item: TokenStream) -> TokenStream {
     let args = parse_macro_input!(attr as AttributeArgs);
     let item = parse_macro_input!(item as ItemFn);
 
-    if args.len() > 0 {
+    if !args.is_empty() {
         let err = Error::new(Span::call_site(), "the number of arguments must be zero")
             .to_compile_error();
         return err.into();

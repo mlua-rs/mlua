@@ -76,11 +76,12 @@ impl Chunk {
                 .map(|lc| (lc.line, lc.column))
                 .unwrap_or_else(|| (line, col));
 
+            #[allow(clippy::comparison_chain)]
             if line > prev_line {
-                source.push_str("\n");
+                source.push('\n');
             } else if line == prev_line {
                 for _ in 0..col.saturating_sub(prev_col) {
-                    source.push_str(" ");
+                    source.push(' ');
                 }
             }
             source.push_str(&t.to_string());

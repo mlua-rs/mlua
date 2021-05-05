@@ -38,7 +38,7 @@ impl Pos {
 }
 
 fn span_pos(span: &Span) -> (Pos, Pos) {
-    let span2: Span2 = span.clone().into();
+    let span2: Span2 = (*span).into();
     let start = span2.start();
     let end = span2.end();
 
@@ -175,7 +175,7 @@ impl Tokens {
     pub(crate) fn retokenize(tt: TokenStream) -> Tokens {
         Tokens(
             tt.into_iter()
-                .map(|tt| Tokens::from(tt))
+                .map(Tokens::from)
                 .flatten()
                 .peekable()
                 .batching(|iter| {
@@ -217,8 +217,8 @@ impl From<TokenTree> for Tokens {
 
                 vec![Token::new_delim(b, tt.clone(), true)]
                     .into_iter()
-                    .chain(g.stream().into_iter().map(|tt| Tokens::from(tt)).flatten())
-                    .chain(vec![Token::new_delim(e, tt.clone(), false)])
+                    .chain(g.stream().into_iter().map(Tokens::from).flatten())
+                    .chain(vec![Token::new_delim(e, tt, false)])
                     .collect()
             }
             _ => vec![Token::new(tt)],
