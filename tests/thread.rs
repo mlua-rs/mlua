@@ -93,6 +93,49 @@ fn test_thread() -> Result<()> {
     Ok(())
 }
 
+#[cfg(any(feature = "lua54", all(feature = "luajit", feature = "vendored")))]
+#[test]
+fn test_thread_reset() -> Result<()> {
+    use mlua::{AnyUserData, UserData};
+    use std::sync::Arc;
+
+    let lua = Lua::new();
+
+    struct MyUserData(Arc<()>);
+    impl UserData for MyUserData {}
+
+    let arc = Arc::new(());
+
+    let func: Function = lua.load(r#"function(ud) coroutine.yield(ud) end"#).eval()?;
+    let thread = lua.create_thread(func.clone())?;
+
+    for _ in 0..2 {
+        assert_eq!(thread.status(), ThreadStatus::Resumable);
+        let _ = thread.resume::<_, AnyUserData>(MyUserData(arc.clone()))?;
+        assert_eq!(thread.status(), ThreadStatus::Resumable);
+        assert_eq!(Arc::strong_count(&arc), 2);
+        thread.resume::<_, ()>(())?;
+        assert_eq!(thread.status(), ThreadStatus::Unresumable);
+        thread.reset(func.clone())?;
+        lua.gc_collect()?;
+        assert_eq!(Arc::strong_count(&arc), 1);
+    }
+
+    // Check for errors (Lua 5.4 only)
+    #[cfg(feature = "lua54")]
+    {
+        let func: Function = lua.load(r#"function(ud) error("test error") end"#).eval()?;
+        let thread = lua.create_thread(func.clone())?;
+        let _ = thread.resume::<_, AnyUserData>(MyUserData(arc.clone()));
+        assert_eq!(thread.status(), ThreadStatus::Error);
+        assert_eq!(Arc::strong_count(&arc), 2);
+        assert!(thread.reset(func.clone()).is_err());
+        assert_eq!(thread.status(), ThreadStatus::Error);
+    }
+
+    Ok(())
+}
+
 #[test]
 fn coroutine_from_closure() -> Result<()> {
     let lua = Lua::new();

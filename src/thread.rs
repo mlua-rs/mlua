@@ -7,6 +7,9 @@ use crate::types::LuaRef;
 use crate::util::{assert_stack, check_stack, pop_error, StackGuard};
 use crate::value::{FromLuaMulti, MultiValue, ToLuaMulti};
 
+#[cfg(any(feature = "lua54", all(feature = "luajit", feature = "vendored"), doc))]
+use crate::function::Function;
+
 #[cfg(feature = "async")]
 use {
     crate::{
@@ -167,6 +170,43 @@ impl<'lua> Thread<'lua> {
             } else {
                 ThreadStatus::Unresumable
             }
+        }
+    }
+
+    /// Resets a thread
+    ///
+    /// In [Lua 5.4]: cleans its call stack and closes all pending to-be-closed variables.
+    /// Returns a error in case of either the original error that stopped the thread or errors
+    /// in closing methods.
+    ///
+    /// In [LuaJIT]: resets to the initial state of a newly created Lua thread.
+    /// Lua threads in arbitrary states (like yielded or errored) can be reset properly.
+    ///
+    /// Sets a Lua function for the thread afterwards.
+    ///
+    /// Requires `feature = "lua54"` OR `feature = "luajit,vendored"`
+    ///
+    /// [Lua 5.4]: https://www.lua.org/manual/5.4/manual.html#lua_resetthread
+    /// [LuaJIT]: https://github.com/openresty/luajit2#lua_resetthread
+    #[cfg(any(feature = "lua54", all(feature = "luajit", feature = "vendored"), doc))]
+    pub fn reset(&self, func: Function<'lua>) -> Result<()> {
+        let lua = self.0.lua;
+        unsafe {
+            let _sg = StackGuard::new(lua.state);
+            check_stack(lua.state, 2)?;
+
+            lua.push_ref(&self.0);
+            let thread_state = ffi::lua_tothread(lua.state, -1);
+
+            let ret = ffi::lua_resetthread(lua.state, thread_state);
+            if ret != ffi::LUA_OK {
+                return Err(pop_error(thread_state, ret));
+            }
+
+            lua.push_ref(&func.0);
+            ffi::lua_xmove(lua.state, thread_state, 1);
+
+            Ok(())
         }
     }
 

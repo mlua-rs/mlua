@@ -156,8 +156,13 @@ extern "C" {
     pub fn lua_newstate(f: lua_Alloc, ud: *mut c_void) -> *mut lua_State;
     pub fn lua_close(L: *mut lua_State);
     pub fn lua_newthread(L: *mut lua_State) -> *mut lua_State;
+
     #[cfg(feature = "lua54")]
-    pub fn lua_resetthread(L: *mut lua_State) -> c_int;
+    #[link_name = "lua_resetthread"]
+    pub fn lua_resetthread_54(L: *mut lua_State) -> c_int;
+    #[cfg(all(feature = "luajit", feature = "vendored"))]
+    #[link_name = "lua_resetthread"]
+    pub fn lua_resetthread_jit(L: *mut lua_State, th: *mut lua_State);
 
     pub fn lua_atpanic(L: *mut lua_State, panicf: lua_CFunction) -> lua_CFunction;
 
@@ -214,6 +219,17 @@ extern "C" {
     pub fn lua_touserdata(L: *mut lua_State, idx: c_int) -> *mut c_void;
     pub fn lua_tothread(L: *mut lua_State, idx: c_int) -> *mut lua_State;
     pub fn lua_topointer(L: *mut lua_State, idx: c_int) -> *const c_void;
+}
+
+#[cfg(any(feature = "lua54", all(feature = "luajit", feature = "vendored")))]
+pub unsafe fn lua_resetthread(_L: *mut lua_State, th: *mut lua_State) -> c_int {
+    #[cfg(all(feature = "luajit", feature = "vendored"))]
+    {
+        lua_resetthread_jit(_L, th);
+        LUA_OK
+    }
+    #[cfg(feature = "lua54")]
+    lua_resetthread_54(th)
 }
 
 // Comparison and arithmetic functions

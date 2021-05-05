@@ -21,7 +21,10 @@ use crate::lua::Lua;
 use crate::table::{Table, TablePairs};
 use crate::types::{LuaRef, MaybeSend};
 use crate::util::{check_stack, get_destructed_userdata_metatable, get_userdata, StackGuard};
-use crate::value::{FromLua, FromLuaMulti, ToLua, ToLuaMulti, Value};
+use crate::value::{FromLua, FromLuaMulti, ToLua, ToLuaMulti};
+
+#[cfg(any(feature = "lua52", feature = "lua51", feature = "luajit"))]
+use crate::value::Value;
 
 /// Kinds of metamethods that can be overridden.
 ///

@@ -160,8 +160,8 @@ pub use self::lua::{
 
 #[cfg(feature = "lua54")]
 pub use self::lua::{
-    lua_getiuservalue, lua_newuserdatauv, lua_resetthread, lua_setcstacklimit, lua_setiuservalue,
-    lua_setwarnf, lua_toclose, lua_warning,
+    lua_getiuservalue, lua_newuserdatauv, lua_setcstacklimit, lua_setiuservalue, lua_setwarnf,
+    lua_toclose, lua_warning,
 };
 
 #[cfg(any(feature = "lua54", feature = "lua53"))]
@@ -169,6 +169,9 @@ pub use self::lua::{lua_isyieldable, lua_version};
 
 #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
 pub use self::lua::{lua_callk, lua_pcallk, lua_upvalueid, lua_upvaluejoin, lua_yieldk};
+
+#[cfg(any(feature = "lua54", all(feature = "luajit", feature = "vendored")))]
+pub use self::lua::lua_resetthread;
 
 // auxiliary library types
 pub use self::lauxlib::luaL_Reg;
