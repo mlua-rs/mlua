@@ -98,6 +98,16 @@ pub enum MetaMethod {
     /// Requires `feature = "lua54/lua53/lua52"`
     #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", doc))]
     Pairs,
+    /// The `__ipairs` metamethod.
+    ///
+    /// This is not an operator, but it will be called by the built-in `ipairs` function on
+    /// Lua 5.2 and Lua 5.4. Lua 5.1 has no support for customizing pairs or ipairs and
+    /// Lua 5.4 will iterate (using [`MetaMethod::Index`]) starting at index 1 until it
+    /// reaches a nil value.
+    ///
+    /// Requires `feature = "lua54/lua53/lua52"`
+    #[cfg(any(feature = "lua53", feature = "lua52", doc))]
+    IPairs,
     /// The `__close` metamethod.
     ///
     /// Executed when a variable, that marked as to-be-closed, goes out of scope.
@@ -175,6 +185,9 @@ impl MetaMethod {
 
             #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
             MetaMethod::Pairs => "__pairs",
+
+            #[cfg(any(feature = "lua53", feature = "lua52", doc))]
+            MetaMethod::IPairs => "__ipairs",
 
             #[cfg(feature = "lua54")]
             MetaMethod::Close => "__close",
