@@ -93,6 +93,14 @@ impl<'a> Debug<'a> {
             }
         }
     }
+
+    pub(crate) unsafe fn wrap(state: *mut ffi::lua_State, ar: *mut ffi::lua_Debug) -> Debug<'a> {
+        Debug {
+            ar: ar,
+            state: state,
+            _phantom: PhantomData,
+        }
+    }
 }
 
 #[derive(Clone, Debug)]

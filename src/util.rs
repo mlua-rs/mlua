@@ -1,15 +1,19 @@
 use std::any::{Any, TypeId};
 use std::collections::HashMap;
+use std::fmt;
 use std::fmt::Write;
 use std::os::raw::{c_int, c_void};
+use std::borrow::Cow;
 use std::panic::{catch_unwind, resume_unwind, AssertUnwindSafe};
 use std::sync::{Arc, Mutex};
 use std::{mem, ptr, slice};
+use std::result::Result as StdResult;
 
 use once_cell::sync::Lazy;
 
 use crate::error::{Error, Result};
 use crate::ffi;
+use crate::hook;
 
 static METATABLE_CACHE: Lazy<Mutex<HashMap<TypeId, u8>>> = Lazy::new(|| {
     // The capacity must(!) be greater than number of stored keys
@@ -124,7 +128,9 @@ pub unsafe fn pop_error(state: *mut ffi::lua_State, err_code: c_int) -> Error {
 
     if let Some(err) = get_wrapped_error(state, -1).as_ref() {
         ffi::lua_pop(state, 1);
-        err.clone()
+        // XXX: is this actually sound? we just popped it off the stack,
+        // didn't we?
+        err.0.clone()
     } else if let Some(panic) = get_gc_userdata::<WrappedPanic>(state, -1).as_mut() {
         if let Some(p) = (*panic).0.take() {
             resume_unwind(p);
@@ -288,6 +294,55 @@ pub unsafe extern "C" fn userdata_destructor<T>(state: *mut ffi::lua_State) -> c
     })
 }
 
+pub unsafe fn format_traceback(state: *mut ffi::lua_State, limit: i32) -> StdResult<String, fmt::Error> {
+    let mut ar: ffi::lua_Debug = mem::zeroed();
+    let mut buf = String::new();
+    buf.write_str("stack traceback:")?;
+    for level in 0..limit {
+        if ffi::lua_getstack(state, level, &mut ar) == 0 {
+            break;
+        }
+        let wrapped = hook::Debug::wrap(state, &mut ar);
+        let curr_line = wrapped.curr_line();
+        let names = wrapped.names();
+        let source = wrapped.source();
+        let short_src = source.short_src.and_then(|v| {
+            Some(String::from_utf8_lossy(v))
+        }).unwrap_or(Cow::from("?"));
+        if curr_line > 0 {
+            write!(buf, "\n\t{}:{}: in ", short_src, curr_line)?;
+        } else {
+            write!(buf, "\n\t{}: in ", short_src)?;
+        }
+        let name_what = names.name_what.and_then(|v| {
+            Some(String::from_utf8_lossy(v))
+        }).unwrap_or(Cow::from(""));
+        if name_what.len() > 0 {
+            let name = names.name.and_then(|v| {
+                Some(String::from_utf8_lossy(v))
+            }).unwrap_or(Cow::from("?"));
+            write!(buf, "function {:?}", name)?;
+        } else {
+            let source_what = source.what.and_then(|v| {
+                Some(String::from_utf8_lossy(v).chars().next().unwrap_or('\0'))
+            }).unwrap_or('\0');
+            match source_what {
+                // luaL_traceback does some magic around pushglobalfuncname
+                // in the 'C' case, which we ignore.
+                'C' => buf.write_str("?")?,
+                'm' => buf.write_str("main chunk")?,
+                '\0' => buf.write_str("?")?,
+                _ => write!(buf, "function <{}:{}>", short_src, source.line_defined)?,
+            };
+        }
+    }
+    Ok(buf)
+}
+
+pub unsafe fn get_traceback(state: *mut ffi::lua_State, limit: i32) -> Option<String> {
+    format_traceback(state, limit).ok()
+}
+
 // In the context of a lua callback, this will call the given function and if the given function
 // returns an error, *or if the given function panics*, this will result in a call to lua_error (a
 // longjmp) by a C shim. The error or panic is wrapped in such a way that when calling pop_error back
@@ -310,9 +365,10 @@ where
             r
         }
         Ok(Err(err)) => {
+            let stacktrace = get_traceback(state, 128);
             ffi::lua_settop(state, 1);
             let error_ud = ffi::lua_touserdata(state, 1);
-            ptr::write(error_ud as *mut WrappedError, WrappedError(err));
+            ptr::write(error_ud as *mut WrappedError, WrappedError(err, stacktrace));
             get_gc_metatable_for::<WrappedError>(state);
             ffi::lua_setmetatable(state, -2);
             -1
@@ -350,7 +406,7 @@ pub unsafe extern "C" fn wrapped_error_traceback(
         "<not enough stack space for traceback>".to_owned()
     };
 
-    let error = error.clone();
+    let error = error.0.clone();
     ffi::lua_remove(state, -2); // Remove original error
 
     ptr::write(
@@ -358,7 +414,7 @@ pub unsafe extern "C" fn wrapped_error_traceback(
         WrappedError(Error::CallbackError {
             traceback,
             cause: Arc::new(error),
-        }),
+        }, None),
     );
     get_gc_metatable_for::<WrappedError>(state);
     ffi::lua_setmetatable(state, -2);
@@ -391,7 +447,7 @@ pub unsafe fn get_main_state(state: *mut ffi::lua_State) -> Option<*mut ffi::lua
 // Uses 2 stack spaces and does not call checkstack.
 pub unsafe fn push_wrapped_error(state: *mut ffi::lua_State, err: Error) -> Result<()> {
     let error_ud = ffi::safe::lua_newwrappederror(state)? as *mut WrappedError;
-    ptr::write(error_ud, WrappedError(err));
+    ptr::write(error_ud, WrappedError(err, None));
     get_gc_metatable_for::<WrappedError>(state);
     ffi::lua_setmetatable(state, -2);
     Ok(())
@@ -400,12 +456,12 @@ pub unsafe fn push_wrapped_error(state: *mut ffi::lua_State, err: Error) -> Resu
 // Checks if the value at the given index is a WrappedError, and if it is returns a pointer to it,
 // otherwise returns null.
 // Uses 2 stack spaces and does not call checkstack.
-pub unsafe fn get_wrapped_error(state: *mut ffi::lua_State, index: c_int) -> *const Error {
+pub(crate) unsafe fn get_wrapped_error(state: *mut ffi::lua_State, index: c_int) -> *const WrappedError {
     let ud = get_gc_userdata::<WrappedError>(state, index);
     if ud.is_null() {
         return ptr::null();
     }
-    &(*ud).0
+    ud
 }
 
 // Initialize the internal (with __gc method) metatable for a type T.
@@ -474,7 +530,12 @@ pub unsafe fn init_error_registry(state: *mut ffi::lua_State) -> Result<(*const 
                 // Depending on how the API is used and what error types scripts are given, it may
                 // be possible to make this consume arbitrary amounts of memory (for example, some
                 // kind of recursive error structure?)
-                let _ = write!(&mut (*err_buf), "{}", error);
+                if let Some(tb) = &error.1 {
+                    let _ = write!(&mut (*err_buf), "{}\n{}", error.0, tb);
+                } else {
+                    let _ = write!(&mut (*err_buf), "{}", error.0);
+                }
+
                 Ok(err_buf)
             } else if let Some(panic) = get_gc_userdata::<WrappedPanic>(state, -1).as_ref() {
                 if let Some(ref p) = (*panic).0 {
@@ -529,7 +590,7 @@ pub unsafe fn init_error_registry(state: *mut ffi::lua_State) -> Result<(*const 
         callback_error(state, |_| {
             check_stack(state, 2)?;
             let error_ud = ffi::safe::lua_newwrappederror(state)? as *mut WrappedError;
-            ptr::write(error_ud, WrappedError(Error::CallbackDestructed));
+            ptr::write(error_ud, WrappedError(Error::CallbackDestructed, None));
             get_gc_metatable_for::<WrappedError>(state);
             ffi::lua_setmetatable(state, -2);
             Ok(-1) // to trigger lua_error
@@ -593,7 +654,7 @@ pub unsafe fn init_error_registry(state: *mut ffi::lua_State) -> Result<(*const 
     Ok((wrapped_error_key, wrapped_panic_key))
 }
 
-pub(crate) struct WrappedError(pub Error);
+pub(crate) struct WrappedError(pub Error, pub Option<String>);
 pub(crate) struct WrappedPanic(pub Option<Box<dyn Any + Send + 'static>>);
 
 // Converts the given lua value to a string in a reasonable format without causing a Lua error or

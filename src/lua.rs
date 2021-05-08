@@ -1507,7 +1507,7 @@ impl Lua {
                 // We must prevent interaction with userdata types other than UserData OR a WrappedError.
                 // WrappedPanics are automatically resumed.
                 if let Some(err) = get_wrapped_error(state, -1).as_ref() {
-                    let err = err.clone();
+                    let err = err.0.clone();
                     ffi::lua_pop(state, 1);
                     Value::Error(err)
                 } else if let Some(panic) = get_gc_userdata::<WrappedPanic>(state, -1).as_mut() {
