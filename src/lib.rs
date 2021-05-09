@@ -112,7 +112,9 @@ pub use crate::string::String;
 pub use crate::table::{Table, TableExt, TablePairs, TableSequence};
 pub use crate::thread::{Thread, ThreadStatus};
 pub use crate::types::{Integer, LightUserData, Number, RegistryKey};
-pub use crate::userdata::{AnyUserData, MetaMethod, UserData, UserDataFields, UserDataMethods};
+pub use crate::userdata::{
+    AnyUserData, MetaMethod, UserData, UserDataFields, UserDataMetatable, UserDataMethods,
+};
 pub use crate::value::{FromLua, FromLuaMulti, MultiValue, Nil, ToLua, ToLuaMulti, Value};
 
 #[cfg(feature = "async")]

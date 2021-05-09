@@ -9,6 +9,7 @@ pub use crate::{
     Result as LuaResult, String as LuaString, Table as LuaTable, TableExt as LuaTableExt,
     TablePairs as LuaTablePairs, TableSequence as LuaTableSequence, Thread as LuaThread,
     ThreadStatus as LuaThreadStatus, ToLua, ToLuaMulti, UserData as LuaUserData,
+    UserDataFields as LuaUserDataFields, UserDataMetatable as LuaUserDataMetatable,
     UserDataMethods as LuaUserDataMethods, Value as LuaValue,
 };
 
