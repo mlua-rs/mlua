@@ -31,12 +31,17 @@ size_t MLUA_WRAPPED_PANIC_SIZE = 0;
 const void *MLUA_WRAPPED_ERROR_KEY = NULL;
 const void *MLUA_WRAPPED_PANIC_KEY = NULL;
 
-extern void wrapped_error_traceback(lua_State *L, int error_idx, void *error_ud,
-                                    int has_traceback);
+extern void wrapped_error_traceback(lua_State *L, int error_idx,
+                                    int traceback_idx,
+                                    int convert_to_callback_error);
 
 extern int mlua_hook_proc(lua_State *L, lua_Debug *ar);
 
 #define max(a, b) (a > b ? a : b)
+
+// I believe luaL_traceback < 5.4 requires this much free stack to not error.
+// 5.4 uses luaL_Buffer
+const int LUA_TRACEBACK_STACK = 11;
 
 typedef struct {
   const char *data;
@@ -67,7 +72,15 @@ static int lua_call_rust(lua_State *L) {
   lua_CFunction rust_callback = lua_touserdata(L, lua_upvalueindex(1));
 
   int ret = rust_callback(L);
-  if (ret == -1) {
+  if (ret < 0) {
+    if (ret == -1 /* WrappedError */) {
+      if (lua_checkstack(L, LUA_TRACEBACK_STACK) != 0) {
+        luaL_traceback(L, L, NULL, 0);
+        // Attach traceback
+        wrapped_error_traceback(L, -2, -1, 0);
+        lua_pop(L, 1);
+      }
+    }
     lua_error(L);
   }
 
@@ -401,10 +414,6 @@ int is_wrapped_struct(lua_State *state, int index, const void *key) {
 // rust errors under certain memory conditions. This function ensures that such
 // behavior will *never* occur with a rust panic, however.
 int error_traceback(lua_State *state) {
-  // I believe luaL_traceback < 5.4 requires this much free stack to not error.
-  // 5.4 uses luaL_Buffer
-  const int LUA_TRACEBACK_STACK = 11;
-
   if (lua_checkstack(state, 2) == 0) {
     // If we don't have enough stack space to even check the error type, do
     // nothing so we don't risk shadowing a rust panic.
@@ -412,24 +421,18 @@ int error_traceback(lua_State *state) {
   }
 
   if (is_wrapped_struct(state, -1, MLUA_WRAPPED_ERROR_KEY) != 0) {
-    int error_idx = lua_absindex(state, -1);
-    // lua_newuserdata and luaL_traceback may error
-    void *error_ud = lua_newuserdata(state, MLUA_WRAPPED_ERROR_SIZE);
-    int has_traceback = 0;
-    if (lua_checkstack(state, LUA_TRACEBACK_STACK) != 0) {
-      luaL_traceback(state, state, NULL, 0);
-      has_traceback = 1;
-    }
-    wrapped_error_traceback(state, error_idx, error_ud, has_traceback);
+    // Convert to CallbackError
+    wrapped_error_traceback(state, -1, 0, 1);
     return 1;
   }
 
   if (MLUA_WRAPPED_PANIC_KEY != NULL &&
-      !is_wrapped_struct(state, -1, MLUA_WRAPPED_PANIC_KEY) &&
-      lua_checkstack(state, LUA_TRACEBACK_STACK) != 0) {
+      !is_wrapped_struct(state, -1, MLUA_WRAPPED_PANIC_KEY)) {
     const char *s = luaL_tolstring(state, -1, NULL);
-    luaL_traceback(state, state, s, 0);
-    lua_remove(state, -2);
+    if (lua_checkstack(state, LUA_TRACEBACK_STACK) != 0) {
+      luaL_traceback(state, state, s, 1);
+      lua_remove(state, -2);
+    }
   }
 
   return 1;

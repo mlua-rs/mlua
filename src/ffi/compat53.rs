@@ -680,7 +680,7 @@ pub unsafe fn luaL_traceback(
     msg: *const c_char,
     mut level: c_int,
 ) {
-    let mut ar: lua_Debug = std::mem::zeroed();
+    let mut ar: lua_Debug = mem::zeroed();
     let top = lua_gettop(L);
     let numlevels = compat53_countlevels(L1);
     let mark = if numlevels > COMPAT53_LEVELS1 + COMPAT53_LEVELS2 {

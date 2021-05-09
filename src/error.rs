@@ -248,7 +248,7 @@ impl fmt::Display for Error {
                 write!(fmt, "RegistryKey used from different Lua state")
             }
             Error::CallbackError { ref traceback, .. } => {
-                write!(fmt, "callback error: {}", traceback)
+                write!(fmt, "callback error\n{}", traceback)
             }
             Error::PreviouslyResumedPanic => {
                 write!(fmt, "previously resumed panic returned again")
