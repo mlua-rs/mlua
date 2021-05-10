@@ -32,8 +32,7 @@ const void *MLUA_WRAPPED_ERROR_KEY = NULL;
 const void *MLUA_WRAPPED_PANIC_KEY = NULL;
 
 extern void wrapped_error_traceback(lua_State *L, int error_idx,
-                                    int traceback_idx,
-                                    int convert_to_callback_error);
+                                    int traceback_idx);
 
 extern int mlua_hook_proc(lua_State *L, lua_Debug *ar);
 
@@ -76,9 +75,12 @@ static int lua_call_rust(lua_State *L) {
     if (ret == -1 /* WrappedError */) {
       if (lua_checkstack(L, LUA_TRACEBACK_STACK) != 0) {
         luaL_traceback(L, L, NULL, 0);
-        // Attach traceback
-        wrapped_error_traceback(L, -2, -1, 0);
+        // Convert to CallbackError and attach traceback
+        wrapped_error_traceback(L, -2, -1);
         lua_pop(L, 1);
+      } else {
+        // Convert to CallbackError with error message as a traceback
+        wrapped_error_traceback(L, -1, 0);
       }
     }
     lua_error(L);
@@ -92,7 +94,18 @@ void lua_call_mlua_hook_proc(lua_State *L, lua_Debug *ar) {
   lua_newuserdata(L, max(MLUA_WRAPPED_ERROR_SIZE, MLUA_WRAPPED_PANIC_SIZE));
   lua_rotate(L, 1, 1);
   int ret = mlua_hook_proc(L, ar);
-  if (ret == -1) {
+  if (ret < 0) {
+    if (ret == -1 /* WrappedError */) {
+      if (lua_checkstack(L, LUA_TRACEBACK_STACK) != 0) {
+        luaL_traceback(L, L, NULL, 0);
+        // Convert to CallbackError and attach traceback
+        wrapped_error_traceback(L, -2, -1);
+        lua_pop(L, 1);
+      } else {
+        // Convert to CallbackError with error message as a traceback
+        wrapped_error_traceback(L, -1, 0);
+      }
+    }
     lua_error(L);
   }
 }
@@ -420,19 +433,16 @@ int error_traceback(lua_State *state) {
     return 1;
   }
 
-  if (is_wrapped_struct(state, -1, MLUA_WRAPPED_ERROR_KEY) != 0) {
-    // Convert to CallbackError
-    wrapped_error_traceback(state, -1, 0, 1);
+  if (MLUA_WRAPPED_PANIC_KEY == NULL ||
+      is_wrapped_struct(state, -1, MLUA_WRAPPED_PANIC_KEY) ||
+      is_wrapped_struct(state, -1, MLUA_WRAPPED_ERROR_KEY)) {
     return 1;
   }
 
-  if (MLUA_WRAPPED_PANIC_KEY != NULL &&
-      !is_wrapped_struct(state, -1, MLUA_WRAPPED_PANIC_KEY)) {
-    const char *s = luaL_tolstring(state, -1, NULL);
-    if (lua_checkstack(state, LUA_TRACEBACK_STACK) != 0) {
-      luaL_traceback(state, state, s, 1);
-      lua_remove(state, -2);
-    }
+  const char *s = luaL_tolstring(state, -1, NULL);
+  if (lua_checkstack(state, LUA_TRACEBACK_STACK) != 0) {
+    luaL_traceback(state, state, s, 1);
+    lua_remove(state, -2);
   }
 
   return 1;

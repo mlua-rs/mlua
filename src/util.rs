@@ -313,7 +313,7 @@ where
         Ok(Err(err)) => {
             ffi::lua_settop(state, 1);
             let error_ud = ffi::lua_touserdata(state, 1);
-            ptr::write(error_ud as *mut WrappedError, WrappedError(err, None));
+            ptr::write(error_ud as *mut WrappedError, WrappedError(err));
             get_gc_metatable_for::<WrappedError>(state);
             ffi::lua_setmetatable(state, -2);
             -1
@@ -338,23 +338,17 @@ pub unsafe extern "C" fn wrapped_error_traceback(
     state: *mut ffi::lua_State,
     error_idx: c_int,
     traceback_idx: c_int,
-    convert_to_callback_error: c_int,
 ) {
     let wrapped_error = mlua_expect!(
         get_gc_userdata::<WrappedError>(state, error_idx).as_mut(),
         "cannot get <WrappedError>"
     );
-
-    if convert_to_callback_error != 0 {
-        let traceback = wrapped_error
-            .1
-            .take()
-            .unwrap_or_else(|| "<not enough stack space for traceback>".into());
-        let cause = Arc::new(wrapped_error.0.clone());
-        wrapped_error.0 = Error::CallbackError { traceback, cause };
-    } else {
-        wrapped_error.1 = Some(to_string(state, traceback_idx));
-    }
+    let traceback = match traceback_idx {
+        0 => "<not enough stack space for traceback>".to_string(),
+        _ => to_string(state, traceback_idx),
+    };
+    let cause = Arc::new(wrapped_error.0.clone());
+    wrapped_error.0 = Error::CallbackError { traceback, cause };
 }
 
 // Returns Lua main thread for Lua >= 5.2 or checks that the passed thread is main for Lua 5.1.
@@ -384,7 +378,7 @@ pub unsafe fn get_main_state(state: *mut ffi::lua_State) -> Option<*mut ffi::lua
 // Uses 2 stack spaces and does not call checkstack.
 pub unsafe fn push_wrapped_error(state: *mut ffi::lua_State, err: Error) -> Result<()> {
     let error_ud = ffi::safe::lua_newwrappederror(state)? as *mut WrappedError;
-    ptr::write(error_ud, WrappedError(err, None));
+    ptr::write(error_ud, WrappedError(err));
     get_gc_metatable_for::<WrappedError>(state);
     ffi::lua_setmetatable(state, -2);
     Ok(())
@@ -457,8 +451,7 @@ pub unsafe fn init_error_registry(state: *mut ffi::lua_State) -> Result<(*const 
         callback_error(state, |_| {
             check_stack(state, 3)?;
 
-            let wrapped_error = get_gc_userdata::<WrappedError>(state, -1).as_ref();
-            let err_buf = if let Some(error) = wrapped_error {
+            let err_buf = if let Some(error) = get_wrapped_error(state, -1).as_ref() {
                 let err_buf_key = &ERROR_PRINT_BUFFER_KEY as *const u8 as *const c_void;
                 ffi::lua_rawgetp(state, ffi::LUA_REGISTRYINDEX, err_buf_key);
                 let err_buf = ffi::lua_touserdata(state, -1) as *mut String;
@@ -468,20 +461,9 @@ pub unsafe fn init_error_registry(state: *mut ffi::lua_State) -> Result<(*const 
                 // Depending on how the API is used and what error types scripts are given, it may
                 // be possible to make this consume arbitrary amounts of memory (for example, some
                 // kind of recursive error structure?)
-                let _ = write!(&mut (*err_buf), "{}", error.0);
-                match error {
-                    WrappedError(Error::CallbackError { .. }, _) => {}
-                    // This is a workaround to avoid having duplicate traceback for string errors
-                    // with attached traceback at the `error_traceback` (message handler) stage.
-                    WrappedError(Error::RuntimeError(ref err), _)
-                        if err.contains("\nstack traceback:\n") => {}
-                    WrappedError(_, Some(ref traceback)) => {
-                        let _ = write!(&mut (*err_buf), "\n{}", traceback);
-                    }
-                    _ => {}
-                }
+                let _ = write!(&mut (*err_buf), "{}", error);
                 // Find first two sources that caused the error
-                let mut source1 = error.0.source();
+                let mut source1 = error.source();
                 let mut source0 = source1.and_then(|s| s.source());
                 while let Some(source) = source0.and_then(|s| s.source()) {
                     source1 = source0;
@@ -557,7 +539,7 @@ pub unsafe fn init_error_registry(state: *mut ffi::lua_State) -> Result<(*const 
         callback_error(state, |_| {
             check_stack(state, 2)?;
             let error_ud = ffi::safe::lua_newwrappederror(state)? as *mut WrappedError;
-            ptr::write(error_ud, WrappedError(Error::CallbackDestructed, None));
+            ptr::write(error_ud, WrappedError(Error::CallbackDestructed));
             get_gc_metatable_for::<WrappedError>(state);
             ffi::lua_setmetatable(state, -2);
             Ok(-1) // to trigger lua_error
@@ -621,7 +603,7 @@ pub unsafe fn init_error_registry(state: *mut ffi::lua_State) -> Result<(*const 
     Ok((wrapped_error_key, wrapped_panic_key))
 }
 
-pub(crate) struct WrappedError(pub Error, pub Option<String>);
+pub(crate) struct WrappedError(pub Error);
 pub(crate) struct WrappedPanic(pub Option<Box<dyn Any + Send + 'static>>);
 
 // Converts the given lua value to a string in a reasonable format without causing a Lua error or
