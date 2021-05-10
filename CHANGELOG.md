@@ -1,3 +1,11 @@
+## v0.6.0-beta.2
+
+- [**Breaking**] Removed `AnyUserData::has_metamethod()`
+- Added `Thread::reset()` for luajit/lua54 to recycle threads.
+  It's possible to attach a new function to a thread (coroutine).
+- Added `chunk!` macro support to load chunks of Lua code using the Rust tokenizer and optinally capturing Rust variables.
+- Improved error reporting (`Error`'s `__tostring` method formats full stacktraces). This is useful in the module mode.
+
 ## v0.6.0-beta.1
 
 - New `UserDataFields` API
