@@ -19,7 +19,7 @@ pub struct Serializer<'lua> {
     options: Options,
 }
 
-/// A struct with options to change default serializer behaviour.
+/// A struct with options to change default serializer behavior.
 #[derive(Debug, Clone, Copy)]
 #[non_exhaustive]
 pub struct Options {

@@ -90,7 +90,7 @@ pub enum Error {
     },
     /// [`Thread::resume`] was called on an inactive coroutine.
     ///
-    /// A coroutine is inactive if its main function has returned or if an error has occured inside
+    /// A coroutine is inactive if its main function has returned or if an error has occurred inside
     /// the coroutine.
     ///
     /// [`Thread::status`] can be used to check if the coroutine can be resumed without causing this
@@ -154,7 +154,7 @@ pub enum Error {
         /// Original error returned by the Rust code.
         cause: Arc<Error>,
     },
-    /// A Rust panic that was previosly resumed, returned again.
+    /// A Rust panic that was previously resumed, returned again.
     ///
     /// This error can occur only when a Rust panic resumed previously was recovered
     /// and returned again.

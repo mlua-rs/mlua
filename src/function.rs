@@ -90,7 +90,7 @@ impl<'lua> Function<'lua> {
     /// Returns a Feature that, when polled, calls `self`, passing `args` as function arguments,
     /// and drives the execution.
     ///
-    /// Internaly it wraps the function to an [`AsyncThread`].
+    /// Internally it wraps the function to an [`AsyncThread`].
     ///
     /// Requires `feature = "async"`
     ///

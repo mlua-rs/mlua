@@ -97,7 +97,7 @@ pub enum GCMode {
     Generational,
 }
 
-/// Controls Lua interpreter behaviour such as Rust panics handling.
+/// Controls Lua interpreter behavior such as Rust panics handling.
 #[derive(Clone, Debug)]
 #[non_exhaustive]
 pub struct LuaOptions {
@@ -107,7 +107,7 @@ pub struct LuaOptions {
     /// Also in Lua 5.1 adds ability to provide arguments to [`xpcall`] similar to Lua >= 5.2.
     ///
     /// If enabled, keeps [`pcall`]/[`xpcall`] unmodified.
-    /// Panics are still automatically resumed if returned back to the Rust side.
+    /// Panics are still automatically resumed if returned to the Rust side.
     ///
     /// Default: **true**
     ///
@@ -125,7 +125,7 @@ impl Default for LuaOptions {
 }
 
 impl LuaOptions {
-    /// Retruns a new instance of `LuaOptions` with default parameters.
+    /// Returns a new instance of `LuaOptions` with default parameters.
     pub fn new() -> Self {
         Self::default()
     }
@@ -206,7 +206,7 @@ impl Lua {
 
     /// Creates a new Lua state and loads the specified safe subset of the standard libraries.
     ///
-    /// Use the [`StdLib`] flags to specifiy the libraries you want to load.
+    /// Use the [`StdLib`] flags to specify the libraries you want to load.
     ///
     /// # Safety
     /// The created Lua state would have _some_ safety guarantees and would not allow to load unsafe
@@ -243,7 +243,7 @@ impl Lua {
 
     /// Creates a new Lua state and loads the specified subset of the standard libraries.
     ///
-    /// Use the [`StdLib`] flags to specifiy the libraries you want to load.
+    /// Use the [`StdLib`] flags to specify the libraries you want to load.
     ///
     /// # Safety
     /// The created Lua state will not have safety guarantees and allow to load C modules.
@@ -300,7 +300,7 @@ impl Lua {
             if !new_ptr.is_null() {
                 mem_info.used_memory += mem_diff;
             } else if !ptr.is_null() && nsize < osize {
-                // Should not happend
+                // Should not happen
                 alloc::handle_alloc_error(new_layout);
             }
 
@@ -459,7 +459,7 @@ impl Lua {
 
     /// Loads the specified subset of the standard libraries into an existing Lua state.
     ///
-    /// Use the [`StdLib`] flags to specifiy the libraries you want to load.
+    /// Use the [`StdLib`] flags to specify the libraries you want to load.
     ///
     /// [`StdLib`]: struct.StdLib.html
     pub fn load_from_std_lib(&self, libs: StdLib) -> Result<()> {
@@ -2167,14 +2167,14 @@ impl<'lua, 'a> Chunk<'lua, 'a> {
         }
     }
 
-    /// Load the chunk function and call it with the given arguemnts.
+    /// Load the chunk function and call it with the given arguments.
     ///
     /// This is equivalent to `into_function` and calling the resulting function.
     pub fn call<A: ToLuaMulti<'lua>, R: FromLuaMulti<'lua>>(self, args: A) -> Result<R> {
         self.into_function()?.call(args)
     }
 
-    /// Load the chunk function and asynchronously call it with the given arguemnts.
+    /// Load the chunk function and asynchronously call it with the given arguments.
     ///
     /// See [`Chunk::call`] for more details.
     ///

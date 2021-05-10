@@ -761,7 +761,7 @@ impl<'lua> AnyUserData<'lua> {
     /// Returns a metatable of this `UserData`.
     ///
     /// Returned [`UserDataMetatable`] object wraps the original metatable and
-    /// provides safe access to it methods.
+    /// provides safe access to its methods.
     ///
     /// For `T: UserData + 'static` returned metatable is shared among all instances of type `T`.
     ///

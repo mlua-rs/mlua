@@ -243,10 +243,10 @@ impl<'lua> Table<'lua> {
     /// Removes a key from the table.
     ///
     /// If `key` is an integer, mlua shifts down the elements from `table[key+1]`,
-    /// and erases element `table[key]`. The complexity is O(n) in worst case,
+    /// and erases element `table[key]`. The complexity is O(n) in the worst case,
     /// where n is the table length.
     ///
-    /// For othey key types this is equivalent to setting `table[key] = nil`.
+    /// For other key types this is equivalent to setting `table[key] = nil`.
     pub fn raw_remove<K: ToLua<'lua>>(&self, key: K) -> Result<()> {
         let lua = self.0.lua;
         let key = key.to_lua(lua)?;
@@ -378,7 +378,7 @@ impl<'lua> Table<'lua> {
     /// Consume this table and return an iterator over all values in the sequence part of the table.
     ///
     /// The iterator will yield all values `t[1]`, `t[2]`, and so on, until a `nil` value is
-    /// encountered. This mirrors the behaviour of Lua's `ipairs` function and will invoke the
+    /// encountered. This mirrors the behavior of Lua's `ipairs` function and will invoke the
     /// `__index` metamethod according to the usual rules. However, the deprecated `__ipairs`
     /// metatable will not be called.
     ///

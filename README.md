@@ -17,7 +17,7 @@ _safe_ (as far as it's possible), high level, easy to use, practical and flexibl
 
 Started as [rlua](https://github.com/amethyst/rlua/tree/0.15.3) fork, `mlua` supports Lua 5.4, 5.3, 5.2 and 5.1 including LuaJIT (2.0.5 and 2.1 beta) and allows to write native Lua modules in Rust as well as use Lua in a standalone mode.
 
-`mlua` tested on Windows/macOS/Linux including module mode in [GitHub Actions] on `x86_64` platform and cross-compilation to `aarch64` (other targes are also supported).
+`mlua` tested on Windows/macOS/Linux including module mode in [GitHub Actions] on `x86_64` platform and cross-compilation to `aarch64` (other targets are also supported).
 
 [GitHub Actions]: https://github.com/khvzak/mlua/actions
 
@@ -25,7 +25,7 @@ Started as [rlua](https://github.com/amethyst/rlua/tree/0.15.3) fork, `mlua` sup
 
 ### Feature flags
 
-`mlua` uses feature flags to reduce the amount of depenendies, compiled code and allow to choose only required set of features.
+`mlua` uses feature flags to reduce the amount of dependencies, compiled code and allow to choose only required set of features.
 Below is a list of the available feature flags. By default `mlua` does not enable any features.
 
 * `lua54`: activate Lua [5.4] support
@@ -73,7 +73,7 @@ With `serialize` feature flag enabled, `mlua` allows you to serialize/deserializ
 
 ### Compiling
 
-You have to enable one of the features `lua54`, `lua53`, `lua52`, `lua51` or `luajit`, according to the choosen Lua version.
+You have to enable one of the features `lua54`, `lua53`, `lua52`, `lua51` or `luajit`, according to the chosen Lua version.
 
 By default `mlua` uses `pkg-config` tool to find lua includes and libraries for the chosen Lua version.
 In most cases it works as desired, although sometimes could be more preferable to use a custom lua library.
@@ -85,7 +85,7 @@ An example how to use them:
 my_project $ LUA_INC=$HOME/tmp/lua-5.2.4/src LUA_LIB=$HOME/tmp/lua-5.2.4/src LUA_LIB_NAME=lua LUA_LINK=static cargo build
 ```
 
-`mlua` also supports vendored lua/luajit using the auxilary crates [lua-src](https://crates.io/crates/lua-src) and
+`mlua` also supports vendored lua/luajit using the auxiliary crates [lua-src](https://crates.io/crates/lua-src) and
 [luajit-src](https://crates.io/crates/luajit-src).
 Just enable the `vendored` feature and cargo will automatically build and link specified lua/luajit version. This is the easiest way to get started with `mlua`.
 
@@ -233,7 +233,7 @@ If you encounter them, a bug report would be very welcome:
 
   + If your program panics with a message that contains the string "mlua internal error", this is a bug.
 
-  + Lua C API errors are handled by lonjmp. All instances where the Lua C API would otherwise longjmp over calling stack frames should be guarded against, except in internal callbacks where this is intentional. If you detect that `mlua` is triggering a longjmp over your Rust stack frames, this is a bug!
+  + Lua C API errors are handled by longjmp. All instances where the Lua C API would otherwise longjmp over calling stack frames should be guarded against, except in internal callbacks where this is intentional. If you detect that `mlua` is triggering a longjmp over your Rust stack frames, this is a bug!
 
   + If you detect that, after catching a panic or during a Drop triggered from a panic, a `Lua` or handle method is triggering other bugs or there is a Lua stack space leak, this is a bug. `mlua` instances are supposed to remain fully usable in the face of user generated panics. This guarantee does not extend to panics marked with "mlua internal error" simply because that is already indicative of a separate bug.
 

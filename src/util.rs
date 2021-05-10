@@ -45,7 +45,7 @@ pub struct StackGuard {
 }
 
 impl StackGuard {
-    // Creates a StackGuard instance with wa record of the stack size, and on Drop will check the
+    // Creates a StackGuard instance with record of the stack size, and on Drop will check the
     // stack size and drop any extra elements. If the stack size at the end is *smaller* than at
     // the beginning, this is considered a fatal logic error and will result in a panic.
     pub unsafe fn new(state: *mut ffi::lua_State) -> StackGuard {
