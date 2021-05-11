@@ -47,9 +47,21 @@ typedef struct {
   size_t len;
 } StringArg;
 
+static void handle_wrapped_error(lua_State *L) {
+  if (lua_checkstack(L, LUA_TRACEBACK_STACK) != 0) {
+    luaL_traceback(L, L, NULL, 0);
+    // Convert to CallbackError and attach traceback
+    wrapped_error_traceback(L, -2, -1);
+    lua_pop(L, 1);
+  } else {
+    // Convert to CallbackError with error message as a traceback
+    wrapped_error_traceback(L, -1, 0);
+  }
+}
+
 // A wrapper around Rust function to protect from triggering longjmp in Rust.
-// Rust callback expected to return -1 in case of errors or number of output
-// values.
+// Rust callback expected to return positive number of output values or
+// -1 in case of error, -2 in case of panic.
 static int lua_call_rust(lua_State *L) {
   int nargs = lua_gettop(L);
 
@@ -73,15 +85,7 @@ static int lua_call_rust(lua_State *L) {
   int ret = rust_callback(L);
   if (ret < 0) {
     if (ret == -1 /* WrappedError */) {
-      if (lua_checkstack(L, LUA_TRACEBACK_STACK) != 0) {
-        luaL_traceback(L, L, NULL, 0);
-        // Convert to CallbackError and attach traceback
-        wrapped_error_traceback(L, -2, -1);
-        lua_pop(L, 1);
-      } else {
-        // Convert to CallbackError with error message as a traceback
-        wrapped_error_traceback(L, -1, 0);
-      }
+      handle_wrapped_error(L);
     }
     lua_error(L);
   }
@@ -96,15 +100,7 @@ void lua_call_mlua_hook_proc(lua_State *L, lua_Debug *ar) {
   int ret = mlua_hook_proc(L, ar);
   if (ret < 0) {
     if (ret == -1 /* WrappedError */) {
-      if (lua_checkstack(L, LUA_TRACEBACK_STACK) != 0) {
-        luaL_traceback(L, L, NULL, 0);
-        // Convert to CallbackError and attach traceback
-        wrapped_error_traceback(L, -2, -1);
-        lua_pop(L, 1);
-      } else {
-        // Convert to CallbackError with error message as a traceback
-        wrapped_error_traceback(L, -1, 0);
-      }
+      handle_wrapped_error(L);
     }
     lua_error(L);
   }
@@ -419,13 +415,10 @@ int is_wrapped_struct(lua_State *state, int index, const void *key) {
   return res;
 }
 
-// Takes an error at the top of the stack, and if it is a WrappedError, converts
-// it to an Error::CallbackError with a traceback, if it is some lua type,
-// prints the error along with a traceback, and if it is a WrappedPanic, does
+// Takes an error at the top of the stack and converts Lua errors into a string
+// with attached traceback. If the error is a WrappedError or WrappedPanic, does
 // not modify it. This function does its best to avoid triggering another error
-// and shadowing previous rust errors, but it may trigger Lua errors that shadow
-// rust errors under certain memory conditions. This function ensures that such
-// behavior will *never* occur with a rust panic, however.
+// and shadowing previous rust errors.
 int error_traceback(lua_State *state) {
   if (lua_checkstack(state, 2) == 0) {
     // If we don't have enough stack space to even check the error type, do

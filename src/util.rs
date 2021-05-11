@@ -331,8 +331,7 @@ where
 
 // A part of the C shim for errors handling.
 // Receives indexes of error and traceback (optional) in the stack.
-// Depending on `convert_to_callback_error` flag attaches traceback to the error or
-// converts error into a `CallbackError` (using previously attached traceback).
+// Converts error into a `CallbackError` and attaches the traceback provided.
 #[no_mangle]
 pub unsafe extern "C" fn wrapped_error_traceback(
     state: *mut ffi::lua_State,
