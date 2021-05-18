@@ -15,6 +15,19 @@ fn test_module() -> Result<()> {
     .exec()
 }
 
+#[test]
+fn test_module_multi() -> Result<()> {
+    let lua = make_lua()?;
+    lua.load(
+        r#"
+        local mod = require("rust_module")
+        local mod2 = require("rust_module.second")
+        assert(mod.check_userdata(mod2.userdata) == 123)
+    "#,
+    )
+    .exec()
+}
+
 #[cfg(any(
     feature = "lua54",
     feature = "lua53",

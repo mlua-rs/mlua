@@ -369,6 +369,10 @@ impl Lua {
         let main_state = maybe_main_state.unwrap_or(state);
         let main_state_top = ffi::lua_gettop(main_state);
 
+        if let Some(lua) = Lua::make_from_ptr(state) {
+            return lua;
+        }
+
         let ref_thread = mlua_expect!(
             (|state| {
                 // Before initializing the error registry, we must set Error/Panic size.
@@ -437,8 +441,8 @@ impl Lua {
         );
         let extra_key = &EXTRA_REGISTRY_KEY as *const u8 as *const c_void;
         mlua_expect!(
-            ffi::safe::lua_rawsetp(main_state, ffi::LUA_REGISTRYINDEX, extra_key,),
-            "Error while storing extra data"
+            ffi::safe::lua_rawsetp(main_state, ffi::LUA_REGISTRYINDEX, extra_key),
+            "Error while storing extra data",
         );
 
         mlua_debug_assert!(
@@ -1972,12 +1976,14 @@ impl Lua {
         Ok(())
     }
 
-    pub(crate) unsafe fn make_from_ptr(state: *mut ffi::lua_State) -> Self {
+    pub(crate) unsafe fn make_from_ptr(state: *mut ffi::lua_State) -> Option<Self> {
         let _sg = StackGuard::new(state);
         assert_stack(state, 1);
 
         let extra_key = &EXTRA_REGISTRY_KEY as *const u8 as *const c_void;
-        ffi::lua_rawgetp(state, ffi::LUA_REGISTRYINDEX, extra_key);
+        if ffi::lua_rawgetp(state, ffi::LUA_REGISTRYINDEX, extra_key) != ffi::LUA_TUSERDATA {
+            return None;
+        }
         let extra = mlua_expect!(
             (*get_gc_userdata::<Weak<Mutex<ExtraData>>>(state, -1)).upgrade(),
             "extra is destroyed"
@@ -1986,14 +1992,14 @@ impl Lua {
 
         let safe = mlua_expect!(extra.lock(), "extra is poisoned").safe;
 
-        Lua {
+        Some(Lua {
             state,
             main_state: get_main_state(state),
             extra,
             ephemeral: true,
             safe,
             _no_ref_unwind_safe: PhantomData,
-        }
+        })
     }
 
     pub(crate) unsafe fn hook_callback(&self) -> Option<HookCallback> {

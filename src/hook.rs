@@ -174,7 +174,7 @@ pub unsafe extern "C" fn mlua_hook_proc(state: *mut lua_State, ar: *mut lua_Debu
             _phantom: PhantomData,
         };
 
-        let lua = Lua::make_from_ptr(state);
+        let lua = mlua_expect!(Lua::make_from_ptr(state), "cannot make Lua instance");
         let hook_cb = mlua_expect!(lua.hook_callback(), "no hook callback set in hook_proc");
 
         #[allow(clippy::match_wild_err_arm)]
