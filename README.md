@@ -38,6 +38,7 @@ Below is a list of the available feature flags. By default `mlua` does not enabl
 * `async`: enable async/await support (any executor can be used, eg. [tokio] or [async-std])
 * `send`: make `mlua::Lua` transferable across thread boundaries (adds [`Send`] requirement to `mlua::Function` and `mlua::UserData`)
 * `serialize`: add serialization and deserialization support to `mlua` types using [serde] framework
+* `macros`: enable procedural macros (such as `chunk!`)
 
 [5.4]: https://www.lua.org/manual/5.4/manual.html
 [5.3]: https://www.lua.org/manual/5.3/manual.html
@@ -96,7 +97,7 @@ Add to `Cargo.toml` :
 
 ``` toml
 [dependencies]
-mlua = { version = "0.5", features = ["lua53", "vendored"] }
+mlua = { version = "0.6.0-beta", features = ["lua53", "vendored"] }
 ```
 
 `main.rs`
@@ -131,7 +132,7 @@ Add to `Cargo.toml` :
 crate-type = ["cdylib"]
 
 [dependencies]
-mlua = { version = "0.5", features = ["lua53", "vendored", "module"] }
+mlua = { version = "0.6.0-beta", features = ["lua53", "vendored", "module"] }
 ```
 
 `lib.rs` :
