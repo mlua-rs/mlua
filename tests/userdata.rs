@@ -1,4 +1,7 @@
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, RwLock};
+
+#[cfg(not(feature = "send"))]
+use std::{cell::RefCell, rc::Rc};
 
 #[cfg(feature = "lua54")]
 use std::sync::atomic::{AtomicI64, Ordering};
@@ -448,6 +451,56 @@ fn test_metatable() -> Result<()> {
         Err(Error::MetaMethodTypeError { .. }) => {}
         Err(e) => panic!("expected MetaMethodTypeError, got {:?}", e),
     }
+
+    Ok(())
+}
+
+#[test]
+fn test_userdata_wrapped() -> Result<()> {
+    struct MyUserData(i64);
+
+    impl UserData for MyUserData {
+        fn add_fields<'lua, F: UserDataFields<'lua, Self>>(fields: &mut F) {
+            fields.add_field_method_get("data", |_, this| Ok(this.0));
+            fields.add_field_method_set("data", |_, this, val| {
+                this.0 = val;
+                Ok(())
+            })
+        }
+    }
+
+    let lua = Lua::new();
+    let globals = lua.globals();
+
+    #[cfg(not(feature = "send"))]
+    {
+        globals.set("rc_refcell_ud", Rc::new(RefCell::new(MyUserData(1))))?;
+        lua.load(
+            r#"
+            rc_refcell_ud.data = rc_refcell_ud.data + 1
+            assert(rc_refcell_ud.data == 2)
+        "#,
+        )
+        .exec()?;
+    }
+
+    globals.set("arc_mutex_ud", Arc::new(Mutex::new(MyUserData(2))))?;
+    lua.load(
+        r#"
+        arc_mutex_ud.data = arc_mutex_ud.data + 1
+        assert(arc_mutex_ud.data == 3)
+    "#,
+    )
+    .exec()?;
+
+    globals.set("arc_rwlock_ud", Arc::new(RwLock::new(MyUserData(3))))?;
+    lua.load(
+        r#"
+        arc_rwlock_ud.data = arc_rwlock_ud.data + 1
+        assert(arc_rwlock_ud.data == 4)
+    "#,
+    )
+    .exec()?;
 
     Ok(())
 }

@@ -1,8 +1,9 @@
 use std::any::Any;
-use std::cell::{Cell, Ref, RefCell, RefMut};
+use std::cell::{Cell, RefCell};
 use std::marker::PhantomData;
 use std::mem;
 use std::os::raw::{c_int, c_void};
+use std::rc::Rc;
 
 #[cfg(feature = "serialize")]
 use serde::Serialize;
@@ -238,7 +239,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
     where
         T: 'scope + UserData,
     {
-        let data = UserDataCell::new_arc(data);
+        let data = Rc::new(RefCell::new(data));
 
         // 'callback outliving 'scope is a lie to make the types work out, required due to the
         // inability to work with the more correct callback type that is universally quantified over
@@ -247,7 +248,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
         // parameters.
         fn wrap_method<'scope, 'lua, 'callback: 'scope, T: 'scope>(
             scope: &Scope<'lua, 'scope>,
-            data: UserDataCell<T>,
+            data: Rc<RefCell<T>>,
             data_ptr: *mut c_void,
             method: NonStaticMethod<'callback, T>,
         ) -> Result<Function<'lua>> {
@@ -263,7 +264,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
                     unsafe {
                         let _sg = StackGuard::new(lua.state);
                         check_stack(lua.state, 3)?;
-                        lua.push_userdata_ref(&ud.0)?;
+                        lua.push_userdata_ref(&ud.0, false)?;
                         if get_userdata(lua.state, -1) == data_ptr {
                             return Ok(());
                         }
@@ -276,10 +277,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
                 NonStaticMethod::Method(method) => {
                     let f = Box::new(move |lua, mut args: MultiValue<'callback>| {
                         check_ud_type(lua, args.pop_front())?;
-                        let data = data
-                            .try_borrow()
-                            .map(|cell| Ref::map(cell, AsRef::as_ref))
-                            .map_err(|_| Error::UserDataBorrowError)?;
+                        let data = data.try_borrow().map_err(|_| Error::UserDataBorrowError)?;
                         method(lua, &*data, args)
                     });
                     unsafe { scope.create_callback(f) }
@@ -293,7 +291,6 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
                             .map_err(|_| Error::RecursiveMutCallback)?;
                         let mut data = data
                             .try_borrow_mut()
-                            .map(|cell| RefMut::map(cell, AsMut::as_mut))
                             .map_err(|_| Error::UserDataBorrowMutError)?;
                         (&mut *method)(lua, &mut *data, args)
                     });
@@ -324,7 +321,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
             let _sg = StackGuard::new(lua.state);
             check_stack(lua.state, 13)?;
 
-            push_userdata(lua.state, data.clone())?;
+            push_userdata(lua.state, UserDataCell::new(data.clone()))?;
             let data_ptr = ffi::lua_touserdata(lua.state, -1);
 
             // Prepare metatable, add meta methods first and then meta fields
@@ -379,7 +376,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
                 methods_index = Some(ffi::lua_absindex(lua.state, -1));
             }
 
-            init_userdata_metatable::<()>(
+            init_userdata_metatable::<UserDataCell<Rc<RefCell<T>>>>(
                 lua.state,
                 metatable_index,
                 field_getters_index,
@@ -427,7 +424,8 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
                     mem::transmute(f)
                 }
 
-                vec![Box::new(seal(take_userdata::<UserDataCell<T>>(state)))]
+                let ud = Box::new(seal(take_userdata::<UserDataCell<Rc<RefCell<T>>>>(state)));
+                vec![ud]
             });
             self.destructors
                 .borrow_mut()
