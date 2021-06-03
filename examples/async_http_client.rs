@@ -1,12 +1,11 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use bstr::BString;
 use hyper::body::{Body as HyperBody, HttpBody as _};
 use hyper::Client as HyperClient;
 use tokio::sync::Mutex;
 
-use mlua::{Error, Lua, Result, UserData, UserDataMethods};
+use mlua::{ExternalResult, Lua, Result, UserData, UserDataMethods};
 
 #[derive(Clone)]
 struct BodyReader(Arc<Mutex<HyperBody>>);
@@ -19,11 +18,11 @@ impl BodyReader {
 
 impl UserData for BodyReader {
     fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
-        methods.add_async_method("read", |_, reader, ()| async move {
+        methods.add_async_method("read", |lua, reader, ()| async move {
             let mut reader = reader.0.lock().await;
             if let Some(bytes) = reader.data().await {
-                let bytes = bytes.map_err(Error::external)?;
-                return Ok(Some(BString::from(bytes.as_ref())));
+                let bytes = bytes.to_lua_err()?;
+                return Some(lua.create_string(&bytes)).transpose();
             }
             Ok(None)
         });
@@ -36,18 +35,18 @@ async fn main() -> Result<()> {
 
     let fetch_url = lua.create_async_function(|lua, uri: String| async move {
         let client = HyperClient::new();
-        let uri = uri.parse().map_err(Error::external)?;
-        let resp = client.get(uri).await.map_err(Error::external)?;
+        let uri = uri.parse().to_lua_err()?;
+        let resp = client.get(uri).await.to_lua_err()?;
 
         let lua_resp = lua.create_table()?;
         lua_resp.set("status", resp.status().as_u16())?;
 
         let mut headers = HashMap::new();
-        for (key, value) in resp.headers().iter() {
+        for (key, value) in resp.headers() {
             headers
                 .entry(key.as_str())
                 .or_insert(Vec::new())
-                .push(value.to_str().unwrap());
+                .push(value.to_str().to_lua_err()?);
         }
 
         lua_resp.set("headers", headers)?;

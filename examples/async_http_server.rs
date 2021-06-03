@@ -1,5 +1,4 @@
 use std::net::SocketAddr;
-use std::sync::Arc;
 
 use hyper::server::conn::AddrStream;
 use hyper::service::{make_service_fn, service_fn};
@@ -7,13 +6,12 @@ use hyper::{Body, Request, Response, Server};
 
 use mlua::{Error, Function, Lua, Result, Table, UserData, UserDataMethods};
 
-#[derive(Clone)]
-struct LuaRequest(Arc<(SocketAddr, Request<Body>)>);
+struct LuaRequest(SocketAddr, Request<Body>);
 
 impl UserData for LuaRequest {
     fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
-        methods.add_method("remote_addr", |_lua, req, ()| Ok((req.0).0.to_string()));
-        methods.add_method("method", |_lua, req, ()| Ok((req.0).1.method().to_string()));
+        methods.add_method("remote_addr", |_lua, req, ()| Ok((req.0).to_string()));
+        methods.add_method("method", |_lua, req, ()| Ok((req.1).method().to_string()));
     }
 }
 
@@ -25,7 +23,7 @@ async fn run_server(handler: Function<'static>) -> Result<()> {
             Ok::<_, Error>(service_fn(move |req: Request<Body>| {
                 let handler = handler.clone();
                 async move {
-                    let lua_req = LuaRequest(Arc::new((remote_addr, req)));
+                    let lua_req = LuaRequest(remote_addr, req);
                     let lua_resp: Table = handler.call_async(lua_req).await?;
                     let body = lua_resp
                         .get::<_, Option<String>>("body")?
@@ -72,7 +70,7 @@ async fn main() -> Result<()> {
                     ["X-Req-Method"] = req:method(),
                     ["X-Remote-Addr"] = req:remote_addr(),
                 },
-                body = "Hello, World!"
+                body = "Hello, World!\n"
             }
         end
     "#,

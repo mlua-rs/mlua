@@ -1,14 +1,12 @@
 use std::sync::Arc;
 
-use bstr::BString;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::Mutex;
 use tokio::task;
 
-use mlua::{Function, Lua, Result, UserData, UserDataMethods};
+use mlua::{Function, Lua, Result, String as LuaString, UserData, UserDataMethods};
 
-#[derive(Clone)]
 struct LuaTcp;
 
 #[derive(Clone)]
@@ -41,15 +39,15 @@ impl UserData for LuaTcpStream {
             Ok(stream.0.lock().await.peer_addr()?.to_string())
         });
 
-        methods.add_async_method("read", |_, stream, size: usize| async move {
+        methods.add_async_method("read", |lua, stream, size: usize| async move {
             let mut buf = vec![0; size];
             let n = stream.0.lock().await.read(&mut buf).await?;
             buf.truncate(n);
-            Ok(BString::from(buf))
+            lua.create_string(&buf)
         });
 
-        methods.add_async_method("write", |_, stream, data: BString| async move {
-            let n = stream.0.lock().await.write(&data).await?;
+        methods.add_async_method("write", |_, stream, data: LuaString| async move {
+            let n = stream.0.lock().await.write(&data.as_bytes()).await?;
             Ok(n)
         });
 

@@ -1,4 +1,4 @@
-use mlua::{Error, Lua, LuaSerdeExt, Result};
+use mlua::{ExternalResult, Lua, LuaSerdeExt, Result};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -10,11 +10,8 @@ async fn main() -> Result<()> {
         let resp = reqwest::get(&uri)
             .await
             .and_then(|resp| resp.error_for_status())
-            .map_err(Error::external)?;
-        let json = resp
-            .json::<serde_json::Value>()
-            .await
-            .map_err(Error::external)?;
+            .to_lua_err()?;
+        let json = resp.json::<serde_json::Value>().await.to_lua_err()?;
         lua.to_value(&json)
     })?;
     globals.set("fetch_json", fetch_json)?;
