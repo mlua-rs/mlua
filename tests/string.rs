@@ -40,6 +40,10 @@ fn string_views() -> Result<()> {
 
     assert_eq!(ok.to_str()?, "null bytes are valid utf-8, wh\0 knew?");
     assert_eq!(
+        ok.to_string_lossy(),
+        "null bytes are valid utf-8, wh\0 knew?"
+    );
+    assert_eq!(
         ok.as_bytes(),
         &b"null bytes are valid utf-8, wh\0 knew?"[..]
     );

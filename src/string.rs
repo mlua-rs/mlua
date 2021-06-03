@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+use std::string::String as StdString;
 use std::{slice, str};
 
 #[cfg(feature = "serialize")]
@@ -42,6 +44,28 @@ impl<'lua> String<'lua> {
             to: "&str",
             message: Some(e.to_string()),
         })
+    }
+
+    /// Converts this string to a [`Cow<str>`].
+    ///
+    /// Any non-Unicode sequences are replaced with [`U+FFFD REPLACEMENT CHARACTER`][U+FFFD].
+    ///
+    /// [U+FFFD]: std::char::REPLACEMENT_CHARACTER
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use mlua::{Lua, Result};
+    /// # fn main() -> Result<()> {
+    /// let lua = Lua::new();
+    ///
+    /// let s = lua.create_string(b"test\xff")?;
+    /// assert_eq!(s.to_string_lossy(), "test\u{fffd}");
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn to_string_lossy(&self) -> Cow<'_, str> {
+        StdString::from_utf8_lossy(self.as_bytes())
     }
 
     /// Get the bytes that make up this string.
