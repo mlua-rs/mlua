@@ -359,7 +359,6 @@ pub trait UserDataMethods<'lua, T: UserData> {
     #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
     fn add_async_function<S, A, R, F, FR>(&mut self, name: &S, function: F)
     where
-        T: Clone,
         S: AsRef<[u8]> + ?Sized,
         A: FromLuaMulti<'lua>,
         R: ToLuaMulti<'lua>,

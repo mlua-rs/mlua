@@ -663,7 +663,6 @@ impl<'lua, T: UserData> UserDataMethods<'lua, T> for NonStaticUserDataMethods<'l
     #[cfg(feature = "async")]
     fn add_async_function<S, A, R, F, FR>(&mut self, _name: &S, _function: F)
     where
-        T: Clone,
         S: AsRef<[u8]> + ?Sized,
         A: FromLuaMulti<'lua>,
         R: ToLuaMulti<'lua>,
