@@ -1,3 +1,11 @@
+## v0.6.0-beta.3
+
+- Errors are always `Send + Sync` to be compatible with anyhow crate
+- Implement `UserData` for `Rc<RefCell>`/`Arc<Mutex>`/`Arc<RwLock>`
+- Added `__ipairs` metamethod for Lua 5.2
+- Added `String::to_string_lossy`
+- Various bugfixes and improvements
+
 ## v0.6.0-beta.2
 
 - [**Breaking**] Removed `AnyUserData::has_metamethod()`
