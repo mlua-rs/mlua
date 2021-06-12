@@ -233,7 +233,7 @@ impl Lua {
             }
         }
 
-        let mut lua = unsafe { Self::unsafe_new_with(libs, options) };
+        let mut lua = unsafe { Self::inner_new(libs, options) };
 
         if libs.contains(StdLib::PACKAGE) {
             mlua_expect!(lua.disable_c_modules(), "Error during disabling C modules");
@@ -253,6 +253,11 @@ impl Lua {
     ///
     /// [`StdLib`]: struct.StdLib.html
     pub unsafe fn unsafe_new_with(libs: StdLib, options: LuaOptions) -> Lua {
+        ffi::keep_lua_symbols();
+        Self::inner_new(libs, options)
+    }
+
+    unsafe fn inner_new(libs: StdLib, options: LuaOptions) -> Lua {
         #[cfg_attr(any(feature = "lua51", feature = "luajit"), allow(dead_code))]
         unsafe extern "C" fn allocator(
             extra_data: *mut c_void,

@@ -245,7 +245,10 @@ fn main() {
         .define("COMPAT53_INCLUDE_SOURCE", None);
     #[cfg(feature = "luajit")]
     shim_cc.define("COMPAT53_LUAJIT", None);
-    shim_cc.file("src/ffi/shim/shim.c").compile("shim");
+    shim_cc
+        .file("src/ffi/shim/shim.c")
+        .file("src/ffi/shim/symbols.c")
+        .compile("shim");
 
     println!("cargo:rerun-if-changed=src/ffi/shim");
     println!("cargo:rerun-if-changed=build");

@@ -280,6 +280,9 @@ pub const SYS_MIN_ALIGN: usize = 8;
 )))]
 pub const SYS_MIN_ALIGN: usize = 16;
 
+// Re-rexport all symbols
+pub use symbols::keep_lua_symbols;
+
 #[allow(unused_imports, dead_code, non_camel_case_types)]
 #[allow(clippy::unreadable_literal)]
 mod glue {
@@ -293,5 +296,6 @@ mod lauxlib;
 mod lua;
 mod luaconf;
 mod lualib;
+mod symbols;
 
 pub mod safe;
