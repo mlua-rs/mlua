@@ -258,7 +258,7 @@ impl<'lua> Thread<'lua> {
         A: ToLuaMulti<'lua>,
         R: FromLuaMulti<'lua>,
     {
-        let args = args.to_lua_multi(&self.0.lua);
+        let args = args.to_lua_multi(self.0.lua);
         AsyncThread {
             thread: self,
             args0: RefCell::new(Some(args)),

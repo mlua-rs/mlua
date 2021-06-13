@@ -117,8 +117,8 @@ impl<'lua> PartialEq for LuaRef<'lua> {
         unsafe {
             let _sg = StackGuard::new(lua.state);
             assert_stack(lua.state, 2);
-            lua.push_ref(&self);
-            lua.push_ref(&other);
+            lua.push_ref(self);
+            lua.push_ref(other);
             ffi::lua_rawequal(lua.state, -1, -2) == 1
         }
     }

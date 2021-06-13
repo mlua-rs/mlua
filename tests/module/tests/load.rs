@@ -35,7 +35,7 @@ fn test_module_error() -> Result<()> {
         r#"
         local ok, err = pcall(require, "rust_module.error")
         assert(not ok)
-        assert(string:find(tostring(err), "custom module error"))
+        assert(string.find(tostring(err), "custom module error"))
     "#,
     )
     .exec()
