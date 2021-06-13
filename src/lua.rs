@@ -536,14 +536,18 @@ impl Lua {
         F: 'static + MaybeSend + Fn(&'callback Lua) -> Result<R>,
     {
         let cb = self.create_callback(Box::new(move |lua, _| func(lua)?.to_lua_multi(lua)))?;
-        match cb.call(()) {
-            Ok(res) => unsafe { self.push_value(res)? },
-            Err(err) => unsafe {
-                self.push_value(Value::Error(err))?;
-                // This longjmp is undesired, but we cannot wrap it to a C
-                ffi::lua_error(self.state)
-            },
-        }
+        let res = cb.call(());
+        unsafe {
+            check_stack(self.state, 2)?;
+            match res {
+                Ok(res) => self.push_value(res)?,
+                Err(err) => {
+                    self.push_value(Value::Error(err))?;
+                    // This longjmp is undesired, but we cannot wrap it to a C
+                    ffi::lua_error(self.state)
+                }
+            }
+        };
         Ok(1)
     }
 
