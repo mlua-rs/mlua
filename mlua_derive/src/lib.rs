@@ -1,39 +1,38 @@
 use proc_macro::TokenStream;
 use proc_macro2::{Ident, Span};
-use quote::quote_spanned;
-use syn::{parse_macro_input, spanned::Spanned, AttributeArgs, Error, ItemFn};
+use quote::quote;
+use syn::{parse_macro_input, AttributeArgs, Error, ItemFn};
 
 #[cfg(feature = "macros")]
 use {
     crate::chunk::Chunk, proc_macro::TokenTree, proc_macro2::TokenStream as TokenStream2,
-    proc_macro_error::proc_macro_error, quote::quote,
+    proc_macro_error::proc_macro_error,
 };
 
 #[proc_macro_attribute]
 pub fn lua_module(attr: TokenStream, item: TokenStream) -> TokenStream {
     let args = parse_macro_input!(attr as AttributeArgs);
-    let item = parse_macro_input!(item as ItemFn);
+    let func = parse_macro_input!(item as ItemFn);
 
     if !args.is_empty() {
-        let err = Error::new(Span::call_site(), "the number of arguments must be zero")
+        let err = Error::new(Span::call_site(), "the macro does not support arguments")
             .to_compile_error();
         return err.into();
     }
 
-    let span = item.span();
-    let item_name = item.sig.ident.clone();
-    let ext_entrypoint_name = Ident::new(&format!("luaopen_{}", item.sig.ident), Span::call_site());
+    let func_name = func.sig.ident.clone();
+    let ext_entrypoint_name = Ident::new(&format!("luaopen_{}", func_name), Span::call_site());
 
-    let wrapped = quote_spanned! { span =>
-        mlua::require_module_feature!();
+    let wrapped = quote! {
+        ::mlua::require_module_feature!();
+
+        #func
 
         #[no_mangle]
-        unsafe extern "C" fn #ext_entrypoint_name(state: *mut mlua::lua_State) -> std::os::raw::c_int {
-            #item
-
-            mlua::Lua::init_from_ptr(state)
-                .entrypoint1(#item_name)
-                .unwrap()
+        unsafe extern "C" fn #ext_entrypoint_name(state: *mut ::mlua::lua_State) -> ::std::os::raw::c_int {
+            ::mlua::Lua::init_from_ptr(state)
+                .entrypoint1(#func_name)
+                .expect("cannot initialize module")
         }
     };
 

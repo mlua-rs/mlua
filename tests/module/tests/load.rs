@@ -28,6 +28,19 @@ fn test_module_multi() -> Result<()> {
     .exec()
 }
 
+#[test]
+fn test_module_error() -> Result<()> {
+    let lua = make_lua()?;
+    lua.load(
+        r#"
+        local ok, err = pcall(require, "rust_module.error")
+        assert(not ok)
+        assert(string:find(tostring(err), "custom module error"))
+    "#,
+    )
+    .exec()
+}
+
 #[cfg(any(
     feature = "lua54",
     feature = "lua53",

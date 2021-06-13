@@ -32,3 +32,8 @@ fn rust_module_second(lua: &Lua) -> LuaResult<LuaTable> {
     exports.set("userdata", lua.create_userdata(MyUserData(123))?)?;
     Ok(exports)
 }
+
+#[mlua::lua_module]
+fn rust_module_error(_: &Lua) -> LuaResult<LuaTable> {
+    Err("custom module error".to_lua_err())
+}
