@@ -362,6 +362,12 @@ fn test_fields() -> Result<()> {
                 index.set("f", 321)?;
                 Ok(index)
             });
+            fields.add_meta_field_with(MetaMethod::NewIndex, |lua| {
+                lua.create_function(|lua, (_, field, val): (AnyUserData, String, Value)| {
+                    lua.globals().set(field, val)?;
+                    Ok(())
+                })
+            })
         }
     }
 
@@ -379,6 +385,9 @@ fn test_fields() -> Result<()> {
         assert(ud.uval == "hello")
 
         assert(ud.f == 321)
+
+        ud.unknown = 789
+        assert(unknown == 789)
     "#,
     )
     .exec()?;

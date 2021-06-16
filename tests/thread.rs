@@ -93,8 +93,8 @@ fn test_thread() -> Result<()> {
     Ok(())
 }
 
-#[cfg(any(feature = "lua54", all(feature = "luajit", feature = "vendored")))]
 #[test]
+#[cfg(any(feature = "lua54", all(feature = "luajit", feature = "vendored")))]
 fn test_thread_reset() -> Result<()> {
     use mlua::{AnyUserData, UserData};
     use std::sync::Arc;

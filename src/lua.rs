@@ -93,7 +93,7 @@ struct MemoryInfo {
 /// More information can be found in the Lua 5.x [documentation].
 ///
 /// [documentation]: https://www.lua.org/manual/5.4/manual.html#2.5
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum GCMode {
     Incremental,
     /// Requires `feature = "lua54"`
@@ -525,6 +525,7 @@ impl Lua {
     // Executes module entrypoint function, which returns only one Value.
     // The returned value then pushed to the Lua stack.
     #[doc(hidden)]
+    #[cfg(not(tarpaulin_include))]
     pub fn entrypoint1<'lua, 'callback, R, F>(&'lua self, func: F) -> Result<c_int>
     where
         'lua: 'callback,

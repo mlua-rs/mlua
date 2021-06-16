@@ -180,6 +180,7 @@ pub enum Error {
 /// A specialized `Result` type used by `mlua`'s API.
 pub type Result<T> = StdResult<T, Error>;
 
+#[cfg(not(tarpaulin_include))]
 impl fmt::Display for Error {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
         match *self {

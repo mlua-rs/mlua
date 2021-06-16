@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
-use std::ffi::CString;
+use std::ffi::{CStr, CString};
 
 use maplit::{btreemap, btreeset, hashmap, hashset};
 use mlua::{Lua, Result};
@@ -72,7 +72,12 @@ fn test_conv_cstring() -> Result<()> {
     let s = CString::new(b"hello".to_vec()).unwrap();
     lua.globals().set("s", s.clone())?;
     let s2: CString = lua.globals().get("s")?;
-    assert!(s == s2);
+    assert_eq!(s, s2);
+
+    let cs = CStr::from_bytes_with_nul(b"hello\0").unwrap();
+    lua.globals().set("cs", cs)?;
+    let cs2: CString = lua.globals().get("cs")?;
+    assert_eq!(cs, cs2.as_c_str());
 
     Ok(())
 }
