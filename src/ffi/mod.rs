@@ -280,8 +280,24 @@ pub const SYS_MIN_ALIGN: usize = 8;
 )))]
 pub const SYS_MIN_ALIGN: usize = 16;
 
-// Re-rexport all symbols
-pub use symbols::keep_lua_symbols;
+// Hack to avoid stripping a few unused Lua symbols that could be imported
+// by C modules in unsafe mode
+pub(crate) fn keep_lua_symbols() {
+    let mut symbols: Vec<*const extern "C" fn()> = Vec::new();
+    symbols.push(lua_atpanic as _);
+    symbols.push(lua_isuserdata as _);
+    symbols.push(lua_tocfunction as _);
+    symbols.push(luaL_loadstring as _);
+    symbols.push(luaL_openlibs as _);
+    if cfg!(any(any(
+        feature = "lua54",
+        feature = "lua53",
+        feature = "lua52"
+    ))) {
+        symbols.push(lua_getglobal as _);
+        symbols.push(lua_setglobal as _);
+    }
+}
 
 #[allow(unused_imports, dead_code, non_camel_case_types)]
 #[allow(clippy::unreadable_literal)]
@@ -296,4 +312,3 @@ mod lauxlib;
 mod lua;
 mod luaconf;
 mod lualib;
-mod symbols;

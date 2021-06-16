@@ -239,12 +239,5 @@ fn main() {
         println!("cargo:rerun-if-changed=src/ffi/glue/glue.c");
     }
 
-    let mut shim_cc = cc::Build::new();
-    shim_cc
-        .include(include_dir)
-        .file("src/ffi/shim/symbols.c")
-        .compile("shim");
-
-    println!("cargo:rerun-if-changed=src/ffi/shim");
     println!("cargo:rerun-if-changed=build");
 }
