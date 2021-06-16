@@ -10,7 +10,7 @@ use crate::error::{Error, Result};
 use crate::ffi;
 use crate::function::Function;
 use crate::types::{Integer, LuaRef};
-use crate::util::{assert_stack, check_stack, StackGuard};
+use crate::util::{assert_stack, check_stack, protect_lua, StackGuard};
 use crate::value::{FromLua, FromLuaMulti, Nil, ToLua, ToLuaMulti, Value};
 
 #[cfg(feature = "async")]
@@ -67,7 +67,7 @@ impl<'lua> Table<'lua> {
             lua.push_ref(&self.0);
             lua.push_value(key)?;
             lua.push_value(value)?;
-            ffi::safe::lua_settable(lua.state, -3)
+            protect_lua(lua.state, 3, 0, |state| ffi::lua_settable(state, -3))
         }
     }
 
@@ -105,7 +105,7 @@ impl<'lua> Table<'lua> {
 
             lua.push_ref(&self.0);
             lua.push_value(key)?;
-            ffi::safe::lua_gettable(lua.state, -2)?;
+            protect_lua(lua.state, 2, 1, |state| ffi::lua_gettable(state, -2))?;
 
             lua.pop_value()
         };
@@ -123,9 +123,9 @@ impl<'lua> Table<'lua> {
 
             lua.push_ref(&self.0);
             lua.push_value(key)?;
-            ffi::safe::lua_gettable(lua.state, -2)?;
-
-            Ok(ffi::lua_isnil(lua.state, -1) == 0)
+            protect_lua(lua.state, 2, 1, |state| {
+                ffi::lua_gettable(state, -2) != ffi::LUA_TNIL
+            })
         }
     }
 
@@ -198,7 +198,7 @@ impl<'lua> Table<'lua> {
             lua.push_ref(&self.0);
             lua.push_value(key)?;
             lua.push_value(value)?;
-            ffi::safe::lua_rawset(lua.state, -3)
+            protect_lua(lua.state, 3, 0, |state| ffi::lua_rawset(state, -3))
         }
     }
 
@@ -232,11 +232,18 @@ impl<'lua> Table<'lua> {
         let value = value.to_lua(lua)?;
         unsafe {
             let _sg = StackGuard::new(lua.state);
-            check_stack(lua.state, 6)?;
+            check_stack(lua.state, 5)?;
 
             lua.push_ref(&self.0);
             lua.push_value(value)?;
-            ffi::safe::lua_rawinsert(lua.state, -2, idx)
+            protect_lua(lua.state, 2, 0, |state| {
+                for i in (idx..=size).rev() {
+                    // table[i+1] = table[i]
+                    ffi::lua_rawgeti(state, -2, i);
+                    ffi::lua_rawseti(state, -3, i + 1);
+                }
+                ffi::lua_rawseti(state, -2, idx)
+            })
         }
     }
 
@@ -258,10 +265,17 @@ impl<'lua> Table<'lua> {
                 }
                 unsafe {
                     let _sg = StackGuard::new(lua.state);
-                    check_stack(lua.state, 5)?;
+                    check_stack(lua.state, 4)?;
 
                     lua.push_ref(&self.0);
-                    ffi::safe::lua_rawremove(lua.state, -1, idx)
+                    protect_lua(lua.state, 1, 0, |state| {
+                        for i in idx..size {
+                            ffi::lua_rawgeti(state, -1, i + 1);
+                            ffi::lua_rawseti(state, -2, i);
+                        }
+                        ffi::lua_pushnil(state);
+                        ffi::lua_rawseti(state, -2, size);
+                    })
                 }
             }
             _ => self.raw_set(key, Nil),
@@ -280,7 +294,7 @@ impl<'lua> Table<'lua> {
             check_stack(lua.state, 4)?;
 
             lua.push_ref(&self.0);
-            ffi::safe::luaL_len(lua.state, -1)
+            protect_lua(lua.state, 1, 0, |state| ffi::luaL_len(state, -1))
         }
     }
 
@@ -657,7 +671,10 @@ where
                 lua.push_ref(&self.table);
                 lua.push_value(prev_key)?;
 
-                if ffi::safe::lua_next(lua.state, -2)? != 0 {
+                let next = protect_lua(lua.state, 2, ffi::LUA_MULTRET, |state| {
+                    ffi::lua_next(state, -2)
+                })?;
+                if next != 0 {
                     let value = lua.pop_value();
                     let key = lua.pop_value();
                     Ok(Some((
@@ -709,13 +726,13 @@ where
 
             let res = (|| unsafe {
                 let _sg = StackGuard::new(lua.state);
-                check_stack(lua.state, 1 + if self.raw { 0 } else { 4 })?;
+                check_stack(lua.state, 1 + if self.raw { 0 } else { 3 })?;
 
                 lua.push_ref(&self.table);
                 let res = if self.raw {
                     ffi::lua_rawgeti(lua.state, -1, index)
                 } else {
-                    ffi::safe::lua_geti(lua.state, -1, index)?
+                    protect_lua(lua.state, 1, 1, |state| ffi::lua_geti(state, -1, index))?
                 };
                 match res {
                     ffi::LUA_TNIL if index > self.len.unwrap_or(0) => Ok(None),

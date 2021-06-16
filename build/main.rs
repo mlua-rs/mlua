@@ -242,11 +242,6 @@ fn main() {
     let mut shim_cc = cc::Build::new();
     shim_cc
         .include(include_dir)
-        .define("COMPAT53_INCLUDE_SOURCE", None);
-    #[cfg(feature = "luajit")]
-    shim_cc.define("COMPAT53_LUAJIT", None);
-    shim_cc
-        .file("src/ffi/shim/shim.c")
         .file("src/ffi/shim/symbols.c")
         .compile("shim");
 

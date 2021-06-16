@@ -20,7 +20,9 @@ use crate::function::Function;
 use crate::lua::Lua;
 use crate::table::{Table, TablePairs};
 use crate::types::{Callback, LuaRef, MaybeSend};
-use crate::util::{check_stack, get_destructed_userdata_metatable, get_userdata, StackGuard};
+use crate::util::{
+    check_stack, get_destructed_userdata_metatable, get_userdata, push_string, StackGuard,
+};
 use crate::value::{FromLua, FromLuaMulti, ToLua, ToLuaMulti};
 
 #[cfg(any(feature = "lua52", feature = "lua51", feature = "luajit"))]
@@ -926,7 +928,7 @@ impl<'lua> AnyUserData<'lua> {
             lua.push_userdata_ref(&self.0, true)?;
 
             // Get the special `__mlua_type_id`
-            ffi::safe::lua_pushstring(lua.state, "__mlua_type_id")?;
+            push_string(lua.state, "__mlua_type_id")?;
             if ffi::lua_rawget(lua.state, -2) != ffi::LUA_TUSERDATA {
                 return Err(Error::UserDataTypeMismatch);
             }

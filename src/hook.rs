@@ -165,8 +165,7 @@ impl HookTriggers {
     }
 }
 
-#[no_mangle]
-pub unsafe extern "C" fn mlua_hook_proc(state: *mut lua_State, ar: *mut lua_Debug) -> c_int {
+pub(crate) unsafe extern "C" fn hook_proc(state: *mut lua_State, ar: *mut lua_Debug) {
     callback_error(state, |_| {
         let debug = Debug {
             ar,
@@ -183,7 +182,7 @@ pub unsafe extern "C" fn mlua_hook_proc(state: *mut lua_State, ar: *mut lua_Debu
             Err(_) => mlua_panic!("Lua should not allow hooks to be called within another hook"),
         }?;
 
-        Ok(0)
+        Ok(())
     })
 }
 

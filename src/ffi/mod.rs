@@ -297,5 +297,3 @@ mod lua;
 mod luaconf;
 mod lualib;
 mod symbols;
-
-pub mod safe;

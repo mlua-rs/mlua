@@ -17,8 +17,8 @@ use crate::userdata::{
     AnyUserData, MetaMethod, UserData, UserDataCell, UserDataFields, UserDataMethods,
 };
 use crate::util::{
-    assert_stack, check_stack, get_userdata, init_userdata_metatable, push_userdata, take_userdata,
-    StackGuard,
+    assert_stack, check_stack, get_userdata, init_userdata_metatable, push_table, push_userdata,
+    rawset_field, take_userdata, StackGuard,
 };
 use crate::value::{FromLua, FromLuaMulti, MultiValue, ToLua, ToLuaMulti, Value};
 
@@ -326,27 +326,27 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
 
             // Prepare metatable, add meta methods first and then meta fields
             let meta_methods_nrec = ud_methods.meta_methods.len() + ud_fields.meta_fields.len() + 1;
-            ffi::safe::lua_createtable(lua.state, 0, meta_methods_nrec as c_int)?;
+            push_table(lua.state, 0, meta_methods_nrec as c_int)?;
 
             for (k, m) in ud_methods.meta_methods {
                 let data = data.clone();
                 lua.push_value(Value::Function(wrap_method(self, data, data_ptr, m)?))?;
-                ffi::safe::lua_rawsetfield(lua.state, -2, k.validate()?.name())?;
+                rawset_field(lua.state, -2, k.validate()?.name())?;
             }
             for (k, f) in ud_fields.meta_fields {
                 lua.push_value(f(mem::transmute(lua))?)?;
-                ffi::safe::lua_rawsetfield(lua.state, -2, k.validate()?.name())?;
+                rawset_field(lua.state, -2, k.validate()?.name())?;
             }
             let metatable_index = ffi::lua_absindex(lua.state, -1);
 
             let mut field_getters_index = None;
             let field_getters_nrec = ud_fields.field_getters.len();
             if field_getters_nrec > 0 {
-                ffi::safe::lua_createtable(lua.state, 0, field_getters_nrec as c_int)?;
+                push_table(lua.state, 0, field_getters_nrec as c_int)?;
                 for (k, m) in ud_fields.field_getters {
                     let data = data.clone();
                     lua.push_value(Value::Function(wrap_method(self, data, data_ptr, m)?))?;
-                    ffi::safe::lua_rawsetfield(lua.state, -2, &k)?;
+                    rawset_field(lua.state, -2, &k)?;
                 }
                 field_getters_index = Some(ffi::lua_absindex(lua.state, -1));
             }
@@ -354,11 +354,11 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
             let mut field_setters_index = None;
             let field_setters_nrec = ud_fields.field_setters.len();
             if field_setters_nrec > 0 {
-                ffi::safe::lua_createtable(lua.state, 0, field_setters_nrec as c_int)?;
+                push_table(lua.state, 0, field_setters_nrec as c_int)?;
                 for (k, m) in ud_fields.field_setters {
                     let data = data.clone();
                     lua.push_value(Value::Function(wrap_method(self, data, data_ptr, m)?))?;
-                    ffi::safe::lua_rawsetfield(lua.state, -2, &k)?;
+                    rawset_field(lua.state, -2, &k)?;
                 }
                 field_setters_index = Some(ffi::lua_absindex(lua.state, -1));
             }
@@ -367,11 +367,11 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
             let methods_nrec = ud_methods.methods.len();
             if methods_nrec > 0 {
                 // Create table used for methods lookup
-                ffi::safe::lua_createtable(lua.state, 0, methods_nrec as c_int)?;
+                push_table(lua.state, 0, methods_nrec as c_int)?;
                 for (k, m) in ud_methods.methods {
                     let data = data.clone();
                     lua.push_value(Value::Function(wrap_method(self, data, data_ptr, m)?))?;
-                    ffi::safe::lua_rawsetfield(lua.state, -2, &k)?;
+                    rawset_field(lua.state, -2, &k)?;
                 }
                 methods_index = Some(ffi::lua_absindex(lua.state, -1));
             }
@@ -456,15 +456,15 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
 
             // We know the destructor has not run yet because we hold a reference to the callback.
 
-            ffi::lua_getupvalue(state, -1, 2);
+            ffi::lua_getupvalue(state, -1, 1);
             let ud1 = take_userdata::<Callback>(state);
             ffi::lua_pushnil(state);
-            ffi::lua_setupvalue(state, -2, 2);
+            ffi::lua_setupvalue(state, -2, 1);
 
-            ffi::lua_getupvalue(state, -1, 3);
+            ffi::lua_getupvalue(state, -1, 2);
             let ud2 = take_userdata::<Lua>(state);
             ffi::lua_pushnil(state);
-            ffi::lua_setupvalue(state, -2, 3);
+            ffi::lua_setupvalue(state, -2, 2);
 
             vec![Box::new(ud1), Box::new(ud2)]
         });
@@ -506,15 +506,15 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
             ffi::lua_rawget(state, -2);
 
             // Destroy all upvalues
-            ffi::lua_getupvalue(state, -1, 2);
+            ffi::lua_getupvalue(state, -1, 1);
             let ud1 = take_userdata::<AsyncCallback>(state);
             ffi::lua_pushnil(state);
-            ffi::lua_setupvalue(state, -2, 2);
+            ffi::lua_setupvalue(state, -2, 1);
 
-            ffi::lua_getupvalue(state, -1, 3);
+            ffi::lua_getupvalue(state, -1, 2);
             let ud2 = take_userdata::<Lua>(state);
             ffi::lua_pushnil(state);
-            ffi::lua_setupvalue(state, -2, 3);
+            ffi::lua_setupvalue(state, -2, 2);
 
             ffi::lua_pop(state, 1);
             let mut data: Vec<Box<dyn Any>> = vec![Box::new(ud1), Box::new(ud2)];
@@ -522,16 +522,16 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
             // Finally, get polled future and destroy it
             f.lua.push_ref(&poll_str.0);
             if ffi::lua_rawget(state, -2) == ffi::LUA_TFUNCTION {
-                ffi::lua_getupvalue(state, -1, 2);
+                ffi::lua_getupvalue(state, -1, 1);
                 let ud3 = take_userdata::<LocalBoxFuture<Result<MultiValue>>>(state);
                 ffi::lua_pushnil(state);
-                ffi::lua_setupvalue(state, -2, 2);
+                ffi::lua_setupvalue(state, -2, 1);
                 data.push(Box::new(ud3));
 
-                ffi::lua_getupvalue(state, -1, 3);
+                ffi::lua_getupvalue(state, -1, 2);
                 let ud4 = take_userdata::<Lua>(state);
                 ffi::lua_pushnil(state);
-                ffi::lua_setupvalue(state, -2, 3);
+                ffi::lua_setupvalue(state, -2, 2);
                 data.push(Box::new(ud4));
             }
 

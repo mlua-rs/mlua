@@ -1,10 +1,11 @@
 use std::os::raw::{c_int, c_void};
+use std::ptr;
 use std::slice;
 
 use crate::error::{Error, Result};
 use crate::ffi;
 use crate::types::LuaRef;
-use crate::util::{assert_stack, check_stack, pop_error, StackGuard};
+use crate::util::{assert_stack, check_stack, error_traceback, pop_error, protect_lua, StackGuard};
 use crate::value::{FromLuaMulti, MultiValue, ToLuaMulti};
 
 #[cfg(feature = "async")]
@@ -65,7 +66,7 @@ impl<'lua> Function<'lua> {
             let _sg = StackGuard::new(lua.state);
             check_stack(lua.state, nargs + 3)?;
 
-            ffi::lua_pushcfunction(lua.state, ffi::safe::error_traceback);
+            ffi::lua_pushcfunction(lua.state, error_traceback);
             let stack_start = ffi::lua_gettop(lua.state);
             lua.push_ref(&self.0);
             for arg in args {
@@ -159,6 +160,26 @@ impl<'lua> Function<'lua> {
     /// # }
     /// ```
     pub fn bind<A: ToLuaMulti<'lua>>(&self, args: A) -> Result<Function<'lua>> {
+        unsafe extern "C" fn bind_call_impl(state: *mut ffi::lua_State) -> c_int {
+            let nargs = ffi::lua_gettop(state);
+            let nbinds = ffi::lua_tointeger(state, ffi::lua_upvalueindex(2)) as c_int;
+            ffi::luaL_checkstack(state, nbinds + 2, ptr::null());
+
+            ffi::lua_settop(state, nargs + nbinds + 1);
+            ffi::lua_rotate(state, -(nargs + nbinds + 1), nbinds + 1);
+
+            ffi::lua_pushvalue(state, ffi::lua_upvalueindex(1));
+            ffi::lua_replace(state, 1);
+
+            for i in 0..nbinds {
+                ffi::lua_pushvalue(state, ffi::lua_upvalueindex(i + 3));
+                ffi::lua_replace(state, i + 2);
+            }
+
+            ffi::lua_call(state, nargs + nbinds, ffi::LUA_MULTRET);
+            ffi::lua_gettop(state)
+        }
+
         let lua = self.0.lua;
 
         let args = args.to_lua_multi(lua)?;
@@ -177,7 +198,9 @@ impl<'lua> Function<'lua> {
             for arg in args {
                 lua.push_value(arg)?;
             }
-            ffi::safe::lua_pushcclosure(lua.state, ffi::safe::bind_call_impl, nargs + 2)?;
+            protect_lua(lua.state, nargs + 2, 1, |state| {
+                ffi::lua_pushcclosure(state, bind_call_impl, nargs + 2);
+            })?;
 
             Ok(Function(lua.pop_ref()))
         }

@@ -4,7 +4,7 @@ use std::os::raw::c_int;
 use crate::error::{Error, Result};
 use crate::ffi;
 use crate::types::LuaRef;
-use crate::util::{assert_stack, check_stack, pop_error, StackGuard};
+use crate::util::{assert_stack, check_stack, error_traceback, pop_error, protect_lua, StackGuard};
 use crate::value::{FromLuaMulti, MultiValue, ToLuaMulti};
 
 #[cfg(any(feature = "lua54", all(feature = "luajit", feature = "vendored"), doc))]
@@ -135,7 +135,7 @@ impl<'lua> Thread<'lua> {
 
             let ret = ffi::lua_resume(thread_state, lua.state, nargs, &mut nresults as *mut c_int);
             if ret != ffi::LUA_OK && ret != ffi::LUA_YIELD {
-                ffi::safe::error_traceback2(lua.state, thread_state)?;
+                protect_lua(lua.state, 0, 0, |_| error_traceback(thread_state))?;
                 return Err(pop_error(thread_state, ret));
             }
 
