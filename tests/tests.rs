@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::iter::FromIterator;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::string::String as StdString;
@@ -793,6 +794,23 @@ fn test_drop_registry_value() -> Result<()> {
     lua.load(r#"collectgarbage("collect")"#).exec()?;
 
     assert_eq!(Arc::strong_count(&rc), 1);
+
+    Ok(())
+}
+
+#[test]
+fn test_lua_registry_hash() -> Result<()> {
+    let lua = Lua::new();
+
+    let r1 = Arc::new(lua.create_registry_value("value1")?);
+    let r2 = Arc::new(lua.create_registry_value("value2")?);
+
+    let mut map = HashMap::new();
+    map.insert(r1.clone(), "value1");
+    map.insert(r2.clone(), "value2");
+
+    assert_eq!(map[&r1], "value1");
+    assert_eq!(map[&r2], "value2");
 
     Ok(())
 }

@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use std::hash::{Hash, Hasher};
 use std::os::raw::{c_int, c_void};
 use std::sync::{Arc, Mutex};
 use std::{fmt, mem, ptr};
@@ -66,6 +67,20 @@ impl fmt::Debug for RegistryKey {
         write!(f, "RegistryKey({})", self.registry_id)
     }
 }
+
+impl Hash for RegistryKey {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.registry_id.hash(state)
+    }
+}
+
+impl PartialEq for RegistryKey {
+    fn eq(&self, other: &RegistryKey) -> bool {
+        self.registry_id == other.registry_id && Arc::ptr_eq(&self.unref_list, &other.unref_list)
+    }
+}
+
+impl Eq for RegistryKey {}
 
 impl Drop for RegistryKey {
     fn drop(&mut self) {
