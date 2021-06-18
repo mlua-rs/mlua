@@ -8,7 +8,7 @@ use mlua::{
 };
 
 #[test]
-fn scope_func() -> Result<()> {
+fn test_scope_func() -> Result<()> {
     let lua = Lua::new();
 
     let rc = Rc::new(Cell::new(0));
@@ -38,7 +38,7 @@ fn scope_func() -> Result<()> {
 }
 
 #[test]
-fn scope_capture() -> Result<()> {
+fn test_scope_capture() -> Result<()> {
     let lua = Lua::new();
 
     let mut i = 0;
@@ -56,7 +56,7 @@ fn scope_capture() -> Result<()> {
 }
 
 #[test]
-fn scope_outer_lua_access() -> Result<()> {
+fn test_scope_outer_lua_access() -> Result<()> {
     let lua = Lua::new();
 
     let table = lua.create_table()?;
@@ -71,7 +71,7 @@ fn scope_outer_lua_access() -> Result<()> {
 }
 
 #[test]
-fn scope_userdata_fields() -> Result<()> {
+fn test_scope_userdata_fields() -> Result<()> {
     struct MyUserData<'a>(&'a Cell<i64>);
 
     impl<'a> UserData for MyUserData<'a> {
@@ -106,7 +106,7 @@ fn scope_userdata_fields() -> Result<()> {
 }
 
 #[test]
-fn scope_userdata_methods() -> Result<()> {
+fn test_scope_userdata_methods() -> Result<()> {
     struct MyUserData<'a>(&'a Cell<i64>);
 
     impl<'a> UserData for MyUserData<'a> {
@@ -147,7 +147,7 @@ fn scope_userdata_methods() -> Result<()> {
 }
 
 #[test]
-fn scope_userdata_functions() -> Result<()> {
+fn test_scope_userdata_functions() -> Result<()> {
     struct MyUserData<'a>(&'a i64);
 
     impl<'a> UserData for MyUserData<'a> {
@@ -189,7 +189,7 @@ fn scope_userdata_functions() -> Result<()> {
 }
 
 #[test]
-fn scope_userdata_mismatch() -> Result<()> {
+fn test_scope_userdata_mismatch() -> Result<()> {
     struct MyUserData<'a>(&'a Cell<i64>);
 
     impl<'a> UserData for MyUserData<'a> {
@@ -241,7 +241,7 @@ fn scope_userdata_mismatch() -> Result<()> {
 }
 
 #[test]
-fn scope_userdata_drop() -> Result<()> {
+fn test_scope_userdata_drop() -> Result<()> {
     let lua = Lua::new();
 
     struct MyUserData(Rc<()>);
@@ -299,7 +299,7 @@ fn scope_userdata_drop() -> Result<()> {
 }
 
 #[test]
-fn scope_nonstatic_userdata_drop() -> Result<()> {
+fn test_scope_nonstatic_userdata_drop() -> Result<()> {
     let lua = Lua::new();
 
     struct MyUserData<'a>(&'a Cell<i64>, Arc<()>);

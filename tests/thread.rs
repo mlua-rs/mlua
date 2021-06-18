@@ -137,7 +137,7 @@ fn test_thread_reset() -> Result<()> {
 }
 
 #[test]
-fn coroutine_from_closure() -> Result<()> {
+fn test_coroutine_from_closure() -> Result<()> {
     let lua = Lua::new();
 
     let thrd_main = lua.create_function(|_, ()| Ok(()))?;
@@ -161,7 +161,7 @@ fn coroutine_from_closure() -> Result<()> {
 }
 
 #[test]
-fn coroutine_panic() {
+fn test_coroutine_panic() {
     match catch_unwind(|| -> Result<()> {
         // check that coroutines propagate panics correctly
         let lua = Lua::new();

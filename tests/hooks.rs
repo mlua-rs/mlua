@@ -6,7 +6,7 @@ use std::sync::{Arc, Mutex};
 use mlua::{Error, HookTriggers, Lua, Result, Value};
 
 #[test]
-fn line_counts() -> Result<()> {
+fn test_line_counts() -> Result<()> {
     let output = Arc::new(Mutex::new(Vec::new()));
     let hook_output = output.clone();
 
@@ -43,7 +43,7 @@ fn line_counts() -> Result<()> {
 }
 
 #[test]
-fn function_calls() -> Result<()> {
+fn test_function_calls() -> Result<()> {
     let output = Arc::new(Mutex::new(Vec::new()));
     let hook_output = output.clone();
 
@@ -95,7 +95,7 @@ fn function_calls() -> Result<()> {
 }
 
 #[test]
-fn error_within_hook() -> Result<()> {
+fn test_error_within_hook() -> Result<()> {
     let lua = Lua::new();
     lua.set_hook(
         HookTriggers {
@@ -126,7 +126,7 @@ fn error_within_hook() -> Result<()> {
 }
 
 #[test]
-fn limit_execution_instructions() -> Result<()> {
+fn test_limit_execution_instructions() -> Result<()> {
     let lua = Lua::new();
     let mut max_instructions = 10000;
 
@@ -165,7 +165,7 @@ fn limit_execution_instructions() -> Result<()> {
 }
 
 #[test]
-fn hook_removal() -> Result<()> {
+fn test_hook_removal() -> Result<()> {
     let lua = Lua::new();
 
     lua.set_hook(
@@ -188,7 +188,7 @@ fn hook_removal() -> Result<()> {
 }
 
 #[test]
-fn hook_swap_within_hook() -> Result<()> {
+fn test_hook_swap_within_hook() -> Result<()> {
     thread_local! {
         static TL_LUA: RefCell<Option<Lua>> = RefCell::new(None);
     }

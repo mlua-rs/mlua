@@ -2,7 +2,7 @@ use bstr::{BStr, BString};
 use mlua::{Lua, Result};
 
 #[test]
-fn byte_string_round_trip() -> Result<()> {
+fn test_byte_string_round_trip() -> Result<()> {
     let lua = Lua::new();
 
     lua.load(

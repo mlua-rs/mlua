@@ -3,7 +3,7 @@ use std::borrow::Cow;
 use mlua::{Lua, Result, String};
 
 #[test]
-fn compare() {
+fn test_string_compare() {
     fn with_str<F: FnOnce(String)>(s: &str, f: F) {
         f(Lua::new().create_string(s).unwrap());
     }
@@ -21,7 +21,7 @@ fn compare() {
 }
 
 #[test]
-fn string_views() -> Result<()> {
+fn test_string_views() -> Result<()> {
     let lua = Lua::new();
 
     lua.load(
@@ -59,7 +59,7 @@ fn string_views() -> Result<()> {
 }
 
 #[test]
-fn raw_string() -> Result<()> {
+fn test_raw_string() -> Result<()> {
     let lua = Lua::new();
 
     let rs = lua.create_string(&[0, 1, 2, 3, 0, 1, 2, 3])?;

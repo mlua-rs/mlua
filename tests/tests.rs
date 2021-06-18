@@ -83,6 +83,7 @@ fn test_safety() -> Result<()> {
 #[test]
 fn test_load() -> Result<()> {
     let lua = Lua::new();
+
     let func = lua.load("return 1+2").into_function()?;
     let result: i32 = func.call(())?;
     assert_eq!(result, 3);
@@ -395,7 +396,7 @@ fn test_panic() -> Result<()> {
         Ok(lua)
     }
 
-    // Test triggerting Lua error passing Rust panic (must be resumed)
+    // Test triggering Lua error with sending Rust panic (must be resumed)
     {
         let lua = make_lua(LuaOptions::default())?;
 
@@ -451,7 +452,7 @@ fn test_panic() -> Result<()> {
         }
     }
 
-    // Test representing rust panic as a string
+    // Test representing Rust panic as a string
     match catch_unwind(|| -> Result<()> {
         let lua = make_lua(LuaOptions::default())?;
         lua.load(
@@ -486,7 +487,7 @@ fn test_panic() -> Result<()> {
         Err(p) => assert!(*p.downcast::<StdString>().unwrap() == "rust panic from lua"),
     }
 
-    // Test enabling `catch_rust_panics` option / xpcall correctness
+    // Test disabling `catch_rust_panics` option / xpcall correctness
     match catch_unwind(|| -> Result<()> {
         let lua = make_lua(LuaOptions::new().catch_rust_panics(false))?;
         lua.load(
@@ -612,7 +613,7 @@ fn test_pcall_xpcall() -> Result<()> {
     assert!(lua.load("xpcall()").exec().is_err());
     assert!(lua.load("xpcall(function() end)").exec().is_err());
 
-    // Lua 5.3/5.2 / LuaJIT compatible version of xpcall
+    // Lua >= 5.2 compatible version of xpcall for 5.1
     #[cfg(feature = "lua51")]
     lua.load(
         r#"
@@ -846,7 +847,7 @@ fn test_mismatched_registry_key() -> Result<()> {
 }
 
 #[test]
-fn too_many_returns() -> Result<()> {
+fn test_too_many_returns() -> Result<()> {
     let lua = Lua::new();
     let f = lua.create_function(|_, ()| Ok(Variadic::from_iter(1..1000000)))?;
     assert!(f.call::<_, Vec<u32>>(()).is_err());
@@ -854,7 +855,7 @@ fn too_many_returns() -> Result<()> {
 }
 
 #[test]
-fn too_many_arguments() -> Result<()> {
+fn test_too_many_arguments() -> Result<()> {
     let lua = Lua::new();
     lua.load("function test(...) end").exec()?;
     let args = Variadic::from_iter(1..1000000);
@@ -868,23 +869,20 @@ fn too_many_arguments() -> Result<()> {
 
 #[test]
 #[cfg(not(feature = "luajit"))]
-fn too_many_recursions() -> Result<()> {
+fn test_too_many_recursions() -> Result<()> {
     let lua = Lua::new();
+
     let f = lua
         .create_function(move |lua, ()| lua.globals().get::<_, Function>("f")?.call::<_, ()>(()))?;
-    lua.globals().set("f", f)?;
 
-    assert!(lua
-        .globals()
-        .get::<_, Function>("f")?
-        .call::<_, ()>(())
-        .is_err());
+    lua.globals().set("f", f.clone())?;
+    assert!(f.call::<_, ()>(()).is_err());
 
     Ok(())
 }
 
 #[test]
-fn too_many_binds() -> Result<()> {
+fn test_too_many_binds() -> Result<()> {
     let lua = Lua::new();
     let globals = lua.globals();
     lua.load(
@@ -923,7 +921,7 @@ fn test_ref_stack_exhaustion() {
 }
 
 #[test]
-fn large_args() -> Result<()> {
+fn test_large_args() -> Result<()> {
     let lua = Lua::new();
     let globals = lua.globals();
 
@@ -958,7 +956,7 @@ fn large_args() -> Result<()> {
 }
 
 #[test]
-fn large_args_ref() -> Result<()> {
+fn test_large_args_ref() -> Result<()> {
     let lua = Lua::new();
 
     let f = lua.create_function(|_, args: Variadic<String>| {
@@ -974,7 +972,7 @@ fn large_args_ref() -> Result<()> {
 }
 
 #[test]
-fn chunk_env() -> Result<()> {
+fn test_chunk_env() -> Result<()> {
     let lua = Lua::new();
 
     let assert: Function = lua.globals().get("assert")?;
@@ -1016,7 +1014,7 @@ fn chunk_env() -> Result<()> {
 }
 
 #[test]
-fn context_thread() -> Result<()> {
+fn test_context_thread() -> Result<()> {
     let lua = Lua::new();
 
     let f = lua
@@ -1039,7 +1037,7 @@ fn context_thread() -> Result<()> {
 
 #[test]
 #[cfg(any(feature = "lua51", feature = "luajit"))]
-fn context_thread_51() -> Result<()> {
+fn test_context_thread_51() -> Result<()> {
     let lua = Lua::new();
 
     let thread = lua.create_thread(
