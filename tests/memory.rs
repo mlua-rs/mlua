@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use mlua::{GCMode, Lua, Result, UserData};
+use mlua::{Lua, Result, UserData};
 
 #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
 use mlua::Error;
@@ -39,7 +39,7 @@ fn test_gc_control() -> Result<()> {
     let globals = lua.globals();
 
     #[cfg(feature = "lua54")]
-    assert_eq!(lua.gc_gen(0, 0), GCMode::Incremental);
+    assert_eq!(lua.gc_gen(0, 0), mlua::GCMode::Incremental);
 
     #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
     {
@@ -63,7 +63,7 @@ fn test_gc_control() -> Result<()> {
     assert_eq!(Arc::strong_count(&rc), 1);
 
     #[cfg(feature = "lua54")]
-    assert_eq!(lua.gc_inc(0, 0, 0), GCMode::Generational);
+    assert_eq!(lua.gc_inc(0, 0, 0), mlua::GCMode::Generational);
 
     Ok(())
 }
