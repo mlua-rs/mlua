@@ -1977,8 +1977,11 @@ impl Lua {
         let _sg = StackGuard::new(self.state);
         check_stack(self.state, 2)?;
 
-        push_userdata(self.state, data)?;
+        // If we unable to push metatable, then we should not push userdata.
+        // Otherwise we can have a memory leak.
         self.push_userdata_metatable::<T>()?;
+        push_userdata(self.state, data)?;
+        ffi::lua_rotate(self.state, -2, 1);
         ffi::lua_setmetatable(self.state, -2);
 
         Ok(AnyUserData(self.pop_ref()))

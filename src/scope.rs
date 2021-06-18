@@ -3,6 +3,7 @@ use std::cell::{Cell, RefCell};
 use std::marker::PhantomData;
 use std::mem;
 use std::os::raw::{c_int, c_void};
+use std::ptr;
 use std::rc::Rc;
 
 #[cfg(feature = "serialize")]
@@ -17,7 +18,7 @@ use crate::userdata::{
     AnyUserData, MetaMethod, UserData, UserDataCell, UserDataFields, UserDataMethods,
 };
 use crate::util::{
-    assert_stack, check_stack, get_userdata, init_userdata_metatable, push_table, push_userdata,
+    assert_stack, check_stack, get_userdata, init_userdata_metatable, protect_lua, push_table,
     rawset_field, take_userdata, StackGuard,
 };
 use crate::value::{FromLua, FromLuaMulti, MultiValue, ToLua, ToLuaMulti, Value};
@@ -321,9 +322,9 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
             let _sg = StackGuard::new(lua.state);
             check_stack(lua.state, 13)?;
 
-            push_userdata(lua.state, UserDataCell::new(data.clone()))?;
-            let data_ptr = ffi::lua_touserdata(lua.state, -1);
-
+            let data_ptr = protect_lua(lua.state, 0, 1, |state| {
+                ffi::lua_newuserdata(state, mem::size_of::<UserDataCell<Rc<RefCell<T>>>>())
+            })?;
             // Prepare metatable, add meta methods first and then meta fields
             let meta_methods_nrec = ud_methods.meta_methods.len() + ud_fields.meta_fields.len() + 1;
             push_table(lua.state, 0, meta_methods_nrec as c_int)?;
@@ -390,6 +391,8 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
             ffi::lua_pop(lua.state, count);
 
             let mt_id = ffi::lua_topointer(lua.state, -1);
+            // Write userdata just before attaching metatable with `__gc` metamethod
+            ptr::write(data_ptr as _, UserDataCell::new(data.clone()));
             ffi::lua_setmetatable(lua.state, -2);
             let ud = AnyUserData(lua.pop_ref());
             lua.register_userdata_metatable(mt_id as isize);
