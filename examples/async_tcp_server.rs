@@ -5,7 +5,7 @@ use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::Mutex;
 use tokio::task;
 
-use mlua::{Function, Lua, Result, String as LuaString, UserData, UserDataMethods};
+use mlua::{chunk, Function, Lua, Result, String as LuaString, UserData, UserDataMethods};
 
 struct LuaTcp;
 
@@ -64,15 +64,12 @@ async fn run_server(lua: &'static Lua) -> Result<()> {
         Ok(())
     })?;
 
-    let globals = lua.globals();
-    globals.set("tcp", LuaTcp)?;
-    globals.set("spawn", spawn)?;
+    let tcp = LuaTcp;
 
     let server = lua
-        .load(
-            r#"
+        .load(chunk! {
             local addr = ...
-            local listener = tcp.bind(addr)
+            local listener = $tcp.bind(addr)
             print("listening on "..addr)
 
             local accept_new = true
@@ -85,7 +82,7 @@ async fn run_server(lua: &'static Lua) -> Result<()> {
                     return
                 end
 
-                spawn(function()
+                $spawn(function()
                     while true do
                         local data = stream:read(100)
                         data = data:match("^%s*(.-)%s*$") -- trim
@@ -104,8 +101,7 @@ async fn run_server(lua: &'static Lua) -> Result<()> {
                     end
                 end)
             end
-        "#,
-        )
+        })
         .into_function()?;
 
     task::LocalSet::new()

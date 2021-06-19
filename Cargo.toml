@@ -76,11 +76,11 @@ required-features = ["async"]
 
 [[example]]
 name = "async_http_client"
-required-features = ["async"]
+required-features = ["async", "macros"]
 
 [[example]]
 name = "async_http_reqwest"
-required-features = ["async", "serialize"]
+required-features = ["async", "serialize", "macros"]
 
 [[example]]
 name = "async_http_server"
@@ -88,7 +88,11 @@ required-features = ["async", "send"]
 
 [[example]]
 name = "async_tcp_server"
-required-features = ["async"]
+required-features = ["async", "macros"]
+
+[[example]]
+name = "guided_tour"
+required-features = ["macros"]
 
 [[example]]
 name = "serialize"

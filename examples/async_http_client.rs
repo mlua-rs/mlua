@@ -5,7 +5,7 @@ use hyper::body::{Body as HyperBody, HttpBody as _};
 use hyper::Client as HyperClient;
 use tokio::sync::Mutex;
 
-use mlua::{ExternalResult, Lua, Result, UserData, UserDataMethods};
+use mlua::{chunk, ExternalResult, Lua, Result, UserData, UserDataMethods};
 
 #[derive(Clone)]
 struct BodyReader(Arc<Mutex<HyperBody>>);
@@ -55,13 +55,9 @@ async fn main() -> Result<()> {
         Ok(lua_resp)
     })?;
 
-    let globals = lua.globals();
-    globals.set("fetch_url", fetch_url)?;
-
     let f = lua
-        .load(
-            r#"
-            local res = fetch_url(...)
+        .load(chunk! {
+            local res = $fetch_url(...)
             print(res.status)
             for key, vals in pairs(res.headers) do
                 for _, val in ipairs(vals) do
@@ -74,8 +70,7 @@ async fn main() -> Result<()> {
                     print(body)
                 end
             until not body
-        "#,
-        )
+        })
         .into_function()?;
 
     f.call_async("http://httpbin.org/ip").await
