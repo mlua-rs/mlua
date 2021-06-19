@@ -5,7 +5,7 @@ use std::ffi::CString;
 use std::fmt;
 use std::marker::PhantomData;
 use std::os::raw::{c_char, c_int, c_void};
-use std::panic::resume_unwind;
+use std::panic::{catch_unwind, resume_unwind, AssertUnwindSafe};
 use std::sync::{Arc, Mutex, MutexGuard, RwLock, Weak};
 use std::{mem, ptr, str};
 
@@ -25,11 +25,11 @@ use crate::userdata::{
     AnyUserData, MetaMethod, UserData, UserDataCell, UserDataFields, UserDataMethods,
 };
 use crate::util::{
-    assert_stack, callback_error, check_stack, get_destructed_userdata_metatable, get_gc_userdata,
-    get_main_state, get_userdata, get_wrapped_error, init_error_registry, init_gc_metatable_for,
-    init_userdata_metatable, pop_error, protect_lua, push_gc_userdata, push_string, push_table,
-    push_userdata, push_wrapped_error, rawset_field, safe_pcall, safe_xpcall, StackGuard,
-    WrappedPanic,
+    self, assert_stack, callback_error, check_stack, get_destructed_userdata_metatable,
+    get_gc_metatable_for, get_gc_userdata, get_main_state, get_userdata, get_wrapped_error,
+    init_error_registry, init_gc_metatable_for, init_userdata_metatable, pop_error, protect_lua,
+    push_gc_userdata, push_string, push_table, push_userdata, push_wrapped_error, rawset_field,
+    safe_pcall, safe_xpcall, StackGuard, WrappedError, WrappedPanic,
 };
 use crate::value::{FromLua, FromLuaMulti, MultiValue, Nil, ToLua, ToLuaMulti, Value};
 
@@ -75,6 +75,10 @@ struct ExtraData {
     ref_stack_size: c_int,
     ref_stack_top: c_int,
     ref_free: Vec<c_int>,
+
+    // Vec of preallocated WrappedError/WrappedPanic structs
+    // Used for callback optimization
+    prealloc_wrapped_errors: Vec<c_int>,
 
     hook_callback: Option<HookCallback>,
 }
@@ -158,7 +162,12 @@ impl Drop for Lua {
     fn drop(&mut self) {
         unsafe {
             if !self.ephemeral {
-                let extra = mlua_expect!(self.extra.lock(), "extra is poisoned");
+                let mut extra = mlua_expect!(self.extra.lock(), "extra is poisoned");
+                for index in extra.prealloc_wrapped_errors.clone() {
+                    ffi::lua_pushnil(extra.ref_thread);
+                    ffi::lua_replace(extra.ref_thread, index);
+                    extra.ref_free.push(index);
+                }
                 mlua_debug_assert!(
                     ffi::lua_gettop(extra.ref_thread) == extra.ref_stack_top
                         && extra.ref_stack_top as usize == extra.ref_free.len(),
@@ -434,6 +443,7 @@ impl Lua {
             ref_stack_size: ffi::LUA_MINSTACK - 1,
             ref_stack_top: 0,
             ref_free: Vec::new(),
+            prealloc_wrapped_errors: Vec::new(),
             hook_callback: None,
         }));
 
@@ -1585,7 +1595,7 @@ impl Lua {
     pub(crate) unsafe fn pop_ref(&self) -> LuaRef {
         let extra = mlua_expect!(self.extra.lock(), "extra is poisoned");
         ffi::lua_xmove(self.state, extra.ref_thread, 1);
-        let index = ref_stack_pop(extra);
+        let (index, _) = ref_stack_pop(extra);
         LuaRef { lua: self, index }
     }
 
@@ -1593,7 +1603,7 @@ impl Lua {
         unsafe {
             let extra = mlua_expect!(self.extra.lock(), "extra is poisoned");
             ffi::lua_pushvalue(extra.ref_thread, lref.index);
-            let index = ref_stack_pop(extra);
+            let (index, _) = ref_stack_pop(extra);
             LuaRef { lua: self, index }
         }
     }
@@ -1767,7 +1777,7 @@ impl Lua {
         'lua: 'callback,
     {
         unsafe extern "C" fn call_callback(state: *mut ffi::lua_State) -> c_int {
-            callback_error(state, |nargs| {
+            callback_error2(state, |nargs| {
                 let upvalue_idx1 = ffi::lua_upvalueindex(1);
                 let upvalue_idx2 = ffi::lua_upvalueindex(2);
                 if ffi::lua_type(state, upvalue_idx1) == ffi::LUA_TNIL
@@ -1834,7 +1844,7 @@ impl Lua {
         }
 
         unsafe extern "C" fn call_callback(state: *mut ffi::lua_State) -> c_int {
-            callback_error(state, |nargs| {
+            callback_error2(state, |nargs| {
                 let upvalue_idx1 = ffi::lua_upvalueindex(1);
                 let upvalue_idx2 = ffi::lua_upvalueindex(2);
                 if ffi::lua_type(state, upvalue_idx1) == ffi::LUA_TNIL
@@ -1871,7 +1881,7 @@ impl Lua {
         }
 
         unsafe extern "C" fn poll_future(state: *mut ffi::lua_State) -> c_int {
-            callback_error(state, |nargs| {
+            callback_error2(state, |nargs| {
                 let upvalue_idx1 = ffi::lua_upvalueindex(1);
                 let upvalue_idx2 = ffi::lua_upvalueindex(2);
                 if ffi::lua_type(state, upvalue_idx1) == ffi::LUA_TNIL
@@ -2278,6 +2288,97 @@ impl<'lua, T: AsRef<[u8]> + ?Sized> AsChunk<'lua> for T {
     }
 }
 
+// An optimized version of `callback_error` that does not allocate `WrappedError+Panic` userdata
+// and instead reuses first unsed and cached value from previous calls (or allocates new).
+// It assumes that ephemeral `Lua` struct is passed as a 2nd upvalue.
+pub unsafe fn callback_error2<F, R>(state: *mut ffi::lua_State, f: F) -> R
+where
+    F: FnOnce(c_int) -> Result<R>,
+{
+    let upvalue_idx2 = ffi::lua_upvalueindex(2);
+    if ffi::lua_type(state, upvalue_idx2) == ffi::LUA_TNIL {
+        return callback_error(state, f);
+    }
+
+    let nargs = ffi::lua_gettop(state);
+
+    // We need 2 extra stack spaces to store preallocated memory and error/panic metatable.
+    let extra_stack = if nargs < 2 { 2 - nargs } else { 1 };
+    ffi::luaL_checkstack(
+        state,
+        extra_stack,
+        cstr!("not enough stack space for callback error handling"),
+    );
+
+    // We cannot shadow Rust errors with Lua ones, so we need to obtain pre-allocated memory
+    // to store a wrapped error or panic *before* we proceed.
+    let lua = get_userdata::<Lua>(state, upvalue_idx2);
+    let ud = {
+        let mut extra = mlua_expect!((*lua).extra.lock(), "extra is poisoned");
+        if let Some(index) = extra.prealloc_wrapped_errors.pop() {
+            // Move pre-allocatd WrappedError+Panic from the ref thread to the current thread
+            ffi::lua_pushvalue(extra.ref_thread, index);
+            ffi::lua_xmove(extra.ref_thread, state, 1);
+            ffi::lua_pushnil(extra.ref_thread);
+            ffi::lua_replace(extra.ref_thread, index);
+            extra.ref_free.push(index);
+            ffi::lua_touserdata(state, -1)
+        } else {
+            ffi::lua_newuserdata(
+                state,
+                mem::size_of::<WrappedError>().max(mem::size_of::<WrappedPanic>()),
+            )
+        }
+    };
+    ffi::lua_rotate(state, 1, 1);
+
+    match catch_unwind(AssertUnwindSafe(|| f(nargs))) {
+        Ok(Ok(r)) => {
+            let extra = mlua_expect!((*lua).extra.lock(), "extra is poisoned");
+            if extra.prealloc_wrapped_errors.len() < 10 {
+                // Return unused WrappedError+Panic to the cache
+                ffi::lua_rotate(state, 1, -1);
+                ffi::lua_xmove(state, extra.ref_thread, 1);
+                let (index, mut extra) = ref_stack_pop(extra);
+                extra.prealloc_wrapped_errors.push(index);
+            } else {
+                ffi::lua_remove(state, 1);
+            }
+
+            r
+        }
+        Ok(Err(err)) => {
+            ffi::lua_settop(state, 1);
+
+            let wrapped_error = ud as *mut WrappedError;
+            ptr::write(wrapped_error, WrappedError(err));
+            get_gc_metatable_for::<WrappedError>(state);
+            ffi::lua_setmetatable(state, -2);
+
+            // Convert to CallbackError and attach traceback
+            let traceback = if ffi::lua_checkstack(state, ffi::LUA_TRACEBACK_STACK) != 0 {
+                ffi::luaL_traceback(state, state, ptr::null(), 0);
+                let traceback = util::to_string(state, -1);
+                ffi::lua_pop(state, 1);
+                traceback
+            } else {
+                "<not enough stack space for traceback>".to_string()
+            };
+            let cause = Arc::new((*wrapped_error).0.clone());
+            (*wrapped_error).0 = Error::CallbackError { traceback, cause };
+
+            ffi::lua_error(state)
+        }
+        Err(p) => {
+            ffi::lua_settop(state, 1);
+            ptr::write(ud as *mut WrappedPanic, WrappedPanic(Some(p)));
+            get_gc_metatable_for::<WrappedPanic>(state);
+            ffi::lua_setmetatable(state, -2);
+            ffi::lua_error(state)
+        }
+    }
+}
+
 // Uses 3 stack spaces
 unsafe fn load_from_std_lib(state: *mut ffi::lua_State, libs: StdLib) -> Result<()> {
     #[inline(always)]
@@ -2399,10 +2500,11 @@ unsafe fn load_from_std_lib(state: *mut ffi::lua_State, libs: StdLib) -> Result<
     Ok(())
 }
 
-unsafe fn ref_stack_pop(mut extra: MutexGuard<ExtraData>) -> c_int {
+// We move `extra` (`MutexGuard`) here to correctly drop it if panic
+unsafe fn ref_stack_pop(mut extra: MutexGuard<ExtraData>) -> (c_int, MutexGuard<ExtraData>) {
     if let Some(free) = extra.ref_free.pop() {
         ffi::lua_replace(extra.ref_thread, free);
-        return free;
+        return (free, extra);
     }
 
     // Try to grow max stack size
@@ -2427,7 +2529,7 @@ unsafe fn ref_stack_pop(mut extra: MutexGuard<ExtraData>) -> c_int {
         extra.ref_stack_size += inc;
     }
     extra.ref_stack_top += 1;
-    extra.ref_stack_top
+    (extra.ref_stack_top, extra)
 }
 
 struct StaticUserDataMethods<'lua, T: 'static + UserData> {

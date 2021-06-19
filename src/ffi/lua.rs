@@ -111,6 +111,10 @@ pub const LUA_RIDX_GLOBALS: lua_Integer = 2;
 #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
 pub const LUA_RIDX_LAST: lua_Integer = LUA_RIDX_GLOBALS;
 
+// I believe `luaL_traceback` < 5.4 requires this much free stack to not error.
+// 5.4 uses `luaL_Buffer`
+pub const LUA_TRACEBACK_STACK: c_int = 11;
+
 /// A Lua number, usually equivalent to `f64`.
 pub type lua_Number = luaconf::LUA_NUMBER;
 

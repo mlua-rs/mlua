@@ -17,10 +17,6 @@ static METATABLE_CACHE: Lazy<Mutex<HashMap<TypeId, u8>>> = Lazy::new(|| {
     Mutex::new(HashMap::with_capacity(32))
 });
 
-// I believe `luaL_traceback` < 5.4 requires this much free stack to not error.
-// 5.4 uses `luaL_Buffer`
-const LUA_TRACEBACK_STACK: c_int = 11;
-
 // Checks that Lua has enough free stack space for future stack operations. On failure, this will
 // panic with an internal error message.
 pub unsafe fn assert_stack(state: *mut ffi::lua_State, amount: c_int) {
@@ -474,8 +470,7 @@ where
 {
     let nargs = ffi::lua_gettop(state);
 
-    // We need one extra stack space to store preallocated memory, and at least 2
-    // stack spaces overall for handling error metatables
+    // We need 2 extra stack spaces to store preallocated memory and error/panic metatable
     let extra_stack = if nargs < 2 { 2 - nargs } else { 1 };
     ffi::luaL_checkstack(
         state,
@@ -505,7 +500,7 @@ where
             ffi::lua_setmetatable(state, -2);
 
             // Convert to CallbackError and attach traceback
-            let traceback = if ffi::lua_checkstack(state, LUA_TRACEBACK_STACK) != 0 {
+            let traceback = if ffi::lua_checkstack(state, ffi::LUA_TRACEBACK_STACK) != 0 {
                 ffi::luaL_traceback(state, state, ptr::null(), 0);
                 let traceback = to_string(state, -1);
                 ffi::lua_pop(state, 1);
@@ -539,7 +534,7 @@ pub unsafe extern "C" fn error_traceback(state: *mut ffi::lua_State) -> c_int {
         && get_gc_userdata::<WrappedPanic>(state, -1).is_null()
     {
         let s = ffi::luaL_tolstring(state, -1, ptr::null_mut());
-        if ffi::lua_checkstack(state, LUA_TRACEBACK_STACK) != 0 {
+        if ffi::lua_checkstack(state, ffi::LUA_TRACEBACK_STACK) != 0 {
             ffi::luaL_traceback(state, state, s, 1);
             ffi::lua_remove(state, -2);
         }
@@ -866,7 +861,7 @@ pub(crate) struct WrappedPanic(pub Option<Box<dyn Any + Send + 'static>>);
 
 // Converts the given lua value to a string in a reasonable format without causing a Lua error or
 // panicking.
-unsafe fn to_string(state: *mut ffi::lua_State, index: c_int) -> String {
+pub(crate) unsafe fn to_string(state: *mut ffi::lua_State, index: c_int) -> String {
     match ffi::lua_type(state, index) {
         ffi::LUA_TNONE => "<none>".to_string(),
         ffi::LUA_TNIL => "<nil>".to_string(),
