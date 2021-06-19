@@ -97,7 +97,7 @@ Add to `Cargo.toml` :
 
 ``` toml
 [dependencies]
-mlua = { version = "0.6.0-beta", features = ["lua53", "vendored"] }
+mlua = { version = "0.6", features = ["lua53", "vendored"] }
 ```
 
 `main.rs`
@@ -132,7 +132,7 @@ Add to `Cargo.toml` :
 crate-type = ["cdylib"]
 
 [dependencies]
-mlua = { version = "0.6.0-beta", features = ["lua53", "vendored", "module"] }
+mlua = { version = "0.6", features = ["lua53", "vendored", "module"] }
 ```
 
 `lib.rs` :
@@ -184,6 +184,15 @@ Easiest way is to use either MinGW64 (as part of [MSYS2](https://github.com/msys
 MSVC with `LUA_INC` / `LUA_LIB` / `LUA_LIB_NAME` environment variables.
 
 More details about compiling and linking Lua modules can be found on the [Building Modules](http://lua-users.org/wiki/BuildingModules) page.
+
+### Publishing to luarocks.org
+
+There is a LuaRocks build backend for mlua modules [`luarocks-build-rust-mlua`].
+
+Modules written in Rust and published to luarocks:
+- [`lua-ryaml`](https://github.com/khvzak/lua-ryaml)
+
+[`luarocks-build-rust-mlua`]: https://luarocks.org/modules/khvzak/luarocks-build-rust-mlua
 
 ## Safety
 
