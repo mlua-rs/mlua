@@ -2289,7 +2289,7 @@ impl<'lua, T: AsRef<[u8]> + ?Sized> AsChunk<'lua> for T {
 }
 
 // An optimized version of `callback_error` that does not allocate `WrappedError+Panic` userdata
-// and instead reuses first unsed and cached value from previous calls (or allocates new).
+// and instead reuses unsed and cached values from previous calls (or allocates new).
 // It assumes that ephemeral `Lua` struct is passed as a 2nd upvalue.
 pub unsafe fn callback_error2<F, R>(state: *mut ffi::lua_State, f: F) -> R
 where
@@ -2310,47 +2310,73 @@ where
         cstr!("not enough stack space for callback error handling"),
     );
 
+    enum PreallocatedError {
+        New(*mut c_void),
+        Cached(i32),
+    }
+
     // We cannot shadow Rust errors with Lua ones, so we need to obtain pre-allocated memory
     // to store a wrapped error or panic *before* we proceed.
     let lua = get_userdata::<Lua>(state, upvalue_idx2);
-    let ud = {
+    let prealloc_err = {
         let mut extra = mlua_expect!((*lua).extra.lock(), "extra is poisoned");
-        if let Some(index) = extra.prealloc_wrapped_errors.pop() {
-            // Move pre-allocatd WrappedError+Panic from the ref thread to the current thread
-            ffi::lua_pushvalue(extra.ref_thread, index);
-            ffi::lua_xmove(extra.ref_thread, state, 1);
-            ffi::lua_pushnil(extra.ref_thread);
-            ffi::lua_replace(extra.ref_thread, index);
-            extra.ref_free.push(index);
-            ffi::lua_touserdata(state, -1)
-        } else {
-            ffi::lua_newuserdata(
-                state,
-                mem::size_of::<WrappedError>().max(mem::size_of::<WrappedPanic>()),
-            )
+        match extra.prealloc_wrapped_errors.pop() {
+            Some(index) => PreallocatedError::Cached(index),
+            None => {
+                let size = mem::size_of::<WrappedError>().max(mem::size_of::<WrappedPanic>());
+                let ud = ffi::lua_newuserdata(state, size);
+                ffi::lua_rotate(state, 1, 1);
+                PreallocatedError::New(ud)
+            }
         }
     };
-    ffi::lua_rotate(state, 1, 1);
+
+    let get_prealloc_err = || {
+        let mut extra = mlua_expect!((*lua).extra.lock(), "extra is poisoned");
+        match prealloc_err {
+            PreallocatedError::New(ud) => {
+                ffi::lua_settop(state, 1);
+                ud
+            }
+            PreallocatedError::Cached(index) => {
+                ffi::lua_settop(state, 0);
+                ffi::lua_pushvalue(extra.ref_thread, index);
+                ffi::lua_xmove(extra.ref_thread, state, 1);
+                ffi::lua_pushnil(extra.ref_thread);
+                ffi::lua_replace(extra.ref_thread, index);
+                extra.ref_free.push(index);
+                ffi::lua_touserdata(state, -1)
+            }
+        }
+    };
 
     match catch_unwind(AssertUnwindSafe(|| f(nargs))) {
         Ok(Ok(r)) => {
-            let extra = mlua_expect!((*lua).extra.lock(), "extra is poisoned");
-            if extra.prealloc_wrapped_errors.len() < 10 {
-                // Return unused WrappedError+Panic to the cache
-                ffi::lua_rotate(state, 1, -1);
-                ffi::lua_xmove(state, extra.ref_thread, 1);
-                let (index, mut extra) = ref_stack_pop(extra);
-                extra.prealloc_wrapped_errors.push(index);
-            } else {
-                ffi::lua_remove(state, 1);
+            // Return unused WrappedError+Panic to the cache
+            let mut extra = mlua_expect!((*lua).extra.lock(), "extra is poisoned");
+            match prealloc_err {
+                PreallocatedError::New(_) if extra.prealloc_wrapped_errors.len() < 16 => {
+                    ffi::lua_rotate(state, 1, -1);
+                    ffi::lua_xmove(state, extra.ref_thread, 1);
+                    let (index, mut extra) = ref_stack_pop(extra);
+                    extra.prealloc_wrapped_errors.push(index);
+                }
+                PreallocatedError::New(_) => {
+                    ffi::lua_remove(state, 1);
+                }
+                PreallocatedError::Cached(index) if extra.prealloc_wrapped_errors.len() < 16 => {
+                    extra.prealloc_wrapped_errors.push(index);
+                }
+                PreallocatedError::Cached(index) => {
+                    ffi::lua_pushnil(extra.ref_thread);
+                    ffi::lua_replace(extra.ref_thread, index);
+                    extra.ref_free.push(index);
+                }
             }
-
             r
         }
         Ok(Err(err)) => {
-            ffi::lua_settop(state, 1);
-
-            let wrapped_error = ud as *mut WrappedError;
+            let wrapped_error = get_prealloc_err() as *mut WrappedError;
             ptr::write(wrapped_error, WrappedError(err));
             get_gc_metatable_for::<WrappedError>(state);
             ffi::lua_setmetatable(state, -2);
@@ -2370,8 +2396,8 @@ where
             ffi::lua_error(state)
         }
         Err(p) => {
-            ffi::lua_settop(state, 1);
-            ptr::write(ud as *mut WrappedPanic, WrappedPanic(Some(p)));
+            let wrapped_panic = get_prealloc_err() as *mut WrappedPanic;
+            ptr::write(wrapped_panic, WrappedPanic(Some(p)));
             get_gc_metatable_for::<WrappedPanic>(state);
             ffi::lua_setmetatable(state, -2);
             ffi::lua_error(state)
