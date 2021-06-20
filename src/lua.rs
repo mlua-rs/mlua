@@ -2694,11 +2694,15 @@ impl<'lua, T: 'static + UserData> StaticUserDataMethods<'lua, T> {
         Box::new(move |lua, mut args| {
             if let Some(front) = args.pop_front() {
                 let userdata = AnyUserData::from_lua(front, lua)?;
-                match userdata.type_id()? {
-                    id if id == TypeId::of::<T>() => {
-                        let ud = userdata.borrow::<T>()?;
-                        method(lua, &ud, A::from_lua_multi(args, lua)?)?.to_lua_multi(lua)
+                // Try normal userdata first
+                let err = match userdata.borrow::<T>() {
+                    Ok(ud) => {
+                        return method(lua, &ud, A::from_lua_multi(args, lua)?)?.to_lua_multi(lua)
                     }
+                    Err(err) => err,
+                };
+                match userdata.type_id()? {
+                    id if id == TypeId::of::<T>() => Err(err),
                     #[cfg(not(feature = "send"))]
                     id if id == TypeId::of::<Rc<RefCell<T>>>() => {
                         let ud = userdata.borrow::<Rc<RefCell<T>>>()?;
