@@ -77,15 +77,15 @@ pub fn chunk(input: TokenStream) -> TokenStream {
                 (#source).as_bytes()
             }
 
-            fn env(&self, lua: &'lua Lua) -> Option<Result<Value<'lua>>> {
+            fn env(&self, lua: &'lua Lua) -> Result<Option<Value<'lua>>> {
                 if #caps_len > 0 {
                     if let Ok(mut make_env) = self.0.lock() {
                         if let Some(make_env) = make_env.take() {
-                            return Some(make_env(lua));
+                            return make_env(lua).map(Some);
                         }
                     }
                 }
-                None
+                Ok(None)
             }
 
             fn mode(&self) -> Option<ChunkMode> {

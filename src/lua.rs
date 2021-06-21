@@ -2074,7 +2074,7 @@ pub struct Chunk<'lua, 'a> {
     lua: &'lua Lua,
     source: &'a [u8],
     name: Option<CString>,
-    env: Option<Result<Value<'lua>>>,
+    env: Result<Option<Value<'lua>>>,
     mode: Option<ChunkMode>,
 }
 
@@ -2101,8 +2101,8 @@ pub trait AsChunk<'lua> {
     /// Returns optional chunk [environment]
     ///
     /// [environment]: https://www.lua.org/manual/5.3/manual.html#2.2
-    fn env(&self, _lua: &'lua Lua) -> Option<Result<Value<'lua>>> {
-        None
+    fn env(&self, _lua: &'lua Lua) -> Result<Option<Value<'lua>>> {
+        Ok(None)
     }
 
     /// Returns optional chunk mode (text or binary)
@@ -2137,7 +2137,7 @@ impl<'lua, 'a> Chunk<'lua, 'a> {
     /// useful.
     pub fn set_environment<V: ToLua<'lua>>(mut self, env: V) -> Result<Chunk<'lua, 'a>> {
         // Prefer to propagate errors here and wrap to `Ok`
-        self.env = Some(Ok(env.to_lua(self.lua)?));
+        self.env = Ok(Some(env.to_lua(self.lua)?));
         Ok(self)
     }
 
@@ -2268,10 +2268,7 @@ impl<'lua, 'a> Chunk<'lua, 'a> {
     }
 
     fn env(&self) -> Result<Option<Value<'lua>>> {
-        match self.env {
-            None => Ok(None),
-            Some(ref env) => env.clone().map(Some),
-        }
+        self.env.clone()
     }
 
     fn expression_source(&self) -> Vec<u8> {
