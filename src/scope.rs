@@ -392,7 +392,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
 
             let mt_id = ffi::lua_topointer(lua.state, -1);
             // Write userdata just before attaching metatable with `__gc` metamethod
-            ptr::write(data_ptr as _, UserDataCell::new(data.clone()));
+            ptr::write(data_ptr as _, UserDataCell::new(data));
             ffi::lua_setmetatable(lua.state, -2);
             let ud = AnyUserData(lua.pop_ref());
             lua.register_userdata_metatable(mt_id as isize);
