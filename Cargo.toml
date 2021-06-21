@@ -97,3 +97,7 @@ required-features = ["macros"]
 [[example]]
 name = "serialize"
 required-features = ["serialize"]
+
+[[example]]
+name = "userdata"
+required-features = ["macros"]
