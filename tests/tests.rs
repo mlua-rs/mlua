@@ -847,6 +847,25 @@ fn test_mismatched_registry_key() -> Result<()> {
 }
 
 #[test]
+fn test_recursion() -> Result<()> {
+    let lua = Lua::new();
+
+    let f = lua.create_function(move |lua, i: i32| {
+        if i < 64 {
+            lua.globals()
+                .get::<_, Function>("f")?
+                .call::<_, ()>(i + 1)?;
+        }
+        Ok(())
+    })?;
+
+    lua.globals().set("f", f.clone())?;
+    f.call::<_, ()>(1)?;
+
+    Ok(())
+}
+
+#[test]
 fn test_too_many_returns() -> Result<()> {
     let lua = Lua::new();
     let f = lua.create_function(|_, ()| Ok(Variadic::from_iter(1..1000000)))?;
