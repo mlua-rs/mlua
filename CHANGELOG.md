@@ -7,7 +7,7 @@ Changes since 0.5.4
 - Added `LuaOptions` to customize Lua/Rust behaviour (currently panic handling)
 - Added `ToLua`/`FromLua` implementation for `Box<str>` and `Box<[T]>`.
 - Added `Thread::reset()` for luajit/lua54 to recycle threads (coroutines) with attaching a new function.
-- Added `chunk!` macro support to load chunks of Lua code using the Rust tokenizer and optinally capturing Rust variables.
+- Added `chunk!` macro support to load chunks of Lua code using the Rust tokenizer and optionally capturing Rust variables.
 - Improved errors reporting (`Error`'s `__tostring` method formats full stacktraces). This is useful in a module mode.
 - Added `String::to_string_lossy`
 - Various bugfixes and improvements
@@ -16,7 +16,7 @@ Breaking changes:
 - Errors are always `Send + Sync` to be compatible with the anyhow crate.
 - Removed `Result` from `LuaSerdeExt::null()` and `LuaSerdeExt::array_metatable()` (never fails)
 - Removed `Result` from `Function::dump()` (never fails)
-- Removed `AnyUserData::has_metamethod()` (if favour of full access to metatables)
+- Removed `AnyUserData::has_metamethod()` (in favour of full access to metatables)
 
 ## v0.6.0-beta.3
 
