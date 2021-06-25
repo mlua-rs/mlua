@@ -12,7 +12,7 @@ fn test_conv_vec() -> Result<()> {
     let v = vec![1, 2, 3];
     lua.globals().set("v", v.clone())?;
     let v2: Vec<i32> = lua.globals().get("v")?;
-    assert!(v == v2);
+    assert_eq!(v, v2);
 
     Ok(())
 }
@@ -24,7 +24,7 @@ fn test_conv_hashmap() -> Result<()> {
     let map = hashmap! {"hello".to_string() => "world".to_string()};
     lua.globals().set("map", map.clone())?;
     let map2: HashMap<String, String> = lua.globals().get("map")?;
-    assert!(map == map2);
+    assert_eq!(map, map2);
 
     Ok(())
 }
@@ -36,7 +36,10 @@ fn test_conv_hashset() -> Result<()> {
     let set = hashset! {"hello".to_string(), "world".to_string()};
     lua.globals().set("set", set.clone())?;
     let set2: HashSet<String> = lua.globals().get("set")?;
-    assert!(set == set2);
+    assert_eq!(set, set2);
+
+    let set3 = lua.load(r#"{"a", "b", "c"}"#).eval::<HashSet<String>>()?;
+    assert_eq!(set3, hashset! { "a".into(), "b".into(), "c".into() });
 
     Ok(())
 }
@@ -48,7 +51,7 @@ fn test_conv_btreemap() -> Result<()> {
     let map = btreemap! {"hello".to_string() => "world".to_string()};
     lua.globals().set("map", map.clone())?;
     let map2: BTreeMap<String, String> = lua.globals().get("map")?;
-    assert!(map == map2);
+    assert_eq!(map, map2);
 
     Ok(())
 }
@@ -60,7 +63,10 @@ fn test_conv_btreeset() -> Result<()> {
     let set = btreeset! {"hello".to_string(), "world".to_string()};
     lua.globals().set("set", set.clone())?;
     let set2: BTreeSet<String> = lua.globals().get("set")?;
-    assert!(set == set2);
+    assert_eq!(set, set2);
+
+    let set3 = lua.load(r#"{"a", "b", "c"}"#).eval::<BTreeSet<String>>()?;
+    assert_eq!(set3, btreeset! { "a".into(), "b".into(), "c".into() });
 
     Ok(())
 }
@@ -89,7 +95,7 @@ fn test_conv_cow() -> Result<()> {
     let s = Cow::from("hello");
     lua.globals().set("s", s.clone())?;
     let s2: String = lua.globals().get("s")?;
-    assert!(s == s2);
+    assert_eq!(s, s2);
 
     Ok(())
 }
@@ -101,7 +107,7 @@ fn test_conv_boxed_str() -> Result<()> {
     let s = String::from("hello").into_boxed_str();
     lua.globals().set("s", s.clone())?;
     let s2: Box<str> = lua.globals().get("s")?;
-    assert!(s == s2);
+    assert_eq!(s, s2);
 
     Ok(())
 }
@@ -113,7 +119,7 @@ fn test_conv_boxed_slice() -> Result<()> {
     let v = vec![1, 2, 3].into_boxed_slice();
     lua.globals().set("v", v.clone())?;
     let v2: Box<[i32]> = lua.globals().get("v")?;
-    assert!(v == v2);
+    assert_eq!(v, v2);
 
     Ok(())
 }

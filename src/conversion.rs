@@ -554,17 +554,17 @@ impl<'lua, T: Eq + Hash + ToLua<'lua>, S: BuildHasher> ToLua<'lua> for HashSet<T
 
 impl<'lua, T: Eq + Hash + FromLua<'lua>, S: BuildHasher + Default> FromLua<'lua> for HashSet<T, S> {
     fn from_lua(value: Value<'lua>, _: &'lua Lua) -> Result<Self> {
-        if let Value::Table(table) = value {
-            table
+        match value {
+            Value::Table(table) if table.len()? > 0 => table.sequence_values().collect(),
+            Value::Table(table) => table
                 .pairs::<T, Value<'lua>>()
                 .map(|res| res.map(|(k, _)| k))
-                .collect()
-        } else {
-            Err(Error::FromLuaConversionError {
+                .collect(),
+            _ => Err(Error::FromLuaConversionError {
                 from: value.type_name(),
                 to: "HashSet",
                 message: Some("expected table".to_string()),
-            })
+            }),
         }
     }
 }
@@ -579,17 +579,17 @@ impl<'lua, T: Ord + ToLua<'lua>> ToLua<'lua> for BTreeSet<T> {
 
 impl<'lua, T: Ord + FromLua<'lua>> FromLua<'lua> for BTreeSet<T> {
     fn from_lua(value: Value<'lua>, _: &'lua Lua) -> Result<Self> {
-        if let Value::Table(table) = value {
-            table
+        match value {
+            Value::Table(table) if table.len()? > 0 => table.sequence_values().collect(),
+            Value::Table(table) => table
                 .pairs::<T, Value<'lua>>()
                 .map(|res| res.map(|(k, _)| k))
-                .collect()
-        } else {
-            Err(Error::FromLuaConversionError {
+                .collect(),
+            _ => Err(Error::FromLuaConversionError {
                 from: value.type_name(),
                 to: "BTreeSet",
                 message: Some("expected table".to_string()),
-            })
+            }),
         }
     }
 }
