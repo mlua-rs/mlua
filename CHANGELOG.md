@@ -1,3 +1,9 @@
+## v0.6.1
+
+- Update `chunk!` documentation (stable Rust limitations)
+- Fixed Lua sequence table conversion to HashSet/BTreeSet
+- `once_cell` dependency lowered to 1.0
+
 ## v0.6.0
 Changes since 0.5.4
 - New `UserDataFields` API
