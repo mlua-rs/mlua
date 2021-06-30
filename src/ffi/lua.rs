@@ -23,7 +23,7 @@
 
 //! Contains definitions from `lua.h`.
 
-#[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+#[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "lua-factorio"))]
 use std::os::raw::c_uchar;
 use std::os::raw::{c_char, c_int, c_void};
 #[cfg(feature = "lua54")]
@@ -44,7 +44,7 @@ pub const LUA_SIGNATURE: &[u8] = b"\x1bLJ";
 // option for multiple returns in 'lua_pcall' and 'lua_call'
 pub const LUA_MULTRET: c_int = -1;
 
-#[cfg(any(feature = "lua52", feature = "lua51", feature = "luajit"))]
+#[cfg(any(feature = "lua52", feature = "lua-factorio", feature = "lua51", feature = "luajit"))]
 pub use super::compat53::{
     lua_dump, lua_getextraspace, lua_getfield, lua_geti, lua_gettable, lua_getuservalue,
     lua_isinteger, lua_pushlstring, lua_rawget, lua_rawgeti, lua_rawgetp, lua_rotate, lua_seti,
@@ -58,10 +58,10 @@ pub use super::compat53::{
     lua_upvalueindex,
 };
 
-#[cfg(feature = "lua52")]
+#[cfg(any(feature = "lua52", feature = "lua-factorio"))]
 pub use super::compat53::lua_getglobal;
 
-#[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+#[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "lua-factorio"))]
 #[inline(always)]
 pub fn lua_upvalueindex(i: c_int) -> c_int {
     LUA_REGISTRYINDEX - i
@@ -73,11 +73,11 @@ pub const LUA_YIELD: c_int = 1;
 pub const LUA_ERRRUN: c_int = 2;
 pub const LUA_ERRSYNTAX: c_int = 3;
 pub const LUA_ERRMEM: c_int = 4;
-#[cfg(any(feature = "lua53", feature = "lua52"))]
+#[cfg(any(feature = "lua53", feature = "lua52", feature = "lua-factorio"))]
 pub const LUA_ERRGCMM: c_int = 5;
 #[cfg(any(feature = "lua54", feature = "lua51", feature = "luajit"))]
 pub const LUA_ERRERR: c_int = 5;
-#[cfg(any(feature = "lua53", feature = "lua52"))]
+#[cfg(any(feature = "lua53", feature = "lua52", feature = "lua-factorio"))]
 pub const LUA_ERRERR: c_int = 6;
 
 pub type lua_State = c_void;
@@ -97,18 +97,18 @@ pub const LUA_TTHREAD: c_int = 8;
 
 #[cfg(feature = "lua54")]
 pub const LUA_NUMTYPES: c_int = 9;
-#[cfg(any(feature = "lua53", feature = "lua52"))]
+#[cfg(any(feature = "lua53", feature = "lua52", feature = "lua-factorio"))]
 pub const LUA_NUMTAGS: c_int = 9;
 
 // minimum stack available to a C function
 pub const LUA_MINSTACK: c_int = 20;
 
 // predefined values in the registry
-#[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+#[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "lua-factorio"))]
 pub const LUA_RIDX_MAINTHREAD: lua_Integer = 1;
-#[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+#[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "lua-factorio"))]
 pub const LUA_RIDX_GLOBALS: lua_Integer = 2;
-#[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+#[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "lua-factorio"))]
 pub const LUA_RIDX_LAST: lua_Integer = LUA_RIDX_GLOBALS;
 
 // I believe `luaL_traceback` < 5.4 requires this much free stack to not error.
@@ -176,20 +176,20 @@ extern "C" {
     pub fn lua_version(L: *mut lua_State) -> *const lua_Number;
 
     // basic stack manipulation
-    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "lua-factorio"))]
     pub fn lua_absindex(L: *mut lua_State, idx: c_int) -> c_int;
     pub fn lua_gettop(L: *mut lua_State) -> c_int;
     pub fn lua_settop(L: *mut lua_State, idx: c_int);
     pub fn lua_pushvalue(L: *mut lua_State, idx: c_int);
-    #[cfg(any(feature = "lua52", feature = "lua51", feature = "luajit"))]
+    #[cfg(any(feature = "lua52", feature = "lua-factorio", feature = "lua51", feature = "luajit"))]
     pub fn lua_remove(L: *mut lua_State, idx: c_int);
-    #[cfg(any(feature = "lua52", feature = "lua51", feature = "luajit"))]
+    #[cfg(any(feature = "lua52", feature = "lua-factorio", feature = "lua51", feature = "luajit"))]
     pub fn lua_insert(L: *mut lua_State, idx: c_int);
-    #[cfg(any(feature = "lua52", feature = "lua51", feature = "luajit"))]
+    #[cfg(any(feature = "lua52", feature = "lua-factorio", feature = "lua51", feature = "luajit"))]
     pub fn lua_replace(L: *mut lua_State, idx: c_int);
     #[cfg(any(feature = "lua54", feature = "lua53"))]
     pub fn lua_rotate(L: *mut lua_State, idx: c_int, n: c_int);
-    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "lua-factorio"))]
     pub fn lua_copy(L: *mut lua_State, fromidx: c_int, toidx: c_int);
     pub fn lua_checkstack(L: *mut lua_State, sz: c_int) -> c_int;
 
@@ -207,7 +207,7 @@ extern "C" {
 
     #[cfg(any(feature = "lua51", feature = "luajit"))]
     pub fn lua_tonumber(L: *mut lua_State, idx: c_int) -> lua_Number;
-    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "lua-factorio"))]
     pub fn lua_tonumberx(L: *mut lua_State, idx: c_int, isnum: *mut c_int) -> lua_Number;
     #[cfg(any(feature = "lua51", feature = "luajit"))]
     pub fn lua_tointeger(L: *mut lua_State, idx: c_int) -> lua_Integer;
@@ -217,7 +217,7 @@ extern "C" {
     pub fn lua_tolstring(L: *mut lua_State, idx: c_int, len: *mut usize) -> *const c_char;
     #[cfg(any(feature = "lua51", feature = "luajit"))]
     pub fn lua_objlen(L: *mut lua_State, idx: c_int) -> usize;
-    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "lua-factorio"))]
     pub fn lua_rawlen(L: *mut lua_State, idx: c_int) -> usize;
     pub fn lua_tocfunction(L: *mut lua_State, idx: c_int) -> lua_CFunction;
     pub fn lua_touserdata(L: *mut lua_State, idx: c_int) -> *mut c_void;
@@ -241,13 +241,13 @@ pub const LUA_OPADD: c_int = 0;
 pub const LUA_OPSUB: c_int = 1;
 pub const LUA_OPMUL: c_int = 2;
 
-#[cfg(any(feature = "lua52", feature = "lua51", feature = "luajit"))]
+#[cfg(any(feature = "lua52", feature = "lua-factorio", feature = "lua51", feature = "luajit"))]
 pub const LUA_OPDIV: c_int = 3;
-#[cfg(any(feature = "lua52", feature = "lua51", feature = "luajit"))]
+#[cfg(any(feature = "lua52", feature = "lua-factorio", feature = "lua51", feature = "luajit"))]
 pub const LUA_OPMOD: c_int = 4;
-#[cfg(any(feature = "lua52", feature = "lua51", feature = "luajit"))]
+#[cfg(any(feature = "lua52", feature = "lua-factorio", feature = "lua51", feature = "luajit"))]
 pub const LUA_OPPOW: c_int = 5;
-#[cfg(any(feature = "lua52", feature = "lua51", feature = "luajit"))]
+#[cfg(any(feature = "lua52", feature = "lua-factorio", feature = "lua51", feature = "luajit"))]
 pub const LUA_OPUNM: c_int = 6;
 
 #[cfg(any(feature = "lua54", feature = "lua53"))]
@@ -274,7 +274,7 @@ pub const LUA_OPUNM: c_int = 12;
 pub const LUA_OPBNOT: c_int = 13;
 
 extern "C" {
-    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "lua-factorio"))]
     pub fn lua_arith(L: *mut lua_State, op: c_int);
 }
 
@@ -288,7 +288,7 @@ extern "C" {
     pub fn lua_rawequal(L: *mut lua_State, idx1: c_int, idx2: c_int) -> c_int;
     #[cfg(any(feature = "lua51", feature = "luajit"))]
     pub fn lua_lessthan(L: *mut lua_State, idx1: c_int, idx2: c_int) -> c_int;
-    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "lua-factorio"))]
     pub fn lua_compare(L: *mut lua_State, idx1: c_int, idx2: c_int, op: c_int) -> c_int;
 }
 
@@ -300,11 +300,11 @@ extern "C" {
 
     #[cfg(any(feature = "lua54", feature = "lua53"))]
     pub fn lua_pushlstring(L: *mut lua_State, s: *const c_char, l: usize) -> *const c_char;
-    #[cfg(any(feature = "lua52", feature = "lua51", feature = "luajit"))]
+    #[cfg(any(feature = "lua52", feature = "lua-factorio", feature = "lua51", feature = "luajit"))]
     #[link_name = "lua_pushlstring"]
     pub fn lua_pushlstring_old(L: *mut lua_State, s: *const c_char, l: usize) -> *const c_char;
 
-    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "lua-factorio"))]
     pub fn lua_pushstring(L: *mut lua_State, s: *const c_char) -> *const c_char;
     #[cfg(any(feature = "lua51", feature = "luajit"))]
     #[link_name = "lua_pushstring"]
@@ -323,19 +323,19 @@ extern "C" {
 extern "C" {
     #[cfg(any(feature = "lua54", feature = "lua53"))]
     pub fn lua_getglobal(L: *mut lua_State, var: *const c_char) -> c_int;
-    #[cfg(feature = "lua52")]
+    #[cfg(any(feature = "lua52", feature = "lua-factorio"))]
     #[link_name = "lua_getglobal"]
     pub fn lua_getglobal_old(L: *mut lua_State, var: *const c_char);
 
     #[cfg(any(feature = "lua54", feature = "lua53"))]
     pub fn lua_gettable(L: *mut lua_State, idx: c_int) -> c_int;
-    #[cfg(any(feature = "lua52", feature = "lua51", feature = "luajit"))]
+    #[cfg(any(feature = "lua52", feature = "lua-factorio", feature = "lua51", feature = "luajit"))]
     #[link_name = "lua_gettable"]
     pub fn lua_gettable_old(L: *mut lua_State, idx: c_int);
 
     #[cfg(any(feature = "lua54", feature = "lua53"))]
     pub fn lua_getfield(L: *mut lua_State, idx: c_int, k: *const c_char) -> c_int;
-    #[cfg(any(feature = "lua52", feature = "lua51", feature = "luajit"))]
+    #[cfg(any(feature = "lua52", feature = "lua-factorio", feature = "lua51", feature = "luajit"))]
     #[link_name = "lua_getfield"]
     pub fn lua_getfield_old(L: *mut lua_State, idx: c_int, k: *const c_char);
 
@@ -344,19 +344,19 @@ extern "C" {
 
     #[cfg(any(feature = "lua54", feature = "lua53"))]
     pub fn lua_rawget(L: *mut lua_State, idx: c_int) -> c_int;
-    #[cfg(any(feature = "lua52", feature = "lua51", feature = "luajit"))]
+    #[cfg(any(feature = "lua52", feature = "lua-factorio", feature = "lua51", feature = "luajit"))]
     #[link_name = "lua_rawget"]
     pub fn lua_rawget_old(L: *mut lua_State, idx: c_int);
 
     #[cfg(any(feature = "lua54", feature = "lua53"))]
     pub fn lua_rawgeti(L: *mut lua_State, idx: c_int, n: lua_Integer) -> c_int;
-    #[cfg(any(feature = "lua52", feature = "lua51", feature = "luajit"))]
+    #[cfg(any(feature = "lua52", feature = "lua-factorio", feature = "lua51", feature = "luajit"))]
     #[link_name = "lua_rawgeti"]
     pub fn lua_rawgeti_old(L: *mut lua_State, idx: c_int, n: lua_Integer);
 
     #[cfg(any(feature = "lua54", feature = "lua53"))]
     pub fn lua_rawgetp(L: *mut lua_State, idx: c_int, p: *const c_void) -> c_int;
-    #[cfg(feature = "lua52")]
+    #[cfg(any(feature = "lua52", feature = "lua-factorio"))]
     #[link_name = "lua_rawgetp"]
     pub fn lua_rawgetp_old(L: *mut lua_State, idx: c_int, p: *const c_void);
 
@@ -366,6 +366,7 @@ extern "C" {
     #[cfg(any(
         feature = "lua53",
         feature = "lua52",
+        feature = "lua-factorio",
         feature = "lua51",
         feature = "luajit"
     ))]
@@ -376,7 +377,7 @@ extern "C" {
     pub fn lua_getiuservalue(L: *mut lua_State, idx: c_int, n: c_int) -> c_int;
     #[cfg(feature = "lua53")]
     pub fn lua_getuservalue(L: *mut lua_State, idx: c_int) -> c_int;
-    #[cfg(feature = "lua52")]
+    #[cfg(any(feature = "lua52", feature = "lua-factorio"))]
     #[link_name = "lua_getuservalue"]
     pub fn lua_getuservalue_old(L: *mut lua_State, idx: c_int);
     #[cfg(any(feature = "lua51", feature = "luajit"))]
@@ -397,7 +398,7 @@ pub unsafe fn lua_getuservalue(L: *mut lua_State, idx: c_int) -> c_int {
 
 // set functions (stack -> Lua)
 extern "C" {
-    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "lua-factorio"))]
     pub fn lua_setglobal(L: *mut lua_State, var: *const c_char);
     pub fn lua_settable(L: *mut lua_State, idx: c_int);
     pub fn lua_setfield(L: *mut lua_State, idx: c_int, k: *const c_char);
@@ -405,12 +406,12 @@ extern "C" {
     pub fn lua_seti(L: *mut lua_State, idx: c_int, n: lua_Integer);
     pub fn lua_rawset(L: *mut lua_State, idx: c_int);
     pub fn lua_rawseti(L: *mut lua_State, idx: c_int, n: lua_Integer);
-    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "lua-factorio"))]
     pub fn lua_rawsetp(L: *mut lua_State, idx: c_int, p: *const c_void);
     pub fn lua_setmetatable(L: *mut lua_State, objindex: c_int) -> c_int;
     #[cfg(feature = "lua54")]
     pub fn lua_setiuservalue(L: *mut lua_State, idx: c_int, n: c_int) -> c_int;
-    #[cfg(any(feature = "lua53", feature = "lua52"))]
+    #[cfg(any(feature = "lua53", feature = "lua52", feature = "lua-factorio"))]
     pub fn lua_setuservalue(L: *mut lua_State, idx: c_int);
     #[cfg(any(feature = "lua51", feature = "luajit"))]
     pub fn lua_setfenv(L: *mut lua_State, idx: c_int) -> c_int;
@@ -432,7 +433,7 @@ extern "C" {
         ctx: lua_KContext,
         k: Option<lua_KFunction>,
     );
-    #[cfg(feature = "lua52")]
+    #[cfg(any(feature = "lua52", feature = "lua-factorio"))]
     pub fn lua_callk(
         L: *mut lua_State,
         nargs: c_int,
@@ -450,7 +451,7 @@ extern "C" {
         ctx: lua_KContext,
         k: Option<lua_KFunction>,
     ) -> c_int;
-    #[cfg(feature = "lua52")]
+    #[cfg(any(feature = "lua52", feature = "lua-factorio"))]
     pub fn lua_pcallk(
         L: *mut lua_State,
         nargs: c_int,
@@ -460,7 +461,7 @@ extern "C" {
         k: Option<lua_CFunction>,
     ) -> c_int;
 
-    #[cfg(feature = "lua52")]
+    #[cfg(any(feature = "lua52", feature = "lua-factorio"))]
     pub fn lua_getctx(L: *mut lua_State, ctx: *mut c_int) -> c_int;
 
     #[cfg(any(feature = "lua51", feature = "luajit"))]
@@ -484,18 +485,18 @@ extern "C" {
         data: *mut c_void,
         strip: c_int,
     ) -> c_int;
-    #[cfg(any(feature = "lua52", feature = "lua51", feature = "luajit"))]
+    #[cfg(any(feature = "lua52", feature = "lua-factorio", feature = "lua51", feature = "luajit"))]
     #[link_name = "lua_dump"]
     pub fn lua_dump_old(L: *mut lua_State, writer: lua_Writer, data: *mut c_void) -> c_int;
 }
 
-#[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+#[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "lua-factorio"))]
 #[inline(always)]
 pub unsafe fn lua_call(L: *mut lua_State, n: c_int, r: c_int) {
     lua_callk(L, n, r, 0, None)
 }
 
-#[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+#[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "lua-factorio"))]
 #[inline(always)]
 pub unsafe fn lua_pcall(L: *mut lua_State, n: c_int, r: c_int, f: c_int) -> c_int {
     lua_pcallk(L, n, r, f, 0, None)
@@ -510,7 +511,7 @@ extern "C" {
         ctx: lua_KContext,
         k: Option<lua_KFunction>,
     ) -> c_int;
-    #[cfg(feature = "lua52")]
+    #[cfg(any(feature = "lua52", feature = "lua-factorio"))]
     pub fn lua_yieldk(
         L: *mut lua_State,
         nresults: c_int,
@@ -527,7 +528,7 @@ extern "C" {
         narg: c_int,
         nres: *mut c_int,
     ) -> c_int;
-    #[cfg(any(feature = "lua53", feature = "lua52"))]
+    #[cfg(any(feature = "lua53", feature = "lua52", feature = "lua-factorio"))]
     #[link_name = "lua_resume"]
     pub fn lua_resume_53(L: *mut lua_State, from: *mut lua_State, narg: c_int) -> c_int;
     #[cfg(any(feature = "lua51", feature = "luajit"))]
@@ -539,7 +540,7 @@ extern "C" {
     pub fn lua_isyieldable(L: *mut lua_State) -> c_int;
 }
 
-#[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+#[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "lua-factorio"))]
 #[inline(always)]
 pub unsafe fn lua_yield(L: *mut lua_State, n: c_int) -> c_int {
     lua_yieldk(L, n, 0, None)
@@ -548,6 +549,7 @@ pub unsafe fn lua_yield(L: *mut lua_State, n: c_int) -> c_int {
 #[cfg(any(
     feature = "lua53",
     feature = "lua52",
+    feature = "lua-factorio",
     feature = "lua51",
     feature = "luajit"
 ))]
@@ -581,7 +583,7 @@ pub const LUA_GCCOUNTB: c_int = 4;
 pub const LUA_GCSTEP: c_int = 5;
 pub const LUA_GCSETPAUSE: c_int = 6;
 pub const LUA_GCSETSTEPMUL: c_int = 7;
-#[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+#[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "lua-factorio"))]
 pub const LUA_GCISRUNNING: c_int = 9;
 #[cfg(feature = "lua54")]
 pub const LUA_GCGEN: c_int = 10;
@@ -594,6 +596,7 @@ extern "C" {
     #[cfg(any(
         feature = "lua53",
         feature = "lua52",
+        feature = "lua-factorio",
         feature = "lua51",
         feature = "luajit"
     ))]
@@ -605,7 +608,7 @@ extern "C" {
     pub fn lua_error(L: *mut lua_State) -> !;
     pub fn lua_next(L: *mut lua_State, idx: c_int) -> c_int;
     pub fn lua_concat(L: *mut lua_State, n: c_int);
-    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "lua-factorio"))]
     pub fn lua_len(L: *mut lua_State, idx: c_int);
     #[cfg(any(feature = "lua54", feature = "lua53"))]
     pub fn lua_stringtonumber(L: *mut lua_State, s: *const c_char) -> usize;
@@ -623,13 +626,13 @@ pub unsafe fn lua_getextraspace(L: *mut lua_State) -> *mut c_void {
     L.offset(-super::glue::LUA_EXTRASPACE as isize) as *mut c_void
 }
 
-#[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+#[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "lua-factorio"))]
 #[inline(always)]
 pub unsafe fn lua_tonumber(L: *mut lua_State, i: c_int) -> lua_Number {
     lua_tonumberx(L, i, ptr::null_mut())
 }
 
-#[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+#[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "lua-factorio"))]
 #[inline(always)]
 pub unsafe fn lua_tointeger(L: *mut lua_State, i: c_int) -> lua_Integer {
     lua_tointegerx(L, i, ptr::null_mut())
@@ -715,7 +718,7 @@ pub unsafe fn lua_getglobal(L: *mut lua_State, var: *const c_char) -> c_int {
     lua_getfield(L, LUA_GLOBALSINDEX, var)
 }
 
-#[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+#[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "lua-factorio"))]
 #[inline(always)]
 pub unsafe fn lua_pushglobaltable(L: *mut lua_State) -> c_int {
     lua_rawgeti(L, LUA_REGISTRYINDEX, LUA_RIDX_GLOBALS)
@@ -771,9 +774,9 @@ extern "C" {
     pub fn lua_getupvalue(L: *mut lua_State, funcindex: c_int, n: c_int) -> *const c_char;
     pub fn lua_setupvalue(L: *mut lua_State, funcindex: c_int, n: c_int) -> *const c_char;
 
-    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "lua-factorio"))]
     pub fn lua_upvalueid(L: *mut lua_State, fidx: c_int, n: c_int) -> *mut c_void;
-    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "lua-factorio"))]
     pub fn lua_upvaluejoin(L: *mut lua_State, fidx1: c_int, n1: c_int, fidx2: c_int, n2: c_int);
 
     pub fn lua_sethook(L: *mut lua_State, func: Option<lua_Hook>, mask: c_int, count: c_int);
@@ -785,7 +788,7 @@ extern "C" {
     pub fn lua_setcstacklimit(L: *mut lua_State, limit: c_uint) -> c_int;
 }
 
-#[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+#[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "lua-factorio"))]
 #[repr(C)]
 pub struct lua_Debug {
     pub event: c_int,
