@@ -612,7 +612,7 @@ pub unsafe extern "C" fn safe_xpcall(state: *mut ffi::lua_State) -> c_int {
 // Returns Lua main thread for Lua >= 5.2 or checks that the passed thread is main for Lua 5.1.
 // Does not call lua_checkstack, uses 1 stack space.
 pub unsafe fn get_main_state(state: *mut ffi::lua_State) -> Option<*mut ffi::lua_State> {
-    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "lua-factorio"))]
     {
         ffi::lua_rawgeti(state, ffi::LUA_REGISTRYINDEX, ffi::LUA_RIDX_MAINTHREAD);
         let main_state = ffi::lua_tothread(state, -1);
@@ -828,9 +828,9 @@ pub unsafe fn init_error_registry(state: *mut ffi::lua_State) -> Result<()> {
         "__newindex",
         "__call",
         "__tostring",
-        #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+        #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "lua-factorio"))]
         "__pairs",
-        #[cfg(any(feature = "lua53", feature = "lua52"))]
+        #[cfg(any(feature = "lua53", feature = "lua52", feature = "lua-factorio"))]
         "__ipairs",
         #[cfg(feature = "lua54")]
         "__close",
