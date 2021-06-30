@@ -201,7 +201,7 @@ pub use self::lualib::{
 #[cfg(any(feature = "lua54", feature = "lua53"))]
 pub use self::lualib::{luaopen_coroutine, luaopen_utf8};
 
-#[cfg(feature = "lua52", feature = "lua-factorio")]
+#[cfg(any(feature = "lua52", feature = "lua-factorio"))]
 pub use self::lualib::{luaopen_bit32, luaopen_coroutine};
 
 #[cfg(feature = "luajit")]
