@@ -167,7 +167,7 @@ pub use self::lua::{
 #[cfg(any(feature = "lua54", feature = "lua53"))]
 pub use self::lua::{lua_isyieldable, lua_version};
 
-#[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+#[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "lua-factorio"))]
 pub use self::lua::{lua_callk, lua_pcallk, lua_upvalueid, lua_upvaluejoin, lua_yieldk};
 
 #[cfg(any(feature = "lua54", all(feature = "luajit", feature = "vendored")))]
@@ -189,7 +189,7 @@ pub use self::lauxlib::{
     luaL_where,
 };
 
-#[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+#[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "lua-factorio"))]
 pub use self::lauxlib::{luaL_execresult, luaL_fileresult, luaL_loadfilex};
 
 // lualib.h functions
@@ -201,7 +201,7 @@ pub use self::lualib::{
 #[cfg(any(feature = "lua54", feature = "lua53"))]
 pub use self::lualib::{luaopen_coroutine, luaopen_utf8};
 
-#[cfg(feature = "lua52")]
+#[cfg(feature = "lua52", feature = "lua-factorio")]
 pub use self::lualib::{luaopen_bit32, luaopen_coroutine};
 
 #[cfg(feature = "luajit")]
@@ -227,10 +227,10 @@ pub use self::lua::{
 #[cfg(feature = "lua54")]
 pub use self::lua::{LUA_GCGEN, LUA_GCINC};
 
-#[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+#[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "lua-factorio"))]
 pub use self::lua::{LUA_GCISRUNNING, LUA_RIDX_GLOBALS, LUA_RIDX_MAINTHREAD};
 
-#[cfg(any(feature = "lua53", feature = "lua52"))]
+#[cfg(any(feature = "lua53", feature = "lua52", feature = "lua-factorio"))]
 pub use self::lua::LUA_ERRGCMM;
 
 #[cfg(any(feature = "lua51", feature = "luajit"))]
@@ -248,7 +248,7 @@ pub use self::lualib::{
 #[cfg(any(feature = "lua54", feature = "lua53"))]
 pub use self::lualib::LUA_UTF8LIBNAME;
 
-#[cfg(any(feature = "lua52", feature = "luajit"))]
+#[cfg(any(feature = "lua52", feature = "lua-factorio", feature = "luajit"))]
 pub use self::lualib::LUA_BITLIBNAME;
 
 #[cfg(feature = "luajit")]
@@ -293,7 +293,8 @@ pub(crate) fn keep_lua_symbols() {
     if cfg!(any(any(
         feature = "lua54",
         feature = "lua53",
-        feature = "lua52"
+        feature = "lua52",
+        feature = "lua-factorio"
     ))) {
         symbols.push(lua_getglobal as _);
         symbols.push(lua_setglobal as _);
@@ -306,7 +307,7 @@ mod glue {
     include!(concat!(env!("OUT_DIR"), "/glue.rs"));
 }
 
-#[cfg(any(feature = "lua52", feature = "lua51", feature = "luajit"))]
+#[cfg(any(feature = "lua52", feature = "lua-factorio", feature = "lua51", feature = "luajit"))]
 mod compat53;
 
 mod lauxlib;
