@@ -43,7 +43,7 @@ pub use super::glue::{LUA_FFILIBNAME, LUA_JITLIBNAME};
 
 extern "C" {
     pub fn luaopen_base(L: *mut lua_State) -> c_int;
-    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "lua-factorio"))]
     pub fn luaopen_coroutine(L: *mut lua_State) -> c_int;
     pub fn luaopen_table(L: *mut lua_State) -> c_int;
     pub fn luaopen_io(L: *mut lua_State) -> c_int;
@@ -51,7 +51,7 @@ extern "C" {
     pub fn luaopen_string(L: *mut lua_State) -> c_int;
     #[cfg(any(feature = "lua54", feature = "lua53"))]
     pub fn luaopen_utf8(L: *mut lua_State) -> c_int;
-    #[cfg(feature = "lua52")]
+    #[cfg(any(feature = "lua52", feature = "lua-factorio"))]
     pub fn luaopen_bit32(L: *mut lua_State) -> c_int;
     pub fn luaopen_math(L: *mut lua_State) -> c_int;
     pub fn luaopen_debug(L: *mut lua_State) -> c_int;
