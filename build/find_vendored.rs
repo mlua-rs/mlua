@@ -7,6 +7,8 @@ pub fn probe_lua() -> PathBuf {
     let artifacts = lua_src::Build::new().build(lua_src::Lua53);
     #[cfg(feature = "lua52")]
     let artifacts = lua_src::Build::new().build(lua_src::Lua52);
+    #[cfg(feature = "lua-factorio")]
+    let artifacts = lua_src::Build::new().build(lua_src::LuaFactorio52);
     #[cfg(feature = "lua51")]
     let artifacts = lua_src::Build::new().build(lua_src::Lua51);
     #[cfg(feature = "luajit")]
