@@ -35,7 +35,7 @@ pub use super::glue::{
 #[cfg(any(feature = "lua54", feature = "lua53"))]
 pub use super::glue::LUA_UTF8LIBNAME;
 
-#[cfg(any(feature = "lua52", feature = "luajit"))]
+#[cfg(any(feature = "lua52", feature = "lua-factorio", feature = "luajit"))]
 pub use super::glue::LUA_BITLIBNAME;
 
 #[cfg(feature = "luajit")]
