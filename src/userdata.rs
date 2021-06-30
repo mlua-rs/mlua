@@ -25,7 +25,7 @@ use crate::util::{
 };
 use crate::value::{FromLua, FromLuaMulti, ToLua, ToLuaMulti};
 
-#[cfg(any(feature = "lua52", feature = "lua51", feature = "luajit"))]
+#[cfg(any(feature = "lua52", feature = "lua-factorio", feature = "lua51", feature = "luajit"))]
 use crate::value::Value;
 
 #[cfg(feature = "async")]
@@ -104,7 +104,7 @@ pub enum MetaMethod {
     /// This is not an operator, but it will be called by the built-in `pairs` function.
     ///
     /// Requires `feature = "lua54/lua53/lua52"`
-    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", doc))]
+    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "lua-factorio", doc))]
     Pairs,
     /// The `__ipairs` metamethod.
     ///
@@ -113,7 +113,7 @@ pub enum MetaMethod {
     /// Requires `feature = "lua52"`
     ///
     /// [`ipairs`]: https://www.lua.org/manual/5.2/manual.html#pdf-ipairs
-    #[cfg(any(feature = "lua52", doc))]
+    #[cfg(any(feature = "lua52", feature = "lua-factorio", doc))]
     IPairs,
     /// The `__close` metamethod.
     ///
@@ -190,9 +190,9 @@ impl MetaMethod {
             MetaMethod::Call => "__call",
             MetaMethod::ToString => "__tostring",
 
-            #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+            #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "lua-factorio"))]
             MetaMethod::Pairs => "__pairs",
-            #[cfg(feature = "lua52")]
+            #[cfg(any(feature = "lua52", feature = "lua-factorio"))]
             MetaMethod::IPairs => "__ipairs",
 
             #[cfg(feature = "lua54")]
@@ -252,9 +252,9 @@ impl From<StdString> for MetaMethod {
             "__call" => MetaMethod::Call,
             "__tostring" => MetaMethod::ToString,
 
-            #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+            #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "lua-factorio"))]
             "__pairs" => MetaMethod::Pairs,
-            #[cfg(feature = "lua52")]
+            #[cfg(any(feature = "lua52", feature = "lua-factorio"))]
             "__ipairs" => MetaMethod::IPairs,
 
             #[cfg(feature = "lua54")]
@@ -828,7 +828,7 @@ impl<'lua> AnyUserData<'lua> {
     /// [`get_user_value`]: #method.get_user_value
     pub fn set_user_value<V: ToLua<'lua>>(&self, v: V) -> Result<()> {
         let lua = self.0.lua;
-        #[cfg(any(feature = "lua52", feature = "lua51", feature = "luajit"))]
+        #[cfg(any(feature = "lua52", feature = "lua-factorio", feature = "lua51", feature = "luajit"))]
         let v = {
             // Lua <= 5.2 allows to store only a table. Then we will wrap the value.
             let t = lua.create_table_with_capacity(1, 0)?;
@@ -864,7 +864,7 @@ impl<'lua> AnyUserData<'lua> {
             ffi::lua_getuservalue(lua.state, -1);
             lua.pop_value()
         };
-        #[cfg(any(feature = "lua52", feature = "lua51", feature = "luajit"))]
+        #[cfg(any(feature = "lua52", feature = "lua-factorio", feature = "lua51", feature = "luajit"))]
         return match <Option<Table>>::from_lua(res, lua)? {
             Some(t) => t.get(1),
             None => V::from_lua(Value::Nil, lua),
