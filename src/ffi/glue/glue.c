@@ -256,10 +256,16 @@ int main(int argc, const char **argv) {
       // == lualib.h ===========================================================
 
       RS_COMMENT("lualib.h"),
+#ifdef LUA_COLIBNAME
       RS_STR("LUA_COLIBNAME", LUA_COLIBNAME),
+#endif
       RS_STR("LUA_TABLIBNAME", LUA_TABLIBNAME),
+#ifdef LUA_IOLIBNAME
       RS_STR("LUA_IOLIBNAME", LUA_IOLIBNAME),
+#endif
+#ifdef LUA_OSLIBNAME
       RS_STR("LUA_OSLIBNAME", LUA_OSLIBNAME),
+#endif
       RS_STR("LUA_STRLIBNAME", LUA_STRLIBNAME),
 #ifdef LUA_UTF8LIBNAME
       RS_STR("LUA_UTF8LIBNAME", LUA_UTF8LIBNAME),
