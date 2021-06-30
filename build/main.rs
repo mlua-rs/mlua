@@ -211,7 +211,7 @@ fn main() {
             feature = "lua53",
             feature = "lua52",
             feature = "lua51",
-            feature = "lua-factorio"
+            feature = "lua-factorio",
             feature = "luajit"
         )
     ))]
