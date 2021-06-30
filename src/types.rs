@@ -26,9 +26,26 @@ pub struct LightUserData(pub *mut c_void);
 pub(crate) type Callback<'lua, 'a> =
     Box<dyn Fn(&'lua Lua, MultiValue<'lua>) -> Result<MultiValue<'lua>> + 'a>;
 
+pub(crate) struct CallbackUpvalue<'lua> {
+    pub(crate) lua: Lua,
+    pub(crate) func: Callback<'lua, 'static>,
+}
+
 #[cfg(feature = "async")]
 pub(crate) type AsyncCallback<'lua, 'a> =
     Box<dyn Fn(&'lua Lua, MultiValue<'lua>) -> LocalBoxFuture<'lua, Result<MultiValue<'lua>>> + 'a>;
+
+#[cfg(feature = "async")]
+pub(crate) struct AsyncCallbackUpvalue<'lua> {
+    pub(crate) lua: Lua,
+    pub(crate) func: AsyncCallback<'lua, 'static>,
+}
+
+#[cfg(feature = "async")]
+pub(crate) struct AsyncPollUpvalue<'lua> {
+    pub(crate) lua: Lua,
+    pub(crate) fut: LocalBoxFuture<'lua, Result<MultiValue<'lua>>>,
+}
 
 pub(crate) type HookCallback = Arc<RefCell<dyn FnMut(&Lua, Debug) -> Result<()>>>;
 

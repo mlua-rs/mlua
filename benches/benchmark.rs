@@ -59,6 +59,22 @@ fn create_string_table(c: &mut Criterion) {
     });
 }
 
+fn create_function(c: &mut Criterion) {
+    let lua = Lua::new();
+
+    c.bench_function("create [function] 10", |b| {
+        b.iter_batched(
+            || collect_gc_twice(&lua),
+            |_| {
+                for i in 0..10 {
+                    lua.create_function(move |_, ()| Ok(i)).unwrap();
+                }
+            },
+            BatchSize::SmallInput,
+        );
+    });
+}
+
 fn call_lua_function(c: &mut Criterion) {
     let lua = Lua::new();
 
@@ -258,6 +274,7 @@ criterion_group! {
         create_table,
         create_array,
         create_string_table,
+        create_function,
         call_lua_function,
         call_sum_callback,
         call_async_sum_callback,

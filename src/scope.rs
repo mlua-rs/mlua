@@ -13,7 +13,7 @@ use crate::error::{Error, Result};
 use crate::ffi;
 use crate::function::Function;
 use crate::lua::Lua;
-use crate::types::{Callback, LuaRef, MaybeSend};
+use crate::types::{Callback, CallbackUpvalue, LuaRef, MaybeSend};
 use crate::userdata::{
     AnyUserData, MetaMethod, UserData, UserDataCell, UserDataFields, UserDataMethods,
 };
@@ -25,8 +25,8 @@ use crate::value::{FromLua, FromLuaMulti, MultiValue, ToLua, ToLuaMulti, Value};
 
 #[cfg(feature = "async")]
 use {
-    crate::types::AsyncCallback,
-    futures_core::future::{Future, LocalBoxFuture},
+    crate::types::{AsyncCallback, AsyncCallbackUpvalue, AsyncPollUpvalue},
+    futures_core::future::Future,
     futures_util::future::{self, TryFutureExt},
 };
 
@@ -224,7 +224,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
     /// use [`Scope::create_userdata`] instead.
     ///
     /// The main limitation that comes from using non-'static userdata is that the produced userdata
-    /// will no longer have a `TypeId` associated with it, becuase `TypeId` can only work for
+    /// will no longer have a `TypeId` associated with it, because `TypeId` can only work for
     /// 'static types. This means that it is impossible, once the userdata is created, to get a
     /// reference to it back *out* of an `AnyUserData` handle. This also implies that the
     /// "function" type methods that can be added via [`UserDataMethods`] (the ones that accept
@@ -460,16 +460,11 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
             // We know the destructor has not run yet because we hold a reference to the callback.
 
             ffi::lua_getupvalue(state, -1, 1);
-            let ud1 = take_userdata::<Callback>(state);
+            let ud = take_userdata::<CallbackUpvalue>(state);
             ffi::lua_pushnil(state);
             ffi::lua_setupvalue(state, -2, 1);
 
-            ffi::lua_getupvalue(state, -1, 2);
-            let ud2 = take_userdata::<Lua>(state);
-            ffi::lua_pushnil(state);
-            ffi::lua_setupvalue(state, -2, 2);
-
-            vec![Box::new(ud1), Box::new(ud2)]
+            vec![Box::new(ud)]
         });
         self.destructors
             .borrow_mut()
@@ -510,32 +505,21 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
 
             // Destroy all upvalues
             ffi::lua_getupvalue(state, -1, 1);
-            let ud1 = take_userdata::<AsyncCallback>(state);
+            let upvalue1 = take_userdata::<AsyncCallbackUpvalue>(state);
             ffi::lua_pushnil(state);
             ffi::lua_setupvalue(state, -2, 1);
 
-            ffi::lua_getupvalue(state, -1, 2);
-            let ud2 = take_userdata::<Lua>(state);
-            ffi::lua_pushnil(state);
-            ffi::lua_setupvalue(state, -2, 2);
-
             ffi::lua_pop(state, 1);
-            let mut data: Vec<Box<dyn Any>> = vec![Box::new(ud1), Box::new(ud2)];
+            let mut data: Vec<Box<dyn Any>> = vec![Box::new(upvalue1)];
 
             // Finally, get polled future and destroy it
             f.lua.push_ref(&poll_str.0);
             if ffi::lua_rawget(state, -2) == ffi::LUA_TFUNCTION {
                 ffi::lua_getupvalue(state, -1, 1);
-                let ud3 = take_userdata::<LocalBoxFuture<Result<MultiValue>>>(state);
+                let upvalue2 = take_userdata::<AsyncPollUpvalue>(state);
                 ffi::lua_pushnil(state);
                 ffi::lua_setupvalue(state, -2, 1);
-                data.push(Box::new(ud3));
-
-                ffi::lua_getupvalue(state, -1, 2);
-                let ud4 = take_userdata::<Lua>(state);
-                ffi::lua_pushnil(state);
-                ffi::lua_setupvalue(state, -2, 2);
-                data.push(Box::new(ud4));
+                data.push(Box::new(upvalue2));
             }
 
             data

@@ -19,7 +19,8 @@ use crate::string::String;
 use crate::table::Table;
 use crate::thread::Thread;
 use crate::types::{
-    Callback, HookCallback, Integer, LightUserData, LuaRef, MaybeSend, Number, RegistryKey,
+    Callback, CallbackUpvalue, HookCallback, Integer, LightUserData, LuaRef, MaybeSend, Number,
+    RegistryKey,
 };
 use crate::userdata::{
     AnyUserData, MetaMethod, UserData, UserDataCell, UserDataFields, UserDataMethods,
@@ -38,7 +39,7 @@ use std::rc::Rc;
 
 #[cfg(feature = "async")]
 use {
-    crate::types::AsyncCallback,
+    crate::types::{AsyncCallback, AsyncCallbackUpvalue, AsyncPollUpvalue},
     futures_core::{
         future::{Future, LocalBoxFuture},
         task::{Context, Poll, Waker},
@@ -396,12 +397,13 @@ impl Lua {
                 // to prevent them from being garbage collected.
 
                 init_gc_metatable_for::<Callback>(state, None)?;
-                init_gc_metatable_for::<Lua>(state, None)?;
+                init_gc_metatable_for::<CallbackUpvalue>(state, None)?;
                 init_gc_metatable_for::<Weak<Mutex<ExtraData>>>(state, None)?;
                 #[cfg(feature = "async")]
                 {
                     init_gc_metatable_for::<AsyncCallback>(state, None)?;
-                    init_gc_metatable_for::<LocalBoxFuture<Result<MultiValue>>>(state, None)?;
+                    init_gc_metatable_for::<AsyncCallbackUpvalue>(state, None)?;
+                    init_gc_metatable_for::<AsyncPollUpvalue>(state, None)?;
                     init_gc_metatable_for::<Option<Waker>>(state, None)?;
 
                     // Create empty Waker slot
@@ -1777,22 +1779,22 @@ impl Lua {
         'lua: 'callback,
     {
         unsafe extern "C" fn call_callback(state: *mut ffi::lua_State) -> c_int {
-            callback_error2(state, |nargs| {
-                let upvalue_idx1 = ffi::lua_upvalueindex(1);
-                let upvalue_idx2 = ffi::lua_upvalueindex(2);
-                if ffi::lua_type(state, upvalue_idx1) == ffi::LUA_TNIL
-                    || ffi::lua_type(state, upvalue_idx2) == ffi::LUA_TNIL
-                {
+            let get_extra = |state| {
+                let upvalue = get_userdata::<CallbackUpvalue>(state, ffi::lua_upvalueindex(1));
+                (*upvalue).lua.extra.clone()
+            };
+            callback_error_ext(state, get_extra, |nargs| {
+                let upvalue_idx = ffi::lua_upvalueindex(1);
+                if ffi::lua_type(state, upvalue_idx) == ffi::LUA_TNIL {
                     return Err(Error::CallbackDestructed);
                 }
-                let func = get_userdata::<Callback>(state, upvalue_idx1);
-                let lua = get_userdata::<Lua>(state, upvalue_idx2);
+                let upvalue = get_userdata::<CallbackUpvalue>(state, upvalue_idx);
 
                 if nargs < ffi::LUA_MINSTACK {
                     check_stack(state, ffi::LUA_MINSTACK - nargs)?;
                 }
 
-                let lua = &mut *lua;
+                let lua = &mut (*upvalue).lua;
                 lua.state = state;
 
                 let mut args = MultiValue::new();
@@ -1801,7 +1803,7 @@ impl Lua {
                     args.push_front(lua.pop_value());
                 }
 
-                let results = (*func)(lua, args)?;
+                let results = ((*upvalue).func)(lua, args)?;
                 let nresults = results.len() as c_int;
 
                 check_stack(state, nresults)?;
@@ -1815,12 +1817,13 @@ impl Lua {
 
         unsafe {
             let _sg = StackGuard::new(self.state);
-            check_stack(self.state, 5)?;
+            check_stack(self.state, 4)?;
 
-            push_gc_userdata::<Callback>(self.state, mem::transmute(func))?;
-            push_gc_userdata(self.state, self.clone())?;
-            protect_lua(self.state, 2, 1, |state| {
-                ffi::lua_pushcclosure(state, call_callback, 2);
+            let lua = self.clone();
+            let func = mem::transmute(func);
+            push_gc_userdata(self.state, CallbackUpvalue { lua, func })?;
+            protect_lua(self.state, 1, 1, |state| {
+                ffi::lua_pushcclosure(state, call_callback, 1);
             })?;
 
             Ok(Function(self.pop_ref()))
@@ -1844,22 +1847,22 @@ impl Lua {
         }
 
         unsafe extern "C" fn call_callback(state: *mut ffi::lua_State) -> c_int {
-            callback_error2(state, |nargs| {
-                let upvalue_idx1 = ffi::lua_upvalueindex(1);
-                let upvalue_idx2 = ffi::lua_upvalueindex(2);
-                if ffi::lua_type(state, upvalue_idx1) == ffi::LUA_TNIL
-                    || ffi::lua_type(state, upvalue_idx2) == ffi::LUA_TNIL
-                {
+            let get_extra = |state| {
+                let upvalue = get_userdata::<AsyncCallbackUpvalue>(state, ffi::lua_upvalueindex(1));
+                (*upvalue).lua.extra.clone()
+            };
+            callback_error_ext(state, get_extra, |nargs| {
+                let upvalue_idx = ffi::lua_upvalueindex(1);
+                if ffi::lua_type(state, upvalue_idx) == ffi::LUA_TNIL {
                     return Err(Error::CallbackDestructed);
                 }
-                let func = get_userdata::<AsyncCallback>(state, upvalue_idx1);
-                let lua = get_userdata::<Lua>(state, upvalue_idx2);
+                let upvalue = get_userdata::<AsyncCallbackUpvalue>(state, upvalue_idx);
 
                 if nargs < ffi::LUA_MINSTACK {
                     check_stack(state, ffi::LUA_MINSTACK - nargs)?;
                 }
 
-                let lua = &mut *lua;
+                let lua = &mut (*upvalue).lua;
                 lua.state = state;
 
                 let mut args = MultiValue::new();
@@ -1868,12 +1871,11 @@ impl Lua {
                     args.push_front(lua.pop_value());
                 }
 
-                let fut = (*func)(lua, args);
-                push_gc_userdata(state, fut)?;
-                push_gc_userdata(state, lua.clone())?;
-
-                protect_lua(state, 2, 1, |state| {
-                    ffi::lua_pushcclosure(state, poll_future, 2);
+                let fut = ((*upvalue).func)(lua, args);
+                let lua = lua.clone();
+                push_gc_userdata(state, AsyncPollUpvalue { lua, fut })?;
+                protect_lua(state, 1, 1, |state| {
+                    ffi::lua_pushcclosure(state, poll_future, 1);
                 })?;
 
                 Ok(1)
@@ -1881,22 +1883,22 @@ impl Lua {
         }
 
         unsafe extern "C" fn poll_future(state: *mut ffi::lua_State) -> c_int {
-            callback_error2(state, |nargs| {
-                let upvalue_idx1 = ffi::lua_upvalueindex(1);
-                let upvalue_idx2 = ffi::lua_upvalueindex(2);
-                if ffi::lua_type(state, upvalue_idx1) == ffi::LUA_TNIL
-                    || ffi::lua_type(state, upvalue_idx2) == ffi::LUA_TNIL
-                {
+            let get_extra = |state| {
+                let upvalue = get_userdata::<AsyncPollUpvalue>(state, ffi::lua_upvalueindex(1));
+                (*upvalue).lua.extra.clone()
+            };
+            callback_error_ext(state, get_extra, |nargs| {
+                let upvalue_idx = ffi::lua_upvalueindex(1);
+                if ffi::lua_type(state, upvalue_idx) == ffi::LUA_TNIL {
                     return Err(Error::CallbackDestructed);
                 }
-                let fut = get_userdata::<LocalBoxFuture<Result<MultiValue>>>(state, upvalue_idx1);
-                let lua = get_userdata::<Lua>(state, upvalue_idx2);
+                let upvalue = get_userdata::<AsyncPollUpvalue>(state, upvalue_idx);
 
                 if nargs < ffi::LUA_MINSTACK {
                     check_stack(state, ffi::LUA_MINSTACK - nargs)?;
                 }
 
-                let lua = &mut *lua;
+                let lua = &mut (*upvalue).lua;
                 lua.state = state;
 
                 // Try to get an outer poll waker
@@ -1910,7 +1912,8 @@ impl Lua {
 
                 let mut ctx = Context::from_waker(&waker);
 
-                match (*fut).as_mut().poll(&mut ctx) {
+                let fut = &mut (*upvalue).fut;
+                match fut.as_mut().poll(&mut ctx) {
                     Poll::Pending => {
                         check_stack(state, 1)?;
                         ffi::lua_pushboolean(state, 0);
@@ -1932,12 +1935,13 @@ impl Lua {
 
         let get_poll = unsafe {
             let _sg = StackGuard::new(self.state);
-            check_stack(self.state, 5)?;
+            check_stack(self.state, 4)?;
 
-            push_gc_userdata::<AsyncCallback>(self.state, mem::transmute(func))?;
-            push_gc_userdata(self.state, self.clone())?;
-            protect_lua(self.state, 2, 1, |state| {
-                ffi::lua_pushcclosure(state, call_callback, 2);
+            let lua = self.clone();
+            let func = mem::transmute(func);
+            push_gc_userdata(self.state, AsyncCallbackUpvalue { lua, func })?;
+            protect_lua(self.state, 1, 1, |state| {
+                ffi::lua_pushcclosure(state, call_callback, 1);
             })?;
 
             Function(self.pop_ref())
@@ -2287,13 +2291,14 @@ impl<'lua, T: AsRef<[u8]> + ?Sized> AsChunk<'lua> for T {
 
 // An optimized version of `callback_error` that does not allocate `WrappedError+Panic` userdata
 // and instead reuses unsed and cached values from previous calls (or allocates new).
-// It assumes that ephemeral `Lua` struct is passed as a 2nd upvalue.
-pub unsafe fn callback_error2<F, R>(state: *mut ffi::lua_State, f: F) -> R
+// It requires `get_extra` function to return `ExtraData` value.
+unsafe fn callback_error_ext<E, F, R>(state: *mut ffi::lua_State, get_extra: E, f: F) -> R
 where
+    E: Fn(*mut ffi::lua_State) -> Arc<Mutex<ExtraData>>,
     F: FnOnce(c_int) -> Result<R>,
 {
-    let upvalue_idx2 = ffi::lua_upvalueindex(2);
-    if ffi::lua_type(state, upvalue_idx2) == ffi::LUA_TNIL {
+    let upvalue_idx = ffi::lua_upvalueindex(1);
+    if ffi::lua_type(state, upvalue_idx) == ffi::LUA_TNIL {
         return callback_error(state, f);
     }
 
@@ -2314,9 +2319,9 @@ where
 
     // We cannot shadow Rust errors with Lua ones, so we need to obtain pre-allocated memory
     // to store a wrapped error or panic *before* we proceed.
-    let lua = get_userdata::<Lua>(state, upvalue_idx2);
+    let extra = get_extra(state);
     let prealloc_err = {
-        let mut extra = mlua_expect!((*lua).extra.lock(), "extra is poisoned");
+        let mut extra = mlua_expect!(extra.lock(), "extra is poisoned");
         match extra.prealloc_wrapped_errors.pop() {
             Some(index) => PreallocatedError::Cached(index),
             None => {
@@ -2329,7 +2334,7 @@ where
     };
 
     let get_prealloc_err = || {
-        let mut extra = mlua_expect!((*lua).extra.lock(), "extra is poisoned");
+        let mut extra = mlua_expect!(extra.lock(), "extra is poisoned");
         match prealloc_err {
             PreallocatedError::New(ud) => {
                 ffi::lua_settop(state, 1);
@@ -2350,7 +2355,7 @@ where
     match catch_unwind(AssertUnwindSafe(|| f(nargs))) {
         Ok(Ok(r)) => {
             // Return unused WrappedError+Panic to the cache
-            let mut extra = mlua_expect!((*lua).extra.lock(), "extra is poisoned");
+            let mut extra = mlua_expect!(extra.lock(), "extra is poisoned");
             match prealloc_err {
                 PreallocatedError::New(_) if extra.prealloc_wrapped_errors.len() < 16 => {
                     ffi::lua_rotate(state, 1, -1);
