@@ -36,7 +36,7 @@ use super::lauxlib::{
 #[cfg(any(feature = "lua51", feature = "luajit"))]
 use super::lauxlib::{luaL_Reg, luaL_checktype, luaL_getmetatable};
 
-#[cfg(feature = "lua52")]
+#[cfg(any(feature = "lua52", feature = "lua-factorio"))]
 use super::lauxlib::{luaL_checkstack, luaL_getsubtable};
 
 use super::lua::{
@@ -58,7 +58,7 @@ use super::lua::{
     lua_setfenv, lua_settop, LUA_OPADD, LUA_OPUNM,
 };
 
-#[cfg(feature = "lua52")]
+#[cfg(any(feature = "lua52", feature = "lua-factorio"))]
 use super::lua::{
     lua_absindex, lua_getglobal_old, lua_getuservalue_old, lua_pushstring, lua_rawgetp_old,
     lua_rawsetp, lua_tonumberx,
@@ -371,7 +371,7 @@ pub unsafe fn lua_pushlstring(L: *mut lua_State, s: *const c_char, l: usize) -> 
     lua_tostring(L, -1)
 }
 
-#[cfg(feature = "lua52")]
+#[cfg(any(feature = "lua52", feature = "lua-factorio"))]
 #[inline(always)]
 pub unsafe fn lua_pushlstring(L: *mut lua_State, s: *const c_char, l: usize) -> *const c_char {
     if l == 0 {
@@ -388,7 +388,7 @@ pub unsafe fn lua_pushstring(L: *mut lua_State, s: *const c_char) -> *const c_ch
     lua_tostring(L, -1)
 }
 
-#[cfg(feature = "lua52")]
+#[cfg(any(feature = "lua52", feature = "lua-factorio"))]
 #[inline(always)]
 pub unsafe fn lua_getglobal(L: *mut lua_State, var: *const c_char) -> c_int {
     lua_getglobal_old(L, var);
@@ -438,7 +438,7 @@ pub unsafe fn lua_rawgetp(L: *mut lua_State, idx: c_int, p: *const c_void) -> c_
     lua_type(L, -1)
 }
 
-#[cfg(feature = "lua52")]
+#[cfg(any(feature = "lua52", feature = "lua-factorio"))]
 #[inline(always)]
 pub unsafe fn lua_rawgetp(L: *mut lua_State, idx: c_int, p: *const c_void) -> c_int {
     lua_rawgetp_old(L, idx, p);
@@ -452,7 +452,7 @@ pub unsafe fn lua_getuservalue(L: *mut lua_State, idx: c_int) -> c_int {
     lua_type(L, -1)
 }
 
-#[cfg(feature = "lua52")]
+#[cfg(any(feature = "lua52", feature = "lua-factorio"))]
 #[inline(always)]
 pub unsafe fn lua_getuservalue(L: *mut lua_State, idx: c_int) -> c_int {
     lua_getuservalue_old(L, idx);
@@ -822,7 +822,7 @@ pub unsafe fn luaL_requiref(
         lua_pop(L, 1);
         lua_pushcfunction(L, openf);
         lua_pushstring(L, modname);
-        #[cfg(any(feature = "lua52", feature = "lua51"))]
+        #[cfg(any(feature = "lua52", feature = "lua-factorio", feature = "lua51"))]
         {
             lua_call(L, 1, 1);
             lua_pushvalue(L, -1);
@@ -834,7 +834,7 @@ pub unsafe fn luaL_requiref(
             lua_getfield(L, -1, modname);
         }
     }
-    if cfg!(any(feature = "lua52", feature = "lua51")) && glb != 0 {
+    if cfg!(any(feature = "lua52", feature = "lua-factorio", feature = "lua51")) && glb != 0 {
         lua_pushvalue(L, -1);
         lua_setglobal(L, modname);
     }
