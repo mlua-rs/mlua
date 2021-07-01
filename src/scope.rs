@@ -197,7 +197,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
                 // We know the destructor has not run yet because we hold a reference to the userdata.
 
                 // Clear uservalue
-                #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+                #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "lua-factorio"))]
                 ffi::lua_pushnil(state);
                 #[cfg(any(feature = "lua51", feature = "luajit"))]
                 ud.lua.push_ref(&newtable.0);
@@ -415,7 +415,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
                 ud.lua.deregister_userdata_metatable(mt_id as isize);
 
                 // Clear uservalue
-                #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+                #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "lua-factorio"))]
                 ffi::lua_pushnil(state);
                 #[cfg(any(feature = "lua51", feature = "luajit"))]
                 ud.lua.push_ref(&newtable.0);
@@ -494,7 +494,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
             // We know the destructor has not run yet because we hold a reference to the callback.
 
             // First, get the environment table
-            #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+            #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "lua-factorio"))]
             ffi::lua_getupvalue(state, -1, 1);
             #[cfg(any(feature = "lua51", feature = "luajit"))]
             ffi::lua_getfenv(state, -1);
