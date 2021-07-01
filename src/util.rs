@@ -199,7 +199,7 @@ pub unsafe fn pop_error(state: *mut ffi::lua_State, err_code: c_int) -> Error {
                 Error::RuntimeError(err_string)
             }
             ffi::LUA_ERRMEM => Error::MemoryError(err_string),
-            #[cfg(any(feature = "lua53", feature = "lua52"))]
+            #[cfg(any(feature = "lua53", feature = "lua52", feature = "lua-factorio"))]
             ffi::LUA_ERRGCMM => Error::GarbageCollectorError(err_string),
             _ => mlua_panic!("unrecognized lua error code"),
         }
