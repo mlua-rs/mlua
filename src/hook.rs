@@ -86,9 +86,9 @@ impl<'a> Debug<'a> {
             );
             DebugStack {
                 num_ups: (*self.ar).nups as i32,
-                #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+                #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "lua-factorio"))]
                 num_params: (*self.ar).nparams as i32,
-                #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+                #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "lua-factorio"))]
                 is_vararg: (*self.ar).isvararg != 0,
             }
         }
@@ -114,10 +114,10 @@ pub struct DebugSource<'a> {
 pub struct DebugStack {
     pub num_ups: i32,
     /// Requires `feature = "lua54/lua53/lua52"`
-    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", doc))]
+    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "lua-factorio", doc))]
     pub num_params: i32,
     /// Requires `feature = "lua54/lua53/lua52"`
-    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", doc))]
+    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "lua-factorio", doc))]
     pub is_vararg: bool,
 }
 
