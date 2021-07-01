@@ -14,8 +14,10 @@ impl StdLib {
     /// [`table`](https://www.lua.org/manual/5.3/manual.html#6.6) library
     pub const TABLE: StdLib = StdLib(1 << 1);
     /// [`io`](https://www.lua.org/manual/5.3/manual.html#6.8) library
+    #[cfg(not(feature = "lua-factorio"))]
     pub const IO: StdLib = StdLib(1 << 2);
     /// [`os`](https://www.lua.org/manual/5.3/manual.html#6.9) library
+    #[cfg(not(feature = "lua-factorio"))]
     pub const OS: StdLib = StdLib(1 << 3);
     /// [`string`](https://www.lua.org/manual/5.3/manual.html#6.4) library
     pub const STRING: StdLib = StdLib(1 << 4);
@@ -27,7 +29,7 @@ impl StdLib {
     /// [`bit`](https://www.lua.org/manual/5.2/manual.html#6.7) library
     ///
     /// Requires `feature = "lua52/luajit"`
-    #[cfg(any(feature = "lua52", feature = "luajit", doc))]
+    #[cfg(any(feature = "lua52", feature = "lua-factorio", feature = "luajit", doc))]
     pub const BIT: StdLib = StdLib(1 << 6);
     /// [`math`](https://www.lua.org/manual/5.3/manual.html#6.7) library
     pub const MATH: StdLib = StdLib(1 << 7);
