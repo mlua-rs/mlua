@@ -646,7 +646,7 @@ impl Lua {
     ///
     /// Does not work on module mode where Lua state is managed externally.
     ///
-    /// Requires `feature = "lua54/lua53/lua52"`
+    /// Requires `feature = "lua54/lua53/lua52/lua-factorio"`
     #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "lua-factorio", doc))]
     pub fn set_memory_limit(&self, memory_limit: usize) -> Result<usize> {
         let mut extra = mlua_expect!(self.extra.lock(), "extra is poisoned");
@@ -662,7 +662,7 @@ impl Lua {
 
     /// Returns true if the garbage collector is currently running automatically.
     ///
-    /// Requires `feature = "lua54/lua53/lua52"`
+    /// Requires `feature = "lua54/lua53/lua52/lua-factorio"`
     #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "lua-factorio", doc))]
     pub fn gc_is_running(&self) -> bool {
         let state = self.main_state.unwrap_or(self.state);
@@ -856,7 +856,7 @@ impl Lua {
                 ffi::LUA_OK => {
                     if let Some(env) = env {
                         self.push_value(env)?;
-                        #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+                        #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "lua-factorio"))]
                         ffi::lua_setupvalue(self.state, -2, 1);
                         #[cfg(any(feature = "lua51", feature = "luajit"))]
                         ffi::lua_setfenv(self.state, -2);
