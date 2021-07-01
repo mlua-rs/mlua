@@ -103,14 +103,14 @@ pub enum MetaMethod {
     ///
     /// This is not an operator, but it will be called by the built-in `pairs` function.
     ///
-    /// Requires `feature = "lua54/lua53/lua52"`
+    /// Requires `feature = "lua54/lua53/lua52/lua-factorio"`
     #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "lua-factorio", doc))]
     Pairs,
     /// The `__ipairs` metamethod.
     ///
     /// This is not an operator, but it will be called by the built-in [`ipairs`] function.
     ///
-    /// Requires `feature = "lua52"`
+    /// Requires `feature = "lua52/lua-factorio"`
     ///
     /// [`ipairs`]: https://www.lua.org/manual/5.2/manual.html#pdf-ipairs
     #[cfg(any(feature = "lua52", feature = "lua-factorio", doc))]
