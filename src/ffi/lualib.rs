@@ -28,8 +28,13 @@ use std::os::raw::c_int;
 use super::lua::lua_State;
 
 pub use super::glue::{
-    LUA_COLIBNAME, LUA_DBLIBNAME, LUA_IOLIBNAME, LUA_LOADLIBNAME, LUA_MATHLIBNAME, LUA_OSLIBNAME,
+    LUA_DBLIBNAME, LUA_LOADLIBNAME, LUA_MATHLIBNAME,
     LUA_STRLIBNAME, LUA_TABLIBNAME,
+};
+
+#[cfg(not(feature = "lua-factorio"))]
+pub use super::glue::{
+    LUA_COLIBNAME, LUA_IOLIBNAME, LUA_OSLIBNAME,
 };
 
 #[cfg(any(feature = "lua54", feature = "lua53"))]

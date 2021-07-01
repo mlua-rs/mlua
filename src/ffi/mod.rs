@@ -241,8 +241,13 @@ pub use self::lauxlib::{LUA_ERRFILE, LUA_NOREF, LUA_REFNIL};
 
 // constants from lualib.h
 pub use self::lualib::{
-    LUA_COLIBNAME, LUA_DBLIBNAME, LUA_IOLIBNAME, LUA_LOADLIBNAME, LUA_MATHLIBNAME, LUA_OSLIBNAME,
+    LUA_DBLIBNAME, LUA_LOADLIBNAME, LUA_MATHLIBNAME,
     LUA_STRLIBNAME, LUA_TABLIBNAME,
+};
+
+#[cfg(not(feature = "lua-factorio"))]
+pub use self::lualib::{
+    LUA_COLIBNAME, LUA_IOLIBNAME, LUA_OSLIBNAME,
 };
 
 #[cfg(any(feature = "lua54", feature = "lua53"))]
