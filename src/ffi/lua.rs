@@ -196,8 +196,14 @@ extern "C" {
     pub fn lua_xmove(from: *mut lua_State, to: *mut lua_State, n: c_int);
 
     // access functions (stack -> C)
+    #[cfg(not(feature = "lua-factorio"))]
     pub fn lua_isnumber(L: *mut lua_State, idx: c_int) -> c_int;
+    #[cfg(feature = "lua-factorio")]
+    pub fn lua_isnumberorstringconvertabletonumber(L: *mut lua_State, idx: c_int) -> c_int;
+    #[cfg(not(feature = "lua-factorio"))]
     pub fn lua_isstring(L: *mut lua_State, idx: c_int) -> c_int;
+    #[cfg(feature = "lua-factorio")]
+    pub fn lua_isstringornumberconvertabletostring(L: *mut lua_State, idx: c_int) -> c_int;
     pub fn lua_iscfunction(L: *mut lua_State, idx: c_int) -> c_int;
     #[cfg(any(feature = "lua54", feature = "lua53"))]
     pub fn lua_isinteger(L: *mut lua_State, idx: c_int) -> c_int;
