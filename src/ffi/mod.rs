@@ -125,7 +125,7 @@ pub use self::lua::{
     lua_register,
     lua_remove,
     lua_replace,
-    lua_resume,
+    //lua_resume,
     lua_rotate,
     lua_setallocf,
     lua_setfield,
@@ -155,8 +155,11 @@ pub use self::lua::{
     lua_typename,
     lua_upvalueindex,
     lua_xmove,
-    lua_yield,
+    //lua_yield,
 };
+
+#[cfg(not(feature = "lua-factorio"))]
+pub use self::lua::{lua_resume, lua_yield};
 
 #[cfg(feature = "lua54")]
 pub use self::lua::{
@@ -167,8 +170,11 @@ pub use self::lua::{
 #[cfg(any(feature = "lua54", feature = "lua53"))]
 pub use self::lua::{lua_isyieldable, lua_version};
 
-#[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "lua-factorio"))]
+#[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
 pub use self::lua::{lua_callk, lua_pcallk, lua_upvalueid, lua_upvaluejoin, lua_yieldk};
+
+#[cfg(feature = "lua-factorio")]
+pub use self::lua::{lua_callk, lua_pcallk, lua_upvalueid, lua_upvaluejoin};
 
 #[cfg(any(feature = "lua54", all(feature = "luajit", feature = "vendored")))]
 pub use self::lua::lua_resetthread;
