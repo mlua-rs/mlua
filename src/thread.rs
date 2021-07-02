@@ -104,6 +104,7 @@ impl<'lua> Thread<'lua> {
     /// # Ok(())
     /// # }
     /// ```
+    #[cfg(not(feature = "lua-factorio"))]
     pub fn resume<A, R>(&self, args: A) -> Result<R>
     where
         A: ToLuaMulti<'lua>,
