@@ -157,7 +157,7 @@ pub type lua_WarnFunction =
 
 #[cfg(feature = "lua-factorio")]
 extern "C" {
-    //pub fn lua_registertracehandler(handler) // I don't know how to do this
+    pub fn lua_registertracehandler(handler: Option<extern "C" fn(*const c_char)>);
     pub fn lua_trace(message: *const c_char);
     pub fn lua_traceandabort(message: *const c_char) -> c_int;
 }
