@@ -510,6 +510,52 @@ impl Lua {
         res
     }
 
+    /// Calls the Lua function `func` with the string `modname` as an argument, sets
+    /// the call result to `package.loaded[modname]` and returns copy of the result.
+    ///
+    /// If `package.loaded[modname]` value is not nil, returns copy of the value without
+    /// calling the function.
+    ///
+    /// If the function does not return a non-nil value then this method assigns true to
+    /// `package.loaded[modname]`.
+    ///
+    /// Behavior is similar to Lua's [`require`] function.
+    ///
+    /// [`require`]: https://www.lua.org/manual/5.3/manual.html#pdf-require
+    pub fn load_from_function<'lua, S, T>(
+        &'lua self,
+        modname: &S,
+        func: Function<'lua>,
+    ) -> Result<T>
+    where
+        S: AsRef<[u8]> + ?Sized,
+        T: FromLua<'lua>,
+    {
+        unsafe {
+            let _sg = StackGuard::new(self.state);
+            check_stack(self.state, 3)?;
+
+            protect_lua(self.state, 0, 1, |state| {
+                ffi::luaL_getsubtable(state, ffi::LUA_REGISTRYINDEX, cstr!("_LOADED"));
+            })?;
+            let loaded = Table(self.pop_ref());
+
+            let modname = self.create_string(modname)?;
+            let value = match loaded.raw_get(modname.clone())? {
+                Value::Nil => {
+                    let result = match func.call(modname.clone())? {
+                        Value::Nil => Value::Boolean(true),
+                        res => res,
+                    };
+                    loaded.raw_set(modname, result.clone())?;
+                    result
+                }
+                res => res,
+            };
+            T::from_lua(value, self)
+        }
+    }
+
     /// Consumes and leaks `Lua` object, returning a static reference `&'static Lua`.
     ///
     /// This function is useful when the `Lua` object is supposed to live for the remainder
@@ -1032,6 +1078,19 @@ impl Lua {
                 .try_borrow_mut()
                 .map_err(|_| Error::RecursiveMutCallback)?)(lua, args)
         })
+    }
+
+    /// Wraps a C function, creating a callable Lua function handle to it.
+    ///
+    /// # Safety
+    /// This function is unsafe because provides a way to execute unsafe C function.
+    pub unsafe fn create_c_function(&self, func: ffi::lua_CFunction) -> Result<Function> {
+        let _sg = StackGuard::new(self.state);
+        check_stack(self.state, 3)?;
+        protect_lua(self.state, 0, 1, |state| {
+            ffi::lua_pushcfunction(state, func);
+        })?;
+        Ok(Function(self.pop_ref()))
     }
 
     /// Wraps a Rust async function or closure, creating a callable Lua function handle to it.

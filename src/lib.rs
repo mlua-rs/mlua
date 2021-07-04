@@ -98,8 +98,7 @@ mod userdata;
 mod util;
 mod value;
 
-#[doc(hidden)]
-pub use crate::ffi::lua_State;
+pub use crate::{ffi::lua_CFunction, ffi::lua_State};
 
 pub use crate::error::{Error, ExternalError, ExternalResult, Result};
 pub use crate::function::Function;

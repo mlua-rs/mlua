@@ -77,6 +77,23 @@ fn test_rust_function() -> Result<()> {
 }
 
 #[test]
+fn test_c_function() -> Result<()> {
+    let lua = Lua::new();
+
+    unsafe extern "C" fn c_function(state: *mut mlua::lua_State) -> std::os::raw::c_int {
+        let lua = Lua::init_from_ptr(state);
+        lua.globals().set("c_function", true).unwrap();
+        0
+    }
+
+    let func = unsafe { lua.create_c_function(c_function)? };
+    func.call(())?;
+    assert_eq!(lua.globals().get::<_, bool>("c_function")?, true);
+
+    Ok(())
+}
+
+#[test]
 fn test_dump() -> Result<()> {
     let lua = unsafe { Lua::unsafe_new() };
 

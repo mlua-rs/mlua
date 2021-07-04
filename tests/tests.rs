@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::iter::FromIterator;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::string::String as StdString;
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 use std::{error, f32, f64, fmt};
 
@@ -1084,5 +1085,32 @@ fn test_jit_version() -> Result<()> {
         .get::<_, String>("version")?
         .to_str()?
         .contains("LuaJIT"));
+    Ok(())
+}
+
+#[test]
+fn test_load_from_function() -> Result<()> {
+    let lua = Lua::new();
+
+    let i = Arc::new(AtomicU32::new(0));
+    let i2 = i.clone();
+    let func = lua.create_function(move |lua, modname: String| {
+        i2.fetch_add(1, Ordering::Relaxed);
+        let t = lua.create_table()?;
+        t.set("__name", modname)?;
+        Ok(t)
+    })?;
+
+    let t: Table = lua.load_from_function("my_module", func.clone())?;
+    assert_eq!(t.get::<_, String>("__name")?, "my_module");
+    assert_eq!(i.load(Ordering::Relaxed), 1);
+
+    let _: Value = lua.load_from_function("my_module", func)?;
+    assert_eq!(i.load(Ordering::Relaxed), 1);
+
+    let func_nil = lua.create_function(move |_, _: String| Ok(Value::Nil))?;
+    let v: Value = lua.load_from_function("my_module2", func_nil)?;
+    assert_eq!(v, Value::Boolean(true));
+
     Ok(())
 }
