@@ -134,6 +134,9 @@ pub mod serde;
 #[macro_use]
 extern crate mlua_derive;
 
+#[cfg(feature = "lua-factorio")]
+extern crate link_cplusplus;
+
 /// Create a type that implements [`AsChunk`] and can capture Rust variables.
 ///
 /// This macro allows to write Lua code directly in Rust code.

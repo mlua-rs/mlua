@@ -33,7 +33,7 @@ lua54 = []
 lua53 = []
 lua52 = []
 lua51 = []
-lua-factorio = ["vendored"]
+lua-factorio = ["vendored", "link-cplusplus"]
 luajit = []
 vendored = ["lua-src", "luajit-src"]
 module = ["mlua_derive"]
@@ -52,6 +52,7 @@ futures-task = { version = "0.3.5", optional = true }
 futures-util = { version = "0.3.5", optional = true }
 serde = { version = "1.0", optional = true }
 erased-serde = { version = "0.3", optional = true }
+link-cplusplus = { version = "1.0", optional = true}
 
 [build-dependencies]
 cc = { version = "1.0" }
