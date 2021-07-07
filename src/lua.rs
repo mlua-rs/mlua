@@ -28,9 +28,8 @@ use crate::userdata::{
 use crate::util::{
     self, assert_stack, callback_error, check_stack, get_destructed_userdata_metatable,
     get_gc_metatable, get_gc_userdata, get_main_state, get_userdata, init_error_registry,
-    init_gc_metatable, init_userdata_metatable, pop_error, protect_lua, push_gc_userdata,
-    push_string, push_table, push_userdata, rawset_field, safe_pcall, safe_xpcall, StackGuard,
-    WrappedFailure,
+    init_gc_metatable, init_userdata_metatable, pop_error, push_gc_userdata, push_string,
+    push_table, push_userdata, rawset_field, safe_pcall, safe_xpcall, StackGuard, WrappedFailure,
 };
 use crate::value::{FromLua, FromLuaMulti, MultiValue, Nil, ToLua, ToLuaMulti, Value};
 
@@ -414,7 +413,7 @@ impl Lua {
 
                     // Create empty Waker slot
                     push_gc_userdata::<Option<Waker>>(state, None)?;
-                    protect_lua(state, 1, 0, |state| {
+                    protect_lua!(state, 1, 0, state => {
                         let waker_key = &WAKER_REGISTRY_KEY as *const u8 as *const c_void;
                         ffi::lua_rawsetp(state, ffi::LUA_REGISTRYINDEX, waker_key);
                     })?;
@@ -432,7 +431,7 @@ impl Lua {
         // Create ref stack thread and place it in the registry to prevent it from being garbage
         // collected.
         let ref_thread = mlua_expect!(
-            protect_lua(state, 0, 0, |state| {
+            protect_lua!(state, 0, 0, |state| {
                 let thread = ffi::lua_newthread(state);
                 ffi::luaL_ref(state, ffi::LUA_REGISTRYINDEX);
                 thread
@@ -461,7 +460,7 @@ impl Lua {
         mlua_expect!(
             (|state| {
                 push_gc_userdata(state, Arc::clone(&extra))?;
-                protect_lua(main_state, 1, 0, |state| {
+                protect_lua!(main_state, 1, 0, state => {
                     let extra_key = &EXTRA_REGISTRY_KEY as *const u8 as *const c_void;
                     ffi::lua_rawsetp(state, ffi::LUA_REGISTRYINDEX, extra_key);
                 })
@@ -546,7 +545,7 @@ impl Lua {
         let loaded = unsafe {
             let _sg = StackGuard::new(self.state);
             check_stack(self.state, 3)?;
-            protect_lua(self.state, 0, 1, |state| {
+            protect_lua!(self.state, 0, 1, state => {
                 ffi::luaL_getsubtable(state, ffi::LUA_REGISTRYINDEX, cstr!("_LOADED"));
             })?;
             Table(self.pop_ref())
@@ -772,9 +771,7 @@ impl Lua {
         let state = self.main_state.unwrap_or(self.state);
         unsafe {
             check_stack(state, 3)?;
-            protect_lua(state, 0, 0, |state| {
-                ffi::lua_gc(state, ffi::LUA_GCCOLLECT, 0);
-            })
+            protect_lua!(state, 0, 0, state => ffi::lua_gc(state, ffi::LUA_GCCOLLECT, 0))
         }
     }
 
@@ -793,7 +790,7 @@ impl Lua {
         let state = self.main_state.unwrap_or(self.state);
         unsafe {
             check_stack(state, 3)?;
-            protect_lua(state, 0, 0, |state| {
+            protect_lua!(state, 0, 0, |state| {
                 ffi::lua_gc(state, ffi::LUA_GCSTEP, kbytes) != 0
             })
         }
@@ -970,7 +967,7 @@ impl Lua {
         unsafe {
             let _sg = StackGuard::new(self.state);
             check_stack(self.state, 3)?;
-            push_table(self.state, 0, 0)?;
+            protect_lua!(self.state, 0, 1, state => ffi::lua_newtable(state))?;
             Ok(Table(self.pop_ref()))
         }
     }
@@ -1005,7 +1002,7 @@ impl Lua {
             for (k, v) in iter {
                 self.push_value(k.to_lua(self)?)?;
                 self.push_value(v.to_lua(self)?)?;
-                protect_lua(self.state, 3, 1, |state| ffi::lua_rawset(state, -3))?;
+                protect_lua!(self.state, 3, 1, state => ffi::lua_rawset(state, -3))?;
             }
 
             Ok(Table(self.pop_ref()))
@@ -1027,7 +1024,7 @@ impl Lua {
             push_table(self.state, lower_bound as c_int, 0)?;
             for (i, v) in iter.enumerate() {
                 self.push_value(v.to_lua(self)?)?;
-                protect_lua(self.state, 2, 1, |state| {
+                protect_lua!(self.state, 2, 1, |state| {
                     ffi::lua_rawseti(state, -2, (i + 1) as Integer);
                 })?;
             }
@@ -1197,7 +1194,7 @@ impl Lua {
             let _sg = StackGuard::new(self.state);
             check_stack(self.state, 3)?;
 
-            let thread_state = protect_lua(self.state, 0, 1, |state| ffi::lua_newthread(state))?;
+            let thread_state = protect_lua!(self.state, 0, 1, |state| ffi::lua_newthread(state))?;
             self.push_ref(&func.0);
             ffi::lua_xmove(self.state, thread_state, 1);
 
@@ -1312,7 +1309,7 @@ impl Lua {
                 check_stack(self.state, 4)?;
 
                 self.push_value(v)?;
-                let res = protect_lua(self.state, 1, 1, |state| {
+                let res = protect_lua!(self.state, 1, 1, |state| {
                     ffi::lua_tolstring(state, -1, ptr::null_mut())
                 })?;
                 if !res.is_null() {
@@ -1466,7 +1463,7 @@ impl Lua {
             check_stack(self.state, 4)?;
 
             self.push_value(t)?;
-            let registry_id = protect_lua(self.state, 1, 0, |state| {
+            let registry_id = protect_lua!(self.state, 1, 0, |state| {
                 ffi::luaL_ref(state, ffi::LUA_REGISTRYINDEX)
             })?;
 
@@ -1747,7 +1744,7 @@ impl Lua {
             rawset_field(self.state, -2, k.validate()?.name())?;
         }
         // Add special `__mlua_type_id` field
-        let type_id_ptr = protect_lua(self.state, 0, 1, |state| {
+        let type_id_ptr = protect_lua!(self.state, 0, 1, |state| {
             ffi::lua_newuserdata(state, mem::size_of::<TypeId>()) as *mut TypeId
         })?;
         ptr::write(type_id_ptr, type_id);
@@ -1813,7 +1810,7 @@ impl Lua {
 
         let ptr = ffi::lua_topointer(self.state, -1);
         ffi::lua_pushvalue(self.state, -1);
-        let id = protect_lua(self.state, 1, 0, |state| {
+        let id = protect_lua!(self.state, 1, 0, |state| {
             ffi::luaL_ref(state, ffi::LUA_REGISTRYINDEX)
         })?;
 
@@ -1917,7 +1914,7 @@ impl Lua {
             let lua = self.clone();
             let func = mem::transmute(func);
             push_gc_userdata(self.state, CallbackUpvalue { lua, func })?;
-            protect_lua(self.state, 1, 1, |state| {
+            protect_lua!(self.state, 1, 1, state => {
                 ffi::lua_pushcclosure(state, call_callback, 1);
             })?;
 
@@ -1969,7 +1966,7 @@ impl Lua {
                 let fut = ((*upvalue).func)(lua, args);
                 let lua = lua.clone();
                 push_gc_userdata(state, AsyncPollUpvalue { lua, fut })?;
-                protect_lua(state, 1, 1, |state| {
+                protect_lua!(state, 1, 1, state => {
                     ffi::lua_pushcclosure(state, poll_future, 1);
                 })?;
 
@@ -2035,7 +2032,7 @@ impl Lua {
             let lua = self.clone();
             let func = mem::transmute(func);
             push_gc_userdata(self.state, AsyncCallbackUpvalue { lua, func })?;
-            protect_lua(self.state, 1, 1, |state| {
+            protect_lua!(self.state, 1, 1, state => {
                 ffi::lua_pushcclosure(state, call_callback, 1);
             })?;
 
@@ -2520,7 +2517,7 @@ unsafe fn load_from_std_lib(state: *mut ffi::lua_State, libs: StdLib) -> Result<
         glb: c_int,
     ) -> Result<()> {
         let modname = mlua_expect!(CString::new(modname.as_ref()), "modname contains nil bytes");
-        protect_lua(state, 0, 1, |state| {
+        protect_lua!(state, 0, 1, |state| {
             ffi::luaL_requiref(state, modname.as_ptr() as *const c_char, openf, glb)
         })
     }

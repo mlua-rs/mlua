@@ -18,8 +18,8 @@ use crate::userdata::{
     AnyUserData, MetaMethod, UserData, UserDataCell, UserDataFields, UserDataMethods,
 };
 use crate::util::{
-    assert_stack, check_stack, get_userdata, init_userdata_metatable, protect_lua, push_table,
-    rawset_field, take_userdata, StackGuard,
+    assert_stack, check_stack, get_userdata, init_userdata_metatable, push_table, rawset_field,
+    take_userdata, StackGuard,
 };
 use crate::value::{FromLua, FromLuaMulti, MultiValue, ToLua, ToLuaMulti, Value};
 
@@ -322,7 +322,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
             let _sg = StackGuard::new(lua.state);
             check_stack(lua.state, 13)?;
 
-            let data_ptr = protect_lua(lua.state, 0, 1, |state| {
+            let data_ptr = protect_lua!(lua.state, 0, 1, |state| {
                 ffi::lua_newuserdata(state, mem::size_of::<UserDataCell<Rc<RefCell<T>>>>())
             })?;
             // Prepare metatable, add meta methods first and then meta fields
