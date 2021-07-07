@@ -5,7 +5,7 @@ use std::slice;
 use crate::error::{Error, Result};
 use crate::ffi;
 use crate::types::LuaRef;
-use crate::util::{assert_stack, check_stack, error_traceback, pop_error, protect_lua, StackGuard};
+use crate::util::{assert_stack, check_stack, error_traceback, pop_error, StackGuard};
 use crate::value::{FromLuaMulti, MultiValue, ToLuaMulti};
 
 #[cfg(feature = "async")]
@@ -198,8 +198,8 @@ impl<'lua> Function<'lua> {
             for arg in args {
                 lua.push_value(arg)?;
             }
-            protect_lua(lua.state, nargs + 2, 1, |state| {
-                ffi::lua_pushcclosure(state, bind_call_impl, nargs + 2);
+            protect_lua!(lua.state, nargs + 2, 1, state => {
+                ffi::lua_pushcclosure(state, bind_call_impl, ffi::lua_gettop(state));
             })?;
 
             Ok(Function(lua.pop_ref()))

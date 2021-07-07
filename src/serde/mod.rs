@@ -10,7 +10,7 @@ use crate::ffi;
 use crate::lua::Lua;
 use crate::table::Table;
 use crate::types::LightUserData;
-use crate::util::{assert_stack, check_stack, protect_lua, StackGuard};
+use crate::util::{assert_stack, check_stack, StackGuard};
 use crate::value::Value;
 
 /// Trait for serializing/deserializing Lua values using Serde.
@@ -201,7 +201,7 @@ impl<'lua> LuaSerdeExt<'lua> for Lua {
 // Uses 6 stack spaces and calls checkstack.
 pub(crate) unsafe fn init_metatables(state: *mut ffi::lua_State) -> Result<()> {
     check_stack(state, 3)?;
-    protect_lua(state, 0, 0, |state| {
+    protect_lua!(state, 0, 0, state => {
         ffi::lua_createtable(state, 0, 1);
 
         ffi::lua_pushstring(state, cstr!("__metatable"));
