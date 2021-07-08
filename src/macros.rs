@@ -94,18 +94,3 @@ macro_rules! require_module_feature {
         compile_error!("Feature `module` must be enabled in the `mlua` crate");
     };
 }
-
-macro_rules! protect_lua {
-    ($state:expr, $nargs:expr, $nresults:expr, $f:expr) => {
-        crate::util::protect_lua_closure($state, $nargs, $nresults, $f)
-    };
-
-    ($state:expr, $nargs:expr, $nresults:expr, $state_inner:ident => $code:expr) => {{
-        unsafe extern "C" fn do_call($state_inner: *mut ffi::lua_State) -> ::std::os::raw::c_int {
-            $code;
-            $nresults
-        }
-
-        crate::util::protect_lua_c($state, $nargs, do_call)
-    }};
-}
