@@ -27,10 +27,10 @@ use crate::userdata::{
 };
 use crate::util::{
     self, assert_stack, callback_error, check_stack, get_destructed_userdata_metatable,
-    get_gc_metatable, get_gc_userdata, get_main_state, get_userdata, get_wrapped_error,
-    init_error_registry, init_gc_metatable, init_userdata_metatable, pop_error, protect_lua,
-    push_gc_userdata, push_string, push_table, push_userdata, push_wrapped_error, rawset_field,
-    safe_pcall, safe_xpcall, StackGuard, WrappedError, WrappedPanic,
+    get_gc_metatable, get_gc_userdata, get_main_state, get_userdata, init_error_registry,
+    init_gc_metatable, init_userdata_metatable, pop_error, protect_lua, push_gc_userdata,
+    push_string, push_table, push_userdata, rawset_field, safe_pcall, safe_xpcall, StackGuard,
+    WrappedFailure,
 };
 use crate::value::{FromLua, FromLuaMulti, MultiValue, Nil, ToLua, ToLuaMulti, Value};
 
@@ -77,9 +77,9 @@ struct ExtraData {
     ref_stack_top: c_int,
     ref_free: Vec<c_int>,
 
-    // Vec of preallocated WrappedError/WrappedPanic structs
+    // Vec of preallocated WrappedFailure enums
     // Used for callback optimization
-    prealloc_wrapped_errors: Vec<c_int>,
+    prealloc_wrapped_failures: Vec<c_int>,
 
     hook_callback: Option<HookCallback>,
 }
@@ -164,7 +164,7 @@ impl Drop for Lua {
         unsafe {
             if !self.ephemeral {
                 let extra = &mut *self.extra;
-                for index in extra.prealloc_wrapped_errors.clone() {
+                for index in extra.prealloc_wrapped_failures.clone() {
                     ffi::lua_pushnil(extra.ref_thread);
                     ffi::lua_replace(extra.ref_thread, index);
                     extra.ref_free.push(index);
@@ -446,7 +446,7 @@ impl Lua {
             ref_stack_size: ffi::LUA_MINSTACK - 1,
             ref_stack_top: 0,
             ref_free: Vec::new(),
-            prealloc_wrapped_errors: Vec::new(),
+            prealloc_wrapped_failures: Vec::new(),
             hook_callback: None,
         }));
 
@@ -1558,8 +1558,8 @@ impl Lua {
                 self.push_ref(&ud.0);
             }
 
-            Value::Error(e) => {
-                push_wrapped_error(self.state, e)?;
+            Value::Error(err) => {
+                push_gc_userdata(self.state, WrappedFailure::Error(err))?;
             }
         }
 
@@ -1608,20 +1608,22 @@ impl Lua {
             ffi::LUA_TUSERDATA => {
                 // We must prevent interaction with userdata types other than UserData OR a WrappedError.
                 // WrappedPanics are automatically resumed.
-                if let Some(err) = get_wrapped_error(state, -1).as_ref() {
-                    let err = err.clone();
-                    ffi::lua_pop(state, 1);
-                    Value::Error(err)
-                } else if let Some(panic) = get_gc_userdata::<WrappedPanic>(state, -1).as_mut() {
-                    if let Some(panic) = (*panic).0.take() {
+                match get_gc_userdata::<WrappedFailure>(state, -1).as_mut() {
+                    Some(WrappedFailure::Error(err)) => {
+                        let err = err.clone();
                         ffi::lua_pop(state, 1);
-                        resume_unwind(panic);
+                        Value::Error(err)
                     }
-                    // Previously resumed panic?
-                    ffi::lua_pop(state, 1);
-                    Nil
-                } else {
-                    Value::UserData(AnyUserData(self.pop_ref()))
+                    Some(WrappedFailure::Panic(panic)) => {
+                        if let Some(panic) = panic.take() {
+                            ffi::lua_pop(state, 1);
+                            resume_unwind(panic);
+                        }
+                        // Previously resumed panic?
+                        ffi::lua_pop(state, 1);
+                        Nil
+                    }
+                    _ => Value::UserData(AnyUserData(self.pop_ref())),
                 }
             }
 
@@ -2334,7 +2336,7 @@ impl<'lua, T: AsRef<[u8]> + ?Sized> AsChunk<'lua> for T {
     }
 }
 
-// An optimized version of `callback_error` that does not allocate `WrappedError+Panic` userdata
+// An optimized version of `callback_error` that does not allocate `WrappedFailure` userdata
 // and instead reuses unsed and cached values from previous calls (or allocates new).
 // It requires `get_extra` function to return `ExtraData` value.
 unsafe fn callback_error_ext<E, F, R>(state: *mut ffi::lua_State, get_extra: E, f: F) -> R
@@ -2357,59 +2359,60 @@ where
         cstr!("not enough stack space for callback error handling"),
     );
 
-    enum PreallocatedError {
-        New(*mut c_void),
+    enum PreallocatedFailure {
+        New(*mut WrappedFailure),
         Cached(i32),
     }
 
     // We cannot shadow Rust errors with Lua ones, so we need to obtain pre-allocated memory
     // to store a wrapped error or panic *before* we proceed.
     let extra = &mut *get_extra(state);
-    let prealloc_err = {
-        match extra.prealloc_wrapped_errors.pop() {
-            Some(index) => PreallocatedError::Cached(index),
+    let prealloc_failure = {
+        match extra.prealloc_wrapped_failures.pop() {
+            Some(index) => PreallocatedFailure::Cached(index),
             None => {
-                let size = mem::size_of::<WrappedError>().max(mem::size_of::<WrappedPanic>());
-                let ud = ffi::lua_newuserdata(state, size);
+                let ud = ffi::lua_newuserdata(state, mem::size_of::<WrappedFailure>());
                 ffi::lua_rotate(state, 1, 1);
-                PreallocatedError::New(ud)
+                PreallocatedFailure::New(ud as *mut WrappedFailure)
             }
         }
     };
 
-    let mut get_prealloc_err = || match prealloc_err {
-        PreallocatedError::New(ud) => {
+    let mut get_prealloc_failure = || match prealloc_failure {
+        PreallocatedFailure::New(ud) => {
             ffi::lua_settop(state, 1);
             ud
         }
-        PreallocatedError::Cached(index) => {
+        PreallocatedFailure::Cached(index) => {
             ffi::lua_settop(state, 0);
             ffi::lua_pushvalue(extra.ref_thread, index);
             ffi::lua_xmove(extra.ref_thread, state, 1);
             ffi::lua_pushnil(extra.ref_thread);
             ffi::lua_replace(extra.ref_thread, index);
             extra.ref_free.push(index);
-            ffi::lua_touserdata(state, -1)
+            ffi::lua_touserdata(state, -1) as *mut WrappedFailure
         }
     };
 
     match catch_unwind(AssertUnwindSafe(|| f(nargs))) {
         Ok(Ok(r)) => {
-            // Return unused WrappedError+Panic to the cache
-            match prealloc_err {
-                PreallocatedError::New(_) if extra.prealloc_wrapped_errors.len() < 16 => {
+            // Return unused WrappedFailure to the cache
+            match prealloc_failure {
+                PreallocatedFailure::New(_) if extra.prealloc_wrapped_failures.len() < 16 => {
                     ffi::lua_rotate(state, 1, -1);
                     ffi::lua_xmove(state, extra.ref_thread, 1);
                     let index = ref_stack_pop(extra);
-                    extra.prealloc_wrapped_errors.push(index);
+                    extra.prealloc_wrapped_failures.push(index);
                 }
-                PreallocatedError::New(_) => {
+                PreallocatedFailure::New(_) => {
                     ffi::lua_remove(state, 1);
                 }
-                PreallocatedError::Cached(index) if extra.prealloc_wrapped_errors.len() < 16 => {
-                    extra.prealloc_wrapped_errors.push(index);
+                PreallocatedFailure::Cached(index)
+                    if extra.prealloc_wrapped_failures.len() < 16 =>
+                {
+                    extra.prealloc_wrapped_failures.push(index);
                 }
-                PreallocatedError::Cached(index) => {
+                PreallocatedFailure::Cached(index) => {
                     ffi::lua_pushnil(extra.ref_thread);
                     ffi::lua_replace(extra.ref_thread, index);
                     extra.ref_free.push(index);
@@ -2418,9 +2421,9 @@ where
             r
         }
         Ok(Err(err)) => {
-            let wrapped_error = get_prealloc_err() as *mut WrappedError;
-            ptr::write(wrapped_error, WrappedError(err));
-            get_gc_metatable::<WrappedError>(state);
+            let wrapped_error = get_prealloc_failure();
+            ptr::write(wrapped_error, WrappedFailure::Error(err));
+            get_gc_metatable::<WrappedFailure>(state);
             ffi::lua_setmetatable(state, -2);
 
             // Convert to CallbackError and attach traceback
@@ -2432,15 +2435,17 @@ where
             } else {
                 "<not enough stack space for traceback>".to_string()
             };
-            let cause = Arc::new((*wrapped_error).0.clone());
-            (*wrapped_error).0 = Error::CallbackError { traceback, cause };
+            if let WrappedFailure::Error(ref mut err) = *wrapped_error {
+                let cause = Arc::new(err.clone());
+                *err = Error::CallbackError { traceback, cause };
+            }
 
             ffi::lua_error(state)
         }
         Err(p) => {
-            let wrapped_panic = get_prealloc_err() as *mut WrappedPanic;
-            ptr::write(wrapped_panic, WrappedPanic(Some(p)));
-            get_gc_metatable::<WrappedPanic>(state);
+            let wrapped_panic = get_prealloc_failure();
+            ptr::write(wrapped_panic, WrappedFailure::Panic(Some(p)));
+            get_gc_metatable::<WrappedFailure>(state);
             ffi::lua_setmetatable(state, -2);
             ffi::lua_error(state)
         }
