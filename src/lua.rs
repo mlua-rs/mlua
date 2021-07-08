@@ -27,8 +27,8 @@ use crate::userdata::{
 };
 use crate::util::{
     self, assert_stack, callback_error, check_stack, get_destructed_userdata_metatable,
-    get_gc_metatable_for, get_gc_userdata, get_main_state, get_userdata, get_wrapped_error,
-    init_error_registry, init_gc_metatable_for, init_userdata_metatable, pop_error, protect_lua,
+    get_gc_metatable, get_gc_userdata, get_main_state, get_userdata, get_wrapped_error,
+    init_error_registry, init_gc_metatable, init_userdata_metatable, pop_error, protect_lua,
     push_gc_userdata, push_string, push_table, push_userdata, push_wrapped_error, rawset_field,
     safe_pcall, safe_xpcall, StackGuard, WrappedError, WrappedPanic,
 };
@@ -398,14 +398,14 @@ impl Lua {
                 // Create the internal metatables and place them in the registry
                 // to prevent them from being garbage collected.
 
-                init_gc_metatable_for::<Callback>(state, None)?;
-                init_gc_metatable_for::<CallbackUpvalue>(state, None)?;
+                init_gc_metatable::<Callback>(state, None)?;
+                init_gc_metatable::<CallbackUpvalue>(state, None)?;
                 #[cfg(feature = "async")]
                 {
-                    init_gc_metatable_for::<AsyncCallback>(state, None)?;
-                    init_gc_metatable_for::<AsyncCallbackUpvalue>(state, None)?;
-                    init_gc_metatable_for::<AsyncPollUpvalue>(state, None)?;
-                    init_gc_metatable_for::<Option<Waker>>(state, None)?;
+                    init_gc_metatable::<AsyncCallback>(state, None)?;
+                    init_gc_metatable::<AsyncCallbackUpvalue>(state, None)?;
+                    init_gc_metatable::<AsyncPollUpvalue>(state, None)?;
+                    init_gc_metatable::<Option<Waker>>(state, None)?;
 
                     // Create empty Waker slot
                     push_gc_userdata::<Option<Waker>>(state, None)?;
@@ -2420,7 +2420,7 @@ where
         Ok(Err(err)) => {
             let wrapped_error = get_prealloc_err() as *mut WrappedError;
             ptr::write(wrapped_error, WrappedError(err));
-            get_gc_metatable_for::<WrappedError>(state);
+            get_gc_metatable::<WrappedError>(state);
             ffi::lua_setmetatable(state, -2);
 
             // Convert to CallbackError and attach traceback
@@ -2440,7 +2440,7 @@ where
         Err(p) => {
             let wrapped_panic = get_prealloc_err() as *mut WrappedPanic;
             ptr::write(wrapped_panic, WrappedPanic(Some(p)));
-            get_gc_metatable_for::<WrappedPanic>(state);
+            get_gc_metatable::<WrappedPanic>(state);
             ffi::lua_setmetatable(state, -2);
             ffi::lua_error(state)
         }
