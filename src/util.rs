@@ -232,7 +232,7 @@ where
     protect_lua(state, 2, 0, |state| {
         ffi::lua_pushlstring(state, field.as_ptr() as *const c_char, field.len());
         ffi::lua_rotate(state, -3, 2);
-        ffi::lua_rawset(state, -3)
+        ffi::lua_rawset(state, -3);
     })
 }
 
@@ -409,7 +409,7 @@ pub unsafe fn init_userdata_metatable<T>(
                     }
                 }
                 protect_lua(state, 3, 1, |state| {
-                    ffi::lua_pushcclosure(state, meta_index_impl, 3)
+                    ffi::lua_pushcclosure(state, meta_index_impl, 3);
                 })?;
             }
             _ => mlua_panic!("improper __index type {}", index_type),
@@ -425,7 +425,7 @@ pub unsafe fn init_userdata_metatable<T>(
             ffi::LUA_TNIL | ffi::LUA_TTABLE | ffi::LUA_TFUNCTION => {
                 ffi::lua_pushvalue(state, field_setters);
                 protect_lua(state, 2, 1, |state| {
-                    ffi::lua_pushcclosure(state, meta_newindex_impl, 2)
+                    ffi::lua_pushcclosure(state, meta_newindex_impl, 2);
                 })?;
             }
             _ => mlua_panic!("improper __newindex type {}", newindex_type),
@@ -681,7 +681,7 @@ pub unsafe fn init_gc_metatable_for<T: Any>(
     }
 
     protect_lua(state, 1, 0, |state| {
-        ffi::lua_rawsetp(state, ffi::LUA_REGISTRYINDEX, ref_addr as *mut c_void)
+        ffi::lua_rawsetp(state, ffi::LUA_REGISTRYINDEX, ref_addr as *mut c_void);
     })?;
 
     Ok(())
@@ -840,17 +840,17 @@ pub unsafe fn init_error_registry(state: *mut ffi::lua_State) -> Result<()> {
     }
     ffi::lua_pop(state, 1);
 
-    let destructed_metatable_key = &DESTRUCTED_USERDATA_METATABLE as *const u8 as *const c_void;
     protect_lua(state, 1, 0, |state| {
-        ffi::lua_rawsetp(state, ffi::LUA_REGISTRYINDEX, destructed_metatable_key)
+        let destructed_mt_key = &DESTRUCTED_USERDATA_METATABLE as *const u8 as *const c_void;
+        ffi::lua_rawsetp(state, ffi::LUA_REGISTRYINDEX, destructed_mt_key);
     })?;
 
     // Create error print buffer
     init_gc_metatable_for::<String>(state, None)?;
     push_gc_userdata(state, String::new())?;
-    let err_buf_key = &ERROR_PRINT_BUFFER_KEY as *const u8 as *const c_void;
     protect_lua(state, 1, 0, |state| {
-        ffi::lua_rawsetp(state, ffi::LUA_REGISTRYINDEX, err_buf_key)
+        let err_buf_key = &ERROR_PRINT_BUFFER_KEY as *const u8 as *const c_void;
+        ffi::lua_rawsetp(state, ffi::LUA_REGISTRYINDEX, err_buf_key);
     })?;
 
     Ok(())

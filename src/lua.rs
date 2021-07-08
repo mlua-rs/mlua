@@ -344,7 +344,8 @@ impl Lua {
 
         let extra = &mut *lua.extra;
 
-        if cfg!(any(feature = "lua54", feature = "lua53", feature = "lua52")) {
+        #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+        {
             extra.mem_info = mem_info;
         }
 
@@ -408,8 +409,8 @@ impl Lua {
 
                     // Create empty Waker slot
                     push_gc_userdata::<Option<Waker>>(state, None)?;
-                    let waker_key = &WAKER_REGISTRY_KEY as *const u8 as *const c_void;
                     protect_lua(state, 1, 0, |state| {
+                        let waker_key = &WAKER_REGISTRY_KEY as *const u8 as *const c_void;
                         ffi::lua_rawsetp(state, ffi::LUA_REGISTRYINDEX, waker_key);
                     })?;
                 }
@@ -450,9 +451,9 @@ impl Lua {
         }));
 
         ffi::lua_pushlightuserdata(main_state, extra as *mut c_void);
-        let extra_key = &EXTRA_REGISTRY_KEY as *const u8 as *const c_void;
         mlua_expect!(
             protect_lua(main_state, 1, 0, |state| {
+                let extra_key = &EXTRA_REGISTRY_KEY as *const u8 as *const c_void;
                 ffi::lua_rawsetp(state, ffi::LUA_REGISTRYINDEX, extra_key)
             }),
             "Error while storing extra data",
@@ -1888,7 +1889,8 @@ impl Lua {
     where
         'lua: 'callback,
     {
-        if cfg!(any(feature = "lua54", feature = "lua53", feature = "lua52")) {
+        #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+        {
             let libs = unsafe { (*self.extra).libs };
             if !libs.contains(StdLib::COROUTINE) {
                 self.load_from_std_lib(StdLib::COROUTINE)?;
