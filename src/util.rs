@@ -1,21 +1,18 @@
-use std::any::{Any, TypeId};
-use std::collections::HashMap;
+use std::any::Any;
 use std::error::Error as StdError;
 use std::fmt::Write;
 use std::os::raw::{c_char, c_int, c_void};
 use std::panic::{catch_unwind, resume_unwind, AssertUnwindSafe};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::{mem, ptr, slice};
-
-use once_cell::sync::Lazy;
 
 use crate::error::{Error, Result};
 use crate::ffi;
 
-static METATABLE_CACHE: Lazy<Mutex<HashMap<TypeId, u8>>> = Lazy::new(|| {
-    // The capacity must(!) be greater than number of stored keys
-    Mutex::new(HashMap::with_capacity(32))
-});
+pub(crate) static WRAPPED_ERROR_MT: u8 = 0;
+pub(crate) static WRAPPED_PANIC_MT: u8 = 0;
+static DESTRUCTED_USERDATA_MT: u8 = 0;
+static ERROR_PRINT_BUFFER_KEY: u8 = 0;
 
 // Checks that Lua has enough free stack space for future stack operations. On failure, this will
 // panic with an internal error message.
@@ -199,7 +196,9 @@ pub unsafe fn pop_error(state: *mut ffi::lua_State, err_code: c_int) -> Error {
     if let Some(err) = get_wrapped_error(state, -1).as_ref() {
         ffi::lua_pop(state, 1);
         err.clone()
-    } else if let Some(panic) = get_gc_userdata::<WrappedPanic>(state, -1).as_mut() {
+    } else if let Some(panic) =
+        get_gc_userdata::<WrappedPanic>(state, -1, &WRAPPED_PANIC_MT).as_mut()
+    {
         if let Some(p) = (*panic).0.take() {
             resume_unwind(p);
         } else {
@@ -298,20 +297,24 @@ pub unsafe fn take_userdata<T>(state: *mut ffi::lua_State) -> T {
 
 // Pushes the userdata and attaches a metatable with __gc method.
 // Internally uses 3 stack spaces, does not call checkstack.
-pub unsafe fn push_gc_userdata<T: Any>(state: *mut ffi::lua_State, t: T) -> Result<()> {
+pub unsafe fn push_gc_userdata<T>(state: *mut ffi::lua_State, key: *const u8, t: T) -> Result<()> {
     push_userdata(state, t)?;
-    get_gc_metatable_for::<T>(state);
+    get_gc_metatable(state, key);
     ffi::lua_setmetatable(state, -2);
     Ok(())
 }
 
 // Uses 2 stack spaces, does not call checkstack
-pub unsafe fn get_gc_userdata<T: Any>(state: *mut ffi::lua_State, index: c_int) -> *mut T {
+pub unsafe fn get_gc_userdata<T>(
+    state: *mut ffi::lua_State,
+    index: c_int,
+    key: *const u8,
+) -> *mut T {
     let ud = ffi::lua_touserdata(state, index) as *mut T;
     if ud.is_null() || ffi::lua_getmetatable(state, index) == 0 {
         return ptr::null_mut();
     }
-    get_gc_metatable_for::<T>(state);
+    get_gc_metatable(state, key);
     let res = ffi::lua_rawequal(state, -1, -2);
     ffi::lua_pop(state, 2);
     if res == 0 {
@@ -525,7 +528,7 @@ where
 
             let wrapped_error = ud as *mut WrappedError;
             ptr::write(wrapped_error, WrappedError(err));
-            get_gc_metatable_for::<WrappedError>(state);
+            get_gc_metatable(state, &WRAPPED_ERROR_MT);
             ffi::lua_setmetatable(state, -2);
 
             // Convert to CallbackError and attach traceback
@@ -545,7 +548,7 @@ where
         Err(p) => {
             ffi::lua_settop(state, 1);
             ptr::write(ud as *mut WrappedPanic, WrappedPanic(Some(p)));
-            get_gc_metatable_for::<WrappedPanic>(state);
+            get_gc_metatable(state, &WRAPPED_PANIC_MT);
             ffi::lua_setmetatable(state, -2);
             ffi::lua_error(state)
         }
@@ -559,8 +562,8 @@ pub unsafe extern "C" fn error_traceback(state: *mut ffi::lua_State) -> c_int {
         return 1;
     }
 
-    if get_gc_userdata::<WrappedError>(state, -1).is_null()
-        && get_gc_userdata::<WrappedPanic>(state, -1).is_null()
+    if get_gc_userdata::<WrappedError>(state, -1, &WRAPPED_ERROR_MT).is_null()
+        && get_gc_userdata::<WrappedPanic>(state, -1, &WRAPPED_PANIC_MT).is_null()
     {
         let s = ffi::luaL_tolstring(state, -1, ptr::null_mut());
         if ffi::lua_checkstack(state, ffi::LUA_TRACEBACK_STACK) != 0 {
@@ -587,7 +590,7 @@ pub unsafe extern "C" fn safe_pcall(state: *mut ffi::lua_State) -> c_int {
         ffi::lua_insert(state, 1);
         ffi::lua_gettop(state)
     } else {
-        if !get_gc_userdata::<WrappedPanic>(state, -1).is_null() {
+        if !get_gc_userdata::<WrappedPanic>(state, -1, &WRAPPED_PANIC_MT).is_null() {
             ffi::lua_error(state);
         }
         ffi::lua_pushboolean(state, 0);
@@ -601,7 +604,7 @@ pub unsafe extern "C" fn safe_xpcall(state: *mut ffi::lua_State) -> c_int {
     unsafe extern "C" fn xpcall_msgh(state: *mut ffi::lua_State) -> c_int {
         ffi::luaL_checkstack(state, 2, ptr::null());
 
-        if !get_gc_userdata::<WrappedPanic>(state, -1).is_null() {
+        if !get_gc_userdata::<WrappedPanic>(state, -1, &WRAPPED_PANIC_MT).is_null() {
             1
         } else {
             ffi::lua_pushvalue(state, ffi::lua_upvalueindex(1));
@@ -629,7 +632,7 @@ pub unsafe extern "C" fn safe_xpcall(state: *mut ffi::lua_State) -> c_int {
         ffi::lua_insert(state, 2);
         ffi::lua_gettop(state) - 1
     } else {
-        if !get_gc_userdata::<WrappedPanic>(state, -1).is_null() {
+        if !get_gc_userdata::<WrappedPanic>(state, -1, &WRAPPED_PANIC_MT).is_null() {
             ffi::lua_error(state);
         }
         ffi::lua_pushboolean(state, 0);
@@ -664,14 +667,14 @@ pub unsafe fn get_main_state(state: *mut ffi::lua_State) -> Option<*mut ffi::lua
 // Pushes a WrappedError to the top of the stack.
 // Uses 3 stack spaces and does not call checkstack.
 pub unsafe fn push_wrapped_error(state: *mut ffi::lua_State, err: Error) -> Result<()> {
-    push_gc_userdata::<WrappedError>(state, WrappedError(err))
+    push_gc_userdata::<WrappedError>(state, &WRAPPED_ERROR_MT, WrappedError(err))
 }
 
 // Checks if the value at the given index is a WrappedError, and if it is returns a pointer to it,
 // otherwise returns null.
 // Uses 2 stack spaces and does not call checkstack.
 pub unsafe fn get_wrapped_error(state: *mut ffi::lua_State, index: c_int) -> *const Error {
-    let ud = get_gc_userdata::<WrappedError>(state, index);
+    let ud = get_gc_userdata::<WrappedError>(state, index, &WRAPPED_ERROR_MT);
     if ud.is_null() {
         return ptr::null();
     }
@@ -680,22 +683,12 @@ pub unsafe fn get_wrapped_error(state: *mut ffi::lua_State, index: c_int) -> *co
 
 // Initialize the internal (with __gc method) metatable for a type T.
 // Uses 6 stack spaces and calls checkstack.
-pub unsafe fn init_gc_metatable_for<T: Any>(
+pub unsafe fn init_gc_metatable<T>(
     state: *mut ffi::lua_State,
+    key: *const u8,
     customize_fn: Option<fn(*mut ffi::lua_State) -> Result<()>>,
 ) -> Result<()> {
     check_stack(state, 6)?;
-
-    let type_id = TypeId::of::<T>();
-    let ref_addr = {
-        let mut mt_cache = mlua_expect!(METATABLE_CACHE.lock(), "cannot lock metatable cache");
-        mlua_assert!(
-            mt_cache.capacity() - mt_cache.len() > 0,
-            "out of metatable cache capacity"
-        );
-        mt_cache.insert(type_id, 0);
-        &mt_cache[&type_id] as *const u8
-    };
 
     push_table(state, 0, 3)?;
 
@@ -710,19 +703,14 @@ pub unsafe fn init_gc_metatable_for<T: Any>(
     }
 
     protect_lua!(state, 1, 0, |state| {
-        ffi::lua_rawsetp(state, ffi::LUA_REGISTRYINDEX, ref_addr as *mut c_void)
+        ffi::lua_rawsetp(state, ffi::LUA_REGISTRYINDEX, key as *const c_void)
     })?;
 
     Ok(())
 }
 
-pub unsafe fn get_gc_metatable_for<T: Any>(state: *mut ffi::lua_State) {
-    let type_id = TypeId::of::<T>();
-    let ref_addr = {
-        let mt_cache = mlua_expect!(METATABLE_CACHE.lock(), "cannot lock metatable cache");
-        mlua_expect!(mt_cache.get(&type_id), "gc metatable does not exist") as *const u8
-    };
-    ffi::lua_rawgetp(state, ffi::LUA_REGISTRYINDEX, ref_addr as *const c_void);
+pub unsafe fn get_gc_metatable(state: *mut ffi::lua_State, key: *const u8) {
+    ffi::lua_rawgetp(state, ffi::LUA_REGISTRYINDEX, key as *const c_void);
 }
 
 // Initialize the error, panic, and destructed userdata metatables.
@@ -771,7 +759,9 @@ pub unsafe fn init_error_registry(state: *mut ffi::lua_State) -> Result<()> {
                     _ => {}
                 }
                 Ok(err_buf)
-            } else if let Some(panic) = get_gc_userdata::<WrappedPanic>(state, -1).as_ref() {
+            } else if let Some(panic) =
+                get_gc_userdata::<WrappedPanic>(state, -1, &WRAPPED_PANIC_MT).as_ref()
+            {
                 if let Some(ref p) = (*panic).0 {
                     let err_buf_key = &ERROR_PRINT_BUFFER_KEY as *const u8 as *const c_void;
                     ffi::lua_rawgetp(state, ffi::LUA_REGISTRYINDEX, err_buf_key);
@@ -802,16 +792,18 @@ pub unsafe fn init_error_registry(state: *mut ffi::lua_State) -> Result<()> {
         })
     }
 
-    init_gc_metatable_for::<WrappedError>(
+    init_gc_metatable::<WrappedError>(
         state,
+        &WRAPPED_ERROR_MT,
         Some(|state| {
             ffi::lua_pushcfunction(state, error_tostring);
             rawset_field(state, -2, "__tostring")
         }),
     )?;
 
-    init_gc_metatable_for::<WrappedPanic>(
+    init_gc_metatable::<WrappedPanic>(
         state,
+        &WRAPPED_PANIC_MT,
         Some(|state| {
             ffi::lua_pushcfunction(state, error_tostring);
             rawset_field(state, -2, "__tostring")
@@ -870,16 +862,16 @@ pub unsafe fn init_error_registry(state: *mut ffi::lua_State) -> Result<()> {
     ffi::lua_pop(state, 1);
 
     protect_lua!(state, 1, 0, state => {
-        let destructed_metatable_key = &DESTRUCTED_USERDATA_METATABLE as *const u8 as *const c_void;
-        ffi::lua_rawsetp(state, ffi::LUA_REGISTRYINDEX, destructed_metatable_key)
+        let key = &DESTRUCTED_USERDATA_MT as *const u8 as *const c_void;
+        ffi::lua_rawsetp(state, ffi::LUA_REGISTRYINDEX, key)
     })?;
 
     // Create error print buffer
-    init_gc_metatable_for::<String>(state, None)?;
-    push_gc_userdata(state, String::new())?;
+    init_gc_metatable::<String>(state, &ERROR_PRINT_BUFFER_KEY, None)?;
+    push_gc_userdata(state, &ERROR_PRINT_BUFFER_KEY, String::new())?;
     protect_lua!(state, 1, 0, state => {
-        let err_buf_key = &ERROR_PRINT_BUFFER_KEY as *const u8 as *const c_void;
-        ffi::lua_rawsetp(state, ffi::LUA_REGISTRYINDEX, err_buf_key)
+        let key = &ERROR_PRINT_BUFFER_KEY as *const u8 as *const c_void;
+        ffi::lua_rawsetp(state, ffi::LUA_REGISTRYINDEX, key)
     })?;
 
     Ok(())
@@ -923,9 +915,6 @@ pub(crate) unsafe fn to_string(state: *mut ffi::lua_State, index: c_int) -> Stri
 }
 
 pub(crate) unsafe fn get_destructed_userdata_metatable(state: *mut ffi::lua_State) {
-    let key = &DESTRUCTED_USERDATA_METATABLE as *const u8 as *const c_void;
+    let key = &DESTRUCTED_USERDATA_MT as *const u8 as *const c_void;
     ffi::lua_rawgetp(state, ffi::LUA_REGISTRYINDEX, key);
 }
-
-static DESTRUCTED_USERDATA_METATABLE: u8 = 0;
-static ERROR_PRINT_BUFFER_KEY: u8 = 0;
