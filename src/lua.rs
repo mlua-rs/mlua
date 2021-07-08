@@ -27,10 +27,10 @@ use crate::userdata::{
 };
 use crate::util::{
     self, assert_stack, callback_error, check_stack, get_destructed_userdata_metatable,
-    get_gc_metatable, get_gc_userdata, get_main_state, get_userdata, get_wrapped_error,
-    init_error_registry, init_gc_metatable, init_userdata_metatable, pop_error, push_gc_userdata,
-    push_string, push_table, push_userdata, push_wrapped_error, rawset_field, safe_pcall,
-    safe_xpcall, StackGuard, WrappedError, WrappedPanic, WRAPPED_ERROR_MT, WRAPPED_PANIC_MT,
+    get_gc_metatable_for, get_gc_userdata, get_main_state, get_userdata, get_wrapped_error,
+    init_error_registry, init_gc_metatable_for, init_userdata_metatable, pop_error,
+    push_gc_userdata, push_string, push_table, push_userdata, push_wrapped_error, rawset_field,
+    safe_pcall, safe_xpcall, StackGuard, WrappedError, WrappedPanic,
 };
 use crate::value::{FromLua, FromLuaMulti, MultiValue, Nil, ToLua, ToLuaMulti, Value};
 
@@ -148,23 +148,11 @@ impl LuaOptions {
     }
 }
 
-static CALLBACK_MT: u8 = 0;
-static CALLBACK_UPVALUE_MT: u8 = 0;
-
-pub(crate) static EXTRA_REGISTRY_KEY: u8 = 0;
-
-#[cfg(feature = "async")]
-static ASYNC_CALLBACK_MT: u8 = 0;
-#[cfg(feature = "async")]
-static ASYNC_CALLBACK_UPVALUE_MT: u8 = 0;
-#[cfg(feature = "async")]
-static ASYNC_POLL_UPVALUE_MT: u8 = 0;
-#[cfg(feature = "async")]
-pub(crate) static WAKER_MT: u8 = 0;
-#[cfg(feature = "async")]
-pub(crate) static WAKER_REGISTRY_KEY: u8 = 0;
 #[cfg(feature = "async")]
 pub(crate) static ASYNC_POLL_PENDING: u8 = 0;
+#[cfg(feature = "async")]
+pub(crate) static WAKER_REGISTRY_KEY: u8 = 0;
+pub(crate) static EXTRA_REGISTRY_KEY: u8 = 0;
 
 /// Requires `feature = "send"`
 #[cfg(feature = "send")]
@@ -409,18 +397,17 @@ impl Lua {
                 // Create the internal metatables and place them in the registry
                 // to prevent them from being garbage collected.
 
-                init_gc_metatable::<Callback>(state, &CALLBACK_MT, None)?;
-                init_gc_metatable::<CallbackUpvalue>(state, &CALLBACK_UPVALUE_MT, None)?;
+                init_gc_metatable_for::<Callback>(state, None)?;
+                init_gc_metatable_for::<CallbackUpvalue>(state, None)?;
                 #[cfg(feature = "async")]
                 {
-                    init_gc_metatable::<AsyncCallback>(state, &ASYNC_CALLBACK_MT, None)?;
-                    #[rustfmt::skip]
-                    init_gc_metatable::<AsyncCallbackUpvalue>(state, &ASYNC_CALLBACK_UPVALUE_MT, None)?;
-                    init_gc_metatable::<AsyncPollUpvalue>(state, &ASYNC_POLL_UPVALUE_MT, None)?;
-                    init_gc_metatable::<Option<Waker>>(state, &WAKER_MT, None)?;
+                    init_gc_metatable_for::<AsyncCallback>(state, None)?;
+                    init_gc_metatable_for::<AsyncCallbackUpvalue>(state, None)?;
+                    init_gc_metatable_for::<AsyncPollUpvalue>(state, None)?;
+                    init_gc_metatable_for::<Option<Waker>>(state, None)?;
 
                     // Create empty Waker slot
-                    push_gc_userdata::<Option<Waker>>(state, &WAKER_MT, None)?;
+                    push_gc_userdata::<Option<Waker>>(state, None)?;
                     protect_lua!(state, 1, 0, state => {
                         let waker_key = &WAKER_REGISTRY_KEY as *const u8 as *const c_void;
                         ffi::lua_rawsetp(state, ffi::LUA_REGISTRYINDEX, waker_key);
@@ -1622,9 +1609,7 @@ impl Lua {
                     let err = err.clone();
                     ffi::lua_pop(state, 1);
                     Value::Error(err)
-                } else if let Some(panic) =
-                    get_gc_userdata::<WrappedPanic>(state, -1, &WRAPPED_PANIC_MT).as_mut()
-                {
+                } else if let Some(panic) = get_gc_userdata::<WrappedPanic>(state, -1).as_mut() {
                     if let Some(panic) = (*panic).0.take() {
                         ffi::lua_pop(state, 1);
                         resume_unwind(panic);
@@ -1883,12 +1868,8 @@ impl Lua {
             check_stack(self.state, 4)?;
 
             let lua = self.clone();
-            push_gc_userdata(
-                self.state,
-                &CALLBACK_UPVALUE_MT,
-                CallbackUpvalue { lua, func },
-            )?;
-
+            let func = mem::transmute(func);
+            push_gc_userdata(self.state, CallbackUpvalue { lua, func })?;
             protect_lua!(self.state, 1, 1, state => {
                 ffi::lua_pushcclosure(state, call_callback, 1);
             })?;
@@ -1939,7 +1920,7 @@ impl Lua {
 
                 let fut = ((*upvalue).func)(lua, args);
                 let lua = lua.clone();
-                push_gc_userdata(state, &ASYNC_POLL_UPVALUE_MT, AsyncPollUpvalue { lua, fut })?;
+                push_gc_userdata(state, AsyncPollUpvalue { lua, fut })?;
                 protect_lua!(state, 1, 1, state => {
                     ffi::lua_pushcclosure(state, poll_future, 1);
                 })?;
@@ -1970,7 +1951,7 @@ impl Lua {
                 // Try to get an outer poll waker
                 let waker_key = &WAKER_REGISTRY_KEY as *const u8 as *const c_void;
                 ffi::lua_rawgetp(state, ffi::LUA_REGISTRYINDEX, waker_key);
-                let waker = match get_gc_userdata::<Option<Waker>>(state, -1, &WAKER_MT).as_ref() {
+                let waker = match get_gc_userdata::<Option<Waker>>(state, -1).as_ref() {
                     Some(Some(waker)) => waker.clone(),
                     _ => noop_waker(),
                 };
@@ -2004,11 +1985,8 @@ impl Lua {
             check_stack(self.state, 4)?;
 
             let lua = self.clone();
-            push_gc_userdata(
-                self.state,
-                &ASYNC_CALLBACK_UPVALUE_MT,
-                AsyncCallbackUpvalue { lua, func },
-            )?;
+            let func = mem::transmute(func);
+            push_gc_userdata(self.state, AsyncCallbackUpvalue { lua, func })?;
             protect_lua!(self.state, 1, 1, state => {
                 ffi::lua_pushcclosure(state, call_callback, 1);
             })?;
@@ -2438,7 +2416,7 @@ where
         Ok(Err(err)) => {
             let wrapped_error = get_prealloc_err() as *mut WrappedError;
             ptr::write(wrapped_error, WrappedError(err));
-            get_gc_metatable(state, &WRAPPED_ERROR_MT);
+            get_gc_metatable_for::<WrappedError>(state);
             ffi::lua_setmetatable(state, -2);
 
             // Convert to CallbackError and attach traceback
@@ -2458,7 +2436,7 @@ where
         Err(p) => {
             let wrapped_panic = get_prealloc_err() as *mut WrappedPanic;
             ptr::write(wrapped_panic, WrappedPanic(Some(p)));
-            get_gc_metatable(state, &WRAPPED_PANIC_MT);
+            get_gc_metatable_for::<WrappedPanic>(state);
             ffi::lua_setmetatable(state, -2);
             ffi::lua_error(state)
         }

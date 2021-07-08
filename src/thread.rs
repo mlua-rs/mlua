@@ -13,7 +13,7 @@ use crate::function::Function;
 #[cfg(feature = "async")]
 use {
     crate::{
-        lua::{ASYNC_POLL_PENDING, WAKER_MT, WAKER_REGISTRY_KEY},
+        lua::{ASYNC_POLL_PENDING, WAKER_REGISTRY_KEY},
         util::get_gc_userdata,
         value::Value,
     },
@@ -362,7 +362,7 @@ impl WakerGuard {
 
             let waker_key = &WAKER_REGISTRY_KEY as *const u8 as *const c_void;
             ffi::lua_rawgetp(state, ffi::LUA_REGISTRYINDEX, waker_key);
-            let waker_slot = get_gc_userdata::<Option<Waker>>(state, -1, &WAKER_MT).as_mut();
+            let waker_slot = get_gc_userdata::<Option<Waker>>(state, -1).as_mut();
             let old = mlua_expect!(waker_slot, "Waker is destroyed").replace(waker);
 
             Ok(WakerGuard(state, old))
@@ -380,7 +380,7 @@ impl Drop for WakerGuard {
 
             let waker_key = &WAKER_REGISTRY_KEY as *const u8 as *const c_void;
             ffi::lua_rawgetp(state, ffi::LUA_REGISTRYINDEX, waker_key);
-            let waker_slot = get_gc_userdata::<Option<Waker>>(state, -1, &WAKER_MT).as_mut();
+            let waker_slot = get_gc_userdata::<Option<Waker>>(state, -1).as_mut();
             mem::swap(mlua_expect!(waker_slot, "Waker is destroyed"), &mut self.1);
         }
     }
