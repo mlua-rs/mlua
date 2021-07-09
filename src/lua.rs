@@ -2816,11 +2816,16 @@ impl<'lua, T: 'static + UserData> StaticUserDataMethods<'lua, T> {
                 let mut method = method
                     .try_borrow_mut()
                     .map_err(|_| Error::RecursiveMutCallback)?;
-                match userdata.type_id()? {
-                    id if id == TypeId::of::<T>() => {
-                        let mut ud = userdata.borrow_mut::<T>()?;
-                        method(lua, &mut ud, A::from_lua_multi(args, lua)?)?.to_lua_multi(lua)
+                // Try normal userdata first
+                let err = match userdata.borrow_mut::<T>() {
+                    Ok(mut ud) => {
+                        return method(lua, &mut ud, A::from_lua_multi(args, lua)?)?
+                            .to_lua_multi(lua)
                     }
+                    Err(err) => err,
+                };
+                match userdata.type_id()? {
+                    id if id == TypeId::of::<T>() => Err(err),
                     #[cfg(not(feature = "send"))]
                     id if id == TypeId::of::<Rc<RefCell<T>>>() => {
                         let ud = userdata.borrow::<Rc<RefCell<T>>>()?;
