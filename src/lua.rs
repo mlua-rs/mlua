@@ -2044,11 +2044,10 @@ impl Lua {
         let _sg = StackGuard::new(self.state);
         check_stack(self.state, 2)?;
 
-        // If we unable to push metatable, then we should not push userdata.
-        // Otherwise we can have a memory leak.
-        self.push_userdata_metatable::<T>()?;
+        // It's safe to push userdata first and then metatable.
+        // If the first push failed, unlikely we moved `data` to allocated memory.
         push_userdata(self.state, data)?;
-        ffi::lua_rotate(self.state, -2, 1);
+        self.push_userdata_metatable::<T>()?;
         ffi::lua_setmetatable(self.state, -2);
 
         Ok(AnyUserData(self.pop_ref()))

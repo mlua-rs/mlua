@@ -11,6 +11,7 @@ use std::future::Future;
 #[cfg(feature = "serialize")]
 use {
     serde::ser::{self, Serialize, Serializer},
+    std::os::raw::c_void,
     std::result::Result as StdResult,
 };
 
@@ -623,21 +624,6 @@ impl<T> UserDataCell<T> {
     }
 }
 
-#[cfg(feature = "serialize")]
-impl Serialize for UserDataCell<()> {
-    fn serialize<S>(&self, serializer: S) -> StdResult<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let ser = self
-            .0
-            .try_borrow()
-            .map_err(|_| ser::Error::custom(Error::UserDataBorrowError))?
-            .ser;
-        unsafe { (&*ser).serialize(serializer) }
-    }
-}
-
 /// A wrapper type for an immutably borrowed value from an `AnyUserData`.
 pub struct UserDataRef<'a, T>(UserDataRefInner<'a, T>);
 
@@ -704,19 +690,15 @@ impl<T: fmt::Display> fmt::Display for UserDataRefMut<'_, T> {
     }
 }
 
-pub(crate) struct UserDataWrapped<T> {
-    pub(crate) data: *mut T,
+pub(crate) enum UserDataWrapped<T> {
+    Default(T),
     #[cfg(feature = "serialize")]
-    ser: *mut dyn erased_serde::Serialize,
+    Serializable(*mut T, *const dyn erased_serde::Serialize),
 }
 
 impl<T> UserDataWrapped<T> {
     fn new(data: T) -> Self {
-        UserDataWrapped {
-            data: Box::into_raw(Box::new(data)),
-            #[cfg(feature = "serialize")]
-            ser: Box::into_raw(Box::new(UserDataSerializeError)),
-        }
+        UserDataWrapped::Default(data)
     }
 
     #[cfg(feature = "serialize")]
@@ -725,21 +707,15 @@ impl<T> UserDataWrapped<T> {
         T: 'static + Serialize,
     {
         let data_raw = Box::into_raw(Box::new(data));
-        UserDataWrapped {
-            data: data_raw,
-            ser: data_raw,
-        }
+        UserDataWrapped::Serializable(data_raw, data_raw)
     }
 }
 
+#[cfg(feature = "serialize")]
 impl<T> Drop for UserDataWrapped<T> {
     fn drop(&mut self) {
-        unsafe {
-            drop(Box::from_raw(self.data));
-            #[cfg(feature = "serialize")]
-            if self.data as *mut () != self.ser as *mut () {
-                drop(Box::from_raw(self.ser));
-            }
+        if let UserDataWrapped::Serializable(data, _) = *self {
+            drop(unsafe { Box::from_raw(data) });
         }
     }
 }
@@ -748,13 +724,21 @@ impl<T> Deref for UserDataWrapped<T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
-        unsafe { &*self.data }
+        match self {
+            Self::Default(data) => data,
+            #[cfg(feature = "serialize")]
+            Self::Serializable(data, _) => unsafe { &**data },
+        }
     }
 }
 
 impl<T> DerefMut for UserDataWrapped<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        unsafe { &mut *self.data }
+        match self {
+            Self::Default(data) => data,
+            #[cfg(feature = "serialize")]
+            Self::Serializable(data, _) => unsafe { &mut **data },
+        }
     }
 }
 
@@ -1069,8 +1053,14 @@ impl<'lua> Serialize for AnyUserData<'lua> {
 
             lua.push_userdata_ref(&self.0, false)
                 .map_err(ser::Error::custom)?;
-            let ud = &*get_userdata::<UserDataCell<()>>(lua.state, -1);
-            ud.serialize(serializer)
+            let ud = &*get_userdata::<UserDataCell<c_void>>(lua.state, -1);
+            let data =
+                ud.0.try_borrow()
+                    .map_err(|_| ser::Error::custom(Error::UserDataBorrowError))?;
+            match *data {
+                UserDataWrapped::Default(_) => UserDataSerializeError.serialize(serializer),
+                UserDataWrapped::Serializable(_, ser) => (&*ser).serialize(serializer),
+            }
         }
     }
 }
