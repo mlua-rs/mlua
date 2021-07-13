@@ -80,7 +80,7 @@ pub const LUA_ERRERR: c_int = 5;
 #[cfg(any(feature = "lua53", feature = "lua52"))]
 pub const LUA_ERRERR: c_int = 6;
 
-/// A raw Lua Lua state associated with a thread.
+/// A raw Lua state associated with a thread.
 pub type lua_State = c_void;
 
 // basic types

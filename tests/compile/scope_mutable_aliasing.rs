@@ -2,7 +2,7 @@ use mlua::{Lua, UserData};
 
 fn main() {
     struct MyUserData<'a>(&'a mut i32);
-    impl<'a> UserData for MyUserData<'a> {};
+    impl<'a> UserData for MyUserData<'a> {}
 
     let mut i = 1;
 
