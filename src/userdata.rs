@@ -608,85 +608,19 @@ impl<T> UserDataCell<T> {
     }
 
     // Immutably borrows the wrapped value.
-    fn try_borrow(&self) -> Result<UserDataRef<T>> {
+    fn try_borrow(&self) -> Result<Ref<T>> {
         self.0
             .try_borrow()
-            .map(|r| UserDataRef(UserDataRefInner::Ref(r)))
+            .map(|r| Ref::map(r, |r| r.deref()))
             .map_err(|_| Error::UserDataBorrowError)
     }
 
     // Mutably borrows the wrapped value.
-    fn try_borrow_mut(&self) -> Result<UserDataRefMut<T>> {
+    fn try_borrow_mut(&self) -> Result<RefMut<T>> {
         self.0
             .try_borrow_mut()
-            .map(|r| UserDataRefMut(UserDataRefMutInner::Ref(r)))
+            .map(|r| RefMut::map(r, |r| r.deref_mut()))
             .map_err(|_| Error::UserDataBorrowMutError)
-    }
-}
-
-/// A wrapper type for an immutably borrowed value from an `AnyUserData`.
-pub struct UserDataRef<'a, T>(UserDataRefInner<'a, T>);
-
-enum UserDataRefInner<'a, T> {
-    Ref(Ref<'a, UserDataWrapped<T>>),
-}
-
-/// A wrapper type for a mutably borrowed value from an `AnyUserData`.
-pub struct UserDataRefMut<'a, T>(UserDataRefMutInner<'a, T>);
-
-enum UserDataRefMutInner<'a, T> {
-    Ref(RefMut<'a, UserDataWrapped<T>>),
-}
-
-impl<T> Deref for UserDataRef<'_, T> {
-    type Target = T;
-
-    fn deref(&self) -> &Self::Target {
-        match &self.0 {
-            UserDataRefInner::Ref(x) => &*x,
-        }
-    }
-}
-
-impl<T> Deref for UserDataRefMut<'_, T> {
-    type Target = T;
-
-    fn deref(&self) -> &Self::Target {
-        match &self.0 {
-            UserDataRefMutInner::Ref(x) => &*x,
-        }
-    }
-}
-
-impl<T> DerefMut for UserDataRefMut<'_, T> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        match &mut self.0 {
-            UserDataRefMutInner::Ref(x) => &mut *x,
-        }
-    }
-}
-
-impl<T: fmt::Debug> fmt::Debug for UserDataRef<'_, T> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt::Debug::fmt(&*self as &T, f)
-    }
-}
-
-impl<T: fmt::Debug> fmt::Debug for UserDataRefMut<'_, T> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt::Debug::fmt(&*self as &T, f)
-    }
-}
-
-impl<T: fmt::Display> fmt::Display for UserDataRef<'_, T> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt::Display::fmt(&*self as &T, f)
-    }
-}
-
-impl<T: fmt::Display> fmt::Display for UserDataRefMut<'_, T> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt::Display::fmt(&*self as &T, f)
     }
 }
 
@@ -790,7 +724,7 @@ impl<'lua> AnyUserData<'lua> {
     ///
     /// Returns a `UserDataBorrowError` if the userdata is already mutably borrowed. Returns a
     /// `UserDataTypeMismatch` if the userdata is not of type `T`.
-    pub fn borrow<T: 'static + UserData>(&self) -> Result<UserDataRef<T>> {
+    pub fn borrow<T: 'static + UserData>(&self) -> Result<Ref<T>> {
         self.inspect(|cell| cell.try_borrow())
     }
 
@@ -800,7 +734,7 @@ impl<'lua> AnyUserData<'lua> {
     ///
     /// Returns a `UserDataBorrowMutError` if the userdata cannot be mutably borrowed.
     /// Returns a `UserDataTypeMismatch` if the userdata is not of type `T`.
-    pub fn borrow_mut<T: 'static + UserData>(&self) -> Result<UserDataRefMut<T>> {
+    pub fn borrow_mut<T: 'static + UserData>(&self) -> Result<RefMut<T>> {
         self.inspect(|cell| cell.try_borrow_mut())
     }
 
