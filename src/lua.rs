@@ -509,8 +509,11 @@ impl Lua {
         res
     }
 
-    /// Calls the Lua function `func` with the string `modname` as an argument, sets
-    /// the call result to `package.loaded[modname]` and returns copy of the result.
+    /// Loads module `modname` into an existing Lua state using the specified entrypoint
+    /// function.
+    ///
+    /// Internally calls the Lua function `func` with the string `modname` as an argument,
+    /// sets the call result to `package.loaded[modname]` and returns copy of the result.
     ///
     /// If `package.loaded[modname]` value is not nil, returns copy of the value without
     /// calling the function.
@@ -530,29 +533,28 @@ impl Lua {
         S: AsRef<[u8]> + ?Sized,
         T: FromLua<'lua>,
     {
-        unsafe {
+        let loaded = unsafe {
             let _sg = StackGuard::new(self.state);
             check_stack(self.state, 3)?;
-
             protect_lua(self.state, 0, 1, |state| {
                 ffi::luaL_getsubtable(state, ffi::LUA_REGISTRYINDEX, cstr!("_LOADED"));
             })?;
-            let loaded = Table(self.pop_ref());
+            Table(self.pop_ref())
+        };
 
-            let modname = self.create_string(modname)?;
-            let value = match loaded.raw_get(modname.clone())? {
-                Value::Nil => {
-                    let result = match func.call(modname.clone())? {
-                        Value::Nil => Value::Boolean(true),
-                        res => res,
-                    };
-                    loaded.raw_set(modname, result.clone())?;
-                    result
-                }
-                res => res,
-            };
-            T::from_lua(value, self)
-        }
+        let modname = self.create_string(modname)?;
+        let value = match loaded.raw_get(modname.clone())? {
+            Value::Nil => {
+                let result = match func.call(modname.clone())? {
+                    Value::Nil => Value::Boolean(true),
+                    res => res,
+                };
+                loaded.raw_set(modname, result.clone())?;
+                result
+            }
+            res => res,
+        };
+        T::from_lua(value, self)
     }
 
     /// Consumes and leaks `Lua` object, returning a static reference `&'static Lua`.
@@ -1084,11 +1086,8 @@ impl Lua {
     /// # Safety
     /// This function is unsafe because provides a way to execute unsafe C function.
     pub unsafe fn create_c_function(&self, func: ffi::lua_CFunction) -> Result<Function> {
-        let _sg = StackGuard::new(self.state);
-        check_stack(self.state, 3)?;
-        protect_lua(self.state, 0, 1, |state| {
-            ffi::lua_pushcfunction(state, func);
-        })?;
+        check_stack(self.state, 1)?;
+        ffi::lua_pushcfunction(self.state, func);
         Ok(Function(self.pop_ref()))
     }
 
