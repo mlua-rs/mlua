@@ -1,3 +1,8 @@
+## v0.6.2
+
+- New functionality: `Lua::load_from_function()` and `Lua::create_c_function()`
+- Many optimizations in callbacks/userdata creation and methods execution
+
 ## v0.6.1
 
 - Update `chunk!` documentation (stable Rust limitations)
