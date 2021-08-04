@@ -520,8 +520,10 @@ pub trait UserDataFields<'lua, T: UserData> {
 
 /// Trait for custom userdata types.
 ///
-/// By implementing this trait, a struct becomes eligible for use inside Lua code. Implementations
-/// of [`ToLua`] and [`FromLua`] are automatically provided.
+/// By implementing this trait, a struct becomes eligible for use inside Lua code.
+/// Implementation of [`ToLua`] is automatically provided, [`FromLua`] is implemented
+/// only for `T: UserData + Clone`.
+///
 ///
 /// # Examples
 ///
