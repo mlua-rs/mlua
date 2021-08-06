@@ -450,11 +450,10 @@ pub unsafe fn init_userdata_metatable<T>(
 }
 
 pub unsafe extern "C" fn userdata_destructor<T>(state: *mut ffi::lua_State) -> c_int {
-    callback_error(state, |_| {
-        check_stack(state, 1)?;
-        take_userdata::<T>(state);
-        Ok(0)
-    })
+    // It's probably NOT a good idea to catch Rust panics in finalizer
+    // Lua 5.4 ignores it, other versions generates `LUA_ERRGCMM` without calling message handler
+    take_userdata::<T>(state);
+    0
 }
 
 // In the context of a lua callback, this will call the given function and if the given function
