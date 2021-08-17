@@ -381,6 +381,9 @@ impl Lua {
     }
 
     /// Constructs a new Lua instance from an existing raw state.
+    ///
+    /// Once called, a returned Lua state is cached in the registry and can be retrieved
+    /// by calling this function again.
     #[allow(clippy::missing_safety_doc)]
     pub unsafe fn init_from_ptr(state: *mut ffi::lua_State) -> Lua {
         let maybe_main_state = get_main_state(state);
