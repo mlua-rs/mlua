@@ -23,6 +23,25 @@ pub struct Debug<'a> {
 }
 
 impl<'a> Debug<'a> {
+    /// Returns the specific event that triggered the hook.
+    ///
+    /// For [Lua 5.1] `DebugEvent::TailCall` is used for return events to indicate a return
+    /// from a function that did a tail call.
+    ///
+    /// [Lua 5.1]: https://www.lua.org/manual/5.1/manual.html#pdf-LUA_HOOKTAILRET
+    pub fn event(&self) -> DebugEvent {
+        unsafe {
+            match (&*self.ar).event {
+                ffi::LUA_HOOKCALL => DebugEvent::Call,
+                ffi::LUA_HOOKRET => DebugEvent::Ret,
+                ffi::LUA_HOOKTAILCALL => DebugEvent::TailCall,
+                ffi::LUA_HOOKLINE => DebugEvent::Line,
+                ffi::LUA_HOOKCOUNT => DebugEvent::Count,
+                event => mlua_panic!("Unknown Lua event code: {}", event),
+            }
+        }
+    }
+
     /// Corresponds to the `n` what mask.
     pub fn names(&self) -> DebugNames<'a> {
         unsafe {
@@ -93,6 +112,16 @@ impl<'a> Debug<'a> {
             }
         }
     }
+}
+
+/// Represents a specific event that triggered the hook.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DebugEvent {
+    Call,
+    Ret,
+    TailCall,
+    Line,
+    Count,
 }
 
 #[derive(Clone, Debug)]

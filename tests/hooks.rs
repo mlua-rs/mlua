@@ -3,7 +3,7 @@ use std::ops::Deref;
 use std::str;
 use std::sync::{Arc, Mutex};
 
-use mlua::{Error, HookTriggers, Lua, Result, Value};
+use mlua::{DebugEvent, Error, HookTriggers, Lua, Result, Value};
 
 #[test]
 fn test_line_counts() -> Result<()> {
@@ -17,6 +17,7 @@ fn test_line_counts() -> Result<()> {
             ..Default::default()
         },
         move |_lua, debug| {
+            assert_eq!(debug.event(), DebugEvent::Line);
             hook_output.lock().unwrap().push(debug.curr_line());
             Ok(())
         },
@@ -54,6 +55,7 @@ fn test_function_calls() -> Result<()> {
             ..Default::default()
         },
         move |_lua, debug| {
+            assert_eq!(debug.event(), DebugEvent::Call);
             let names = debug.names();
             let source = debug.source();
             let name = names.name.map(|s| str::from_utf8(s).unwrap().to_owned());
@@ -139,7 +141,8 @@ fn test_limit_execution_instructions() -> Result<()> {
             every_nth_instruction: Some(30),
             ..Default::default()
         },
-        move |_lua, _debug| {
+        move |_lua, debug| {
+            assert_eq!(debug.event(), DebugEvent::Count);
             max_instructions -= 30;
             if max_instructions < 0 {
                 Err(Error::RuntimeError("time's up".to_string()))
