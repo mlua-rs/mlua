@@ -1,5 +1,6 @@
 use std::ffi::CStr;
 use std::marker::PhantomData;
+use std::ops::{BitOr, BitOrAssign};
 use std::os::raw::{c_char, c_int};
 
 use crate::ffi::{self, lua_Debug, lua_State};
@@ -169,6 +170,46 @@ pub struct HookTriggers {
 }
 
 impl HookTriggers {
+    /// Returns a new instance of `HookTriggers` with [`on_calls`] trigger set.
+    ///
+    /// [`on_calls`]: #structfield.on_calls
+    pub fn on_calls() -> Self {
+        HookTriggers {
+            on_calls: true,
+            ..Default::default()
+        }
+    }
+
+    /// Returns a new instance of `HookTriggers` with [`on_returns`] trigger set.
+    ///
+    /// [`on_returns`]: #structfield.on_returns
+    pub fn on_returns() -> Self {
+        HookTriggers {
+            on_returns: true,
+            ..Default::default()
+        }
+    }
+
+    /// Returns a new instance of `HookTriggers` with [`every_line`] trigger set.
+    ///
+    /// [`every_line`]: #structfield.every_line
+    pub fn every_line() -> Self {
+        HookTriggers {
+            every_line: true,
+            ..Default::default()
+        }
+    }
+
+    /// Returns a new instance of `HookTriggers` with [`every_nth_instruction`] trigger set.
+    ///
+    /// [`every_nth_instruction`]: #structfield.every_nth_instruction
+    pub fn every_nth_instruction(n: u32) -> Self {
+        HookTriggers {
+            every_nth_instruction: Some(n),
+            ..Default::default()
+        }
+    }
+
     // Compute the mask to pass to `lua_sethook`.
     pub(crate) fn mask(&self) -> c_int {
         let mut mask: c_int = 0;
@@ -191,6 +232,26 @@ impl HookTriggers {
     // returned.
     pub(crate) fn count(&self) -> c_int {
         self.every_nth_instruction.unwrap_or(0) as c_int
+    }
+}
+
+impl BitOr for HookTriggers {
+    type Output = Self;
+
+    fn bitor(mut self, rhs: Self) -> Self::Output {
+        self.on_calls |= rhs.on_calls;
+        self.on_returns |= rhs.on_returns;
+        self.every_line |= rhs.every_line;
+        if self.every_nth_instruction.is_none() && rhs.every_nth_instruction.is_some() {
+            self.every_nth_instruction = rhs.every_nth_instruction;
+        }
+        self
+    }
+}
+
+impl BitOrAssign for HookTriggers {
+    fn bitor_assign(&mut self, rhs: Self) {
+        *self = *self | rhs;
     }
 }
 

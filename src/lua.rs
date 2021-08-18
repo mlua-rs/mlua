@@ -628,9 +628,7 @@ impl Lua {
     /// # use mlua::{Lua, HookTriggers, Result};
     /// # fn main() -> Result<()> {
     /// let lua = Lua::new();
-    /// lua.set_hook(HookTriggers {
-    ///     every_line: true, ..Default::default()
-    /// }, |_lua, debug| {
+    /// lua.set_hook(HookTriggers::every_line(), |_lua, debug| {
     ///     println!("line {}", debug.curr_line());
     ///     Ok(())
     /// })?;

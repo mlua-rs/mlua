@@ -61,7 +61,7 @@ impl Default for Options {
 }
 
 impl Options {
-    /// Retruns a new instance of `Options` with default parameters.
+    /// Returns a new instance of `Options` with default parameters.
     pub fn new() -> Self {
         Self::default()
     }
