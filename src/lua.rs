@@ -69,7 +69,7 @@ struct ExtraData {
     registry_unref_list: Arc<Mutex<Option<Vec<c_int>>>>,
 
     libs: StdLib,
-    mem_info: *mut MemoryInfo,
+    mem_info: Option<Box<MemoryInfo>>,
     safe: bool, // Same as in the Lua struct
 
     ref_thread: *mut ffi::lua_State,
@@ -176,9 +176,6 @@ impl Drop for Lua {
                 );
                 *mlua_expect!(extra.registry_unref_list.lock(), "unref list poisoned") = None;
                 ffi::lua_close(mlua_expect!(self.main_state, "main_state is null"));
-                if !extra.mem_info.is_null() {
-                    Box::from_raw(extra.mem_info);
-                }
                 Box::from_raw(extra);
             }
         }
@@ -326,13 +323,13 @@ impl Lua {
         }
 
         #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
-        let mem_info = Box::into_raw(Box::new(MemoryInfo {
+        let mut mem_info = Box::new(MemoryInfo {
             used_memory: 0,
             memory_limit: 0,
-        }));
+        });
 
         #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
-        let state = ffi::lua_newstate(allocator, mem_info as *mut c_void);
+        let state = ffi::lua_newstate(allocator, &mut *mem_info as *mut MemoryInfo as *mut c_void);
         #[cfg(any(feature = "lua51", feature = "luajit"))]
         let state = ffi::luaL_newstate();
 
@@ -346,7 +343,7 @@ impl Lua {
 
         #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
         {
-            extra.mem_info = mem_info;
+            extra.mem_info = Some(mem_info);
         }
 
         mlua_expect!(
@@ -443,7 +440,7 @@ impl Lua {
             registry_unref_list: Arc::new(Mutex::new(Some(Vec::new()))),
             ref_thread,
             libs: StdLib::NONE,
-            mem_info: ptr::null_mut(),
+            mem_info: None,
             safe: false,
             // We need 1 extra stack space to move values in and out of the ref stack.
             ref_stack_size: ffi::LUA_MINSTACK - 1,
@@ -673,14 +670,14 @@ impl Lua {
     pub fn used_memory(&self) -> usize {
         unsafe {
             let state = self.main_state.unwrap_or(self.state);
-            match (*self.extra).mem_info {
-                mem_info if mem_info.is_null() => {
+            match &(*self.extra).mem_info {
+                Some(mem_info) => mem_info.used_memory as usize,
+                None => {
                     // Get data from the Lua GC
                     let used_kbytes = ffi::lua_gc(state, ffi::LUA_GCCOUNT, 0);
                     let used_kbytes_rem = ffi::lua_gc(state, ffi::LUA_GCCOUNTB, 0);
                     (used_kbytes as usize) * 1024 + (used_kbytes_rem as usize)
                 }
-                mem_info => (*mem_info).used_memory as usize,
             }
         }
     }
@@ -697,13 +694,13 @@ impl Lua {
     #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", doc))]
     pub fn set_memory_limit(&self, memory_limit: usize) -> Result<usize> {
         unsafe {
-            match (*self.extra).mem_info {
-                mem_info if mem_info.is_null() => Err(Error::MemoryLimitNotAvailable),
-                mem_info => {
-                    let prev_limit = (*mem_info).memory_limit as usize;
-                    (*mem_info).memory_limit = memory_limit as isize;
+            match &mut (*self.extra).mem_info {
+                Some(mem_info) => {
+                    let prev_limit = mem_info.memory_limit as usize;
+                    mem_info.memory_limit = memory_limit as isize;
                     Ok(prev_limit)
                 }
+                None => Err(Error::MemoryLimitNotAvailable),
             }
         }
     }
