@@ -17,19 +17,19 @@ macro_rules! cstr {
 
 macro_rules! mlua_panic {
     ($msg:expr) => {
-        panic!(bug_msg!($msg));
+        panic!(bug_msg!($msg))
     };
 
     ($msg:expr,) => {
-        mlua_panic!($msg);
+        mlua_panic!($msg)
     };
 
     ($msg:expr, $($arg:expr),+) => {
-        panic!(bug_msg!($msg), $($arg),+);
+        panic!(bug_msg!($msg), $($arg),+)
     };
 
     ($msg:expr, $($arg:expr),+,) => {
-        mlua_panic!($msg, $($arg),+);
+        mlua_panic!($msg, $($arg),+)
     };
 }
 
