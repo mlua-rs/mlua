@@ -32,7 +32,7 @@ impl<'a> Debug<'a> {
     /// [Lua 5.1]: https://www.lua.org/manual/5.1/manual.html#pdf-LUA_HOOKTAILRET
     pub fn event(&self) -> DebugEvent {
         unsafe {
-            match (&*self.ar).event {
+            match (*self.ar).event {
                 ffi::LUA_HOOKCALL => DebugEvent::Call,
                 ffi::LUA_HOOKRET => DebugEvent::Ret,
                 ffi::LUA_HOOKTAILCALL => DebugEvent::TailCall,
