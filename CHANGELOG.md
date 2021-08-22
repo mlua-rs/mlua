@@ -1,3 +1,10 @@
+## v0.6.3
+
+- Disabled catching Rust panics in userdata finalizers on drop. It also has positive performance impact.
+- Added `Debug::event()` to the hook's Debug structure
+- Simplified interface of `hook::HookTriggers`
+- Added finalizer to `ExtraData` in module mode. This helps avoiding memory leak on closing state when Lua unloads modules and frees memory.
+
 ## v0.6.2
 
 - New functionality: `Lua::load_from_function()` and `Lua::create_c_function()`
