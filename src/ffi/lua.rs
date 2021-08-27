@@ -23,6 +23,7 @@
 
 //! Contains definitions from `lua.h`.
 
+use std::marker::{PhantomData, PhantomPinned};
 #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
 use std::os::raw::c_uchar;
 use std::os::raw::{c_char, c_int, c_void};
@@ -81,7 +82,11 @@ pub const LUA_ERRERR: c_int = 5;
 pub const LUA_ERRERR: c_int = 6;
 
 /// A raw Lua state associated with a thread.
-pub type lua_State = c_void;
+#[repr(C)]
+pub struct lua_State {
+    _data: [u8; 0],
+    _marker: PhantomData<(*mut u8, PhantomPinned)>,
+}
 
 // basic types
 pub const LUA_TNONE: c_int = -1;
@@ -621,7 +626,7 @@ extern "C" {
 #[cfg(any(feature = "lua54", feature = "lua53"))]
 #[inline(always)]
 pub unsafe fn lua_getextraspace(L: *mut lua_State) -> *mut c_void {
-    L.offset(-super::glue::LUA_EXTRASPACE as isize) as *mut c_void
+    (L as *mut c_char).offset(-super::glue::LUA_EXTRASPACE as isize) as *mut c_void
 }
 
 #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
