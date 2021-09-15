@@ -4,6 +4,7 @@
 - Added `Debug::event()` to the hook's Debug structure
 - Simplified interface of `hook::HookTriggers`
 - Added finalizer to `ExtraData` in module mode. This helps avoiding memory leak on closing state when Lua unloads modules and frees memory.
+- Added `DeserializeOptions` struct to control deserializer behavior (`from_value_with` function).
 
 ## v0.6.2
 
