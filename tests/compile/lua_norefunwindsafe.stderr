@@ -15,49 +15,21 @@ error[E0277]: the type `UnsafeCell<()>` may contain interior mutability and a re
     = note: required because of the requirements on the impl of `UnwindSafe` for `&Lua`
     = note: required because it appears within the type `[closure@$DIR/tests/compile/lua_norefunwindsafe.rs:7:18: 7:48]`
 
-error[E0277]: the type `UnsafeCell<(dyn for<'r, 's> FnMut(&'r Lua, mlua::Debug<'s>) -> Result<(), LuaError> + 'static)>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+error[E0277]: the type `UnsafeCell<mlua::lua::ExtraData>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
    --> $DIR/lua_norefunwindsafe.rs:7:5
     |
 7   |     catch_unwind(|| lua.create_table().unwrap());
-    |     ^^^^^^^^^^^^ `UnsafeCell<(dyn for<'r, 's> FnMut(&'r Lua, mlua::Debug<'s>) -> Result<(), LuaError> + 'static)>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+    |     ^^^^^^^^^^^^ `UnsafeCell<mlua::lua::ExtraData>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
     |
    ::: $RUST/std/src/panic.rs
     |
     | pub fn catch_unwind<F: FnOnce() -> R + UnwindSafe, R>(f: F) -> Result<R> {
     |                                        ---------- required by this bound in `catch_unwind`
     |
-    = help: within `Lua`, the trait `RefUnwindSafe` is not implemented for `UnsafeCell<(dyn for<'r, 's> FnMut(&'r Lua, mlua::Debug<'s>) -> Result<(), LuaError> + 'static)>`
-    = note: required because it appears within the type `RefCell<(dyn for<'r, 's> FnMut(&'r Lua, mlua::Debug<'s>) -> Result<(), LuaError> + 'static)>`
-    = note: required because it appears within the type `alloc::sync::ArcInner<RefCell<(dyn for<'r, 's> FnMut(&'r Lua, mlua::Debug<'s>) -> Result<(), LuaError> + 'static)>>`
-    = note: required because it appears within the type `PhantomData<alloc::sync::ArcInner<RefCell<(dyn for<'r, 's> FnMut(&'r Lua, mlua::Debug<'s>) -> Result<(), LuaError> + 'static)>>>`
-    = note: required because it appears within the type `Arc<RefCell<(dyn for<'r, 's> FnMut(&'r Lua, mlua::Debug<'s>) -> Result<(), LuaError> + 'static)>>`
-    = note: required because it appears within the type `Option<Arc<RefCell<(dyn for<'r, 's> FnMut(&'r Lua, mlua::Debug<'s>) -> Result<(), LuaError> + 'static)>>>`
-    = note: required because it appears within the type `mlua::lua::ExtraData`
-    = note: required because it appears within the type `*mut mlua::lua::ExtraData`
-    = note: required because it appears within the type `Lua`
-    = note: required because of the requirements on the impl of `UnwindSafe` for `&Lua`
-    = note: required because it appears within the type `[closure@$DIR/tests/compile/lua_norefunwindsafe.rs:7:18: 7:48]`
-
-error[E0277]: the type `UnsafeCell<isize>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
-   --> $DIR/lua_norefunwindsafe.rs:7:5
-    |
-7   |     catch_unwind(|| lua.create_table().unwrap());
-    |     ^^^^^^^^^^^^ `UnsafeCell<isize>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
-    |
-   ::: $RUST/std/src/panic.rs
-    |
-    | pub fn catch_unwind<F: FnOnce() -> R + UnwindSafe, R>(f: F) -> Result<R> {
-    |                                        ---------- required by this bound in `catch_unwind`
-    |
-    = help: within `Lua`, the trait `RefUnwindSafe` is not implemented for `UnsafeCell<isize>`
-    = note: required because it appears within the type `Cell<isize>`
-    = note: required because it appears within the type `RefCell<(dyn for<'r, 's> FnMut(&'r Lua, mlua::Debug<'s>) -> Result<(), LuaError> + 'static)>`
-    = note: required because it appears within the type `alloc::sync::ArcInner<RefCell<(dyn for<'r, 's> FnMut(&'r Lua, mlua::Debug<'s>) -> Result<(), LuaError> + 'static)>>`
-    = note: required because it appears within the type `PhantomData<alloc::sync::ArcInner<RefCell<(dyn for<'r, 's> FnMut(&'r Lua, mlua::Debug<'s>) -> Result<(), LuaError> + 'static)>>>`
-    = note: required because it appears within the type `Arc<RefCell<(dyn for<'r, 's> FnMut(&'r Lua, mlua::Debug<'s>) -> Result<(), LuaError> + 'static)>>`
-    = note: required because it appears within the type `Option<Arc<RefCell<(dyn for<'r, 's> FnMut(&'r Lua, mlua::Debug<'s>) -> Result<(), LuaError> + 'static)>>>`
-    = note: required because it appears within the type `mlua::lua::ExtraData`
-    = note: required because it appears within the type `*mut mlua::lua::ExtraData`
+    = help: within `Lua`, the trait `RefUnwindSafe` is not implemented for `UnsafeCell<mlua::lua::ExtraData>`
+    = note: required because it appears within the type `alloc::sync::ArcInner<UnsafeCell<mlua::lua::ExtraData>>`
+    = note: required because it appears within the type `PhantomData<alloc::sync::ArcInner<UnsafeCell<mlua::lua::ExtraData>>>`
+    = note: required because it appears within the type `Arc<UnsafeCell<mlua::lua::ExtraData>>`
     = note: required because it appears within the type `Lua`
     = note: required because of the requirements on the impl of `UnwindSafe` for `&Lua`
     = note: required because it appears within the type `[closure@$DIR/tests/compile/lua_norefunwindsafe.rs:7:18: 7:48]`
