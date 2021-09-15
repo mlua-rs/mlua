@@ -1713,6 +1713,11 @@ impl Lua {
         }
     }
 
+    #[cfg(feature = "serialize")]
+    pub(crate) unsafe fn get_ref_ptr(&self, lref: &LuaRef) -> *const c_void {
+        ffi::lua_topointer((*self.extra.get()).ref_thread, lref.index)
+    }
+
     pub(crate) unsafe fn push_userdata_metatable<T: 'static + UserData>(&self) -> Result<()> {
         let extra = &mut *self.extra.get();
 

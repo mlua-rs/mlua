@@ -121,7 +121,9 @@ pub use crate::thread::AsyncThread;
 
 #[cfg(feature = "serialize")]
 #[doc(inline)]
-pub use crate::serde::{ser::Options as SerializeOptions, LuaSerdeExt};
+pub use crate::serde::{
+    de::Options as DeserializeOptions, ser::Options as SerializeOptions, LuaSerdeExt,
+};
 
 pub mod prelude;
 #[cfg(feature = "serialize")]
