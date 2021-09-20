@@ -47,6 +47,10 @@ pub(crate) struct AsyncPollUpvalue<'lua> {
     pub(crate) fut: LocalBoxFuture<'lua, Result<MultiValue<'lua>>>,
 }
 
+#[cfg(feature = "send")]
+pub(crate) type HookCallback = Arc<RefCell<dyn FnMut(&Lua, Debug) -> Result<()> + Send>>;
+
+#[cfg(not(feature = "send"))]
 pub(crate) type HookCallback = Arc<RefCell<dyn FnMut(&Lua, Debug) -> Result<()>>>;
 
 #[cfg(feature = "send")]
