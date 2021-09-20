@@ -1,9 +1,9 @@
 use std::cell::RefCell;
-use std::collections::HashSet;
 use std::os::raw::c_void;
 use std::rc::Rc;
 use std::string::String as StdString;
 
+use rustc_hash::FxHashSet;
 use serde::de::{self, IntoDeserializer};
 
 use crate::error::{Error, Result};
@@ -16,7 +16,7 @@ use crate::value::Value;
 pub struct Deserializer<'lua> {
     value: Value<'lua>,
     options: Options,
-    visited: Rc<RefCell<HashSet<*const c_void>>>,
+    visited: Rc<RefCell<FxHashSet<*const c_void>>>,
 }
 
 /// A struct with options to change default deserializer behavior.
@@ -86,14 +86,14 @@ impl<'lua> Deserializer<'lua> {
         Deserializer {
             value,
             options,
-            visited: Rc::new(RefCell::new(HashSet::new())),
+            visited: Rc::new(RefCell::new(FxHashSet::default())),
         }
     }
 
     fn from_parts(
         value: Value<'lua>,
         options: Options,
-        visited: Rc<RefCell<HashSet<*const c_void>>>,
+        visited: Rc<RefCell<FxHashSet<*const c_void>>>,
     ) -> Self {
         Deserializer {
             value,
@@ -313,7 +313,7 @@ impl<'lua, 'de> serde::Deserializer<'de> for Deserializer<'lua> {
 struct SeqDeserializer<'lua> {
     seq: TableSequence<'lua, Value<'lua>>,
     options: Options,
-    visited: Rc<RefCell<HashSet<*const c_void>>>,
+    visited: Rc<RefCell<FxHashSet<*const c_void>>>,
 }
 
 impl<'lua, 'de> de::SeqAccess<'de> for SeqDeserializer<'lua> {
@@ -351,7 +351,7 @@ struct MapDeserializer<'lua> {
     pairs: TablePairs<'lua, Value<'lua>, Value<'lua>>,
     value: Option<Value<'lua>>,
     options: Options,
-    visited: Rc<RefCell<HashSet<*const c_void>>>,
+    visited: Rc<RefCell<FxHashSet<*const c_void>>>,
     processed: usize,
 }
 
@@ -407,7 +407,7 @@ struct EnumDeserializer<'lua> {
     variant: StdString,
     value: Option<Value<'lua>>,
     options: Options,
-    visited: Rc<RefCell<HashSet<*const c_void>>>,
+    visited: Rc<RefCell<FxHashSet<*const c_void>>>,
 }
 
 impl<'lua, 'de> de::EnumAccess<'de> for EnumDeserializer<'lua> {
@@ -431,7 +431,7 @@ impl<'lua, 'de> de::EnumAccess<'de> for EnumDeserializer<'lua> {
 struct VariantDeserializer<'lua> {
     value: Option<Value<'lua>>,
     options: Options,
-    visited: Rc<RefCell<HashSet<*const c_void>>>,
+    visited: Rc<RefCell<FxHashSet<*const c_void>>>,
 }
 
 impl<'lua, 'de> de::VariantAccess<'de> for VariantDeserializer<'lua> {
@@ -499,12 +499,12 @@ impl<'lua, 'de> de::VariantAccess<'de> for VariantDeserializer<'lua> {
 // Used to track recursive tables but allow to traverse same tables multiple times
 struct RecursionGuard {
     ptr: *const c_void,
-    visited: Rc<RefCell<HashSet<*const c_void>>>,
+    visited: Rc<RefCell<FxHashSet<*const c_void>>>,
 }
 
 impl RecursionGuard {
     #[inline]
-    fn new(table: &Table, visited: &Rc<RefCell<HashSet<*const c_void>>>) -> Self {
+    fn new(table: &Table, visited: &Rc<RefCell<FxHashSet<*const c_void>>>) -> Self {
         let visited = Rc::clone(visited);
         let lua = table.0.lua;
         let ptr =
@@ -524,7 +524,7 @@ impl Drop for RecursionGuard {
 fn check_value_if_skip(
     value: &Value,
     options: Options,
-    visited: &RefCell<HashSet<*const c_void>>,
+    visited: &RefCell<FxHashSet<*const c_void>>,
 ) -> Result<bool> {
     match value {
         Value::Table(table) => {

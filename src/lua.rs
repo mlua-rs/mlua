@@ -1,6 +1,5 @@
 use std::any::TypeId;
 use std::cell::{Ref, RefCell, RefMut, UnsafeCell};
-use std::collections::HashMap;
 use std::ffi::CString;
 use std::fmt;
 use std::marker::PhantomData;
@@ -8,6 +7,8 @@ use std::os::raw::{c_char, c_int, c_void};
 use std::panic::{catch_unwind, resume_unwind, AssertUnwindSafe, Location};
 use std::sync::{Arc, Mutex, RwLock};
 use std::{mem, ptr, str};
+
+use rustc_hash::FxHashMap;
 
 use crate::error::{Error, Result};
 use crate::ffi;
@@ -63,8 +64,8 @@ pub struct Lua {
 
 // Data associated with the Lua.
 struct ExtraData {
-    registered_userdata: HashMap<TypeId, c_int>,
-    registered_userdata_mt: HashMap<*const c_void, Option<TypeId>>,
+    registered_userdata: FxHashMap<TypeId, c_int>,
+    registered_userdata_mt: FxHashMap<*const c_void, Option<TypeId>>,
     registry_unref_list: Arc<Mutex<Option<Vec<c_int>>>>,
 
     libs: StdLib,
@@ -456,8 +457,8 @@ impl Lua {
         // Create ExtraData
 
         let extra = Arc::new(UnsafeCell::new(ExtraData {
-            registered_userdata: HashMap::new(),
-            registered_userdata_mt: HashMap::new(),
+            registered_userdata: FxHashMap::default(),
+            registered_userdata_mt: FxHashMap::default(),
             registry_unref_list: Arc::new(Mutex::new(Some(Vec::new()))),
             ref_thread,
             libs: StdLib::NONE,
@@ -2425,7 +2426,7 @@ impl<'lua, T: AsRef<[u8]> + ?Sized> AsChunk<'lua> for T {
 }
 
 // Creates required entries in the metatable cache (see `util::METATABLE_CACHE`)
-pub(crate) fn init_metatable_cache(cache: &mut HashMap<TypeId, u8>) {
+pub(crate) fn init_metatable_cache(cache: &mut FxHashMap<TypeId, u8>) {
     cache.insert(TypeId::of::<Arc<UnsafeCell<ExtraData>>>(), 0);
     cache.insert(TypeId::of::<Callback>(), 0);
     cache.insert(TypeId::of::<CallbackUpvalue>(), 0);
