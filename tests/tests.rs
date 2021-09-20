@@ -848,6 +848,37 @@ fn test_mismatched_registry_key() -> Result<()> {
 }
 
 #[test]
+fn test_application_data() -> Result<()> {
+    let lua = Lua::new();
+
+    lua.set_app_data("test1");
+    lua.set_app_data(vec!["test2"]);
+
+    let f = lua.create_function(|lua, ()| {
+        {
+            let data1 = lua.app_data_ref::<&str>().unwrap();
+            assert_eq!(*data1, "test1");
+        }
+        let mut data2 = lua.app_data_mut::<Vec<&str>>().unwrap();
+        assert_eq!(*data2, vec!["test2"]);
+        data2.push("test3");
+        Ok(())
+    })?;
+    f.call(())?;
+
+    assert_eq!(*lua.app_data_ref::<&str>().unwrap(), "test1");
+    assert_eq!(
+        *lua.app_data_ref::<Vec<&str>>().unwrap(),
+        vec!["test2", "test3"]
+    );
+
+    lua.remove_app_data::<Vec<&str>>();
+    assert!(matches!(lua.app_data_ref::<Vec<&str>>(), None));
+
+    Ok(())
+}
+
+#[test]
 fn test_recursion() -> Result<()> {
     let lua = Lua::new();
 
