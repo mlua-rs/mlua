@@ -2379,6 +2379,21 @@ impl<'lua, T: AsRef<[u8]> + ?Sized> AsChunk<'lua> for T {
     }
 }
 
+// Creates required entries in the metatable cache (see `util::METATABLE_CACHE`)
+pub(crate) fn init_metatable_cache(cache: &mut HashMap<TypeId, u8>) {
+    cache.insert(TypeId::of::<Arc<UnsafeCell<ExtraData>>>(), 0);
+    cache.insert(TypeId::of::<Callback>(), 0);
+    cache.insert(TypeId::of::<CallbackUpvalue>(), 0);
+
+    #[cfg(feature = "async")]
+    {
+        cache.insert(TypeId::of::<AsyncCallback>(), 0);
+        cache.insert(TypeId::of::<AsyncCallbackUpvalue>(), 0);
+        cache.insert(TypeId::of::<AsyncPollUpvalue>(), 0);
+        cache.insert(TypeId::of::<Option<Waker>>(), 0);
+    }
+}
+
 // An optimized version of `callback_error` that does not allocate `WrappedFailure` userdata
 // and instead reuses unsed and cached values from previous calls (or allocates new).
 // It requires `get_extra` function to return `ExtraData` value.
