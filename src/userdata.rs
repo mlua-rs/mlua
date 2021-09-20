@@ -597,11 +597,13 @@ pub trait UserData: Sized {
 pub(crate) struct UserDataCell<T>(RefCell<UserDataWrapped<T>>);
 
 impl<T> UserDataCell<T> {
+    #[inline]
     pub(crate) fn new(data: T) -> Self {
         UserDataCell(RefCell::new(UserDataWrapped::new(data)))
     }
 
     #[cfg(feature = "serialize")]
+    #[inline]
     pub(crate) fn new_ser(data: T) -> Self
     where
         T: 'static + Serialize,
@@ -610,6 +612,7 @@ impl<T> UserDataCell<T> {
     }
 
     // Immutably borrows the wrapped value.
+    #[inline]
     fn try_borrow(&self) -> Result<Ref<T>> {
         self.0
             .try_borrow()
@@ -618,6 +621,7 @@ impl<T> UserDataCell<T> {
     }
 
     // Mutably borrows the wrapped value.
+    #[inline]
     fn try_borrow_mut(&self) -> Result<RefMut<T>> {
         self.0
             .try_borrow_mut()
@@ -633,11 +637,13 @@ pub(crate) enum UserDataWrapped<T> {
 }
 
 impl<T> UserDataWrapped<T> {
+    #[inline]
     fn new(data: T) -> Self {
         UserDataWrapped::Default(data)
     }
 
     #[cfg(feature = "serialize")]
+    #[inline]
     fn new_ser(data: T) -> Self
     where
         T: 'static + Serialize,
@@ -659,6 +665,7 @@ impl<T> Drop for UserDataWrapped<T> {
 impl<T> Deref for UserDataWrapped<T> {
     type Target = T;
 
+    #[inline]
     fn deref(&self) -> &Self::Target {
         match self {
             Self::Default(data) => data,
@@ -669,6 +676,7 @@ impl<T> Deref for UserDataWrapped<T> {
 }
 
 impl<T> DerefMut for UserDataWrapped<T> {
+    #[inline]
     fn deref_mut(&mut self) -> &mut Self::Target {
         match self {
             Self::Default(data) => data,
@@ -726,6 +734,7 @@ impl<'lua> AnyUserData<'lua> {
     ///
     /// Returns a `UserDataBorrowError` if the userdata is already mutably borrowed. Returns a
     /// `UserDataTypeMismatch` if the userdata is not of type `T`.
+    #[inline]
     pub fn borrow<T: 'static + UserData>(&self) -> Result<Ref<T>> {
         self.inspect(|cell| cell.try_borrow())
     }
@@ -736,6 +745,7 @@ impl<'lua> AnyUserData<'lua> {
     ///
     /// Returns a `UserDataBorrowMutError` if the userdata cannot be mutably borrowed.
     /// Returns a `UserDataTypeMismatch` if the userdata is not of type `T`.
+    #[inline]
     pub fn borrow_mut<T: 'static + UserData>(&self) -> Result<RefMut<T>> {
         self.inspect(|cell| cell.try_borrow_mut())
     }

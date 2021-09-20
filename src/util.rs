@@ -19,6 +19,7 @@ static METATABLE_CACHE: Lazy<Mutex<HashMap<TypeId, u8>>> = Lazy::new(|| {
 
 // Checks that Lua has enough free stack space for future stack operations. On failure, this will
 // panic with an internal error message.
+#[inline]
 pub unsafe fn assert_stack(state: *mut ffi::lua_State, amount: c_int) {
     // TODO: This should only be triggered when there is a logic error in `mlua`. In the future,
     // when there is a way to be confident about stack safety and test it, this could be enabled
@@ -30,6 +31,7 @@ pub unsafe fn assert_stack(state: *mut ffi::lua_State, amount: c_int) {
 }
 
 // Checks that Lua has enough free stack space and returns `Error::StackError` on failure.
+#[inline]
 pub unsafe fn check_stack(state: *mut ffi::lua_State, amount: c_int) -> Result<()> {
     if ffi::lua_checkstack(state, amount) == 0 {
         Err(Error::StackError)
@@ -48,6 +50,7 @@ impl StackGuard {
     // Creates a StackGuard instance with record of the stack size, and on Drop will check the
     // stack size and drop any extra elements. If the stack size at the end is *smaller* than at
     // the beginning, this is considered a fatal logic error and will result in a panic.
+    #[inline]
     pub unsafe fn new(state: *mut ffi::lua_State) -> StackGuard {
         StackGuard {
             state,
@@ -57,6 +60,7 @@ impl StackGuard {
     }
 
     // Similar to `new`, but checks and keeps `extra` elements from top of the stack on Drop.
+    #[inline]
     pub unsafe fn new_extra(state: *mut ffi::lua_State, extra: c_int) -> StackGuard {
         StackGuard {
             state,
@@ -211,6 +215,7 @@ pub unsafe fn pop_error(state: *mut ffi::lua_State, err_code: c_int) -> Error {
 }
 
 // Uses 3 stack spaces
+#[inline]
 pub unsafe fn push_string<S: AsRef<[u8]> + ?Sized>(
     state: *mut ffi::lua_State,
     s: &S,
@@ -222,6 +227,7 @@ pub unsafe fn push_string<S: AsRef<[u8]> + ?Sized>(
 }
 
 // Uses 3 stack spaces
+#[inline]
 pub unsafe fn push_table(state: *mut ffi::lua_State, narr: c_int, nrec: c_int) -> Result<()> {
     protect_lua(state, 0, 1, |state| ffi::lua_createtable(state, narr, nrec))
 }
@@ -241,6 +247,7 @@ where
 }
 
 // Internally uses 3 stack spaces, does not call checkstack.
+#[inline]
 pub unsafe fn push_userdata<T>(state: *mut ffi::lua_State, t: T) -> Result<()> {
     let ud = protect_lua(state, 0, 1, |state| {
         ffi::lua_newuserdata(state, mem::size_of::<T>()) as *mut T
@@ -249,6 +256,7 @@ pub unsafe fn push_userdata<T>(state: *mut ffi::lua_State, t: T) -> Result<()> {
     Ok(())
 }
 
+#[inline]
 pub unsafe fn get_userdata<T>(state: *mut ffi::lua_State, index: c_int) -> *mut T {
     let ud = ffi::lua_touserdata(state, index) as *mut T;
     mlua_debug_assert!(!ud.is_null(), "userdata pointer is null");

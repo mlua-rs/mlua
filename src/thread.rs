@@ -341,6 +341,7 @@ where
 }
 
 #[cfg(feature = "async")]
+#[inline(always)]
 fn is_poll_pending(val: &MultiValue) -> bool {
     match val.iter().enumerate().last() {
         Some((1, Value::LightUserData(ud))) => {
