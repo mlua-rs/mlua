@@ -1842,9 +1842,16 @@ impl Lua {
 
         // Prepare metatable, add meta methods first and then meta fields
         let metatable_nrec = methods.meta_methods.len() + fields.meta_fields.len();
+        #[cfg(feature = "async")]
+        let metatable_nrec = metatable_nrec + methods.async_meta_methods.len();
         push_table(self.state, 0, metatable_nrec as c_int)?;
         for (k, m) in methods.meta_methods {
             self.push_value(Value::Function(self.create_callback(m)?))?;
+            rawset_field(self.state, -2, k.validate()?.name())?;
+        }
+        #[cfg(feature = "async")]
+        for (k, m) in methods.async_meta_methods {
+            self.push_value(Value::Function(self.create_async_callback(m)?))?;
             rawset_field(self.state, -2, k.validate()?.name())?;
         }
         for (k, f) in fields.meta_fields {
@@ -1880,10 +1887,9 @@ impl Lua {
         }
 
         let mut methods_index = None;
-        #[cfg(feature = "async")]
-        let methods_nrec = methods.methods.len() + methods.async_methods.len();
-        #[cfg(not(feature = "async"))]
         let methods_nrec = methods.methods.len();
+        #[cfg(feature = "async")]
+        let methods_nrec = methods_nrec + methods.async_methods.len();
         if methods_nrec > 0 {
             push_table(self.state, 0, methods_nrec as c_int)?;
             for (k, m) in methods.methods {
@@ -2785,6 +2791,8 @@ struct StaticUserDataMethods<'lua, T: 'static + UserData> {
     #[cfg(feature = "async")]
     async_methods: Vec<(Vec<u8>, AsyncCallback<'lua, 'static>)>,
     meta_methods: Vec<(MetaMethod, Callback<'lua, 'static>)>,
+    #[cfg(feature = "async")]
+    async_meta_methods: Vec<(MetaMethod, AsyncCallback<'lua, 'static>)>,
     _type: PhantomData<T>,
 }
 
@@ -2795,6 +2803,8 @@ impl<'lua, T: 'static + UserData> Default for StaticUserDataMethods<'lua, T> {
             #[cfg(feature = "async")]
             async_methods: Vec::new(),
             meta_methods: Vec::new(),
+            #[cfg(feature = "async")]
+            async_meta_methods: Vec::new(),
             _type: PhantomData,
         }
     }
@@ -2894,6 +2904,20 @@ impl<'lua, T: 'static + UserData> UserDataMethods<'lua, T> for StaticUserDataMet
             .push((meta.into(), Self::box_method_mut(method)));
     }
 
+    #[cfg(all(feature = "async", not(feature = "lua51")))]
+    fn add_async_meta_method<S, A, R, M, MR>(&mut self, meta: S, method: M)
+    where
+        T: Clone,
+        S: Into<MetaMethod>,
+        A: FromLuaMulti<'lua>,
+        R: ToLuaMulti<'lua>,
+        M: 'static + MaybeSend + Fn(&'lua Lua, T, A) -> MR,
+        MR: 'lua + Future<Output = Result<R>>,
+    {
+        self.async_meta_methods
+            .push((meta.into(), Self::box_async_method(method)));
+    }
+
     fn add_meta_function<S, A, R, F>(&mut self, meta: S, function: F)
     where
         S: Into<MetaMethod>,
@@ -2916,6 +2940,19 @@ impl<'lua, T: 'static + UserData> UserDataMethods<'lua, T> for StaticUserDataMet
             .push((meta.into(), Self::box_function_mut(function)));
     }
 
+    #[cfg(all(feature = "async", not(feature = "lua51")))]
+    fn add_async_meta_function<S, A, R, F, FR>(&mut self, meta: S, function: F)
+    where
+        S: Into<MetaMethod>,
+        A: FromLuaMulti<'lua>,
+        R: ToLuaMulti<'lua>,
+        F: 'static + MaybeSend + Fn(&'lua Lua, A) -> FR,
+        FR: 'lua + Future<Output = Result<R>>,
+    {
+        self.async_meta_methods
+            .push((meta.into(), Self::box_async_function(function)));
+    }
+
     // Below are internal methods used in generated code
 
     fn add_callback(&mut self, name: Vec<u8>, callback: Callback<'lua, 'static>) {
@@ -2929,6 +2966,15 @@ impl<'lua, T: 'static + UserData> UserDataMethods<'lua, T> for StaticUserDataMet
 
     fn add_meta_callback(&mut self, meta: MetaMethod, callback: Callback<'lua, 'static>) {
         self.meta_methods.push((meta, callback));
+    }
+
+    #[cfg(feature = "async")]
+    fn add_async_meta_callback(
+        &mut self,
+        meta: MetaMethod,
+        callback: AsyncCallback<'lua, 'static>,
+    ) {
+        self.async_meta_methods.push((meta, callback))
     }
 }
 
@@ -3274,6 +3320,10 @@ macro_rules! lua_userdata_impl {
                 }
                 for (meta, callback) in orig_methods.meta_methods {
                     methods.add_meta_callback(meta, callback);
+                }
+                #[cfg(feature = "async")]
+                for (meta, callback) in orig_methods.async_meta_methods {
+                    methods.add_async_meta_callback(meta, callback);
                 }
             }
         }
