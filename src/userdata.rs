@@ -21,9 +21,7 @@ use crate::function::Function;
 use crate::lua::Lua;
 use crate::table::{Table, TablePairs};
 use crate::types::{Callback, LuaRef, MaybeSend};
-use crate::util::{
-    check_stack, get_destructed_userdata_metatable, get_userdata, push_string, StackGuard,
-};
+use crate::util::{check_stack, get_userdata, StackGuard};
 use crate::value::{FromLua, FromLuaMulti, ToLua, ToLuaMulti};
 
 #[cfg(any(feature = "lua52", feature = "lua51", feature = "luajit"))]
@@ -613,7 +611,7 @@ impl<T> UserDataCell<T> {
 
     // Immutably borrows the wrapped value.
     #[inline]
-    fn try_borrow(&self) -> Result<Ref<T>> {
+    pub(crate) fn try_borrow(&self) -> Result<Ref<T>> {
         self.0
             .try_borrow()
             .map(|r| Ref::map(r, |r| r.deref()))
@@ -622,7 +620,7 @@ impl<T> UserDataCell<T> {
 
     // Mutably borrows the wrapped value.
     #[inline]
-    fn try_borrow_mut(&self) -> Result<RefMut<T>> {
+    pub(crate) fn try_borrow_mut(&self) -> Result<RefMut<T>> {
         self.0
             .try_borrow_mut()
             .map(|r| RefMut::map(r, |r| r.deref_mut()))
@@ -771,7 +769,7 @@ impl<'lua> AnyUserData<'lua> {
             let _sg = StackGuard::new(lua.state);
             check_stack(lua.state, 3)?;
 
-            lua.push_userdata_ref(&self.0, false)?;
+            lua.push_userdata_ref(&self.0)?;
             lua.push_value(v)?;
             ffi::lua_setuservalue(lua.state, -2);
 
@@ -790,7 +788,7 @@ impl<'lua> AnyUserData<'lua> {
             let _sg = StackGuard::new(lua.state);
             check_stack(lua.state, 3)?;
 
-            lua.push_userdata_ref(&self.0, false)?;
+            lua.push_userdata_ref(&self.0)?;
             ffi::lua_getuservalue(lua.state, -1);
             lua.pop_value()
         };
@@ -821,7 +819,7 @@ impl<'lua> AnyUserData<'lua> {
             let _sg = StackGuard::new(lua.state);
             check_stack(lua.state, 3)?;
 
-            lua.push_userdata_ref(&self.0, false)?;
+            lua.push_userdata_ref(&self.0)?;
             ffi::lua_getmetatable(lua.state, -1); // Checked that non-empty on the previous call
             Ok(Table(lua.pop_ref()))
         }
@@ -848,25 +846,6 @@ impl<'lua> AnyUserData<'lua> {
         Ok(false)
     }
 
-    pub(crate) fn type_id(&self) -> Result<TypeId> {
-        let lua = self.0.lua;
-        unsafe {
-            let _sg = StackGuard::new(lua.state);
-            check_stack(lua.state, 5)?;
-
-            // Push userdata with metatable
-            lua.push_userdata_ref(&self.0, true)?;
-
-            // Get the special `__mlua_type_id`
-            push_string(lua.state, "__mlua_type_id")?;
-            if ffi::lua_rawget(lua.state, -2) != ffi::LUA_TUSERDATA {
-                return Err(Error::UserDataTypeMismatch);
-            }
-
-            Ok(*(ffi::lua_touserdata(lua.state, -1) as *const TypeId))
-        }
-    }
-
     fn inspect<'a, T, R, F>(&'a self, func: F) -> Result<R>
     where
         T: 'static + UserData,
@@ -875,25 +854,14 @@ impl<'lua> AnyUserData<'lua> {
         let lua = self.0.lua;
         unsafe {
             let _sg = StackGuard::new(lua.state);
-            check_stack(lua.state, 3)?;
+            check_stack(lua.state, 2)?;
 
-            lua.push_ref(&self.0);
-            if ffi::lua_getmetatable(lua.state, -1) == 0 {
-                return Err(Error::UserDataTypeMismatch);
-            }
-            lua.push_userdata_metatable::<T>()?;
-
-            if ffi::lua_rawequal(lua.state, -1, -2) == 0 {
-                // Maybe UserData destructed?
-                ffi::lua_pop(lua.state, 1);
-                get_destructed_userdata_metatable(lua.state);
-                if ffi::lua_rawequal(lua.state, -1, -2) == 1 {
-                    Err(Error::UserDataDestructed)
-                } else {
-                    Err(Error::UserDataTypeMismatch)
+            let type_id = lua.push_userdata_ref(&self.0)?;
+            match type_id {
+                Some(type_id) if type_id == TypeId::of::<T>() => {
+                    func(&*get_userdata::<UserDataCell<T>>(lua.state, -1))
                 }
-            } else {
-                func(&*get_userdata::<UserDataCell<T>>(lua.state, -3))
+                _ => Err(Error::UserDataTypeMismatch),
             }
         }
     }
@@ -997,8 +965,7 @@ impl<'lua> Serialize for AnyUserData<'lua> {
             let _sg = StackGuard::new(lua.state);
             check_stack(lua.state, 3).map_err(ser::Error::custom)?;
 
-            lua.push_userdata_ref(&self.0, false)
-                .map_err(ser::Error::custom)?;
+            lua.push_userdata_ref(&self.0).map_err(ser::Error::custom)?;
             let ud = &*get_userdata::<UserDataCell<c_void>>(lua.state, -1);
             let data =
                 ud.0.try_borrow()

@@ -63,6 +63,8 @@ pub trait MaybeSend {}
 #[cfg(not(feature = "send"))]
 impl<T> MaybeSend for T {}
 
+pub(crate) struct DestructedUserdataMT;
+
 /// An auto generated key into the Lua registry.
 ///
 /// This is a handle to a value stored inside the Lua registry. It is not automatically

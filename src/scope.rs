@@ -265,7 +265,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
                     unsafe {
                         let _sg = StackGuard::new(lua.state);
                         check_stack(lua.state, 3)?;
-                        lua.push_userdata_ref(&ud.0, false)?;
+                        lua.push_userdata_ref(&ud.0)?;
                         if get_userdata(lua.state, -1) == data_ptr {
                             return Ok(());
                         }
@@ -390,12 +390,12 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
                 + methods_index.map(|_| 1).unwrap_or(0);
             ffi::lua_pop(lua.state, count);
 
-            let mt_id = ffi::lua_topointer(lua.state, -1);
+            let mt_ptr = ffi::lua_topointer(lua.state, -1);
             // Write userdata just before attaching metatable with `__gc` metamethod
             ptr::write(data_ptr as _, UserDataCell::new(data));
             ffi::lua_setmetatable(lua.state, -2);
             let ud = AnyUserData(lua.pop_ref());
-            lua.register_userdata_metatable(mt_id as isize);
+            lua.register_userdata_metatable(mt_ptr, None);
 
             #[cfg(any(feature = "lua51", feature = "luajit"))]
             let newtable = lua.create_table()?;
@@ -410,9 +410,9 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
 
                 // Deregister metatable
                 ffi::lua_getmetatable(state, -1);
-                let mt_id = ffi::lua_topointer(state, -1);
+                let mt_ptr = ffi::lua_topointer(state, -1);
                 ffi::lua_pop(state, 1);
-                ud.lua.deregister_userdata_metatable(mt_id as isize);
+                ud.lua.deregister_userdata_metatable(mt_ptr);
 
                 // Clear uservalue
                 #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
