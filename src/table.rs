@@ -67,7 +67,7 @@ impl<'lua> Table<'lua> {
             lua.push_ref(&self.0);
             lua.push_value(key)?;
             lua.push_value(value)?;
-            protect_lua!(lua.state, 3, 0, state => ffi::lua_settable(state, -3))
+            protect_lua!(lua.state, 3, 0, fn(state) ffi::lua_settable(state, -3))
         }
     }
 
@@ -105,7 +105,7 @@ impl<'lua> Table<'lua> {
 
             lua.push_ref(&self.0);
             lua.push_value(key)?;
-            protect_lua!(lua.state, 2, 1, state => ffi::lua_gettable(state, -2))?;
+            protect_lua!(lua.state, 2, 1, fn(state) ffi::lua_gettable(state, -2))?;
 
             lua.pop_value()
         };
@@ -123,7 +123,7 @@ impl<'lua> Table<'lua> {
 
             lua.push_ref(&self.0);
             lua.push_value(key)?;
-            protect_lua!(lua.state, 2, 1, state => ffi::lua_gettable(state, -2))?;
+            protect_lua!(lua.state, 2, 1, fn(state) ffi::lua_gettable(state, -2))?;
             Ok(ffi::lua_isnil(lua.state, -1) == 0)
         }
     }
@@ -197,7 +197,7 @@ impl<'lua> Table<'lua> {
             lua.push_ref(&self.0);
             lua.push_value(key)?;
             lua.push_value(value)?;
-            protect_lua!(lua.state, 3, 0, state => ffi::lua_rawset(state, -3))
+            protect_lua!(lua.state, 3, 0, fn(state) ffi::lua_rawset(state, -3))
         }
     }
 

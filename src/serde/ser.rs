@@ -322,7 +322,7 @@ impl<'lua> ser::SerializeSeq for SerializeVec<'lua> {
 
             lua.push_ref(&self.table.0);
             lua.push_value(value)?;
-            protect_lua!(lua.state, 2, 0, state => {
+            protect_lua!(lua.state, 2, 0, fn(state) {
                 let len = ffi::lua_rawlen(state, -2) as Integer;
                 ffi::lua_rawseti(state, -2, len + 1);
             })

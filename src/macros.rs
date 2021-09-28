@@ -100,7 +100,7 @@ macro_rules! protect_lua {
         crate::util::protect_lua_closure($state, $nargs, $nresults, $f)
     };
 
-    ($state:expr, $nargs:expr, $nresults:expr, $state_inner:ident => $code:expr) => {{
+    ($state:expr, $nargs:expr, $nresults:expr, fn($state_inner:ident) $code:expr) => {{
         unsafe extern "C" fn do_call($state_inner: *mut ffi::lua_State) -> ::std::os::raw::c_int {
             $code;
             $nresults

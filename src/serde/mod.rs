@@ -243,7 +243,7 @@ impl<'lua> LuaSerdeExt<'lua> for Lua {
 // Uses 2 stack spaces and calls checkstack.
 pub(crate) unsafe fn init_metatables(state: *mut ffi::lua_State) -> Result<()> {
     check_stack(state, 2)?;
-    protect_lua!(state, 0, 0, state => {
+    protect_lua!(state, 0, 0, fn(state) {
         ffi::lua_createtable(state, 0, 1);
 
         ffi::lua_pushstring(state, cstr!("__metatable"));

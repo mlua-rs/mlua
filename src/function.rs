@@ -198,7 +198,7 @@ impl<'lua> Function<'lua> {
             for arg in args {
                 lua.push_value(arg)?;
             }
-            protect_lua!(lua.state, nargs + 2, 1, state => {
+            protect_lua!(lua.state, nargs + 2, 1, fn(state) {
                 ffi::lua_pushcclosure(state, bind_call_impl, ffi::lua_gettop(state));
             })?;
 

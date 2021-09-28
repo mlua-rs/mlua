@@ -414,7 +414,7 @@ impl Lua {
 
                     // Create empty Waker slot
                     push_gc_userdata::<Option<Waker>>(state, None)?;
-                    protect_lua!(state, 1, 0, state => {
+                    protect_lua!(state, 1, 0, fn(state) {
                         let waker_key = &WAKER_REGISTRY_KEY as *const u8 as *const c_void;
                         ffi::lua_rawsetp(state, ffi::LUA_REGISTRYINDEX, waker_key);
                     })?;
@@ -461,7 +461,7 @@ impl Lua {
         mlua_expect!(
             (|state| {
                 push_gc_userdata(state, Arc::clone(&extra))?;
-                protect_lua!(main_state, 1, 0, state => {
+                protect_lua!(main_state, 1, 0, fn(state) {
                     let extra_key = &EXTRA_REGISTRY_KEY as *const u8 as *const c_void;
                     ffi::lua_rawsetp(state, ffi::LUA_REGISTRYINDEX, extra_key);
                 })
@@ -555,7 +555,7 @@ impl Lua {
         let loaded = unsafe {
             let _sg = StackGuard::new(self.state);
             check_stack(self.state, 2)?;
-            protect_lua!(self.state, 0, 1, state => {
+            protect_lua!(self.state, 0, 1, fn(state) {
                 ffi::luaL_getsubtable(state, ffi::LUA_REGISTRYINDEX, cstr!("_LOADED"));
             })?;
             Table(self.pop_ref())
@@ -781,7 +781,7 @@ impl Lua {
         let state = self.main_state.unwrap_or(self.state);
         unsafe {
             check_stack(state, 3)?;
-            protect_lua!(state, 0, 0, state => ffi::lua_gc(state, ffi::LUA_GCCOLLECT, 0))
+            protect_lua!(state, 0, 0, fn(state) ffi::lua_gc(state, ffi::LUA_GCCOLLECT, 0))
         }
     }
 
@@ -977,7 +977,7 @@ impl Lua {
         unsafe {
             let _sg = StackGuard::new(self.state);
             check_stack(self.state, 2)?;
-            protect_lua!(self.state, 0, 1, state => ffi::lua_newtable(state))?;
+            protect_lua!(self.state, 0, 1, fn(state) ffi::lua_newtable(state))?;
             Ok(Table(self.pop_ref()))
         }
     }
@@ -1012,7 +1012,7 @@ impl Lua {
             for (k, v) in iter {
                 self.push_value(k.to_lua(self)?)?;
                 self.push_value(v.to_lua(self)?)?;
-                protect_lua!(self.state, 3, 1, state => ffi::lua_rawset(state, -3))?;
+                protect_lua!(self.state, 3, 1, fn(state) ffi::lua_rawset(state, -3))?;
             }
 
             Ok(Table(self.pop_ref()))
@@ -1928,7 +1928,7 @@ impl Lua {
             let lua = self.clone();
             let func = mem::transmute(func);
             push_gc_userdata(self.state, CallbackUpvalue { lua, func })?;
-            protect_lua!(self.state, 1, 1, state => {
+            protect_lua!(self.state, 1, 1, fn(state) {
                 ffi::lua_pushcclosure(state, call_callback, 1);
             })?;
 
@@ -1980,7 +1980,7 @@ impl Lua {
                 let fut = ((*upvalue).func)(lua, args);
                 let lua = lua.clone();
                 push_gc_userdata(state, AsyncPollUpvalue { lua, fut })?;
-                protect_lua!(state, 1, 1, state => {
+                protect_lua!(state, 1, 1, fn(state) {
                     ffi::lua_pushcclosure(state, poll_future, 1);
                 })?;
 
@@ -2046,7 +2046,7 @@ impl Lua {
             let lua = self.clone();
             let func = mem::transmute(func);
             push_gc_userdata(self.state, AsyncCallbackUpvalue { lua, func })?;
-            protect_lua!(self.state, 1, 1, state => {
+            protect_lua!(self.state, 1, 1, fn(state) {
                 ffi::lua_pushcclosure(state, call_callback, 1);
             })?;
 
