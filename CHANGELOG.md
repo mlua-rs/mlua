@@ -1,3 +1,8 @@
+## v0.6.4
+
+- Performance optimizations
+- Fixed table traversal used in recursion detection in deserializer
+
 ## v0.6.3
 
 - Disabled catching Rust panics in userdata finalizers on drop. It also has positive performance impact.
