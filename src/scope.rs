@@ -250,7 +250,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
         fn wrap_method<'scope, 'lua, 'callback: 'scope, T: 'scope>(
             scope: &Scope<'lua, 'scope>,
             data: Rc<RefCell<T>>,
-            data_ptr: *mut c_void,
+            data_ptr: *const c_void,
             method: NonStaticMethod<'callback, T>,
         ) -> Result<Function<'lua>> {
             // On methods that actually receive the userdata, we fake a type check on the passed in
@@ -264,9 +264,9 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
                 if let Some(Value::UserData(ud)) = value {
                     unsafe {
                         let _sg = StackGuard::new(lua.state);
-                        check_stack(lua.state, 3)?;
+                        check_stack(lua.state, 2)?;
                         lua.push_userdata_ref(&ud.0)?;
-                        if get_userdata(lua.state, -1) == data_ptr {
+                        if get_userdata(lua.state, -1) as *const _ == data_ptr {
                             return Ok(());
                         }
                     }

@@ -246,7 +246,7 @@ pub unsafe fn pop_error(state: *mut ffi::lua_State, err_code: c_int) -> Error {
     }
 }
 
-// Uses 3 stack spaces
+// Uses 3 stack spaces, does not call checkstack.
 #[inline]
 pub unsafe fn push_string<S: AsRef<[u8]> + ?Sized>(
     state: *mut ffi::lua_State,
@@ -258,13 +258,13 @@ pub unsafe fn push_string<S: AsRef<[u8]> + ?Sized>(
     })
 }
 
-// Uses 3 stack spaces
+// Uses 3 stack spaces, does not call checkstack.
 #[inline]
 pub unsafe fn push_table(state: *mut ffi::lua_State, narr: c_int, nrec: c_int) -> Result<()> {
     protect_lua!(state, 0, 1, |state| ffi::lua_createtable(state, narr, nrec))
 }
 
-// Uses 4 stack spaces
+// Uses 4 stack spaces, does not call checkstack.
 pub unsafe fn rawset_field<S>(state: *mut ffi::lua_State, table: c_int, field: &S) -> Result<()>
 where
     S: AsRef<[u8]> + ?Sized,

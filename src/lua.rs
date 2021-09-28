@@ -554,7 +554,7 @@ impl Lua {
     {
         let loaded = unsafe {
             let _sg = StackGuard::new(self.state);
-            check_stack(self.state, 3)?;
+            check_stack(self.state, 2)?;
             protect_lua!(self.state, 0, 1, state => {
                 ffi::luaL_getsubtable(state, ffi::LUA_REGISTRYINDEX, cstr!("_LOADED"));
             })?;
@@ -976,7 +976,7 @@ impl Lua {
     pub fn create_table(&self) -> Result<Table> {
         unsafe {
             let _sg = StackGuard::new(self.state);
-            check_stack(self.state, 3)?;
+            check_stack(self.state, 2)?;
             protect_lua!(self.state, 0, 1, state => ffi::lua_newtable(state))?;
             Ok(Table(self.pop_ref()))
         }

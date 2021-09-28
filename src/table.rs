@@ -62,7 +62,7 @@ impl<'lua> Table<'lua> {
 
         unsafe {
             let _sg = StackGuard::new(lua.state);
-            check_stack(lua.state, 6)?;
+            check_stack(lua.state, 5)?;
 
             lua.push_ref(&self.0);
             lua.push_value(key)?;
@@ -101,7 +101,7 @@ impl<'lua> Table<'lua> {
 
         let value = unsafe {
             let _sg = StackGuard::new(lua.state);
-            check_stack(lua.state, 5)?;
+            check_stack(lua.state, 4)?;
 
             lua.push_ref(&self.0);
             lua.push_value(key)?;
@@ -119,7 +119,7 @@ impl<'lua> Table<'lua> {
 
         unsafe {
             let _sg = StackGuard::new(lua.state);
-            check_stack(lua.state, 5)?;
+            check_stack(lua.state, 4)?;
 
             lua.push_ref(&self.0);
             lua.push_value(key)?;
@@ -192,7 +192,7 @@ impl<'lua> Table<'lua> {
 
         unsafe {
             let _sg = StackGuard::new(lua.state);
-            check_stack(lua.state, 6)?;
+            check_stack(lua.state, 5)?;
 
             lua.push_ref(&self.0);
             lua.push_value(key)?;

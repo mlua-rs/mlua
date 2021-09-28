@@ -318,7 +318,7 @@ impl<'lua> ser::SerializeSeq for SerializeVec<'lua> {
         let value = lua.to_value_with(value, self.options)?;
         unsafe {
             let _sg = StackGuard::new(lua.state);
-            check_stack(lua.state, 5)?;
+            check_stack(lua.state, 4)?;
 
             lua.push_ref(&self.table.0);
             lua.push_value(value)?;
