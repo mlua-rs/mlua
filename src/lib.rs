@@ -120,6 +120,7 @@ pub use crate::value::{FromLua, FromLuaMulti, MultiValue, Nil, ToLua, ToLuaMulti
 pub use crate::thread::AsyncThread;
 
 #[cfg(feature = "serialize")]
+#[cfg_attr(docsrs, doc(cfg(feature = "serialize")))]
 #[doc(inline)]
 pub use crate::serde::{
     de::Options as DeserializeOptions, ser::Options as SerializeOptions, LuaSerdeExt,
