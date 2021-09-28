@@ -306,6 +306,36 @@ fn test_to_value_with_options() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[test]
+fn test_from_value_nested_tables() -> Result<(), Box<dyn std::error::Error>> {
+    let lua = Lua::new();
+
+    let value = lua
+        .load(
+            r#"
+            local table_a = {a = "a"}
+            local table_b = {"b"}
+            return {
+                a = table_a,
+                b = {table_b, table_b},
+                ab = {a = table_a, b = table_b}
+            }
+        "#,
+        )
+        .eval::<Value>()?;
+    let got = lua.from_value::<serde_json::Value>(value)?;
+    assert_eq!(
+        got,
+        serde_json::json!({
+            "a": {"a": "a"},
+            "b": [["b"], ["b"]],
+            "ab": {"a": {"a": "a"}, "b": ["b"]},
+        })
+    );
+
+    Ok(())
+}
+
+#[test]
 fn test_from_value_struct() -> Result<(), Box<dyn std::error::Error>> {
     let lua = Lua::new();
 

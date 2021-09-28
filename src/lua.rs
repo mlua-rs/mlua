@@ -1721,6 +1721,7 @@ impl Lua {
     }
 
     #[cfg(feature = "serialize")]
+    #[inline]
     pub(crate) unsafe fn get_ref_ptr(&self, lref: &LuaRef) -> *const c_void {
         ffi::lua_topointer((*self.extra.get()).ref_thread, lref.index)
     }
