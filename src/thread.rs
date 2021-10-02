@@ -344,7 +344,7 @@ where
 #[inline(always)]
 fn is_poll_pending(val: &MultiValue) -> bool {
     match val.iter().enumerate().last() {
-        Some((1, Value::LightUserData(ud))) => {
+        Some((0, Value::LightUserData(ud))) => {
             ud.0 == &ASYNC_POLL_PENDING as *const u8 as *mut c_void
         }
         _ => false,
