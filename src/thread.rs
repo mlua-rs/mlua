@@ -332,7 +332,6 @@ where
 
         if let ThreadStatus::Resumable = self.thread.status() {
             // Ignore value returned via yield()
-            cx.waker().wake_by_ref();
             return Poll::Pending;
         }
 
