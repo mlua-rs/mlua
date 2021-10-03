@@ -76,8 +76,12 @@ struct ExtraData {
     ref_stack_top: c_int,
     ref_free: Vec<c_int>,
 
-    // Pool of preallocated `WrappedFailure` enums
+    // Pool of preallocated `WrappedFailure` enums on the ref thread
     wrapped_failures_pool: Vec<c_int>,
+
+    // Index of `Option<Waker>` userdata on the ref thread
+    #[cfg(feature = "async")]
+    ref_waker_idx: c_int,
 
     hook_callback: Option<HookCallback>,
 }
@@ -148,8 +152,6 @@ impl LuaOptions {
 
 #[cfg(feature = "async")]
 pub(crate) static ASYNC_POLL_PENDING: u8 = 0;
-#[cfg(feature = "async")]
-pub(crate) static WAKER_REGISTRY_KEY: u8 = 0;
 pub(crate) static EXTRA_REGISTRY_KEY: u8 = 0;
 
 const WRAPPED_FAILURES_POOL_SIZE: usize = 16;
@@ -168,6 +170,13 @@ impl Drop for Lua {
                     ffi::lua_pushnil(extra.ref_thread);
                     ffi::lua_replace(extra.ref_thread, index);
                     extra.ref_free.push(index);
+                }
+                #[cfg(feature = "async")]
+                {
+                    // Destroy Waker slot
+                    ffi::lua_pushnil(extra.ref_thread);
+                    ffi::lua_replace(extra.ref_thread, extra.ref_waker_idx);
+                    extra.ref_free.push(extra.ref_waker_idx);
                 }
                 mlua_debug_assert!(
                     ffi::lua_gettop(extra.ref_thread) == extra.ref_stack_top
@@ -411,13 +420,6 @@ impl Lua {
                     init_gc_metatable::<AsyncCallbackUpvalue>(state, None)?;
                     init_gc_metatable::<AsyncPollUpvalue>(state, None)?;
                     init_gc_metatable::<Option<Waker>>(state, None)?;
-
-                    // Create empty Waker slot
-                    push_gc_userdata::<Option<Waker>>(state, None)?;
-                    protect_lua!(state, 1, 0, fn(state) {
-                        let waker_key = &WAKER_REGISTRY_KEY as *const u8 as *const c_void;
-                        ffi::lua_rawsetp(state, ffi::LUA_REGISTRYINDEX, waker_key);
-                    })?;
                 }
 
                 // Init serde metatables
@@ -440,6 +442,17 @@ impl Lua {
             "Error while creating ref thread",
         );
 
+        // Create empty Waker slot on the ref thread
+        #[cfg(feature = "async")]
+        let ref_waker_idx = {
+            mlua_expect!(
+                push_gc_userdata::<Option<Waker>>(ref_thread, None),
+                "Error while creating Waker slot"
+            );
+            ffi::lua_gettop(ref_thread)
+        };
+        let ref_stack_top = ffi::lua_gettop(ref_thread);
+
         // Create ExtraData
 
         let extra = Arc::new(UnsafeCell::new(ExtraData {
@@ -452,9 +465,11 @@ impl Lua {
             safe: false,
             // We need 1 extra stack space to move values in and out of the ref stack.
             ref_stack_size: ffi::LUA_MINSTACK - 1,
-            ref_stack_top: 0,
+            ref_stack_top,
             ref_free: Vec::new(),
             wrapped_failures_pool: Vec::new(),
+            #[cfg(feature = "async")]
+            ref_waker_idx,
             hook_callback: None,
         }));
 
@@ -1720,10 +1735,14 @@ impl Lua {
         }
     }
 
-    #[cfg(feature = "serialize")]
+    /// Executes the function provided on the ref thread
     #[inline]
-    pub(crate) unsafe fn get_ref_ptr(&self, lref: &LuaRef) -> *const c_void {
-        ffi::lua_topointer((*self.extra.get()).ref_thread, lref.index)
+    pub(crate) unsafe fn ref_thread_exec<F, R>(&self, f: F) -> R
+    where
+        F: FnOnce(*mut ffi::lua_State) -> R,
+    {
+        let ref_thread = (*self.extra.get()).ref_thread;
+        f(ref_thread)
     }
 
     pub(crate) unsafe fn push_userdata_metatable<T: 'static + UserData>(&self) -> Result<()> {
@@ -2008,14 +2027,7 @@ impl Lua {
                 lua.state = state;
 
                 // Try to get an outer poll waker
-                let waker_key = &WAKER_REGISTRY_KEY as *const u8 as *const c_void;
-                ffi::lua_rawgetp(state, ffi::LUA_REGISTRYINDEX, waker_key);
-                let waker = match get_gc_userdata::<Option<Waker>>(state, -1).as_ref() {
-                    Some(Some(waker)) => waker.clone(),
-                    _ => noop_waker(),
-                };
-                ffi::lua_pop(state, 1);
-
+                let waker = lua.waker().unwrap_or_else(noop_waker);
                 let mut ctx = Context::from_waker(&waker);
 
                 let fut = &mut (*upvalue).fut;
@@ -2088,6 +2100,22 @@ impl Lua {
         .set_name("_mlua_async_poll")?
         .set_environment(env)?
         .into_function()
+    }
+
+    #[cfg(feature = "async")]
+    pub(crate) unsafe fn waker(&self) -> Option<Waker> {
+        let extra = &*self.extra.get();
+        (*get_userdata::<Option<Waker>>(extra.ref_thread, extra.ref_waker_idx)).clone()
+    }
+
+    #[cfg(feature = "async")]
+    pub(crate) unsafe fn set_waker(&self, waker: Option<Waker>) -> Option<Waker> {
+        let extra = &*self.extra.get();
+        let waker_slot = &mut *get_userdata::<Option<Waker>>(extra.ref_thread, extra.ref_waker_idx);
+        match waker {
+            Some(waker) => waker_slot.replace(waker),
+            None => waker_slot.take(),
+        }
     }
 
     pub(crate) unsafe fn make_userdata<T>(&self, data: UserDataCell<T>) -> Result<AnyUserData>

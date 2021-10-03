@@ -7,6 +7,7 @@ use std::string::String as StdString;
 use serde::de::{self, IntoDeserializer};
 
 use crate::error::{Error, Result};
+use crate::ffi;
 use crate::table::{Table, TablePairs, TableSequence};
 use crate::value::Value;
 
@@ -500,7 +501,9 @@ impl RecursionGuard {
     #[inline]
     fn new(table: &Table, visited: &Rc<RefCell<HashSet<*const c_void>>>) -> Self {
         let visited = Rc::clone(visited);
-        let ptr = unsafe { table.0.lua.get_ref_ptr(&table.0) };
+        let lua = table.0.lua;
+        let ptr =
+            unsafe { lua.ref_thread_exec(|refthr| ffi::lua_topointer(refthr, table.0.index)) };
         visited.borrow_mut().insert(ptr);
         RecursionGuard { ptr, visited }
     }
@@ -521,7 +524,8 @@ fn check_value_if_skip(
     match value {
         Value::Table(table) => {
             let lua = table.0.lua;
-            let ptr = unsafe { lua.get_ref_ptr(&table.0) };
+            let ptr =
+                unsafe { lua.ref_thread_exec(|refthr| ffi::lua_topointer(refthr, table.0.index)) };
             if visited.borrow().contains(&ptr) {
                 if options.deny_recursive_tables {
                     return Err(de::Error::custom("recursive table detected"));
