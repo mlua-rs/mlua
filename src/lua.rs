@@ -5,7 +5,7 @@ use std::ffi::CString;
 use std::fmt;
 use std::marker::PhantomData;
 use std::os::raw::{c_char, c_int, c_void};
-use std::panic::{catch_unwind, resume_unwind, AssertUnwindSafe};
+use std::panic::{catch_unwind, resume_unwind, AssertUnwindSafe, Location};
 use std::sync::{Arc, Mutex, RwLock};
 use std::{mem, ptr, str};
 
@@ -910,6 +910,7 @@ impl Lua {
     /// chunks of either text or binary type, as if passing `bt` mode to `luaL_loadbufferx`.
     ///
     /// [`Chunk::exec`]: struct.Chunk.html#method.exec
+    #[track_caller]
     pub fn load<'lua, 'a, S>(&'lua self, source: &'a S) -> Chunk<'lua, 'a>
     where
         S: AsChunk<'lua> + ?Sized,
@@ -917,7 +918,10 @@ impl Lua {
         Chunk {
             lua: self,
             source: source.source(),
-            name: source.name(),
+            name: match source.name() {
+                Some(name) => Some(name),
+                None => CString::new(Location::caller().to_string()).ok(),
+            },
             env: source.env(self),
             mode: source.mode(),
         }
