@@ -139,6 +139,8 @@ impl<'lua> ser::Serializer for Serializer<'lua> {
     lua_serialize_number!(serialize_u32, u32);
     lua_serialize_number!(serialize_i64, i64);
     lua_serialize_number!(serialize_u64, u64);
+    lua_serialize_number!(serialize_i128, i128);
+    lua_serialize_number!(serialize_u128, u128);
 
     lua_serialize_number!(serialize_f32, f32);
     lua_serialize_number!(serialize_f64, f64);

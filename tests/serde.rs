@@ -178,30 +178,6 @@ fn test_to_value_struct() -> LuaResult<()> {
 fn test_to_value_enum() -> LuaResult<()> {
     let lua = Lua::new();
     let globals = lua.globals();
-    globals.set("null", lua.null())?;
-
-    #[derive(Serialize)]
-    struct Test {
-        name: String,
-        key: i64,
-        data: Option<bool>,
-    }
-
-    let test = Test {
-        name: "alex".to_string(),
-        key: -16,
-        data: None,
-    };
-
-    globals.set("value", lua.to_value(&test)?)?;
-    lua.load(
-        r#"
-            assert(value["name"] == "alex")
-            assert(value["key"] == -16)
-            assert(value["data"] == null)
-        "#,
-    )
-    .exec()?;
 
     #[derive(Serialize)]
     enum E {

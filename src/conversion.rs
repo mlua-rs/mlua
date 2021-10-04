@@ -351,6 +351,7 @@ macro_rules! lua_convert_int {
                 if let Some(i) = cast(self) {
                     Ok(Value::Integer(i))
                 } else {
+                    // TODO: Remove conversion to Number in v0.7
                     cast(self)
                         .ok_or_else(|| Error::ToLuaConversionError {
                             from: stringify!($x),
