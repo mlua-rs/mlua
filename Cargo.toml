@@ -1,6 +1,6 @@
 [package]
 name = "mlua"
-version = "0.6.4" # remember to update html_root_url and mlua_derive
+version = "0.6.5" # remember to update html_root_url and mlua_derive
 authors = ["Aleksandr Orlenko <zxteam@pm.me>", "kyren <catherine@chucklefish.org>"]
 edition = "2018"
 repository = "https://github.com/khvzak/mlua"
@@ -13,7 +13,7 @@ links = "lua"
 build = "build/main.rs"
 description = """
 High level bindings to Lua 5.4/5.3/5.2/5.1 (including LuaJIT)
-with async/await features and support of writing native lua modules in Rust.
+with async/await features and support of writing native Lua modules in Rust.
 """
 
 [package.metadata.docs.rs]
