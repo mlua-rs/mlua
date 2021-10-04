@@ -1,3 +1,10 @@
+## v0.6.5
+
+- Fixed bug when polling async futures (#77)
+- Refactor Waker handling in async code (+10% performance gain when calling async functions)
+- Added `Location::caller()` information to `Lua::load()` if chunk's name is None (Rust 1.46+)
+- Added serialization of i128/u128 types (serde)
+
 ## v0.6.4
 
 - Performance optimizations
