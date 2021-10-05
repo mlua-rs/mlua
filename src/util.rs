@@ -805,6 +805,7 @@ pub unsafe fn init_error_registry(state: *mut ffi::lua_State) -> Result<()> {
     // Create destructed userdata metatable
 
     unsafe extern "C" fn destructed_error(state: *mut ffi::lua_State) -> c_int {
+        // TODO: Consider changing error to UserDataDestructed in v0.7
         callback_error(state, |_| Err(Error::CallbackDestructed))
     }
 

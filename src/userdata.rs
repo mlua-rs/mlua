@@ -11,7 +11,6 @@ use std::future::Future;
 #[cfg(feature = "serialize")]
 use {
     serde::ser::{self, Serialize, Serializer},
-    std::os::raw::c_void,
     std::result::Result as StdResult,
 };
 
@@ -21,7 +20,7 @@ use crate::function::Function;
 use crate::lua::Lua;
 use crate::table::{Table, TablePairs};
 use crate::types::{Callback, LuaRef, MaybeSend};
-use crate::util::{check_stack, get_userdata, StackGuard};
+use crate::util::{check_stack, get_userdata, take_userdata, StackGuard};
 use crate::value::{FromLua, FromLuaMulti, ToLua, ToLuaMulti};
 
 #[cfg(any(feature = "lua52", feature = "lua51", feature = "luajit"))]
@@ -626,18 +625,24 @@ impl<T> UserDataCell<T> {
             .map(|r| RefMut::map(r, |r| r.deref_mut()))
             .map_err(|_| Error::UserDataBorrowMutError)
     }
+
+    // Consumes this `UserDataCell`, returning the wrapped value.
+    #[inline]
+    fn into_inner(self) -> T {
+        self.0.into_inner().into_inner()
+    }
 }
 
 pub(crate) enum UserDataWrapped<T> {
-    Default(T),
+    Default(Box<T>),
     #[cfg(feature = "serialize")]
-    Serializable(*mut T, *const dyn erased_serde::Serialize),
+    Serializable(Box<dyn erased_serde::Serialize>),
 }
 
 impl<T> UserDataWrapped<T> {
     #[inline]
     fn new(data: T) -> Self {
-        UserDataWrapped::Default(data)
+        UserDataWrapped::Default(Box::new(data))
     }
 
     #[cfg(feature = "serialize")]
@@ -646,16 +651,15 @@ impl<T> UserDataWrapped<T> {
     where
         T: 'static + Serialize,
     {
-        let data_raw = Box::into_raw(Box::new(data));
-        UserDataWrapped::Serializable(data_raw, data_raw)
+        UserDataWrapped::Serializable(Box::new(data))
     }
-}
 
-#[cfg(feature = "serialize")]
-impl<T> Drop for UserDataWrapped<T> {
-    fn drop(&mut self) {
-        if let UserDataWrapped::Serializable(data, _) = *self {
-            drop(unsafe { Box::from_raw(data) });
+    #[inline]
+    fn into_inner(self) -> T {
+        match self {
+            Self::Default(data) => *data,
+            #[cfg(feature = "serialize")]
+            Self::Serializable(data) => unsafe { *Box::from_raw(Box::into_raw(data) as *mut T) },
         }
     }
 }
@@ -668,7 +672,9 @@ impl<T> Deref for UserDataWrapped<T> {
         match self {
             Self::Default(data) => data,
             #[cfg(feature = "serialize")]
-            Self::Serializable(data, _) => unsafe { &**data },
+            Self::Serializable(data) => unsafe {
+                &*(data.as_ref() as *const _ as *const Self::Target)
+            },
         }
     }
 }
@@ -679,7 +685,9 @@ impl<T> DerefMut for UserDataWrapped<T> {
         match self {
             Self::Default(data) => data,
             #[cfg(feature = "serialize")]
-            Self::Serializable(data, _) => unsafe { &mut **data },
+            Self::Serializable(data) => unsafe {
+                &mut *(data.as_mut() as *mut _ as *mut Self::Target)
+            },
         }
     }
 }
@@ -746,6 +754,35 @@ impl<'lua> AnyUserData<'lua> {
     #[inline]
     pub fn borrow_mut<T: 'static + UserData>(&self) -> Result<RefMut<T>> {
         self.inspect(|cell| cell.try_borrow_mut())
+    }
+
+    /// Takes out the value of `UserData` and sets the special "destructed" metatable that prevents
+    /// any further operations with this userdata.
+    #[doc(hidden)]
+    pub fn take<T: 'static + UserData>(&self) -> Result<T> {
+        let lua = self.0.lua;
+        unsafe {
+            let _sg = StackGuard::new(lua.state);
+            check_stack(lua.state, 2)?;
+
+            let type_id = lua.push_userdata_ref(&self.0)?;
+            match type_id {
+                Some(type_id) if type_id == TypeId::of::<T>() => {
+                    // Try to borrow userdata exclusively
+                    let _ = (*get_userdata::<UserDataCell<T>>(lua.state, -1)).try_borrow_mut()?;
+
+                    // Clear uservalue
+                    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+                    ffi::lua_pushnil(lua.state);
+                    #[cfg(any(feature = "lua51", feature = "luajit"))]
+                    protect_lua!(lua.state, 0, 1, fn(state) ffi::lua_newtable(state))?;
+                    ffi::lua_setuservalue(lua.state, -2);
+
+                    Ok(take_userdata::<UserDataCell<T>>(lua.state).into_inner())
+                }
+                _ => Err(Error::UserDataTypeMismatch),
+            }
+        }
     }
 
     /// Sets an associated value to this `AnyUserData`.
@@ -960,20 +997,19 @@ impl<'lua> Serialize for AnyUserData<'lua> {
     where
         S: Serializer,
     {
-        unsafe {
-            let lua = self.0.lua;
+        let lua = self.0.lua;
+        let data = unsafe {
             let _sg = StackGuard::new(lua.state);
             check_stack(lua.state, 3).map_err(ser::Error::custom)?;
 
             lua.push_userdata_ref(&self.0).map_err(ser::Error::custom)?;
-            let ud = &*get_userdata::<UserDataCell<c_void>>(lua.state, -1);
-            let data =
-                ud.0.try_borrow()
-                    .map_err(|_| ser::Error::custom(Error::UserDataBorrowError))?;
-            match *data {
-                UserDataWrapped::Default(_) => UserDataSerializeError.serialize(serializer),
-                UserDataWrapped::Serializable(_, ser) => (&*ser).serialize(serializer),
-            }
+            let ud = &*get_userdata::<UserDataCell<()>>(lua.state, -1);
+            ud.0.try_borrow()
+                .map_err(|_| ser::Error::custom(Error::UserDataBorrowError))?
+        };
+        match &*data {
+            UserDataWrapped::Default(_) => UserDataSerializeError.serialize(serializer),
+            UserDataWrapped::Serializable(ser) => ser.serialize(serializer),
         }
     }
 }

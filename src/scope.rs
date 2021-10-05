@@ -192,9 +192,10 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
                 let _sg = StackGuard::new(state);
                 assert_stack(state, 2);
 
-                ud.lua.push_ref(&ud);
-
-                // We know the destructor has not run yet because we hold a reference to the userdata.
+                // Check that userdata is not destructed (via `take()` call)
+                if ud.lua.push_userdata_ref(&ud).is_err() {
+                    return vec![];
+                }
 
                 // Clear uservalue
                 #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
@@ -404,9 +405,10 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
                 let _sg = StackGuard::new(state);
                 assert_stack(state, 2);
 
-                ud.lua.push_ref(&ud);
-
-                // We know the destructor has not run yet because we hold a reference to the userdata.
+                // Check that userdata is valid (very likely)
+                if ud.lua.push_userdata_ref(&ud).is_err() {
+                    return vec![];
+                }
 
                 // Deregister metatable
                 ffi::lua_getmetatable(state, -1);
