@@ -210,7 +210,7 @@ impl Lua {
     ///
     /// See [`StdLib`] documentation for a list of unsafe modules that cannot be loaded.
     ///
-    /// [`StdLib`]: struct.StdLib.html
+    /// [`StdLib`]: crate::StdLib
     #[allow(clippy::new_without_default)]
     pub fn new() -> Lua {
         mlua_expect!(
@@ -237,7 +237,7 @@ impl Lua {
     ///
     /// See [`StdLib`] documentation for a list of unsafe modules that cannot be loaded.
     ///
-    /// [`StdLib`]: struct.StdLib.html
+    /// [`StdLib`]: crate::StdLib
     pub fn new_with(libs: StdLib, options: LuaOptions) -> Result<Lua> {
         if libs.contains(StdLib::DEBUG) {
             return Err(Error::SafetyError(
@@ -271,7 +271,7 @@ impl Lua {
     /// # Safety
     /// The created Lua state will not have safety guarantees and allow to load C modules.
     ///
-    /// [`StdLib`]: struct.StdLib.html
+    /// [`StdLib`]: crate::StdLib
     pub unsafe fn unsafe_new_with(libs: StdLib, options: LuaOptions) -> Lua {
         ffi::keep_lua_symbols();
         Self::inner_new(libs, options)
@@ -513,7 +513,7 @@ impl Lua {
     ///
     /// Use the [`StdLib`] flags to specify the libraries you want to load.
     ///
-    /// [`StdLib`]: struct.StdLib.html
+    /// [`StdLib`]: crate::StdLib
     pub fn load_from_std_lib(&self, libs: StdLib) -> Result<()> {
         if self.safe && libs.contains(StdLib::DEBUG) {
             return Err(Error::SafetyError(
@@ -700,8 +700,8 @@ impl Lua {
     /// # }
     /// ```
     ///
-    /// [`HookTriggers`]: struct.HookTriggers.html
-    /// [`HookTriggers.every_nth_instruction`]: struct.HookTriggers.html#field.every_nth_instruction
+    /// [`HookTriggers`]: crate::HookTriggers
+    /// [`HookTriggers.every_nth_instruction`]: crate::HookTriggers::every_nth_instruction
     pub fn set_hook<F>(&self, triggers: HookTriggers, callback: F) -> Result<()>
     where
         F: 'static + MaybeSend + FnMut(&Lua, Debug) -> Result<()>,
@@ -906,10 +906,11 @@ impl Lua {
     /// similar on the returned builder. Code is not even parsed until one of these methods is
     /// called.
     ///
-    /// If this `Lua` was created with `unsafe_new`, `load` will automatically detect and load
+    /// If this `Lua` was created with [`unsafe_new`], `load` will automatically detect and load
     /// chunks of either text or binary type, as if passing `bt` mode to `luaL_loadbufferx`.
     ///
-    /// [`Chunk::exec`]: struct.Chunk.html#method.exec
+    /// [`Chunk::exec`]: crate::Chunk::exec
+    /// [`unsafe_new`]: #method.unsafe_new
     #[track_caller]
     pub fn load<'lua, 'a, S>(&'lua self, source: &'a S) -> Chunk<'lua, 'a>
     where
@@ -1105,8 +1106,8 @@ impl Lua {
     /// # }
     /// ```
     ///
-    /// [`ToLua`]: trait.ToLua.html
-    /// [`ToLuaMulti`]: trait.ToLuaMulti.html
+    /// [`ToLua`]: crate::ToLua
+    /// [`ToLuaMulti`]: crate::ToLuaMulti
     pub fn create_function<'lua, 'callback, A, R, F>(&'lua self, func: F) -> Result<Function<'lua>>
     where
         'lua: 'callback,
@@ -1191,8 +1192,8 @@ impl Lua {
     /// }
     /// ```
     ///
-    /// [`Thread`]: struct.Thread.html
-    /// [`AsyncThread`]: struct.AsyncThread.html
+    /// [`Thread`]: crate::Thread
+    /// [`AsyncThread`]: crate::AsyncThread
     #[cfg(feature = "async")]
     #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
     pub fn create_async_function<'lua, 'callback, A, R, F, FR>(
@@ -1484,7 +1485,7 @@ impl Lua {
     /// Be warned, garbage collection of values held inside the registry is not automatic, see
     /// [`RegistryKey`] for more details.
     ///
-    /// [`RegistryKey`]: struct.RegistryKey.html
+    /// [`RegistryKey`]: crate::RegistryKey
     pub fn create_registry_value<'lua, T: ToLua<'lua>>(&'lua self, t: T) -> Result<RegistryKey> {
         let t = t.to_lua(self)?;
         unsafe {
@@ -2206,7 +2207,7 @@ impl Lua {
 
 /// Returned from [`Lua::load`] and is used to finalize loading and executing Lua main chunks.
 ///
-/// [`Lua::load`]: struct.Lua.html#method.load
+/// [`Lua::load`]: crate::Lua::load
 #[must_use = "`Chunk`s do nothing unless one of `exec`, `eval`, `call`, or `into_function` are called on them"]
 pub struct Chunk<'lua, 'a> {
     lua: &'lua Lua,
@@ -2226,7 +2227,7 @@ pub enum ChunkMode {
 /// Trait for types [loadable by Lua] and convertible to a [`Chunk`]
 ///
 /// [loadable by Lua]: https://www.lua.org/manual/5.3/manual.html#3.3.2
-/// [`Chunk`]: struct.Chunk.html
+/// [`Chunk`]: crate::Chunk
 pub trait AsChunk<'lua> {
     /// Returns chunk data (can be text or binary)
     fn source(&self) -> &[u8];
@@ -2284,7 +2285,7 @@ impl<'lua, 'a> Chunk<'lua, 'a> {
     /// Lua does not check the consistency of binary chunks, therefore this mode is allowed only
     /// for instances created with [`Lua::unsafe_new`].
     ///
-    /// [`Lua::unsafe_new`]: struct.Lua.html#method.unsafe_new
+    /// [`Lua::unsafe_new`]: crate::Lua::unsafe_new
     pub fn set_mode(mut self, mode: ChunkMode) -> Chunk<'lua, 'a> {
         self.mode = Some(mode);
         self
@@ -2300,11 +2301,11 @@ impl<'lua, 'a> Chunk<'lua, 'a> {
 
     /// Asynchronously execute this chunk of code.
     ///
-    /// See [`Chunk::exec`] for more details.
+    /// See [`exec`] for more details.
     ///
     /// Requires `feature = "async"`
     ///
-    /// [`Chunk::exec`]: struct.Chunk.html#method.exec
+    /// [`exec`]: #method.exec
     #[cfg(feature = "async")]
     #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
     pub fn exec_async<'fut>(self) -> LocalBoxFuture<'fut, Result<()>>
@@ -2340,11 +2341,11 @@ impl<'lua, 'a> Chunk<'lua, 'a> {
 
     /// Asynchronously evaluate the chunk as either an expression or block.
     ///
-    /// See [`Chunk::eval`] for more details.
+    /// See [`eval`] for more details.
     ///
     /// Requires `feature = "async"`
     ///
-    /// [`Chunk::eval`]: struct.Chunk.html#method.eval
+    /// [`eval`]: #method.eval
     #[cfg(feature = "async")]
     #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
     pub fn eval_async<'fut, R>(self) -> LocalBoxFuture<'fut, Result<R>>
@@ -2378,11 +2379,11 @@ impl<'lua, 'a> Chunk<'lua, 'a> {
 
     /// Load the chunk function and asynchronously call it with the given arguments.
     ///
-    /// See [`Chunk::call`] for more details.
+    /// See [`call`] for more details.
     ///
     /// Requires `feature = "async"`
     ///
-    /// [`Chunk::call`]: struct.Chunk.html#method.call
+    /// [`call`]: #method.call
     #[cfg(feature = "async")]
     #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
     pub fn call_async<'fut, A, R>(self, args: A) -> LocalBoxFuture<'fut, Result<R>>

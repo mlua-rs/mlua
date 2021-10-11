@@ -49,6 +49,7 @@ pub enum Value<'lua> {
     /// `Error` is a special builtin userdata type. When received from Lua it is implicitly cloned.
     Error(Error),
 }
+
 pub use self::Value::Nil;
 
 impl<'lua> Value<'lua> {

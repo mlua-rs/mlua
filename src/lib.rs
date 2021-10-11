@@ -50,24 +50,24 @@
 //! to [`Function`]s and [`UserData`].
 //!
 //! [Lua programming language]: https://www.lua.org/
-//! [`Lua`]: struct.Lua.html
-//! [executing]: struct.Chunk.html#method.exec
-//! [evaluating]: struct.Chunk.html#method.eval
-//! [globals]: struct.Lua.html#method.globals
-//! [`ToLua`]: trait.ToLua.html
-//! [`FromLua`]: trait.FromLua.html
-//! [`ToLuaMulti`]: trait.ToLuaMulti.html
-//! [`FromLuaMulti`]: trait.FromLuaMulti.html
-//! [`Function`]: struct.Function.html
-//! [`UserData`]: trait.UserData.html
-//! [`UserDataFields`]: trait.UserDataFields.html
-//! [`UserDataMethods`]: trait.UserDataMethods.html
-//! [`LuaSerdeExt`]: serde/trait.LuaSerdeExt.html
-//! [`Value`]: enum.Value.html
-//! [`create_async_function`]: struct.Lua.html#method.create_async_function
-//! [`call_async`]: struct.Function.html#method.call_async
-//! [`AsyncThread`]: struct.AsyncThread.html
-//! [`Future`]: ../futures_core/future/trait.Future.html
+//! [`Lua`]: crate::Lua
+//! [executing]: crate::Chunk::exec
+//! [evaluating]: crate::Chunk::eval
+//! [globals]: crate::Lua::globals
+//! [`ToLua`]: crate::ToLua
+//! [`FromLua`]: crate::FromLua
+//! [`ToLuaMulti`]: crate::ToLuaMulti
+//! [`FromLuaMulti`]: crate::FromLuaMulti
+//! [`Function`]: crate::Function
+//! [`UserData`]: crate::UserData
+//! [`UserDataFields`]: crate::UserDataFields
+//! [`UserDataMethods`]: crate::UserDataMethods
+//! [`LuaSerdeExt`]: crate::LuaSerdeExt
+//! [`Value`]: crate::Value
+//! [`create_async_function`]: crate::Lua::create_async_function
+//! [`call_async`]: crate::Function::call_async
+//! [`AsyncThread`]: crate::AsyncThread
+//! [`Future`]: std::future::Future
 //! [`serde::Serialize`]: https://docs.serde.rs/serde/ser/trait.Serialize.html
 //! [`serde::Deserialize`]: https://docs.serde.rs/serde/de/trait.Deserialize.html
 
@@ -98,6 +98,8 @@ mod userdata;
 mod util;
 mod value;
 
+pub mod prelude;
+
 pub use crate::{ffi::lua_CFunction, ffi::lua_State};
 
 pub use crate::error::{Error, ExternalError, ExternalResult, Result};
@@ -120,13 +122,11 @@ pub use crate::value::{FromLua, FromLuaMulti, MultiValue, Nil, ToLua, ToLuaMulti
 pub use crate::thread::AsyncThread;
 
 #[cfg(feature = "serialize")]
-#[cfg_attr(docsrs, doc(cfg(feature = "serialize")))]
 #[doc(inline)]
 pub use crate::serde::{
     de::Options as DeserializeOptions, ser::Options as SerializeOptions, LuaSerdeExt,
 };
 
-pub mod prelude;
 #[cfg(feature = "serialize")]
 #[cfg_attr(docsrs, doc(cfg(feature = "serialize")))]
 pub mod serde;
@@ -185,9 +185,9 @@ extern crate mlua_derive;
 ///
 /// Everything else should work.
 ///
-/// [`AsChunk`]: trait.AsChunk.html
-/// [`UserData`]: trait.UserData.html
-/// [`ToLua`]: trait.ToLua.html
+/// [`AsChunk`]: crate::AsChunk
+/// [`UserData`]: crate::UserData
+/// [`ToLua`]: crate::ToLua
 #[cfg(any(feature = "macros"))]
 #[cfg_attr(docsrs, doc(cfg(feature = "macros")))]
 pub use mlua_derive::chunk;

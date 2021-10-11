@@ -15,7 +15,7 @@ use crate::util::callback_error;
 /// found in the [Lua 5.3 documentation][lua_doc].
 ///
 /// [lua_doc]: https://www.lua.org/manual/5.3/manual.html#lua_Debug
-/// [`Lua::set_hook`]: struct.Lua.html#method.set_hook
+/// [`Lua::set_hook`]: crate::Lua::set_hook
 #[derive(Clone)]
 pub struct Debug<'a> {
     ar: *mut lua_Debug,

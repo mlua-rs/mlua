@@ -1,5 +1,6 @@
 //! Re-exports most types with an extra `Lua*` prefix to prevent name clashes.
 
+#[doc(no_inline)]
 pub use crate::{
     AnyUserData as LuaAnyUserData, Chunk as LuaChunk, Error as LuaError,
     ExternalError as LuaExternalError, ExternalResult as LuaExternalResult, FromLua, FromLuaMulti,
@@ -14,10 +15,11 @@ pub use crate::{
 };
 
 #[cfg(feature = "async")]
+#[doc(no_inline)]
 pub use crate::AsyncThread as LuaAsyncThread;
 
 #[cfg(feature = "serialize")]
-#[doc(inline)]
+#[doc(no_inline)]
 pub use crate::{
     DeserializeOptions as LuaDeserializeOptions, LuaSerdeExt,
     SerializeOptions as LuaSerializeOptions,

@@ -378,7 +378,7 @@ impl<'lua> Table<'lua> {
     /// # }
     /// ```
     ///
-    /// [`Result`]: type.Result.html
+    /// [`Result`]: crate::Result
     /// [Lua manual]: http://www.lua.org/manual/5.3/manual.html#pdf-next
     pub fn pairs<K: FromLua<'lua>, V: FromLua<'lua>>(self) -> TablePairs<'lua, K, V> {
         TablePairs {
@@ -427,7 +427,7 @@ impl<'lua> Table<'lua> {
     /// ```
     ///
     /// [`pairs`]: #method.pairs
-    /// [`Result`]: type.Result.html
+    /// [`Result`]: crate::Result
     /// [Lua manual]: http://www.lua.org/manual/5.3/manual.html#pdf-next
     pub fn sequence_values<V: FromLua<'lua>>(self) -> TableSequence<'lua, V> {
         TableSequence {
@@ -645,7 +645,7 @@ impl<'lua> Serialize for Table<'lua> {
 ///
 /// This struct is created by the [`Table::pairs`] method.
 ///
-/// [`Table::pairs`]: struct.Table.html#method.pairs
+/// [`Table::pairs`]: crate::Table::pairs
 pub struct TablePairs<'lua, K, V> {
     table: LuaRef<'lua>,
     key: Option<Value<'lua>>,
@@ -704,7 +704,7 @@ where
 ///
 /// This struct is created by the [`Table::sequence_values`] method.
 ///
-/// [`Table::sequence_values`]: struct.Table.html#method.sequence_values
+/// [`Table::sequence_values`]: crate::Table::sequence_values
 pub struct TableSequence<'lua, V> {
     table: LuaRef<'lua>,
     index: Option<Integer>,

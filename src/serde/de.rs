@@ -23,11 +23,16 @@ pub struct Deserializer<'lua> {
 #[derive(Debug, Clone, Copy)]
 #[non_exhaustive]
 pub struct Options {
-    /// If true, an attempt to serialize types such as `Thread`, `UserData`, `LightUserData`
-    /// and `Error` will cause an error.
+    /// If true, an attempt to serialize types such as [`Thread`], [`UserData`], [`LightUserData`]
+    /// and [`Error`] will cause an error.
     /// Otherwise these types skipped when iterating or serialized as unit type.
     ///
     /// Default: **true**
+    ///
+    /// [`Thread`]: crate::Thread
+    /// [`UserData`]: crate::UserData
+    /// [`LightUserData`]: crate::LightUserData
+    /// [`Error`]: crate::Error
     pub deny_unsupported_types: bool,
 
     /// If true, an attempt to serialize a recursive table (table that refers to itself)

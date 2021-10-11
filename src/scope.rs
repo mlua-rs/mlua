@@ -35,7 +35,7 @@ use {
 ///
 /// See [`Lua::scope`] for more details.
 ///
-/// [`Lua::scope`]: struct.Lua.html#method.scope
+/// [`Lua::scope`]: crate::Lua.html::scope
 pub struct Scope<'lua, 'scope> {
     lua: &'lua Lua,
     destructors: RefCell<Vec<(LuaRef<'lua>, DestructorCallback<'lua>)>>,
@@ -58,8 +58,8 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
     /// This is a version of [`Lua::create_function`] that creates a callback which expires on
     /// scope drop. See [`Lua::scope`] for more details.
     ///
-    /// [`Lua::create_function`]: struct.Lua.html#method.create_function
-    /// [`Lua::scope`]: struct.Lua.html#method.scope
+    /// [`Lua::create_function`]: crate::Lua::create_function
+    /// [`Lua::scope`]: crate::Lua::scope
     pub fn create_function<'callback, A, R, F>(&'callback self, func: F) -> Result<Function<'lua>>
     where
         A: FromLuaMulti<'callback>,
@@ -87,8 +87,8 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
     /// This is a version of [`Lua::create_function_mut`] that creates a callback which expires
     /// on scope drop. See [`Lua::scope`] and [`Scope::create_function`] for more details.
     ///
-    /// [`Lua::create_function_mut`]: struct.Lua.html#method.create_function_mut
-    /// [`Lua::scope`]: struct.Lua.html#method.scope
+    /// [`Lua::create_function_mut`]: crate::Lua::create_function_mut
+    /// [`Lua::scope`]: crate::Lua::scope
     /// [`Scope::create_function`]: #method.create_function
     pub fn create_function_mut<'callback, A, R, F>(
         &'callback self,
@@ -114,9 +114,9 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
     ///
     /// Requires `feature = "async"`
     ///
-    /// [`Lua::create_async_function`]: struct.Lua.html#method.create_async_function
-    /// [`Lua::scope`]: struct.Lua.html#method.scope
-    /// [`Lua::async_scope`]: struct.Lua.html#method.async_scope
+    /// [`Lua::create_async_function`]: crate::Lua::create_async_function
+    /// [`Lua::scope`]: crate::Lua::scope
+    /// [`Lua::async_scope`]: crate::Lua::async_scope
     #[cfg(feature = "async")]
     #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
     pub fn create_async_function<'callback, A, R, F, FR>(
@@ -147,8 +147,8 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
     /// UserData be 'static).
     /// See [`Lua::scope`] for more details.
     ///
-    /// [`Lua::create_userdata`]: struct.Lua.html#method.create_userdata
-    /// [`Lua::scope`]: struct.Lua.html#method.scope
+    /// [`Lua::create_userdata`]: crate::Lua::create_userdata
+    /// [`Lua::scope`]: crate::Lua::scope
     pub fn create_userdata<T>(&self, data: T) -> Result<AnyUserData<'lua>>
     where
         T: 'static + UserData,
@@ -165,8 +165,8 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
     ///
     /// Requires `feature = "serialize"`
     ///
-    /// [`Lua::create_ser_userdata`]: struct.Lua.html#method.create_ser_userdata
-    /// [`Lua::scope`]: struct.Lua.html#method.scope
+    /// [`Lua::create_ser_userdata`]: crate::Lua::create_ser_userdata
+    /// [`Lua::scope`]: crate::Lua::scope
     #[cfg(feature = "serialize")]
     #[cfg_attr(docsrs, doc(cfg(feature = "serialize")))]
     pub fn create_ser_userdata<T>(&self, data: T) -> Result<AnyUserData<'lua>>
@@ -234,9 +234,9 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
     /// creating the userdata metatable each time a new userdata is created.
     ///
     /// [`Scope::create_userdata`]: #method.create_userdata
-    /// [`Lua::create_userdata`]: struct.Lua.html#method.create_userdata
-    /// [`Lua::scope`]: struct.Lua.html#method.scope
-    /// [`UserDataMethods`]: trait.UserDataMethods.html
+    /// [`Lua::create_userdata`]: crate::Lua::create_userdata
+    /// [`Lua::scope`]:crate::Lua::scope
+    /// [`UserDataMethods`]: crate::UserDataMethods
     pub fn create_nonstatic_userdata<T>(&self, data: T) -> Result<AnyUserData<'lua>>
     where
         T: 'scope + UserData,

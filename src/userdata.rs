@@ -34,7 +34,7 @@ use crate::types::AsyncCallback;
 /// Currently, this mechanism does not allow overriding the `__gc` metamethod, since there is
 /// generally no need to do so: [`UserData`] implementors can instead just implement `Drop`.
 ///
-/// [`UserData`]: trait.UserData.html
+/// [`UserData`]: crate::UserData
 #[derive(Debug, Clone)]
 pub enum MetaMethod {
     /// The `+` operator.
@@ -271,7 +271,7 @@ impl From<&str> for MetaMethod {
 
 /// Method registry for [`UserData`] implementors.
 ///
-/// [`UserData`]: trait.UserData.html
+/// [`UserData`]: crate::UserData
 pub trait UserDataMethods<'lua, T: UserData> {
     /// Add a regular method which accepts a `&T` as the first parameter.
     ///
@@ -325,7 +325,7 @@ pub trait UserDataMethods<'lua, T: UserData> {
     ///
     /// Prefer to use [`add_method`] or [`add_method_mut`] as they are easier to use.
     ///
-    /// [`AnyUserData`]: struct.AnyUserData.html
+    /// [`AnyUserData`]: crate::AnyUserData
     /// [`add_method`]: #method.add_method
     /// [`add_method_mut`]: #method.add_method_mut
     fn add_function<S, A, R, F>(&mut self, name: &S, function: F)
@@ -436,7 +436,7 @@ pub trait UserDataMethods<'lua, T: UserData> {
 
 /// Field registry for [`UserData`] implementors.
 ///
-/// [`UserData`]: trait.UserData.html
+/// [`UserData`]: crate::UserData
 pub trait UserDataFields<'lua, T: UserData> {
     /// Add a regular field getter as a method which accepts a `&T` as the parameter.
     ///
@@ -469,7 +469,7 @@ pub trait UserDataFields<'lua, T: UserData> {
     ///
     /// Prefer to use [`add_field_method_get`] as it is easier to use.
     ///
-    /// [`AnyUserData`]: struct.AnyUserData.html
+    /// [`AnyUserData`]: crate::AnyUserData
     /// [`add_field_method_get`]: #method.add_field_method_get
     fn add_field_function_get<S, R, F>(&mut self, name: &S, function: F)
     where
@@ -482,7 +482,7 @@ pub trait UserDataFields<'lua, T: UserData> {
     ///
     /// Prefer to use [`add_field_method_set`] as it is easier to use.
     ///
-    /// [`AnyUserData`]: struct.AnyUserData.html
+    /// [`AnyUserData`]: crate::AnyUserData
     /// [`add_field_method_set`]: #method.add_field_method_set
     fn add_field_function_set<S, A, F>(&mut self, name: &S, function: F)
     where
@@ -578,10 +578,10 @@ pub trait UserDataFields<'lua, T: UserData> {
 /// # }
 /// ```
 ///
-/// [`ToLua`]: trait.ToLua.html
-/// [`FromLua`]: trait.FromLua.html
-/// [`UserDataFields`]: trait.UserDataFields.html
-/// [`UserDataMethods`]: trait.UserDataMethods.html
+/// [`ToLua`]: crate::ToLua
+/// [`FromLua`]: crate::FromLua
+/// [`UserDataFields`]: crate::UserDataFields
+/// [`UserDataMethods`]: crate::UserDataMethods
 pub trait UserData: Sized {
     /// Adds custom fields specific to this userdata.
     fn add_fields<'lua, F: UserDataFields<'lua, Self>>(_fields: &mut F) {}
@@ -718,9 +718,9 @@ impl Serialize for UserDataSerializeError {
 /// This API should only be used when necessary. Implementing [`UserData`] already allows defining
 /// methods which check the type and acquire a borrow behind the scenes.
 ///
-/// [`UserData`]: trait.UserData.html
-/// [`is`]: #method.is
-/// [`borrow`]: #method.borrow
+/// [`UserData`]: crate::UserData
+/// [`is`]: crate::AnyUserData::is
+/// [`borrow`]: crate::AnyUserData::borrow
 #[derive(Clone, Debug)]
 pub struct AnyUserData<'lua>(pub(crate) LuaRef<'lua>);
 
@@ -845,7 +845,7 @@ impl<'lua> AnyUserData<'lua> {
     ///
     /// For `T: UserData + 'static` returned metatable is shared among all instances of type `T`.
     ///
-    /// [`UserDataMetatable`]: struct.UserDataMetatable.html
+    /// [`UserDataMetatable`]: crate::UserDataMetatable
     pub fn get_metatable(&self) -> Result<UserDataMetatable<'lua>> {
         self.get_raw_metatable().map(UserDataMetatable)
     }
@@ -954,7 +954,7 @@ impl<'lua> UserDataMetatable<'lua> {
     ///
     /// The pairs are wrapped in a [`Result`], since they are lazily converted to `V` type.
     ///
-    /// [`Result`]: type.Result.html
+    /// [`Result`]: crate::Result
     pub fn pairs<V: FromLua<'lua>>(self) -> UserDataMetatablePairs<'lua, V> {
         UserDataMetatablePairs(self.0.pairs())
     }
@@ -966,8 +966,8 @@ impl<'lua> UserDataMetatable<'lua> {
 ///
 /// This struct is created by the [`UserDataMetatable::pairs`] method.
 ///
-/// [`UserData`]: trait.UserData.html
-/// [`UserDataMetatable::pairs`]: struct.UserDataMetatable.html#method.pairs
+/// [`UserData`]: crate::UserData
+/// [`UserDataMetatable::pairs`]: crate::UserDataMetatable::method.pairs
 pub struct UserDataMetatablePairs<'lua, V>(TablePairs<'lua, StdString, V>);
 
 impl<'lua, V> Iterator for UserDataMetatablePairs<'lua, V>

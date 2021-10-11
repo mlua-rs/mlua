@@ -28,16 +28,16 @@ pub struct Options {
     ///
     /// Default: **true**
     ///
-    /// [`array_metatable`]: ../trait.LuaSerdeExt.html#tymethod.array_metatable
+    /// [`array_metatable`]: crate::LuaSerdeExt::array_metatable
     pub set_array_metatable: bool,
 
-    /// If true, serialize `None` (part of `Option` type) to [`null`].
+    /// If true, serialize `None` (part of the `Option` type) to [`null`].
     /// Otherwise it will be set to Lua [`Nil`].
     ///
     /// Default: **true**
     ///
-    /// [`null`]: ../trait.LuaSerdeExt.html#tymethod.null
-    /// [`Nil`]: ../../enum.Value.html#variant.Nil
+    /// [`null`]: crate::LuaSerdeExt::null
+    /// [`Nil`]: crate::Value::Nil
     pub serialize_none_to_null: bool,
 
     /// If true, serialize `Unit` (type of `()` in Rust) and Unit structs to [`null`].
@@ -45,8 +45,8 @@ pub struct Options {
     ///
     /// Default: **true**
     ///
-    /// [`null`]: ../trait.LuaSerdeExt.html#tymethod.null
-    /// [`Nil`]: ../../enum.Value.html#variant.Nil
+    /// [`null`]: crate::LuaSerdeExt::null
+    /// [`Nil`]: crate::Value::Nil
     pub serialize_unit_to_null: bool,
 }
 
@@ -61,7 +61,7 @@ impl Default for Options {
 }
 
 impl Options {
-    /// Returns a new instance of `Options` with default parameters.
+    /// Returns a new instance of [`Options`] with default parameters.
     pub fn new() -> Self {
         Self::default()
     }
