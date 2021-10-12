@@ -752,9 +752,9 @@ pub unsafe fn init_error_registry(state: *mut ffi::lua_State) -> Result<()> {
                         (Some(error1), Some(error0)) => {
                             let _ = write!(&mut (*err_buf), "\ncaused by: {}", error0);
                             let s = error1.to_string();
-                            if let Some(traceback) = s.splitn(2, "\nstack traceback:\n").nth(1) {
+                            if let Some(traceback) = s.split_once("\nstack traceback:\n") {
                                 let _ =
-                                    write!(&mut (*err_buf), "\nstack traceback:\n{}", traceback);
+                                    write!(&mut (*err_buf), "\nstack traceback:\n{}", traceback.1);
                             }
                         }
                         (Some(error1), None) => {

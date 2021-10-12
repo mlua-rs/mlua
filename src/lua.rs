@@ -3118,7 +3118,7 @@ impl<'lua, T: 'static + UserData> UserDataFields<'lua, T> for StaticUserDataFiel
     {
         self.field_getters.push((
             name.as_ref().to_vec(),
-            StaticUserDataMethods::<T>::box_function(move |lua, data| function(lua, data)),
+            StaticUserDataMethods::<T>::box_function(function),
         ));
     }
 
