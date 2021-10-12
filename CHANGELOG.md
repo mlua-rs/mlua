@@ -1,3 +1,8 @@
+## v0.6.6
+
+- Fixed calculating `LUA_REGISTRYINDEX` when cross-compiling for lua51/jit (#82)
+- Updated documentation & examples
+
 ## v0.6.5
 
 - Fixed bug when polling async futures (#77)
