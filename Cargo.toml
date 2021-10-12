@@ -84,7 +84,7 @@ required-features = ["async", "serialize", "macros"]
 
 [[example]]
 name = "async_http_server"
-required-features = ["async", "send"]
+required-features = ["async", "macros"]
 
 [[example]]
 name = "async_tcp_server"

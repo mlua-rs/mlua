@@ -1,26 +1,17 @@
 use std::collections::HashMap;
-use std::sync::Arc;
 
 use hyper::body::{Body as HyperBody, HttpBody as _};
 use hyper::Client as HyperClient;
-use tokio::sync::Mutex;
 
-use mlua::{chunk, ExternalResult, Lua, Result, UserData, UserDataMethods};
+use mlua::{chunk, AnyUserData, ExternalResult, Lua, Result, UserData, UserDataMethods};
 
-#[derive(Clone)]
-struct BodyReader(Arc<Mutex<HyperBody>>);
-
-impl BodyReader {
-    fn new(body: HyperBody) -> Self {
-        BodyReader(Arc::new(Mutex::new(body)))
-    }
-}
+struct BodyReader(HyperBody);
 
 impl UserData for BodyReader {
     fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
-        methods.add_async_method("read", |lua, reader, ()| async move {
-            let mut reader = reader.0.lock().await;
-            if let Some(bytes) = reader.data().await {
+        methods.add_async_function("read", |lua, reader: AnyUserData| async move {
+            let mut reader = reader.borrow_mut::<Self>()?;
+            if let Some(bytes) = reader.0.data().await {
                 let bytes = bytes.to_lua_err()?;
                 return Some(lua.create_string(&bytes)).transpose();
             }
@@ -50,7 +41,7 @@ async fn main() -> Result<()> {
         }
 
         lua_resp.set("headers", headers)?;
-        lua_resp.set("body", BodyReader::new(resp.into_body()))?;
+        lua_resp.set("body", BodyReader(resp.into_body()))?;
 
         Ok(lua_resp)
     })?;
@@ -58,7 +49,7 @@ async fn main() -> Result<()> {
     let f = lua
         .load(chunk! {
             local res = $fetch_url(...)
-            print(res.status)
+            print("status: "..res.status)
             for key, vals in pairs(res.headers) do
                 for _, val in ipairs(vals) do
                     print(key..": "..val)
