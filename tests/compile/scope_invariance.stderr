@@ -7,7 +7,7 @@ error[E0373]: closure may outlive the current function, but it borrows `test`, w
 14 |                 .create_function_mut(|_, ()| {
    |                                      ^^^^^^^ may outlive borrowed value `test`
 15 |                     test.field = 42;
-   |                     ---- `test` is borrowed here
+   |                     ---------- `test` is borrowed here
    |
 note: function requires argument type to outlive `'1`
   --> $DIR/scope_invariance.rs:13:13

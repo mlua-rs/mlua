@@ -18,8 +18,8 @@ use crate::userdata::{
     AnyUserData, MetaMethod, UserData, UserDataCell, UserDataFields, UserDataMethods,
 };
 use crate::util::{
-    assert_stack, check_stack, get_userdata, init_userdata_metatable, protect_lua, push_table,
-    rawset_field, take_userdata, StackGuard,
+    assert_stack, check_stack, get_userdata, init_userdata_metatable, push_table, rawset_field,
+    take_userdata, StackGuard,
 };
 use crate::value::{FromLua, FromLuaMulti, MultiValue, ToLua, ToLuaMulti, Value};
 
@@ -35,7 +35,7 @@ use {
 ///
 /// See [`Lua::scope`] for more details.
 ///
-/// [`Lua::scope`]: struct.Lua.html#method.scope
+/// [`Lua::scope`]: crate::Lua.html::scope
 pub struct Scope<'lua, 'scope> {
     lua: &'lua Lua,
     destructors: RefCell<Vec<(LuaRef<'lua>, DestructorCallback<'lua>)>>,
@@ -58,8 +58,8 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
     /// This is a version of [`Lua::create_function`] that creates a callback which expires on
     /// scope drop. See [`Lua::scope`] for more details.
     ///
-    /// [`Lua::create_function`]: struct.Lua.html#method.create_function
-    /// [`Lua::scope`]: struct.Lua.html#method.scope
+    /// [`Lua::create_function`]: crate::Lua::create_function
+    /// [`Lua::scope`]: crate::Lua::scope
     pub fn create_function<'callback, A, R, F>(&'callback self, func: F) -> Result<Function<'lua>>
     where
         A: FromLuaMulti<'callback>,
@@ -87,8 +87,8 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
     /// This is a version of [`Lua::create_function_mut`] that creates a callback which expires
     /// on scope drop. See [`Lua::scope`] and [`Scope::create_function`] for more details.
     ///
-    /// [`Lua::create_function_mut`]: struct.Lua.html#method.create_function_mut
-    /// [`Lua::scope`]: struct.Lua.html#method.scope
+    /// [`Lua::create_function_mut`]: crate::Lua::create_function_mut
+    /// [`Lua::scope`]: crate::Lua::scope
     /// [`Scope::create_function`]: #method.create_function
     pub fn create_function_mut<'callback, A, R, F>(
         &'callback self,
@@ -114,9 +114,9 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
     ///
     /// Requires `feature = "async"`
     ///
-    /// [`Lua::create_async_function`]: struct.Lua.html#method.create_async_function
-    /// [`Lua::scope`]: struct.Lua.html#method.scope
-    /// [`Lua::async_scope`]: struct.Lua.html#method.async_scope
+    /// [`Lua::create_async_function`]: crate::Lua::create_async_function
+    /// [`Lua::scope`]: crate::Lua::scope
+    /// [`Lua::async_scope`]: crate::Lua::async_scope
     #[cfg(feature = "async")]
     #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
     pub fn create_async_function<'callback, A, R, F, FR>(
@@ -147,8 +147,8 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
     /// UserData be 'static).
     /// See [`Lua::scope`] for more details.
     ///
-    /// [`Lua::create_userdata`]: struct.Lua.html#method.create_userdata
-    /// [`Lua::scope`]: struct.Lua.html#method.scope
+    /// [`Lua::create_userdata`]: crate::Lua::create_userdata
+    /// [`Lua::scope`]: crate::Lua::scope
     pub fn create_userdata<T>(&self, data: T) -> Result<AnyUserData<'lua>>
     where
         T: 'static + UserData,
@@ -165,8 +165,8 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
     ///
     /// Requires `feature = "serialize"`
     ///
-    /// [`Lua::create_ser_userdata`]: struct.Lua.html#method.create_ser_userdata
-    /// [`Lua::scope`]: struct.Lua.html#method.scope
+    /// [`Lua::create_ser_userdata`]: crate::Lua::create_ser_userdata
+    /// [`Lua::scope`]: crate::Lua::scope
     #[cfg(feature = "serialize")]
     #[cfg_attr(docsrs, doc(cfg(feature = "serialize")))]
     pub fn create_ser_userdata<T>(&self, data: T) -> Result<AnyUserData<'lua>>
@@ -192,9 +192,10 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
                 let _sg = StackGuard::new(state);
                 assert_stack(state, 2);
 
-                ud.lua.push_ref(&ud);
-
-                // We know the destructor has not run yet because we hold a reference to the userdata.
+                // Check that userdata is not destructed (via `take()` call)
+                if ud.lua.push_userdata_ref(&ud).is_err() {
+                    return vec![];
+                }
 
                 // Clear uservalue
                 #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "lua-factorio"))]
@@ -233,9 +234,9 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
     /// creating the userdata metatable each time a new userdata is created.
     ///
     /// [`Scope::create_userdata`]: #method.create_userdata
-    /// [`Lua::create_userdata`]: struct.Lua.html#method.create_userdata
-    /// [`Lua::scope`]: struct.Lua.html#method.scope
-    /// [`UserDataMethods`]: trait.UserDataMethods.html
+    /// [`Lua::create_userdata`]: crate::Lua::create_userdata
+    /// [`Lua::scope`]:crate::Lua::scope
+    /// [`UserDataMethods`]: crate::UserDataMethods
     pub fn create_nonstatic_userdata<T>(&self, data: T) -> Result<AnyUserData<'lua>>
     where
         T: 'scope + UserData,
@@ -250,7 +251,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
         fn wrap_method<'scope, 'lua, 'callback: 'scope, T: 'scope>(
             scope: &Scope<'lua, 'scope>,
             data: Rc<RefCell<T>>,
-            data_ptr: *mut c_void,
+            data_ptr: *const c_void,
             method: NonStaticMethod<'callback, T>,
         ) -> Result<Function<'lua>> {
             // On methods that actually receive the userdata, we fake a type check on the passed in
@@ -264,9 +265,9 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
                 if let Some(Value::UserData(ud)) = value {
                     unsafe {
                         let _sg = StackGuard::new(lua.state);
-                        check_stack(lua.state, 3)?;
-                        lua.push_userdata_ref(&ud.0, false)?;
-                        if get_userdata(lua.state, -1) == data_ptr {
+                        check_stack(lua.state, 2)?;
+                        lua.push_userdata_ref(&ud.0)?;
+                        if get_userdata(lua.state, -1) as *const _ == data_ptr {
                             return Ok(());
                         }
                     }
@@ -322,7 +323,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
             let _sg = StackGuard::new(lua.state);
             check_stack(lua.state, 13)?;
 
-            let data_ptr = protect_lua(lua.state, 0, 1, |state| {
+            let data_ptr = protect_lua!(lua.state, 0, 1, |state| {
                 ffi::lua_newuserdata(state, mem::size_of::<UserDataCell<Rc<RefCell<T>>>>())
             })?;
             // Prepare metatable, add meta methods first and then meta fields
@@ -390,12 +391,12 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
                 + methods_index.map(|_| 1).unwrap_or(0);
             ffi::lua_pop(lua.state, count);
 
-            let mt_id = ffi::lua_topointer(lua.state, -1);
+            let mt_ptr = ffi::lua_topointer(lua.state, -1);
             // Write userdata just before attaching metatable with `__gc` metamethod
             ptr::write(data_ptr as _, UserDataCell::new(data));
             ffi::lua_setmetatable(lua.state, -2);
             let ud = AnyUserData(lua.pop_ref());
-            lua.register_userdata_metatable(mt_id as isize);
+            lua.register_userdata_metatable(mt_ptr, None);
 
             #[cfg(any(feature = "lua51", feature = "luajit"))]
             let newtable = lua.create_table()?;
@@ -404,15 +405,16 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
                 let _sg = StackGuard::new(state);
                 assert_stack(state, 2);
 
-                ud.lua.push_ref(&ud);
-
-                // We know the destructor has not run yet because we hold a reference to the userdata.
+                // Check that userdata is valid (very likely)
+                if ud.lua.push_userdata_ref(&ud).is_err() {
+                    return vec![];
+                }
 
                 // Deregister metatable
                 ffi::lua_getmetatable(state, -1);
-                let mt_id = ffi::lua_topointer(state, -1);
+                let mt_ptr = ffi::lua_topointer(state, -1);
                 ffi::lua_pop(state, 1);
-                ud.lua.deregister_userdata_metatable(mt_id as isize);
+                ud.lua.deregister_userdata_metatable(mt_ptr);
 
                 // Clear uservalue
                 #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "lua-factorio"))]

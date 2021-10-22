@@ -2,7 +2,10 @@
 
 use std::collections::HashMap;
 
-use mlua::{Error, Lua, LuaSerdeExt, Result as LuaResult, SerializeOptions, UserData, Value};
+use mlua::{
+    DeserializeOptions, Error, Lua, LuaSerdeExt, Result as LuaResult, SerializeOptions, UserData,
+    Value,
+};
 use serde::{Deserialize, Serialize};
 
 #[test]
@@ -175,30 +178,6 @@ fn test_to_value_struct() -> LuaResult<()> {
 fn test_to_value_enum() -> LuaResult<()> {
     let lua = Lua::new();
     let globals = lua.globals();
-    globals.set("null", lua.null())?;
-
-    #[derive(Serialize)]
-    struct Test {
-        name: String,
-        key: i64,
-        data: Option<bool>,
-    }
-
-    let test = Test {
-        name: "alex".to_string(),
-        key: -16,
-        data: None,
-    };
-
-    globals.set("value", lua.to_value(&test)?)?;
-    lua.load(
-        r#"
-            assert(value["name"] == "alex")
-            assert(value["key"] == -16)
-            assert(value["data"] == null)
-        "#,
-    )
-    .exec()?;
 
     #[derive(Serialize)]
     enum E {
@@ -303,6 +282,36 @@ fn test_to_value_with_options() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[test]
+fn test_from_value_nested_tables() -> Result<(), Box<dyn std::error::Error>> {
+    let lua = Lua::new();
+
+    let value = lua
+        .load(
+            r#"
+            local table_a = {a = "a"}
+            local table_b = {"b"}
+            return {
+                a = table_a,
+                b = {table_b, table_b},
+                ab = {a = table_a, b = table_b}
+            }
+        "#,
+        )
+        .eval::<Value>()?;
+    let got = lua.from_value::<serde_json::Value>(value)?;
+    assert_eq!(
+        got,
+        serde_json::json!({
+            "a": {"a": "a"},
+            "b": [["b"], ["b"]],
+            "ab": {"a": {"a": "a"}, "b": ["b"]},
+        })
+    );
+
+    Ok(())
+}
+
+#[test]
 fn test_from_value_struct() -> Result<(), Box<dyn std::error::Error>> {
     let lua = Lua::new();
 
@@ -310,7 +319,7 @@ fn test_from_value_struct() -> Result<(), Box<dyn std::error::Error>> {
     struct Test {
         int: u32,
         seq: Vec<String>,
-        map: std::collections::HashMap<i32, i32>,
+        map: HashMap<i32, i32>,
         empty: Vec<()>,
         tuple: (u8, u8, u8),
     }
@@ -410,6 +419,58 @@ fn test_from_value_enum_untagged() -> Result<(), Box<dyn std::error::Error>> {
         Err(Error::DeserializeError(_)) => {}
         Err(e) => panic!("expected Error::DeserializeError, got {}", e),
     }
+
+    Ok(())
+}
+
+#[test]
+fn test_from_value_with_options() -> Result<(), Box<dyn std::error::Error>> {
+    let lua = Lua::new();
+
+    // Deny unsupported types by default
+    let value = Value::Function(lua.create_function(|_, ()| Ok(()))?);
+    match lua.from_value::<Option<String>>(value) {
+        Ok(v) => panic!("expected deserialization error, got {:?}", v),
+        Err(Error::DeserializeError(err)) => {
+            assert!(err.contains("unsupported value type"))
+        }
+        Err(err) => panic!("expected `DeserializeError` error, got {:?}", err),
+    };
+
+    // Allow unsupported types
+    let value = Value::Function(lua.create_function(|_, ()| Ok(()))?);
+    let options = DeserializeOptions::new().deny_unsupported_types(false);
+    assert_eq!(lua.from_value_with::<()>(value, options)?, ());
+
+    // Allow unsupported types (in a table seq)
+    let value = lua.load(r#"{"a", "b", function() end, "c"}"#).eval()?;
+    let options = DeserializeOptions::new().deny_unsupported_types(false);
+    assert_eq!(
+        lua.from_value_with::<Vec<String>>(value, options)?,
+        vec!["a".to_string(), "b".to_string(), "c".to_string()]
+    );
+
+    // Deny recursive tables by default
+    let value = lua.load(r#"local t = {}; t.t = t; return t"#).eval()?;
+    match lua.from_value::<HashMap<String, Option<String>>>(value) {
+        Ok(v) => panic!("expected deserialization error, got {:?}", v),
+        Err(Error::DeserializeError(err)) => {
+            assert!(err.contains("recursive table detected"))
+        }
+        Err(err) => panic!("expected `DeserializeError` error, got {:?}", err),
+    };
+
+    // Serialize Lua globals table
+    #[derive(Debug, Deserialize)]
+    struct Globals {
+        hello: String,
+    }
+    let options = DeserializeOptions::new()
+        .deny_unsupported_types(false)
+        .deny_recursive_tables(false);
+    lua.load(r#"hello = "world""#).exec()?;
+    let globals: Globals = lua.from_value_with(Value::Table(lua.globals()), options)?;
+    assert_eq!(globals.hello, "world");
 
     Ok(())
 }

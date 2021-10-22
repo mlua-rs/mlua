@@ -146,16 +146,18 @@ fn generate_glue() -> Result<()> {
         (version.0 * 100) + version.1
     )?;
 
-    let max_stack = if pointer_bit_width >= 32 {
-        1_000_000
-    } else {
-        15_000
-    };
+    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
     writeln!(
         glue,
         "pub const LUA_REGISTRYINDEX: c_int = -{} - 1000;",
-        max_stack
+        if pointer_bit_width >= 32 {
+            1_000_000
+        } else {
+            15_000
+        }
     )?;
+    #[cfg(any(feature = "lua51", feature = "luajit"))]
+    writeln!(glue, "pub const LUA_REGISTRYINDEX: c_int = -10000;")?;
 
     // These two are only defined in lua 5.1
     writeln!(glue, "pub const LUA_ENVIRONINDEX: c_int = -10001;")?;

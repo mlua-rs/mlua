@@ -80,6 +80,7 @@ pub const LUA_ERRERR: c_int = 5;
 #[cfg(any(feature = "lua53", feature = "lua52", feature = "lua-factorio"))]
 pub const LUA_ERRERR: c_int = 6;
 
+/// A raw Lua state associated with a thread.
 pub type lua_State = c_void;
 
 // basic types
@@ -121,14 +122,14 @@ pub type lua_Number = luaconf::LUA_NUMBER;
 /// A Lua integer, usually equivalent to `i64`.
 pub type lua_Integer = luaconf::LUA_INTEGER;
 
-// unsigned integer type
+/// A Lua unsigned integer, usually equivalent to `u64`.
 pub type lua_Unsigned = luaconf::LUA_UNSIGNED;
 
 // type for continuation-function contexts
 #[cfg(any(feature = "lua54", feature = "lua53"))]
 pub type lua_KContext = luaconf::LUA_KCONTEXT;
 
-/// Type for native functions that can be passed to Lua.
+/// Type for native C functions that can be passed to Lua.
 pub type lua_CFunction = unsafe extern "C" fn(L: *mut lua_State) -> c_int;
 
 // Type for continuation functions

@@ -20,9 +20,7 @@ use crate::function::Function;
 use crate::lua::Lua;
 use crate::table::{Table, TablePairs};
 use crate::types::{Callback, LuaRef, MaybeSend};
-use crate::util::{
-    check_stack, get_destructed_userdata_metatable, get_userdata, push_string, StackGuard,
-};
+use crate::util::{check_stack, get_userdata, take_userdata, StackGuard};
 use crate::value::{FromLua, FromLuaMulti, ToLua, ToLuaMulti};
 
 #[cfg(any(feature = "lua52", feature = "lua-factorio", feature = "lua51", feature = "luajit"))]
@@ -36,7 +34,7 @@ use crate::types::AsyncCallback;
 /// Currently, this mechanism does not allow overriding the `__gc` metamethod, since there is
 /// generally no need to do so: [`UserData`] implementors can instead just implement `Drop`.
 ///
-/// [`UserData`]: trait.UserData.html
+/// [`UserData`]: crate::UserData
 #[derive(Debug, Clone)]
 pub enum MetaMethod {
     /// The `+` operator.
@@ -273,7 +271,7 @@ impl From<&str> for MetaMethod {
 
 /// Method registry for [`UserData`] implementors.
 ///
-/// [`UserData`]: trait.UserData.html
+/// [`UserData`]: crate::UserData
 pub trait UserDataMethods<'lua, T: UserData> {
     /// Add a regular method which accepts a `&T` as the first parameter.
     ///
@@ -327,7 +325,7 @@ pub trait UserDataMethods<'lua, T: UserData> {
     ///
     /// Prefer to use [`add_method`] or [`add_method_mut`] as they are easier to use.
     ///
-    /// [`AnyUserData`]: struct.AnyUserData.html
+    /// [`AnyUserData`]: crate::AnyUserData
     /// [`add_method`]: #method.add_method
     /// [`add_method_mut`]: #method.add_method_mut
     fn add_function<S, A, R, F>(&mut self, name: &S, function: F)
@@ -438,7 +436,7 @@ pub trait UserDataMethods<'lua, T: UserData> {
 
 /// Field registry for [`UserData`] implementors.
 ///
-/// [`UserData`]: trait.UserData.html
+/// [`UserData`]: crate::UserData
 pub trait UserDataFields<'lua, T: UserData> {
     /// Add a regular field getter as a method which accepts a `&T` as the parameter.
     ///
@@ -471,7 +469,7 @@ pub trait UserDataFields<'lua, T: UserData> {
     ///
     /// Prefer to use [`add_field_method_get`] as it is easier to use.
     ///
-    /// [`AnyUserData`]: struct.AnyUserData.html
+    /// [`AnyUserData`]: crate::AnyUserData
     /// [`add_field_method_get`]: #method.add_field_method_get
     fn add_field_function_get<S, R, F>(&mut self, name: &S, function: F)
     where
@@ -484,7 +482,7 @@ pub trait UserDataFields<'lua, T: UserData> {
     ///
     /// Prefer to use [`add_field_method_set`] as it is easier to use.
     ///
-    /// [`AnyUserData`]: struct.AnyUserData.html
+    /// [`AnyUserData`]: crate::AnyUserData
     /// [`add_field_method_set`]: #method.add_field_method_set
     fn add_field_function_set<S, A, F>(&mut self, name: &S, function: F)
     where
@@ -519,8 +517,10 @@ pub trait UserDataFields<'lua, T: UserData> {
 
 /// Trait for custom userdata types.
 ///
-/// By implementing this trait, a struct becomes eligible for use inside Lua code. Implementations
-/// of [`ToLua`] and [`FromLua`] are automatically provided.
+/// By implementing this trait, a struct becomes eligible for use inside Lua code.
+/// Implementation of [`ToLua`] is automatically provided, [`FromLua`] is implemented
+/// only for `T: UserData + Clone`.
+///
 ///
 /// # Examples
 ///
@@ -578,10 +578,10 @@ pub trait UserDataFields<'lua, T: UserData> {
 /// # }
 /// ```
 ///
-/// [`ToLua`]: trait.ToLua.html
-/// [`FromLua`]: trait.FromLua.html
-/// [`UserDataFields`]: trait.UserDataFields.html
-/// [`UserDataMethods`]: trait.UserDataMethods.html
+/// [`ToLua`]: crate::ToLua
+/// [`FromLua`]: crate::FromLua
+/// [`UserDataFields`]: crate::UserDataFields
+/// [`UserDataMethods`]: crate::UserDataMethods
 pub trait UserData: Sized {
     /// Adds custom fields specific to this userdata.
     fn add_fields<'lua, F: UserDataFields<'lua, Self>>(_fields: &mut F) {}
@@ -594,11 +594,13 @@ pub trait UserData: Sized {
 pub(crate) struct UserDataCell<T>(RefCell<UserDataWrapped<T>>);
 
 impl<T> UserDataCell<T> {
+    #[inline]
     pub(crate) fn new(data: T) -> Self {
         UserDataCell(RefCell::new(UserDataWrapped::new(data)))
     }
 
     #[cfg(feature = "serialize")]
+    #[inline]
     pub(crate) fn new_ser(data: T) -> Self
     where
         T: 'static + Serialize,
@@ -607,139 +609,57 @@ impl<T> UserDataCell<T> {
     }
 
     // Immutably borrows the wrapped value.
-    fn try_borrow(&self) -> Result<UserDataRef<T>> {
+    #[inline]
+    pub(crate) fn try_borrow(&self) -> Result<Ref<T>> {
         self.0
             .try_borrow()
-            .map(|r| UserDataRef(UserDataRefInner::Ref(r)))
+            .map(|r| Ref::map(r, |r| r.deref()))
             .map_err(|_| Error::UserDataBorrowError)
     }
 
     // Mutably borrows the wrapped value.
-    fn try_borrow_mut(&self) -> Result<UserDataRefMut<T>> {
+    #[inline]
+    pub(crate) fn try_borrow_mut(&self) -> Result<RefMut<T>> {
         self.0
             .try_borrow_mut()
-            .map(|r| UserDataRefMut(UserDataRefMutInner::Ref(r)))
+            .map(|r| RefMut::map(r, |r| r.deref_mut()))
             .map_err(|_| Error::UserDataBorrowMutError)
     }
-}
 
-#[cfg(feature = "serialize")]
-impl Serialize for UserDataCell<()> {
-    fn serialize<S>(&self, serializer: S) -> StdResult<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let ser = self
-            .0
-            .try_borrow()
-            .map_err(|_| ser::Error::custom(Error::UserDataBorrowError))?
-            .ser;
-        unsafe { (&*ser).serialize(serializer) }
+    // Consumes this `UserDataCell`, returning the wrapped value.
+    #[inline]
+    fn into_inner(self) -> T {
+        self.0.into_inner().into_inner()
     }
 }
 
-/// A wrapper type for an immutably borrowed value from an `AnyUserData`.
-pub struct UserDataRef<'a, T>(UserDataRefInner<'a, T>);
-
-enum UserDataRefInner<'a, T> {
-    Ref(Ref<'a, UserDataWrapped<T>>),
-}
-
-/// A wrapper type for a mutably borrowed value from an `AnyUserData`.
-pub struct UserDataRefMut<'a, T>(UserDataRefMutInner<'a, T>);
-
-enum UserDataRefMutInner<'a, T> {
-    Ref(RefMut<'a, UserDataWrapped<T>>),
-}
-
-impl<T> Deref for UserDataRef<'_, T> {
-    type Target = T;
-
-    fn deref(&self) -> &Self::Target {
-        match &self.0 {
-            UserDataRefInner::Ref(x) => &*x,
-        }
-    }
-}
-
-impl<T> Deref for UserDataRefMut<'_, T> {
-    type Target = T;
-
-    fn deref(&self) -> &Self::Target {
-        match &self.0 {
-            UserDataRefMutInner::Ref(x) => &*x,
-        }
-    }
-}
-
-impl<T> DerefMut for UserDataRefMut<'_, T> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        match &mut self.0 {
-            UserDataRefMutInner::Ref(x) => &mut *x,
-        }
-    }
-}
-
-impl<T: fmt::Debug> fmt::Debug for UserDataRef<'_, T> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt::Debug::fmt(&*self as &T, f)
-    }
-}
-
-impl<T: fmt::Debug> fmt::Debug for UserDataRefMut<'_, T> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt::Debug::fmt(&*self as &T, f)
-    }
-}
-
-impl<T: fmt::Display> fmt::Display for UserDataRef<'_, T> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt::Display::fmt(&*self as &T, f)
-    }
-}
-
-impl<T: fmt::Display> fmt::Display for UserDataRefMut<'_, T> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt::Display::fmt(&*self as &T, f)
-    }
-}
-
-pub(crate) struct UserDataWrapped<T> {
-    pub(crate) data: *mut T,
+pub(crate) enum UserDataWrapped<T> {
+    Default(Box<T>),
     #[cfg(feature = "serialize")]
-    ser: *mut dyn erased_serde::Serialize,
+    Serializable(Box<dyn erased_serde::Serialize>),
 }
 
 impl<T> UserDataWrapped<T> {
+    #[inline]
     fn new(data: T) -> Self {
-        UserDataWrapped {
-            data: Box::into_raw(Box::new(data)),
-            #[cfg(feature = "serialize")]
-            ser: Box::into_raw(Box::new(UserDataSerializeError)),
-        }
+        UserDataWrapped::Default(Box::new(data))
     }
 
     #[cfg(feature = "serialize")]
+    #[inline]
     fn new_ser(data: T) -> Self
     where
         T: 'static + Serialize,
     {
-        let data_raw = Box::into_raw(Box::new(data));
-        UserDataWrapped {
-            data: data_raw,
-            ser: data_raw,
-        }
+        UserDataWrapped::Serializable(Box::new(data))
     }
-}
 
-impl<T> Drop for UserDataWrapped<T> {
-    fn drop(&mut self) {
-        unsafe {
-            drop(Box::from_raw(self.data));
+    #[inline]
+    fn into_inner(self) -> T {
+        match self {
+            Self::Default(data) => *data,
             #[cfg(feature = "serialize")]
-            if self.data as *mut () != self.ser as *mut () {
-                drop(Box::from_raw(self.ser));
-            }
+            Self::Serializable(data) => unsafe { *Box::from_raw(Box::into_raw(data) as *mut T) },
         }
     }
 }
@@ -747,14 +667,28 @@ impl<T> Drop for UserDataWrapped<T> {
 impl<T> Deref for UserDataWrapped<T> {
     type Target = T;
 
+    #[inline]
     fn deref(&self) -> &Self::Target {
-        unsafe { &*self.data }
+        match self {
+            Self::Default(data) => data,
+            #[cfg(feature = "serialize")]
+            Self::Serializable(data) => unsafe {
+                &*(data.as_ref() as *const _ as *const Self::Target)
+            },
+        }
     }
 }
 
 impl<T> DerefMut for UserDataWrapped<T> {
+    #[inline]
     fn deref_mut(&mut self) -> &mut Self::Target {
-        unsafe { &mut *self.data }
+        match self {
+            Self::Default(data) => data,
+            #[cfg(feature = "serialize")]
+            Self::Serializable(data) => unsafe {
+                &mut *(data.as_mut() as *mut _ as *mut Self::Target)
+            },
+        }
     }
 }
 
@@ -784,9 +718,9 @@ impl Serialize for UserDataSerializeError {
 /// This API should only be used when necessary. Implementing [`UserData`] already allows defining
 /// methods which check the type and acquire a borrow behind the scenes.
 ///
-/// [`UserData`]: trait.UserData.html
-/// [`is`]: #method.is
-/// [`borrow`]: #method.borrow
+/// [`UserData`]: crate::UserData
+/// [`is`]: crate::AnyUserData::is
+/// [`borrow`]: crate::AnyUserData::borrow
 #[derive(Clone, Debug)]
 pub struct AnyUserData<'lua>(pub(crate) LuaRef<'lua>);
 
@@ -806,7 +740,8 @@ impl<'lua> AnyUserData<'lua> {
     ///
     /// Returns a `UserDataBorrowError` if the userdata is already mutably borrowed. Returns a
     /// `UserDataTypeMismatch` if the userdata is not of type `T`.
-    pub fn borrow<T: 'static + UserData>(&self) -> Result<UserDataRef<T>> {
+    #[inline]
+    pub fn borrow<T: 'static + UserData>(&self) -> Result<Ref<T>> {
         self.inspect(|cell| cell.try_borrow())
     }
 
@@ -816,8 +751,38 @@ impl<'lua> AnyUserData<'lua> {
     ///
     /// Returns a `UserDataBorrowMutError` if the userdata cannot be mutably borrowed.
     /// Returns a `UserDataTypeMismatch` if the userdata is not of type `T`.
-    pub fn borrow_mut<T: 'static + UserData>(&self) -> Result<UserDataRefMut<T>> {
+    #[inline]
+    pub fn borrow_mut<T: 'static + UserData>(&self) -> Result<RefMut<T>> {
         self.inspect(|cell| cell.try_borrow_mut())
+    }
+
+    /// Takes out the value of `UserData` and sets the special "destructed" metatable that prevents
+    /// any further operations with this userdata.
+    #[doc(hidden)]
+    pub fn take<T: 'static + UserData>(&self) -> Result<T> {
+        let lua = self.0.lua;
+        unsafe {
+            let _sg = StackGuard::new(lua.state);
+            check_stack(lua.state, 2)?;
+
+            let type_id = lua.push_userdata_ref(&self.0)?;
+            match type_id {
+                Some(type_id) if type_id == TypeId::of::<T>() => {
+                    // Try to borrow userdata exclusively
+                    let _ = (*get_userdata::<UserDataCell<T>>(lua.state, -1)).try_borrow_mut()?;
+
+                    // Clear uservalue
+                    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+                    ffi::lua_pushnil(lua.state);
+                    #[cfg(any(feature = "lua51", feature = "luajit"))]
+                    protect_lua!(lua.state, 0, 1, fn(state) ffi::lua_newtable(state))?;
+                    ffi::lua_setuservalue(lua.state, -2);
+
+                    Ok(take_userdata::<UserDataCell<T>>(lua.state).into_inner())
+                }
+                _ => Err(Error::UserDataTypeMismatch),
+            }
+        }
     }
 
     /// Sets an associated value to this `AnyUserData`.
@@ -841,7 +806,7 @@ impl<'lua> AnyUserData<'lua> {
             let _sg = StackGuard::new(lua.state);
             check_stack(lua.state, 3)?;
 
-            lua.push_userdata_ref(&self.0, false)?;
+            lua.push_userdata_ref(&self.0)?;
             lua.push_value(v)?;
             ffi::lua_setuservalue(lua.state, -2);
 
@@ -860,7 +825,7 @@ impl<'lua> AnyUserData<'lua> {
             let _sg = StackGuard::new(lua.state);
             check_stack(lua.state, 3)?;
 
-            lua.push_userdata_ref(&self.0, false)?;
+            lua.push_userdata_ref(&self.0)?;
             ffi::lua_getuservalue(lua.state, -1);
             lua.pop_value()
         };
@@ -880,7 +845,7 @@ impl<'lua> AnyUserData<'lua> {
     ///
     /// For `T: UserData + 'static` returned metatable is shared among all instances of type `T`.
     ///
-    /// [`UserDataMetatable`]: struct.UserDataMetatable.html
+    /// [`UserDataMetatable`]: crate::UserDataMetatable
     pub fn get_metatable(&self) -> Result<UserDataMetatable<'lua>> {
         self.get_raw_metatable().map(UserDataMetatable)
     }
@@ -891,7 +856,7 @@ impl<'lua> AnyUserData<'lua> {
             let _sg = StackGuard::new(lua.state);
             check_stack(lua.state, 3)?;
 
-            lua.push_userdata_ref(&self.0, false)?;
+            lua.push_userdata_ref(&self.0)?;
             ffi::lua_getmetatable(lua.state, -1); // Checked that non-empty on the previous call
             Ok(Table(lua.pop_ref()))
         }
@@ -918,25 +883,6 @@ impl<'lua> AnyUserData<'lua> {
         Ok(false)
     }
 
-    pub(crate) fn type_id(&self) -> Result<TypeId> {
-        let lua = self.0.lua;
-        unsafe {
-            let _sg = StackGuard::new(lua.state);
-            check_stack(lua.state, 5)?;
-
-            // Push userdata with metatable
-            lua.push_userdata_ref(&self.0, true)?;
-
-            // Get the special `__mlua_type_id`
-            push_string(lua.state, "__mlua_type_id")?;
-            if ffi::lua_rawget(lua.state, -2) != ffi::LUA_TUSERDATA {
-                return Err(Error::UserDataTypeMismatch);
-            }
-
-            Ok(*(ffi::lua_touserdata(lua.state, -1) as *const TypeId))
-        }
-    }
-
     fn inspect<'a, T, R, F>(&'a self, func: F) -> Result<R>
     where
         T: 'static + UserData,
@@ -945,25 +891,14 @@ impl<'lua> AnyUserData<'lua> {
         let lua = self.0.lua;
         unsafe {
             let _sg = StackGuard::new(lua.state);
-            check_stack(lua.state, 3)?;
+            check_stack(lua.state, 2)?;
 
-            lua.push_ref(&self.0);
-            if ffi::lua_getmetatable(lua.state, -1) == 0 {
-                return Err(Error::UserDataTypeMismatch);
-            }
-            lua.push_userdata_metatable::<T>()?;
-
-            if ffi::lua_rawequal(lua.state, -1, -2) == 0 {
-                // Maybe UserData destructed?
-                ffi::lua_pop(lua.state, 1);
-                get_destructed_userdata_metatable(lua.state);
-                if ffi::lua_rawequal(lua.state, -1, -2) == 1 {
-                    Err(Error::UserDataDestructed)
-                } else {
-                    Err(Error::UserDataTypeMismatch)
+            let type_id = lua.push_userdata_ref(&self.0)?;
+            match type_id {
+                Some(type_id) if type_id == TypeId::of::<T>() => {
+                    func(&*get_userdata::<UserDataCell<T>>(lua.state, -1))
                 }
-            } else {
-                func(&*get_userdata::<UserDataCell<T>>(lua.state, -3))
+                _ => Err(Error::UserDataTypeMismatch),
             }
         }
     }
@@ -1019,7 +954,7 @@ impl<'lua> UserDataMetatable<'lua> {
     ///
     /// The pairs are wrapped in a [`Result`], since they are lazily converted to `V` type.
     ///
-    /// [`Result`]: type.Result.html
+    /// [`Result`]: crate::Result
     pub fn pairs<V: FromLua<'lua>>(self) -> UserDataMetatablePairs<'lua, V> {
         UserDataMetatablePairs(self.0.pairs())
     }
@@ -1031,8 +966,8 @@ impl<'lua> UserDataMetatable<'lua> {
 ///
 /// This struct is created by the [`UserDataMetatable::pairs`] method.
 ///
-/// [`UserData`]: trait.UserData.html
-/// [`UserDataMetatable::pairs`]: struct.UserDataMetatable.html#method.pairs
+/// [`UserData`]: crate::UserData
+/// [`UserDataMetatable::pairs`]: crate::UserDataMetatable::method.pairs
 pub struct UserDataMetatablePairs<'lua, V>(TablePairs<'lua, StdString, V>);
 
 impl<'lua, V> Iterator for UserDataMetatablePairs<'lua, V>
@@ -1062,15 +997,19 @@ impl<'lua> Serialize for AnyUserData<'lua> {
     where
         S: Serializer,
     {
-        unsafe {
-            let lua = self.0.lua;
+        let lua = self.0.lua;
+        let data = unsafe {
             let _sg = StackGuard::new(lua.state);
             check_stack(lua.state, 3).map_err(ser::Error::custom)?;
 
-            lua.push_userdata_ref(&self.0, false)
-                .map_err(ser::Error::custom)?;
+            lua.push_userdata_ref(&self.0).map_err(ser::Error::custom)?;
             let ud = &*get_userdata::<UserDataCell<()>>(lua.state, -1);
-            ud.serialize(serializer)
+            ud.0.try_borrow()
+                .map_err(|_| ser::Error::custom(Error::UserDataBorrowError))?
+        };
+        match &*data {
+            UserDataWrapped::Default(_) => UserDataSerializeError.serialize(serializer),
+            UserDataWrapped::Serializable(ser) => ser.serialize(serializer),
         }
     }
 }

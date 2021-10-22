@@ -3,7 +3,7 @@ use mlua::{Lua, UserData};
 fn main() {
     // Should not allow userdata borrow to outlive lifetime of AnyUserData handle
     struct MyUserData<'a>(&'a i32);
-    impl<'a> UserData for MyUserData<'a> {};
+    impl<'a> UserData for MyUserData<'a> {}
 
     let igood = 1;
 

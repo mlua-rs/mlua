@@ -36,6 +36,7 @@ fn test_user_data() -> Result<()> {
 
 #[test]
 fn test_methods() -> Result<()> {
+    #[cfg_attr(feature = "serialize", derive(serde::Serialize))]
     struct MyUserData(i64);
 
     impl UserData for MyUserData {
@@ -48,29 +49,38 @@ fn test_methods() -> Result<()> {
         }
     }
 
-    let lua = Lua::new();
-    let globals = lua.globals();
-    let userdata = lua.create_userdata(MyUserData(42))?;
-    globals.set("userdata", userdata.clone())?;
-    lua.load(
-        r#"
-        function get_it()
-            return userdata:get_value()
-        end
+    fn check_methods(lua: &Lua, userdata: AnyUserData) -> Result<()> {
+        let globals = lua.globals();
+        globals.set("userdata", userdata.clone())?;
+        lua.load(
+            r#"
+            function get_it()
+                return userdata:get_value()
+            end
 
-        function set_it(i)
-            return userdata:set_value(i)
-        end
-    "#,
-    )
-    .exec()?;
-    let get = globals.get::<_, Function>("get_it")?;
-    let set = globals.get::<_, Function>("set_it")?;
-    assert_eq!(get.call::<_, i64>(())?, 42);
-    userdata.borrow_mut::<MyUserData>()?.0 = 64;
-    assert_eq!(get.call::<_, i64>(())?, 64);
-    set.call::<_, ()>(100)?;
-    assert_eq!(get.call::<_, i64>(())?, 100);
+            function set_it(i)
+                return userdata:set_value(i)
+            end
+        "#,
+        )
+        .exec()?;
+        let get = globals.get::<_, Function>("get_it")?;
+        let set = globals.get::<_, Function>("set_it")?;
+        assert_eq!(get.call::<_, i64>(())?, 42);
+        userdata.borrow_mut::<MyUserData>()?.0 = 64;
+        assert_eq!(get.call::<_, i64>(())?, 64);
+        set.call::<_, ()>(100)?;
+        assert_eq!(get.call::<_, i64>(())?, 100);
+        Ok(())
+    }
+
+    let lua = Lua::new();
+
+    check_methods(&lua, lua.create_userdata(MyUserData(42))?)?;
+
+    // Additionally check serializable userdata
+    #[cfg(feature = "serialize")]
+    check_methods(&lua, lua.create_ser_userdata(MyUserData(42))?)?;
 
     Ok(())
 }
@@ -248,6 +258,76 @@ fn test_gc_userdata() -> Result<()> {
         )
         .exec()
         .is_err());
+
+    Ok(())
+}
+
+#[test]
+fn test_userdata_take() -> Result<()> {
+    #[derive(Debug)]
+    struct MyUserdata(Arc<i64>);
+
+    impl UserData for MyUserdata {
+        fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
+            methods.add_method("num", |_, this, ()| Ok(*this.0))
+        }
+    }
+
+    #[cfg(feature = "serialize")]
+    impl serde::Serialize for MyUserdata {
+        fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+        where
+            S: serde::Serializer,
+        {
+            serializer.serialize_i64(*self.0)
+        }
+    }
+
+    fn check_userdata_take(lua: &Lua, userdata: AnyUserData, rc: Arc<i64>) -> Result<()> {
+        lua.globals().set("userdata", userdata.clone())?;
+        assert_eq!(Arc::strong_count(&rc), 2);
+        let userdata_copy = userdata.clone();
+        {
+            let _value = userdata.borrow::<MyUserdata>()?;
+            // We should not be able to take userdata if it's borrowed
+            match userdata_copy.take::<MyUserdata>() {
+                Err(Error::UserDataBorrowMutError) => {}
+                r => panic!("expected `UserDataBorrowMutError` error, got {:?}", r),
+            }
+        }
+
+        let value = userdata_copy.take::<MyUserdata>()?;
+        assert_eq!(*value.0, 18);
+        drop(value);
+        assert_eq!(Arc::strong_count(&rc), 1);
+
+        match userdata.borrow::<MyUserdata>() {
+            Err(Error::UserDataDestructed) => {}
+            r => panic!("expected `UserDataDestructed` error, got {:?}", r),
+        }
+        match lua.load("userdata:num()").exec() {
+            Err(Error::CallbackError { ref cause, .. }) => match cause.as_ref() {
+                Error::CallbackDestructed => {}
+                err => panic!("expected `CallbackDestructed`, got {:?}", err),
+            },
+            r => panic!("improper return for destructed userdata: {:?}", r),
+        }
+        Ok(())
+    }
+
+    let lua = Lua::new();
+
+    let rc = Arc::new(18);
+    let userdata = lua.create_userdata(MyUserdata(rc.clone()))?;
+    check_userdata_take(&lua, userdata, rc)?;
+
+    // Additionally check serializable userdata
+    #[cfg(feature = "serialize")]
+    {
+        let rc = Arc::new(18);
+        let userdata = lua.create_ser_userdata(MyUserdata(rc.clone()))?;
+        check_userdata_take(&lua, userdata, rc)?;
+    }
 
     Ok(())
 }

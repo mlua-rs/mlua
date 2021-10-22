@@ -96,8 +96,8 @@ pub enum Error {
     /// [`Thread::status`] can be used to check if the coroutine can be resumed without causing this
     /// error.
     ///
-    /// [`Thread::resume`]: struct.Thread.html#method.resume
-    /// [`Thread::status`]: struct.Thread.html#method.status
+    /// [`Thread::resume`]: crate::Thread::resume
+    /// [`Thread::status`]: crate::Thread::status
     CoroutineInactive,
     /// An [`AnyUserData`] is not the expected type in a borrow.
     ///
@@ -105,15 +105,15 @@ pub enum Error {
     /// metamethods for binary operators. Refer to the documentation of [`UserDataMethods`] for
     /// details.
     ///
-    /// [`AnyUserData`]: struct.AnyUserData.html
-    /// [`UserDataMethods`]: trait.UserDataMethods.html
+    /// [`AnyUserData`]: crate::AnyUserData
+    /// [`UserDataMethods`]: crate::UserDataMethods
     UserDataTypeMismatch,
     /// An [`AnyUserData`] borrow failed because it has been destructed.
     ///
     /// This error can happen either due to to being destructed in a previous __gc, or due to being
     /// destructed from exiting a `Lua::scope` call.
     ///
-    /// [`AnyUserData`]: struct.AnyUserData.html
+    /// [`AnyUserData`]: crate::AnyUserData
     UserDataDestructed,
     /// An [`AnyUserData`] immutable borrow failed because it is already borrowed mutably.
     ///
@@ -121,8 +121,8 @@ pub enum Error {
     /// tries to call a method on the same [`UserData`] type. Consider restructuring your API to
     /// prevent these errors.
     ///
-    /// [`AnyUserData`]: struct.AnyUserData.html
-    /// [`UserData`]: trait.UserData.html
+    /// [`AnyUserData`]: crate::AnyUserData
+    /// [`UserData`]: crate::UserData
     UserDataBorrowError,
     /// An [`AnyUserData`] mutable borrow failed because it is already borrowed.
     ///
@@ -130,22 +130,24 @@ pub enum Error {
     /// tries to call a method on the same [`UserData`] type. Consider restructuring your API to
     /// prevent these errors.
     ///
-    /// [`AnyUserData`]: struct.AnyUserData.html
-    /// [`UserData`]: trait.UserData.html
+    /// [`AnyUserData`]: crate::AnyUserData
+    /// [`UserData`]: crate::UserData
     UserDataBorrowMutError,
     /// A [`MetaMethod`] operation is restricted (typically for `__gc` or `__metatable`).
     ///
-    /// [`MetaMethod`]: enum.MetaMethod.html
+    /// [`MetaMethod`]: crate::MetaMethod
     MetaMethodRestricted(StdString),
     /// A [`MetaMethod`] (eg. `__index` or `__newindex`) has invalid type.
     ///
-    /// [`MetaMethod`]: enum.MetaMethod.html
+    /// [`MetaMethod`]: crate::MetaMethod
     MetaMethodTypeError {
         method: StdString,
         type_name: &'static str,
         message: Option<StdString>,
     },
-    /// A `RegistryKey` produced from a different Lua state was used.
+    /// A [`RegistryKey`] produced from a different Lua state was used.
+    ///
+    /// [`RegistryKey`]: crate::RegistryKey
     MismatchedRegistryKey,
     /// A Rust callback returned `Err`, raising the contained `Error` as a Lua error.
     CallbackError {

@@ -1,3 +1,33 @@
+## v0.6.6
+
+- Fixed calculating `LUA_REGISTRYINDEX` when cross-compiling for lua51/jit (#82)
+- Updated documentation & examples
+
+## v0.6.5
+
+- Fixed bug when polling async futures (#77)
+- Refactor Waker handling in async code (+10% performance gain when calling async functions)
+- Added `Location::caller()` information to `Lua::load()` if chunk's name is None (Rust 1.46+)
+- Added serialization of i128/u128 types (serde)
+
+## v0.6.4
+
+- Performance optimizations
+- Fixed table traversal used in recursion detection in deserializer
+
+## v0.6.3
+
+- Disabled catching Rust panics in userdata finalizers on drop. It also has positive performance impact.
+- Added `Debug::event()` to the hook's Debug structure
+- Simplified interface of `hook::HookTriggers`
+- Added finalizer to `ExtraData` in module mode. This helps avoiding memory leak on closing state when Lua unloads modules and frees memory.
+- Added `DeserializeOptions` struct to control deserializer behavior (`from_value_with` function).
+
+## v0.6.2
+
+- New functionality: `Lua::load_from_function()` and `Lua::create_c_function()`
+- Many optimizations in callbacks/userdata creation and methods execution
+
 ## v0.6.1
 
 - Update `chunk!` documentation (stable Rust limitations)

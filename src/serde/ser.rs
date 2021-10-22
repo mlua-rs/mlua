@@ -9,7 +9,7 @@ use crate::lua::Lua;
 use crate::string::String;
 use crate::table::Table;
 use crate::types::Integer;
-use crate::util::{check_stack, protect_lua, StackGuard};
+use crate::util::{check_stack, StackGuard};
 use crate::value::{ToLua, Value};
 
 /// A struct for serializing Rust values into Lua values.
@@ -28,16 +28,16 @@ pub struct Options {
     ///
     /// Default: **true**
     ///
-    /// [`array_metatable`]: ../trait.LuaSerdeExt.html#tymethod.array_metatable
+    /// [`array_metatable`]: crate::LuaSerdeExt::array_metatable
     pub set_array_metatable: bool,
 
-    /// If true, serialize `None` (part of `Option` type) to [`null`].
+    /// If true, serialize `None` (part of the `Option` type) to [`null`].
     /// Otherwise it will be set to Lua [`Nil`].
     ///
     /// Default: **true**
     ///
-    /// [`null`]: ../trait.LuaSerdeExt.html#tymethod.null
-    /// [`Nil`]: ../../enum.Value.html#variant.Nil
+    /// [`null`]: crate::LuaSerdeExt::null
+    /// [`Nil`]: crate::Value::Nil
     pub serialize_none_to_null: bool,
 
     /// If true, serialize `Unit` (type of `()` in Rust) and Unit structs to [`null`].
@@ -45,8 +45,8 @@ pub struct Options {
     ///
     /// Default: **true**
     ///
-    /// [`null`]: ../trait.LuaSerdeExt.html#tymethod.null
-    /// [`Nil`]: ../../enum.Value.html#variant.Nil
+    /// [`null`]: crate::LuaSerdeExt::null
+    /// [`Nil`]: crate::Value::Nil
     pub serialize_unit_to_null: bool,
 }
 
@@ -61,7 +61,7 @@ impl Default for Options {
 }
 
 impl Options {
-    /// Retruns a new instance of `Options` with default parameters.
+    /// Returns a new instance of [`Options`] with default parameters.
     pub fn new() -> Self {
         Self::default()
     }
@@ -139,6 +139,8 @@ impl<'lua> ser::Serializer for Serializer<'lua> {
     lua_serialize_number!(serialize_u32, u32);
     lua_serialize_number!(serialize_i64, i64);
     lua_serialize_number!(serialize_u64, u64);
+    lua_serialize_number!(serialize_i128, i128);
+    lua_serialize_number!(serialize_u128, u128);
 
     lua_serialize_number!(serialize_f32, f32);
     lua_serialize_number!(serialize_f64, f64);
@@ -318,12 +320,12 @@ impl<'lua> ser::SerializeSeq for SerializeVec<'lua> {
         let value = lua.to_value_with(value, self.options)?;
         unsafe {
             let _sg = StackGuard::new(lua.state);
-            check_stack(lua.state, 5)?;
+            check_stack(lua.state, 4)?;
 
             lua.push_ref(&self.table.0);
             lua.push_value(value)?;
-            let len = ffi::lua_rawlen(lua.state, -2) as Integer;
-            protect_lua(lua.state, 2, 0, |state| {
+            protect_lua!(lua.state, 2, 0, fn(state) {
+                let len = ffi::lua_rawlen(state, -2) as Integer;
                 ffi::lua_rawseti(state, -2, len + 1);
             })
         }

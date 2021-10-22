@@ -17,19 +17,19 @@ macro_rules! cstr {
 
 macro_rules! mlua_panic {
     ($msg:expr) => {
-        panic!(bug_msg!($msg));
+        panic!(bug_msg!($msg))
     };
 
     ($msg:expr,) => {
-        mlua_panic!($msg);
+        mlua_panic!($msg)
     };
 
     ($msg:expr, $($arg:expr),+) => {
-        panic!(bug_msg!($msg), $($arg),+);
+        panic!(bug_msg!($msg), $($arg),+)
     };
 
     ($msg:expr, $($arg:expr),+,) => {
-        mlua_panic!($msg, $($arg),+);
+        mlua_panic!($msg, $($arg),+)
     };
 }
 
@@ -93,4 +93,19 @@ macro_rules! require_module_feature {
     () => {
         compile_error!("Feature `module` must be enabled in the `mlua` crate");
     };
+}
+
+macro_rules! protect_lua {
+    ($state:expr, $nargs:expr, $nresults:expr, $f:expr) => {
+        crate::util::protect_lua_closure($state, $nargs, $nresults, $f)
+    };
+
+    ($state:expr, $nargs:expr, $nresults:expr, fn($state_inner:ident) $code:expr) => {{
+        unsafe extern "C" fn do_call($state_inner: *mut ffi::lua_State) -> ::std::os::raw::c_int {
+            $code;
+            $nresults
+        }
+
+        crate::util::protect_lua_call($state, $nargs, do_call)
+    }};
 }

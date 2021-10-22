@@ -4,7 +4,7 @@ error[E0373]: closure may outlive the current function, but it borrows `test`, w
 9  |     let _ = lua.create_function(|_, ()| -> Result<i32> {
    |                                 ^^^^^^^^^^^^^^^^^^^^^^ may outlive borrowed value `test`
 10 |         Ok(test.0)
-   |            ---- `test` is borrowed here
+   |            ------ `test` is borrowed here
    |
 note: function requires argument type to outlive `'static`
   --> $DIR/function_borrow.rs:9:13

@@ -10,7 +10,7 @@ use crate::ffi;
 use crate::lua::Lua;
 use crate::table::Table;
 use crate::types::LightUserData;
-use crate::util::{assert_stack, check_stack, protect_lua, StackGuard};
+use crate::util::{assert_stack, check_stack, StackGuard};
 use crate::value::Value;
 
 /// Trait for serializing/deserializing Lua values using Serde.
@@ -69,11 +69,11 @@ pub trait LuaSerdeExt<'lua> {
     /// ```
     fn array_metatable(&'lua self) -> Table<'lua>;
 
-    /// Converts `T` into a `Value` instance.
+    /// Converts `T` into a [`Value`] instance.
     ///
     /// Requires `feature = "serialize"`
     ///
-    /// [`Value`]: enum.Value.html
+    /// [`Value`]: crate::Value
     ///
     /// # Example
     ///
@@ -102,11 +102,11 @@ pub trait LuaSerdeExt<'lua> {
     /// ```
     fn to_value<T: Serialize + ?Sized>(&'lua self, t: &T) -> Result<Value<'lua>>;
 
-    /// Converts `T` into a `Value` instance with options.
+    /// Converts `T` into a [`Value`] instance with options.
     ///
     /// Requires `feature = "serialize"`
     ///
-    /// [`Value`]: enum.Value.html
+    /// [`Value`]: crate::Value
     ///
     /// # Example
     ///
@@ -129,11 +129,11 @@ pub trait LuaSerdeExt<'lua> {
     where
         T: Serialize + ?Sized;
 
-    /// Deserializes a `Value` into any serde deserializable object.
+    /// Deserializes a [`Value`] into any serde deserializable object.
     ///
     /// Requires `feature = "serialize"`
     ///
-    /// [`Value`]: enum.Value.html
+    /// [`Value`]: crate::Value
     ///
     /// # Example
     ///
@@ -158,6 +158,41 @@ pub trait LuaSerdeExt<'lua> {
     /// }
     /// ```
     fn from_value<T: Deserialize<'lua>>(&'lua self, value: Value<'lua>) -> Result<T>;
+
+    /// Deserializes a [`Value`] into any serde deserializable object with options.
+    ///
+    /// Requires `feature = "serialize"`
+    ///
+    /// [`Value`]: crate::Value
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use mlua::{Lua, Result, LuaSerdeExt, DeserializeOptions};
+    /// use serde::Deserialize;
+    ///
+    /// #[derive(Deserialize, Debug, PartialEq)]
+    /// struct User {
+    ///     name: String,
+    ///     age: u8,
+    /// }
+    ///
+    /// fn main() -> Result<()> {
+    ///     let lua = Lua::new();
+    ///     let val = lua.load(r#"{name = "John Smith", age = 20, f = function() end}"#).eval()?;
+    ///     let options = DeserializeOptions::new().deny_unsupported_types(false);
+    ///     let u: User = lua.from_value_with(val, options)?;
+    ///
+    ///     assert_eq!(u, User { name: "John Smith".into(), age: 20 });
+    ///
+    ///     Ok(())
+    /// }
+    /// ```
+    fn from_value_with<T: Deserialize<'lua>>(
+        &'lua self,
+        value: Value<'lua>,
+        options: de::Options,
+    ) -> Result<T>;
 }
 
 impl<'lua> LuaSerdeExt<'lua> for Lua {
@@ -196,12 +231,19 @@ impl<'lua> LuaSerdeExt<'lua> for Lua {
     {
         T::deserialize(de::Deserializer::new(value))
     }
+
+    fn from_value_with<T>(&'lua self, value: Value<'lua>, options: de::Options) -> Result<T>
+    where
+        T: Deserialize<'lua>,
+    {
+        T::deserialize(de::Deserializer::new_with_options(value, options))
+    }
 }
 
-// Uses 6 stack spaces and calls checkstack.
+// Uses 2 stack spaces and calls checkstack.
 pub(crate) unsafe fn init_metatables(state: *mut ffi::lua_State) -> Result<()> {
-    check_stack(state, 3)?;
-    protect_lua(state, 0, 0, |state| {
+    check_stack(state, 2)?;
+    protect_lua!(state, 0, 0, fn(state) {
         ffi::lua_createtable(state, 0, 1);
 
         ffi::lua_pushstring(state, cstr!("__metatable"));

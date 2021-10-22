@@ -49,6 +49,7 @@ pub enum Value<'lua> {
     /// `Error` is a special builtin userdata type. When received from Lua it is implicitly cloned.
     Error(Error),
 }
+
 pub use self::Value::Nil;
 
 impl<'lua> Value<'lua> {
@@ -157,18 +158,21 @@ pub struct MultiValue<'lua>(Vec<Value<'lua>>);
 
 impl<'lua> MultiValue<'lua> {
     /// Creates an empty `MultiValue` containing no values.
+    #[inline]
     pub fn new() -> MultiValue<'lua> {
         MultiValue(Vec::new())
     }
 }
 
 impl<'lua> Default for MultiValue<'lua> {
+    #[inline]
     fn default() -> MultiValue<'lua> {
         MultiValue::new()
     }
 }
 
 impl<'lua> FromIterator<Value<'lua>> for MultiValue<'lua> {
+    #[inline]
     fn from_iter<I: IntoIterator<Item = Value<'lua>>>(iter: I) -> Self {
         MultiValue::from_vec(Vec::from_iter(iter))
     }
@@ -178,6 +182,7 @@ impl<'lua> IntoIterator for MultiValue<'lua> {
     type Item = Value<'lua>;
     type IntoIter = iter::Rev<vec::IntoIter<Value<'lua>>>;
 
+    #[inline]
     fn into_iter(self) -> Self::IntoIter {
         self.0.into_iter().rev()
     }
@@ -187,43 +192,52 @@ impl<'a, 'lua> IntoIterator for &'a MultiValue<'lua> {
     type Item = &'a Value<'lua>;
     type IntoIter = iter::Rev<slice::Iter<'a, Value<'lua>>>;
 
+    #[inline]
     fn into_iter(self) -> Self::IntoIter {
         (&self.0).iter().rev()
     }
 }
 
 impl<'lua> MultiValue<'lua> {
+    #[inline]
     pub fn from_vec(mut v: Vec<Value<'lua>>) -> MultiValue<'lua> {
         v.reverse();
         MultiValue(v)
     }
 
+    #[inline]
     pub fn into_vec(self) -> Vec<Value<'lua>> {
         let mut v = self.0;
         v.reverse();
         v
     }
 
+    #[inline]
     pub(crate) fn reserve(&mut self, size: usize) {
         self.0.reserve(size);
     }
 
+    #[inline]
     pub(crate) fn push_front(&mut self, value: Value<'lua>) {
         self.0.push(value);
     }
 
+    #[inline]
     pub(crate) fn pop_front(&mut self) -> Option<Value<'lua>> {
         self.0.pop()
     }
 
+    #[inline]
     pub fn len(&self) -> usize {
         self.0.len()
     }
 
+    #[inline]
     pub fn is_empty(&self) -> bool {
         self.0.len() == 0
     }
 
+    #[inline]
     pub fn iter(&self) -> iter::Rev<slice::Iter<Value<'lua>>> {
         self.0.iter().rev()
     }

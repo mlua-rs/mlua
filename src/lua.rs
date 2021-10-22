@@ -1,12 +1,12 @@
 use std::any::TypeId;
-use std::cell::{RefCell, UnsafeCell};
-use std::collections::{HashMap, HashSet};
+use std::cell::{Ref, RefCell, RefMut, UnsafeCell};
+use std::collections::HashMap;
 use std::ffi::CString;
 use std::fmt;
 use std::marker::PhantomData;
 use std::os::raw::{c_char, c_int, c_void};
-use std::panic::{catch_unwind, resume_unwind, AssertUnwindSafe};
-use std::sync::{Arc, Mutex, MutexGuard, RwLock, Weak};
+use std::panic::{catch_unwind, resume_unwind, AssertUnwindSafe, Location};
+use std::sync::{Arc, Mutex, RwLock};
 use std::{mem, ptr, str};
 
 use crate::error::{Error, Result};
@@ -19,18 +19,17 @@ use crate::string::String;
 use crate::table::Table;
 use crate::thread::Thread;
 use crate::types::{
-    Callback, CallbackUpvalue, HookCallback, Integer, LightUserData, LuaRef, MaybeSend, Number,
-    RegistryKey,
+    Callback, CallbackUpvalue, DestructedUserdataMT, HookCallback, Integer, LightUserData, LuaRef,
+    MaybeSend, Number, RegistryKey,
 };
 use crate::userdata::{
     AnyUserData, MetaMethod, UserData, UserDataCell, UserDataFields, UserDataMethods,
 };
 use crate::util::{
     self, assert_stack, callback_error, check_stack, get_destructed_userdata_metatable,
-    get_gc_metatable_for, get_gc_userdata, get_main_state, get_userdata, get_wrapped_error,
-    init_error_registry, init_gc_metatable_for, init_userdata_metatable, pop_error, protect_lua,
-    push_gc_userdata, push_string, push_table, push_userdata, push_wrapped_error, rawset_field,
-    safe_pcall, safe_xpcall, StackGuard, WrappedError, WrappedPanic,
+    get_gc_metatable, get_gc_userdata, get_main_state, get_userdata, init_error_registry,
+    init_gc_metatable, init_userdata_metatable, pop_error, push_gc_userdata, push_string,
+    push_table, push_userdata, rawset_field, safe_pcall, safe_xpcall, StackGuard, WrappedFailure,
 };
 use crate::value::{FromLua, FromLuaMulti, MultiValue, Nil, ToLua, ToLuaMulti, Value};
 
@@ -55,7 +54,7 @@ use serde::Serialize;
 pub struct Lua {
     pub(crate) state: *mut ffi::lua_State,
     main_state: Option<*mut ffi::lua_State>,
-    extra: Arc<Mutex<ExtraData>>,
+    extra: Arc<UnsafeCell<ExtraData>>,
     ephemeral: bool,
     safe: bool,
     // Lua has lots of interior mutability, should not be RefUnwindSafe
@@ -65,11 +64,11 @@ pub struct Lua {
 // Data associated with the Lua.
 struct ExtraData {
     registered_userdata: HashMap<TypeId, c_int>,
-    registered_userdata_mt: HashSet<isize>,
+    registered_userdata_mt: HashMap<*const c_void, Option<TypeId>>,
     registry_unref_list: Arc<Mutex<Option<Vec<c_int>>>>,
 
     libs: StdLib,
-    mem_info: *mut MemoryInfo,
+    mem_info: Option<Box<MemoryInfo>>,
     safe: bool, // Same as in the Lua struct
 
     ref_thread: *mut ffi::lua_State,
@@ -77,9 +76,12 @@ struct ExtraData {
     ref_stack_top: c_int,
     ref_free: Vec<c_int>,
 
-    // Vec of preallocated WrappedError/WrappedPanic structs
-    // Used for callback optimization
-    prealloc_wrapped_errors: Vec<c_int>,
+    // Pool of preallocated `WrappedFailure` enums on the ref thread
+    wrapped_failures_pool: Vec<c_int>,
+
+    // Index of `Option<Waker>` userdata on the ref thread
+    #[cfg(feature = "async")]
+    ref_waker_idx: c_int,
 
     hook_callback: Option<HookCallback>,
 }
@@ -150,9 +152,9 @@ impl LuaOptions {
 
 #[cfg(feature = "async")]
 pub(crate) static ASYNC_POLL_PENDING: u8 = 0;
-#[cfg(feature = "async")]
-pub(crate) static WAKER_REGISTRY_KEY: u8 = 0;
 pub(crate) static EXTRA_REGISTRY_KEY: u8 = 0;
+
+const WRAPPED_FAILURES_POOL_SIZE: usize = 16;
 
 /// Requires `feature = "send"`
 #[cfg(feature = "send")]
@@ -163,26 +165,33 @@ impl Drop for Lua {
     fn drop(&mut self) {
         unsafe {
             if !self.ephemeral {
-                let mut extra = mlua_expect!(self.extra.lock(), "extra is poisoned");
-                for index in extra.prealloc_wrapped_errors.clone() {
+                let extra = &mut *self.extra.get();
+                for index in extra.wrapped_failures_pool.drain(..) {
                     ffi::lua_pushnil(extra.ref_thread);
                     ffi::lua_replace(extra.ref_thread, index);
                     extra.ref_free.push(index);
+                }
+                #[cfg(feature = "async")]
+                {
+                    // Destroy Waker slot
+                    ffi::lua_pushnil(extra.ref_thread);
+                    ffi::lua_replace(extra.ref_thread, extra.ref_waker_idx);
+                    extra.ref_free.push(extra.ref_waker_idx);
                 }
                 mlua_debug_assert!(
                     ffi::lua_gettop(extra.ref_thread) == extra.ref_stack_top
                         && extra.ref_stack_top as usize == extra.ref_free.len(),
                     "reference leak detected"
                 );
-                let mut unref_list =
-                    mlua_expect!(extra.registry_unref_list.lock(), "unref list poisoned");
-                *unref_list = None;
                 ffi::lua_close(mlua_expect!(self.main_state, "main_state is null"));
-                if !extra.mem_info.is_null() {
-                    Box::from_raw(extra.mem_info);
-                }
             }
         }
+    }
+}
+
+impl Drop for ExtraData {
+    fn drop(&mut self) {
+        *mlua_expect!(self.registry_unref_list.lock(), "unref list poisoned") = None;
     }
 }
 
@@ -201,7 +210,7 @@ impl Lua {
     ///
     /// See [`StdLib`] documentation for a list of unsafe modules that cannot be loaded.
     ///
-    /// [`StdLib`]: struct.StdLib.html
+    /// [`StdLib`]: crate::StdLib
     #[allow(clippy::new_without_default)]
     pub fn new() -> Lua {
         mlua_expect!(
@@ -228,7 +237,7 @@ impl Lua {
     ///
     /// See [`StdLib`] documentation for a list of unsafe modules that cannot be loaded.
     ///
-    /// [`StdLib`]: struct.StdLib.html
+    /// [`StdLib`]: crate::StdLib
     pub fn new_with(libs: StdLib, options: LuaOptions) -> Result<Lua> {
         if libs.contains(StdLib::DEBUG) {
             return Err(Error::SafetyError(
@@ -250,7 +259,7 @@ impl Lua {
             mlua_expect!(lua.disable_c_modules(), "Error during disabling C modules");
         }
         lua.safe = true;
-        mlua_expect!(lua.extra.lock(), "extra is poisoned").safe = true;
+        unsafe { (*lua.extra.get()).safe = true };
 
         Ok(lua)
     }
@@ -262,7 +271,7 @@ impl Lua {
     /// # Safety
     /// The created Lua state will not have safety guarantees and allow to load C modules.
     ///
-    /// [`StdLib`]: struct.StdLib.html
+    /// [`StdLib`]: crate::StdLib
     pub unsafe fn unsafe_new_with(libs: StdLib, options: LuaOptions) -> Lua {
         ffi::keep_lua_symbols();
         Self::inner_new(libs, options)
@@ -327,13 +336,13 @@ impl Lua {
         }
 
         #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "lua-factorio"))]
-        let mem_info = Box::into_raw(Box::new(MemoryInfo {
+        let mut mem_info = Box::new(MemoryInfo {
             used_memory: 0,
             memory_limit: 0,
-        }));
+        });
 
         #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "lua-factorio"))]
-        let state = ffi::lua_newstate(allocator, mem_info as *mut c_void);
+        let state = ffi::lua_newstate(allocator, &mut *mem_info as *mut MemoryInfo as *mut c_void);
         #[cfg(any(feature = "lua51", feature = "luajit"))]
         let state = ffi::luaL_newstate();
 
@@ -342,16 +351,19 @@ impl Lua {
 
         let mut lua = Lua::init_from_ptr(state);
         lua.ephemeral = false;
+
+        let extra = &mut *lua.extra.get();
+
         #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "lua-factorio"))]
         {
-            mlua_expect!(lua.extra.lock(), "extra is poisoned").mem_info = mem_info;
+            extra.mem_info = Some(mem_info);
         }
 
         mlua_expect!(
             load_from_std_lib(state, libs),
             "Error during loading standard libraries"
         );
-        mlua_expect!(lua.extra.lock(), "extra is poisoned").libs |= libs;
+        extra.libs |= libs;
 
         if !options.catch_rust_panics {
             mlua_expect!(
@@ -379,6 +391,9 @@ impl Lua {
     }
 
     /// Constructs a new Lua instance from an existing raw state.
+    ///
+    /// Once called, a returned Lua state is cached in the registry and can be retrieved
+    /// by calling this function again.
     #[allow(clippy::missing_safety_doc)]
     pub unsafe fn init_from_ptr(state: *mut ffi::lua_State) -> Lua {
         let maybe_main_state = get_main_state(state);
@@ -389,77 +404,94 @@ impl Lua {
             return lua;
         }
 
-        let ref_thread = mlua_expect!(
+        mlua_expect!(
             (|state| {
                 init_error_registry(state)?;
 
                 // Create the internal metatables and place them in the registry
                 // to prevent them from being garbage collected.
 
-                init_gc_metatable_for::<Callback>(state, None)?;
-                init_gc_metatable_for::<CallbackUpvalue>(state, None)?;
-                init_gc_metatable_for::<Weak<Mutex<ExtraData>>>(state, None)?;
+                init_gc_metatable::<Arc<UnsafeCell<ExtraData>>>(state, None)?;
+                init_gc_metatable::<Callback>(state, None)?;
+                init_gc_metatable::<CallbackUpvalue>(state, None)?;
                 #[cfg(feature = "async")]
                 {
-                    init_gc_metatable_for::<AsyncCallback>(state, None)?;
-                    init_gc_metatable_for::<AsyncCallbackUpvalue>(state, None)?;
-                    init_gc_metatable_for::<AsyncPollUpvalue>(state, None)?;
-                    init_gc_metatable_for::<Option<Waker>>(state, None)?;
-
-                    // Create empty Waker slot
-                    push_gc_userdata::<Option<Waker>>(state, None)?;
-                    let waker_key = &WAKER_REGISTRY_KEY as *const u8 as *const c_void;
-                    protect_lua(state, 1, 0, |state| {
-                        ffi::lua_rawsetp(state, ffi::LUA_REGISTRYINDEX, waker_key);
-                    })?;
+                    init_gc_metatable::<AsyncCallback>(state, None)?;
+                    init_gc_metatable::<AsyncCallbackUpvalue>(state, None)?;
+                    init_gc_metatable::<AsyncPollUpvalue>(state, None)?;
+                    init_gc_metatable::<Option<Waker>>(state, None)?;
                 }
 
                 // Init serde metatables
                 #[cfg(feature = "serialize")]
                 crate::serde::init_metatables(state)?;
 
-                // Create ref stack thread and place it in the registry to prevent it from being garbage
-                // collected.
-                let ref_thread = protect_lua(state, 0, 0, |state| {
-                    let thread = ffi::lua_newthread(state);
-                    ffi::luaL_ref(state, ffi::LUA_REGISTRYINDEX);
-                    thread
-                })?;
-
-                Ok::<_, Error>(ref_thread)
+                Ok::<_, Error>(())
             })(main_state),
             "Error during Lua construction",
         );
 
+        // Create ref stack thread and place it in the registry to prevent it from being garbage
+        // collected.
+        let ref_thread = mlua_expect!(
+            protect_lua!(state, 0, 0, |state| {
+                let thread = ffi::lua_newthread(state);
+                ffi::luaL_ref(state, ffi::LUA_REGISTRYINDEX);
+                thread
+            }),
+            "Error while creating ref thread",
+        );
+
+        // Create empty Waker slot on the ref thread
+        #[cfg(feature = "async")]
+        let ref_waker_idx = {
+            mlua_expect!(
+                push_gc_userdata::<Option<Waker>>(ref_thread, None),
+                "Error while creating Waker slot"
+            );
+            ffi::lua_gettop(ref_thread)
+        };
+        let ref_stack_top = ffi::lua_gettop(ref_thread);
+
         // Create ExtraData
 
-        let extra = Arc::new(Mutex::new(ExtraData {
+        let extra = Arc::new(UnsafeCell::new(ExtraData {
             registered_userdata: HashMap::new(),
-            registered_userdata_mt: HashSet::new(),
+            registered_userdata_mt: HashMap::new(),
             registry_unref_list: Arc::new(Mutex::new(Some(Vec::new()))),
             ref_thread,
             libs: StdLib::NONE,
-            mem_info: ptr::null_mut(),
+            mem_info: None,
             safe: false,
             // We need 1 extra stack space to move values in and out of the ref stack.
             ref_stack_size: ffi::LUA_MINSTACK - 1,
-            ref_stack_top: 0,
+            ref_stack_top,
             ref_free: Vec::new(),
-            prealloc_wrapped_errors: Vec::new(),
+            wrapped_failures_pool: Vec::new(),
+            #[cfg(feature = "async")]
+            ref_waker_idx,
             hook_callback: None,
         }));
 
         mlua_expect!(
-            push_gc_userdata(main_state, Arc::downgrade(&extra)),
+            (|state| {
+                push_gc_userdata(state, Arc::clone(&extra))?;
+                protect_lua!(main_state, 1, 0, fn(state) {
+                    let extra_key = &EXTRA_REGISTRY_KEY as *const u8 as *const c_void;
+                    ffi::lua_rawsetp(state, ffi::LUA_REGISTRYINDEX, extra_key);
+                })
+            })(main_state),
             "Error while storing extra data",
         );
-        let extra_key = &EXTRA_REGISTRY_KEY as *const u8 as *const c_void;
-        mlua_expect!(
-            protect_lua(main_state, 1, 0, |state| {
-                ffi::lua_rawsetp(state, ffi::LUA_REGISTRYINDEX, extra_key)
-            }),
-            "Error while storing extra data",
+
+        // Register `DestructedUserdataMT` type
+        get_destructed_userdata_metatable(main_state);
+        let destructed_mt_ptr = ffi::lua_topointer(main_state, -1);
+        (*extra.get()).registered_userdata_mt.insert(
+            destructed_mt_ptr,
+            Some(TypeId::of::<DestructedUserdataMT>()),
         );
+        ffi::lua_pop(main_state, 1);
 
         mlua_debug_assert!(
             ffi::lua_gettop(main_state) == main_state_top,
@@ -481,7 +513,7 @@ impl Lua {
     ///
     /// Use the [`StdLib`] flags to specify the libraries you want to load.
     ///
-    /// [`StdLib`]: struct.StdLib.html
+    /// [`StdLib`]: crate::StdLib
     pub fn load_from_std_lib(&self, libs: StdLib) -> Result<()> {
         if self.safe && libs.contains(StdLib::DEBUG) {
             return Err(Error::SafetyError(
@@ -501,13 +533,62 @@ impl Lua {
         let res = unsafe { load_from_std_lib(state, libs) };
 
         // If `package` library loaded into a safe lua state then disable C modules
-        let curr_libs = mlua_expect!(self.extra.lock(), "extra is poisoned").libs;
+        let extra = unsafe { &mut *self.extra.get() };
+        let curr_libs = extra.libs;
         if self.safe && (curr_libs ^ (curr_libs | libs)).contains(StdLib::PACKAGE) {
             mlua_expect!(self.disable_c_modules(), "Error during disabling C modules");
         }
-        mlua_expect!(self.extra.lock(), "extra is poisoned").libs |= libs;
+        extra.libs |= libs;
 
         res
+    }
+
+    /// Loads module `modname` into an existing Lua state using the specified entrypoint
+    /// function.
+    ///
+    /// Internally calls the Lua function `func` with the string `modname` as an argument,
+    /// sets the call result to `package.loaded[modname]` and returns copy of the result.
+    ///
+    /// If `package.loaded[modname]` value is not nil, returns copy of the value without
+    /// calling the function.
+    ///
+    /// If the function does not return a non-nil value then this method assigns true to
+    /// `package.loaded[modname]`.
+    ///
+    /// Behavior is similar to Lua's [`require`] function.
+    ///
+    /// [`require`]: https://www.lua.org/manual/5.3/manual.html#pdf-require
+    pub fn load_from_function<'lua, S, T>(
+        &'lua self,
+        modname: &S,
+        func: Function<'lua>,
+    ) -> Result<T>
+    where
+        S: AsRef<[u8]> + ?Sized,
+        T: FromLua<'lua>,
+    {
+        let loaded = unsafe {
+            let _sg = StackGuard::new(self.state);
+            check_stack(self.state, 2)?;
+            protect_lua!(self.state, 0, 1, fn(state) {
+                ffi::luaL_getsubtable(state, ffi::LUA_REGISTRYINDEX, cstr!("_LOADED"));
+            })?;
+            Table(self.pop_ref())
+        };
+
+        let modname = self.create_string(modname)?;
+        let value = match loaded.raw_get(modname.clone())? {
+            Value::Nil => {
+                let result = match func.call(modname.clone())? {
+                    Value::Nil => Value::Boolean(true),
+                    res => res,
+                };
+                loaded.raw_set(modname, result.clone())?;
+                result
+            }
+            res => res,
+        };
+        T::from_lua(value, self)
     }
 
     /// Consumes and leaks `Lua` object, returning a static reference `&'static Lua`.
@@ -535,29 +616,57 @@ impl Lua {
     }
 
     // Executes module entrypoint function, which returns only one Value.
-    // The returned value then pushed to the Lua stack.
+    // The returned value then pushed onto the stack.
     #[doc(hidden)]
     #[cfg(not(tarpaulin_include))]
-    pub fn entrypoint1<'lua, 'callback, R, F>(&'lua self, func: F) -> Result<c_int>
+    pub unsafe fn entrypoint<'lua, A, R, F>(self, func: F) -> Result<c_int>
     where
-        'lua: 'callback,
-        R: ToLua<'callback>,
-        F: 'static + MaybeSend + Fn(&'callback Lua) -> Result<R>,
+        A: FromLuaMulti<'lua>,
+        R: ToLua<'lua>,
+        F: 'static + MaybeSend + Fn(&'lua Lua, A) -> Result<R>,
     {
-        let cb = self.create_callback(Box::new(move |lua, _| func(lua)?.to_lua_multi(lua)))?;
-        let res = cb.call(());
-        unsafe {
-            check_stack(self.state, 2)?;
-            match res {
-                Ok(res) => self.push_value(res)?,
-                Err(err) => {
-                    self.push_value(Value::Error(err))?;
-                    // This longjmp is undesired, but we cannot wrap it to a C
-                    ffi::lua_error(self.state)
-                }
+        let entrypoint_inner = |lua: &'lua Lua, func: F| {
+            let nargs = ffi::lua_gettop(lua.state);
+            check_stack(lua.state, 3)?;
+
+            let mut args = MultiValue::new();
+            args.reserve(nargs as usize);
+            for _ in 0..nargs {
+                args.push_front(lua.pop_value());
             }
+
+            // We create callback rather than call `func` directly to catch errors
+            // with attached stacktrace.
+            let callback = lua.create_callback(Box::new(move |lua, args| {
+                func(lua, A::from_lua_multi(args, lua)?)?.to_lua_multi(lua)
+            }))?;
+            callback.call(args)
         };
-        Ok(1)
+
+        match entrypoint_inner(mem::transmute(&self), func) {
+            Ok(res) => {
+                self.push_value(res)?;
+                Ok(1)
+            }
+            Err(err) => {
+                self.push_value(Value::Error(err))?;
+                let state = self.state;
+                // Lua (self) must be dropped before triggering longjmp
+                drop(self);
+                ffi::lua_error(state)
+            }
+        }
+    }
+
+    // A simple module entrypoint without arguments
+    #[doc(hidden)]
+    #[cfg(not(tarpaulin_include))]
+    pub unsafe fn entrypoint1<'lua, R, F>(self, func: F) -> Result<c_int>
+    where
+        R: ToLua<'lua>,
+        F: 'static + MaybeSend + Fn(&'lua Lua) -> Result<R>,
+    {
+        self.entrypoint(move |lua, _: ()| func(lua))
     }
 
     /// Sets a 'hook' function that will periodically be called as Lua code executes.
@@ -578,9 +687,7 @@ impl Lua {
     /// # use mlua::{Lua, HookTriggers, Result};
     /// # fn main() -> Result<()> {
     /// let lua = Lua::new();
-    /// lua.set_hook(HookTriggers {
-    ///     every_line: true, ..Default::default()
-    /// }, |_lua, debug| {
+    /// lua.set_hook(HookTriggers::every_line(), |_lua, debug| {
     ///     println!("line {}", debug.curr_line());
     ///     Ok(())
     /// })?;
@@ -593,16 +700,15 @@ impl Lua {
     /// # }
     /// ```
     ///
-    /// [`HookTriggers`]: struct.HookTriggers.html
-    /// [`HookTriggers.every_nth_instruction`]: struct.HookTriggers.html#field.every_nth_instruction
+    /// [`HookTriggers`]: crate::HookTriggers
+    /// [`HookTriggers.every_nth_instruction`]: crate::HookTriggers::every_nth_instruction
     pub fn set_hook<F>(&self, triggers: HookTriggers, callback: F) -> Result<()>
     where
         F: 'static + MaybeSend + FnMut(&Lua, Debug) -> Result<()>,
     {
         let state = self.main_state.ok_or(Error::MainThreadNotAvailable)?;
         unsafe {
-            let mut extra = mlua_expect!(self.extra.lock(), "extra is poisoned");
-            extra.hook_callback = Some(Arc::new(RefCell::new(callback)));
+            (*self.extra.get()).hook_callback = Some(Arc::new(RefCell::new(callback)));
             ffi::lua_sethook(state, Some(hook_proc), triggers.mask(), triggers.count());
         }
         Ok(())
@@ -616,26 +722,26 @@ impl Lua {
             Some(state) => state,
             None => return,
         };
-        let mut extra = mlua_expect!(self.extra.lock(), "extra is poisoned");
         unsafe {
-            extra.hook_callback = None;
+            (*self.extra.get()).hook_callback = None;
             ffi::lua_sethook(state, None, 0, 0);
         }
     }
 
     /// Returns the amount of memory (in bytes) currently used inside this Lua state.
     pub fn used_memory(&self) -> usize {
-        let extra = mlua_expect!(self.extra.lock(), "extra is poisoned");
-        let state = self.main_state.unwrap_or(self.state);
-        if extra.mem_info.is_null() {
-            // Get data from the Lua GC
-            unsafe {
-                let used_kbytes = ffi::lua_gc(state, ffi::LUA_GCCOUNT, 0);
-                let used_kbytes_rem = ffi::lua_gc(state, ffi::LUA_GCCOUNTB, 0);
-                return (used_kbytes as usize) * 1024 + (used_kbytes_rem as usize);
+        unsafe {
+            let state = self.main_state.unwrap_or(self.state);
+            match &(*self.extra.get()).mem_info {
+                Some(mem_info) => mem_info.used_memory as usize,
+                None => {
+                    // Get data from the Lua GC
+                    let used_kbytes = ffi::lua_gc(state, ffi::LUA_GCCOUNT, 0);
+                    let used_kbytes_rem = ffi::lua_gc(state, ffi::LUA_GCCOUNTB, 0);
+                    (used_kbytes as usize) * 1024 + (used_kbytes_rem as usize)
+                }
             }
         }
-        unsafe { (*extra.mem_info).used_memory as usize }
     }
 
     /// Sets a memory limit (in bytes) on this Lua state.
@@ -649,14 +755,15 @@ impl Lua {
     /// Requires `feature = "lua54/lua53/lua52/lua-factorio"`
     #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "lua-factorio", doc))]
     pub fn set_memory_limit(&self, memory_limit: usize) -> Result<usize> {
-        let mut extra = mlua_expect!(self.extra.lock(), "extra is poisoned");
-        if extra.mem_info.is_null() {
-            return Err(Error::MemoryLimitNotAvailable);
-        }
         unsafe {
-            let prev_limit = (*extra.mem_info).memory_limit as usize;
-            (*extra.mem_info).memory_limit = memory_limit as isize;
-            Ok(prev_limit)
+            match &mut (*self.extra.get()).mem_info {
+                Some(mem_info) => {
+                    let prev_limit = mem_info.memory_limit as usize;
+                    mem_info.memory_limit = memory_limit as isize;
+                    Ok(prev_limit)
+                }
+                None => Err(Error::MemoryLimitNotAvailable),
+            }
         }
     }
 
@@ -689,9 +796,7 @@ impl Lua {
         let state = self.main_state.unwrap_or(self.state);
         unsafe {
             check_stack(state, 3)?;
-            protect_lua(state, 0, 0, |state| {
-                ffi::lua_gc(state, ffi::LUA_GCCOLLECT, 0);
-            })
+            protect_lua!(state, 0, 0, fn(state) ffi::lua_gc(state, ffi::LUA_GCCOLLECT, 0))
         }
     }
 
@@ -710,7 +815,7 @@ impl Lua {
         let state = self.main_state.unwrap_or(self.state);
         unsafe {
             check_stack(state, 3)?;
-            protect_lua(state, 0, 0, |state| {
+            protect_lua!(state, 0, 0, |state| {
                 ffi::lua_gc(state, ffi::LUA_GCSTEP, kbytes) != 0
             })
         }
@@ -802,10 +907,12 @@ impl Lua {
     /// similar on the returned builder. Code is not even parsed until one of these methods is
     /// called.
     ///
-    /// If this `Lua` was created with `unsafe_new`, `load` will automatically detect and load
+    /// If this `Lua` was created with [`unsafe_new`], `load` will automatically detect and load
     /// chunks of either text or binary type, as if passing `bt` mode to `luaL_loadbufferx`.
     ///
-    /// [`Chunk::exec`]: struct.Chunk.html#method.exec
+    /// [`Chunk::exec`]: crate::Chunk::exec
+    /// [`unsafe_new`]: #method.unsafe_new
+    #[track_caller]
     pub fn load<'lua, 'a, S>(&'lua self, source: &'a S) -> Chunk<'lua, 'a>
     where
         S: AsChunk<'lua> + ?Sized,
@@ -813,7 +920,10 @@ impl Lua {
         Chunk {
             lua: self,
             source: source.source(),
-            name: source.name(),
+            name: match source.name() {
+                Some(name) => Some(name),
+                None => CString::new(Location::caller().to_string()).ok(),
+            },
             env: source.env(self),
             mode: source.mode(),
         }
@@ -887,8 +997,8 @@ impl Lua {
     pub fn create_table(&self) -> Result<Table> {
         unsafe {
             let _sg = StackGuard::new(self.state);
-            check_stack(self.state, 3)?;
-            push_table(self.state, 0, 0)?;
+            check_stack(self.state, 2)?;
+            protect_lua!(self.state, 0, 1, fn(state) ffi::lua_newtable(state))?;
             Ok(Table(self.pop_ref()))
         }
     }
@@ -923,7 +1033,7 @@ impl Lua {
             for (k, v) in iter {
                 self.push_value(k.to_lua(self)?)?;
                 self.push_value(v.to_lua(self)?)?;
-                protect_lua(self.state, 3, 1, |state| ffi::lua_rawset(state, -3))?;
+                protect_lua!(self.state, 3, 1, fn(state) ffi::lua_rawset(state, -3))?;
             }
 
             Ok(Table(self.pop_ref()))
@@ -945,7 +1055,7 @@ impl Lua {
             push_table(self.state, lower_bound as c_int, 0)?;
             for (i, v) in iter.enumerate() {
                 self.push_value(v.to_lua(self)?)?;
-                protect_lua(self.state, 2, 1, |state| {
+                protect_lua!(self.state, 2, 1, |state| {
                     ffi::lua_rawseti(state, -2, (i + 1) as Integer);
                 })?;
             }
@@ -997,8 +1107,8 @@ impl Lua {
     /// # }
     /// ```
     ///
-    /// [`ToLua`]: trait.ToLua.html
-    /// [`ToLuaMulti`]: trait.ToLuaMulti.html
+    /// [`ToLua`]: crate::ToLua
+    /// [`ToLuaMulti`]: crate::ToLuaMulti
     pub fn create_function<'lua, 'callback, A, R, F>(&'lua self, func: F) -> Result<Function<'lua>>
     where
         'lua: 'callback,
@@ -1033,6 +1143,16 @@ impl Lua {
                 .try_borrow_mut()
                 .map_err(|_| Error::RecursiveMutCallback)?)(lua, args)
         })
+    }
+
+    /// Wraps a C function, creating a callable Lua function handle to it.
+    ///
+    /// # Safety
+    /// This function is unsafe because provides a way to execute unsafe C function.
+    pub unsafe fn create_c_function(&self, func: ffi::lua_CFunction) -> Result<Function> {
+        check_stack(self.state, 1)?;
+        ffi::lua_pushcfunction(self.state, func);
+        Ok(Function(self.pop_ref()))
     }
 
     /// Wraps a Rust async function or closure, creating a callable Lua function handle to it.
@@ -1073,8 +1193,8 @@ impl Lua {
     /// }
     /// ```
     ///
-    /// [`Thread`]: struct.Thread.html
-    /// [`AsyncThread`]: struct.AsyncThread.html
+    /// [`Thread`]: crate::Thread
+    /// [`AsyncThread`]: crate::AsyncThread
     #[cfg(feature = "async")]
     #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
     pub fn create_async_function<'lua, 'callback, A, R, F, FR>(
@@ -1105,7 +1225,7 @@ impl Lua {
             let _sg = StackGuard::new(self.state);
             check_stack(self.state, 3)?;
 
-            let thread_state = protect_lua(self.state, 0, 1, |state| ffi::lua_newthread(state))?;
+            let thread_state = protect_lua!(self.state, 0, 1, |state| ffi::lua_newthread(state))?;
             self.push_ref(&func.0);
             ffi::lua_xmove(self.state, thread_state, 1);
 
@@ -1220,7 +1340,7 @@ impl Lua {
                 check_stack(self.state, 4)?;
 
                 self.push_value(v)?;
-                let res = protect_lua(self.state, 1, 1, |state| {
+                let res = protect_lua!(self.state, 1, 1, |state| {
                     ffi::lua_tolstring(state, -1, ptr::null_mut())
                 })?;
                 if !res.is_null() {
@@ -1366,7 +1486,7 @@ impl Lua {
     /// Be warned, garbage collection of values held inside the registry is not automatic, see
     /// [`RegistryKey`] for more details.
     ///
-    /// [`RegistryKey`]: struct.RegistryKey.html
+    /// [`RegistryKey`]: crate::RegistryKey
     pub fn create_registry_value<'lua, T: ToLua<'lua>>(&'lua self, t: T) -> Result<RegistryKey> {
         let t = t.to_lua(self)?;
         unsafe {
@@ -1374,15 +1494,13 @@ impl Lua {
             check_stack(self.state, 4)?;
 
             self.push_value(t)?;
-            let registry_id = protect_lua(self.state, 1, 0, |state| {
+            let registry_id = protect_lua!(self.state, 1, 0, |state| {
                 ffi::luaL_ref(state, ffi::LUA_REGISTRYINDEX)
             })?;
 
-            let extra = mlua_expect!(self.extra.lock(), "extra is poisoned");
-
             Ok(RegistryKey {
                 registry_id,
-                unref_list: extra.registry_unref_list.clone(),
+                unref_list: (*self.extra.get()).registry_unref_list.clone(),
             })
         }
     }
@@ -1438,8 +1556,8 @@ impl Lua {
     /// `Error::MismatchedRegistryKey` if passed a `RegistryKey` that was not created with a
     /// matching `Lua` state.
     pub fn owns_registry_value(&self, key: &RegistryKey) -> bool {
-        let extra = mlua_expect!(self.extra.lock(), "extra is poisoned");
-        Arc::ptr_eq(&key.unref_list, &extra.registry_unref_list)
+        let registry_unref_list = unsafe { &(*self.extra.get()).registry_unref_list };
+        Arc::ptr_eq(&key.unref_list, registry_unref_list)
     }
 
     /// Remove any registry values whose `RegistryKey`s have all been dropped.
@@ -1449,9 +1567,10 @@ impl Lua {
     /// by `Lua::remove_registry_value`.
     pub fn expire_registry_values(&self) {
         unsafe {
-            let extra = mlua_expect!(self.extra.lock(), "extra is poisoned");
-            let mut unref_list =
-                mlua_expect!(extra.registry_unref_list.lock(), "unref list poisoned");
+            let mut unref_list = mlua_expect!(
+                (*self.extra.get()).registry_unref_list.lock(),
+                "unref list poisoned"
+            );
             let unref_list = mem::replace(&mut *unref_list, Some(Vec::new()));
             for id in mlua_expect!(unref_list, "unref list not set") {
                 ffi::luaL_unref(self.state, ffi::LUA_REGISTRYINDEX, id);
@@ -1502,8 +1621,8 @@ impl Lua {
                 self.push_ref(&ud.0);
             }
 
-            Value::Error(e) => {
-                push_wrapped_error(self.state, e)?;
+            Value::Error(err) => {
+                push_gc_userdata(self.state, WrappedFailure::Error(err))?;
             }
         }
 
@@ -1552,20 +1671,22 @@ impl Lua {
             ffi::LUA_TUSERDATA => {
                 // We must prevent interaction with userdata types other than UserData OR a WrappedError.
                 // WrappedPanics are automatically resumed.
-                if let Some(err) = get_wrapped_error(state, -1).as_ref() {
-                    let err = err.clone();
-                    ffi::lua_pop(state, 1);
-                    Value::Error(err)
-                } else if let Some(panic) = get_gc_userdata::<WrappedPanic>(state, -1).as_mut() {
-                    if let Some(panic) = (*panic).0.take() {
+                match get_gc_userdata::<WrappedFailure>(state, -1).as_mut() {
+                    Some(WrappedFailure::Error(err)) => {
+                        let err = err.clone();
                         ffi::lua_pop(state, 1);
-                        resume_unwind(panic);
+                        Value::Error(err)
                     }
-                    // Previously resumed panic?
-                    ffi::lua_pop(state, 1);
-                    Nil
-                } else {
-                    Value::UserData(AnyUserData(self.pop_ref()))
+                    Some(WrappedFailure::Panic(panic)) => {
+                        if let Some(panic) = panic.take() {
+                            ffi::lua_pop(state, 1);
+                            resume_unwind(panic);
+                        }
+                        // Previously resumed panic?
+                        ffi::lua_pop(state, 1);
+                        Nil
+                    }
+                    _ => Value::UserData(AnyUserData(self.pop_ref())),
                 }
             }
 
@@ -1581,7 +1702,7 @@ impl Lua {
             Arc::ptr_eq(&lref.lua.extra, &self.extra),
             "Lua instance passed Value created from a different main Lua state"
         );
-        let extra = mlua_expect!(self.extra.lock(), "extra is poisoned");
+        let extra = &*self.extra.get();
         ffi::lua_pushvalue(extra.ref_thread, lref.index);
         ffi::lua_xmove(extra.ref_thread, self.state, 1);
     }
@@ -1596,36 +1717,45 @@ impl Lua {
     // number of short term references being created, and `RegistryKey` being used for long term
     // references.
     pub(crate) unsafe fn pop_ref(&self) -> LuaRef {
-        let extra = mlua_expect!(self.extra.lock(), "extra is poisoned");
+        let extra = &mut *self.extra.get();
         ffi::lua_xmove(self.state, extra.ref_thread, 1);
-        let (index, _) = ref_stack_pop(extra);
+        let index = ref_stack_pop(extra);
         LuaRef { lua: self, index }
     }
 
     pub(crate) fn clone_ref<'lua>(&'lua self, lref: &LuaRef<'lua>) -> LuaRef<'lua> {
         unsafe {
-            let extra = mlua_expect!(self.extra.lock(), "extra is poisoned");
+            let extra = &mut *self.extra.get();
             ffi::lua_pushvalue(extra.ref_thread, lref.index);
-            let (index, _) = ref_stack_pop(extra);
+            let index = ref_stack_pop(extra);
             LuaRef { lua: self, index }
         }
     }
 
     pub(crate) fn drop_ref<'lua>(&'lua self, lref: &mut LuaRef<'lua>) {
         unsafe {
-            let mut extra = mlua_expect!(self.extra.lock(), "extra is poisoned");
+            let extra = &mut *self.extra.get();
             ffi::lua_pushnil(extra.ref_thread);
             ffi::lua_replace(extra.ref_thread, lref.index);
             extra.ref_free.push(lref.index);
         }
     }
 
+    /// Executes the function provided on the ref thread
+    #[inline]
+    pub(crate) unsafe fn ref_thread_exec<F, R>(&self, f: F) -> R
+    where
+        F: FnOnce(*mut ffi::lua_State) -> R,
+    {
+        let ref_thread = (*self.extra.get()).ref_thread;
+        f(ref_thread)
+    }
+
     pub(crate) unsafe fn push_userdata_metatable<T: 'static + UserData>(&self) -> Result<()> {
+        let extra = &mut *self.extra.get();
+
         let type_id = TypeId::of::<T>();
-        if let Some(&table_id) = mlua_expect!(self.extra.lock(), "extra is poisoned")
-            .registered_userdata
-            .get(&type_id)
-        {
+        if let Some(&table_id) = extra.registered_userdata.get(&type_id) {
             ffi::lua_rawgeti(self.state, ffi::LUA_REGISTRYINDEX, table_id as Integer);
             return Ok(());
         }
@@ -1649,12 +1779,6 @@ impl Lua {
             self.push_value(f(self)?)?;
             rawset_field(self.state, -2, k.validate()?.name())?;
         }
-        // Add special `__mlua_type_id` field
-        let type_id_ptr = protect_lua(self.state, 0, 1, |state| {
-            ffi::lua_newuserdata(state, mem::size_of::<TypeId>()) as *mut TypeId
-        })?;
-        ptr::write(type_id_ptr, type_id);
-        rawset_field(self.state, -2, "__mlua_type_id")?;
         let metatable_index = ffi::lua_absindex(self.state, -1);
 
         let mut extra_tables_count = 0;
@@ -1714,54 +1838,60 @@ impl Lua {
         // Pop extra tables to get metatable on top of the stack
         ffi::lua_pop(self.state, extra_tables_count);
 
-        let ptr = ffi::lua_topointer(self.state, -1);
+        let mt_ptr = ffi::lua_topointer(self.state, -1);
         ffi::lua_pushvalue(self.state, -1);
-        let id = protect_lua(self.state, 1, 0, |state| {
+        let id = protect_lua!(self.state, 1, 0, |state| {
             ffi::luaL_ref(state, ffi::LUA_REGISTRYINDEX)
         })?;
 
-        let mut extra = mlua_expect!(self.extra.lock(), "extra is poisoned");
         extra.registered_userdata.insert(type_id, id);
-        extra.registered_userdata_mt.insert(ptr as isize);
+        extra.registered_userdata_mt.insert(mt_ptr, Some(type_id));
 
         Ok(())
     }
 
-    pub(crate) fn register_userdata_metatable(&self, id: isize) {
-        let mut extra = mlua_expect!(self.extra.lock(), "extra is poisoned");
-        extra.registered_userdata_mt.insert(id);
+    pub(crate) unsafe fn register_userdata_metatable(
+        &self,
+        ptr: *const c_void,
+        type_id: Option<TypeId>,
+    ) {
+        let extra = &mut *self.extra.get();
+        extra.registered_userdata_mt.insert(ptr, type_id);
     }
 
-    pub(crate) fn deregister_userdata_metatable(&self, id: isize) {
-        let mut extra = mlua_expect!(self.extra.lock(), "extra is poisoned");
-        extra.registered_userdata_mt.remove(&id);
+    pub(crate) unsafe fn deregister_userdata_metatable(&self, ptr: *const c_void) {
+        (*self.extra.get()).registered_userdata_mt.remove(&ptr);
     }
 
     // Pushes a LuaRef value onto the stack, checking that it's a registered
     // and not destructed UserData.
-    // Uses 3 stack spaces, does not call checkstack.
-    pub(crate) unsafe fn push_userdata_ref(&self, lref: &LuaRef, with_mt: bool) -> Result<()> {
+    // Uses 2 stack spaces, does not call checkstack.
+    pub(crate) unsafe fn push_userdata_ref(&self, lref: &LuaRef) -> Result<Option<TypeId>> {
         self.push_ref(lref);
         if ffi::lua_getmetatable(self.state, -1) == 0 {
             return Err(Error::UserDataTypeMismatch);
         }
-        // Check that userdata is registered
-        let ptr = ffi::lua_topointer(self.state, -1);
-        let extra = mlua_expect!(self.extra.lock(), "extra is poisoned");
-        if extra.registered_userdata_mt.contains(&(ptr as isize)) {
-            if !with_mt {
-                ffi::lua_pop(self.state, 1);
+        let mt_ptr = ffi::lua_topointer(self.state, -1);
+        ffi::lua_pop(self.state, 1);
+
+        let extra = &*self.extra.get();
+        match extra.registered_userdata_mt.get(&mt_ptr) {
+            Some(&type_id) if type_id == Some(TypeId::of::<DestructedUserdataMT>()) => {
+                Err(Error::UserDataDestructed)
             }
-            return Ok(());
+            Some(&type_id) => Ok(type_id),
+            None => Err(Error::UserDataTypeMismatch),
         }
-        // Maybe userdata was destructed?
-        get_destructed_userdata_metatable(self.state);
-        if ffi::lua_rawequal(self.state, -1, -2) != 0 {
-            ffi::lua_pop(self.state, 2);
-            return Err(Error::UserDataDestructed);
-        }
-        ffi::lua_pop(self.state, 2);
-        Err(Error::UserDataTypeMismatch)
+    }
+
+    #[inline]
+    unsafe fn get_userdata_ref<T>(&self) -> Result<Ref<T>> {
+        (*get_userdata::<UserDataCell<T>>(self.state, -1)).try_borrow()
+    }
+
+    #[inline]
+    unsafe fn get_userdata_mut<T>(&self) -> Result<RefMut<T>> {
+        (*get_userdata::<UserDataCell<T>>(self.state, -1)).try_borrow_mut()
     }
 
     // Creates a Function out of a Callback containing a 'static Fn. This is safe ONLY because the
@@ -1782,7 +1912,7 @@ impl Lua {
         unsafe extern "C" fn call_callback(state: *mut ffi::lua_State) -> c_int {
             let get_extra = |state| {
                 let upvalue = get_userdata::<CallbackUpvalue>(state, ffi::lua_upvalueindex(1));
-                (*upvalue).lua.extra.clone()
+                (*upvalue).lua.extra.get()
             };
             callback_error_ext(state, get_extra, |nargs| {
                 let upvalue_idx = ffi::lua_upvalueindex(1);
@@ -1823,7 +1953,7 @@ impl Lua {
             let lua = self.clone();
             let func = mem::transmute(func);
             push_gc_userdata(self.state, CallbackUpvalue { lua, func })?;
-            protect_lua(self.state, 1, 1, |state| {
+            protect_lua!(self.state, 1, 1, fn(state) {
                 ffi::lua_pushcclosure(state, call_callback, 1);
             })?;
 
@@ -1840,8 +1970,8 @@ impl Lua {
         'lua: 'callback,
     {
         #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "lua-factorio"))]
-        {
-            let libs = mlua_expect!(self.extra.lock(), "extra is poisoned").libs;
+        unsafe {
+            let libs = (*self.extra.get()).libs;
             if !libs.contains(StdLib::COROUTINE) {
                 self.load_from_std_lib(StdLib::COROUTINE)?;
             }
@@ -1850,7 +1980,7 @@ impl Lua {
         unsafe extern "C" fn call_callback(state: *mut ffi::lua_State) -> c_int {
             let get_extra = |state| {
                 let upvalue = get_userdata::<AsyncCallbackUpvalue>(state, ffi::lua_upvalueindex(1));
-                (*upvalue).lua.extra.clone()
+                (*upvalue).lua.extra.get()
             };
             callback_error_ext(state, get_extra, |nargs| {
                 let upvalue_idx = ffi::lua_upvalueindex(1);
@@ -1875,7 +2005,7 @@ impl Lua {
                 let fut = ((*upvalue).func)(lua, args);
                 let lua = lua.clone();
                 push_gc_userdata(state, AsyncPollUpvalue { lua, fut })?;
-                protect_lua(state, 1, 1, |state| {
+                protect_lua!(state, 1, 1, fn(state) {
                     ffi::lua_pushcclosure(state, poll_future, 1);
                 })?;
 
@@ -1886,7 +2016,7 @@ impl Lua {
         unsafe extern "C" fn poll_future(state: *mut ffi::lua_State) -> c_int {
             let get_extra = |state| {
                 let upvalue = get_userdata::<AsyncPollUpvalue>(state, ffi::lua_upvalueindex(1));
-                (*upvalue).lua.extra.clone()
+                (*upvalue).lua.extra.get()
             };
             callback_error_ext(state, get_extra, |nargs| {
                 let upvalue_idx = ffi::lua_upvalueindex(1);
@@ -1903,14 +2033,7 @@ impl Lua {
                 lua.state = state;
 
                 // Try to get an outer poll waker
-                let waker_key = &WAKER_REGISTRY_KEY as *const u8 as *const c_void;
-                ffi::lua_rawgetp(state, ffi::LUA_REGISTRYINDEX, waker_key);
-                let waker = match get_gc_userdata::<Option<Waker>>(state, -1).as_ref() {
-                    Some(Some(waker)) => waker.clone(),
-                    _ => noop_waker(),
-                };
-                ffi::lua_pop(state, 1);
-
+                let waker = lua.waker().unwrap_or_else(noop_waker);
                 let mut ctx = Context::from_waker(&waker);
 
                 let fut = &mut (*upvalue).fut;
@@ -1941,7 +2064,7 @@ impl Lua {
             let lua = self.clone();
             let func = mem::transmute(func);
             push_gc_userdata(self.state, AsyncCallbackUpvalue { lua, func })?;
-            protect_lua(self.state, 1, 1, |state| {
+            protect_lua!(self.state, 1, 1, fn(state) {
                 ffi::lua_pushcclosure(state, call_callback, 1);
             })?;
 
@@ -1985,18 +2108,34 @@ impl Lua {
         .into_function()
     }
 
+    #[cfg(feature = "async")]
+    pub(crate) unsafe fn waker(&self) -> Option<Waker> {
+        let extra = &*self.extra.get();
+        (*get_userdata::<Option<Waker>>(extra.ref_thread, extra.ref_waker_idx)).clone()
+    }
+
+    #[cfg(feature = "async")]
+    pub(crate) unsafe fn set_waker(&self, waker: Option<Waker>) -> Option<Waker> {
+        let extra = &*self.extra.get();
+        let waker_slot = &mut *get_userdata::<Option<Waker>>(extra.ref_thread, extra.ref_waker_idx);
+        match waker {
+            Some(waker) => waker_slot.replace(waker),
+            None => waker_slot.take(),
+        }
+    }
+
     pub(crate) unsafe fn make_userdata<T>(&self, data: UserDataCell<T>) -> Result<AnyUserData>
     where
         T: 'static + UserData,
     {
         let _sg = StackGuard::new(self.state);
-        check_stack(self.state, 2)?;
+        check_stack(self.state, 3)?;
 
-        // If we unable to push metatable, then we should not push userdata.
-        // Otherwise we can have a memory leak.
+        // We push metatable first to ensure having correct metatable with `__gc` method
+        ffi::lua_pushnil(self.state);
         self.push_userdata_metatable::<T>()?;
         push_userdata(self.state, data)?;
-        ffi::lua_rotate(self.state, -2, 1);
+        ffi::lua_replace(self.state, -3);
         ffi::lua_setmetatable(self.state, -2);
 
         Ok(AnyUserData(self.pop_ref()))
@@ -2006,7 +2145,7 @@ impl Lua {
         Lua {
             state: self.state,
             main_state: self.main_state,
-            extra: self.extra.clone(),
+            extra: Arc::clone(&self.extra),
             ephemeral: true,
             safe: self.safe,
             _no_ref_unwind_safe: PhantomData,
@@ -2047,14 +2186,11 @@ impl Lua {
         if ffi::lua_rawgetp(state, ffi::LUA_REGISTRYINDEX, extra_key) != ffi::LUA_TUSERDATA {
             return None;
         }
-        let extra = mlua_expect!(
-            (*get_gc_userdata::<Weak<Mutex<ExtraData>>>(state, -1)).upgrade(),
-            "extra is destroyed"
-        );
+        let extra_ptr = ffi::lua_touserdata(state, -1) as *mut Arc<UnsafeCell<ExtraData>>;
+        let extra = Arc::clone(&*extra_ptr);
         ffi::lua_pop(state, 1);
 
-        let safe = mlua_expect!(extra.lock(), "extra is poisoned").safe;
-
+        let safe = (*extra.get()).safe;
         Some(Lua {
             state,
             main_state: get_main_state(state),
@@ -2066,14 +2202,13 @@ impl Lua {
     }
 
     pub(crate) unsafe fn hook_callback(&self) -> Option<HookCallback> {
-        let extra = mlua_expect!(self.extra.lock(), "extra is poisoned");
-        extra.hook_callback.clone()
+        (*self.extra.get()).hook_callback.clone()
     }
 }
 
 /// Returned from [`Lua::load`] and is used to finalize loading and executing Lua main chunks.
 ///
-/// [`Lua::load`]: struct.Lua.html#method.load
+/// [`Lua::load`]: crate::Lua::load
 #[must_use = "`Chunk`s do nothing unless one of `exec`, `eval`, `call`, or `into_function` are called on them"]
 pub struct Chunk<'lua, 'a> {
     lua: &'lua Lua,
@@ -2093,7 +2228,7 @@ pub enum ChunkMode {
 /// Trait for types [loadable by Lua] and convertible to a [`Chunk`]
 ///
 /// [loadable by Lua]: https://www.lua.org/manual/5.3/manual.html#3.3.2
-/// [`Chunk`]: struct.Chunk.html
+/// [`Chunk`]: crate::Chunk
 pub trait AsChunk<'lua> {
     /// Returns chunk data (can be text or binary)
     fn source(&self) -> &[u8];
@@ -2151,7 +2286,7 @@ impl<'lua, 'a> Chunk<'lua, 'a> {
     /// Lua does not check the consistency of binary chunks, therefore this mode is allowed only
     /// for instances created with [`Lua::unsafe_new`].
     ///
-    /// [`Lua::unsafe_new`]: struct.Lua.html#method.unsafe_new
+    /// [`Lua::unsafe_new`]: crate::Lua::unsafe_new
     pub fn set_mode(mut self, mode: ChunkMode) -> Chunk<'lua, 'a> {
         self.mode = Some(mode);
         self
@@ -2167,11 +2302,11 @@ impl<'lua, 'a> Chunk<'lua, 'a> {
 
     /// Asynchronously execute this chunk of code.
     ///
-    /// See [`Chunk::exec`] for more details.
+    /// See [`exec`] for more details.
     ///
     /// Requires `feature = "async"`
     ///
-    /// [`Chunk::exec`]: struct.Chunk.html#method.exec
+    /// [`exec`]: #method.exec
     #[cfg(feature = "async")]
     #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
     pub fn exec_async<'fut>(self) -> LocalBoxFuture<'fut, Result<()>>
@@ -2207,11 +2342,11 @@ impl<'lua, 'a> Chunk<'lua, 'a> {
 
     /// Asynchronously evaluate the chunk as either an expression or block.
     ///
-    /// See [`Chunk::eval`] for more details.
+    /// See [`eval`] for more details.
     ///
     /// Requires `feature = "async"`
     ///
-    /// [`Chunk::eval`]: struct.Chunk.html#method.eval
+    /// [`eval`]: #method.eval
     #[cfg(feature = "async")]
     #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
     pub fn eval_async<'fut, R>(self) -> LocalBoxFuture<'fut, Result<R>>
@@ -2245,11 +2380,11 @@ impl<'lua, 'a> Chunk<'lua, 'a> {
 
     /// Load the chunk function and asynchronously call it with the given arguments.
     ///
-    /// See [`Chunk::call`] for more details.
+    /// See [`call`] for more details.
     ///
     /// Requires `feature = "async"`
     ///
-    /// [`Chunk::call`]: struct.Chunk.html#method.call
+    /// [`call`]: #method.call
     #[cfg(feature = "async")]
     #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
     pub fn call_async<'fut, A, R>(self, args: A) -> LocalBoxFuture<'fut, Result<R>>
@@ -2290,12 +2425,27 @@ impl<'lua, T: AsRef<[u8]> + ?Sized> AsChunk<'lua> for T {
     }
 }
 
-// An optimized version of `callback_error` that does not allocate `WrappedError+Panic` userdata
+// Creates required entries in the metatable cache (see `util::METATABLE_CACHE`)
+pub(crate) fn init_metatable_cache(cache: &mut HashMap<TypeId, u8>) {
+    cache.insert(TypeId::of::<Arc<UnsafeCell<ExtraData>>>(), 0);
+    cache.insert(TypeId::of::<Callback>(), 0);
+    cache.insert(TypeId::of::<CallbackUpvalue>(), 0);
+
+    #[cfg(feature = "async")]
+    {
+        cache.insert(TypeId::of::<AsyncCallback>(), 0);
+        cache.insert(TypeId::of::<AsyncCallbackUpvalue>(), 0);
+        cache.insert(TypeId::of::<AsyncPollUpvalue>(), 0);
+        cache.insert(TypeId::of::<Option<Waker>>(), 0);
+    }
+}
+
+// An optimized version of `callback_error` that does not allocate `WrappedFailure` userdata
 // and instead reuses unsed and cached values from previous calls (or allocates new).
 // It requires `get_extra` function to return `ExtraData` value.
 unsafe fn callback_error_ext<E, F, R>(state: *mut ffi::lua_State, get_extra: E, f: F) -> R
 where
-    E: Fn(*mut ffi::lua_State) -> Arc<Mutex<ExtraData>>,
+    E: Fn(*mut ffi::lua_State) -> *mut ExtraData,
     F: FnOnce(c_int) -> Result<R>,
 {
     let upvalue_idx = ffi::lua_upvalueindex(1);
@@ -2313,64 +2463,60 @@ where
         cstr!("not enough stack space for callback error handling"),
     );
 
-    enum PreallocatedError {
-        New(*mut c_void),
+    enum PreallocatedFailure {
+        New(*mut WrappedFailure),
         Cached(i32),
     }
 
     // We cannot shadow Rust errors with Lua ones, so we need to obtain pre-allocated memory
     // to store a wrapped error or panic *before* we proceed.
-    let extra = get_extra(state);
-    let prealloc_err = {
-        let mut extra = mlua_expect!(extra.lock(), "extra is poisoned");
-        match extra.prealloc_wrapped_errors.pop() {
-            Some(index) => PreallocatedError::Cached(index),
-            None => {
-                let size = mem::size_of::<WrappedError>().max(mem::size_of::<WrappedPanic>());
-                let ud = ffi::lua_newuserdata(state, size);
-                ffi::lua_rotate(state, 1, 1);
-                PreallocatedError::New(ud)
-            }
+    let extra = &mut *get_extra(state);
+    let prealloc_failure = match extra.wrapped_failures_pool.pop() {
+        Some(index) => PreallocatedFailure::Cached(index),
+        None => {
+            let ud = ffi::lua_newuserdata(state, mem::size_of::<WrappedFailure>());
+            ffi::lua_rotate(state, 1, 1);
+            PreallocatedFailure::New(ud as *mut WrappedFailure)
         }
     };
 
-    let get_prealloc_err = || {
-        let mut extra = mlua_expect!(extra.lock(), "extra is poisoned");
-        match prealloc_err {
-            PreallocatedError::New(ud) => {
-                ffi::lua_settop(state, 1);
-                ud
-            }
-            PreallocatedError::Cached(index) => {
-                ffi::lua_settop(state, 0);
-                ffi::lua_pushvalue(extra.ref_thread, index);
-                ffi::lua_xmove(extra.ref_thread, state, 1);
-                ffi::lua_pushnil(extra.ref_thread);
-                ffi::lua_replace(extra.ref_thread, index);
-                extra.ref_free.push(index);
-                ffi::lua_touserdata(state, -1)
-            }
+    let mut get_wrapped_failure = || match prealloc_failure {
+        PreallocatedFailure::New(ud) => {
+            ffi::lua_settop(state, 1);
+            ud
+        }
+        PreallocatedFailure::Cached(index) => {
+            ffi::lua_settop(state, 0);
+            ffi::lua_pushvalue(extra.ref_thread, index);
+            ffi::lua_xmove(extra.ref_thread, state, 1);
+            ffi::lua_pushnil(extra.ref_thread);
+            ffi::lua_replace(extra.ref_thread, index);
+            extra.ref_free.push(index);
+            ffi::lua_touserdata(state, -1) as *mut WrappedFailure
         }
     };
 
     match catch_unwind(AssertUnwindSafe(|| f(nargs))) {
         Ok(Ok(r)) => {
-            // Return unused WrappedError+Panic to the cache
-            let mut extra = mlua_expect!(extra.lock(), "extra is poisoned");
-            match prealloc_err {
-                PreallocatedError::New(_) if extra.prealloc_wrapped_errors.len() < 16 => {
+            // Return unused WrappedFailure to the cache
+            match prealloc_failure {
+                PreallocatedFailure::New(_)
+                    if extra.wrapped_failures_pool.len() < WRAPPED_FAILURES_POOL_SIZE =>
+                {
                     ffi::lua_rotate(state, 1, -1);
                     ffi::lua_xmove(state, extra.ref_thread, 1);
-                    let (index, mut extra) = ref_stack_pop(extra);
-                    extra.prealloc_wrapped_errors.push(index);
+                    let index = ref_stack_pop(extra);
+                    extra.wrapped_failures_pool.push(index);
                 }
-                PreallocatedError::New(_) => {
+                PreallocatedFailure::New(_) => {
                     ffi::lua_remove(state, 1);
                 }
-                PreallocatedError::Cached(index) if extra.prealloc_wrapped_errors.len() < 16 => {
-                    extra.prealloc_wrapped_errors.push(index);
+                PreallocatedFailure::Cached(index)
+                    if extra.wrapped_failures_pool.len() < WRAPPED_FAILURES_POOL_SIZE =>
+                {
+                    extra.wrapped_failures_pool.push(index);
                 }
-                PreallocatedError::Cached(index) => {
+                PreallocatedFailure::Cached(index) => {
                     ffi::lua_pushnil(extra.ref_thread);
                     ffi::lua_replace(extra.ref_thread, index);
                     extra.ref_free.push(index);
@@ -2379,9 +2525,9 @@ where
             r
         }
         Ok(Err(err)) => {
-            let wrapped_error = get_prealloc_err() as *mut WrappedError;
-            ptr::write(wrapped_error, WrappedError(err));
-            get_gc_metatable_for::<WrappedError>(state);
+            let wrapped_error = get_wrapped_failure();
+            ptr::write(wrapped_error, WrappedFailure::Error(err));
+            get_gc_metatable::<WrappedFailure>(state);
             ffi::lua_setmetatable(state, -2);
 
             // Convert to CallbackError and attach traceback
@@ -2393,15 +2539,17 @@ where
             } else {
                 "<not enough stack space for traceback>".to_string()
             };
-            let cause = Arc::new((*wrapped_error).0.clone());
-            (*wrapped_error).0 = Error::CallbackError { traceback, cause };
+            if let WrappedFailure::Error(ref mut err) = *wrapped_error {
+                let cause = Arc::new(err.clone());
+                *err = Error::CallbackError { traceback, cause };
+            }
 
             ffi::lua_error(state)
         }
         Err(p) => {
-            let wrapped_panic = get_prealloc_err() as *mut WrappedPanic;
-            ptr::write(wrapped_panic, WrappedPanic(Some(p)));
-            get_gc_metatable_for::<WrappedPanic>(state);
+            let wrapped_panic = get_wrapped_failure();
+            ptr::write(wrapped_panic, WrappedFailure::Panic(Some(p)));
+            get_gc_metatable::<WrappedFailure>(state);
             ffi::lua_setmetatable(state, -2);
             ffi::lua_error(state)
         }
@@ -2418,7 +2566,7 @@ unsafe fn load_from_std_lib(state: *mut ffi::lua_State, libs: StdLib) -> Result<
         glb: c_int,
     ) -> Result<()> {
         let modname = mlua_expect!(CString::new(modname.as_ref()), "modname contains nil bytes");
-        protect_lua(state, 0, 1, |state| {
+        protect_lua!(state, 0, 1, |state| {
             ffi::luaL_requiref(state, modname.as_ptr() as *const c_char, openf, glb)
         })
     }
@@ -2532,10 +2680,10 @@ unsafe fn load_from_std_lib(state: *mut ffi::lua_State, libs: StdLib) -> Result<
 }
 
 // We move `extra` (`MutexGuard`) here to correctly drop it if panic
-unsafe fn ref_stack_pop(mut extra: MutexGuard<ExtraData>) -> (c_int, MutexGuard<ExtraData>) {
+unsafe fn ref_stack_pop(extra: &mut ExtraData) -> c_int {
     if let Some(free) = extra.ref_free.pop() {
         ffi::lua_replace(extra.ref_thread, free);
-        return (free, extra);
+        return free;
     }
 
     // Try to grow max stack size
@@ -2549,7 +2697,6 @@ unsafe fn ref_stack_pop(mut extra: MutexGuard<ExtraData>) -> (c_int, MutexGuard<
             // during unwinding.
             ffi::lua_pop(extra.ref_thread, 1);
             let top = extra.ref_stack_top;
-            drop(extra);
             // It is a user error to create enough references to exhaust the Lua max stack size for
             // the ref thread.
             panic!(
@@ -2560,7 +2707,7 @@ unsafe fn ref_stack_pop(mut extra: MutexGuard<ExtraData>) -> (c_int, MutexGuard<
         extra.ref_stack_size += inc;
     }
     extra.ref_stack_top += 1;
-    (extra.ref_stack_top, extra)
+    extra.ref_stack_top
 }
 
 struct StaticUserDataMethods<'lua, T: 'static + UserData> {
@@ -2725,32 +2872,34 @@ impl<'lua, T: 'static + UserData> StaticUserDataMethods<'lua, T> {
         Box::new(move |lua, mut args| {
             if let Some(front) = args.pop_front() {
                 let userdata = AnyUserData::from_lua(front, lua)?;
-                // Try normal userdata first
-                let err = match userdata.borrow::<T>() {
-                    Ok(ud) => {
-                        return method(lua, &ud, A::from_lua_multi(args, lua)?)?.to_lua_multi(lua)
+                unsafe {
+                    let _sg = StackGuard::new(lua.state);
+                    check_stack(lua.state, 2)?;
+
+                    let type_id = lua.push_userdata_ref(&userdata.0)?;
+                    match type_id {
+                        Some(id) if id == TypeId::of::<T>() => {
+                            let ud = lua.get_userdata_ref::<T>()?;
+                            method(lua, &ud, A::from_lua_multi(args, lua)?)?.to_lua_multi(lua)
+                        }
+                        #[cfg(not(feature = "send"))]
+                        Some(id) if id == TypeId::of::<Rc<RefCell<T>>>() => {
+                            let ud = lua.get_userdata_ref::<Rc<RefCell<T>>>()?;
+                            let ud = ud.try_borrow().map_err(|_| Error::UserDataBorrowError)?;
+                            method(lua, &ud, A::from_lua_multi(args, lua)?)?.to_lua_multi(lua)
+                        }
+                        Some(id) if id == TypeId::of::<Arc<Mutex<T>>>() => {
+                            let ud = lua.get_userdata_ref::<Arc<Mutex<T>>>()?;
+                            let ud = ud.try_lock().map_err(|_| Error::UserDataBorrowError)?;
+                            method(lua, &ud, A::from_lua_multi(args, lua)?)?.to_lua_multi(lua)
+                        }
+                        Some(id) if id == TypeId::of::<Arc<RwLock<T>>>() => {
+                            let ud = lua.get_userdata_ref::<Arc<RwLock<T>>>()?;
+                            let ud = ud.try_read().map_err(|_| Error::UserDataBorrowError)?;
+                            method(lua, &ud, A::from_lua_multi(args, lua)?)?.to_lua_multi(lua)
+                        }
+                        _ => Err(Error::UserDataTypeMismatch),
                     }
-                    Err(err) => err,
-                };
-                match userdata.type_id()? {
-                    id if id == TypeId::of::<T>() => Err(err),
-                    #[cfg(not(feature = "send"))]
-                    id if id == TypeId::of::<Rc<RefCell<T>>>() => {
-                        let ud = userdata.borrow::<Rc<RefCell<T>>>()?;
-                        let ud = ud.try_borrow().map_err(|_| Error::UserDataBorrowError)?;
-                        method(lua, &ud, A::from_lua_multi(args, lua)?)?.to_lua_multi(lua)
-                    }
-                    id if id == TypeId::of::<Arc<Mutex<T>>>() => {
-                        let ud = userdata.borrow::<Arc<Mutex<T>>>()?;
-                        let ud = ud.try_lock().map_err(|_| Error::UserDataBorrowError)?;
-                        method(lua, &ud, A::from_lua_multi(args, lua)?)?.to_lua_multi(lua)
-                    }
-                    id if id == TypeId::of::<Arc<RwLock<T>>>() => {
-                        let ud = userdata.borrow::<Arc<RwLock<T>>>()?;
-                        let ud = ud.try_read().map_err(|_| Error::UserDataBorrowError)?;
-                        method(lua, &ud, A::from_lua_multi(args, lua)?)?.to_lua_multi(lua)
-                    }
-                    _ => Err(Error::UserDataTypeMismatch),
                 }
             } else {
                 Err(Error::FromLuaConversionError {
@@ -2775,30 +2924,38 @@ impl<'lua, T: 'static + UserData> StaticUserDataMethods<'lua, T> {
                 let mut method = method
                     .try_borrow_mut()
                     .map_err(|_| Error::RecursiveMutCallback)?;
-                match userdata.type_id()? {
-                    id if id == TypeId::of::<T>() => {
-                        let mut ud = userdata.borrow_mut::<T>()?;
-                        method(lua, &mut ud, A::from_lua_multi(args, lua)?)?.to_lua_multi(lua)
+                unsafe {
+                    let _sg = StackGuard::new(lua.state);
+                    check_stack(lua.state, 2)?;
+
+                    let type_id = lua.push_userdata_ref(&userdata.0)?;
+                    match type_id {
+                        Some(id) if id == TypeId::of::<T>() => {
+                            let mut ud = lua.get_userdata_mut::<T>()?;
+                            method(lua, &mut ud, A::from_lua_multi(args, lua)?)?.to_lua_multi(lua)
+                        }
+                        #[cfg(not(feature = "send"))]
+                        Some(id) if id == TypeId::of::<Rc<RefCell<T>>>() => {
+                            let ud = lua.get_userdata_mut::<Rc<RefCell<T>>>()?;
+                            let mut ud = ud
+                                .try_borrow_mut()
+                                .map_err(|_| Error::UserDataBorrowMutError)?;
+                            method(lua, &mut ud, A::from_lua_multi(args, lua)?)?.to_lua_multi(lua)
+                        }
+                        Some(id) if id == TypeId::of::<Arc<Mutex<T>>>() => {
+                            let ud = lua.get_userdata_mut::<Arc<Mutex<T>>>()?;
+                            let mut ud =
+                                ud.try_lock().map_err(|_| Error::UserDataBorrowMutError)?;
+                            method(lua, &mut ud, A::from_lua_multi(args, lua)?)?.to_lua_multi(lua)
+                        }
+                        Some(id) if id == TypeId::of::<Arc<RwLock<T>>>() => {
+                            let ud = lua.get_userdata_mut::<Arc<RwLock<T>>>()?;
+                            let mut ud =
+                                ud.try_write().map_err(|_| Error::UserDataBorrowMutError)?;
+                            method(lua, &mut ud, A::from_lua_multi(args, lua)?)?.to_lua_multi(lua)
+                        }
+                        _ => Err(Error::UserDataTypeMismatch),
                     }
-                    #[cfg(not(feature = "send"))]
-                    id if id == TypeId::of::<Rc<RefCell<T>>>() => {
-                        let ud = userdata.borrow::<Rc<RefCell<T>>>()?;
-                        let mut ud = ud
-                            .try_borrow_mut()
-                            .map_err(|_| Error::UserDataBorrowMutError)?;
-                        method(lua, &mut ud, A::from_lua_multi(args, lua)?)?.to_lua_multi(lua)
-                    }
-                    id if id == TypeId::of::<Arc<Mutex<T>>>() => {
-                        let ud = userdata.borrow::<Arc<Mutex<T>>>()?;
-                        let mut ud = ud.try_lock().map_err(|_| Error::UserDataBorrowMutError)?;
-                        method(lua, &mut ud, A::from_lua_multi(args, lua)?)?.to_lua_multi(lua)
-                    }
-                    id if id == TypeId::of::<Arc<RwLock<T>>>() => {
-                        let ud = userdata.borrow::<Arc<RwLock<T>>>()?;
-                        let mut ud = ud.try_write().map_err(|_| Error::UserDataBorrowMutError)?;
-                        method(lua, &mut ud, A::from_lua_multi(args, lua)?)?.to_lua_multi(lua)
-                    }
-                    _ => Err(Error::UserDataTypeMismatch),
                 }
             } else {
                 Err(Error::FromLuaConversionError {
@@ -2823,8 +2980,35 @@ impl<'lua, T: 'static + UserData> StaticUserDataMethods<'lua, T> {
             let fut_res = || {
                 if let Some(front) = args.pop_front() {
                     let userdata = AnyUserData::from_lua(front, lua)?;
-                    let userdata = userdata.borrow::<T>()?.clone();
-                    Ok(method(lua, userdata, A::from_lua_multi(args, lua)?))
+                    unsafe {
+                        let _sg = StackGuard::new(lua.state);
+                        check_stack(lua.state, 2)?;
+
+                        let type_id = lua.push_userdata_ref(&userdata.0)?;
+                        match type_id {
+                            Some(id) if id == TypeId::of::<T>() => {
+                                let ud = lua.get_userdata_ref::<T>()?;
+                                Ok(method(lua, ud.clone(), A::from_lua_multi(args, lua)?))
+                            }
+                            #[cfg(not(feature = "send"))]
+                            Some(id) if id == TypeId::of::<Rc<RefCell<T>>>() => {
+                                let ud = lua.get_userdata_ref::<Rc<RefCell<T>>>()?;
+                                let ud = ud.try_borrow().map_err(|_| Error::UserDataBorrowError)?;
+                                Ok(method(lua, ud.clone(), A::from_lua_multi(args, lua)?))
+                            }
+                            Some(id) if id == TypeId::of::<Arc<Mutex<T>>>() => {
+                                let ud = lua.get_userdata_ref::<Arc<Mutex<T>>>()?;
+                                let ud = ud.try_lock().map_err(|_| Error::UserDataBorrowError)?;
+                                Ok(method(lua, ud.clone(), A::from_lua_multi(args, lua)?))
+                            }
+                            Some(id) if id == TypeId::of::<Arc<RwLock<T>>>() => {
+                                let ud = lua.get_userdata_ref::<Arc<RwLock<T>>>()?;
+                                let ud = ud.try_read().map_err(|_| Error::UserDataBorrowError)?;
+                                Ok(method(lua, ud.clone(), A::from_lua_multi(args, lua)?))
+                            }
+                            _ => Err(Error::UserDataTypeMismatch),
+                        }
+                    }
                 } else {
                     Err(Error::FromLuaConversionError {
                         from: "missing argument",
@@ -2937,7 +3121,7 @@ impl<'lua, T: 'static + UserData> UserDataFields<'lua, T> for StaticUserDataFiel
     {
         self.field_getters.push((
             name.as_ref().to_vec(),
-            StaticUserDataMethods::<T>::box_function(move |lua, data| function(lua, data)),
+            StaticUserDataMethods::<T>::box_function(function),
         ));
     }
 

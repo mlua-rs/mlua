@@ -47,6 +47,10 @@ pub(crate) struct AsyncPollUpvalue<'lua> {
     pub(crate) fut: LocalBoxFuture<'lua, Result<MultiValue<'lua>>>,
 }
 
+#[cfg(feature = "send")]
+pub(crate) type HookCallback = Arc<RefCell<dyn FnMut(&Lua, Debug) -> Result<()> + Send>>;
+
+#[cfg(not(feature = "send"))]
 pub(crate) type HookCallback = Arc<RefCell<dyn FnMut(&Lua, Debug) -> Result<()>>>;
 
 #[cfg(feature = "send")]
@@ -59,21 +63,25 @@ pub trait MaybeSend {}
 #[cfg(not(feature = "send"))]
 impl<T> MaybeSend for T {}
 
+pub(crate) struct DestructedUserdataMT;
+
 /// An auto generated key into the Lua registry.
 ///
 /// This is a handle to a value stored inside the Lua registry. It is not automatically
 /// garbage collected on Drop, but it can be removed with [`Lua::remove_registry_value`],
 /// and instances not manually removed can be garbage collected with [`Lua::expire_registry_values`].
 ///
-/// Be warned, If you place this into Lua via a `UserData` type or a rust callback, it is *very
+/// Be warned, If you place this into Lua via a [`UserData`] type or a rust callback, it is *very
 /// easy* to accidentally cause reference cycles that the Lua garbage collector cannot resolve.
-/// Instead of placing a `RegistryKey` into a `UserData` type, prefer instead to use
-/// [`UserData::set_user_value`] / [`UserData::get_user_value`].
+/// Instead of placing a [`RegistryKey`] into a [`UserData`] type, prefer instead to use
+/// [`AnyUserData::set_user_value`] / [`AnyUserData::get_user_value`].
 ///
-/// [`Lua::remove_registry_value`]: struct.Lua.html#method.remove_registry_value
-/// [`Lua::expire_registry_values`]: struct.Lua.html#method.expire_registry_values
-/// [`UserData::set_user_value`]: struct.UserData.html#method.set_user_value
-/// [`UserData::get_user_value`]: struct.UserData.html#method.get_user_value
+/// [`UserData`]: crate::UserData
+/// [`RegistryKey`]: crate::RegistryKey
+/// [`Lua::remove_registry_value`]: crate::Lua::remove_registry_value
+/// [`Lua::expire_registry_values`]: crate::Lua::expire_registry_values
+/// [`AnyUserData::set_user_value`]: crate::AnyUserData::set_user_value
+/// [`AnyUserData::get_user_value`]: crate::AnyUserData::get_user_value
 pub struct RegistryKey {
     pub(crate) registry_id: c_int,
     pub(crate) unref_list: Arc<Mutex<Option<Vec<c_int>>>>,

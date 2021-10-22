@@ -24,17 +24,18 @@ jobs:
         toolchain: ${{ matrix.rust }}
         target: ${{ matrix.target }}
         override: true
+    - uses: Swatinem/rust-cache@v1
     - name: Build ${{ matrix.lua }} vendored
       run: |
-        cargo build --release --features "${{ matrix.lua }},vendored"
-        cargo build --release --features "${{ matrix.lua }},vendored,async,send,serialize,macros"
+        cargo build --features "${{ matrix.lua }},vendored"
+        cargo build --features "${{ matrix.lua }},vendored,async,send,serialize,macros"
       shell: bash
     - name: Build ${{ matrix.lua }} pkg-config
       if: ${{ matrix.os == 'ubuntu-18.04' && matrix.lua != 'lua54' }}
       run: |
         sudo apt-get update
         sudo apt-get install -y --no-install-recommends liblua5.3-dev liblua5.2-dev liblua5.1-0-dev libluajit-5.1-dev
-        cargo build --release --features "${{ matrix.lua }}"
+        cargo build --features "${{ matrix.lua }}"
 
   build_aarch64_cross_macos:
     name: Cross-compile to aarch64-apple-darwin
@@ -47,7 +48,7 @@ jobs:
     - uses: actions/checkout@v2
     - uses: actions-rs/toolchain@v1
       with:
-        toolchain: nightly
+        toolchain: stable
         target: aarch64-apple-darwin
         override: true
     - name: Cross-compile
@@ -64,7 +65,7 @@ jobs:
     - uses: actions/checkout@v2
     - uses: actions-rs/toolchain@v1
       with:
-        toolchain: nightly
+        toolchain: stable
         target: aarch64-unknown-linux-gnu
         override: true
     - name: Install ARM compiler toolchain
@@ -87,7 +88,7 @@ jobs:
     - uses: actions/checkout@v2
     - uses: actions-rs/toolchain@v1
       with:
-        toolchain: nightly
+        toolchain: stable
         target: armv7-unknown-linux-gnueabihf
         override: true
     - name: Install ARM compiler toolchain
@@ -122,16 +123,43 @@ jobs:
         toolchain: ${{ matrix.rust }}
         target: ${{ matrix.target }}
         override: true
+    - uses: Swatinem/rust-cache@v1
     - name: Run ${{ matrix.lua }} tests
       run: |
-        cargo test --release --features "${{ matrix.lua }},vendored"
-        cargo test --release --features "${{ matrix.lua }},vendored,async,send,serialize,macros"
+        cargo test --features "${{ matrix.lua }},vendored"
+        cargo test --features "${{ matrix.lua }},vendored,async,send,serialize,macros"
       shell: bash
     - name: Run compile tests (macos lua53)
       if: ${{ matrix.os == 'macos-latest' && matrix.lua == 'lua53' }}
       run: |
-        TRYBUILD=overwrite cargo test --release --features "${{ matrix.lua }},vendored" -- --ignored
-        TRYBUILD=overwrite cargo test --release --features "${{ matrix.lua }},vendored,async,send,serialize,macros" -- --ignored
+        TRYBUILD=overwrite cargo test --features "${{ matrix.lua }},vendored" -- --ignored
+        TRYBUILD=overwrite cargo test --features "${{ matrix.lua }},vendored,async,send,serialize,macros" -- --ignored
+      shell: bash
+
+  test_with_sanitizer:
+    name: Test with address sanitizer
+    runs-on: ${{ matrix.os }}
+    needs: build
+    strategy:
+      matrix:
+        os: [ubuntu-18.04]
+        rust: [nightly]
+        lua: [lua54, lua53, lua52, lua51, luajit]
+        include:
+        - os: ubuntu-18.04
+          target: x86_64-unknown-linux-gnu
+    steps:
+    - uses: actions/checkout@v2
+    - uses: actions-rs/toolchain@v1
+      with:
+        toolchain: ${{ matrix.rust }}
+        target: ${{ matrix.target }}
+        override: true
+    - uses: Swatinem/rust-cache@v1
+    - name: Run ${{ matrix.lua }} tests with address sanitizer
+      run: |
+        RUSTFLAGS="-Z sanitizer=address" \
+          cargo test --tests --features "${{ matrix.lua }},vendored,async,send,serialize,macros" --target x86_64-unknown-linux-gnu -- --skip test_too_many_recursions
       shell: bash
 
   test_modules:
@@ -141,7 +169,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-18.04, macos-latest]
-        rust: [stable, nightly]
+        rust: [stable]
         lua: [lua54, lua53, lua52, lua51, luajit]
         include:
         - os: ubuntu-18.04
@@ -155,6 +183,7 @@ jobs:
         toolchain: ${{ matrix.rust }}
         target: ${{ matrix.target }}
         override: true
+    - uses: Swatinem/rust-cache@v1
     - name: Run ${{ matrix.lua }} module tests
       run: |
         (cd examples/module && cargo build --release --features "${{ matrix.lua }},vendored")

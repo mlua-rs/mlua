@@ -4,7 +4,7 @@ use std::os::raw::c_int;
 use crate::error::{Error, Result};
 use crate::ffi;
 use crate::types::LuaRef;
-use crate::util::{assert_stack, check_stack, error_traceback, pop_error, protect_lua, StackGuard};
+use crate::util::{check_stack, error_traceback, pop_error, StackGuard};
 use crate::value::{FromLuaMulti, MultiValue, ToLuaMulti};
 
 #[cfg(any(feature = "lua54", all(feature = "luajit", feature = "vendored"), doc))]
@@ -13,15 +13,13 @@ use crate::function::Function;
 #[cfg(feature = "async")]
 use {
     crate::{
-        lua::{ASYNC_POLL_PENDING, WAKER_REGISTRY_KEY},
-        util::get_gc_userdata,
+        lua::{Lua, ASYNC_POLL_PENDING},
         value::Value,
     },
     futures_core::{future::Future, stream::Stream},
     std::{
         cell::RefCell,
         marker::PhantomData,
-        mem,
         os::raw::c_void,
         pin::Pin,
         task::{Context, Poll, Waker},
@@ -35,7 +33,7 @@ pub enum ThreadStatus {
     ///
     /// If a thread is in this state, it can be resumed by calling [`Thread::resume`].
     ///
-    /// [`Thread::resume`]: struct.Thread.html#method.resume
+    /// [`Thread::resume`]: crate::Thread::resume
     Resumable,
     /// Either the thread has finished executing, or the thread is currently running.
     Unresumable,
@@ -51,8 +49,8 @@ pub struct Thread<'lua>(pub(crate) LuaRef<'lua>);
 ///
 /// Requires `feature = "async"`
 ///
-/// [`Future`]: ../futures_core/future/trait.Future.html
-/// [`Stream`]: ../futures_core/stream/trait.Stream.html
+/// [`Future`]: futures_core::future::Future
+/// [`Stream`]: futures_core::stream::Stream
 #[cfg(feature = "async")]
 #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
 #[derive(Debug)]
@@ -115,11 +113,10 @@ impl<'lua> Thread<'lua> {
         let nargs = args.len() as c_int;
         let results = unsafe {
             let _sg = StackGuard::new(lua.state);
-            check_stack(lua.state, cmp::min(nargs + 1, 3))?;
+            check_stack(lua.state, cmp::max(nargs + 1, 3))?;
 
-            lua.push_ref(&self.0);
-            let thread_state = ffi::lua_tothread(lua.state, -1);
-            ffi::lua_pop(lua.state, 1);
+            let thread_state =
+                lua.ref_thread_exec(|ref_thread| ffi::lua_tothread(ref_thread, self.0.index));
 
             let status = ffi::lua_status(thread_state);
             if status != ffi::LUA_YIELD && ffi::lua_gettop(thread_state) == 0 {
@@ -136,7 +133,7 @@ impl<'lua> Thread<'lua> {
 
             let ret = ffi::lua_resume(thread_state, lua.state, nargs, &mut nresults as *mut c_int);
             if ret != ffi::LUA_OK && ret != ffi::LUA_YIELD {
-                protect_lua(lua.state, 0, 0, |_| error_traceback(thread_state))?;
+                protect_lua!(lua.state, 0, 0, |_| error_traceback(thread_state))?;
                 return Err(pop_error(thread_state, ret));
             }
 
@@ -156,12 +153,8 @@ impl<'lua> Thread<'lua> {
     pub fn status(&self) -> ThreadStatus {
         let lua = self.0.lua;
         unsafe {
-            let _sg = StackGuard::new(lua.state);
-            assert_stack(lua.state, 1);
-
-            lua.push_ref(&self.0);
-            let thread_state = ffi::lua_tothread(lua.state, -1);
-            ffi::lua_pop(lua.state, 1);
+            let thread_state =
+                lua.ref_thread_exec(|ref_thread| ffi::lua_tothread(ref_thread, self.0.index));
 
             let status = ffi::lua_status(thread_state);
             if status != ffi::LUA_OK && status != ffi::LUA_YIELD {
@@ -211,10 +204,10 @@ impl<'lua> Thread<'lua> {
         }
     }
 
-    /// Converts Thread to an AsyncThread which implements Future and Stream traits.
+    /// Converts Thread to an AsyncThread which implements [`Future`] and [`Stream`] traits.
     ///
     /// `args` are passed as arguments to the thread function for first call.
-    /// The object call `resume()` while polling and also allows to run rust futures
+    /// The object calls [`resume()`] while polling and also allows to run rust futures
     /// to completion using an executor.
     ///
     /// Using AsyncThread as a Stream allows to iterate through `coroutine.yield()`
@@ -222,6 +215,10 @@ impl<'lua> Thread<'lua> {
     /// one (returned from the thread function).
     ///
     /// Requires `feature = "async"`
+    ///
+    /// [`Future`]: futures_core::future::Future
+    /// [`Stream`]: futures_core::stream::Stream
+    /// [`resume()`]: https://www.lua.org/manual/5.4/manual.html#lua_resume
     ///
     /// # Examples
     ///
@@ -289,7 +286,7 @@ where
             _ => return Poll::Ready(None),
         };
 
-        let _wg = WakerGuard::new(lua.state, cx.waker().clone());
+        let _wg = WakerGuard::new(lua, cx.waker().clone());
         let ret: MultiValue = if let Some(args) = self.args0.borrow_mut().take() {
             self.thread.resume(args?)?
         } else {
@@ -320,7 +317,7 @@ where
             _ => return Poll::Ready(Err(Error::CoroutineInactive)),
         };
 
-        let _wg = WakerGuard::new(lua.state, cx.waker().clone());
+        let _wg = WakerGuard::new(lua, cx.waker().clone());
         let ret: MultiValue = if let Some(args) = self.args0.borrow_mut().take() {
             self.thread.resume(args?)?
         } else {
@@ -342,9 +339,10 @@ where
 }
 
 #[cfg(feature = "async")]
+#[inline(always)]
 fn is_poll_pending(val: &MultiValue) -> bool {
     match val.iter().enumerate().last() {
-        Some((1, Value::LightUserData(ud))) => {
+        Some((0, Value::LightUserData(ud))) => {
             ud.0 == &ASYNC_POLL_PENDING as *const u8 as *mut c_void
         }
         _ => false,
@@ -352,37 +350,27 @@ fn is_poll_pending(val: &MultiValue) -> bool {
 }
 
 #[cfg(feature = "async")]
-struct WakerGuard(*mut ffi::lua_State, Option<Waker>);
+struct WakerGuard<'lua> {
+    lua: &'lua Lua,
+    prev: Option<Waker>,
+}
 
 #[cfg(feature = "async")]
-impl WakerGuard {
-    pub fn new(state: *mut ffi::lua_State, waker: Waker) -> Result<WakerGuard> {
+impl<'lua> WakerGuard<'lua> {
+    #[inline]
+    pub fn new(lua: &Lua, waker: Waker) -> Result<WakerGuard> {
         unsafe {
-            let _sg = StackGuard::new(state);
-            check_stack(state, 3)?;
-
-            let waker_key = &WAKER_REGISTRY_KEY as *const u8 as *const c_void;
-            ffi::lua_rawgetp(state, ffi::LUA_REGISTRYINDEX, waker_key);
-            let waker_slot = get_gc_userdata::<Option<Waker>>(state, -1).as_mut();
-            let old = mlua_expect!(waker_slot, "Waker is destroyed").replace(waker);
-
-            Ok(WakerGuard(state, old))
+            let prev = lua.set_waker(Some(waker));
+            Ok(WakerGuard { lua, prev })
         }
     }
 }
 
 #[cfg(feature = "async")]
-impl Drop for WakerGuard {
+impl<'lua> Drop for WakerGuard<'lua> {
     fn drop(&mut self) {
-        let state = self.0;
         unsafe {
-            let _sg = StackGuard::new(state);
-            assert_stack(state, 3);
-
-            let waker_key = &WAKER_REGISTRY_KEY as *const u8 as *const c_void;
-            ffi::lua_rawgetp(state, ffi::LUA_REGISTRYINDEX, waker_key);
-            let waker_slot = get_gc_userdata::<Option<Waker>>(state, -1).as_mut();
-            mem::swap(mlua_expect!(waker_slot, "Waker is destroyed"), &mut self.1);
+            self.lua.set_waker(self.prev.take());
         }
     }
 }

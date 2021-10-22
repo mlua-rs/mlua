@@ -1,5 +1,6 @@
 use std::ffi::CStr;
 use std::marker::PhantomData;
+use std::ops::{BitOr, BitOrAssign};
 use std::os::raw::{c_char, c_int};
 
 use crate::ffi::{self, lua_Debug, lua_State};
@@ -14,7 +15,7 @@ use crate::util::callback_error;
 /// found in the [Lua 5.3 documentation][lua_doc].
 ///
 /// [lua_doc]: https://www.lua.org/manual/5.3/manual.html#lua_Debug
-/// [`Lua::set_hook`]: struct.Lua.html#method.set_hook
+/// [`Lua::set_hook`]: crate::Lua::set_hook
 #[derive(Clone)]
 pub struct Debug<'a> {
     ar: *mut lua_Debug,
@@ -23,6 +24,25 @@ pub struct Debug<'a> {
 }
 
 impl<'a> Debug<'a> {
+    /// Returns the specific event that triggered the hook.
+    ///
+    /// For [Lua 5.1] `DebugEvent::TailCall` is used for return events to indicate a return
+    /// from a function that did a tail call.
+    ///
+    /// [Lua 5.1]: https://www.lua.org/manual/5.1/manual.html#pdf-LUA_HOOKTAILRET
+    pub fn event(&self) -> DebugEvent {
+        unsafe {
+            match (*self.ar).event {
+                ffi::LUA_HOOKCALL => DebugEvent::Call,
+                ffi::LUA_HOOKRET => DebugEvent::Ret,
+                ffi::LUA_HOOKTAILCALL => DebugEvent::TailCall,
+                ffi::LUA_HOOKLINE => DebugEvent::Line,
+                ffi::LUA_HOOKCOUNT => DebugEvent::Count,
+                event => mlua_panic!("Unknown Lua event code: {}", event),
+            }
+        }
+    }
+
     /// Corresponds to the `n` what mask.
     pub fn names(&self) -> DebugNames<'a> {
         unsafe {
@@ -95,6 +115,16 @@ impl<'a> Debug<'a> {
     }
 }
 
+/// Represents a specific event that triggered the hook.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DebugEvent {
+    Call,
+    Ret,
+    TailCall,
+    Line,
+    Count,
+}
+
 #[derive(Clone, Debug)]
 pub struct DebugNames<'a> {
     pub name: Option<&'a [u8]>,
@@ -140,6 +170,46 @@ pub struct HookTriggers {
 }
 
 impl HookTriggers {
+    /// Returns a new instance of `HookTriggers` with [`on_calls`] trigger set.
+    ///
+    /// [`on_calls`]: #structfield.on_calls
+    pub fn on_calls() -> Self {
+        HookTriggers {
+            on_calls: true,
+            ..Default::default()
+        }
+    }
+
+    /// Returns a new instance of `HookTriggers` with [`on_returns`] trigger set.
+    ///
+    /// [`on_returns`]: #structfield.on_returns
+    pub fn on_returns() -> Self {
+        HookTriggers {
+            on_returns: true,
+            ..Default::default()
+        }
+    }
+
+    /// Returns a new instance of `HookTriggers` with [`every_line`] trigger set.
+    ///
+    /// [`every_line`]: #structfield.every_line
+    pub fn every_line() -> Self {
+        HookTriggers {
+            every_line: true,
+            ..Default::default()
+        }
+    }
+
+    /// Returns a new instance of `HookTriggers` with [`every_nth_instruction`] trigger set.
+    ///
+    /// [`every_nth_instruction`]: #structfield.every_nth_instruction
+    pub fn every_nth_instruction(n: u32) -> Self {
+        HookTriggers {
+            every_nth_instruction: Some(n),
+            ..Default::default()
+        }
+    }
+
     // Compute the mask to pass to `lua_sethook`.
     pub(crate) fn mask(&self) -> c_int {
         let mut mask: c_int = 0;
@@ -162,6 +232,26 @@ impl HookTriggers {
     // returned.
     pub(crate) fn count(&self) -> c_int {
         self.every_nth_instruction.unwrap_or(0) as c_int
+    }
+}
+
+impl BitOr for HookTriggers {
+    type Output = Self;
+
+    fn bitor(mut self, rhs: Self) -> Self::Output {
+        self.on_calls |= rhs.on_calls;
+        self.on_returns |= rhs.on_returns;
+        self.every_line |= rhs.every_line;
+        if self.every_nth_instruction.is_none() && rhs.every_nth_instruction.is_some() {
+            self.every_nth_instruction = rhs.every_nth_instruction;
+        }
+        self
+    }
+}
+
+impl BitOrAssign for HookTriggers {
+    fn bitor_assign(&mut self, rhs: Self) {
+        *self = *self | rhs;
     }
 }
 
