@@ -454,6 +454,18 @@ impl<'lua> Table<'lua> {
         }
     }
 
+    #[cfg(feature = "lua-factorio")]
+    pub fn table_size(&self, fuzzy: bool) -> Integer {
+        let lua = self.0.lua;
+        unsafe {
+            let _sg = StackGuard::new(lua.state);
+            assert_stack(lua.state, 1);
+
+            lua.push_ref(&self.0);
+            ffi::lua_tablesize(lua.state, -1, fuzzy as i32) as Integer
+        }
+    }
+
     #[cfg(any(feature = "async", feature = "serialize"))]
     pub(crate) fn raw_sequence_values_by_len<V: FromLua<'lua>>(
         self,
