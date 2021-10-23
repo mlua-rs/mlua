@@ -174,7 +174,7 @@ pub use self::lua::{lua_isyieldable, lua_version};
 pub use self::lua::{lua_callk, lua_pcallk, lua_upvalueid, lua_upvaluejoin, lua_yieldk};
 
 #[cfg(feature = "lua-factorio")]
-pub use self::lua::{lua_callk, lua_pcallk, lua_upvalueid, lua_upvaluejoin};
+pub use self::lua::{lua_callk, lua_pcallk, lua_upvalueid, lua_upvaluejoin, lua_tablesize};
 
 #[cfg(any(feature = "lua54", all(feature = "luajit", feature = "vendored")))]
 pub use self::lua::lua_resetthread;
