@@ -454,6 +454,10 @@ impl<'lua> Table<'lua> {
         }
     }
 
+    /// C++ side implementation of table size calculating function.
+    /// For more info on function see <https://lua-api.factorio.com/latest/Libraries.html>,
+    /// `table_size()` section.
+    /// Factorio uses this with `fuzzy` set to false
     #[cfg(feature = "lua-factorio")]
     pub fn table_size(&self, fuzzy: bool) -> Integer {
         let lua = self.0.lua;
