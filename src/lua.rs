@@ -1577,6 +1577,33 @@ impl Lua {
         }
     }
 
+    /// Arbitrarily access information about the currently executing Lua code with a closure.
+    ///
+    /// Due to limitations of the current API, the [`Debug`] structure cannot be returned
+    /// directly. Instead, it must be accessed using the bracket pattern. Furthermore,
+    /// [`Debug::event`] will return [`DebugEvent::Call`], even if there should be no meaningful
+    /// return value.
+    ///
+    /// If called within a [`Function`] callback, the first [`Debug`] item will refer to that
+    /// native function, instead of the call site. An empty iterator is passed to the closure
+    /// if no Lua code is currently executing.
+    ///
+    /// [`Debug`]: crate::hook::Debug
+    /// [`DebugEvent::Call`]: crate::hook::DebugEvent
+    pub fn with_debug_iter<F, R>(&self, f: F) -> R
+    where
+        F: for<'a> FnOnce(DebugIter<'a>) -> R,
+    {
+        unsafe {
+            let mut ar: ffi::lua_Debug = core::mem::zeroed();
+            f(DebugIter {
+                ar: &mut ar,
+                state: self.state,
+                level: 0,
+            })
+        }
+    }
+
     // Uses 2 stack spaces, does not call checkstack
     pub(crate) unsafe fn push_value(&self, value: Value) -> Result<()> {
         match value {
@@ -2421,6 +2448,36 @@ impl<'lua, 'a> Chunk<'lua, 'a> {
 impl<'lua, T: AsRef<[u8]> + ?Sized> AsChunk<'lua> for T {
     fn source(&self) -> &[u8] {
         self.as_ref()
+    }
+}
+
+/// A lending iterator of debug information about the the current Lua stack. Created by
+/// [`Lua::with_debug_iter`].
+///
+/// The `Iterator` trait cannot be implemented for this structure, as the [`Debug`]
+/// structures it produces lasts only as long as the iteration.
+///
+/// [`Debug`]: crate::hook::Debug
+pub struct DebugIter<'a> {
+    ar: &'a mut ffi::lua_Debug,
+    state: *mut ffi::lua_State,
+    level: i32,
+}
+
+impl<'a> DebugIter<'a> {
+    /// Returns information for the next frame in the stack, if any.
+    #[allow(clippy::should_implement_trait)]
+    pub fn next(&mut self) -> Option<Debug<'_>> {
+        self.ar.event = ffi::LUA_HOOKCALL;
+
+        unsafe {
+            if ffi::lua_getstack(self.state, self.level, self.ar) != 0 {
+                self.level += 1;
+                Some(Debug::new(self.ar, self.state))
+            } else {
+                None
+            }
+        }
     }
 }
 

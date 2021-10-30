@@ -14,8 +14,11 @@ use crate::util::callback_error;
 /// Lua code executing at the time that the hook function was called. Further information can be
 /// found in the [Lua 5.3 documentation][lua_doc].
 ///
+/// The `Debug` structure can also be accessed arbitrarily with [`Lua::with_debug_iter`].
+///
 /// [lua_doc]: https://www.lua.org/manual/5.3/manual.html#lua_Debug
 /// [`Lua::set_hook`]: crate::Lua::set_hook
+/// [`Lua::with_debug_iter`]: crate::Lua::with_debug_iter
 #[derive(Clone)]
 pub struct Debug<'a> {
     ar: *mut lua_Debug,
@@ -24,6 +27,14 @@ pub struct Debug<'a> {
 }
 
 impl<'a> Debug<'a> {
+    pub(crate) unsafe fn new(ar: &'a mut lua_Debug, state: *mut lua_State) -> Self {
+        Debug {
+            ar,
+            state,
+            _phantom: PhantomData,
+        }
+    }
+
     /// Returns the specific event that triggered the hook.
     ///
     /// For [Lua 5.1] `DebugEvent::TailCall` is used for return events to indicate a return

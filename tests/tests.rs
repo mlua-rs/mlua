@@ -1114,3 +1114,73 @@ fn test_load_from_function() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn test_with_debug_iter() -> Result<()> {
+    use std::sync::Mutex;
+
+    let lua = Lua::new();
+
+    lua.with_debug_iter(|mut it| {
+        assert!(it.next().is_none());
+    });
+
+    let xs = Arc::new(Mutex::new(Vec::new()));
+
+    let my_log = lua.create_function({
+        let xs = Arc::clone(&xs);
+        move |lua, msg: String| {
+            let mut xs = xs.lock().unwrap();
+            lua.with_debug_iter(|mut it| {
+                // Skip the stack frame for the native function.
+                it.next().unwrap();
+
+                let debug = it.next().unwrap();
+
+                let source = debug
+                    .source()
+                    .short_src
+                    .map_or("<unknown>", |bytes| core::str::from_utf8(bytes).unwrap());
+
+                let line = debug.curr_line();
+                xs.push(format!("{}:{} {}", source, line, msg.to_string_lossy()));
+            });
+
+            Ok(())
+        }
+    })?;
+
+    lua.globals().set("my_log", my_log)?;
+
+    lua.load(
+        r#"
+        local function foo()
+            my_log("foo")
+        end
+
+        local function bar()
+            foo()
+            my_log("bar")
+        end
+
+        foo()
+        bar()
+        my_log("baz")
+    "#,
+    )
+    .set_name("my_chunk")?
+    .exec()?;
+
+    let xs = xs.lock().unwrap();
+    assert_eq!(
+        &[
+            "[string \"my_chunk\"]:3 foo",
+            "[string \"my_chunk\"]:3 foo",
+            "[string \"my_chunk\"]:8 bar",
+            "[string \"my_chunk\"]:13 baz"
+        ],
+        xs.as_slice(),
+    );
+
+    Ok(())
+}
