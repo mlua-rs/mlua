@@ -333,6 +333,7 @@ fn test_from_value_struct() -> Result<(), Box<dyn std::error::Error>> {
                 map = {2, [4] = 1},
                 empty = {},
                 tuple = {10, 20, 30},
+                extra = function() end
             }
         "#,
         )
@@ -376,7 +377,9 @@ fn test_from_value_enum() -> Result<(), Box<dyn std::error::Error>> {
     let got = lua.from_value(value)?;
     assert_eq!(E::Tuple(1, 2), got);
 
-    let value = lua.load(r#"{Struct = {a = 3}}"#).eval()?;
+    let value = lua
+        .load(r#"{Struct = {a = 3, extra = function() end}}"#)
+        .eval()?;
     let got = lua.from_value(value)?;
     assert_eq!(E::Struct { a: 3 }, got);
 
@@ -409,7 +412,7 @@ fn test_from_value_enum_untagged() -> Result<(), Box<dyn std::error::Error>> {
     let got = lua.from_value(value)?;
     assert_eq!(Eut::Tuple(3, 1), got);
 
-    let value = lua.load(r#"{a = 10}"#).eval()?;
+    let value = lua.load(r#"{a = 10, extra = function() end}"#).eval()?;
     let got = lua.from_value(value)?;
     assert_eq!(Eut::Struct { a: 10 }, got);
 

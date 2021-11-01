@@ -294,13 +294,40 @@ impl<'lua, 'de> serde::Deserializer<'de> for Deserializer<'lua> {
     fn deserialize_struct<V>(
         self,
         _name: &'static str,
-        _fields: &'static [&'static str],
+        fields: &'static [&'static str],
         visitor: V,
     ) -> Result<V::Value>
     where
         V: de::Visitor<'de>,
     {
-        self.deserialize_map(visitor)
+        match self.value {
+            Value::Table(t) => {
+                let _guard = RecursionGuard::new(&t, &self.visited);
+
+                let mut deserializer = StructDeserializer {
+                    pairs: t.pairs(),
+                    value: None,
+                    options: self.options,
+                    visited: self.visited,
+                    processed: 0,
+                    fields: fields.iter().map(|&s| s).collect(),
+                };
+                let map = visitor.visit_map(&mut deserializer)?;
+                let count = deserializer.pairs.count();
+                if count == 0 {
+                    Ok(map)
+                } else {
+                    Err(de::Error::invalid_length(
+                        deserializer.processed + count,
+                        &"fewer elements in the table",
+                    ))
+                }
+            }
+            value => Err(de::Error::invalid_type(
+                de::Unexpected::Other(value.type_name()),
+                &"table",
+            )),
+        }
     }
 
     serde::forward_to_deserialize_any! {
@@ -403,6 +430,68 @@ impl<'lua, 'de> de::MapAccess<'de> for MapDeserializer<'lua> {
     }
 }
 
+struct StructDeserializer<'lua> {
+    pairs: TablePairs<'lua, Value<'lua>, Value<'lua>>,
+    value: Option<Value<'lua>>,
+    options: Options,
+    visited: Rc<RefCell<HashSet<*const c_void>>>,
+    processed: usize,
+    fields: HashSet<&'static str>,
+}
+
+impl<'lua, 'de> de::MapAccess<'de> for StructDeserializer<'lua> {
+    type Error = Error;
+
+    fn next_key_seed<T>(&mut self, seed: T) -> Result<Option<T::Value>>
+    where
+        T: de::DeserializeSeed<'de>,
+    {
+        loop {
+            match self.pairs.next() {
+                Some(item) => {
+                    let (key, value) = item?;
+                    let contains = match &key {
+                        Value::String(s) => {
+                            let s = match s.to_str() {
+                                Ok(s) => s,
+                                Err(_) => continue,
+                            };
+                            self.fields.contains(&s)
+                        }
+                        _ => continue,
+                    };
+                    if check_value_if_skip(&value, self.options, &self.visited)? {
+                        continue;
+                    }
+                    self.processed += 1;
+                    self.value = Some(value);
+                    if contains {
+                        let visited = Rc::clone(&self.visited);
+                        let key_de = Deserializer::from_parts(key, self.options, visited);
+                        return seed.deserialize(key_de).map(Some);
+                    } else {
+                        continue;
+                    }
+                }
+                None => return Ok(None),
+            }
+        }
+    }
+
+    fn next_value_seed<T>(&mut self, seed: T) -> Result<T::Value>
+    where
+        T: de::DeserializeSeed<'de>,
+    {
+        match self.value.take() {
+            Some(value) => {
+                let visited = Rc::clone(&self.visited);
+                seed.deserialize(Deserializer::from_parts(value, self.options, visited))
+            }
+            None => Err(de::Error::custom("value is missing")),
+        }
+    }
+}
+
 struct EnumDeserializer<'lua> {
     variant: StdString,
     value: Option<Value<'lua>>,
@@ -478,13 +567,15 @@ impl<'lua, 'de> de::VariantAccess<'de> for VariantDeserializer<'lua> {
         }
     }
 
-    fn struct_variant<V>(self, _fields: &'static [&'static str], visitor: V) -> Result<V::Value>
+    fn struct_variant<V>(self, fields: &'static [&'static str], visitor: V) -> Result<V::Value>
     where
         V: de::Visitor<'de>,
     {
         match self.value {
-            Some(value) => serde::Deserializer::deserialize_map(
+            Some(value) => serde::Deserializer::deserialize_struct(
                 Deserializer::from_parts(value, self.options, self.visited),
+                "",
+                fields,
                 visitor,
             ),
             None => Err(de::Error::invalid_type(
