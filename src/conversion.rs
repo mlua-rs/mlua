@@ -349,18 +349,15 @@ macro_rules! lua_convert_int {
     ($x:ty) => {
         impl<'lua> ToLua<'lua> for $x {
             fn to_lua(self, _: &'lua Lua) -> Result<Value<'lua>> {
-                if let Some(i) = cast(self) {
-                    Ok(Value::Integer(i))
-                } else {
-                    // TODO: Remove conversion to Number in v0.7
-                    cast(self)
-                        .ok_or_else(|| Error::ToLuaConversionError {
-                            from: stringify!($x),
-                            to: "number",
-                            message: Some("out of range".to_owned()),
-                        })
-                        .map(Value::Number)
-                }
+                cast(self)
+                    .map(Value::Integer)
+                    .or_else(|| cast(self).map(Value::Number))
+                    // This is impossible error because conversion to Number never fails
+                    .ok_or_else(|| Error::ToLuaConversionError {
+                        from: stringify!($x),
+                        to: "number",
+                        message: Some("out of range".to_owned()),
+                    })
             }
         }
 
