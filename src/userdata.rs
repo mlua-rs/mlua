@@ -819,7 +819,6 @@ impl<'lua> AnyUserData<'lua> {
 
     /// Takes out the value of `UserData` and sets the special "destructed" metatable that prevents
     /// any further operations with this userdata.
-    #[doc(hidden)]
     pub fn take<T: 'static + UserData>(&self) -> Result<T> {
         let lua = self.0.lua;
         unsafe {
