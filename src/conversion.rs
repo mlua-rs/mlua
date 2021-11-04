@@ -2,6 +2,7 @@
 
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::convert::TryInto;
 use std::ffi::{CStr, CString};
 use std::hash::{BuildHasher, Hash};
 use std::string::String as StdString;
@@ -451,37 +452,36 @@ where
     }
 }
 
-macro_rules! lua_convert_array {
-    ($($N:literal)+) => {
-        $(
-            impl<'lua, T> ToLua<'lua> for [T; $N]
-            where
-                T: Clone + ToLua<'lua>,
-            {
-                fn to_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
-                    (&self).to_lua(lua)
-                }
-            }
-
-            impl<'lua, T> ToLua<'lua> for &[T; $N]
-            where
-                T: Clone + ToLua<'lua>,
-            {
-                fn to_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
-                    Ok(Value::Table(
-                        lua.create_sequence_from(self.iter().cloned())?,
-                    ))
-                }
-            }
-        )+
+impl<'lua, T, const N: usize> ToLua<'lua> for [T; N]
+where
+    T: ToLua<'lua>,
+{
+    fn to_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
+        Ok(Value::Table(lua.create_sequence_from(self)?))
     }
 }
 
-lua_convert_array! {
-    0  1  2  3  4  5  6  7  8  9
-   10 11 12 13 14 15 16 17 18 19
-   20 21 22 23 24 25 26 27 28 29
-   30 31 32
+impl<'lua, T, const N: usize> FromLua<'lua> for [T; N]
+where
+    T: FromLua<'lua>,
+{
+    fn from_lua(value: Value<'lua>, _: &'lua Lua) -> Result<Self> {
+        if let Value::Table(table) = value {
+            let vec = table.sequence_values().collect::<Result<Vec<_>>>()?;
+            vec.try_into()
+                .map_err(|vec: Vec<T>| Error::FromLuaConversionError {
+                    from: "Table",
+                    to: "Array",
+                    message: Some(format!("expected table of length {}, got {}", N, vec.len())),
+                })
+        } else {
+            Err(Error::FromLuaConversionError {
+                from: value.type_name(),
+                to: "Array",
+                message: Some("expected table".to_string()),
+            })
+        }
+    }
 }
 
 impl<'lua, T: ToLua<'lua>> ToLua<'lua> for Box<[T]> {

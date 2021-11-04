@@ -139,14 +139,6 @@ fn test_table_sequence_from() -> Result<()> {
         vec![1, 2, 3]
     );
 
-    assert_eq!(
-        get_table
-            .call::<_, Table>(&[1, 2, 3])?
-            .sequence_values()
-            .collect::<Result<Vec<i64>>>()?,
-        vec![1, 2, 3]
-    );
-
     Ok(())
 }
 
