@@ -1077,17 +1077,22 @@ fn test_context_thread() -> Result<()> {
         )
         .into_function()?;
 
-    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+    #[cfg(any(
+        feature = "lua54",
+        feature = "lua53",
+        feature = "lua52",
+        feature = "luajit52"
+    ))]
     f.call::<_, ()>(lua.current_thread())?;
 
-    #[cfg(any(feature = "lua51", feature = "luajit"))]
+    #[cfg(any(feature = "lua51", all(feature = "luajit", not(feature = "luajit52"))))]
     f.call::<_, ()>(Nil)?;
 
     Ok(())
 }
 
 #[test]
-#[cfg(any(feature = "lua51", feature = "luajit"))]
+#[cfg(any(feature = "lua51", all(feature = "luajit", not(feature = "luajit52"))))]
 fn test_context_thread_51() -> Result<()> {
     let lua = Lua::new();
 

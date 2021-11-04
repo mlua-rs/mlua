@@ -10,7 +10,13 @@ pub fn probe_lua() -> PathBuf {
     #[cfg(feature = "lua51")]
     let artifacts = lua_src::Build::new().build(lua_src::Lua51);
     #[cfg(feature = "luajit")]
-    let artifacts = luajit_src::Build::new().build();
+    let artifacts = {
+        let mut builder = luajit_src::Build::new();
+        if cfg!(feature = "luajit52") {
+            builder.lua52compat(true);
+        }
+        builder.build()
+    };
 
     #[cfg(not(feature = "module"))]
     artifacts.print_cargo_metadata();

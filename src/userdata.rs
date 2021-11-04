@@ -102,7 +102,13 @@ pub enum MetaMethod {
     /// This is not an operator, but it will be called by the built-in `pairs` function.
     ///
     /// Requires `feature = "lua54/lua53/lua52"`
-    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", doc))]
+    #[cfg(any(
+        feature = "lua54",
+        feature = "lua53",
+        feature = "lua52",
+        feature = "luajit52",
+        doc
+    ))]
     Pairs,
     /// The `__ipairs` metamethod.
     ///
@@ -111,7 +117,7 @@ pub enum MetaMethod {
     /// Requires `feature = "lua52"`
     ///
     /// [`ipairs`]: https://www.lua.org/manual/5.2/manual.html#pdf-ipairs
-    #[cfg(any(feature = "lua52", doc))]
+    #[cfg(any(feature = "lua52", feature = "luajit52", doc))]
     IPairs,
     /// The `__close` metamethod.
     ///
@@ -188,9 +194,14 @@ impl MetaMethod {
             MetaMethod::Call => "__call",
             MetaMethod::ToString => "__tostring",
 
-            #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+            #[cfg(any(
+                feature = "lua54",
+                feature = "lua53",
+                feature = "lua52",
+                feature = "luajit52"
+            ))]
             MetaMethod::Pairs => "__pairs",
-            #[cfg(feature = "lua52")]
+            #[cfg(any(feature = "lua52", feature = "luajit52"))]
             MetaMethod::IPairs => "__ipairs",
 
             #[cfg(feature = "lua54")]
@@ -250,9 +261,14 @@ impl From<StdString> for MetaMethod {
             "__call" => MetaMethod::Call,
             "__tostring" => MetaMethod::ToString,
 
-            #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+            #[cfg(any(
+                feature = "lua54",
+                feature = "lua53",
+                feature = "lua52",
+                feature = "luajit52"
+            ))]
             "__pairs" => MetaMethod::Pairs,
-            #[cfg(feature = "lua52")]
+            #[cfg(any(feature = "lua52", feature = "luajit52"))]
             "__ipairs" => MetaMethod::IPairs,
 
             #[cfg(feature = "lua54")]

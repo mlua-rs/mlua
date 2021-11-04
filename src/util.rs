@@ -842,9 +842,14 @@ pub unsafe fn init_error_registry(state: *mut ffi::lua_State) -> Result<()> {
         "__newindex",
         "__call",
         "__tostring",
-        #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+        #[cfg(any(
+            feature = "lua54",
+            feature = "lua53",
+            feature = "lua52",
+            feature = "luajit52"
+        ))]
         "__pairs",
-        #[cfg(any(feature = "lua53", feature = "lua52"))]
+        #[cfg(any(feature = "lua53", feature = "lua52", feature = "luajit52"))]
         "__ipairs",
         #[cfg(feature = "lua54")]
         "__close",
