@@ -45,23 +45,23 @@ pub struct Options {
 
 impl Default for Options {
     fn default() -> Self {
-        Options {
-            deny_unsupported_types: true,
-            deny_recursive_tables: true,
-        }
+        Self::new()
     }
 }
 
 impl Options {
     /// Returns a new instance of `Options` with default parameters.
-    pub fn new() -> Self {
-        Self::default()
+    pub const fn new() -> Self {
+        Options {
+            deny_unsupported_types: true,
+            deny_recursive_tables: true,
+        }
     }
 
     /// Sets [`deny_unsupported_types`] option.
     ///
     /// [`deny_unsupported_types`]: #structfield.deny_unsupported_types
-    pub fn deny_unsupported_types(mut self, enabled: bool) -> Self {
+    pub const fn deny_unsupported_types(mut self, enabled: bool) -> Self {
         self.deny_unsupported_types = enabled;
         self
     }

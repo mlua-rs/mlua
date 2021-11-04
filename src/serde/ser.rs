@@ -52,24 +52,24 @@ pub struct Options {
 
 impl Default for Options {
     fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Options {
+    /// Returns a new instance of [`Options`] with default parameters.
+    pub const fn new() -> Self {
         Options {
             set_array_metatable: true,
             serialize_none_to_null: true,
             serialize_unit_to_null: true,
         }
     }
-}
-
-impl Options {
-    /// Returns a new instance of [`Options`] with default parameters.
-    pub fn new() -> Self {
-        Self::default()
-    }
 
     /// Sets [`set_array_metatable`] option.
     ///
     /// [`set_array_metatable`]: #structfield.set_array_metatable
-    pub fn set_array_metatable(mut self, enabled: bool) -> Self {
+    pub const fn set_array_metatable(mut self, enabled: bool) -> Self {
         self.set_array_metatable = enabled;
         self
     }
@@ -77,7 +77,7 @@ impl Options {
     /// Sets [`serialize_none_to_null`] option.
     ///
     /// [`serialize_none_to_null`]: #structfield.serialize_none_to_null
-    pub fn serialize_none_to_null(mut self, enabled: bool) -> Self {
+    pub const fn serialize_none_to_null(mut self, enabled: bool) -> Self {
         self.serialize_none_to_null = enabled;
         self
     }
@@ -85,7 +85,7 @@ impl Options {
     /// Sets [`serialize_unit_to_null`] option.
     ///
     /// [`serialize_unit_to_null`]: #structfield.serialize_unit_to_null
-    pub fn serialize_unit_to_null(mut self, enabled: bool) -> Self {
+    pub const fn serialize_unit_to_null(mut self, enabled: bool) -> Self {
         self.serialize_unit_to_null = enabled;
         self
     }
