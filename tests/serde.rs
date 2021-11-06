@@ -460,6 +460,11 @@ fn test_from_value_with_options() -> Result<(), Box<dyn std::error::Error>> {
         Err(err) => panic!("expected `DeserializeError` error, got {:?}", err),
     };
 
+    // Check recursion when using `Serialize` impl
+    let t = lua.create_table()?;
+    t.set("t", t.clone())?;
+    assert!(serde_json::to_string(&t).is_err());
+
     // Serialize Lua globals table
     #[derive(Debug, Deserialize)]
     struct Globals {
