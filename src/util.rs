@@ -1,5 +1,4 @@
 use std::any::{Any, TypeId};
-use std::error::Error as StdError;
 use std::fmt::Write;
 use std::os::raw::{c_char, c_int, c_void};
 use std::panic::{catch_unwind, resume_unwind, AssertUnwindSafe};
@@ -736,32 +735,6 @@ pub unsafe fn init_error_registry(state: *mut ffi::lua_State) -> Result<()> {
                     // be possible to make this consume arbitrary amounts of memory (for example, some
                     // kind of recursive error structure?)
                     let _ = write!(&mut (*err_buf), "{}", error);
-                    // Find first two sources that caused the error
-                    let mut source1 = error.source();
-                    let mut source0 = source1.and_then(|s| s.source());
-                    while let Some(source) = source0.and_then(|s| s.source()) {
-                        source1 = source0;
-                        source0 = Some(source);
-                    }
-                    match (source1, source0) {
-                        (_, Some(error0))
-                            if error0.to_string().contains("\nstack traceback:\n") =>
-                        {
-                            let _ = write!(&mut (*err_buf), "\ncaused by: {}", error0);
-                        }
-                        (Some(error1), Some(error0)) => {
-                            let _ = write!(&mut (*err_buf), "\ncaused by: {}", error0);
-                            let s = error1.to_string();
-                            if let Some(traceback) = s.split_once("\nstack traceback:\n") {
-                                let _ =
-                                    write!(&mut (*err_buf), "\nstack traceback:\n{}", traceback.1);
-                            }
-                        }
-                        (Some(error1), None) => {
-                            let _ = write!(&mut (*err_buf), "\ncaused by: {}", error1);
-                        }
-                        _ => {}
-                    }
                     Ok(err_buf)
                 }
                 Some(WrappedFailure::Panic(Some(ref panic))) => {
@@ -805,7 +778,6 @@ pub unsafe fn init_error_registry(state: *mut ffi::lua_State) -> Result<()> {
     // Create destructed userdata metatable
 
     unsafe extern "C" fn destructed_error(state: *mut ffi::lua_State) -> c_int {
-        // TODO: Consider changing error to UserDataDestructed in v0.7
         callback_error(state, |_| Err(Error::CallbackDestructed))
     }
 
