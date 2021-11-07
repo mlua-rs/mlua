@@ -69,7 +69,10 @@ struct ExtraData {
     registered_userdata_mt: FxHashMap<*const c_void, Option<TypeId>>,
     registry_unref_list: Arc<Mutex<Option<Vec<c_int>>>>,
 
+    #[cfg(not(feature = "send"))]
     app_data: RefCell<HashMap<TypeId, Box<dyn Any>>>,
+    #[cfg(feature = "send")]
+    app_data: RefCell<HashMap<TypeId, Box<dyn Any + Send>>>,
 
     libs: StdLib,
     mem_info: Option<Box<MemoryInfo>>,
