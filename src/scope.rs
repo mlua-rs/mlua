@@ -693,6 +693,21 @@ impl<'lua, T: UserData> UserDataMethods<'lua, T> for NonStaticUserDataMethods<'l
         ));
     }
 
+    #[cfg(all(feature = "async", not(feature = "lua51")))]
+    fn add_async_meta_method<S, A, R, M, MR>(&mut self, _meta: S, _method: M)
+    where
+        T: Clone,
+        S: Into<MetaMethod>,
+        A: FromLuaMulti<'lua>,
+        R: ToLuaMulti<'lua>,
+        M: 'static + MaybeSend + Fn(&'lua Lua, T, A) -> MR,
+        MR: 'lua + Future<Output = Result<R>>,
+    {
+        // The panic should never happen as async non-static code wouldn't compile
+        // Non-static lifetime must be bounded to 'lua lifetime
+        mlua_panic!("asynchronous meta methods are not supported for non-static userdata")
+    }
+
     fn add_meta_function<S, A, R, F>(&mut self, meta: S, function: F)
     where
         S: Into<MetaMethod>,
@@ -721,6 +736,20 @@ impl<'lua, T: UserData> UserDataMethods<'lua, T> for NonStaticUserDataMethods<'l
                 function(lua, A::from_lua_multi(args, lua)?)?.to_lua_multi(lua)
             })),
         ));
+    }
+
+    #[cfg(all(feature = "async", not(feature = "lua51")))]
+    fn add_async_meta_function<S, A, R, F, FR>(&mut self, _meta: S, _function: F)
+    where
+        S: Into<MetaMethod>,
+        A: FromLuaMulti<'lua>,
+        R: ToLuaMulti<'lua>,
+        F: 'static + MaybeSend + Fn(&'lua Lua, A) -> FR,
+        FR: 'lua + Future<Output = Result<R>>,
+    {
+        // The panic should never happen as async non-static code wouldn't compile
+        // Non-static lifetime must be bounded to 'lua lifetime
+        mlua_panic!("asynchronous meta functions are not supported for non-static userdata")
     }
 }
 

@@ -33,6 +33,7 @@ Below is a list of the available feature flags. By default `mlua` does not enabl
 * `lua52`: activate Lua [5.2] support
 * `lua51`: activate Lua [5.1] support
 * `luajit`: activate [LuaJIT] support
+* `luajit52`: activate [LuaJIT] support with partial compatibility with Lua 5.2
 * `vendored`: build static Lua(JIT) library from sources during `mlua` compilation using [lua-src] or [luajit-src] crates
 * `module`: enable module mode (building loadable `cdylib` library for Lua)
 * `async`: enable async/await support (any executor can be used, eg. [tokio] or [async-std])

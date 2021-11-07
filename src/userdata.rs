@@ -102,7 +102,13 @@ pub enum MetaMethod {
     /// This is not an operator, but it will be called by the built-in `pairs` function.
     ///
     /// Requires `feature = "lua54/lua53/lua52"`
-    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", doc))]
+    #[cfg(any(
+        feature = "lua54",
+        feature = "lua53",
+        feature = "lua52",
+        feature = "luajit52",
+        doc
+    ))]
     Pairs,
     /// The `__ipairs` metamethod.
     ///
@@ -111,7 +117,7 @@ pub enum MetaMethod {
     /// Requires `feature = "lua52"`
     ///
     /// [`ipairs`]: https://www.lua.org/manual/5.2/manual.html#pdf-ipairs
-    #[cfg(any(feature = "lua52", doc))]
+    #[cfg(any(feature = "lua52", feature = "luajit52", doc))]
     IPairs,
     /// The `__close` metamethod.
     ///
@@ -188,9 +194,14 @@ impl MetaMethod {
             MetaMethod::Call => "__call",
             MetaMethod::ToString => "__tostring",
 
-            #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+            #[cfg(any(
+                feature = "lua54",
+                feature = "lua53",
+                feature = "lua52",
+                feature = "luajit52"
+            ))]
             MetaMethod::Pairs => "__pairs",
-            #[cfg(feature = "lua52")]
+            #[cfg(any(feature = "lua52", feature = "luajit52"))]
             MetaMethod::IPairs => "__ipairs",
 
             #[cfg(feature = "lua54")]
@@ -250,9 +261,14 @@ impl From<StdString> for MetaMethod {
             "__call" => MetaMethod::Call,
             "__tostring" => MetaMethod::ToString,
 
-            #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+            #[cfg(any(
+                feature = "lua54",
+                feature = "lua53",
+                feature = "lua52",
+                feature = "luajit52"
+            ))]
             "__pairs" => MetaMethod::Pairs,
-            #[cfg(feature = "lua52")]
+            #[cfg(any(feature = "lua52", feature = "luajit52"))]
             "__ipairs" => MetaMethod::IPairs,
 
             #[cfg(feature = "lua54")]
@@ -395,6 +411,25 @@ pub trait UserDataMethods<'lua, T: UserData> {
         R: ToLuaMulti<'lua>,
         M: 'static + MaybeSend + FnMut(&'lua Lua, &mut T, A) -> Result<R>;
 
+    /// Add an async metamethod which accepts a `T` as the first parameter and returns Future.
+    /// The passed `T` is cloned from the original value.
+    ///
+    /// This is an async version of [`add_meta_method`].
+    ///
+    /// Requires `feature = "async"`
+    ///
+    /// [`add_meta_method`]: #method.add_meta_method
+    #[cfg(all(feature = "async", not(feature = "lua51")))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
+    fn add_async_meta_method<S, A, R, M, MR>(&mut self, name: S, method: M)
+    where
+        T: Clone,
+        S: Into<MetaMethod>,
+        A: FromLuaMulti<'lua>,
+        R: ToLuaMulti<'lua>,
+        M: 'static + MaybeSend + Fn(&'lua Lua, T, A) -> MR,
+        MR: 'lua + Future<Output = Result<R>>;
+
     /// Add a metamethod which accepts generic arguments.
     ///
     /// Metamethods for binary operators can be triggered if either the left or right argument to
@@ -419,6 +454,23 @@ pub trait UserDataMethods<'lua, T: UserData> {
         R: ToLuaMulti<'lua>,
         F: 'static + MaybeSend + FnMut(&'lua Lua, A) -> Result<R>;
 
+    /// Add a metamethod which accepts generic arguments and returns Future.
+    ///
+    /// This is an async version of [`add_meta_function`].
+    ///
+    /// Requires `feature = "async"`
+    ///
+    /// [`add_meta_function`]: #method.add_meta_function
+    #[cfg(all(feature = "async", not(feature = "lua51")))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
+    fn add_async_meta_function<S, A, R, F, FR>(&mut self, name: S, function: F)
+    where
+        S: Into<MetaMethod>,
+        A: FromLuaMulti<'lua>,
+        R: ToLuaMulti<'lua>,
+        F: 'static + MaybeSend + Fn(&'lua Lua, A) -> FR,
+        FR: 'lua + Future<Output = Result<R>>;
+
     //
     // Below are internal methods used in generated code
     //
@@ -432,6 +484,15 @@ pub trait UserDataMethods<'lua, T: UserData> {
 
     #[doc(hidden)]
     fn add_meta_callback(&mut self, _meta: MetaMethod, _callback: Callback<'lua, 'static>) {}
+
+    #[doc(hidden)]
+    #[cfg(feature = "async")]
+    fn add_async_meta_callback(
+        &mut self,
+        _meta: MetaMethod,
+        _callback: AsyncCallback<'lua, 'static>,
+    ) {
+    }
 }
 
 /// Field registry for [`UserData`] implementors.
@@ -758,7 +819,6 @@ impl<'lua> AnyUserData<'lua> {
 
     /// Takes out the value of `UserData` and sets the special "destructed" metatable that prevents
     /// any further operations with this userdata.
-    #[doc(hidden)]
     pub fn take<T: 'static + UserData>(&self) -> Result<T> {
         let lua = self.0.lua;
         unsafe {

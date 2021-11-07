@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::ffi::{CStr, CString};
 
 use maplit::{btreemap, btreeset, hashmap, hashset};
-use mlua::{Lua, Result};
+use mlua::{Error, Lua, Result};
 
 #[test]
 fn test_conv_vec() -> Result<()> {
@@ -120,6 +120,21 @@ fn test_conv_boxed_slice() -> Result<()> {
     lua.globals().set("v", v.clone())?;
     let v2: Box<[i32]> = lua.globals().get("v")?;
     assert_eq!(v, v2);
+
+    Ok(())
+}
+
+#[test]
+fn test_conv_array() -> Result<()> {
+    let lua = Lua::new();
+
+    let v = [1, 2, 3];
+    lua.globals().set("v", v)?;
+    let v2: [i32; 3] = lua.globals().get("v")?;
+    assert_eq!(v, v2);
+
+    let v2 = lua.globals().get::<_, [i32; 4]>("v");
+    assert!(matches!(v2, Err(Error::FromLuaConversionError { .. })));
 
     Ok(())
 }

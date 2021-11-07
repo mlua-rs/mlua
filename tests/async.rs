@@ -3,7 +3,7 @@
 use std::cell::Cell;
 use std::rc::Rc;
 use std::sync::{
-    atomic::{AtomicI64, Ordering},
+    atomic::{AtomicI64, AtomicU64, Ordering},
     Arc,
 };
 use std::time::Duration;
@@ -12,7 +12,8 @@ use futures_timer::Delay;
 use futures_util::stream::TryStreamExt;
 
 use mlua::{
-    Error, Function, Lua, Result, Table, TableExt, Thread, UserData, UserDataMethods, Value,
+    Error, Function, Lua, MetaMethod, Result, Table, TableExt, Thread, UserData, UserDataMethods,
+    Value,
 };
 
 #[tokio::test]
@@ -276,7 +277,7 @@ async fn test_async_table() -> Result<()> {
 #[tokio::test]
 async fn test_async_userdata() -> Result<()> {
     #[derive(Clone)]
-    struct MyUserData(Arc<AtomicI64>);
+    struct MyUserData(Arc<AtomicU64>);
 
     impl UserData for MyUserData {
         fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
@@ -295,13 +296,20 @@ async fn test_async_userdata() -> Result<()> {
                 Delay::new(Duration::from_millis(n)).await;
                 Ok(format!("elapsed:{}ms", n))
             });
+
+            #[cfg(not(feature = "lua51"))]
+            methods.add_async_meta_method(MetaMethod::Call, |_, data, ()| async move {
+                let n = data.0.load(Ordering::Relaxed);
+                Delay::new(Duration::from_millis(n)).await;
+                Ok(format!("elapsed:{}ms", n))
+            });
         }
     }
 
     let lua = Lua::new();
     let globals = lua.globals();
 
-    let userdata = lua.create_userdata(MyUserData(Arc::new(AtomicI64::new(11))))?;
+    let userdata = lua.create_userdata(MyUserData(Arc::new(AtomicU64::new(11))))?;
     globals.set("userdata", userdata.clone())?;
 
     lua.load(
@@ -310,6 +318,16 @@ async fn test_async_userdata() -> Result<()> {
         userdata:set_value(12)
         assert(userdata.sleep(5) == "elapsed:5ms")
         assert(userdata:get_value() == 12)
+    "#,
+    )
+    .exec_async()
+    .await?;
+
+    #[cfg(not(feature = "lua51"))]
+    lua.load(
+        r#"
+        userdata:set_value(15)
+        assert(userdata() == "elapsed:15ms")
     "#,
     )
     .exec_async()

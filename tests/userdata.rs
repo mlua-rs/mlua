@@ -111,7 +111,12 @@ fn test_metamethods() -> Result<()> {
                     Err("no such custom index".to_lua_err())
                 }
             });
-            #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+            #[cfg(any(
+                feature = "lua54",
+                feature = "lua53",
+                feature = "lua52",
+                feature = "luajit52"
+            ))]
             methods.add_meta_method(MetaMethod::Pairs, |lua, data, ()| {
                 use std::iter::FromIterator;
                 let stateless_iter = lua.create_function(|_, (data, i): (MyUserData, i64)| {
@@ -136,11 +141,16 @@ fn test_metamethods() -> Result<()> {
         10
     );
 
-    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
-    let pairs_it = {
-        lua.load(
+    #[cfg(any(
+        feature = "lua54",
+        feature = "lua53",
+        feature = "lua52",
+        feature = "luajit52"
+    ))]
+    let pairs_it = lua
+        .load(
             r#"
-            function pairs_it()
+            function()
                 local r = 0
                 for i, v in pairs(userdata1) do
                     r = r + v
@@ -149,16 +159,20 @@ fn test_metamethods() -> Result<()> {
             end
         "#,
         )
-        .exec()?;
-        globals.get::<_, Function>("pairs_it")?
-    };
+        .eval::<Function>()?;
 
     assert_eq!(lua.load("userdata1 - userdata2").eval::<MyUserData>()?.0, 4);
     assert_eq!(lua.load("userdata1:get()").eval::<i64>()?, 7);
     assert_eq!(lua.load("userdata2.inner").eval::<i64>()?, 3);
-    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
-    assert_eq!(pairs_it.call::<_, i64>(())?, 28);
     assert!(lua.load("userdata2.nonexist_field").eval::<()>().is_err());
+
+    #[cfg(any(
+        feature = "lua54",
+        feature = "lua53",
+        feature = "lua52",
+        feature = "luajit52"
+    ))]
+    assert_eq!(pairs_it.call::<_, i64>(())?, 28);
 
     let userdata2: Value = globals.get("userdata2")?;
     let userdata3: Value = globals.get("userdata3")?;

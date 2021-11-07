@@ -1,4 +1,4 @@
-use std::any::TypeId;
+use std::any::{Any, TypeId};
 use std::cell::{Ref, RefCell, RefMut, UnsafeCell};
 use std::collections::HashMap;
 use std::ffi::CString;
@@ -8,6 +8,8 @@ use std::os::raw::{c_char, c_int, c_void};
 use std::panic::{catch_unwind, resume_unwind, AssertUnwindSafe, Location};
 use std::sync::{Arc, Mutex, RwLock};
 use std::{mem, ptr, str};
+
+use rustc_hash::FxHashMap;
 
 use crate::error::{Error, Result};
 use crate::ffi;
@@ -63,9 +65,11 @@ pub struct Lua {
 
 // Data associated with the Lua.
 struct ExtraData {
-    registered_userdata: HashMap<TypeId, c_int>,
-    registered_userdata_mt: HashMap<*const c_void, Option<TypeId>>,
+    registered_userdata: FxHashMap<TypeId, c_int>,
+    registered_userdata_mt: FxHashMap<*const c_void, Option<TypeId>>,
     registry_unref_list: Arc<Mutex<Option<Vec<c_int>>>>,
+
+    app_data: RefCell<HashMap<TypeId, Box<dyn Any>>>,
 
     libs: StdLib,
     mem_info: Option<Box<MemoryInfo>>,
@@ -456,9 +460,10 @@ impl Lua {
         // Create ExtraData
 
         let extra = Arc::new(UnsafeCell::new(ExtraData {
-            registered_userdata: HashMap::new(),
-            registered_userdata_mt: HashMap::new(),
+            registered_userdata: FxHashMap::default(),
+            registered_userdata_mt: FxHashMap::default(),
             registry_unref_list: Arc::new(Mutex::new(Some(Vec::new()))),
+            app_data: RefCell::new(HashMap::new()),
             ref_thread,
             libs: StdLib::NONE,
             mem_info: None,
@@ -1577,6 +1582,74 @@ impl Lua {
         }
     }
 
+    /// Sets or replaces an application data object of type `T`.
+    ///
+    /// Application data could be accessed at any time by using [`Lua::app_data_ref()`] or [`Lua::app_data_mut()`]
+    /// methods where `T` is the data type.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use mlua::{Lua, Result};
+    ///
+    /// fn hello(lua: &Lua, _: ()) -> Result<()> {
+    ///     let mut s = lua.app_data_mut::<&str>().unwrap();
+    ///     assert_eq!(*s, "hello");
+    ///     *s = "world";
+    ///     Ok(())
+    /// }
+    ///
+    /// fn main() -> Result<()> {
+    ///     let lua = Lua::new();
+    ///     lua.set_app_data("hello");
+    ///     lua.create_function(hello)?.call(())?;
+    ///     let s = lua.app_data_ref::<&str>().unwrap();
+    ///     assert_eq!(*s, "world");
+    ///     Ok(())
+    /// }
+    /// ```
+    pub fn set_app_data<T: 'static + MaybeSend>(&self, data: T) {
+        let extra = unsafe { &mut (*self.extra.get()) };
+        extra
+            .app_data
+            .try_borrow_mut()
+            .expect("cannot borrow mutably app data container")
+            .insert(TypeId::of::<T>(), Box::new(data));
+    }
+
+    /// Gets a reference to an application data object stored by [`Lua::set_app_data()`] of type `T`.
+    pub fn app_data_ref<T: 'static>(&self) -> Option<Ref<T>> {
+        let extra = unsafe { &(*self.extra.get()) };
+        let app_data = extra
+            .app_data
+            .try_borrow()
+            .expect("cannot borrow app data container");
+        let value = app_data.get(&TypeId::of::<T>())?.downcast_ref::<T>()? as *const _;
+        Some(Ref::map(app_data, |_| unsafe { &*value }))
+    }
+
+    /// Gets a mutable reference to an application data object stored by [`Lua::set_app_data()`] of type `T`.
+    pub fn app_data_mut<T: 'static>(&self) -> Option<RefMut<T>> {
+        let extra = unsafe { &(*self.extra.get()) };
+        let mut app_data = extra
+            .app_data
+            .try_borrow_mut()
+            .expect("cannot mutably borrow app data container");
+        let value = app_data.get_mut(&TypeId::of::<T>())?.downcast_mut::<T>()? as *mut _;
+        Some(RefMut::map(app_data, |_| unsafe { &mut *value }))
+    }
+
+    /// Removes an application data of type `T`.
+    pub fn remove_app_data<T: 'static>(&self) -> Option<T> {
+        let extra = unsafe { &mut (*self.extra.get()) };
+        extra
+            .app_data
+            .try_borrow_mut()
+            .expect("cannot mutably borrow app data container")
+            .remove(&TypeId::of::<T>())
+            .and_then(|data| data.downcast().ok().map(|data| *data))
+    }
+
     // Uses 2 stack spaces, does not call checkstack
     pub(crate) unsafe fn push_value(&self, value: Value) -> Result<()> {
         match value {
@@ -1769,9 +1842,16 @@ impl Lua {
 
         // Prepare metatable, add meta methods first and then meta fields
         let metatable_nrec = methods.meta_methods.len() + fields.meta_fields.len();
+        #[cfg(feature = "async")]
+        let metatable_nrec = metatable_nrec + methods.async_meta_methods.len();
         push_table(self.state, 0, metatable_nrec as c_int)?;
         for (k, m) in methods.meta_methods {
             self.push_value(Value::Function(self.create_callback(m)?))?;
+            rawset_field(self.state, -2, k.validate()?.name())?;
+        }
+        #[cfg(feature = "async")]
+        for (k, m) in methods.async_meta_methods {
+            self.push_value(Value::Function(self.create_async_callback(m)?))?;
             rawset_field(self.state, -2, k.validate()?.name())?;
         }
         for (k, f) in fields.meta_fields {
@@ -1807,10 +1887,9 @@ impl Lua {
         }
 
         let mut methods_index = None;
-        #[cfg(feature = "async")]
-        let methods_nrec = methods.methods.len() + methods.async_methods.len();
-        #[cfg(not(feature = "async"))]
         let methods_nrec = methods.methods.len();
+        #[cfg(feature = "async")]
+        let methods_nrec = methods_nrec + methods.async_methods.len();
         if methods_nrec > 0 {
             push_table(self.state, 0, methods_nrec as c_int)?;
             for (k, m) in methods.methods {
@@ -2425,7 +2504,7 @@ impl<'lua, T: AsRef<[u8]> + ?Sized> AsChunk<'lua> for T {
 }
 
 // Creates required entries in the metatable cache (see `util::METATABLE_CACHE`)
-pub(crate) fn init_metatable_cache(cache: &mut HashMap<TypeId, u8>) {
+pub(crate) fn init_metatable_cache(cache: &mut FxHashMap<TypeId, u8>) {
     cache.insert(TypeId::of::<Arc<UnsafeCell<ExtraData>>>(), 0);
     cache.insert(TypeId::of::<Callback>(), 0);
     cache.insert(TypeId::of::<CallbackUpvalue>(), 0);
@@ -2712,6 +2791,8 @@ struct StaticUserDataMethods<'lua, T: 'static + UserData> {
     #[cfg(feature = "async")]
     async_methods: Vec<(Vec<u8>, AsyncCallback<'lua, 'static>)>,
     meta_methods: Vec<(MetaMethod, Callback<'lua, 'static>)>,
+    #[cfg(feature = "async")]
+    async_meta_methods: Vec<(MetaMethod, AsyncCallback<'lua, 'static>)>,
     _type: PhantomData<T>,
 }
 
@@ -2722,6 +2803,8 @@ impl<'lua, T: 'static + UserData> Default for StaticUserDataMethods<'lua, T> {
             #[cfg(feature = "async")]
             async_methods: Vec::new(),
             meta_methods: Vec::new(),
+            #[cfg(feature = "async")]
+            async_meta_methods: Vec::new(),
             _type: PhantomData,
         }
     }
@@ -2821,6 +2904,20 @@ impl<'lua, T: 'static + UserData> UserDataMethods<'lua, T> for StaticUserDataMet
             .push((meta.into(), Self::box_method_mut(method)));
     }
 
+    #[cfg(all(feature = "async", not(feature = "lua51")))]
+    fn add_async_meta_method<S, A, R, M, MR>(&mut self, meta: S, method: M)
+    where
+        T: Clone,
+        S: Into<MetaMethod>,
+        A: FromLuaMulti<'lua>,
+        R: ToLuaMulti<'lua>,
+        M: 'static + MaybeSend + Fn(&'lua Lua, T, A) -> MR,
+        MR: 'lua + Future<Output = Result<R>>,
+    {
+        self.async_meta_methods
+            .push((meta.into(), Self::box_async_method(method)));
+    }
+
     fn add_meta_function<S, A, R, F>(&mut self, meta: S, function: F)
     where
         S: Into<MetaMethod>,
@@ -2843,6 +2940,19 @@ impl<'lua, T: 'static + UserData> UserDataMethods<'lua, T> for StaticUserDataMet
             .push((meta.into(), Self::box_function_mut(function)));
     }
 
+    #[cfg(all(feature = "async", not(feature = "lua51")))]
+    fn add_async_meta_function<S, A, R, F, FR>(&mut self, meta: S, function: F)
+    where
+        S: Into<MetaMethod>,
+        A: FromLuaMulti<'lua>,
+        R: ToLuaMulti<'lua>,
+        F: 'static + MaybeSend + Fn(&'lua Lua, A) -> FR,
+        FR: 'lua + Future<Output = Result<R>>,
+    {
+        self.async_meta_methods
+            .push((meta.into(), Self::box_async_function(function)));
+    }
+
     // Below are internal methods used in generated code
 
     fn add_callback(&mut self, name: Vec<u8>, callback: Callback<'lua, 'static>) {
@@ -2856,6 +2966,15 @@ impl<'lua, T: 'static + UserData> UserDataMethods<'lua, T> for StaticUserDataMet
 
     fn add_meta_callback(&mut self, meta: MetaMethod, callback: Callback<'lua, 'static>) {
         self.meta_methods.push((meta, callback));
+    }
+
+    #[cfg(feature = "async")]
+    fn add_async_meta_callback(
+        &mut self,
+        meta: MetaMethod,
+        callback: AsyncCallback<'lua, 'static>,
+    ) {
+        self.async_meta_methods.push((meta, callback))
     }
 }
 
@@ -3201,6 +3320,10 @@ macro_rules! lua_userdata_impl {
                 }
                 for (meta, callback) in orig_methods.meta_methods {
                     methods.add_meta_callback(meta, callback);
+                }
+                #[cfg(feature = "async")]
+                for (meta, callback) in orig_methods.async_meta_methods {
+                    methods.add_async_meta_callback(meta, callback);
                 }
             }
         }

@@ -1,5 +1,4 @@
 use std::any::{Any, TypeId};
-use std::collections::HashMap;
 use std::error::Error as StdError;
 use std::fmt::Write;
 use std::os::raw::{c_char, c_int, c_void};
@@ -8,12 +7,13 @@ use std::sync::Arc;
 use std::{mem, ptr, slice};
 
 use once_cell::sync::Lazy;
+use rustc_hash::FxHashMap;
 
 use crate::error::{Error, Result};
 use crate::ffi;
 
-static METATABLE_CACHE: Lazy<HashMap<TypeId, u8>> = Lazy::new(|| {
-    let mut map = HashMap::with_capacity(32);
+static METATABLE_CACHE: Lazy<FxHashMap<TypeId, u8>> = Lazy::new(|| {
+    let mut map = FxHashMap::with_capacity_and_hasher(32, Default::default());
     crate::lua::init_metatable_cache(&mut map);
     map.insert(TypeId::of::<WrappedFailure>(), 0);
     map.insert(TypeId::of::<String>(), 0);
@@ -842,9 +842,14 @@ pub unsafe fn init_error_registry(state: *mut ffi::lua_State) -> Result<()> {
         "__newindex",
         "__call",
         "__tostring",
-        #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+        #[cfg(any(
+            feature = "lua54",
+            feature = "lua53",
+            feature = "lua52",
+            feature = "luajit52"
+        ))]
         "__pairs",
-        #[cfg(any(feature = "lua53", feature = "lua52"))]
+        #[cfg(any(feature = "lua53", feature = "lua52", feature = "luajit52"))]
         "__ipairs",
         #[cfg(feature = "lua54")]
         "__close",
