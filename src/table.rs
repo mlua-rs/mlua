@@ -2,8 +2,9 @@ use std::marker::PhantomData;
 
 #[cfg(feature = "serialize")]
 use {
+    rustc_hash::FxHashSet,
     serde::ser::{self, Serialize, SerializeMap, SerializeSeq, Serializer},
-    std::{cell::RefCell, collections::HashSet, os::raw::c_void, result::Result as StdResult},
+    std::{cell::RefCell, os::raw::c_void, result::Result as StdResult},
 };
 
 use crate::error::{Error, Result};
@@ -623,7 +624,7 @@ impl<'lua> Serialize for Table<'lua> {
         S: Serializer,
     {
         thread_local! {
-            static VISITED: RefCell<HashSet<*const c_void>> = RefCell::new(HashSet::new());
+            static VISITED: RefCell<FxHashSet<*const c_void>> = RefCell::new(FxHashSet::default());
         }
 
         let lua = self.0.lua;
