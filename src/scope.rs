@@ -23,6 +23,9 @@ use crate::util::{
 };
 use crate::value::{FromLua, FromLuaMulti, MultiValue, ToLua, ToLuaMulti, Value};
 
+#[cfg(feature = "lua54")]
+use crate::userdata::USER_VALUE_MAXSLOT;
+
 #[cfg(feature = "async")]
 use {
     crate::types::{AsyncCallback, AsyncCallbackUpvalue, AsyncPollUpvalue},
@@ -197,12 +200,22 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
                     return vec![];
                 }
 
-                // Clear uservalue
-                #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
-                ffi::lua_pushnil(state);
+                // Clear associated user values
+                #[cfg(feature = "lua54")]
+                for i in 1..=USER_VALUE_MAXSLOT {
+                    ffi::lua_pushnil(state);
+                    ffi::lua_setiuservalue(state, -2, i as c_int);
+                }
+                #[cfg(any(feature = "lua53", feature = "lua52"))]
+                {
+                    ffi::lua_pushnil(state);
+                    ffi::lua_setuservalue(state, -2);
+                }
                 #[cfg(any(feature = "lua51", feature = "luajit"))]
-                ud.lua.push_ref(&newtable.0);
-                ffi::lua_setuservalue(state, -2);
+                {
+                    ud.lua.push_ref(&newtable.0);
+                    ffi::lua_setuservalue(state, -2);
+                }
 
                 vec![Box::new(take_userdata::<UserDataCell<T>>(state))]
             });
@@ -323,8 +336,19 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
             let _sg = StackGuard::new(lua.state);
             check_stack(lua.state, 13)?;
 
+            #[allow(clippy::let_and_return)]
             let data_ptr = protect_lua!(lua.state, 0, 1, |state| {
-                ffi::lua_newuserdata(state, mem::size_of::<UserDataCell<Rc<RefCell<T>>>>())
+                let ud =
+                    ffi::lua_newuserdata(state, mem::size_of::<UserDataCell<Rc<RefCell<T>>>>());
+
+                // Set empty environment for Lua 5.1
+                #[cfg(any(feature = "lua51", feature = "luajit"))]
+                {
+                    ffi::lua_newtable(state);
+                    ffi::lua_setuservalue(state, -2);
+                }
+
+                ud
             })?;
             // Prepare metatable, add meta methods first and then meta fields
             let meta_methods_nrec = ud_methods.meta_methods.len() + ud_fields.meta_fields.len() + 1;
@@ -416,12 +440,22 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
                 ffi::lua_pop(state, 1);
                 ud.lua.deregister_userdata_metatable(mt_ptr);
 
-                // Clear uservalue
-                #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
-                ffi::lua_pushnil(state);
+                // Clear associated user values
+                #[cfg(feature = "lua54")]
+                for i in 1..=USER_VALUE_MAXSLOT {
+                    ffi::lua_pushnil(state);
+                    ffi::lua_setiuservalue(state, -2, i as c_int);
+                }
+                #[cfg(any(feature = "lua53", feature = "lua52"))]
+                {
+                    ffi::lua_pushnil(state);
+                    ffi::lua_setuservalue(state, -2);
+                }
                 #[cfg(any(feature = "lua51", feature = "luajit"))]
-                ud.lua.push_ref(&newtable.0);
-                ffi::lua_setuservalue(state, -2);
+                {
+                    ud.lua.push_ref(&newtable.0);
+                    ffi::lua_setuservalue(state, -2);
+                }
 
                 // A hack to drop non-static `T`
                 unsafe fn seal<T>(t: T) -> Box<dyn FnOnce() + 'static> {

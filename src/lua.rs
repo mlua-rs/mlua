@@ -31,9 +31,14 @@ use crate::util::{
     self, assert_stack, callback_error, check_stack, get_destructed_userdata_metatable,
     get_gc_metatable, get_gc_userdata, get_main_state, get_userdata, init_error_registry,
     init_gc_metatable, init_userdata_metatable, pop_error, push_gc_userdata, push_string,
-    push_table, push_userdata, rawset_field, safe_pcall, safe_xpcall, StackGuard, WrappedFailure,
+    push_table, rawset_field, safe_pcall, safe_xpcall, StackGuard, WrappedFailure,
 };
 use crate::value::{FromLua, FromLuaMulti, MultiValue, Nil, ToLua, ToLuaMulti, Value};
+
+#[cfg(not(feature = "lua54"))]
+use crate::util::push_userdata;
+#[cfg(feature = "lua54")]
+use crate::{userdata::USER_VALUE_MAXSLOT, util::push_userdata_uv};
 
 #[cfg(not(feature = "send"))]
 use std::rc::Rc;
@@ -2215,9 +2220,19 @@ impl Lua {
         // We push metatable first to ensure having correct metatable with `__gc` method
         ffi::lua_pushnil(self.state);
         self.push_userdata_metatable::<T>()?;
+        #[cfg(not(feature = "lua54"))]
         push_userdata(self.state, data)?;
+        #[cfg(feature = "lua54")]
+        push_userdata_uv(self.state, data, USER_VALUE_MAXSLOT as c_int)?;
         ffi::lua_replace(self.state, -3);
         ffi::lua_setmetatable(self.state, -2);
+
+        // Set empty environment for Lua 5.1
+        #[cfg(any(feature = "lua51", feature = "luajit"))]
+        protect_lua!(self.state, 1, 1, fn(state) {
+            ffi::lua_newtable(state);
+            ffi::lua_setuservalue(state, -2);
+        })?;
 
         Ok(AnyUserData(self.pop_ref()))
     }

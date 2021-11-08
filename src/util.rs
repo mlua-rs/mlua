@@ -287,6 +287,17 @@ pub unsafe fn push_userdata<T>(state: *mut ffi::lua_State, t: T) -> Result<()> {
     Ok(())
 }
 
+// Internally uses 3 stack spaces, does not call checkstack.
+#[cfg(feature = "lua54")]
+#[inline]
+pub unsafe fn push_userdata_uv<T>(state: *mut ffi::lua_State, t: T, nuvalue: c_int) -> Result<()> {
+    let ud = protect_lua!(state, 0, 1, |state| {
+        ffi::lua_newuserdatauv(state, mem::size_of::<T>(), nuvalue) as *mut T
+    })?;
+    ptr::write(ud, t);
+    Ok(())
+}
+
 #[inline]
 pub unsafe fn get_userdata<T>(state: *mut ffi::lua_State, index: c_int) -> *mut T {
     let ud = ffi::lua_touserdata(state, index) as *mut T;
