@@ -1,6 +1,5 @@
 use std::cell::UnsafeCell;
 use std::ffi::CStr;
-use std::marker::PhantomData;
 use std::ops::{BitOr, BitOrAssign};
 use std::os::raw::{c_char, c_int};
 
@@ -17,26 +16,23 @@ use crate::util::callback_error;
 ///
 /// [lua_doc]: https://www.lua.org/manual/5.3/manual.html#lua_Debug
 /// [`Lua::set_hook`]: crate::Lua::set_hook
-pub struct Debug<'a> {
+pub struct Debug<'lua> {
+    lua: &'lua Lua,
     ar: ActivationRecord,
-    state: *mut lua_State,
-    _phantom: PhantomData<&'a ()>,
 }
 
-impl<'a> Debug<'a> {
-    pub(crate) fn new(state: *mut lua_State, ar: *mut lua_Debug) -> Self {
+impl<'lua> Debug<'lua> {
+    pub(crate) fn new(lua: &'lua Lua, ar: *mut lua_Debug) -> Self {
         Debug {
+            lua,
             ar: ActivationRecord::Borrowed(ar),
-            state,
-            _phantom: PhantomData,
         }
     }
 
-    pub(crate) fn new_owned(state: *mut lua_State, ar: lua_Debug) -> Self {
+    pub(crate) fn new_owned(lua: &'lua Lua, ar: lua_Debug) -> Self {
         Debug {
+            lua,
             ar: ActivationRecord::Owned(UnsafeCell::new(ar)),
-            state,
-            _phantom: PhantomData,
         }
     }
 
@@ -54,16 +50,16 @@ impl<'a> Debug<'a> {
                 ffi::LUA_HOOKTAILCALL => DebugEvent::TailCall,
                 ffi::LUA_HOOKLINE => DebugEvent::Line,
                 ffi::LUA_HOOKCOUNT => DebugEvent::Count,
-                code => DebugEvent::Unknown(code),
+                event => DebugEvent::Unknown(event),
             }
         }
     }
 
     /// Corresponds to the `n` what mask.
-    pub fn names(&self) -> DebugNames<'a> {
+    pub fn names(&self) -> DebugNames<'lua> {
         unsafe {
             mlua_assert!(
-                ffi::lua_getinfo(self.state, cstr!("n"), self.ar.get()) != 0,
+                ffi::lua_getinfo(self.lua.state, cstr!("n"), self.ar.get()) != 0,
                 "lua_getinfo failed with `n`"
             );
             DebugNames {
@@ -74,10 +70,10 @@ impl<'a> Debug<'a> {
     }
 
     /// Corresponds to the `S` what mask.
-    pub fn source(&self) -> DebugSource<'a> {
+    pub fn source(&self) -> DebugSource<'lua> {
         unsafe {
             mlua_assert!(
-                ffi::lua_getinfo(self.state, cstr!("S"), self.ar.get()) != 0,
+                ffi::lua_getinfo(self.lua.state, cstr!("S"), self.ar.get()) != 0,
                 "lua_getinfo failed with `S`"
             );
             DebugSource {
@@ -94,7 +90,7 @@ impl<'a> Debug<'a> {
     pub fn curr_line(&self) -> i32 {
         unsafe {
             mlua_assert!(
-                ffi::lua_getinfo(self.state, cstr!("l"), self.ar.get()) != 0,
+                ffi::lua_getinfo(self.lua.state, cstr!("l"), self.ar.get()) != 0,
                 "lua_getinfo failed with `l`"
             );
             (*self.ar.get()).currentline as i32
@@ -106,7 +102,7 @@ impl<'a> Debug<'a> {
     pub fn is_tail_call(&self) -> bool {
         unsafe {
             mlua_assert!(
-                ffi::lua_getinfo(self.state, cstr!("t"), self.ar.get()) != 0,
+                ffi::lua_getinfo(self.lua.state, cstr!("t"), self.ar.get()) != 0,
                 "lua_getinfo failed with `t`"
             );
             (*self.ar.get()).currentline != 0
@@ -117,7 +113,7 @@ impl<'a> Debug<'a> {
     pub fn stack(&self) -> DebugStack {
         unsafe {
             mlua_assert!(
-                ffi::lua_getinfo(self.state, cstr!("u"), self.ar.get()) != 0,
+                ffi::lua_getinfo(self.lua.state, cstr!("u"), self.ar.get()) != 0,
                 "lua_getinfo failed with `u`"
             );
             DebugStack {
@@ -289,8 +285,8 @@ impl BitOrAssign for HookTriggers {
 
 pub(crate) unsafe extern "C" fn hook_proc(state: *mut lua_State, ar: *mut lua_Debug) {
     callback_error(state, |_| {
-        let debug = Debug::new(state, ar);
         let lua = mlua_expect!(Lua::make_from_ptr(state), "cannot make Lua instance");
+        let debug = Debug::new(&lua, ar);
         let hook_cb = mlua_expect!(lua.hook_callback(), "no hook callback set in hook_proc");
 
         #[allow(clippy::match_wild_err_arm)]
