@@ -1150,3 +1150,40 @@ fn test_load_from_function() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn test_inspect_stack() -> Result<()> {
+    let lua = Lua::new();
+
+    // Not inside any function
+    assert!(lua.inspect_stack(0).is_none());
+
+    let logline = lua.create_function(|lua, msg: StdString| {
+        let debug = lua.inspect_stack(1).unwrap(); // caller
+        let source = debug.source().short_src.map(core::str::from_utf8);
+        let source = source.transpose().unwrap().unwrap_or("?");
+        let line = debug.curr_line();
+        Ok(format!("{}:{} {}", source, line, msg))
+    })?;
+    lua.globals().set("logline", logline)?;
+
+    lua.load(
+        r#"
+        local function foo()
+            local line = logline("hello")
+            return line
+        end
+        local function bar()
+            return foo()
+        end
+
+        assert(foo() == '[string "chunk"]:3 hello')
+        assert(bar() == '[string "chunk"]:3 hello')
+        assert(logline("world") == '[string "chunk"]:12 world')
+    "#,
+    )
+    .set_name("chunk")?
+    .exec()?;
+
+    Ok(())
+}

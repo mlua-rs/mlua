@@ -741,6 +741,23 @@ impl Lua {
         }
     }
 
+    /// Gets information about the interpreter runtime stack.
+    ///
+    /// This function returns [`Debug`] structure that can be used to get information about the function
+    /// executing at a given level. Level `0` is the current running function, whereas level `n+1` is the
+    /// function that has called level `n` (except for tail calls, which do not count in the stack).
+    ///
+    /// [`Debug`]: crate::hook::Debug
+    pub fn inspect_stack(&self, level: usize) -> Option<Debug> {
+        unsafe {
+            let mut ar: ffi::lua_Debug = mem::zeroed();
+            if ffi::lua_getstack(self.state, level as c_int, &mut ar) == 0 {
+                return None;
+            }
+            Some(Debug::new_owned(self.state, ar))
+        }
+    }
+
     /// Returns the amount of memory (in bytes) currently used inside this Lua state.
     pub fn used_memory(&self) -> usize {
         unsafe {

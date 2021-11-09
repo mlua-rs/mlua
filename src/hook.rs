@@ -1,3 +1,4 @@
+use std::cell::UnsafeCell;
 use std::ffi::CStr;
 use std::marker::PhantomData;
 use std::ops::{BitOr, BitOrAssign};
@@ -16,14 +17,29 @@ use crate::util::callback_error;
 ///
 /// [lua_doc]: https://www.lua.org/manual/5.3/manual.html#lua_Debug
 /// [`Lua::set_hook`]: crate::Lua::set_hook
-#[derive(Clone)]
 pub struct Debug<'a> {
-    ar: *mut lua_Debug,
+    ar: ActivationRecord,
     state: *mut lua_State,
     _phantom: PhantomData<&'a ()>,
 }
 
 impl<'a> Debug<'a> {
+    pub(crate) fn new(state: *mut lua_State, ar: *mut lua_Debug) -> Self {
+        Debug {
+            ar: ActivationRecord::Borrowed(ar),
+            state,
+            _phantom: PhantomData,
+        }
+    }
+
+    pub(crate) fn new_owned(state: *mut lua_State, ar: lua_Debug) -> Self {
+        Debug {
+            ar: ActivationRecord::Owned(UnsafeCell::new(ar)),
+            state,
+            _phantom: PhantomData,
+        }
+    }
+
     /// Returns the specific event that triggered the hook.
     ///
     /// For [Lua 5.1] `DebugEvent::TailCall` is used for return events to indicate a return
@@ -32,13 +48,13 @@ impl<'a> Debug<'a> {
     /// [Lua 5.1]: https://www.lua.org/manual/5.1/manual.html#pdf-LUA_HOOKTAILRET
     pub fn event(&self) -> DebugEvent {
         unsafe {
-            match (*self.ar).event {
+            match (*self.ar.get()).event {
                 ffi::LUA_HOOKCALL => DebugEvent::Call,
                 ffi::LUA_HOOKRET => DebugEvent::Ret,
                 ffi::LUA_HOOKTAILCALL => DebugEvent::TailCall,
                 ffi::LUA_HOOKLINE => DebugEvent::Line,
                 ffi::LUA_HOOKCOUNT => DebugEvent::Count,
-                event => mlua_panic!("Unknown Lua event code: {}", event),
+                code => DebugEvent::Unknown(code),
             }
         }
     }
@@ -47,12 +63,12 @@ impl<'a> Debug<'a> {
     pub fn names(&self) -> DebugNames<'a> {
         unsafe {
             mlua_assert!(
-                ffi::lua_getinfo(self.state, cstr!("n"), self.ar) != 0,
+                ffi::lua_getinfo(self.state, cstr!("n"), self.ar.get()) != 0,
                 "lua_getinfo failed with `n`"
             );
             DebugNames {
-                name: ptr_to_str((*self.ar).name),
-                name_what: ptr_to_str((*self.ar).namewhat),
+                name: ptr_to_str((*self.ar.get()).name),
+                name_what: ptr_to_str((*self.ar.get()).namewhat),
             }
         }
     }
@@ -61,15 +77,15 @@ impl<'a> Debug<'a> {
     pub fn source(&self) -> DebugSource<'a> {
         unsafe {
             mlua_assert!(
-                ffi::lua_getinfo(self.state, cstr!("S"), self.ar) != 0,
+                ffi::lua_getinfo(self.state, cstr!("S"), self.ar.get()) != 0,
                 "lua_getinfo failed with `S`"
             );
             DebugSource {
-                source: ptr_to_str((*self.ar).source),
-                short_src: ptr_to_str((*self.ar).short_src.as_ptr()),
-                line_defined: (*self.ar).linedefined as i32,
-                last_line_defined: (*self.ar).lastlinedefined as i32,
-                what: ptr_to_str((*self.ar).what),
+                source: ptr_to_str((*self.ar.get()).source),
+                short_src: ptr_to_str((*self.ar.get()).short_src.as_ptr()),
+                line_defined: (*self.ar.get()).linedefined as i32,
+                last_line_defined: (*self.ar.get()).lastlinedefined as i32,
+                what: ptr_to_str((*self.ar.get()).what),
             }
         }
     }
@@ -78,10 +94,10 @@ impl<'a> Debug<'a> {
     pub fn curr_line(&self) -> i32 {
         unsafe {
             mlua_assert!(
-                ffi::lua_getinfo(self.state, cstr!("l"), self.ar) != 0,
+                ffi::lua_getinfo(self.state, cstr!("l"), self.ar.get()) != 0,
                 "lua_getinfo failed with `l`"
             );
-            (*self.ar).currentline as i32
+            (*self.ar.get()).currentline as i32
         }
     }
 
@@ -90,10 +106,10 @@ impl<'a> Debug<'a> {
     pub fn is_tail_call(&self) -> bool {
         unsafe {
             mlua_assert!(
-                ffi::lua_getinfo(self.state, cstr!("t"), self.ar) != 0,
+                ffi::lua_getinfo(self.state, cstr!("t"), self.ar.get()) != 0,
                 "lua_getinfo failed with `t`"
             );
-            (*self.ar).currentline != 0
+            (*self.ar.get()).currentline != 0
         }
     }
 
@@ -101,16 +117,31 @@ impl<'a> Debug<'a> {
     pub fn stack(&self) -> DebugStack {
         unsafe {
             mlua_assert!(
-                ffi::lua_getinfo(self.state, cstr!("u"), self.ar) != 0,
+                ffi::lua_getinfo(self.state, cstr!("u"), self.ar.get()) != 0,
                 "lua_getinfo failed with `u`"
             );
             DebugStack {
-                num_ups: (*self.ar).nups as i32,
+                num_ups: (*self.ar.get()).nups as i32,
                 #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
-                num_params: (*self.ar).nparams as i32,
+                num_params: (*self.ar.get()).nparams as i32,
                 #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
-                is_vararg: (*self.ar).isvararg != 0,
+                is_vararg: (*self.ar.get()).isvararg != 0,
             }
+        }
+    }
+}
+
+enum ActivationRecord {
+    Borrowed(*mut lua_Debug),
+    Owned(UnsafeCell<lua_Debug>),
+}
+
+impl ActivationRecord {
+    #[inline]
+    fn get(&self) -> *mut lua_Debug {
+        match self {
+            ActivationRecord::Borrowed(x) => *x,
+            ActivationRecord::Owned(x) => x.get(),
         }
     }
 }
@@ -123,6 +154,7 @@ pub enum DebugEvent {
     TailCall,
     Line,
     Count,
+    Unknown(c_int),
 }
 
 #[derive(Clone, Debug)]
@@ -257,12 +289,7 @@ impl BitOrAssign for HookTriggers {
 
 pub(crate) unsafe extern "C" fn hook_proc(state: *mut lua_State, ar: *mut lua_Debug) {
     callback_error(state, |_| {
-        let debug = Debug {
-            ar,
-            state,
-            _phantom: PhantomData,
-        };
-
+        let debug = Debug::new(state, ar);
         let lua = mlua_expect!(Lua::make_from_ptr(state), "cannot make Lua instance");
         let hook_cb = mlua_expect!(lua.hook_callback(), "no hook callback set in hook_proc");
 
