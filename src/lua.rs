@@ -90,6 +90,8 @@ struct ExtraData {
 
     // Pool of preallocated `WrappedFailure` enums on the ref thread
     wrapped_failures_pool: Vec<c_int>,
+    // Cache of recycled `MultiValue` containers
+    multivalue_cache: Vec<MultiValue<'static>>,
 
     // Index of `Option<Waker>` userdata on the ref thread
     #[cfg(feature = "async")]
@@ -167,6 +169,7 @@ pub(crate) static ASYNC_POLL_PENDING: u8 = 0;
 pub(crate) static EXTRA_REGISTRY_KEY: u8 = 0;
 
 const WRAPPED_FAILURES_POOL_SIZE: usize = 16;
+const MULTIVALUE_CACHE_SIZE: usize = 16;
 
 /// Requires `feature = "send"`
 #[cfg(feature = "send")]
@@ -480,7 +483,8 @@ impl Lua {
             ref_stack_size: ffi::LUA_MINSTACK - 1,
             ref_stack_top,
             ref_free: Vec::new(),
-            wrapped_failures_pool: Vec::new(),
+            wrapped_failures_pool: Vec::with_capacity(WRAPPED_FAILURES_POOL_SIZE),
+            multivalue_cache: Vec::with_capacity(MULTIVALUE_CACHE_SIZE),
             #[cfg(feature = "async")]
             ref_waker_idx,
             hook_callback: None,
@@ -2031,7 +2035,7 @@ impl Lua {
                 let lua = &mut (*upvalue).lua;
                 lua.state = state;
 
-                let mut args = MultiValue::new();
+                let mut args = MultiValue::new_or_cached(lua);
                 args.reserve(nargs as usize);
                 for _ in 0..nargs {
                     args.push_front(lua.pop_value());
@@ -2099,7 +2103,7 @@ impl Lua {
                 let lua = &mut (*upvalue).lua;
                 lua.state = state;
 
-                let mut args = MultiValue::new();
+                let mut args = MultiValue::new_or_cached(lua);
                 args.reserve(nargs as usize);
                 for _ in 0..nargs {
                     args.push_front(lua.pop_value());
@@ -2181,11 +2185,10 @@ impl Lua {
         env.set("yield", coroutine.get::<_, Function>("yield")?)?;
         env.set(
             "unpack",
-            self.create_function(|_, (tbl, len): (Table, Integer)| {
-                Ok(MultiValue::from_vec(
-                    tbl.raw_sequence_values_by_len(Some(len))
-                        .collect::<Result<Vec<Value>>>()?,
-                ))
+            self.create_function(|lua, (tbl, len): (Table, Integer)| {
+                let mut values = MultiValue::new_or_cached(lua);
+                values.refill(tbl.raw_sequence_values_by_len(Some(len)))?;
+                Ok(values)
             })?,
         )?;
         env.set("pending", {
@@ -2316,6 +2319,25 @@ impl Lua {
 
     pub(crate) unsafe fn hook_callback(&self) -> Option<HookCallback> {
         (*self.extra.get()).hook_callback.clone()
+    }
+
+    #[inline]
+    pub(crate) fn new_or_cached_multivalue(&self) -> MultiValue {
+        unsafe {
+            let extra = &mut *self.extra.get();
+            extra.multivalue_cache.pop().unwrap_or_default()
+        }
+    }
+
+    #[inline]
+    pub(crate) fn cache_multivalue(&self, mut multivalue: MultiValue) {
+        unsafe {
+            let extra = &mut *self.extra.get();
+            if extra.multivalue_cache.len() < MULTIVALUE_CACHE_SIZE {
+                multivalue.clear();
+                extra.multivalue_cache.push(mem::transmute(multivalue));
+            }
+        }
     }
 }
 
