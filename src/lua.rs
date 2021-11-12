@@ -2639,11 +2639,8 @@ where
         }
         Ok(Err(err)) => {
             let wrapped_error = get_wrapped_failure();
-            ptr::write(wrapped_error, WrappedFailure::Error(err));
-            get_gc_metatable::<WrappedFailure>(state);
-            ffi::lua_setmetatable(state, -2);
 
-            // Convert to CallbackError and attach traceback
+            // Build `CallbackError` with traceback
             let traceback = if ffi::lua_checkstack(state, ffi::LUA_TRACEBACK_STACK) != 0 {
                 ffi::luaL_traceback(state, state, ptr::null(), 0);
                 let traceback = util::to_string(state, -1);
@@ -2652,10 +2649,13 @@ where
             } else {
                 "<not enough stack space for traceback>".to_string()
             };
-            if let WrappedFailure::Error(ref mut err) = *wrapped_error {
-                let cause = Arc::new(err.clone());
-                *err = Error::CallbackError { traceback, cause };
-            }
+            let cause = Arc::new(err);
+            ptr::write(
+                wrapped_error,
+                WrappedFailure::Error(Error::CallbackError { traceback, cause }),
+            );
+            get_gc_metatable::<WrappedFailure>(state);
+            ffi::lua_setmetatable(state, -2);
 
             ffi::lua_error(state)
         }
