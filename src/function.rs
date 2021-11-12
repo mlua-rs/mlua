@@ -6,7 +6,7 @@ use crate::error::{Error, Result};
 use crate::ffi;
 use crate::types::LuaRef;
 use crate::util::{assert_stack, check_stack, error_traceback, pop_error, StackGuard};
-use crate::value::{FromLuaMulti, MultiValue, ToLuaMulti};
+use crate::value::{FromLuaMulti, ToLuaMulti};
 
 #[cfg(feature = "async")]
 use {futures_core::future::LocalBoxFuture, futures_util::future};
@@ -59,7 +59,7 @@ impl<'lua> Function<'lua> {
     pub fn call<A: ToLuaMulti<'lua>, R: FromLuaMulti<'lua>>(&self, args: A) -> Result<R> {
         let lua = self.0.lua;
 
-        let args = args.to_lua_multi(lua)?;
+        let mut args = args.to_lua_multi(lua)?;
         let nargs = args.len() as c_int;
 
         let results = unsafe {
@@ -69,7 +69,7 @@ impl<'lua> Function<'lua> {
             ffi::lua_pushcfunction(lua.state, error_traceback);
             let stack_start = ffi::lua_gettop(lua.state);
             lua.push_ref(&self.0);
-            for arg in args {
+            for arg in args.drain_all() {
                 lua.push_value(arg)?;
             }
             let ret = ffi::lua_pcall(lua.state, nargs, ffi::LUA_MULTRET, stack_start);
@@ -77,7 +77,7 @@ impl<'lua> Function<'lua> {
                 return Err(pop_error(lua.state, ret));
             }
             let nresults = ffi::lua_gettop(lua.state) - stack_start;
-            let mut results = MultiValue::new();
+            let mut results = args; // Recycle MultiValue container
             assert_stack(lua.state, 2);
             for _ in 0..nresults {
                 results.push_front(lua.pop_value());

@@ -108,7 +108,7 @@ impl<'lua> Thread<'lua> {
         R: FromLuaMulti<'lua>,
     {
         let lua = self.0.lua;
-        let args = args.to_lua_multi(lua)?;
+        let mut args = args.to_lua_multi(lua)?;
         let nargs = args.len() as c_int;
         let results = unsafe {
             let _sg = StackGuard::new(lua.state);
@@ -123,7 +123,7 @@ impl<'lua> Thread<'lua> {
             }
 
             check_stack(thread_state, nargs)?;
-            for arg in args {
+            for arg in args.drain_all() {
                 lua.push_value(arg)?;
             }
             ffi::lua_xmove(lua.state, thread_state, nargs);
@@ -136,7 +136,7 @@ impl<'lua> Thread<'lua> {
                 return Err(pop_error(thread_state, ret));
             }
 
-            let mut results = MultiValue::new();
+            let mut results = args; // Recycle MultiValue container
             check_stack(lua.state, nresults + 2)?; // 2 is extra for `lua.pop_value()` below
             ffi::lua_xmove(thread_state, lua.state, nresults);
 

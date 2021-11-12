@@ -241,6 +241,11 @@ impl<'lua> MultiValue<'lua> {
     pub fn iter(&self) -> iter::Rev<slice::Iter<Value<'lua>>> {
         self.0.iter().rev()
     }
+
+    #[inline]
+    pub(crate) fn drain_all(&mut self) -> iter::Rev<vec::Drain<Value<'lua>>> {
+        self.0.drain(..).rev()
+    }
 }
 
 /// Trait for types convertible to any number of Lua values.
