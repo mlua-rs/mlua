@@ -163,6 +163,7 @@ impl<'lua> MultiValue<'lua> {
         MultiValue(Vec::new())
     }
 
+    /// Similar to `new` but can return previously used container with allocated capacity.
     #[inline]
     pub(crate) fn new_or_cached(lua: &'lua Lua) -> MultiValue<'lua> {
         lua.new_or_cached_multivalue()

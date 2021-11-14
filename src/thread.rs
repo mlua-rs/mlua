@@ -137,7 +137,7 @@ impl<'lua> Thread<'lua> {
                 return Err(pop_error(thread_state, ret));
             }
 
-            let mut results = args; // Recycle MultiValue container
+            let mut results = args; // Reuse MultiValue container
             check_stack(lua.state, nresults + 2)?; // 2 is extra for `lua.pop_value()` below
             ffi::lua_xmove(thread_state, lua.state, nresults);
 

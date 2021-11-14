@@ -77,7 +77,7 @@ impl<'lua> Function<'lua> {
                 return Err(pop_error(lua.state, ret));
             }
             let nresults = ffi::lua_gettop(lua.state) - stack_start;
-            let mut results = args; // Recycle MultiValue container
+            let mut results = args; // Reuse MultiValue container
             assert_stack(lua.state, 2);
             for _ in 0..nresults {
                 results.push_front(lua.pop_value());
