@@ -88,8 +88,8 @@ struct ExtraData {
     ref_stack_top: c_int,
     ref_free: Vec<c_int>,
 
-    // Pool of preallocated `WrappedFailure` enums on the ref thread
-    wrapped_failures_pool: Vec<c_int>,
+    // Cache of `WrappedFailure` enums on the ref thread (as userdata)
+    wrapped_failures_cache: Vec<c_int>,
     // Cache of recycled `MultiValue` containers
     multivalue_cache: Vec<MultiValue<'static>>,
 
@@ -168,7 +168,7 @@ impl LuaOptions {
 pub(crate) static ASYNC_POLL_PENDING: u8 = 0;
 pub(crate) static EXTRA_REGISTRY_KEY: u8 = 0;
 
-const WRAPPED_FAILURES_POOL_SIZE: usize = 16;
+const WRAPPED_FAILURES_CACHE_SIZE: usize = 16;
 const MULTIVALUE_CACHE_SIZE: usize = 16;
 
 /// Requires `feature = "send"`
@@ -181,7 +181,7 @@ impl Drop for Lua {
         unsafe {
             if !self.ephemeral {
                 let extra = &mut *self.extra.get();
-                for index in extra.wrapped_failures_pool.drain(..) {
+                for index in extra.wrapped_failures_cache.drain(..) {
                     ffi::lua_pushnil(extra.ref_thread);
                     ffi::lua_replace(extra.ref_thread, index);
                     extra.ref_free.push(index);
@@ -483,7 +483,7 @@ impl Lua {
             ref_stack_size: ffi::LUA_MINSTACK - 1,
             ref_stack_top,
             ref_free: Vec::new(),
-            wrapped_failures_pool: Vec::with_capacity(WRAPPED_FAILURES_POOL_SIZE),
+            wrapped_failures_cache: Vec::with_capacity(WRAPPED_FAILURES_CACHE_SIZE),
             multivalue_cache: Vec::with_capacity(MULTIVALUE_CACHE_SIZE),
             #[cfg(feature = "async")]
             ref_waker_idx,
@@ -2604,9 +2604,9 @@ where
     }
 
     // We cannot shadow Rust errors with Lua ones, so we need to obtain pre-allocated memory
-    // to store a wrapped error or panic *before* we proceed.
+    // to store a wrapped failure (error or panic) *before* we proceed.
     let extra = &mut *get_extra(state);
-    let prealloc_failure = match extra.wrapped_failures_pool.pop() {
+    let prealloc_failure = match extra.wrapped_failures_cache.pop() {
         Some(index) => PreallocatedFailure::Cached(index),
         None => {
             let ud = ffi::lua_newuserdata(state, mem::size_of::<WrappedFailure>());
@@ -2636,20 +2636,20 @@ where
             // Return unused WrappedFailure to the cache
             match prealloc_failure {
                 PreallocatedFailure::New(_)
-                    if extra.wrapped_failures_pool.len() < WRAPPED_FAILURES_POOL_SIZE =>
+                    if extra.wrapped_failures_cache.len() < WRAPPED_FAILURES_CACHE_SIZE =>
                 {
                     ffi::lua_rotate(state, 1, -1);
                     ffi::lua_xmove(state, extra.ref_thread, 1);
                     let index = ref_stack_pop(extra);
-                    extra.wrapped_failures_pool.push(index);
+                    extra.wrapped_failures_cache.push(index);
                 }
                 PreallocatedFailure::New(_) => {
                     ffi::lua_remove(state, 1);
                 }
                 PreallocatedFailure::Cached(index)
-                    if extra.wrapped_failures_pool.len() < WRAPPED_FAILURES_POOL_SIZE =>
+                    if extra.wrapped_failures_cache.len() < WRAPPED_FAILURES_CACHE_SIZE =>
                 {
-                    extra.wrapped_failures_pool.push(index);
+                    extra.wrapped_failures_cache.push(index);
                 }
                 PreallocatedFailure::Cached(index) => {
                     ffi::lua_pushnil(extra.ref_thread);
