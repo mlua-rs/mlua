@@ -92,6 +92,9 @@ struct ExtraData {
     wrapped_failures_cache: Vec<c_int>,
     // Cache of recycled `MultiValue` containers
     multivalue_cache: Vec<MultiValue<'static>>,
+    // Cache of recycled `Thread`s (coroutines)
+    #[cfg(feature = "async")]
+    recycled_thread_cache: Vec<c_int>,
 
     // Index of `Option<Waker>` userdata on the ref thread
     #[cfg(feature = "async")]
@@ -139,27 +142,49 @@ pub struct LuaOptions {
     /// [`pcall`]: https://www.lua.org/manual/5.3/manual.html#pdf-pcall
     /// [`xpcall`]: https://www.lua.org/manual/5.3/manual.html#pdf-xpcall
     pub catch_rust_panics: bool,
+
+    /// Max size of thread (coroutine) object cache used to execute asynchronous functions.
+    ///
+    /// It works only on Lua 5.4 or LuaJIT (vendored) with [`lua_resetthread`] function,
+    /// and allows to reuse old coroutines with reset state.
+    ///
+    /// Default: **0** (disabled)
+    ///
+    /// [`lua_resetthread`]: https://www.lua.org/manual/5.4/manual.html#lua_resetthread
+    #[cfg(feature = "async")]
+    pub thread_cache_size: usize,
 }
 
 impl Default for LuaOptions {
     fn default() -> Self {
-        LuaOptions {
-            catch_rust_panics: true,
-        }
+        LuaOptions::new()
     }
 }
 
 impl LuaOptions {
     /// Returns a new instance of `LuaOptions` with default parameters.
-    pub fn new() -> Self {
-        Self::default()
+    pub const fn new() -> Self {
+        LuaOptions {
+            catch_rust_panics: true,
+            #[cfg(feature = "async")]
+            thread_cache_size: 0,
+        }
     }
 
     /// Sets [`catch_rust_panics`] option.
     ///
     /// [`catch_rust_panics`]: #structfield.catch_rust_panics
-    pub fn catch_rust_panics(mut self, enabled: bool) -> Self {
+    pub const fn catch_rust_panics(mut self, enabled: bool) -> Self {
         self.catch_rust_panics = enabled;
+        self
+    }
+
+    /// Sets [`thread_cache_size`] option.
+    ///
+    /// [`thread_cache_size`]: #structfield.thread_cache_size
+    #[cfg(feature = "async")]
+    pub const fn thread_cache_size(mut self, size: usize) -> Self {
+        self.thread_cache_size = size;
         self
     }
 }
@@ -181,7 +206,10 @@ impl Drop for Lua {
         unsafe {
             if !self.ephemeral {
                 let extra = &mut *self.extra.get();
-                for index in extra.wrapped_failures_cache.drain(..) {
+                let drain_iter = extra.wrapped_failures_cache.drain(..);
+                #[cfg(feature = "async")]
+                let drain_iter = drain_iter.chain(extra.recycled_thread_cache.drain(..));
+                for index in drain_iter {
                     ffi::lua_pushnil(extra.ref_thread);
                     ffi::lua_replace(extra.ref_thread, index);
                     extra.ref_free.push(index);
@@ -402,6 +430,11 @@ impl Lua {
             )
         }
 
+        #[cfg(feature = "async")]
+        if options.thread_cache_size > 0 {
+            extra.recycled_thread_cache = Vec::with_capacity(options.thread_cache_size);
+        }
+
         lua
     }
 
@@ -485,6 +518,8 @@ impl Lua {
             ref_free: Vec::new(),
             wrapped_failures_cache: Vec::with_capacity(WRAPPED_FAILURES_CACHE_SIZE),
             multivalue_cache: Vec::with_capacity(MULTIVALUE_CACHE_SIZE),
+            #[cfg(feature = "async")]
+            recycled_thread_cache: Vec::new(),
             #[cfg(feature = "async")]
             ref_waker_idx,
             hook_callback: None,
@@ -1263,6 +1298,44 @@ impl Lua {
             ffi::lua_xmove(self.state, thread_state, 1);
 
             Ok(Thread(self.pop_ref()))
+        }
+    }
+
+    /// Wraps a Lua function into a new or recycled thread (coroutine).
+    #[cfg(feature = "async")]
+    pub(crate) fn create_recycled_thread<'lua>(
+        &'lua self,
+        func: Function<'lua>,
+    ) -> Result<Thread<'lua>> {
+        #[cfg(any(feature = "lua54", all(feature = "luajit", feature = "vendored")))]
+        unsafe {
+            let _sg = StackGuard::new(self.state);
+            check_stack(self.state, 1)?;
+
+            let extra = &mut *self.extra.get();
+            if let Some(index) = extra.recycled_thread_cache.pop() {
+                let thread_state = ffi::lua_tothread(extra.ref_thread, index);
+                self.push_ref(&func.0);
+                ffi::lua_xmove(self.state, thread_state, 1);
+                return Ok(Thread(LuaRef { lua: self, index }));
+            }
+        };
+        self.create_thread(func)
+    }
+
+    /// Resets thread (coroutine) and returns to the cache for later use.
+    #[cfg(feature = "async")]
+    #[cfg(any(feature = "lua54", all(feature = "luajit", feature = "vendored")))]
+    pub(crate) fn recycle_thread<'lua>(&'lua self, thread: &mut Thread<'lua>) {
+        unsafe {
+            let extra = &mut *self.extra.get();
+            let thread_state = ffi::lua_tothread(extra.ref_thread, thread.0.index);
+            if extra.recycled_thread_cache.len() < extra.recycled_thread_cache.capacity()
+                && ffi::lua_resetthread(self.state, thread_state) == ffi::LUA_OK
+            {
+                extra.recycled_thread_cache.push(thread.0.index);
+                thread.0.index = 0;
+            }
         }
     }
 

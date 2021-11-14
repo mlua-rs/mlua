@@ -12,8 +12,8 @@ use futures_timer::Delay;
 use futures_util::stream::TryStreamExt;
 
 use mlua::{
-    Error, Function, Lua, MetaMethod, Result, Table, TableExt, Thread, UserData, UserDataMethods,
-    Value,
+    Error, Function, Lua, LuaOptions, MetaMethod, Result, StdLib, Table, TableExt, Thread,
+    UserData, UserDataMethods, Value,
 };
 
 #[tokio::test]
@@ -228,7 +228,8 @@ async fn test_async_thread() -> Result<()> {
 
 #[tokio::test]
 async fn test_async_table() -> Result<()> {
-    let lua = Lua::new();
+    let options = LuaOptions::new().thread_cache_size(4);
+    let lua = Lua::new_with(StdLib::ALL_SAFE, options)?;
 
     let table = lua.create_table()?;
     table.set("val", 10)?;

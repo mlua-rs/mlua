@@ -147,7 +147,9 @@ impl<'lua> Clone for LuaRef<'lua> {
 
 impl<'lua> Drop for LuaRef<'lua> {
     fn drop(&mut self) {
-        self.lua.drop_ref(self)
+        if self.index > 0 {
+            self.lua.drop_ref(self);
+        }
     }
 }
 

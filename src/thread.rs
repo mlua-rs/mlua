@@ -5,7 +5,7 @@ use crate::error::{Error, Result};
 use crate::ffi;
 use crate::types::LuaRef;
 use crate::util::{check_stack, error_traceback, pop_error, StackGuard};
-use crate::value::{FromLuaMulti, MultiValue, ToLuaMulti};
+use crate::value::{FromLuaMulti, ToLuaMulti};
 
 #[cfg(any(feature = "lua54", all(feature = "luajit", feature = "vendored"), doc))]
 use crate::function::Function;
@@ -14,7 +14,7 @@ use crate::function::Function;
 use {
     crate::{
         lua::{Lua, ASYNC_POLL_PENDING},
-        value::Value,
+        value::{MultiValue, Value},
     },
     futures_core::{future::Future, stream::Stream},
     std::{
@@ -58,6 +58,7 @@ pub struct AsyncThread<'lua, R> {
     thread: Thread<'lua>,
     args0: RefCell<Option<Result<MultiValue<'lua>>>>,
     ret: PhantomData<R>,
+    recycle: bool,
 }
 
 impl<'lua> Thread<'lua> {
@@ -260,6 +261,7 @@ impl<'lua> Thread<'lua> {
             thread: self,
             args0: RefCell::new(Some(args)),
             ret: PhantomData,
+            recycle: false,
         }
     }
 }
@@ -267,6 +269,24 @@ impl<'lua> Thread<'lua> {
 impl<'lua> PartialEq for Thread<'lua> {
     fn eq(&self, other: &Self) -> bool {
         self.0 == other.0
+    }
+}
+
+#[cfg(feature = "async")]
+impl<'lua, R> AsyncThread<'lua, R> {
+    #[inline]
+    pub(crate) fn set_recyclable(&mut self, recyclable: bool) {
+        self.recycle = recyclable;
+    }
+}
+
+#[cfg(feature = "async")]
+#[cfg(any(feature = "lua54", all(feature = "luajit", feature = "vendored")))]
+impl<'lua, R> Drop for AsyncThread<'lua, R> {
+    fn drop(&mut self) {
+        if self.recycle {
+            self.thread.0.lua.recycle_thread(&mut self.thread);
+        }
     }
 }
 

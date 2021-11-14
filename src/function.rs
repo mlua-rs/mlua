@@ -126,8 +126,12 @@ impl<'lua> Function<'lua> {
         R: FromLuaMulti<'lua> + 'fut,
     {
         let lua = self.0.lua;
-        match lua.create_thread(self.clone()) {
-            Ok(t) => Box::pin(t.into_async(args)),
+        match lua.create_recycled_thread(self.clone()) {
+            Ok(t) => {
+                let mut t = t.into_async(args);
+                t.set_recyclable(true);
+                Box::pin(t)
+            }
             Err(e) => Box::pin(future::err(e)),
         }
     }
