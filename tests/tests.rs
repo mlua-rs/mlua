@@ -1187,3 +1187,21 @@ fn test_inspect_stack() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn test_multi_states() -> Result<()> {
+    let lua = Lua::new();
+
+    let f = lua.create_function(|_, g: Option<Function>| {
+        if let Some(g) = g {
+            g.call(())?;
+        }
+        Ok(())
+    })?;
+    lua.globals().set("f", f)?;
+
+    lua.load("f(function() coroutine.wrap(function() f() end)() end)")
+        .exec()?;
+
+    Ok(())
+}

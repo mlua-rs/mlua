@@ -64,7 +64,7 @@ pub use super::compat53::lua_getglobal;
 
 #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
 #[inline(always)]
-pub fn lua_upvalueindex(i: c_int) -> c_int {
+pub const fn lua_upvalueindex(i: c_int) -> c_int {
     LUA_REGISTRYINDEX - i
 }
 

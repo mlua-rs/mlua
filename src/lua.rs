@@ -2090,11 +2090,14 @@ impl Lua {
         'lua: 'callback,
     {
         unsafe extern "C" fn call_callback(state: *mut ffi::lua_State) -> c_int {
-            let get_extra = |state| {
-                let upvalue = get_userdata::<CallbackUpvalue>(state, ffi::lua_upvalueindex(1));
-                (*upvalue).lua.extra.get()
+            let extra = match ffi::lua_type(state, ffi::lua_upvalueindex(1)) {
+                ffi::LUA_TUSERDATA => {
+                    let upvalue = get_userdata::<CallbackUpvalue>(state, ffi::lua_upvalueindex(1));
+                    (*upvalue).lua.extra.get()
+                }
+                _ => ptr::null_mut(),
             };
-            callback_error_ext(state, get_extra, |nargs| {
+            callback_error_ext(state, extra, |nargs| {
                 let upvalue_idx = ffi::lua_upvalueindex(1);
                 if ffi::lua_type(state, upvalue_idx) == ffi::LUA_TNIL {
                     return Err(Error::CallbackDestructed);
@@ -2105,16 +2108,16 @@ impl Lua {
                     check_stack(state, ffi::LUA_MINSTACK - nargs)?;
                 }
 
-                let lua = &mut (*upvalue).lua;
+                let mut lua = (*upvalue).lua.clone();
                 lua.state = state;
 
-                let mut args = MultiValue::new_or_cached(lua);
+                let mut args = MultiValue::new_or_cached(&lua);
                 args.reserve(nargs as usize);
                 for _ in 0..nargs {
                     args.push_front(lua.pop_value());
                 }
 
-                let results = ((*upvalue).func)(lua, args)?;
+                let results = ((*upvalue).func)(&lua, args)?;
                 let nresults = results.len() as c_int;
 
                 check_stack(state, nresults)?;
@@ -2158,11 +2161,15 @@ impl Lua {
         }
 
         unsafe extern "C" fn call_callback(state: *mut ffi::lua_State) -> c_int {
-            let get_extra = |state| {
-                let upvalue = get_userdata::<AsyncCallbackUpvalue>(state, ffi::lua_upvalueindex(1));
-                (*upvalue).lua.extra.get()
+            let extra = match ffi::lua_type(state, ffi::lua_upvalueindex(1)) {
+                ffi::LUA_TUSERDATA => {
+                    let upvalue =
+                        get_userdata::<AsyncCallbackUpvalue>(state, ffi::lua_upvalueindex(1));
+                    (*upvalue).lua.extra.get()
+                }
+                _ => ptr::null_mut(),
             };
-            callback_error_ext(state, get_extra, |nargs| {
+            callback_error_ext(state, extra, |nargs| {
                 let upvalue_idx = ffi::lua_upvalueindex(1);
                 if ffi::lua_type(state, upvalue_idx) == ffi::LUA_TNIL {
                     return Err(Error::CallbackDestructed);
@@ -2194,11 +2201,14 @@ impl Lua {
         }
 
         unsafe extern "C" fn poll_future(state: *mut ffi::lua_State) -> c_int {
-            let get_extra = |state| {
-                let upvalue = get_userdata::<AsyncPollUpvalue>(state, ffi::lua_upvalueindex(1));
-                (*upvalue).lua.extra.get()
+            let extra = match ffi::lua_type(state, ffi::lua_upvalueindex(1)) {
+                ffi::LUA_TUSERDATA => {
+                    let upvalue = get_userdata::<AsyncPollUpvalue>(state, ffi::lua_upvalueindex(1));
+                    (*upvalue).lua.extra.get()
+                }
+                _ => ptr::null_mut(),
             };
-            callback_error_ext(state, get_extra, |nargs| {
+            callback_error_ext(state, extra, |nargs| {
                 let upvalue_idx = ffi::lua_upvalueindex(1);
                 if ffi::lua_type(state, upvalue_idx) == ffi::LUA_TNIL {
                     return Err(Error::CallbackDestructed);
@@ -2288,12 +2298,14 @@ impl Lua {
     }
 
     #[cfg(feature = "async")]
+    #[inline]
     pub(crate) unsafe fn waker(&self) -> Option<Waker> {
         let extra = &*self.extra.get();
         (*get_userdata::<Option<Waker>>(extra.ref_thread, extra.ref_waker_idx)).clone()
     }
 
     #[cfg(feature = "async")]
+    #[inline]
     pub(crate) unsafe fn set_waker(&self, waker: Option<Waker>) -> Option<Waker> {
         let extra = &*self.extra.get();
         let waker_slot = &mut *get_userdata::<Option<Waker>>(extra.ref_thread, extra.ref_waker_idx);
@@ -2330,6 +2342,7 @@ impl Lua {
         Ok(AnyUserData(self.pop_ref()))
     }
 
+    #[inline]
     pub(crate) fn clone(&self) -> Self {
         Lua {
             state: self.state,
@@ -2651,15 +2664,14 @@ pub(crate) fn init_metatable_cache(cache: &mut FxHashMap<TypeId, u8>) {
 // An optimized version of `callback_error` that does not allocate `WrappedFailure` userdata
 // and instead reuses unsed and cached values from previous calls (or allocates new).
 // It requires `get_extra` function to return `ExtraData` value.
-unsafe fn callback_error_ext<E, F, R>(state: *mut ffi::lua_State, get_extra: E, f: F) -> R
+unsafe fn callback_error_ext<F, R>(state: *mut ffi::lua_State, extra: *mut ExtraData, f: F) -> R
 where
-    E: Fn(*mut ffi::lua_State) -> *mut ExtraData,
     F: FnOnce(c_int) -> Result<R>,
 {
-    let upvalue_idx = ffi::lua_upvalueindex(1);
-    if ffi::lua_type(state, upvalue_idx) == ffi::LUA_TNIL {
+    if extra.is_null() {
         return callback_error(state, f);
     }
+    let extra = &mut *extra;
 
     let nargs = ffi::lua_gettop(state);
 
@@ -2678,7 +2690,6 @@ where
 
     // We cannot shadow Rust errors with Lua ones, so we need to obtain pre-allocated memory
     // to store a wrapped failure (error or panic) *before* we proceed.
-    let extra = &mut *get_extra(state);
     let prealloc_failure = match extra.wrapped_failures_cache.pop() {
         Some(index) => PreallocatedFailure::Cached(index),
         None => {
