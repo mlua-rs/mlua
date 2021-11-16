@@ -1,4 +1,3 @@
-use std::cell::RefCell;
 use std::hash::{Hash, Hasher};
 use std::os::raw::{c_int, c_void};
 use std::sync::{Arc, Mutex};
@@ -51,10 +50,10 @@ pub(crate) struct AsyncPollUpvalue<'lua> {
 }
 
 #[cfg(feature = "send")]
-pub(crate) type HookCallback = Arc<RefCell<dyn FnMut(&Lua, Debug) -> Result<()> + Send>>;
+pub(crate) type HookCallback = Arc<Mutex<dyn FnMut(&Lua, Debug) -> Result<()> + Send>>;
 
 #[cfg(not(feature = "send"))]
-pub(crate) type HookCallback = Arc<RefCell<dyn FnMut(&Lua, Debug) -> Result<()>>>;
+pub(crate) type HookCallback = Arc<Mutex<dyn FnMut(&Lua, Debug) -> Result<()>>>;
 
 #[cfg(all(feature = "send", feature = "lua54"))]
 pub(crate) type WarnCallback = Box<dyn Fn(&Lua, &CStr, bool) -> Result<()> + Send>;

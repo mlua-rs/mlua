@@ -3,9 +3,8 @@ use std::ffi::CStr;
 use std::ops::{BitOr, BitOrAssign};
 use std::os::raw::{c_char, c_int};
 
-use crate::ffi::{self, lua_Debug, lua_State};
+use crate::ffi::{self, lua_Debug};
 use crate::lua::Lua;
-use crate::util::callback_error;
 
 /// Contains information about currently executing Lua code.
 ///
@@ -281,22 +280,6 @@ impl BitOrAssign for HookTriggers {
     fn bitor_assign(&mut self, rhs: Self) {
         *self = *self | rhs;
     }
-}
-
-pub(crate) unsafe extern "C" fn hook_proc(state: *mut lua_State, ar: *mut lua_Debug) {
-    callback_error(state, |_| {
-        let lua = mlua_expect!(Lua::make_from_ptr(state), "cannot make Lua instance");
-        let debug = Debug::new(&lua, ar);
-        let hook_cb = mlua_expect!(lua.hook_callback(), "no hook callback set in hook_proc");
-
-        #[allow(clippy::match_wild_err_arm)]
-        match hook_cb.try_borrow_mut() {
-            Ok(mut b) => (&mut *b)(&lua, debug),
-            Err(_) => mlua_panic!("Lua should not allow hooks to be called within another hook"),
-        }?;
-
-        Ok(())
-    })
 }
 
 unsafe fn ptr_to_str<'a>(input: *const c_char) -> Option<&'a [u8]> {

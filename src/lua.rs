@@ -14,7 +14,7 @@ use rustc_hash::FxHashMap;
 use crate::error::{Error, Result};
 use crate::ffi;
 use crate::function::Function;
-use crate::hook::{hook_proc, Debug, HookTriggers};
+use crate::hook::{Debug, HookTriggers};
 use crate::scope::Scope;
 use crate::stdlib::StdLib;
 use crate::string::String;
@@ -765,9 +765,32 @@ impl Lua {
     where
         F: 'static + MaybeSend + FnMut(&Lua, Debug) -> Result<()>,
     {
+        unsafe extern "C" fn hook_proc(state: *mut ffi::lua_State, ar: *mut ffi::lua_Debug) {
+            let lua = match Lua::make_from_ptr(state) {
+                Some(lua) => lua,
+                None => return,
+            };
+            let extra = lua.extra.get();
+            callback_error_ext(state, extra, move |_| {
+                let debug = Debug::new(&lua, ar);
+                let hook_cb = (*lua.extra.get()).hook_callback.clone();
+                let hook_cb = mlua_expect!(hook_cb, "no hook callback set in hook_proc");
+
+                #[allow(clippy::match_wild_err_arm)]
+                match hook_cb.try_lock() {
+                    Ok(mut cb) => cb(&lua, debug),
+                    Err(_) => {
+                        mlua_panic!("Lua should not allow hooks to be called within another hook")
+                    }
+                }?;
+
+                Ok(())
+            })
+        }
+
         let state = self.main_state.ok_or(Error::MainThreadNotAvailable)?;
         unsafe {
-            (*self.extra.get()).hook_callback = Some(Arc::new(RefCell::new(callback)));
+            (*self.extra.get()).hook_callback = Some(Arc::new(Mutex::new(callback)));
             ffi::lua_sethook(state, Some(hook_proc), triggers.mask(), triggers.count());
         }
         Ok(())
@@ -805,7 +828,7 @@ impl Lua {
             callback_error_ext(state, extra, move |_| {
                 let cb = mlua_expect!(
                     (*lua.extra.get()).warn_callback.as_ref(),
-                    "no warning callback set"
+                    "no warning callback set in warn_proc"
                 );
                 let msg = CStr::from_ptr(msg);
                 cb(&lua, msg, tocont != 0)
@@ -2466,10 +2489,6 @@ impl Lua {
             safe,
             _no_ref_unwind_safe: PhantomData,
         })
-    }
-
-    pub(crate) unsafe fn hook_callback(&self) -> Option<HookCallback> {
-        (*self.extra.get()).hook_callback.clone()
     }
 
     #[inline]
