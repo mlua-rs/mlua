@@ -38,7 +38,10 @@ use crate::value::{FromLua, FromLuaMulti, MultiValue, Nil, ToLua, ToLuaMulti, Va
 #[cfg(not(feature = "lua54"))]
 use crate::util::push_userdata;
 #[cfg(feature = "lua54")]
-use crate::{userdata::USER_VALUE_MAXSLOT, util::push_userdata_uv};
+use {
+    crate::{types::WarnCallback, userdata::USER_VALUE_MAXSLOT, util::push_userdata_uv},
+    std::ffi::CStr,
+};
 
 #[cfg(not(feature = "send"))]
 use std::rc::Rc;
@@ -101,6 +104,8 @@ struct ExtraData {
     ref_waker_idx: c_int,
 
     hook_callback: Option<HookCallback>,
+    #[cfg(feature = "lua54")]
+    warn_callback: Option<WarnCallback>,
 }
 
 #[cfg_attr(any(feature = "lua51", feature = "luajit"), allow(dead_code))]
@@ -523,6 +528,8 @@ impl Lua {
             #[cfg(feature = "async")]
             ref_waker_idx,
             hook_callback: None,
+            #[cfg(feature = "lua54")]
+            warn_callback: None,
         }));
 
         mlua_expect!(
@@ -778,6 +785,64 @@ impl Lua {
             (*self.extra.get()).hook_callback = None;
             ffi::lua_sethook(state, None, 0, 0);
         }
+    }
+
+    /// Sets the warning function to be used by Lua to emit warnings.
+    ///
+    /// Requires `feature = "lua54"`
+    #[cfg(feature = "lua54")]
+    pub fn set_warning_function<F>(&self, callback: F)
+    where
+        F: 'static + MaybeSend + Fn(&Lua, &CStr, bool) -> Result<()>,
+    {
+        unsafe extern "C" fn warn_proc(ud: *mut c_void, msg: *const c_char, tocont: c_int) {
+            let state = ud as *mut ffi::lua_State;
+            let lua = match Lua::make_from_ptr(state) {
+                Some(lua) => lua,
+                None => return,
+            };
+            let extra = lua.extra.get();
+            callback_error_ext(state, extra, move |_| {
+                let cb = mlua_expect!(
+                    (*lua.extra.get()).warn_callback.as_ref(),
+                    "no warning callback set"
+                );
+                let msg = CStr::from_ptr(msg);
+                cb(&lua, msg, tocont != 0)
+            });
+        }
+
+        let state = self.main_state.unwrap_or(self.state);
+        unsafe {
+            (*self.extra.get()).warn_callback = Some(Box::new(callback));
+            ffi::lua_setwarnf(state, Some(warn_proc), state as *mut c_void);
+        }
+    }
+
+    /// Removes warning function previously set by `set_warning_function`.
+    ///
+    /// This function has no effect if a warning function was not previously set.
+    ///
+    /// Requires `feature = "lua54"`
+    #[cfg(feature = "lua54")]
+    pub fn remove_warning_function(&self) {
+        let state = self.main_state.unwrap_or(self.state);
+        unsafe {
+            (*self.extra.get()).warn_callback = None;
+            ffi::lua_setwarnf(state, None, ptr::null_mut());
+        }
+    }
+
+    /// Emits a warning with the given message.
+    ///
+    /// A message in a call with `tocont` set to `true` should be continued in another call to this function.
+    ///
+    /// Requires `feature = "lua54"`
+    #[cfg(feature = "lua54")]
+    pub fn warning<S: Into<Vec<u8>>>(&self, msg: S, tocont: bool) -> Result<()> {
+        let msg = CString::new(msg).map_err(|err| Error::RuntimeError(err.to_string()))?;
+        unsafe { ffi::lua_warning(self.state, msg.as_ptr(), if tocont { 1 } else { 0 }) };
+        Ok(())
     }
 
     /// Gets information about the interpreter runtime stack.

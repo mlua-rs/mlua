@@ -1205,3 +1205,46 @@ fn test_multi_states() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+#[cfg(feature = "lua54")]
+fn test_warnings() -> Result<()> {
+    let lua = Lua::new();
+    lua.set_app_data::<Vec<(StdString, bool)>>(Vec::new());
+
+    lua.set_warning_function(|lua, msg, tocont| {
+        let msg = msg.to_string_lossy().to_string();
+        lua.app_data_mut::<Vec<(StdString, bool)>>()
+            .unwrap()
+            .push((msg, tocont));
+        Ok(())
+    });
+
+    lua.warning("native warning ...", true)?;
+    lua.warning("finish", false)?;
+    lua.load(r#"warn("lua warning", "continue")"#).exec()?;
+
+    lua.remove_warning_function();
+    lua.warning("one more warning", false)?;
+
+    let messages = lua.app_data_ref::<Vec<(StdString, bool)>>().unwrap();
+    assert_eq!(
+        *messages,
+        vec![
+            ("native warning ...".to_string(), true),
+            ("finish".to_string(), false),
+            ("lua warning".to_string(), true),
+            ("continue".to_string(), false),
+        ]
+    );
+
+    // Trigger error inside warning
+    lua.set_warning_function(|_, _, _| Err(Error::RuntimeError("warning error".to_string())));
+    assert!(matches!(
+        lua.load(r#"warn("test")"#).exec(),
+        Err(Error::CallbackError { cause, .. })
+            if matches!(*cause, Error::RuntimeError(ref err) if err == "warning error")
+    ));
+
+    Ok(())
+}

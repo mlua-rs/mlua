@@ -574,7 +574,7 @@ pub unsafe fn lua_resume(
 // warning-related functions
 #[cfg(feature = "lua54")]
 extern "C" {
-    pub fn lua_setwarnf(L: *mut lua_State, f: lua_WarnFunction, ud: *mut c_void);
+    pub fn lua_setwarnf(L: *mut lua_State, f: Option<lua_WarnFunction>, ud: *mut c_void);
     pub fn lua_warning(L: *mut lua_State, msg: *const c_char, tocont: c_int);
 }
 

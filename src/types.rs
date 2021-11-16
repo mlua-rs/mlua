@@ -4,6 +4,9 @@ use std::os::raw::{c_int, c_void};
 use std::sync::{Arc, Mutex};
 use std::{fmt, mem, ptr};
 
+#[cfg(feature = "lua54")]
+use std::ffi::CStr;
+
 #[cfg(feature = "async")]
 use futures_core::future::LocalBoxFuture;
 
@@ -52,6 +55,12 @@ pub(crate) type HookCallback = Arc<RefCell<dyn FnMut(&Lua, Debug) -> Result<()> 
 
 #[cfg(not(feature = "send"))]
 pub(crate) type HookCallback = Arc<RefCell<dyn FnMut(&Lua, Debug) -> Result<()>>>;
+
+#[cfg(all(feature = "send", feature = "lua54"))]
+pub(crate) type WarnCallback = Box<dyn Fn(&Lua, &CStr, bool) -> Result<()> + Send>;
+
+#[cfg(all(not(feature = "send"), feature = "lua54"))]
+pub(crate) type WarnCallback = Box<dyn Fn(&Lua, &CStr, bool) -> Result<()>>;
 
 #[cfg(feature = "send")]
 pub trait MaybeSend: Send {}
