@@ -3,6 +3,7 @@ use std::cell::{Ref, RefCell, RefMut};
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::ops::{Deref, DerefMut};
+use std::os::raw::{c_char, c_int};
 use std::string::String as StdString;
 
 #[cfg(feature = "async")]
@@ -22,9 +23,6 @@ use crate::table::{Table, TablePairs};
 use crate::types::{Callback, LuaRef, MaybeSend};
 use crate::util::{check_stack, get_userdata, take_userdata, StackGuard};
 use crate::value::{FromLua, FromLuaMulti, ToLua, ToLuaMulti};
-
-#[cfg(feature = "lua54")]
-use std::os::raw::c_int;
 
 #[cfg(feature = "async")]
 use crate::types::AsyncCallback;
@@ -868,8 +866,20 @@ impl<'lua> AnyUserData<'lua> {
     ///
     /// [`get_user_value`]: #method.get_user_value
     /// [`set_nth_user_value`]: #method.set_nth_user_value
+    #[inline]
     pub fn set_user_value<V: ToLua<'lua>>(&self, v: V) -> Result<()> {
         self.set_nth_user_value(1, v)
+    }
+
+    /// Returns an associated value set by [`set_user_value`].
+    ///
+    /// This is the same as calling [`get_nth_user_value`] with `n` set to 1.
+    ///
+    /// [`set_user_value`]: #method.set_user_value
+    /// [`get_nth_user_value`]: #method.get_nth_user_value
+    #[inline]
+    pub fn get_user_value<V: FromLua<'lua>>(&self) -> Result<V> {
+        self.get_nth_user_value(1)
     }
 
     /// Sets an associated `n`th value to this `AnyUserData`.
@@ -904,22 +914,8 @@ impl<'lua> AnyUserData<'lua> {
             }
 
             // Multiple (extra) user values are emulated by storing them in a table
-
-            let getuservalue_t = |state, idx| {
-                #[cfg(feature = "lua54")]
-                return ffi::lua_getiuservalue(state, idx, USER_VALUE_MAXSLOT as c_int);
-                #[cfg(not(feature = "lua54"))]
-                return ffi::lua_getuservalue(state, idx);
-            };
-            let getn = |n: usize| {
-                #[cfg(feature = "lua54")]
-                return n - USER_VALUE_MAXSLOT + 1;
-                #[cfg(not(feature = "lua54"))]
-                return n;
-            };
-
             protect_lua!(lua.state, 2, 0, |state| {
-                if getuservalue_t(lua.state, -2) != ffi::LUA_TTABLE {
+                if getuservalue_table(lua.state, -2) != ffi::LUA_TTABLE {
                     // Create a new table to use as uservalue
                     ffi::lua_pop(lua.state, 1);
                     ffi::lua_newtable(state);
@@ -931,21 +927,14 @@ impl<'lua> AnyUserData<'lua> {
                     ffi::lua_setuservalue(lua.state, -4);
                 }
                 ffi::lua_pushvalue(state, -2);
-                ffi::lua_rawseti(state, -2, getn(n) as ffi::lua_Integer);
+                #[cfg(feature = "lua54")]
+                ffi::lua_rawseti(state, -2, (n - USER_VALUE_MAXSLOT + 1) as ffi::lua_Integer);
+                #[cfg(not(feature = "lua54"))]
+                ffi::lua_rawseti(state, -2, n as ffi::lua_Integer);
             })?;
 
             Ok(())
         }
-    }
-
-    /// Returns an associated value set by [`set_user_value`].
-    ///
-    /// This is the same as calling [`get_nth_user_value`] with `n` set to 1.
-    ///
-    /// [`set_user_value`]: #method.set_user_value
-    /// [`get_nth_user_value`]: #method.get_nth_user_value
-    pub fn get_user_value<V: FromLua<'lua>>(&self) -> Result<V> {
-        self.get_nth_user_value(1)
     }
 
     /// Returns an associated `n`th value set by [`set_nth_user_value`].
@@ -978,26 +967,86 @@ impl<'lua> AnyUserData<'lua> {
             }
 
             // Multiple (extra) user values are emulated by storing them in a table
-
-            let getuservalue_t = |state, idx| {
-                #[cfg(feature = "lua54")]
-                return ffi::lua_getiuservalue(state, idx, USER_VALUE_MAXSLOT as c_int);
-                #[cfg(not(feature = "lua54"))]
-                return ffi::lua_getuservalue(state, idx);
-            };
-            let getn = |n: usize| {
-                #[cfg(feature = "lua54")]
-                return n - USER_VALUE_MAXSLOT + 1;
-                #[cfg(not(feature = "lua54"))]
-                return n;
-            };
-
             protect_lua!(lua.state, 1, 1, |state| {
-                if getuservalue_t(lua.state, -1) != ffi::LUA_TTABLE {
+                if getuservalue_table(lua.state, -1) != ffi::LUA_TTABLE {
                     ffi::lua_pushnil(lua.state);
                     return;
                 }
-                ffi::lua_rawgeti(state, -1, getn(n) as ffi::lua_Integer);
+                #[cfg(feature = "lua54")]
+                ffi::lua_rawgeti(state, -1, (n - USER_VALUE_MAXSLOT + 1) as ffi::lua_Integer);
+                #[cfg(not(feature = "lua54"))]
+                ffi::lua_rawgeti(state, -1, n as ffi::lua_Integer);
+            })?;
+
+            V::from_lua(lua.pop_value(), lua)
+        }
+    }
+
+    /// Sets an associated value to this `AnyUserData` by name.
+    ///
+    /// The value can be retrieved with [`get_named_user_value`].
+    ///
+    /// [`get_named_user_value`]: #method.get_named_user_value
+    pub fn set_named_user_value<S, V>(&self, name: &S, v: V) -> Result<()>
+    where
+        S: AsRef<[u8]> + ?Sized,
+        V: ToLua<'lua>,
+    {
+        let lua = self.0.lua;
+        unsafe {
+            let _sg = StackGuard::new(lua.state);
+            check_stack(lua.state, 5)?;
+
+            lua.push_userdata_ref(&self.0)?;
+            lua.push_value(v.to_lua(lua)?)?;
+
+            // Multiple (extra) user values are emulated by storing them in a table
+            let name = name.as_ref();
+            protect_lua!(lua.state, 2, 0, |state| {
+                if getuservalue_table(lua.state, -2) != ffi::LUA_TTABLE {
+                    // Create a new table to use as uservalue
+                    ffi::lua_pop(lua.state, 1);
+                    ffi::lua_newtable(state);
+                    ffi::lua_pushvalue(state, -1);
+
+                    #[cfg(feature = "lua54")]
+                    ffi::lua_setiuservalue(lua.state, -4, USER_VALUE_MAXSLOT as c_int);
+                    #[cfg(not(feature = "lua54"))]
+                    ffi::lua_setuservalue(lua.state, -4);
+                }
+                ffi::lua_pushlstring(state, name.as_ptr() as *const c_char, name.len());
+                ffi::lua_pushvalue(state, -3);
+                ffi::lua_rawset(state, -3);
+            })?;
+
+            Ok(())
+        }
+    }
+
+    /// Returns an associated value by name set by [`set_named_user_value`].
+    ///
+    /// [`set_named_user_value`]: #method.set_named_user_value
+    pub fn get_named_user_value<S, V>(&self, name: &S) -> Result<V>
+    where
+        S: AsRef<[u8]> + ?Sized,
+        V: FromLua<'lua>,
+    {
+        let lua = self.0.lua;
+        unsafe {
+            let _sg = StackGuard::new(lua.state);
+            check_stack(lua.state, 4)?;
+
+            lua.push_userdata_ref(&self.0)?;
+
+            // Multiple (extra) user values are emulated by storing them in a table
+            let name = name.as_ref();
+            protect_lua!(lua.state, 1, 1, |state| {
+                if getuservalue_table(lua.state, -1) != ffi::LUA_TTABLE {
+                    ffi::lua_pushnil(lua.state);
+                    return;
+                }
+                ffi::lua_pushlstring(state, name.as_ptr() as *const c_char, name.len());
+                ffi::lua_rawget(state, -2);
             })?;
 
             V::from_lua(lua.pop_value(), lua)
@@ -1081,6 +1130,13 @@ impl<'lua> AsRef<AnyUserData<'lua>> for AnyUserData<'lua> {
     fn as_ref(&self) -> &Self {
         self
     }
+}
+
+unsafe fn getuservalue_table(state: *mut ffi::lua_State, idx: c_int) -> c_int {
+    #[cfg(feature = "lua54")]
+    return ffi::lua_getiuservalue(state, idx, USER_VALUE_MAXSLOT as c_int);
+    #[cfg(not(feature = "lua54"))]
+    return ffi::lua_getuservalue(state, idx);
 }
 
 /// Handle to a `UserData` metatable.
