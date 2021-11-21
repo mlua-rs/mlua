@@ -502,6 +502,24 @@ impl<'lua> AsRef<Table<'lua>> for Table<'lua> {
 
 /// An extension trait for `Table`s that provides a variety of convenient functionality.
 pub trait TableExt<'lua> {
+    /// Calls the table as function assuming it has `__call` metamethod.
+    ///
+    /// The metamethod is called with the table as its first argument, followed by the passed arguments.
+    fn call<A, R>(&self, args: A) -> Result<R>
+    where
+        A: ToLuaMulti<'lua>,
+        R: FromLuaMulti<'lua>;
+
+    /// Asynchronously calls the table as function assuming it has `__call` metamethod.
+    ///
+    /// The metamethod is called with the table as its first argument, followed by the passed arguments.
+    #[cfg(feature = "async")]
+    fn call_async<'fut, A, R>(&self, args: A) -> LocalBoxFuture<'fut, Result<R>>
+    where
+        'lua: 'fut,
+        A: ToLuaMulti<'lua>,
+        R: FromLuaMulti<'lua> + 'fut;
+
     /// Gets the function associated to `key` from the table and executes it,
     /// passing the table itself along with `args` as function arguments.
     ///
@@ -564,6 +582,25 @@ pub trait TableExt<'lua> {
 }
 
 impl<'lua> TableExt<'lua> for Table<'lua> {
+    fn call<A, R>(&self, args: A) -> Result<R>
+    where
+        A: ToLuaMulti<'lua>,
+        R: FromLuaMulti<'lua>,
+    {
+        // Convert table to a function and call via pcall that respects the `__call` metamethod.
+        Function(self.0.clone()).call(args)
+    }
+
+    #[cfg(feature = "async")]
+    fn call_async<'fut, A, R>(&self, args: A) -> LocalBoxFuture<'fut, Result<R>>
+    where
+        'lua: 'fut,
+        A: ToLuaMulti<'lua>,
+        R: FromLuaMulti<'lua> + 'fut,
+    {
+        Function(self.0.clone()).call_async(args)
+    }
+
     fn call_method<K, A, R>(&self, key: K, args: A) -> Result<R>
     where
         K: ToLua<'lua>,
