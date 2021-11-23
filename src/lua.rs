@@ -650,9 +650,14 @@ impl Lua {
         T::from_lua(value, self)
     }
 
-    /// Unloads module `modname`
-    /// Internally removes `modname` from package.loaded table.
-    pub fn unload<'lua, S>(&'lua self, modname: &S) -> Result<()>
+    /// Unloads module `modname`.
+    ///
+    /// Removes module from the [`package.loaded`] table which allows to load it again.
+    /// It does not support unloading binary Lua modules since they are internally cached and can be
+    /// unloaded only by closing Lua state.
+    ///
+    /// [`package.loaded`]: https://www.lua.org/manual/5.4/manual.html#pdf-package.loaded
+    pub fn unload<S>(&self, modname: &S) -> Result<()>
     where
         S: AsRef<[u8]> + ?Sized,
     {
