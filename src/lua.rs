@@ -650,6 +650,26 @@ impl Lua {
         T::from_lua(value, self)
     }
 
+    /// Unloads module `modname`
+    /// Internally removes `modname` from package.loaded table.
+    pub fn unload<'lua, S>(&'lua self, modname: &S) -> Result<()>
+    where
+        S: AsRef<[u8]> + ?Sized,
+    {
+        let loaded = unsafe {
+            let _sg = StackGuard::new(self.state);
+            check_stack(self.state, 2)?;
+            protect_lua!(self.state, 0, 1, fn(state) {
+                ffi::luaL_getsubtable(state, ffi::LUA_REGISTRYINDEX, cstr!("_LOADED"));
+            })?;
+            Table(self.pop_ref())
+        };
+
+        let modname = self.create_string(modname)?;
+        loaded.raw_remove(modname)?;
+        Ok(())
+    }
+
     /// Consumes and leaks `Lua` object, returning a static reference `&'static Lua`.
     ///
     /// This function is useful when the `Lua` object is supposed to live for the remainder
