@@ -1141,43 +1141,20 @@ fn test_load_from_function() -> Result<()> {
     assert_eq!(t.get::<_, String>("__name")?, "my_module");
     assert_eq!(i.load(Ordering::Relaxed), 1);
 
-    let _: Value = lua.load_from_function("my_module", func)?;
+    let _: Value = lua.load_from_function("my_module", func.clone())?;
     assert_eq!(i.load(Ordering::Relaxed), 1);
 
     let func_nil = lua.create_function(move |_, _: String| Ok(Value::Nil))?;
     let v: Value = lua.load_from_function("my_module2", func_nil)?;
     assert_eq!(v, Value::Boolean(true));
 
-    Ok(())
-}
-
-#[test]
-fn test_unload() -> Result<()> {
-    let lua = Lua::new();
-
-    let i = Arc::new(AtomicU32::new(0));
-    let i2 = i.clone();
-    let func = lua.create_function(move |lua, modname: String| {
-        i2.fetch_add(1, Ordering::Relaxed);
-        let t = lua.create_table()?;
-        t.set("__name", modname)?;
-        Ok(t)
-    })?;
-
-    let t: Table = lua.load_from_function("my_module", func.clone())?;
-    assert_eq!(t.get::<_, String>("__name")?, "my_module");
-    assert_eq!(i.load(Ordering::Relaxed), 1);
-
-    let _: Value = lua.load_from_function("my_module", func.clone())?;
-    assert_eq!(i.load(Ordering::Relaxed), 1);
-
-    let _: () = lua.unload("my_module")?;
-    assert_eq!(i.load(Ordering::Relaxed), 1);
-
+    // Test unloading and loading again
+    lua.unload("my_module")?;
     let _: Value = lua.load_from_function("my_module", func)?;
     assert_eq!(i.load(Ordering::Relaxed), 2);
 
-    let _: () = lua.unload("my_module42")?;
+    // Unloading nonexistent module must not fail
+    lua.unload("my_module2")?;
 
     Ok(())
 }
