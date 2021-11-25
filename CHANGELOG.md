@@ -3,15 +3,18 @@
 - New "application data" api to store arbitrary objects inside Lua
 - New feature flag `luajit52` to build/support LuaJIT with partial compatibility with Lua 5.2
 - Added async meta methods for all Lua (except 5.1)
+- Added `AnyUserData::take()` to take UserData objects from Lua
+- Added `set_nth_user_value`/`get_nth_user_value` to `AnyUserData` for all Lua versions
+- Added `set_named_user_value`/`get_named_user_value` to `AnyUserData` for all Lua versions
+- Added `Lua::inspect_stack()` to get information about the interpreter runtime stack
+- Added `set_warning_function`/`remove_warning_function`/`warning` functions to `Lua` for 5.4
+- Added `TableExt::call()` to call tables with `__call` metamethod as functions
+- Added `Lua::unload()` to unload modules
 - `ToLua` implementation for arrays changed to const generics
+- Added thread (coroutine) cache for async execution (disabled by default and works for Lua 5.4/JIT)
 - LuaOptions and (De)SerializeOptions marked as const
-- New function `AnyUserData::take` to take UserData objects from Lua
 - Fixed recursive tables serialization when using `serde::Serialize` for Lua Tables
 - Improved errors reporting. Now source included to `fmt::Display` implementation for `Error::CallbackError`
-- Added `set_nth_user_value` and `get_nth_user_value` to `AnyUserData` for all Lua versions
-- Added `Lua::inspect_stack` to get information about the interpreter runtime stack
-- Added thread (coroutine) cache for async execution (disabled by default and works for Lua 5.4/JIT)
-- Added `set_warning_function`/`remove_warning_function`/`warning` functions to `Lua` for 5.4
 - Major performance improvements
 
 ## v0.6.6

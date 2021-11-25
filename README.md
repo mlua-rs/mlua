@@ -16,11 +16,15 @@
 `mlua` is bindings to [Lua](https://www.lua.org) programming language for Rust with a goal to provide
 _safe_ (as far as it's possible), high level, easy to use, practical and flexible API.
 
-Started as [rlua](https://github.com/amethyst/rlua/tree/0.15.3) fork, `mlua` supports Lua 5.4, 5.3, 5.2 and 5.1 including LuaJIT (2.0.5 and 2.1 beta) and allows to write native Lua modules in Rust as well as use Lua in a standalone mode.
+Started as [rlua] fork, `mlua` supports Lua 5.4, 5.3, 5.2 and 5.1 including LuaJIT (2.0.5 and 2.1 beta) and allows to write native Lua modules in Rust as well as use Lua in a standalone mode.
 
 `mlua` tested on Windows/macOS/Linux including module mode in [GitHub Actions] on `x86_64` platform and cross-compilation to `aarch64` (other targets are also supported).
 
+Check our [benchmark results](https://github.com/khvzak/script-bench-rs) for `mlua`, [rlua] and [hlua].
+
 [GitHub Actions]: https://github.com/khvzak/mlua/actions
+[rlua]: https://github.com/amethyst/rlua
+[hlua]: https://github.com/tomaka/hlua
 
 ## Usage
 
@@ -76,7 +80,7 @@ With `serialize` feature flag enabled, `mlua` allows you to serialize/deserializ
 
 ### Compiling
 
-You have to enable one of the features `lua54`, `lua53`, `lua52`, `lua51` or `luajit`, according to the chosen Lua version.
+You have to enable one of the features `lua54`, `lua53`, `lua52`, `lua51` or `luajit(52)`, according to the chosen Lua version.
 
 By default `mlua` uses `pkg-config` tool to find lua includes and libraries for the chosen Lua version.
 In most cases it works as desired, although sometimes could be more preferable to use a custom lua library.
@@ -99,7 +103,7 @@ Add to `Cargo.toml` :
 
 ``` toml
 [dependencies]
-mlua = { version = "0.6", features = ["lua53", "vendored"] }
+mlua = { version = "0.6", features = ["lua54", "vendored"] }
 ```
 
 `main.rs`
@@ -134,7 +138,7 @@ Add to `Cargo.toml` :
 crate-type = ["cdylib"]
 
 [dependencies]
-mlua = { version = "0.6", features = ["lua53", "vendored", "module"] }
+mlua = { version = "0.6", features = ["lua54", "vendored", "module"] }
 ```
 
 `lib.rs` :
