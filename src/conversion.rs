@@ -364,7 +364,9 @@ macro_rules! lua_convert_int {
         impl<'lua> FromLua<'lua> for $x {
             fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> Result<Self> {
                 let ty = value.type_name();
-                (if let Some(i) = lua.coerce_integer(value.clone())? {
+                (if let Value::Integer(i) = value {
+                    cast(i)
+                } else if let Some(i) = lua.coerce_integer(value.clone())? {
                     cast(i)
                 } else {
                     cast(lua.coerce_number(value)?.ok_or_else(|| {

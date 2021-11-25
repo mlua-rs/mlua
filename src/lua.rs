@@ -2230,13 +2230,14 @@ impl Lua {
                     args.push_front(lua.pop_value());
                 }
 
-                let results = ((*upvalue).func)(&lua, args)?;
+                let mut results = ((*upvalue).func)(&lua, args)?;
                 let nresults = results.len() as c_int;
 
                 check_stack(state, nresults)?;
-                for r in results {
+                for r in results.drain_all() {
                     lua.push_value(r)?;
                 }
+                lua.cache_multivalue(results);
 
                 Ok(nresults)
             })
