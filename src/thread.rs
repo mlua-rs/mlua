@@ -7,7 +7,7 @@ use crate::types::LuaRef;
 use crate::util::{check_stack, error_traceback, pop_error, StackGuard};
 use crate::value::{FromLuaMulti, ToLuaMulti};
 
-#[cfg(any(feature = "lua54", all(feature = "luajit", feature = "vendored"), doc))]
+#[cfg(any(feature = "lua54", all(feature = "luajit", feature = "vendored")))]
 use crate::function::Function;
 
 #[cfg(feature = "async")]
@@ -182,7 +182,7 @@ impl<'lua> Thread<'lua> {
     ///
     /// [Lua 5.4]: https://www.lua.org/manual/5.4/manual.html#lua_resetthread
     /// [LuaJIT]: https://github.com/openresty/luajit2#lua_resetthread
-    #[cfg(any(feature = "lua54", all(feature = "luajit", feature = "vendored"), doc))]
+    #[cfg(any(feature = "lua54", all(feature = "luajit", feature = "vendored")))]
     pub fn reset(&self, func: Function<'lua>) -> Result<()> {
         let lua = self.0.lua;
         unsafe {

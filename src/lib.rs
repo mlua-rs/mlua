@@ -192,6 +192,23 @@ extern crate mlua_derive;
 #[cfg_attr(docsrs, doc(cfg(feature = "macros")))]
 pub use mlua_derive::chunk;
 
-#[cfg(any(feature = "module"))]
+/// Registers Lua module entrypoint.
+///
+/// You can register multiple entrypoints as required.
+///
+/// ```
+/// use mlua::{Lua, Result, Table};
+///
+/// #[mlua::lua_module]
+/// fn my_module(lua: &Lua) -> Result<Table> {
+///     let exports = lua.create_table()?;
+///     exports.set("hello", "world")?;
+///     Ok(exports)
+/// }
+/// ```
+///
+/// Internally in the code above the compiler defines C function `luaopen_my_module`.
+///
+#[cfg(any(feature = "module", docsrs))]
 #[cfg_attr(docsrs, doc(cfg(feature = "module")))]
 pub use mlua_derive::lua_module;

@@ -11,9 +11,9 @@ use crate::lua::Lua;
 /// The `Debug` structure is provided as a parameter to the hook function set with
 /// [`Lua::set_hook`]. You may call the methods on this structure to retrieve information about the
 /// Lua code executing at the time that the hook function was called. Further information can be
-/// found in the [Lua 5.3 documentation][lua_doc].
+/// found in the Lua [documentation][lua_doc].
 ///
-/// [lua_doc]: https://www.lua.org/manual/5.3/manual.html#lua_Debug
+/// [lua_doc]: https://www.lua.org/manual/5.4/manual.html#lua_Debug
 /// [`Lua::set_hook`]: crate::Lua::set_hook
 pub struct Debug<'lua> {
     lua: &'lua Lua,
@@ -171,10 +171,10 @@ pub struct DebugSource<'a> {
 pub struct DebugStack {
     pub num_ups: i32,
     /// Requires `feature = "lua54/lua53/lua52"`
-    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", doc))]
+    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
     pub num_params: i32,
     /// Requires `feature = "lua54/lua53/lua52"`
-    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", doc))]
+    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
     pub is_vararg: bool,
 }
 

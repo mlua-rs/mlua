@@ -127,7 +127,7 @@ fn main() -> LuaResult<()> {
 ```
 
 ### Module mode
-In a module mode `mlua` allows to create a compiled Lua module that can be loaded from Lua code using [`require`](https://www.lua.org/manual/5.3/manual.html#pdf-require). In this case `mlua` uses an external Lua runtime which could lead to potential unsafety due to unpredictability of the Lua environment and usage of libraries such as [`debug`](https://www.lua.org/manual/5.3/manual.html#6.10).
+In a module mode `mlua` allows to create a compiled Lua module that can be loaded from Lua code using [`require`](https://www.lua.org/manual/5.4/manual.html#pdf-require). In this case `mlua` uses an external Lua runtime which could lead to potential unsafety due to unpredictability of the Lua environment and usage of libraries such as [`debug`](https://www.lua.org/manual/5.4/manual.html#6.10).
 
 [Example](examples/module)
 
@@ -164,7 +164,7 @@ And then (**macOS** example):
 ``` sh
 $ cargo rustc -- -C link-arg=-undefined -C link-arg=dynamic_lookup
 $ ln -s ./target/debug/libmy_module.dylib ./my_module.so
-$ lua5.3 -e 'require("my_module").hello("world")'
+$ lua5.4 -e 'require("my_module").hello("world")'
 hello, world!
 ```
 

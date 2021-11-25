@@ -119,14 +119,14 @@ struct MemoryInfo {
 /// In Lua 5.4 GC can work in two modes: incremental and generational.
 /// Previous Lua versions support only incremental GC.
 ///
-/// More information can be found in the Lua 5.x [documentation].
+/// More information can be found in the Lua [documentation].
 ///
 /// [documentation]: https://www.lua.org/manual/5.4/manual.html#2.5
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum GCMode {
     Incremental,
     /// Requires `feature = "lua54"`
-    #[cfg(any(feature = "lua54", doc))]
+    #[cfg(any(feature = "lua54"))]
     Generational,
 }
 
@@ -144,8 +144,8 @@ pub struct LuaOptions {
     ///
     /// Default: **true**
     ///
-    /// [`pcall`]: https://www.lua.org/manual/5.3/manual.html#pdf-pcall
-    /// [`xpcall`]: https://www.lua.org/manual/5.3/manual.html#pdf-xpcall
+    /// [`pcall`]: https://www.lua.org/manual/5.4/manual.html#pdf-pcall
+    /// [`xpcall`]: https://www.lua.org/manual/5.4/manual.html#pdf-xpcall
     pub catch_rust_panics: bool,
 
     /// Max size of thread (coroutine) object cache used to execute asynchronous functions.
@@ -157,6 +157,7 @@ pub struct LuaOptions {
     ///
     /// [`lua_resetthread`]: https://www.lua.org/manual/5.4/manual.html#lua_resetthread
     #[cfg(feature = "async")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
     pub thread_cache_size: usize,
 }
 
@@ -188,6 +189,7 @@ impl LuaOptions {
     ///
     /// [`thread_cache_size`]: #structfield.thread_cache_size
     #[cfg(feature = "async")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
     pub const fn thread_cache_size(mut self, size: usize) -> Self {
         self.thread_cache_size = size;
         self
@@ -616,7 +618,7 @@ impl Lua {
     ///
     /// Behavior is similar to Lua's [`require`] function.
     ///
-    /// [`require`]: https://www.lua.org/manual/5.3/manual.html#pdf-require
+    /// [`require`]: https://www.lua.org/manual/5.4/manual.html#pdf-require
     pub fn load_from_function<'lua, S, T>(
         &'lua self,
         modname: &S,
@@ -935,7 +937,7 @@ impl Lua {
     /// Does not work on module mode where Lua state is managed externally.
     ///
     /// Requires `feature = "lua54/lua53/lua52"`
-    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", doc))]
+    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
     pub fn set_memory_limit(&self, memory_limit: usize) -> Result<usize> {
         unsafe {
             match &mut (*self.extra.get()).mem_info {
@@ -952,7 +954,7 @@ impl Lua {
     /// Returns true if the garbage collector is currently running automatically.
     ///
     /// Requires `feature = "lua54/lua53/lua52"`
-    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", doc))]
+    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
     pub fn gc_is_running(&self) -> bool {
         let state = self.main_state.unwrap_or(self.state);
         unsafe { ffi::lua_gc(state, ffi::LUA_GCISRUNNING, 0) != 0 }
@@ -1005,10 +1007,10 @@ impl Lua {
 
     /// Sets the 'pause' value of the collector.
     ///
-    /// Returns the previous value of 'pause'. More information can be found in the [Lua 5.3
-    /// documentation][lua_doc].
+    /// Returns the previous value of 'pause'. More information can be found in the Lua
+    /// [documentation][lua_doc].
     ///
-    /// [lua_doc]: https://www.lua.org/manual/5.3/manual.html#2.5
+    /// [lua_doc]: https://www.lua.org/manual/5.4/manual.html#2.5
     pub fn gc_set_pause(&self, pause: c_int) -> c_int {
         let state = self.main_state.unwrap_or(self.state);
         unsafe { ffi::lua_gc(state, ffi::LUA_GCSETPAUSE, pause) }
@@ -1017,9 +1019,9 @@ impl Lua {
     /// Sets the 'step multiplier' value of the collector.
     ///
     /// Returns the previous value of the 'step multiplier'. More information can be found in the
-    /// Lua 5.x [documentation][lua_doc].
+    /// Lua [documentation][lua_doc].
     ///
-    /// [lua_doc]: https://www.lua.org/manual/5.3/manual.html#2.5
+    /// [lua_doc]: https://www.lua.org/manual/5.4/manual.html#2.5
     pub fn gc_set_step_multiplier(&self, step_multiplier: c_int) -> c_int {
         let state = self.main_state.unwrap_or(self.state);
         unsafe { ffi::lua_gc(state, ffi::LUA_GCSETSTEPMUL, step_multiplier) }
@@ -1028,7 +1030,7 @@ impl Lua {
     /// Changes the collector to incremental mode with the given parameters.
     ///
     /// Returns the previous mode (always `GCMode::Incremental` in Lua < 5.4).
-    /// More information can be found in the Lua 5.x [documentation][lua_doc].
+    /// More information can be found in the Lua [documentation][lua_doc].
     ///
     /// [lua_doc]: https://www.lua.org/manual/5.4/manual.html#2.5.1
     pub fn gc_inc(&self, pause: c_int, step_multiplier: c_int, step_size: c_int) -> GCMode {
@@ -1070,7 +1072,7 @@ impl Lua {
     /// Requires `feature = "lua54"`
     ///
     /// [lua_doc]: https://www.lua.org/manual/5.4/manual.html#2.5.2
-    #[cfg(any(feature = "lua54", doc))]
+    #[cfg(any(feature = "lua54"))]
     pub fn gc_gen(&self, minor_multiplier: c_int, major_multiplier: c_int) -> GCMode {
         let state = self.main_state.unwrap_or(self.state);
         let prev_mode =
@@ -2558,7 +2560,7 @@ pub enum ChunkMode {
 
 /// Trait for types [loadable by Lua] and convertible to a [`Chunk`]
 ///
-/// [loadable by Lua]: https://www.lua.org/manual/5.3/manual.html#3.3.2
+/// [loadable by Lua]: https://www.lua.org/manual/5.4/manual.html#3.3.2
 /// [`Chunk`]: crate::Chunk
 pub trait AsChunk<'lua> {
     /// Returns chunk data (can be text or binary)
@@ -2571,7 +2573,7 @@ pub trait AsChunk<'lua> {
 
     /// Returns optional chunk [environment]
     ///
-    /// [environment]: https://www.lua.org/manual/5.3/manual.html#2.2
+    /// [environment]: https://www.lua.org/manual/5.4/manual.html#2.2
     fn env(&self, _lua: &'lua Lua) -> Result<Option<Value<'lua>>> {
         Ok(None)
     }

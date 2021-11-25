@@ -54,29 +54,29 @@ pub enum MetaMethod {
     Unm,
     /// The floor division (//) operator.
     /// Requires `feature = "lua54/lua53"`
-    #[cfg(any(feature = "lua54", feature = "lua53", doc))]
+    #[cfg(any(feature = "lua54", feature = "lua53"))]
     IDiv,
     /// The bitwise AND (&) operator.
     /// Requires `feature = "lua54/lua53"`
-    #[cfg(any(feature = "lua54", feature = "lua53", doc))]
+    #[cfg(any(feature = "lua54", feature = "lua53"))]
     BAnd,
     /// The bitwise OR (|) operator.
     /// Requires `feature = "lua54/lua53"`
-    #[cfg(any(feature = "lua54", feature = "lua53", doc))]
+    #[cfg(any(feature = "lua54", feature = "lua53"))]
     BOr,
     /// The bitwise XOR (binary ~) operator.
     /// Requires `feature = "lua54/lua53"`
-    #[cfg(any(feature = "lua54", feature = "lua53", doc))]
+    #[cfg(any(feature = "lua54", feature = "lua53"))]
     BXor,
     /// The bitwise NOT (unary ~) operator.
     /// Requires `feature = "lua54/lua53"`
-    #[cfg(any(feature = "lua54", feature = "lua53", doc))]
+    #[cfg(any(feature = "lua54", feature = "lua53"))]
     BNot,
     /// The bitwise left shift (<<) operator.
-    #[cfg(any(feature = "lua54", feature = "lua53", doc))]
+    #[cfg(any(feature = "lua54", feature = "lua53"))]
     Shl,
     /// The bitwise right shift (>>) operator.
-    #[cfg(any(feature = "lua54", feature = "lua53", doc))]
+    #[cfg(any(feature = "lua54", feature = "lua53"))]
     Shr,
     /// The string concatenation operator `..`.
     Concat,
@@ -108,7 +108,6 @@ pub enum MetaMethod {
         feature = "lua53",
         feature = "lua52",
         feature = "luajit52",
-        doc
     ))]
     Pairs,
     /// The `__ipairs` metamethod.
@@ -130,7 +129,7 @@ pub enum MetaMethod {
     /// Requires `feature = "lua54"`
     ///
     /// [lua_doc]: https://www.lua.org/manual/5.4/manual.html#3.3.8
-    #[cfg(any(feature = "lua54", doc))]
+    #[cfg(any(feature = "lua54"))]
     Close,
     /// A custom metamethod.
     ///
