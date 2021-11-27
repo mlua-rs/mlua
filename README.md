@@ -20,11 +20,7 @@ Started as [rlua] fork, `mlua` supports Lua 5.4, 5.3, 5.2 and 5.1 including LuaJ
 
 `mlua` tested on Windows/macOS/Linux including module mode in [GitHub Actions] on `x86_64` platform and cross-compilation to `aarch64` (other targets are also supported).
 
-Check our [benchmark results](https://github.com/khvzak/script-bench-rs) for `mlua`, [rlua] and [hlua].
-
 [GitHub Actions]: https://github.com/khvzak/mlua/actions
-[rlua]: https://github.com/amethyst/rlua
-[hlua]: https://github.com/tomaka/hlua
 
 ## Usage
 
