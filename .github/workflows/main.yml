@@ -7,11 +7,11 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-18.04, macos-latest, windows-latest]
+        os: [ubuntu-20.04, macos-latest, windows-latest]
         rust: [stable]
         lua: [lua54, lua53, lua52, lua51, luajit]
         include:
-        - os: ubuntu-18.04
+        - os: ubuntu-20.04
           target: x86_64-unknown-linux-gnu
         - os: macos-latest
           target: x86_64-apple-darwin
@@ -31,7 +31,7 @@ jobs:
         cargo build --features "${{ matrix.lua }},vendored,async,send,serialize,macros"
       shell: bash
     - name: Build ${{ matrix.lua }} pkg-config
-      if: ${{ matrix.os == 'ubuntu-18.04' && matrix.lua != 'lua54' }}
+      if: ${{ matrix.os == 'ubuntu-20.04' && matrix.lua != 'lua54' }}
       run: |
         sudo apt-get update
         sudo apt-get install -y --no-install-recommends liblua5.3-dev liblua5.2-dev liblua5.1-0-dev libluajit-5.1-dev
@@ -56,7 +56,7 @@ jobs:
 
   build_aarch64_cross_ubuntu:
     name: Cross-compile to aarch64-unknown-linux-gnu
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-20.04
     needs: build
     strategy:
       matrix:
@@ -79,7 +79,7 @@ jobs:
 
   build_armv7_cross_ubuntu:
     name: Cross-compile to armv7-unknown-linux-gnueabihf
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-20.04
     needs: build
     strategy:
       matrix:
@@ -106,11 +106,11 @@ jobs:
     needs: build
     strategy:
       matrix:
-        os: [ubuntu-18.04, macos-latest, windows-latest]
+        os: [ubuntu-20.04, macos-latest, windows-latest]
         rust: [stable, nightly]
-        lua: [lua54, lua53, lua52, lua51, luajit]
+        lua: [lua54, lua53, lua52, lua51, luajit, luajit52]
         include:
-        - os: ubuntu-18.04
+        - os: ubuntu-20.04
           target: x86_64-unknown-linux-gnu
         - os: macos-latest
           target: x86_64-apple-darwin
@@ -129,8 +129,8 @@ jobs:
         cargo test --features "${{ matrix.lua }},vendored"
         cargo test --features "${{ matrix.lua }},vendored,async,send,serialize,macros"
       shell: bash
-    - name: Run compile tests (macos lua53)
-      if: ${{ matrix.os == 'macos-latest' && matrix.lua == 'lua53' }}
+    - name: Run compile tests (macos lua54)
+      if: ${{ matrix.os == 'macos-latest' && matrix.lua == 'lua54' }}
       run: |
         TRYBUILD=overwrite cargo test --features "${{ matrix.lua }},vendored" -- --ignored
         TRYBUILD=overwrite cargo test --features "${{ matrix.lua }},vendored,async,send,serialize,macros" -- --ignored
@@ -142,11 +142,11 @@ jobs:
     needs: build
     strategy:
       matrix:
-        os: [ubuntu-18.04]
+        os: [ubuntu-20.04]
         rust: [nightly]
         lua: [lua54, lua53, lua52, lua51, luajit]
         include:
-        - os: ubuntu-18.04
+        - os: ubuntu-20.04
           target: x86_64-unknown-linux-gnu
     steps:
     - uses: actions/checkout@v2
@@ -168,11 +168,11 @@ jobs:
     needs: build
     strategy:
       matrix:
-        os: [ubuntu-18.04, macos-latest]
+        os: [ubuntu-20.04, macos-latest]
         rust: [stable]
         lua: [lua54, lua53, lua52, lua51, luajit]
         include:
-        - os: ubuntu-18.04
+        - os: ubuntu-20.04
           target: x86_64-unknown-linux-gnu
         - os: macos-latest
           target: x86_64-apple-darwin
@@ -213,7 +213,7 @@ jobs:
 
   rustfmt:
     name: Rustfmt
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-20.04
     steps:
     - uses: actions/checkout@v2
     - uses: actions-rs/toolchain@v1
@@ -225,7 +225,7 @@ jobs:
 
   clippy:
     name: Clippy check
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-20.04
     strategy:
       matrix:
         lua: [lua54, lua53, lua52, lua51, luajit]
