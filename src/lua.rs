@@ -1441,7 +1441,7 @@ impl Lua {
     /// Resets thread (coroutine) and returns to the cache for later use.
     #[cfg(feature = "async")]
     #[cfg(any(feature = "lua54", all(feature = "luajit", feature = "vendored")))]
-    pub(crate) fn recycle_thread<'lua>(&'lua self, thread: &mut Thread<'lua>) {
+    pub(crate) fn recycle_thread(&self, thread: &mut Thread) {
         unsafe {
             let extra = &mut *self.extra.get();
             let thread_state = ffi::lua_tothread(extra.ref_thread, thread.0.index);
@@ -1986,7 +1986,7 @@ impl Lua {
     }
 
     // Pushes a LuaRef value onto the stack, uses 1 stack space, does not call checkstack
-    pub(crate) unsafe fn push_ref<'lua>(&'lua self, lref: &LuaRef<'lua>) {
+    pub(crate) unsafe fn push_ref(&self, lref: &LuaRef) {
         assert!(
             Arc::ptr_eq(&lref.lua.extra, &self.extra),
             "Lua instance passed Value created from a different main Lua state"
@@ -2021,7 +2021,7 @@ impl Lua {
         }
     }
 
-    pub(crate) fn drop_ref<'lua>(&'lua self, lref: &mut LuaRef<'lua>) {
+    pub(crate) fn drop_ref(&self, lref: &LuaRef) {
         unsafe {
             let extra = &mut *self.extra.get();
             ffi::lua_pushnil(extra.ref_thread);
