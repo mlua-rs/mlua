@@ -689,6 +689,7 @@ impl Lua {
     /// This `Lua` object can then be dropped which will properly release the allocated memory.
     ///
     /// [`Lua::from_static`]: #method.from_static
+    #[doc(hidden)]
     pub fn into_static(self) -> &'static Self {
         Box::leak(Box::new(self))
     }
@@ -697,6 +698,7 @@ impl Lua {
     ///
     /// # Safety
     /// This function is unsafe because improper use may lead to memory problems or undefined behavior.
+    #[doc(hidden)]
     pub unsafe fn from_static(lua: &'static Lua) -> Self {
         *Box::from_raw(lua as *const Lua as *mut Lua)
     }
