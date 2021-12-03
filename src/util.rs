@@ -1,6 +1,4 @@
 use std::any::{Any, TypeId};
-use std::collections::HashMap;
-use std::error::Error as StdError;
 use std::fmt::Write;
 use std::os::raw::{c_char, c_int, c_void};
 use std::panic::{catch_unwind, resume_unwind, AssertUnwindSafe};
@@ -8,12 +6,13 @@ use std::sync::Arc;
 use std::{mem, ptr, slice};
 
 use once_cell::sync::Lazy;
+use rustc_hash::FxHashMap;
 
 use crate::error::{Error, Result};
 use crate::ffi;
 
-static METATABLE_CACHE: Lazy<HashMap<TypeId, u8>> = Lazy::new(|| {
-    let mut map = HashMap::with_capacity(32);
+static METATABLE_CACHE: Lazy<FxHashMap<TypeId, u8>> = Lazy::new(|| {
+    let mut map = FxHashMap::with_capacity_and_hasher(32, Default::default());
     crate::lua::init_metatable_cache(&mut map);
     map.insert(TypeId::of::<WrappedFailure>(), 0);
     map.insert(TypeId::of::<String>(), 0);
@@ -288,6 +287,17 @@ pub unsafe fn push_userdata<T>(state: *mut ffi::lua_State, t: T) -> Result<()> {
     Ok(())
 }
 
+// Internally uses 3 stack spaces, does not call checkstack.
+#[cfg(feature = "lua54")]
+#[inline]
+pub unsafe fn push_userdata_uv<T>(state: *mut ffi::lua_State, t: T, nuvalue: c_int) -> Result<()> {
+    let ud = protect_lua!(state, 0, 1, |state| {
+        ffi::lua_newuserdatauv(state, mem::size_of::<T>(), nuvalue) as *mut T
+    })?;
+    ptr::write(ud, t);
+    Ok(())
+}
+
 #[inline]
 pub unsafe fn get_userdata<T>(state: *mut ffi::lua_State, index: c_int) -> *mut T {
     let ud = ffi::lua_touserdata(state, index) as *mut T;
@@ -535,11 +545,8 @@ where
             ffi::lua_settop(state, 1);
 
             let wrapped_error = ud as *mut WrappedFailure;
-            ptr::write(wrapped_error, WrappedFailure::Error(err));
-            get_gc_metatable::<WrappedFailure>(state);
-            ffi::lua_setmetatable(state, -2);
 
-            // Convert to CallbackError and attach traceback
+            // Build `CallbackError` with traceback
             let traceback = if ffi::lua_checkstack(state, ffi::LUA_TRACEBACK_STACK) != 0 {
                 ffi::luaL_traceback(state, state, ptr::null(), 0);
                 let traceback = to_string(state, -1);
@@ -548,10 +555,13 @@ where
             } else {
                 "<not enough stack space for traceback>".to_string()
             };
-            if let WrappedFailure::Error(ref mut err) = *wrapped_error {
-                let cause = Arc::new(err.clone());
-                *err = Error::CallbackError { traceback, cause };
-            }
+            let cause = Arc::new(err);
+            ptr::write(
+                wrapped_error,
+                WrappedFailure::Error(Error::CallbackError { traceback, cause }),
+            );
+            get_gc_metatable::<WrappedFailure>(state);
+            ffi::lua_setmetatable(state, -2);
 
             ffi::lua_error(state)
         }
@@ -736,32 +746,6 @@ pub unsafe fn init_error_registry(state: *mut ffi::lua_State) -> Result<()> {
                     // be possible to make this consume arbitrary amounts of memory (for example, some
                     // kind of recursive error structure?)
                     let _ = write!(&mut (*err_buf), "{}", error);
-                    // Find first two sources that caused the error
-                    let mut source1 = error.source();
-                    let mut source0 = source1.and_then(|s| s.source());
-                    while let Some(source) = source0.and_then(|s| s.source()) {
-                        source1 = source0;
-                        source0 = Some(source);
-                    }
-                    match (source1, source0) {
-                        (_, Some(error0))
-                            if error0.to_string().contains("\nstack traceback:\n") =>
-                        {
-                            let _ = write!(&mut (*err_buf), "\ncaused by: {}", error0);
-                        }
-                        (Some(error1), Some(error0)) => {
-                            let _ = write!(&mut (*err_buf), "\ncaused by: {}", error0);
-                            let s = error1.to_string();
-                            if let Some(traceback) = s.split_once("\nstack traceback:\n") {
-                                let _ =
-                                    write!(&mut (*err_buf), "\nstack traceback:\n{}", traceback.1);
-                            }
-                        }
-                        (Some(error1), None) => {
-                            let _ = write!(&mut (*err_buf), "\ncaused by: {}", error1);
-                        }
-                        _ => {}
-                    }
                     Ok(err_buf)
                 }
                 Some(WrappedFailure::Panic(Some(ref panic))) => {
@@ -805,7 +789,6 @@ pub unsafe fn init_error_registry(state: *mut ffi::lua_State) -> Result<()> {
     // Create destructed userdata metatable
 
     unsafe extern "C" fn destructed_error(state: *mut ffi::lua_State) -> c_int {
-        // TODO: Consider changing error to UserDataDestructed in v0.7
         callback_error(state, |_| Err(Error::CallbackDestructed))
     }
 
@@ -842,9 +825,15 @@ pub unsafe fn init_error_registry(state: *mut ffi::lua_State) -> Result<()> {
         "__newindex",
         "__call",
         "__tostring",
-        #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "lua-factorio"))]
+        #[cfg(any(
+            feature = "lua54",
+            feature = "lua53",
+            feature = "lua52",
+            feature = "luajit52",
+            feature = "lua-factorio"
+        ))]
         "__pairs",
-        #[cfg(any(feature = "lua53", feature = "lua52", feature = "lua-factorio"))]
+        #[cfg(any(feature = "lua53", feature = "lua52", feature = "luajit52", feature = "lua-factorio"))]
         "__ipairs",
         #[cfg(feature = "lua54")]
         "__close",

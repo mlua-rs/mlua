@@ -1,13 +1,8 @@
 error[E0277]: the type `UnsafeCell<()>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
-   --> $DIR/ref_nounwindsafe.rs:8:5
+   --> tests/compile/ref_nounwindsafe.rs:8:5
     |
 8   |     catch_unwind(move || table.set("a", "b").unwrap());
     |     ^^^^^^^^^^^^ `UnsafeCell<()>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
-    |
-   ::: $RUST/std/src/panic.rs
-    |
-    | pub fn catch_unwind<F: FnOnce() -> R + UnwindSafe, R>(f: F) -> Result<R> {
-    |                                        ---------- required by this bound in `catch_unwind`
     |
     = help: within `Lua`, the trait `RefUnwindSafe` is not implemented for `UnsafeCell<()>`
     = note: required because it appears within the type `PhantomData<UnsafeCell<()>>`
@@ -16,17 +11,17 @@ error[E0277]: the type `UnsafeCell<()>` may contain interior mutability and a re
     = note: required because it appears within the type `mlua::types::LuaRef<'_>`
     = note: required because it appears within the type `LuaTable<'_>`
     = note: required because it appears within the type `[closure@$DIR/tests/compile/ref_nounwindsafe.rs:8:18: 8:54]`
+note: required by a bound in `catch_unwind`
+   --> $RUST/std/src/panic.rs
+    |
+    | pub fn catch_unwind<F: FnOnce() -> R + UnwindSafe, R>(f: F) -> Result<R> {
+    |                                        ^^^^^^^^^^ required by this bound in `catch_unwind`
 
 error[E0277]: the type `UnsafeCell<mlua::lua::ExtraData>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
-   --> $DIR/ref_nounwindsafe.rs:8:5
+   --> tests/compile/ref_nounwindsafe.rs:8:5
     |
 8   |     catch_unwind(move || table.set("a", "b").unwrap());
     |     ^^^^^^^^^^^^ `UnsafeCell<mlua::lua::ExtraData>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
-    |
-   ::: $RUST/std/src/panic.rs
-    |
-    | pub fn catch_unwind<F: FnOnce() -> R + UnwindSafe, R>(f: F) -> Result<R> {
-    |                                        ---------- required by this bound in `catch_unwind`
     |
     = help: within `Lua`, the trait `RefUnwindSafe` is not implemented for `UnsafeCell<mlua::lua::ExtraData>`
     = note: required because it appears within the type `alloc::sync::ArcInner<UnsafeCell<mlua::lua::ExtraData>>`
@@ -37,3 +32,8 @@ error[E0277]: the type `UnsafeCell<mlua::lua::ExtraData>` may contain interior m
     = note: required because it appears within the type `mlua::types::LuaRef<'_>`
     = note: required because it appears within the type `LuaTable<'_>`
     = note: required because it appears within the type `[closure@$DIR/tests/compile/ref_nounwindsafe.rs:8:18: 8:54]`
+note: required by a bound in `catch_unwind`
+   --> $RUST/std/src/panic.rs
+    |
+    | pub fn catch_unwind<F: FnOnce() -> R + UnwindSafe, R>(f: F) -> Result<R> {
+    |                                        ^^^^^^^^^^ required by this bound in `catch_unwind`

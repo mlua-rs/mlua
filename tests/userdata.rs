@@ -111,7 +111,12 @@ fn test_metamethods() -> Result<()> {
                     Err("no such custom index".to_lua_err())
                 }
             });
-            #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+            #[cfg(any(
+                feature = "lua54",
+                feature = "lua53",
+                feature = "lua52",
+                feature = "luajit52"
+            ))]
             methods.add_meta_method(MetaMethod::Pairs, |lua, data, ()| {
                 use std::iter::FromIterator;
                 let stateless_iter = lua.create_function(|_, (data, i): (MyUserData, i64)| {
@@ -136,11 +141,16 @@ fn test_metamethods() -> Result<()> {
         10
     );
 
-    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
-    let pairs_it = {
-        lua.load(
+    #[cfg(any(
+        feature = "lua54",
+        feature = "lua53",
+        feature = "lua52",
+        feature = "luajit52"
+    ))]
+    let pairs_it = lua
+        .load(
             r#"
-            function pairs_it()
+            function()
                 local r = 0
                 for i, v in pairs(userdata1) do
                     r = r + v
@@ -149,16 +159,20 @@ fn test_metamethods() -> Result<()> {
             end
         "#,
         )
-        .exec()?;
-        globals.get::<_, Function>("pairs_it")?
-    };
+        .eval::<Function>()?;
 
     assert_eq!(lua.load("userdata1 - userdata2").eval::<MyUserData>()?.0, 4);
     assert_eq!(lua.load("userdata1:get()").eval::<i64>()?, 7);
     assert_eq!(lua.load("userdata2.inner").eval::<i64>()?, 3);
-    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
-    assert_eq!(pairs_it.call::<_, i64>(())?, 28);
     assert!(lua.load("userdata2.nonexist_field").eval::<()>().is_err());
+
+    #[cfg(any(
+        feature = "lua54",
+        feature = "lua53",
+        feature = "lua52",
+        feature = "luajit52"
+    ))]
+    assert_eq!(pairs_it.call::<_, i64>(())?, 28);
 
     let userdata2: Value = globals.get("userdata2")?;
     let userdata3: Value = globals.get("userdata3")?;
@@ -285,7 +299,7 @@ fn test_userdata_take() -> Result<()> {
 
     fn check_userdata_take(lua: &Lua, userdata: AnyUserData, rc: Arc<i64>) -> Result<()> {
         lua.globals().set("userdata", userdata.clone())?;
-        assert_eq!(Arc::strong_count(&rc), 2);
+        assert_eq!(Arc::strong_count(&rc), 3);
         let userdata_copy = userdata.clone();
         {
             let _value = userdata.borrow::<MyUserdata>()?;
@@ -299,6 +313,7 @@ fn test_userdata_take() -> Result<()> {
         let value = userdata_copy.take::<MyUserdata>()?;
         assert_eq!(*value.0, 18);
         drop(value);
+        lua.gc_collect()?;
         assert_eq!(Arc::strong_count(&rc), 1);
 
         match userdata.borrow::<MyUserdata>() {
@@ -319,6 +334,7 @@ fn test_userdata_take() -> Result<()> {
 
     let rc = Arc::new(18);
     let userdata = lua.create_userdata(MyUserdata(rc.clone()))?;
+    userdata.set_nth_user_value(2, MyUserdata(rc.clone()))?;
     check_userdata_take(&lua, userdata, rc)?;
 
     // Additionally check serializable userdata
@@ -326,6 +342,7 @@ fn test_userdata_take() -> Result<()> {
     {
         let rc = Arc::new(18);
         let userdata = lua.create_ser_userdata(MyUserdata(rc.clone()))?;
+        userdata.set_nth_user_value(2, MyUserdata(rc.clone()))?;
         check_userdata_take(&lua, userdata, rc)?;
     }
 
@@ -355,16 +372,32 @@ fn test_destroy_userdata() -> Result<()> {
 }
 
 #[test]
-fn test_user_value() -> Result<()> {
+fn test_user_values() -> Result<()> {
     struct MyUserData;
 
     impl UserData for MyUserData {}
 
     let lua = Lua::new();
     let ud = lua.create_userdata(MyUserData)?;
-    ud.set_user_value("hello")?;
-    assert_eq!(ud.get_user_value::<String>()?, "hello");
-    assert!(ud.get_user_value::<u32>().is_err());
+
+    ud.set_nth_user_value(1, "hello")?;
+    ud.set_nth_user_value(2, "world")?;
+    ud.set_nth_user_value(65535, 321)?;
+    assert_eq!(ud.get_nth_user_value::<String>(1)?, "hello");
+    assert_eq!(ud.get_nth_user_value::<String>(2)?, "world");
+    assert_eq!(ud.get_nth_user_value::<Value>(3)?, Value::Nil);
+    assert_eq!(ud.get_nth_user_value::<i32>(65535)?, 321);
+
+    assert!(ud.get_nth_user_value::<Value>(0).is_err());
+    assert!(ud.get_nth_user_value::<Value>(65536).is_err());
+
+    // Named user values
+    ud.set_named_user_value("name", "alex")?;
+    ud.set_named_user_value("age", 10)?;
+
+    assert_eq!(ud.get_named_user_value::<_, String>("name")?, "alex");
+    assert_eq!(ud.get_named_user_value::<_, i32>("age")?, 10);
+    assert_eq!(ud.get_named_user_value::<_, Value>("nonexist")?, Value::Nil);
 
     Ok(())
 }

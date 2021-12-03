@@ -1,4 +1,4 @@
-use mlua::{Lua, Nil, Result, Table, TableExt, Value};
+use mlua::{Error, Lua, Nil, Result, Table, TableExt, Value};
 
 #[test]
 fn test_set_get() -> Result<()> {
@@ -139,14 +139,6 @@ fn test_table_sequence_from() -> Result<()> {
         vec![1, 2, 3]
     );
 
-    assert_eq!(
-        get_table
-            .call::<_, Table>(&[1, 2, 3])?
-            .sequence_values()
-            .collect::<Result<Vec<i64>>>()?,
-        vec![1, 2, 3]
-    );
-
     Ok(())
 }
 
@@ -274,7 +266,12 @@ fn test_table_call() -> Result<()> {
 
     lua.load(
         r#"
-        table = {a = 1}
+        table = {a = 1, b = 2}
+        setmetatable(table, {
+            __call = function(t, key)
+                return "call_"..t[key]
+            end
+        })
 
         function table.func(key)
             return "func_"..key
@@ -289,11 +286,19 @@ fn test_table_call() -> Result<()> {
 
     let table: Table = lua.globals().get("table")?;
 
+    assert_eq!(table.call::<_, String>("b")?, "call_2");
     assert_eq!(table.call_function::<_, _, String>("func", "a")?, "func_a");
     assert_eq!(
         table.call_method::<_, _, String>("method", "a")?,
         "method_1"
     );
+
+    // Test calling non-callable table
+    let table2 = lua.create_table()?;
+    assert!(matches!(
+        table2.call::<_, ()>(()),
+        Err(Error::RuntimeError(_))
+    ));
 
     Ok(())
 }

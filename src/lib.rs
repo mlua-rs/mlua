@@ -72,7 +72,7 @@
 //! [`serde::Deserialize`]: https://docs.serde.rs/serde/de/trait.Deserialize.html
 
 // mlua types in rustdoc of other crates get linked to here.
-#![doc(html_root_url = "https://docs.rs/mlua/0.6.6")]
+#![doc(html_root_url = "https://docs.rs/mlua/0.7.0")]
 // Deny warnings inside doc tests / examples. When this isn't present, rustdoc doesn't show *any*
 // warnings at all.
 #![doc(test(attr(deny(warnings))))]
@@ -195,6 +195,23 @@ extern crate link_cplusplus;
 #[cfg_attr(docsrs, doc(cfg(feature = "macros")))]
 pub use mlua_derive::chunk;
 
-#[cfg(any(feature = "module"))]
+/// Registers Lua module entrypoint.
+///
+/// You can register multiple entrypoints as required.
+///
+/// ```
+/// use mlua::{Lua, Result, Table};
+///
+/// #[mlua::lua_module]
+/// fn my_module(lua: &Lua) -> Result<Table> {
+///     let exports = lua.create_table()?;
+///     exports.set("hello", "world")?;
+///     Ok(exports)
+/// }
+/// ```
+///
+/// Internally in the code above the compiler defines C function `luaopen_my_module`.
+///
+#[cfg(any(feature = "module", docsrs))]
 #[cfg_attr(docsrs, doc(cfg(feature = "module")))]
 pub use mlua_derive::lua_module;

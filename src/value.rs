@@ -53,7 +53,7 @@ pub enum Value<'lua> {
 pub use self::Value::Nil;
 
 impl<'lua> Value<'lua> {
-    pub fn type_name(&self) -> &'static str {
+    pub const fn type_name(&self) -> &'static str {
         match *self {
             Value::Nil => "nil",
             Value::Boolean(_) => "boolean",
@@ -162,6 +162,12 @@ impl<'lua> MultiValue<'lua> {
     pub fn new() -> MultiValue<'lua> {
         MultiValue(Vec::new())
     }
+
+    /// Similar to `new` but can return previously used container with allocated capacity.
+    #[inline]
+    pub(crate) fn new_or_cached(lua: &'lua Lua) -> MultiValue<'lua> {
+        lua.new_or_cached_multivalue()
+    }
 }
 
 impl<'lua> Default for MultiValue<'lua> {
@@ -228,18 +234,41 @@ impl<'lua> MultiValue<'lua> {
     }
 
     #[inline]
+    pub fn clear(&mut self) {
+        self.0.clear();
+    }
+
+    #[inline]
     pub fn len(&self) -> usize {
         self.0.len()
     }
 
     #[inline]
     pub fn is_empty(&self) -> bool {
-        self.0.len() == 0
+        self.0.is_empty()
     }
 
     #[inline]
     pub fn iter(&self) -> iter::Rev<slice::Iter<Value<'lua>>> {
         self.0.iter().rev()
+    }
+
+    #[inline]
+    pub(crate) fn drain_all(&mut self) -> iter::Rev<vec::Drain<Value<'lua>>> {
+        self.0.drain(..).rev()
+    }
+
+    #[inline]
+    pub(crate) fn refill(
+        &mut self,
+        iter: impl IntoIterator<Item = Result<Value<'lua>>>,
+    ) -> Result<()> {
+        self.0.clear();
+        for value in iter {
+            self.0.push(value?);
+        }
+        self.0.reverse();
+        Ok(())
     }
 }
 

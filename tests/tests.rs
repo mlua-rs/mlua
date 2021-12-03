@@ -848,6 +848,37 @@ fn test_mismatched_registry_key() -> Result<()> {
 }
 
 #[test]
+fn test_application_data() -> Result<()> {
+    let lua = Lua::new();
+
+    lua.set_app_data("test1");
+    lua.set_app_data(vec!["test2"]);
+
+    let f = lua.create_function(|lua, ()| {
+        {
+            let data1 = lua.app_data_ref::<&str>().unwrap();
+            assert_eq!(*data1, "test1");
+        }
+        let mut data2 = lua.app_data_mut::<Vec<&str>>().unwrap();
+        assert_eq!(*data2, vec!["test2"]);
+        data2.push("test3");
+        Ok(())
+    })?;
+    f.call(())?;
+
+    assert_eq!(*lua.app_data_ref::<&str>().unwrap(), "test1");
+    assert_eq!(
+        *lua.app_data_ref::<Vec<&str>>().unwrap(),
+        vec!["test2", "test3"]
+    );
+
+    lua.remove_app_data::<Vec<&str>>();
+    assert!(matches!(lua.app_data_ref::<Vec<&str>>(), None));
+
+    Ok(())
+}
+
+#[test]
 fn test_recursion() -> Result<()> {
     let lua = Lua::new();
 
@@ -1046,17 +1077,22 @@ fn test_context_thread() -> Result<()> {
         )
         .into_function()?;
 
-    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+    #[cfg(any(
+        feature = "lua54",
+        feature = "lua53",
+        feature = "lua52",
+        feature = "luajit52"
+    ))]
     f.call::<_, ()>(lua.current_thread())?;
 
-    #[cfg(any(feature = "lua51", feature = "luajit"))]
+    #[cfg(any(feature = "lua51", all(feature = "luajit", not(feature = "luajit52"))))]
     f.call::<_, ()>(Nil)?;
 
     Ok(())
 }
 
 #[test]
-#[cfg(any(feature = "lua51", feature = "luajit"))]
+#[cfg(any(feature = "lua51", all(feature = "luajit", not(feature = "luajit52"))))]
 fn test_context_thread_51() -> Result<()> {
     let lua = Lua::new();
 
@@ -1105,12 +1141,118 @@ fn test_load_from_function() -> Result<()> {
     assert_eq!(t.get::<_, String>("__name")?, "my_module");
     assert_eq!(i.load(Ordering::Relaxed), 1);
 
-    let _: Value = lua.load_from_function("my_module", func)?;
+    let _: Value = lua.load_from_function("my_module", func.clone())?;
     assert_eq!(i.load(Ordering::Relaxed), 1);
 
     let func_nil = lua.create_function(move |_, _: String| Ok(Value::Nil))?;
     let v: Value = lua.load_from_function("my_module2", func_nil)?;
     assert_eq!(v, Value::Boolean(true));
+
+    // Test unloading and loading again
+    lua.unload("my_module")?;
+    let _: Value = lua.load_from_function("my_module", func)?;
+    assert_eq!(i.load(Ordering::Relaxed), 2);
+
+    // Unloading nonexistent module must not fail
+    lua.unload("my_module2")?;
+
+    Ok(())
+}
+
+#[test]
+fn test_inspect_stack() -> Result<()> {
+    let lua = Lua::new();
+
+    // Not inside any function
+    assert!(lua.inspect_stack(0).is_none());
+
+    let logline = lua.create_function(|lua, msg: StdString| {
+        let debug = lua.inspect_stack(1).unwrap(); // caller
+        let source = debug.source().short_src.map(core::str::from_utf8);
+        let source = source.transpose().unwrap().unwrap_or("?");
+        let line = debug.curr_line();
+        Ok(format!("{}:{} {}", source, line, msg))
+    })?;
+    lua.globals().set("logline", logline)?;
+
+    lua.load(
+        r#"
+        local function foo()
+            local line = logline("hello")
+            return line
+        end
+        local function bar()
+            return foo()
+        end
+
+        assert(foo() == '[string "chunk"]:3 hello')
+        assert(bar() == '[string "chunk"]:3 hello')
+        assert(logline("world") == '[string "chunk"]:12 world')
+    "#,
+    )
+    .set_name("chunk")?
+    .exec()?;
+
+    Ok(())
+}
+
+#[test]
+fn test_multi_states() -> Result<()> {
+    let lua = Lua::new();
+
+    let f = lua.create_function(|_, g: Option<Function>| {
+        if let Some(g) = g {
+            g.call(())?;
+        }
+        Ok(())
+    })?;
+    lua.globals().set("f", f)?;
+
+    lua.load("f(function() coroutine.wrap(function() f() end)() end)")
+        .exec()?;
+
+    Ok(())
+}
+
+#[test]
+#[cfg(feature = "lua54")]
+fn test_warnings() -> Result<()> {
+    let lua = Lua::new();
+    lua.set_app_data::<Vec<(StdString, bool)>>(Vec::new());
+
+    lua.set_warning_function(|lua, msg, tocont| {
+        let msg = msg.to_string_lossy().to_string();
+        lua.app_data_mut::<Vec<(StdString, bool)>>()
+            .unwrap()
+            .push((msg, tocont));
+        Ok(())
+    });
+
+    lua.warning("native warning ...", true)?;
+    lua.warning("finish", false)?;
+    lua.load(r#"warn("lua warning", "continue")"#).exec()?;
+
+    lua.remove_warning_function();
+    lua.warning("one more warning", false)?;
+
+    let messages = lua.app_data_ref::<Vec<(StdString, bool)>>().unwrap();
+    assert_eq!(
+        *messages,
+        vec![
+            ("native warning ...".to_string(), true),
+            ("finish".to_string(), false),
+            ("lua warning".to_string(), true),
+            ("continue".to_string(), false),
+        ]
+    );
+
+    // Trigger error inside warning
+    lua.set_warning_function(|_, _, _| Err(Error::RuntimeError("warning error".to_string())));
+    assert!(matches!(
+        lua.load(r#"warn("test")"#).exec(),
+        Err(Error::CallbackError { cause, .. })
+            if matches!(*cause, Error::RuntimeError(ref err) if err == "warning error")
+    ));
 
     Ok(())
 }
