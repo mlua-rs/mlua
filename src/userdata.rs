@@ -117,7 +117,7 @@ pub enum MetaMethod {
     /// Requires `feature = "lua52/lua-factorio"`
     ///
     /// [`ipairs`]: https://www.lua.org/manual/5.2/manual.html#pdf-ipairs
-    #[cfg(any(feature = "lua52", feature = "luajit52," feature = "lua-factorio", doc))]
+    #[cfg(any(feature = "lua52", feature = "luajit52", feature = "lua-factorio", doc))]
     IPairs,
     /// The `__close` metamethod.
     ///
