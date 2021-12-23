@@ -1,3 +1,8 @@
+## v0.7.1
+
+- Fixed traceback generation for errors (#112)
+- `Lua::into_static/from_static` methods have been removed from the docs and are discouraged for use
+
 ## v0.7.0
 
 - New "application data" api to store arbitrary objects inside Lua
