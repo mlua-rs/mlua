@@ -585,7 +585,7 @@ pub unsafe extern "C" fn error_traceback(state: *mut ffi::lua_State) -> c_int {
     if get_gc_userdata::<WrappedFailure>(state, -1).is_null() {
         let s = ffi::luaL_tolstring(state, -1, ptr::null_mut());
         if ffi::lua_checkstack(state, ffi::LUA_TRACEBACK_STACK) != 0 {
-            ffi::luaL_traceback(state, state, s, 1);
+            ffi::luaL_traceback(state, state, s, 0);
             ffi::lua_remove(state, -2);
         }
     }
