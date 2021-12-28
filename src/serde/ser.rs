@@ -69,6 +69,7 @@ impl Options {
     /// Sets [`set_array_metatable`] option.
     ///
     /// [`set_array_metatable`]: #structfield.set_array_metatable
+    #[must_use]
     pub const fn set_array_metatable(mut self, enabled: bool) -> Self {
         self.set_array_metatable = enabled;
         self
@@ -77,6 +78,7 @@ impl Options {
     /// Sets [`serialize_none_to_null`] option.
     ///
     /// [`serialize_none_to_null`]: #structfield.serialize_none_to_null
+    #[must_use]
     pub const fn serialize_none_to_null(mut self, enabled: bool) -> Self {
         self.serialize_none_to_null = enabled;
         self
@@ -85,6 +87,7 @@ impl Options {
     /// Sets [`serialize_unit_to_null`] option.
     ///
     /// [`serialize_unit_to_null`]: #structfield.serialize_unit_to_null
+    #[must_use]
     pub const fn serialize_unit_to_null(mut self, enabled: bool) -> Self {
         self.serialize_unit_to_null = enabled;
         self

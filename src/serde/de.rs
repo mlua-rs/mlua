@@ -61,6 +61,7 @@ impl Options {
     /// Sets [`deny_unsupported_types`] option.
     ///
     /// [`deny_unsupported_types`]: #structfield.deny_unsupported_types
+    #[must_use]
     pub const fn deny_unsupported_types(mut self, enabled: bool) -> Self {
         self.deny_unsupported_types = enabled;
         self
@@ -69,6 +70,7 @@ impl Options {
     /// Sets [`deny_recursive_tables`] option.
     ///
     /// [`deny_recursive_tables`]: #structfield.deny_recursive_tables
+    #[must_use]
     pub fn deny_recursive_tables(mut self, enabled: bool) -> Self {
         self.deny_recursive_tables = enabled;
         self

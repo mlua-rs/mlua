@@ -175,8 +175,7 @@ impl Tokens {
     pub(crate) fn retokenize(tt: TokenStream) -> Tokens {
         Tokens(
             tt.into_iter()
-                .map(Tokens::from)
-                .flatten()
+                .flat_map(Tokens::from)
                 .peekable()
                 .batching(|iter| {
                     // Find variable tokens
@@ -217,7 +216,7 @@ impl From<TokenTree> for Tokens {
 
                 vec![Token::new_delim(b, tt.clone(), true)]
                     .into_iter()
-                    .chain(g.stream().into_iter().map(Tokens::from).flatten())
+                    .chain(g.stream().into_iter().flat_map(Tokens::from))
                     .chain(vec![Token::new_delim(e, tt, false)])
                     .collect()
             }

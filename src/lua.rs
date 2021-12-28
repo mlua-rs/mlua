@@ -180,6 +180,7 @@ impl LuaOptions {
     /// Sets [`catch_rust_panics`] option.
     ///
     /// [`catch_rust_panics`]: #structfield.catch_rust_panics
+    #[must_use]
     pub const fn catch_rust_panics(mut self, enabled: bool) -> Self {
         self.catch_rust_panics = enabled;
         self
@@ -190,6 +191,7 @@ impl LuaOptions {
     /// [`thread_cache_size`]: #structfield.thread_cache_size
     #[cfg(feature = "async")]
     #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
+    #[must_use]
     pub const fn thread_cache_size(mut self, size: usize) -> Self {
         self.thread_cache_size = size;
         self
