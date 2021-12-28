@@ -10,7 +10,7 @@ fn get_env_var(name: &str) -> String {
     }
 }
 
-pub fn probe_lua() -> PathBuf {
+pub fn probe_lua() -> Option<PathBuf> {
     let include_dir = get_env_var("LUA_INC");
     let lib_dir = get_env_var("LUA_LIB");
     let lua_lib = get_env_var("LUA_LIB_NAME");
@@ -38,7 +38,7 @@ pub fn probe_lua() -> PathBuf {
             println!("cargo:rustc-link-search=native={}", lib_dir);
             println!("cargo:rustc-link-lib={}{}", link_lib, lua_lib);
         }
-        return PathBuf::from(include_dir);
+        return Some(PathBuf::from(include_dir));
     }
 
     // Find using `pkg-config`
@@ -73,11 +73,7 @@ pub fn probe_lua() -> PathBuf {
         lua.expect(&format!("cannot find Lua {} using `pkg-config`", ver))
             .include_paths
             .get(0)
-            .expect(&format!(
-                "cannot find Lua {} include paths using `pkg-config`",
-                ver
-            ))
-            .clone()
+            .cloned()
     }
 
     #[cfg(feature = "luajit")]
@@ -90,7 +86,6 @@ pub fn probe_lua() -> PathBuf {
         lua.expect("cannot find LuaJIT using `pkg-config`")
             .include_paths
             .get(0)
-            .expect("cannot find LuaJIT include paths using `pkg-config`")
-            .clone()
+            .cloned()
     }
 }

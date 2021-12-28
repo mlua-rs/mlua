@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-pub fn probe_lua() -> PathBuf {
+pub fn probe_lua() -> Option<PathBuf> {
     #[cfg(feature = "lua54")]
     let artifacts = lua_src::Build::new().build(lua_src::Lua54);
     #[cfg(feature = "lua53")]
@@ -21,5 +21,5 @@ pub fn probe_lua() -> PathBuf {
     #[cfg(not(feature = "module"))]
     artifacts.print_cargo_metadata();
 
-    artifacts.include_dir().to_owned()
+    Some(artifacts.include_dir().to_owned())
 }
