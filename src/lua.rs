@@ -83,7 +83,7 @@ struct ExtraData {
     app_data: RefCell<HashMap<TypeId, Box<dyn Any + Send>>>,
 
     libs: StdLib,
-    mem_info: Option<Box<MemoryInfo>>,
+    mem_info: Option<ptr::NonNull<MemoryInfo>>,
     safe: bool, // Same as in the Lua struct
 
     ref_thread: *mut ffi::lua_State,
@@ -244,6 +244,9 @@ impl Drop for Lua {
 impl Drop for ExtraData {
     fn drop(&mut self) {
         *mlua_expect!(self.registry_unref_list.lock(), "unref list poisoned") = None;
+        if let Some(mem_info) = self.mem_info {
+            drop(unsafe { Box::from_raw(mem_info.as_ptr()) });
+        }
     }
 }
 
@@ -388,13 +391,13 @@ impl Lua {
         }
 
         #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
-        let mut mem_info = Box::new(MemoryInfo {
+        let mem_info = Box::into_raw(Box::new(MemoryInfo {
             used_memory: 0,
             memory_limit: 0,
-        });
+        }));
 
         #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
-        let state = ffi::lua_newstate(allocator, &mut *mem_info as *mut MemoryInfo as *mut c_void);
+        let state = ffi::lua_newstate(allocator, mem_info as *mut c_void);
         #[cfg(any(feature = "lua51", feature = "luajit"))]
         let state = ffi::luaL_newstate();
 
@@ -408,7 +411,7 @@ impl Lua {
 
         #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
         {
-            extra.mem_info = Some(mem_info);
+            extra.mem_info = ptr::NonNull::new(mem_info);
         }
 
         mlua_expect!(
@@ -920,7 +923,7 @@ impl Lua {
     pub fn used_memory(&self) -> usize {
         unsafe {
             let state = self.main_state.unwrap_or(self.state);
-            match &(*self.extra.get()).mem_info {
+            match (*self.extra.get()).mem_info.map(|x| x.as_ref()) {
                 Some(mem_info) => mem_info.used_memory as usize,
                 None => {
                     // Get data from the Lua GC
@@ -944,7 +947,7 @@ impl Lua {
     #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
     pub fn set_memory_limit(&self, memory_limit: usize) -> Result<usize> {
         unsafe {
-            match &mut (*self.extra.get()).mem_info {
+            match (*self.extra.get()).mem_info.map(|mut x| x.as_mut()) {
                 Some(mem_info) => {
                     let prev_limit = mem_info.memory_limit as usize;
                     mem_info.memory_limit = memory_limit as isize;
