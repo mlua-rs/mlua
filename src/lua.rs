@@ -2283,6 +2283,22 @@ impl Lua {
             }
         }
 
+        struct StateGuard(*mut Lua, *mut ffi::lua_State);
+
+        impl StateGuard {
+            unsafe fn new(lua: *mut Lua, state: *mut ffi::lua_State) -> Self {
+                let orig_state = (*lua).state;
+                (*lua).state = state;
+                Self(lua, orig_state)
+            }
+        }
+
+        impl Drop for StateGuard {
+            fn drop(&mut self) {
+                unsafe { (*self.0).state = self.1 }
+            }
+        }
+
         unsafe extern "C" fn call_callback(state: *mut ffi::lua_State) -> c_int {
             let extra = match ffi::lua_type(state, ffi::lua_upvalueindex(1)) {
                 ffi::LUA_TUSERDATA => {
@@ -2304,7 +2320,7 @@ impl Lua {
                 }
 
                 let lua = &mut (*upvalue).lua;
-                lua.state = state;
+                let _guard = StateGuard::new(lua, state);
 
                 let mut args = MultiValue::new_or_cached(lua);
                 args.reserve(nargs as usize);
