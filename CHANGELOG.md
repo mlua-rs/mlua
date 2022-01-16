@@ -1,3 +1,8 @@
+## v0.7.2
+
+- Allow `pkg-config` to omit include paths if they equals to standard (#114).
+- Various bugfixes (eg. #121)
+
 ## v0.7.1
 
 - Fixed traceback generation for errors (#112)
