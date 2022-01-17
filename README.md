@@ -16,7 +16,7 @@
 `mlua` is bindings to [Lua](https://www.lua.org) programming language for Rust with a goal to provide
 _safe_ (as far as it's possible), high level, easy to use, practical and flexible API.
 
-Started as [rlua] fork, `mlua` supports Lua 5.4, 5.3, 5.2 and 5.1 including LuaJIT (2.0.5 and 2.1 beta) and allows to write native Lua modules in Rust as well as use Lua in a standalone mode.
+Started as `rlua` fork, `mlua` supports Lua 5.4, 5.3, 5.2 and 5.1 including LuaJIT (2.0.5 and 2.1 beta) and allows to write native Lua modules in Rust as well as use Lua in a standalone mode.
 
 `mlua` tested on Windows/macOS/Linux including module mode in [GitHub Actions] on `x86_64` platform and cross-compilation to `aarch64` (other targets are also supported).
 
