@@ -246,10 +246,11 @@ fn main() {
             + "Please, use `pkg-config` or custom mode to link to a Lua dll."
     );
 
+    let include_dir = find::probe_lua();
     if env::var("TARGET").unwrap() != env::var("HOST").unwrap() {
+        // The `probe_lua` call above is still needed here
         generate_glue().unwrap();
     } else {
-        let include_dir = find::probe_lua();
         build_glue(include_dir);
         println!("cargo:rerun-if-changed=src/ffi/glue/glue.c");
     }
