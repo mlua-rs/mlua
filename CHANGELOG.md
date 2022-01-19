@@ -1,3 +1,7 @@
+## v0.7.3
+
+- Fixed cross-compilation issue (introduced in 84a174c)
+
 ## v0.7.2
 
 - Allow `pkg-config` to omit include paths if they equals to standard (#114).
