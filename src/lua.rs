@@ -2400,19 +2400,22 @@ impl Lua {
             Function(self.pop_ref())
         };
 
+        unsafe extern "C" fn unpack(state: *mut ffi::lua_State) -> c_int {
+            let len = ffi::lua_tointeger(state, 2);
+            for i in 1..=len {
+                ffi::lua_rawgeti(state, 1, i);
+            }
+            len as c_int
+        }
+
         let coroutine = self.globals().get::<_, Table>("coroutine")?;
 
         let env = self.create_table_with_capacity(0, 4)?;
         env.set("get_poll", get_poll)?;
         env.set("yield", coroutine.get::<_, Function>("yield")?)?;
-        env.set(
-            "unpack",
-            self.create_function(|lua, (tbl, len): (Table, Integer)| {
-                let mut values = MultiValue::new_or_cached(lua);
-                values.refill(tbl.raw_sequence_values_by_len(Some(len)))?;
-                Ok(values)
-            })?,
-        )?;
+        unsafe {
+            env.set("unpack", self.create_c_function(unpack)?)?;
+        }
         env.set("pending", {
             LightUserData(&ASYNC_POLL_PENDING as *const u8 as *mut c_void)
         })?;
