@@ -130,7 +130,15 @@ fn test_thread_reset() -> Result<()> {
         assert_eq!(thread.status(), ThreadStatus::Error);
         assert_eq!(Arc::strong_count(&arc), 2);
         assert!(thread.reset(func.clone()).is_err());
-        assert_eq!(thread.status(), ThreadStatus::Error);
+        // Reset behavior has changed in Lua v5.4.4
+        // It's became possible to force reset thread by popping error object
+        assert!(matches!(
+            thread.status(),
+            ThreadStatus::Unresumable | ThreadStatus::Error
+        ));
+        // Would pass in 5.4.4
+        // assert!(thread.reset(func.clone()).is_ok());
+        // assert_eq!(thread.status(), ThreadStatus::Resumable);
     }
 
     Ok(())
