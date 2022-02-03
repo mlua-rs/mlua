@@ -107,7 +107,7 @@ int try_write(char **str, char c, size_t n, size_t *written, size_t szstr) {
   if (szstr - *written < n) {
     return 0;
   }
-  for (; n; n--, *written++)
+  for (; n; n--, (*written)++)
     *(*str)++ = c;
   return 1;
 }
