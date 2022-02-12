@@ -101,6 +101,10 @@ pub const LUA_TFUNCTION: c_int = 6;
 pub const LUA_TUSERDATA: c_int = 7;
 pub const LUA_TTHREAD: c_int = 8;
 
+// Type produced by LuaJIT FFI module
+#[cfg(feature = "luajit")]
+pub const LUA_TCDATA: c_int = 10;
+
 #[cfg(feature = "lua54")]
 pub const LUA_NUMTYPES: c_int = 9;
 #[cfg(any(feature = "lua53", feature = "lua52"))]

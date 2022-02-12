@@ -236,6 +236,9 @@ pub use self::lua::LUA_ERRGCMM;
 #[cfg(any(feature = "lua51", feature = "luajit"))]
 pub use self::lua::{LUA_ENVIRONINDEX, LUA_GLOBALSINDEX};
 
+#[cfg(feature = "luajit")]
+pub use self::lua::LUA_TCDATA;
+
 // constants from lauxlib.h
 pub use self::lauxlib::{LUA_ERRFILE, LUA_NOREF, LUA_REFNIL};
 

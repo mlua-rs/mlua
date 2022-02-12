@@ -1256,3 +1256,24 @@ fn test_warnings() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+#[cfg(feature = "luajit")]
+#[should_panic]
+fn test_luajit_cdata() {
+    let lua = unsafe { Lua::unsafe_new() };
+    let _v: Result<Value> = lua
+        .load(
+            r#"
+        local ffi = require("ffi")
+        ffi.cdef[[
+            void *malloc(size_t size);
+            void free(void *ptr);
+        ]]
+        local ptr = ffi.C.malloc(1)
+        ffi.C.free(ptr)
+        return ptr
+    "#,
+        )
+        .eval();
+}

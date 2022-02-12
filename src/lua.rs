@@ -1988,6 +1988,13 @@ impl Lua {
 
             ffi::LUA_TTHREAD => Value::Thread(Thread(self.pop_ref())),
 
+            #[cfg(feature = "luajit")]
+            ffi::LUA_TCDATA => {
+                ffi::lua_pop(state, 1);
+                // TODO: Fix this in a next major release
+                panic!("cdata objects cannot be handled by mlua yet");
+            }
+
             _ => mlua_panic!("LUA_TNONE in pop_value"),
         }
     }
