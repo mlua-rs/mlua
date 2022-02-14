@@ -801,6 +801,17 @@ fn test_drop_registry_value() -> Result<()> {
 }
 
 #[test]
+fn test_replace_registry_value() -> Result<()> {
+    let lua = Lua::new();
+
+    let key = lua.create_registry_value::<i32>(42)?;
+    lua.replace_registry_value(&key, "new value")?;
+    assert_eq!(lua.registry_value::<String>(&key)?, "new value");
+
+    Ok(())
+}
+
+#[test]
 fn test_lua_registry_hash() -> Result<()> {
     let lua = Lua::new();
 

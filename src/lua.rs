@@ -1777,6 +1777,33 @@ impl Lua {
         Ok(())
     }
 
+    /// Replaces a value in the Lua registry by its `RegistryKey`.
+    ///
+    /// See [`create_registry_value`] for more details.
+    ///
+    /// [`create_registry_value`]: #method.create_registry_value
+    pub fn replace_registry_value<'lua, T: ToLua<'lua>>(
+        &'lua self,
+        key: &RegistryKey,
+        t: T,
+    ) -> Result<()> {
+        let t = t.to_lua(self)?;
+        unsafe {
+            let _sg = StackGuard::new(self.state);
+            check_stack(self.state, 4)?;
+
+            self.push_value(t)?;
+            // It must be safe to replace the value without triggering memory error
+            ffi::lua_rawseti(
+                self.state,
+                ffi::LUA_REGISTRYINDEX,
+                key.registry_id as Integer,
+            );
+
+            Ok(())
+        }
+    }
+
     /// Returns true if the given `RegistryKey` was created by a `Lua` which shares the underlying
     /// main state with this `Lua` instance.
     ///
