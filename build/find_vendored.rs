@@ -17,6 +17,8 @@ pub fn probe_lua() -> Option<PathBuf> {
         }
         builder.build()
     };
+    #[cfg(feature = "luau")]
+    let artifacts = luau_src::Build::new().build();
 
     #[cfg(not(feature = "module"))]
     artifacts.print_cargo_metadata();

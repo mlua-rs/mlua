@@ -4,6 +4,7 @@ use std::{slice, str, vec};
 #[cfg(feature = "serialize")]
 use {
     serde::ser::{self, Serialize, Serializer},
+    std::convert::TryInto,
     std::result::Result as StdResult,
 };
 
@@ -125,9 +126,10 @@ impl<'lua> Serialize for Value<'lua> {
             Value::Nil => serializer.serialize_unit(),
             Value::Boolean(b) => serializer.serialize_bool(*b),
             #[allow(clippy::useless_conversion)]
-            Value::Integer(i) => serializer.serialize_i64((*i).into()),
+            Value::Integer(i) => serializer
+                .serialize_i64((*i).try_into().expect("cannot convert lua_Integer to i64")),
             #[allow(clippy::useless_conversion)]
-            Value::Number(n) => serializer.serialize_f64((*n).into()),
+            Value::Number(n) => serializer.serialize_f64(*n),
             Value::String(s) => s.serialize(serializer),
             Value::Table(t) => t.serialize(serializer),
             Value::UserData(ud) => ud.serialize(serializer),

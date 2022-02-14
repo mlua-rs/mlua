@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use std::convert::TryInto;
 use std::os::raw::c_void;
 use std::rc::Rc;
 use std::string::String as StdString;
@@ -117,7 +118,9 @@ impl<'lua, 'de> serde::Deserializer<'de> for Deserializer<'lua> {
             Value::Nil => visitor.visit_unit(),
             Value::Boolean(b) => visitor.visit_bool(b),
             #[allow(clippy::useless_conversion)]
-            Value::Integer(i) => visitor.visit_i64(i.into()),
+            Value::Integer(i) => {
+                visitor.visit_i64(i.try_into().expect("cannot convert lua_Integer to i64"))
+            }
             #[allow(clippy::useless_conversion)]
             Value::Number(n) => visitor.visit_f64(n.into()),
             Value::String(s) => match s.to_str() {

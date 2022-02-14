@@ -34,6 +34,7 @@ lua52 = []
 lua51 = []
 luajit = []
 luajit52 = ["luajit"]
+luau = ["luau-src"]
 vendored = ["lua-src", "luajit-src"]
 module = ["mlua_derive"]
 async = ["futures-core", "futures-task", "futures-util"]
@@ -58,6 +59,7 @@ cc = { version = "1.0" }
 pkg-config = { version = "0.3.17" }
 lua-src = { version = ">= 540.0.0, < 550.0.0", optional = true }
 luajit-src = { version = ">= 210.3.1, < 220.0.0", optional = true }
+luau-src = { version = "1", optional = true }
 
 [dev-dependencies]
 rustyline = "9.0"

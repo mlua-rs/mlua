@@ -1453,7 +1453,7 @@ impl Lua {
             let extra = &mut *self.extra.get();
             let thread_state = ffi::lua_tothread(extra.ref_thread, thread.0.index);
             if extra.recycled_thread_cache.len() < extra.recycled_thread_cache.capacity()
-                && ffi::lua_resetthread(self.state, thread_state) == ffi::LUA_OK
+                && ffi::lua_resetthreadx(self.state, thread_state) == ffi::LUA_OK
             {
                 extra.recycled_thread_cache.push(thread.0.index);
                 thread.0.index = 0;

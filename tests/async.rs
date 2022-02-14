@@ -13,8 +13,8 @@ use futures_timer::Delay;
 use futures_util::stream::TryStreamExt;
 
 use mlua::{
-    Error, ExternalError, Function, Lua, LuaOptions, MetaMethod, Result, StdLib, Table, TableExt,
-    Thread, ToLua, UserData, UserDataMethods, Value,
+    Error, ExternalError, Function, Lua, LuaOptions, Result, StdLib, Table, TableExt, Thread,
+    ToLua, UserData, UserDataMethods, Value,
 };
 
 #[tokio::test]
@@ -300,7 +300,7 @@ async fn test_async_userdata() -> Result<()> {
             });
 
             #[cfg(not(feature = "lua51"))]
-            methods.add_async_meta_method(MetaMethod::Call, |_, data, ()| async move {
+            methods.add_async_meta_method(mlua::MetaMethod::Call, |_, data, ()| async move {
                 let n = data.0.load(Ordering::Relaxed);
                 Delay::new(Duration::from_millis(n)).await;
                 Ok(format!("elapsed:{}ms", n))

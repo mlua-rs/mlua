@@ -192,7 +192,7 @@ impl<'lua> Thread<'lua> {
             lua.push_ref(&self.0);
             let thread_state = ffi::lua_tothread(lua.state, -1);
 
-            let ret = ffi::lua_resetthread(lua.state, thread_state);
+            let ret = ffi::lua_resetthreadx(lua.state, thread_state);
             if ret != ffi::LUA_OK {
                 return Err(pop_error(thread_state, ret));
             }
