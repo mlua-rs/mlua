@@ -1708,11 +1708,12 @@ impl Lua {
 
     /// Place a value in the Lua registry with an auto-generated key.
     ///
-    /// This value will be available to rust from all `Lua` instances which share the same main
+    /// This value will be available to Rust from all `Lua` instances which share the same main
     /// state.
     ///
     /// Be warned, garbage collection of values held inside the registry is not automatic, see
     /// [`RegistryKey`] for more details.
+    /// However, dropped [`RegistryKey`]s automatically reused to store new values.
     ///
     /// [`RegistryKey`]: crate::RegistryKey
     pub fn create_registry_value<'lua, T: ToLua<'lua>>(&'lua self, t: T) -> Result<RegistryKey> {
@@ -1809,7 +1810,7 @@ impl Lua {
         let t = t.to_lua(self)?;
         unsafe {
             let _sg = StackGuard::new(self.state);
-            check_stack(self.state, 4)?;
+            check_stack(self.state, 2)?;
 
             self.push_value(t)?;
             // It must be safe to replace the value without triggering memory error
