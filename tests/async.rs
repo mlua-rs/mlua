@@ -299,7 +299,7 @@ async fn test_async_userdata() -> Result<()> {
                 Ok(format!("elapsed:{}ms", n))
             });
 
-            #[cfg(not(feature = "lua51"))]
+            #[cfg(not(any(feature = "lua51", feature = "luau")))]
             methods.add_async_meta_method(mlua::MetaMethod::Call, |_, data, ()| async move {
                 let n = data.0.load(Ordering::Relaxed);
                 Delay::new(Duration::from_millis(n)).await;
@@ -363,7 +363,7 @@ async fn test_async_userdata() -> Result<()> {
     .exec_async()
     .await?;
 
-    #[cfg(not(feature = "lua51"))]
+    #[cfg(not(any(feature = "lua51", feature = "luau")))]
     lua.load(
         r#"
         userdata:set_value(15)

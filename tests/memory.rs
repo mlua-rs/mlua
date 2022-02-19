@@ -41,7 +41,12 @@ fn test_gc_control() -> Result<()> {
     #[cfg(feature = "lua54")]
     assert_eq!(lua.gc_gen(0, 0), mlua::GCMode::Incremental);
 
-    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+    #[cfg(any(
+        feature = "lua54",
+        feature = "lua53",
+        feature = "lua52",
+        feature = "luau"
+    ))]
     {
         assert!(lua.gc_is_running());
         lua.gc_stop();

@@ -350,7 +350,7 @@ fn test_userdata_take() -> Result<()> {
 }
 
 #[test]
-fn test_destroy_userdata() -> Result<()> {
+fn test_userdata_destroy() -> Result<()> {
     struct MyUserdata(Arc<()>);
 
     impl UserData for MyUserdata {}
@@ -358,12 +358,15 @@ fn test_destroy_userdata() -> Result<()> {
     let rc = Arc::new(());
 
     let lua = Lua::new();
-    lua.globals().set("userdata", MyUserdata(rc.clone()))?;
+    let ud = lua.create_userdata(MyUserdata(rc.clone()))?;
+    ud.set_user_value(MyUserdata(rc.clone()))?;
+    lua.globals().set("userdata", ud)?;
 
-    assert_eq!(Arc::strong_count(&rc), 2);
+    assert_eq!(Arc::strong_count(&rc), 3);
 
-    // should destroy all objects
-    let _ = lua.globals().raw_remove("userdata")?;
+    // Should destroy all objects
+    lua.globals().raw_remove("userdata")?;
+    lua.gc_collect()?;
     lua.gc_collect()?;
 
     assert_eq!(Arc::strong_count(&rc), 1);

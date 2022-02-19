@@ -11,6 +11,7 @@ use mlua::{
     UserData, Value, Variadic,
 };
 
+#[cfg(not(feature = "luau"))]
 #[test]
 fn test_safety() -> Result<()> {
     let lua = Lua::new();
@@ -120,6 +121,7 @@ fn test_exec() -> Result<()> {
         "#,
         )
         .eval()?;
+    println!("checkpoint");
     assert!(module.contains_key("func")?);
     assert_eq!(
         module.get::<_, Function>("func")?.call::<_, String>(())?,
@@ -150,6 +152,7 @@ fn test_eval() -> Result<()> {
     Ok(())
 }
 
+#[cfg(not(feature = "luau"))]
 #[test]
 fn test_load_mode() -> Result<()> {
     let lua = unsafe { Lua::unsafe_new() };
@@ -250,15 +253,7 @@ fn test_error() -> Result<()> {
         }
     }
 
-    impl error::Error for TestError {
-        fn description(&self) -> &str {
-            "test error"
-        }
-
-        fn cause(&self) -> Option<&dyn error::Error> {
-            None
-        }
-    }
+    impl error::Error for TestError {}
 
     let lua = Lua::new();
 
@@ -295,8 +290,8 @@ fn test_error() -> Result<()> {
             end, 3)
 
             local function handler(err)
-                if string.match(_VERSION, ' 5%.1$') or string.match(_VERSION, ' 5%.2$') then
-                    -- Special case for Lua 5.1/5.2
+                if string.match(_VERSION, ' 5%.1$') or string.match(_VERSION, ' 5%.2$') or _VERSION == "Luau" then
+                    -- Special case for Lua 5.1/5.2 and Luau
                     local caps = string.match(err, ': (%d+)$')
                     if caps then
                         err = caps
@@ -1096,7 +1091,11 @@ fn test_context_thread() -> Result<()> {
     ))]
     f.call::<_, ()>(lua.current_thread())?;
 
-    #[cfg(any(feature = "lua51", all(feature = "luajit", not(feature = "luajit52"))))]
+    #[cfg(any(
+        feature = "lua51",
+        all(feature = "luajit", not(feature = "luajit52")),
+        feature = "luau"
+    ))]
     f.call::<_, ()>(Nil)?;
 
     Ok(())
@@ -1170,6 +1169,7 @@ fn test_load_from_function() -> Result<()> {
     Ok(())
 }
 
+#[cfg(not(feature = "luau"))]
 #[test]
 fn test_inspect_stack() -> Result<()> {
     let lua = Lua::new();

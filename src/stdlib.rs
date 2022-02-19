@@ -9,11 +9,17 @@ impl StdLib {
     /// [`coroutine`](https://www.lua.org/manual/5.4/manual.html#6.2) library
     ///
     /// Requires `feature = "lua54/lua53/lua52"`
-    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+    #[cfg(any(
+        feature = "lua54",
+        feature = "lua53",
+        feature = "lua52",
+        feature = "luau"
+    ))]
     pub const COROUTINE: StdLib = StdLib(1);
     /// [`table`](https://www.lua.org/manual/5.4/manual.html#6.6) library
     pub const TABLE: StdLib = StdLib(1 << 1);
     /// [`io`](https://www.lua.org/manual/5.4/manual.html#6.8) library
+    #[cfg(not(feature = "luau"))]
     pub const IO: StdLib = StdLib(1 << 2);
     /// [`os`](https://www.lua.org/manual/5.4/manual.html#6.9) library
     pub const OS: StdLib = StdLib(1 << 3);
@@ -22,16 +28,17 @@ impl StdLib {
     /// [`utf8`](https://www.lua.org/manual/5.4/manual.html#6.5) library
     ///
     /// Requires `feature = "lua54/lua53"`
-    #[cfg(any(feature = "lua54", feature = "lua53"))]
+    #[cfg(any(feature = "lua54", feature = "lua53", feature = "luau"))]
     pub const UTF8: StdLib = StdLib(1 << 5);
     /// [`bit`](https://www.lua.org/manual/5.2/manual.html#6.7) library
     ///
     /// Requires `feature = "lua52/luajit"`
-    #[cfg(any(feature = "lua52", feature = "luajit", doc))]
+    #[cfg(any(feature = "lua52", feature = "luajit", feature = "luau", doc))]
     pub const BIT: StdLib = StdLib(1 << 6);
     /// [`math`](https://www.lua.org/manual/5.4/manual.html#6.7) library
     pub const MATH: StdLib = StdLib(1 << 7);
     /// [`package`](https://www.lua.org/manual/5.4/manual.html#6.3) library
+    #[cfg(not(feature = "luau"))]
     pub const PACKAGE: StdLib = StdLib(1 << 8);
     /// [`jit`](http://luajit.org/ext_jit.html) library
     ///

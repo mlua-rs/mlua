@@ -14,6 +14,7 @@ use rustc_hash::FxHashMap;
 use crate::error::{Error, Result};
 use crate::ffi;
 use crate::function::Function;
+#[cfg(not(feature = "luau"))]
 use crate::hook::{Debug, HookTriggers};
 use crate::scope::Scope;
 use crate::stdlib::StdLib;
@@ -21,8 +22,8 @@ use crate::string::String;
 use crate::table::Table;
 use crate::thread::Thread;
 use crate::types::{
-    Callback, CallbackUpvalue, DestructedUserdataMT, HookCallback, Integer, LightUserData, LuaRef,
-    MaybeSend, Number, RegistryKey,
+    Callback, CallbackUpvalue, DestructedUserdataMT, /*HookCallback,*/ Integer, LightUserData,
+    LuaRef, MaybeSend, Number, RegistryKey,
 };
 use crate::userdata::{
     AnyUserData, MetaMethod, UserData, UserDataCell, UserDataFields, UserDataMethods,
@@ -34,6 +35,9 @@ use crate::util::{
     push_table, rawset_field, safe_pcall, safe_xpcall, StackGuard, WrappedFailure,
 };
 use crate::value::{FromLua, FromLuaMulti, MultiValue, Nil, ToLua, ToLuaMulti, Value};
+
+#[cfg(not(feature = "luau"))]
+use crate::types::HookCallback;
 
 #[cfg(not(feature = "lua54"))]
 use crate::util::push_userdata;
@@ -103,6 +107,7 @@ struct ExtraData {
     #[cfg(feature = "async")]
     ref_waker_idx: c_int,
 
+    #[cfg(not(feature = "luau"))]
     hook_callback: Option<HookCallback>,
     #[cfg(feature = "lua54")]
     warn_callback: Option<WarnCallback>,
@@ -310,6 +315,7 @@ impl Lua {
 
         let mut lua = unsafe { Self::inner_new(libs, options) };
 
+        #[cfg(not(feature = "luau"))]
         if libs.contains(StdLib::PACKAGE) {
             mlua_expect!(lua.disable_c_modules(), "Error during disabling C modules");
         }
@@ -328,12 +334,16 @@ impl Lua {
     ///
     /// [`StdLib`]: crate::StdLib
     pub unsafe fn unsafe_new_with(libs: StdLib, options: LuaOptions) -> Lua {
+        #[cfg(not(feature = "luau"))]
         ffi::keep_lua_symbols();
         Self::inner_new(libs, options)
     }
 
     unsafe fn inner_new(libs: StdLib, options: LuaOptions) -> Lua {
-        #[cfg_attr(any(feature = "lua51", feature = "luajit"), allow(dead_code))]
+        #[cfg_attr(
+            any(feature = "lua51", feature = "luajit", feature = "luau"),
+            allow(dead_code)
+        )]
         unsafe extern "C" fn allocator(
             extra_data: *mut c_void,
             ptr: *mut c_void,
@@ -398,8 +408,13 @@ impl Lua {
 
         #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
         let state = ffi::lua_newstate(allocator, mem_info as *mut c_void);
-        #[cfg(any(feature = "lua51", feature = "luajit"))]
+        #[cfg(any(feature = "lua51", feature = "luajit", feature = "luau"))]
         let state = ffi::luaL_newstate();
+
+        // #[cfg(feature = "luau")]
+        // {
+        //     ffi::luaL_sandbox(state);
+        // }
 
         ffi::luaL_requiref(state, cstr!("_G"), ffi::luaopen_base, 1);
         ffi::lua_pop(state, 1);
@@ -427,7 +442,7 @@ impl Lua {
 
                     #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
                     ffi::lua_rawgeti(lua.state, ffi::LUA_REGISTRYINDEX, ffi::LUA_RIDX_GLOBALS);
-                    #[cfg(any(feature = "lua51", feature = "luajit"))]
+                    #[cfg(any(feature = "lua51", feature = "luajit", feature = "luau"))]
                     ffi::lua_pushvalue(lua.state, ffi::LUA_GLOBALSINDEX);
 
                     ffi::lua_pushcfunction(lua.state, safe_pcall);
@@ -446,6 +461,9 @@ impl Lua {
         if options.thread_cache_size > 0 {
             extra.recycled_thread_cache = Vec::with_capacity(options.thread_cache_size);
         }
+
+        #[cfg(feature = "luau")]
+        mlua_expect!(lua.prepare_luau_state(), "Error preparing Luau state");
 
         lua
     }
@@ -534,6 +552,7 @@ impl Lua {
             recycled_thread_cache: Vec::new(),
             #[cfg(feature = "async")]
             ref_waker_idx,
+            #[cfg(not(feature = "luau"))]
             hook_callback: None,
             #[cfg(feature = "lua54")]
             warn_callback: None,
@@ -600,9 +619,12 @@ impl Lua {
 
         // If `package` library loaded into a safe lua state then disable C modules
         let extra = unsafe { &mut *self.extra.get() };
-        let curr_libs = extra.libs;
-        if self.safe && (curr_libs ^ (curr_libs | libs)).contains(StdLib::PACKAGE) {
-            mlua_expect!(self.disable_c_modules(), "Error during disabling C modules");
+        #[cfg(not(feature = "luau"))]
+        {
+            let curr_libs = extra.libs;
+            if self.safe && (curr_libs ^ (curr_libs | libs)).contains(StdLib::PACKAGE) {
+                mlua_expect!(self.disable_c_modules(), "Error during disabling C modules");
+            }
         }
         extra.libs |= libs;
 
@@ -795,6 +817,7 @@ impl Lua {
     ///
     /// [`HookTriggers`]: crate::HookTriggers
     /// [`HookTriggers.every_nth_instruction`]: crate::HookTriggers::every_nth_instruction
+    #[cfg(not(feature = "luau"))]
     pub fn set_hook<F>(&self, triggers: HookTriggers, callback: F) -> Result<()>
     where
         F: 'static + MaybeSend + FnMut(&Lua, Debug) -> Result<()>,
@@ -832,6 +855,7 @@ impl Lua {
 
     /// Remove any hook previously set by `set_hook`. This function has no effect if a hook was not
     /// previously set.
+    #[cfg(not(feature = "luau"))]
     pub fn remove_hook(&self) {
         // If main_state is not available, then sethook wasn't called.
         let state = match self.main_state {
@@ -909,6 +933,7 @@ impl Lua {
     /// function that has called level `n` (except for tail calls, which do not count in the stack).
     ///
     /// [`Debug`]: crate::hook::Debug
+    #[cfg(not(feature = "luau"))]
     pub fn inspect_stack(&self, level: usize) -> Option<Debug> {
         unsafe {
             let mut ar: ffi::lua_Debug = mem::zeroed();
@@ -961,7 +986,12 @@ impl Lua {
     /// Returns true if the garbage collector is currently running automatically.
     ///
     /// Requires `feature = "lua54/lua53/lua52"`
-    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+    #[cfg(any(
+        feature = "lua54",
+        feature = "lua53",
+        feature = "lua52",
+        feature = "luau"
+    ))]
     pub fn gc_is_running(&self) -> bool {
         let state = self.main_state.unwrap_or(self.state);
         unsafe { ffi::lua_gc(state, ffi::LUA_GCISRUNNING, 0) != 0 }
@@ -1018,6 +1048,7 @@ impl Lua {
     /// [documentation][lua_doc].
     ///
     /// [lua_doc]: https://www.lua.org/manual/5.4/manual.html#2.5
+    #[cfg(not(feature = "luau"))]
     pub fn gc_set_pause(&self, pause: c_int) -> c_int {
         let state = self.main_state.unwrap_or(self.state);
         unsafe { ffi::lua_gc(state, ffi::LUA_GCSETPAUSE, pause) }
@@ -1040,6 +1071,7 @@ impl Lua {
     /// More information can be found in the Lua [documentation][lua_doc].
     ///
     /// [lua_doc]: https://www.lua.org/manual/5.4/manual.html#2.5.1
+    #[cfg(not(feature = "luau"))]
     pub fn gc_inc(&self, pause: c_int, step_multiplier: c_int, step_size: c_int) -> GCMode {
         let state = self.main_state.unwrap_or(self.state);
 
@@ -1138,6 +1170,7 @@ impl Lua {
                 }
                 Some(ChunkMode::Binary) => cstr!("b"),
                 Some(ChunkMode::Text) => cstr!("t"),
+                #[cfg(not(feature = "luau"))]
                 None if source.starts_with(ffi::LUA_SIGNATURE) && self.safe => {
                     return Err(Error::SafetyError(
                         "binary chunks are disabled in safe mode".to_string(),
@@ -1158,7 +1191,7 @@ impl Lua {
                         self.push_value(env)?;
                         #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
                         ffi::lua_setupvalue(self.state, -2, 1);
-                        #[cfg(any(feature = "lua51", feature = "luajit"))]
+                        #[cfg(any(feature = "lua51", feature = "luajit", feature = "luau"))]
                         ffi::lua_setfenv(self.state, -2);
                     }
                     Ok(Function(self.pop_ref()))
@@ -1488,7 +1521,7 @@ impl Lua {
             assert_stack(self.state, 1);
             #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
             ffi::lua_rawgeti(self.state, ffi::LUA_REGISTRYINDEX, ffi::LUA_RIDX_GLOBALS);
-            #[cfg(any(feature = "lua51", feature = "luajit"))]
+            #[cfg(any(feature = "lua51", feature = "luajit", feature = "luau"))]
             ffi::lua_pushvalue(self.state, ffi::LUA_GLOBALSINDEX);
             Table(self.pop_ref())
         }
@@ -2329,7 +2362,12 @@ impl Lua {
     where
         'lua: 'callback,
     {
-        #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+        #[cfg(any(
+            feature = "lua54",
+            feature = "lua53",
+            feature = "lua52",
+            feature = "luau"
+        ))]
         unsafe {
             let libs = (*self.extra.get()).libs;
             if !libs.contains(StdLib::COROUTINE) {
@@ -2551,6 +2589,7 @@ impl Lua {
         }
     }
 
+    #[cfg(not(feature = "luau"))]
     fn disable_c_modules(&self) -> Result<()> {
         let package: Table = self.globals().get("package")?;
 
@@ -2573,6 +2612,42 @@ impl Lua {
         // The third and fourth searchers looks for a loader as a C library
         searchers.raw_set(3, loader.clone())?;
         searchers.raw_remove(4)?;
+
+        Ok(())
+    }
+
+    #[cfg(feature = "luau")]
+    unsafe fn prepare_luau_state(&self) -> Result<()> {
+        use std::ffi::CStr;
+
+        // Since Luau has some missing standard function, we re-implement them here
+        // They are: collectgarbage, loadstring, require
+
+        unsafe extern "C" fn lua_collectgarbage(state: *mut ffi::lua_State) -> c_int {
+            let option = ffi::luaL_optstring(state, 1, cstr!("collect"));
+            let option = CStr::from_ptr(option);
+            match option.to_str() {
+                Ok("collect") => {
+                    ffi::lua_gc(state, ffi::LUA_GCCOLLECT, 0);
+                    return 0;
+                }
+                Ok("count") => {
+                    let n = ffi::lua_gc(state, ffi::LUA_GCCOUNT, 0);
+                    ffi::lua_pushnumber(state, n as ffi::lua_Number);
+                    return 1;
+                }
+                // TODO: More variants
+                _ => ffi::luaL_error(
+                    state,
+                    cstr!("collectgarbage must be called with 'count' or 'collect'"),
+                ),
+            }
+        }
+
+        self.globals().raw_set(
+            "collectgarbage",
+            self.create_c_function(lua_collectgarbage)?,
+        )?;
 
         Ok(())
     }
@@ -2740,7 +2815,7 @@ impl<'lua, 'a> Chunk<'lua, 'a> {
         // For source code, first try interpreting the lua as an expression by adding
         // "return", then as a statement. This is the same thing the
         // actual lua repl does.
-        if self.source.starts_with(ffi::LUA_SIGNATURE) {
+        if self.source[0] < b'\n' {
             self.call(())
         } else if let Ok(function) = self.lua.load_chunk(
             &self.expression_source(),
@@ -2768,7 +2843,7 @@ impl<'lua, 'a> Chunk<'lua, 'a> {
         'lua: 'fut,
         R: FromLuaMulti<'lua> + 'fut,
     {
-        if self.source.starts_with(ffi::LUA_SIGNATURE) {
+        if self.source[0] < b'\n' {
             self.call_async(())
         } else if let Ok(function) = self.lua.load_chunk(
             &self.expression_source(),
@@ -2886,9 +2961,9 @@ where
     let prealloc_failure = match extra.wrapped_failures_cache.pop() {
         Some(index) => PreallocatedFailure::Cached(index),
         None => {
-            let ud = ffi::lua_newuserdata(state, mem::size_of::<WrappedFailure>());
+            let ud = WrappedFailure::new_userdata(state);
             ffi::lua_rotate(state, 1, 1);
-            PreallocatedFailure::New(ud as *mut WrappedFailure)
+            PreallocatedFailure::New(ud)
         }
     };
 
@@ -3006,7 +3081,12 @@ unsafe fn load_from_std_lib(state: *mut ffi::lua_State, libs: StdLib) -> Result<
     #[cfg(feature = "luajit")]
     let _gc_guard = GcGuard::new(state);
 
-    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+    #[cfg(any(
+        feature = "lua54",
+        feature = "lua53",
+        feature = "lua52",
+        feature = "luau"
+    ))]
     {
         if libs.contains(StdLib::COROUTINE) {
             requiref(state, ffi::LUA_COLIBNAME, ffi::luaopen_coroutine, 1)?;
@@ -3019,6 +3099,7 @@ unsafe fn load_from_std_lib(state: *mut ffi::lua_State, libs: StdLib) -> Result<
         ffi::lua_pop(state, 1);
     }
 
+    #[cfg(not(feature = "luau"))]
     if libs.contains(StdLib::IO) {
         requiref(state, ffi::LUA_IOLIBNAME, ffi::luaopen_io, 1)?;
         ffi::lua_pop(state, 1);
@@ -3034,7 +3115,7 @@ unsafe fn load_from_std_lib(state: *mut ffi::lua_State, libs: StdLib) -> Result<
         ffi::lua_pop(state, 1);
     }
 
-    #[cfg(any(feature = "lua54", feature = "lua53"))]
+    #[cfg(any(feature = "lua54", feature = "lua53", feature = "luau"))]
     {
         if libs.contains(StdLib::UTF8) {
             requiref(state, ffi::LUA_UTF8LIBNAME, ffi::luaopen_utf8, 1)?;
@@ -3042,7 +3123,7 @@ unsafe fn load_from_std_lib(state: *mut ffi::lua_State, libs: StdLib) -> Result<
         }
     }
 
-    #[cfg(feature = "lua52")]
+    #[cfg(any(feature = "lua52", feature = "luau"))]
     {
         if libs.contains(StdLib::BIT) {
             requiref(state, ffi::LUA_BITLIBNAME, ffi::luaopen_bit32, 1)?;
@@ -3068,6 +3149,7 @@ unsafe fn load_from_std_lib(state: *mut ffi::lua_State, libs: StdLib) -> Result<
         ffi::lua_pop(state, 1);
     }
 
+    #[cfg(not(feature = "luau"))]
     if libs.contains(StdLib::PACKAGE) {
         requiref(state, ffi::LUA_LOADLIBNAME, ffi::luaopen_package, 1)?;
         ffi::lua_pop(state, 1);
@@ -3089,7 +3171,6 @@ unsafe fn load_from_std_lib(state: *mut ffi::lua_State, libs: StdLib) -> Result<
     Ok(())
 }
 
-// We move `extra` (`MutexGuard`) here to correctly drop it if panic
 unsafe fn ref_stack_pop(extra: &mut ExtraData) -> c_int {
     if let Some(free) = extra.ref_free.pop() {
         ffi::lua_replace(extra.ref_thread, free);
@@ -3238,7 +3319,7 @@ impl<'lua, T: 'static + UserData> UserDataMethods<'lua, T> for StaticUserDataMet
             .push((meta.into(), Self::box_method_mut(method)));
     }
 
-    #[cfg(all(feature = "async", not(feature = "lua51")))]
+    #[cfg(all(feature = "async", not(any(feature = "lua51", feature = "luau"))))]
     fn add_async_meta_method<S, A, R, M, MR>(&mut self, meta: S, method: M)
     where
         T: Clone,
@@ -3274,7 +3355,7 @@ impl<'lua, T: 'static + UserData> UserDataMethods<'lua, T> for StaticUserDataMet
             .push((meta.into(), Self::box_function_mut(function)));
     }
 
-    #[cfg(all(feature = "async", not(feature = "lua51")))]
+    #[cfg(all(feature = "async", not(any(feature = "lua51", feature = "luau"))))]
     fn add_async_meta_function<S, A, R, F, FR>(&mut self, meta: S, function: F)
     where
         S: Into<MetaMethod>,

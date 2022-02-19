@@ -155,7 +155,8 @@ fn test_coroutine_from_closure() -> Result<()> {
         feature = "lua54",
         feature = "lua53",
         feature = "lua52",
-        feature = "luajit"
+        feature = "luajit",
+        feature = "luau"
     ))]
     let thrd: Thread = lua.load("coroutine.create(main)").eval()?;
     #[cfg(feature = "lua51")]

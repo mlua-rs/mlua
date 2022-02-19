@@ -1,6 +1,5 @@
-use std::os::raw::{c_int, c_void};
+use std::os::raw::c_int;
 use std::ptr;
-use std::slice;
 
 use crate::error::{Error, Result};
 use crate::ffi;
@@ -214,7 +213,11 @@ impl<'lua> Function<'lua> {
     ///
     /// If `strip` is true, the binary representation may not include all debug information
     /// about the function, to save space.
+    #[cfg(not(feature = "luau"))]
     pub fn dump(&self, strip: bool) -> Vec<u8> {
+        use std::os::raw::c_void;
+        use std::slice;
+
         unsafe extern "C" fn writer(
             _state: *mut ffi::lua_State,
             buf: *const c_void,

@@ -85,6 +85,7 @@ mod conversion;
 mod error;
 mod ffi;
 mod function;
+#[cfg(not(feature = "luau"))]
 mod hook;
 mod lua;
 mod multi;
@@ -104,6 +105,7 @@ pub use crate::{ffi::lua_CFunction, ffi::lua_State};
 
 pub use crate::error::{Error, ExternalError, ExternalResult, Result};
 pub use crate::function::Function;
+#[cfg(not(feature = "luau"))]
 pub use crate::hook::{Debug, DebugEvent, DebugNames, DebugSource, DebugStack, HookTriggers};
 pub use crate::lua::{AsChunk, Chunk, ChunkMode, GCMode, Lua, LuaOptions};
 pub use crate::multi::Variadic;

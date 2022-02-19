@@ -42,6 +42,7 @@ pub const SYS_MIN_ALIGN: usize = 4;
 
 // Hack to avoid stripping a few unused Lua symbols that could be imported
 // by C modules in unsafe mode
+#[cfg(not(feature = "luau"))]
 pub(crate) fn keep_lua_symbols() {
     let mut symbols: Vec<*const extern "C" fn()> = Vec::new();
     symbols.push(lua_atpanic as _);
@@ -59,14 +60,25 @@ mod lauxlib;
 mod lua;
 mod lualib;
 
-#[cfg(any(feature = "lua52", feature = "lua51", feature = "luajit"))]
+#[cfg(any(
+    feature = "lua52",
+    feature = "lua51",
+    feature = "luajit",
+    feature = "luau"
+))]
 mod compat53;
+
+#[cfg(feature = "lua54")]
+pub mod lua54;
+
+#[cfg(feature = "lua53")]
+pub mod lua53;
+
+#[cfg(feature = "lua52")]
+pub mod lua52;
 
 #[cfg(any(feature = "lua51", feature = "luajit"))]
 pub mod lua51;
-#[cfg(feature = "lua52")]
-pub mod lua52;
-#[cfg(feature = "lua53")]
-pub mod lua53;
-#[cfg(feature = "lua54")]
-pub mod lua54;
+
+#[cfg(feature = "luau")]
+pub mod luau;

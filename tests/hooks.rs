@@ -1,3 +1,5 @@
+#![cfg(not(feature = "luau"))]
+
 use std::cell::RefCell;
 use std::ops::Deref;
 use std::str;

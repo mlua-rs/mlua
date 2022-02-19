@@ -3,7 +3,6 @@ use std::cell::{Cell, RefCell};
 use std::marker::PhantomData;
 use std::mem;
 use std::os::raw::{c_int, c_void};
-use std::ptr;
 use std::rc::Rc;
 
 #[cfg(feature = "serialize")]
@@ -18,8 +17,8 @@ use crate::userdata::{
     AnyUserData, MetaMethod, UserData, UserDataCell, UserDataFields, UserDataMethods,
 };
 use crate::util::{
-    assert_stack, check_stack, get_userdata, init_userdata_metatable, push_table, rawset_field,
-    take_userdata, StackGuard,
+    assert_stack, check_stack, get_userdata, init_userdata_metatable, push_table, push_userdata,
+    rawset_field, take_userdata, StackGuard,
 };
 use crate::value::{FromLua, FromLuaMulti, MultiValue, ToLua, ToLuaMulti, Value};
 
@@ -206,7 +205,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
                     ffi::lua_pushnil(state);
                     ffi::lua_setiuservalue(state, -2, i as c_int);
                 }
-                #[cfg(any(feature = "lua53", feature = "lua52"))]
+                #[cfg(any(feature = "lua53", feature = "lua52", feature = "luau"))]
                 {
                     ffi::lua_pushnil(state);
                     ffi::lua_setuservalue(state, -2);
@@ -264,7 +263,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
         fn wrap_method<'scope, 'lua, 'callback: 'scope, T: 'scope>(
             scope: &Scope<'lua, 'scope>,
             data: Rc<RefCell<T>>,
-            data_ptr: *const c_void,
+            ud_ptr: *const c_void,
             method: NonStaticMethod<'callback, T>,
         ) -> Result<Function<'lua>> {
             // On methods that actually receive the userdata, we fake a type check on the passed in
@@ -280,7 +279,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
                         let _sg = StackGuard::new(lua.state);
                         check_stack(lua.state, 2)?;
                         lua.push_userdata_ref(&ud.0)?;
-                        if get_userdata(lua.state, -1) as *const _ == data_ptr {
+                        if get_userdata(lua.state, -1) as *const _ == ud_ptr {
                             return Ok(());
                         }
                     }
@@ -336,8 +335,9 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
             let _sg = StackGuard::new(lua.state);
             check_stack(lua.state, 13)?;
 
+            #[cfg(not(feature = "luau"))]
             #[allow(clippy::let_and_return)]
-            let data_ptr = protect_lua!(lua.state, 0, 1, |state| {
+            let ud_ptr = protect_lua!(lua.state, 0, 1, |state| {
                 let ud =
                     ffi::lua_newuserdata(state, mem::size_of::<UserDataCell<Rc<RefCell<T>>>>());
 
@@ -350,13 +350,22 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
 
                 ud
             })?;
+            #[cfg(feature = "luau")]
+            let ud_ptr = {
+                push_userdata::<UserDataCell<Rc<RefCell<T>>>>(
+                    lua.state,
+                    UserDataCell::new(data.clone()),
+                )?;
+                ffi::lua_touserdata(lua.state, -1)
+            };
+
             // Prepare metatable, add meta methods first and then meta fields
             let meta_methods_nrec = ud_methods.meta_methods.len() + ud_fields.meta_fields.len() + 1;
             push_table(lua.state, 0, meta_methods_nrec as c_int)?;
 
             for (k, m) in ud_methods.meta_methods {
                 let data = data.clone();
-                lua.push_value(Value::Function(wrap_method(self, data, data_ptr, m)?))?;
+                lua.push_value(Value::Function(wrap_method(self, data, ud_ptr, m)?))?;
                 rawset_field(lua.state, -2, k.validate()?.name())?;
             }
             for (k, f) in ud_fields.meta_fields {
@@ -371,7 +380,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
                 push_table(lua.state, 0, field_getters_nrec as c_int)?;
                 for (k, m) in ud_fields.field_getters {
                     let data = data.clone();
-                    lua.push_value(Value::Function(wrap_method(self, data, data_ptr, m)?))?;
+                    lua.push_value(Value::Function(wrap_method(self, data, ud_ptr, m)?))?;
                     rawset_field(lua.state, -2, &k)?;
                 }
                 field_getters_index = Some(ffi::lua_absindex(lua.state, -1));
@@ -383,7 +392,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
                 push_table(lua.state, 0, field_setters_nrec as c_int)?;
                 for (k, m) in ud_fields.field_setters {
                     let data = data.clone();
-                    lua.push_value(Value::Function(wrap_method(self, data, data_ptr, m)?))?;
+                    lua.push_value(Value::Function(wrap_method(self, data, ud_ptr, m)?))?;
                     rawset_field(lua.state, -2, &k)?;
                 }
                 field_setters_index = Some(ffi::lua_absindex(lua.state, -1));
@@ -396,7 +405,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
                 push_table(lua.state, 0, methods_nrec as c_int)?;
                 for (k, m) in ud_methods.methods {
                     let data = data.clone();
-                    lua.push_value(Value::Function(wrap_method(self, data, data_ptr, m)?))?;
+                    lua.push_value(Value::Function(wrap_method(self, data, ud_ptr, m)?))?;
                     rawset_field(lua.state, -2, &k)?;
                 }
                 methods_index = Some(ffi::lua_absindex(lua.state, -1));
@@ -417,7 +426,8 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
 
             let mt_ptr = ffi::lua_topointer(lua.state, -1);
             // Write userdata just before attaching metatable with `__gc` metamethod
-            ptr::write(data_ptr as _, UserDataCell::new(data));
+            #[cfg(not(feature = "luau"))]
+            std::ptr::write(ud_ptr as _, UserDataCell::new(data));
             ffi::lua_setmetatable(lua.state, -2);
             let ud = AnyUserData(lua.pop_ref());
             lua.register_userdata_metatable(mt_ptr, None);
@@ -446,7 +456,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
                     ffi::lua_pushnil(state);
                     ffi::lua_setiuservalue(state, -2, i as c_int);
                 }
-                #[cfg(any(feature = "lua53", feature = "lua52"))]
+                #[cfg(any(feature = "lua53", feature = "lua52", feature = "luau"))]
                 {
                     ffi::lua_pushnil(state);
                     ffi::lua_setuservalue(state, -2);
@@ -532,7 +542,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
             // First, get the environment table
             #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
             ffi::lua_getupvalue(state, -1, 1);
-            #[cfg(any(feature = "lua51", feature = "luajit"))]
+            #[cfg(any(feature = "lua51", feature = "luajit", feature = "luau"))]
             ffi::lua_getfenv(state, -1);
 
             // Second, get the `get_poll()` closure using the corresponding key
@@ -727,7 +737,7 @@ impl<'lua, T: UserData> UserDataMethods<'lua, T> for NonStaticUserDataMethods<'l
         ));
     }
 
-    #[cfg(all(feature = "async", not(feature = "lua51")))]
+    #[cfg(all(feature = "async", not(any(feature = "lua51", feature = "luau"))))]
     fn add_async_meta_method<S, A, R, M, MR>(&mut self, _meta: S, _method: M)
     where
         T: Clone,
@@ -772,7 +782,7 @@ impl<'lua, T: UserData> UserDataMethods<'lua, T> for NonStaticUserDataMethods<'l
         ));
     }
 
-    #[cfg(all(feature = "async", not(feature = "lua51")))]
+    #[cfg(all(feature = "async", not(any(feature = "lua51", feature = "luau"))))]
     fn add_async_meta_function<S, A, R, F, FR>(&mut self, _meta: S, _function: F)
     where
         S: Into<MetaMethod>,

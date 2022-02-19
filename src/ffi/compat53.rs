@@ -17,6 +17,9 @@ use super::lua52::*;
 #[cfg(any(feature = "lua51", feature = "luajit"))]
 use super::lua51::*;
 
+#[cfg(feature = "luau")]
+use super::luau::*;
+
 unsafe fn compat53_reverse(L: *mut lua_State, mut a: c_int, mut b: c_int) {
     while a < b {
         lua_pushvalue(L, a);
@@ -31,6 +34,7 @@ unsafe fn compat53_reverse(L: *mut lua_State, mut a: c_int, mut b: c_int) {
 const COMPAT53_LEVELS1: c_int = 12; // size of the first part of the stack
 const COMPAT53_LEVELS2: c_int = 10; // size of the second part of the stack
 
+#[cfg(not(feature = "luau"))]
 unsafe fn compat53_countlevels(L: *mut lua_State) -> c_int {
     let mut ar: lua_Debug = mem::zeroed();
     let (mut li, mut le) = (1, 1);
@@ -43,6 +47,27 @@ unsafe fn compat53_countlevels(L: *mut lua_State) -> c_int {
     while li < le {
         let m = (li + le) / 2;
         if lua_getstack(L, m, &mut ar) != 0 {
+            li = m + 1;
+        } else {
+            le = m;
+        }
+    }
+    le - 1
+}
+
+#[cfg(feature = "luau")]
+unsafe fn compat53_countlevels(L: *mut lua_State) -> c_int {
+    let mut ar: lua_Debug = mem::zeroed();
+    let (mut li, mut le) = (1, 1);
+    // find an upper bound
+    while lua_getinfo(L, le, cstr!(""), &mut ar) != 0 {
+        li = le;
+        le *= 2;
+    }
+    // do a binary search
+    while li < le {
+        let m = (li + le) / 2;
+        if lua_getinfo(L, m, cstr!(""), &mut ar) != 0 {
             li = m + 1;
         } else {
             le = m;
@@ -81,7 +106,7 @@ unsafe fn compat53_checkmode(
     LUA_OK
 }
 
-#[cfg(any(feature = "lua51", feature = "luajit"))]
+#[cfg(any(feature = "lua51", feature = "luajit", feature = "luau"))]
 unsafe fn compat53_findfield(L: *mut lua_State, objidx: c_int, level: c_int) -> c_int {
     if level == 0 || lua_istable(L, -1) == 0 {
         return 0; // not found
@@ -110,10 +135,18 @@ unsafe fn compat53_findfield(L: *mut lua_State, objidx: c_int, level: c_int) -> 
     return 0; // not found
 }
 
-#[cfg(any(feature = "lua51", feature = "luajit"))]
-unsafe fn compat53_pushglobalfuncname(L: *mut lua_State, ar: *mut lua_Debug) -> c_int {
+#[cfg(any(feature = "lua51", feature = "luajit", feature = "luau"))]
+unsafe fn compat53_pushglobalfuncname(
+    L: *mut lua_State,
+    level: c_int,
+    ar: *mut lua_Debug,
+) -> c_int {
     let top = lua_gettop(L);
-    lua_getinfo(L, cstr!("f"), ar); // push function
+    // push function
+    #[cfg(not(feature = "luau"))]
+    lua_getinfo(L, cstr!("f"), ar);
+    #[cfg(feature = "luau")]
+    lua_getinfo(L, level, cstr!("f"), ar);
     lua_pushvalue(L, LUA_GLOBALSINDEX);
     if compat53_findfield(L, top + 1, 2) != 0 {
         lua_copy(L, -1, top + 1); // move name to proper place
@@ -122,6 +155,34 @@ unsafe fn compat53_pushglobalfuncname(L: *mut lua_State, ar: *mut lua_Debug) -> 
     } else {
         lua_settop(L, top); // remove function and global table
         return 0;
+    }
+}
+
+#[cfg(feature = "luau")]
+unsafe fn compat53_pushfuncname(L: *mut lua_State, level: c_int, ar: *mut lua_Debug) {
+    /*
+    if *(*ar).namewhat != b'\0' as c_char {
+        // is there a name?
+        lua_pushfstring(L, cstr!("function '%s'"), (*ar).name);
+    } else
+    */
+    if *(*ar).what == b'm' as c_char {
+        // main?
+        lua_pushliteral(L, "main chunk");
+    } else if *(*ar).what == b'C' as c_char {
+        if compat53_pushglobalfuncname(L, level, ar) != 0 {
+            lua_pushfstring(L, cstr!("function '%s'"), lua_tostring(L, -1));
+            lua_remove(L, -2); // remove name
+        } else {
+            lua_pushliteral(L, "?");
+        }
+    } else {
+        lua_pushfstring(
+            L,
+            cstr!("function <%s:%d>"),
+            (*ar).short_src.as_ptr(),
+            (*ar).linedefined,
+        );
     }
 }
 
@@ -134,7 +195,7 @@ unsafe fn compat53_pushfuncname(L: *mut lua_State, ar: *mut lua_Debug) {
         // main?
         lua_pushliteral(L, "main chunk");
     } else if *(*ar).what == b'C' as c_char {
-        if compat53_pushglobalfuncname(L, ar) != 0 {
+        if compat53_pushglobalfuncname(L, -1, ar) != 0 {
             lua_pushfstring(L, cstr!("function '%s'"), lua_tostring(L, -1));
             lua_remove(L, -2); // remove name
         } else {
@@ -184,22 +245,22 @@ pub unsafe fn lua_absindex(L: *mut lua_State, mut idx: c_int) -> c_int {
 }
 
 // Comparison and arithmetic functions
-#[cfg(any(feature = "lua51", feature = "luajit"))]
+#[cfg(any(feature = "lua51", feature = "luajit", feature = "luau"))]
 pub const LUA_OPADD: c_int = 0;
-#[cfg(any(feature = "lua51", feature = "luajit"))]
+#[cfg(any(feature = "lua51", feature = "luajit", feature = "luau"))]
 pub const LUA_OPSUB: c_int = 1;
-#[cfg(any(feature = "lua51", feature = "luajit"))]
+#[cfg(any(feature = "lua51", feature = "luajit", feature = "luau"))]
 pub const LUA_OPMUL: c_int = 2;
-#[cfg(any(feature = "lua51", feature = "luajit"))]
+#[cfg(any(feature = "lua51", feature = "luajit", feature = "luau"))]
 pub const LUA_OPDIV: c_int = 3;
-#[cfg(any(feature = "lua51", feature = "luajit"))]
+#[cfg(any(feature = "lua51", feature = "luajit", feature = "luau"))]
 pub const LUA_OPMOD: c_int = 4;
-#[cfg(any(feature = "lua51", feature = "luajit"))]
+#[cfg(any(feature = "lua51", feature = "luajit", feature = "luau"))]
 pub const LUA_OPPOW: c_int = 5;
-#[cfg(any(feature = "lua51", feature = "luajit"))]
+#[cfg(any(feature = "lua51", feature = "luajit", feature = "luau"))]
 pub const LUA_OPUNM: c_int = 6;
 
-#[cfg(any(feature = "lua51", feature = "luajit"))]
+#[cfg(any(feature = "lua51", feature = "luajit", feature = "luau"))]
 static COMPAT53_ARITH_CODE: &str = r#"
 local op,a,b = ...
 if op == 0 then return a+b
@@ -212,7 +273,7 @@ elseif op == 6 then return -a
 end
 "#;
 
-#[cfg(any(feature = "lua51", feature = "luajit"))]
+#[cfg(any(feature = "lua51", feature = "luajit", feature = "luau"))]
 pub unsafe fn lua_arith(L: *mut lua_State, op: c_int) {
     #[allow(clippy::manual_range_contains)]
     if op < LUA_OPADD || op > LUA_OPUNM {
@@ -242,7 +303,7 @@ pub unsafe fn lua_rotate(L: *mut lua_State, mut idx: c_int, mut n: c_int) {
     }
 }
 
-#[cfg(any(feature = "lua51", feature = "luajit"))]
+#[cfg(any(feature = "lua51", feature = "luajit", feature = "luau"))]
 #[inline(always)]
 pub unsafe fn lua_copy(L: *mut lua_State, fromidx: c_int, toidx: c_int) {
     let abs_to = lua_absindex(L, toidx);
@@ -263,6 +324,12 @@ pub unsafe fn lua_isinteger(L: *mut lua_State, idx: c_int) -> c_int {
     return 0;
 }
 
+#[cfg(any(
+    feature = "lua52",
+    feature = "lua51",
+    feature = "luajit",
+    feature = "luau"
+))]
 #[inline(always)]
 pub unsafe fn lua_tointeger(L: *mut lua_State, i: c_int) -> lua_Integer {
     lua_tointegerx(L, i, ptr::null_mut())
@@ -284,6 +351,12 @@ pub unsafe fn lua_tonumberx(L: *mut lua_State, i: c_int, isnum: *mut c_int) -> l
 
 // Implemented for Lua 5.2 as well
 // See https://github.com/keplerproject/lua-compat-5.3/issues/40
+#[cfg(any(
+    feature = "lua52",
+    feature = "lua51",
+    feature = "luajit",
+    feature = "luau"
+))]
 #[inline(always)]
 pub unsafe fn lua_tointegerx(L: *mut lua_State, i: c_int, isnum: *mut c_int) -> lua_Integer {
     let mut ok = 0;
@@ -301,20 +374,20 @@ pub unsafe fn lua_tointegerx(L: *mut lua_State, i: c_int, isnum: *mut c_int) -> 
     return 0;
 }
 
-#[cfg(any(feature = "lua51", feature = "luajit"))]
+#[cfg(any(feature = "lua51", feature = "luajit", feature = "luau"))]
 #[inline(always)]
 pub unsafe fn lua_rawlen(L: *mut lua_State, idx: c_int) -> usize {
     lua_objlen(L, idx)
 }
 
-#[cfg(any(feature = "lua51", feature = "luajit"))]
+#[cfg(any(feature = "lua51", feature = "luajit", feature = "luau"))]
 pub const LUA_OPEQ: c_int = 0;
-#[cfg(any(feature = "lua51", feature = "luajit"))]
+#[cfg(any(feature = "lua51", feature = "luajit", feature = "luau"))]
 pub const LUA_OPLT: c_int = 1;
-#[cfg(any(feature = "lua51", feature = "luajit"))]
+#[cfg(any(feature = "lua51", feature = "luajit", feature = "luau"))]
 pub const LUA_OPLE: c_int = 2;
 
-#[cfg(any(feature = "lua51", feature = "luajit"))]
+#[cfg(any(feature = "lua51", feature = "luajit", feature = "luau"))]
 #[inline(always)]
 pub unsafe fn lua_compare(L: *mut lua_State, mut idx1: c_int, mut idx2: c_int, op: c_int) -> c_int {
     match op {
@@ -335,7 +408,7 @@ pub unsafe fn lua_compare(L: *mut lua_State, mut idx1: c_int, mut idx2: c_int, o
     }
 }
 
-#[cfg(any(feature = "lua51", feature = "luajit"))]
+#[cfg(any(feature = "lua51", feature = "luajit", feature = "luau"))]
 #[inline(always)]
 pub unsafe fn lua_pushlstring(L: *mut lua_State, s: *const c_char, l: usize) -> *const c_char {
     if l == 0 {
@@ -356,7 +429,7 @@ pub unsafe fn lua_pushlstring(L: *mut lua_State, s: *const c_char, l: usize) -> 
     }
 }
 
-#[cfg(any(feature = "lua51", feature = "luajit"))]
+#[cfg(any(feature = "lua51", feature = "luajit", feature = "luau"))]
 #[inline(always)]
 pub unsafe fn lua_pushstring(L: *mut lua_State, s: *const c_char) -> *const c_char {
     lua_pushstring_(L, s);
@@ -401,7 +474,7 @@ pub unsafe fn lua_rawgeti(L: *mut lua_State, idx: c_int, n: lua_Integer) -> c_in
     lua_type(L, -1)
 }
 
-#[cfg(any(feature = "lua51", feature = "luajit"))]
+#[cfg(any(feature = "lua51", feature = "luajit", feature = "luau"))]
 #[inline(always)]
 pub unsafe fn lua_rawgetp(L: *mut lua_State, idx: c_int, p: *const c_void) -> c_int {
     let abs_i = lua_absindex(L, idx);
@@ -421,6 +494,22 @@ pub unsafe fn lua_rawgetp(L: *mut lua_State, idx: c_int, p: *const c_void) -> c_
 #[inline(always)]
 pub unsafe fn lua_getuservalue(L: *mut lua_State, idx: c_int) -> c_int {
     lua_getfenv(L, idx);
+    lua_type(L, -1)
+}
+
+#[cfg(feature = "luau")]
+#[inline(always)]
+pub unsafe fn lua_getuservalue(L: *mut lua_State, mut idx: c_int) -> c_int {
+    luaL_checkstack(L, 2, cstr!("not enough stack slots available"));
+    idx = lua_absindex(L, idx);
+    lua_pushliteral(L, "__mlua_uservalues");
+    lua_rawget(L, LUA_REGISTRYINDEX);
+    if lua_istable(L, -1) == 0 {
+        return LUA_TNIL;
+    }
+    lua_pushvalue(L, idx);
+    lua_rawget(L, -2);
+    lua_remove(L, -2);
     lua_type(L, -1)
 }
 
@@ -449,7 +538,7 @@ pub unsafe fn lua_rawseti(L: *mut lua_State, idx: c_int, n: lua_Integer) {
     )
 }
 
-#[cfg(any(feature = "lua51", feature = "luajit"))]
+#[cfg(any(feature = "lua51", feature = "luajit", feature = "luau"))]
 #[inline(always)]
 pub unsafe fn lua_rawsetp(L: *mut lua_State, idx: c_int, p: *const c_void) {
     let abs_i = lua_absindex(L, idx);
@@ -466,6 +555,34 @@ pub unsafe fn lua_setuservalue(L: *mut lua_State, idx: c_int) {
     lua_setfenv(L, idx);
 }
 
+#[cfg(feature = "luau")]
+#[inline(always)]
+pub unsafe fn lua_setuservalue(L: *mut lua_State, mut idx: c_int) {
+    luaL_checkstack(L, 4, cstr!("not enough stack slots available"));
+    idx = lua_absindex(L, idx);
+    lua_pushliteral(L, "__mlua_uservalues");
+    lua_pushvalue(L, -1);
+    lua_rawget(L, LUA_REGISTRYINDEX);
+    if lua_istable(L, -1) == 0 {
+        lua_pop(L, 1);
+        lua_createtable(L, 0, 2); // main table
+        lua_createtable(L, 0, 1); // metatable
+        lua_pushliteral(L, "k");
+        lua_setfield(L, -2, cstr!("__mode"));
+        lua_setmetatable(L, -2);
+        lua_pushvalue(L, -2);
+        lua_pushvalue(L, -2);
+        lua_rawset(L, LUA_REGISTRYINDEX);
+    }
+    lua_replace(L, -2);
+    lua_pushvalue(L, idx);
+    lua_pushvalue(L, -3);
+    lua_remove(L, -4);
+    lua_rawset(L, -3);
+    lua_pop(L, 1);
+}
+
+#[cfg(any(feature = "lua52", feature = "lua51", feature = "luajit"))]
 #[inline(always)]
 pub unsafe fn lua_dump(
     L: *mut lua_State,
@@ -476,7 +593,7 @@ pub unsafe fn lua_dump(
     lua_dump_(L, writer, data)
 }
 
-#[cfg(any(feature = "lua51", feature = "luajit"))]
+#[cfg(any(feature = "lua51", feature = "luajit", feature = "luau"))]
 #[inline(always)]
 pub unsafe fn lua_len(L: *mut lua_State, idx: c_int) {
     match lua_type(L, idx) {
@@ -565,7 +682,7 @@ pub unsafe fn lua_getextraspace(L: *mut lua_State) -> *mut c_void {
     return _ptr;
 }
 
-#[cfg(any(feature = "lua51", feature = "luajit"))]
+#[cfg(any(feature = "lua51", feature = "luajit", feature = "luau"))]
 #[inline(always)]
 pub unsafe fn lua_pushglobaltable(L: *mut lua_State) {
     lua_pushvalue(L, LUA_GLOBALSINDEX);
@@ -575,7 +692,7 @@ pub unsafe fn lua_pushglobaltable(L: *mut lua_State) {
 // lauxlib ported functions
 //
 
-#[cfg(any(feature = "lua51", feature = "luajit"))]
+#[cfg(any(feature = "lua51", feature = "luajit", feature = "luau"))]
 #[inline(always)]
 pub unsafe fn luaL_checkstack(L: *mut lua_State, sz: c_int, msg: *const c_char) {
     if lua_checkstack(L, sz + LUA_MINSTACK) == 0 {
@@ -628,7 +745,7 @@ pub unsafe fn luaL_loadbufferx(
     luaL_loadbuffer(L, buff, sz, name)
 }
 
-#[cfg(any(feature = "lua51", feature = "luajit"))]
+#[cfg(any(feature = "lua51", feature = "luajit", feature = "luau"))]
 #[inline(always)]
 pub unsafe fn luaL_len(L: *mut lua_State, idx: c_int) -> lua_Integer {
     let mut isnum = 0;
@@ -682,6 +799,46 @@ pub unsafe fn luaL_traceback(
     lua_concat(L, lua_gettop(L) - top);
 }
 
+#[cfg(feature = "luau")]
+pub unsafe fn luaL_traceback(
+    L: *mut lua_State,
+    L1: *mut lua_State,
+    msg: *const c_char,
+    mut level: c_int,
+) {
+    let mut ar: lua_Debug = mem::zeroed();
+    let top = lua_gettop(L);
+    let numlevels = compat53_countlevels(L1);
+    let mark = if numlevels > COMPAT53_LEVELS1 + COMPAT53_LEVELS2 {
+        COMPAT53_LEVELS1
+    } else {
+        0
+    };
+
+    if !msg.is_null() {
+        lua_pushfstring(L, cstr!("%s\n"), msg);
+    }
+    lua_pushliteral(L, "stack traceback:");
+    while lua_getinfo(L1, level, cstr!(""), &mut ar) != 0 {
+        level += 1;
+        if level == mark {
+            // too many levels?
+            lua_pushliteral(L, "\n\t..."); // add a '...'
+            level = numlevels - COMPAT53_LEVELS2; // and skip to last ones
+        } else {
+            lua_getinfo(L1, level - 1, cstr!("sln"), &mut ar);
+            lua_pushfstring(L, cstr!("\n\t%s:"), ar.short_src.as_ptr());
+            if ar.currentline > 0 {
+                lua_pushfstring(L, cstr!("%d:"), ar.currentline);
+            }
+            lua_pushliteral(L, " in ");
+            compat53_pushfuncname(L, level - 1, &mut ar);
+            lua_concat(L, lua_gettop(L) - top);
+        }
+    }
+    lua_concat(L, lua_gettop(L) - top);
+}
+
 pub unsafe fn luaL_tolstring(L: *mut lua_State, idx: c_int, len: *mut usize) -> *const c_char {
     if luaL_callmeta(L, idx, cstr!("__tostring")) == 0 {
         let t = lua_type(L, idx);
@@ -718,7 +875,7 @@ pub unsafe fn luaL_tolstring(L: *mut lua_State, idx: c_int, len: *mut usize) -> 
     lua_tolstring(L, -1, len)
 }
 
-#[cfg(any(feature = "lua51", feature = "luajit"))]
+#[cfg(any(feature = "lua51", feature = "luajit", feature = "luau"))]
 #[inline(always)]
 pub unsafe fn luaL_setmetatable(L: *mut lua_State, tname: *const c_char) {
     luaL_checkstack(L, 1, cstr!("not enough stack slots"));
@@ -726,7 +883,7 @@ pub unsafe fn luaL_setmetatable(L: *mut lua_State, tname: *const c_char) {
     lua_setmetatable(L, -2);
 }
 
-#[cfg(any(feature = "lua51", feature = "luajit"))]
+#[cfg(any(feature = "lua51", feature = "luajit", feature = "luau"))]
 #[inline(always)]
 pub unsafe fn luaL_testudata(L: *mut lua_State, i: c_int, tname: *const c_char) -> *mut c_void {
     let mut p = lua_touserdata(L, i);
@@ -762,7 +919,7 @@ pub unsafe fn luaL_setfuncs(L: *mut lua_State, mut l: *const luaL_Reg, nup: c_in
     lua_pop(L, nup); // remove upvalues
 }
 
-#[cfg(any(feature = "lua51", feature = "luajit"))]
+#[cfg(any(feature = "lua51", feature = "luajit", feature = "luau"))]
 pub unsafe fn luaL_getsubtable(L: *mut lua_State, idx: c_int, fname: *const c_char) -> c_int {
     let abs_i = lua_absindex(L, idx);
     luaL_checkstack(L, 3, cstr!("not enough stack slots"));
@@ -791,7 +948,7 @@ pub unsafe fn luaL_requiref(
         lua_pop(L, 1);
         lua_pushcfunction(L, openf);
         lua_pushstring(L, modname);
-        #[cfg(any(feature = "lua52", feature = "lua51"))]
+        #[cfg(any(feature = "lua52", feature = "lua51", feature = "luau"))]
         {
             lua_call(L, 1, 1);
             lua_pushvalue(L, -1);
@@ -803,7 +960,7 @@ pub unsafe fn luaL_requiref(
             lua_getfield(L, -1, modname);
         }
     }
-    if cfg!(any(feature = "lua52", feature = "lua51")) && glb != 0 {
+    if cfg!(any(feature = "lua52", feature = "lua51", feature = "luau")) && glb != 0 {
         lua_pushvalue(L, -1);
         lua_setglobal(L, modname);
     }

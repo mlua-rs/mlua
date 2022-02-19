@@ -419,7 +419,7 @@ pub trait UserDataMethods<'lua, T: UserData> {
     /// Requires `feature = "async"`
     ///
     /// [`add_meta_method`]: #method.add_meta_method
-    #[cfg(all(feature = "async", not(feature = "lua51")))]
+    #[cfg(all(feature = "async", not(any(feature = "lua51", feature = "luau"))))]
     #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
     fn add_async_meta_method<S, A, R, M, MR>(&mut self, name: S, method: M)
     where
@@ -461,7 +461,7 @@ pub trait UserDataMethods<'lua, T: UserData> {
     /// Requires `feature = "async"`
     ///
     /// [`add_meta_function`]: #method.add_meta_function
-    #[cfg(all(feature = "async", not(feature = "lua51")))]
+    #[cfg(all(feature = "async", not(any(feature = "lua51", feature = "luau"))))]
     #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
     fn add_async_meta_function<S, A, R, F, FR>(&mut self, name: S, function: F)
     where
@@ -839,7 +839,7 @@ impl<'lua> AnyUserData<'lua> {
                         ffi::lua_pushnil(lua.state);
                         ffi::lua_setiuservalue(lua.state, -2, i as c_int);
                     }
-                    #[cfg(any(feature = "lua53", feature = "lua52"))]
+                    #[cfg(any(feature = "lua53", feature = "lua52", feature = "luau"))]
                     {
                         ffi::lua_pushnil(lua.state);
                         ffi::lua_setuservalue(lua.state, -2);
@@ -865,6 +865,7 @@ impl<'lua> AnyUserData<'lua> {
     ///
     /// [`get_user_value`]: #method.get_user_value
     /// [`set_nth_user_value`]: #method.set_nth_user_value
+    // #[cfg(not(feature = "luau"))]
     #[inline]
     pub fn set_user_value<V: ToLua<'lua>>(&self, v: V) -> Result<()> {
         self.set_nth_user_value(1, v)
@@ -876,6 +877,7 @@ impl<'lua> AnyUserData<'lua> {
     ///
     /// [`set_user_value`]: #method.set_user_value
     /// [`get_nth_user_value`]: #method.get_nth_user_value
+    // #[cfg(not(feature = "luau"))]
     #[inline]
     pub fn get_user_value<V: FromLua<'lua>>(&self) -> Result<V> {
         self.get_nth_user_value(1)
@@ -891,6 +893,7 @@ impl<'lua> AnyUserData<'lua> {
     /// For other Lua versions this functionality is provided using a wrapping table.
     ///
     /// [`get_nth_user_value`]: #method.get_nth_user_value
+    // #[cfg(not(feature = "luau"))]
     pub fn set_nth_user_value<V: ToLua<'lua>>(&self, n: usize, v: V) -> Result<()> {
         if n < 1 || n > u16::MAX as usize {
             return Err(Error::RuntimeError(
@@ -945,6 +948,7 @@ impl<'lua> AnyUserData<'lua> {
     /// For other Lua versions this functionality is provided using a wrapping table.
     ///
     /// [`set_nth_user_value`]: #method.set_nth_user_value
+    // #[cfg(not(feature = "luau"))]
     pub fn get_nth_user_value<V: FromLua<'lua>>(&self, n: usize) -> Result<V> {
         if n < 1 || n > u16::MAX as usize {
             return Err(Error::RuntimeError(
@@ -986,6 +990,7 @@ impl<'lua> AnyUserData<'lua> {
     /// The value can be retrieved with [`get_named_user_value`].
     ///
     /// [`get_named_user_value`]: #method.get_named_user_value
+    // #[cfg(not(feature = "luau"))]
     pub fn set_named_user_value<S, V>(&self, name: &S, v: V) -> Result<()>
     where
         S: AsRef<[u8]> + ?Sized,
@@ -1025,6 +1030,7 @@ impl<'lua> AnyUserData<'lua> {
     /// Returns an associated value by name set by [`set_named_user_value`].
     ///
     /// [`set_named_user_value`]: #method.set_named_user_value
+    // #[cfg(not(feature = "luau"))]
     pub fn get_named_user_value<S, V>(&self, name: &S) -> Result<V>
     where
         S: AsRef<[u8]> + ?Sized,

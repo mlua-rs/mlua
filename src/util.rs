@@ -278,12 +278,34 @@ where
 }
 
 // Internally uses 3 stack spaces, does not call checkstack.
+#[cfg(not(feature = "luau"))]
 #[inline]
 pub unsafe fn push_userdata<T>(state: *mut ffi::lua_State, t: T) -> Result<()> {
     let ud = protect_lua!(state, 0, 1, |state| {
         ffi::lua_newuserdata(state, mem::size_of::<T>()) as *mut T
     })?;
     ptr::write(ud, t);
+    Ok(())
+}
+
+// Internally uses 3 stack spaces, does not call checkstack.
+#[cfg(feature = "luau")]
+#[inline]
+pub unsafe fn push_userdata<T>(state: *mut ffi::lua_State, t: T) -> Result<()> {
+    unsafe extern "C" fn destructor<T>(ud: *mut c_void) {
+        let ud = ud as *mut T;
+        if *(ud.offset(1) as *mut u8) == 0 {
+            ptr::drop_in_place(ud);
+        }
+    }
+
+    let ud = protect_lua!(state, 0, 1, |state| {
+        let size = mem::size_of::<T>() + 1;
+        ffi::lua_newuserdatadtor(state, size, destructor::<T>) as *mut T
+    })?;
+    ptr::write(ud, t);
+    *(ud.offset(1) as *mut u8) = 0; // Mark as not destructed
+
     Ok(())
 }
 
@@ -316,8 +338,11 @@ pub unsafe fn take_userdata<T>(state: *mut ffi::lua_State) -> T {
     // after the first call to __gc.
     get_destructed_userdata_metatable(state);
     ffi::lua_setmetatable(state, -2);
-    let ud = get_userdata(state, -1);
+    let ud = get_userdata::<T>(state, -1);
     ffi::lua_pop(state, 1);
+    if cfg!(feature = "luau") {
+        *(ud.offset(1) as *mut u8) = 1; // Mark as destructed
+    }
     ptr::read(ud)
 }
 
@@ -508,8 +533,11 @@ pub unsafe fn init_userdata_metatable<T>(
         rawset_field(state, -2, "__newindex")?;
     }
 
-    ffi::lua_pushcfunction(state, userdata_destructor::<T>);
-    rawset_field(state, -2, "__gc")?;
+    #[cfg(not(feature = "luau"))]
+    {
+        ffi::lua_pushcfunction(state, userdata_destructor::<T>);
+        rawset_field(state, -2, "__gc")?;
+    }
 
     ffi::lua_pushboolean(state, 0);
     rawset_field(state, -2, "__metatable")?;
@@ -519,6 +547,7 @@ pub unsafe fn init_userdata_metatable<T>(
     Ok(())
 }
 
+#[cfg(not(feature = "luau"))]
 pub unsafe extern "C" fn userdata_destructor<T>(state: *mut ffi::lua_State) -> c_int {
     // It's probably NOT a good idea to catch Rust panics in finalizer
     // Lua 5.4 ignores it, other versions generates `LUA_ERRGCMM` without calling message handler
@@ -553,7 +582,7 @@ where
 
     // We cannot shadow Rust errors with Lua ones, we pre-allocate enough memory
     // to store a wrapped error or panic *before* we proceed.
-    let ud = ffi::lua_newuserdata(state, mem::size_of::<WrappedFailure>());
+    let ud = WrappedFailure::new_userdata(state);
     ffi::lua_rotate(state, 1, 1);
 
     match catch_unwind(AssertUnwindSafe(|| f(nargs))) {
@@ -706,6 +735,8 @@ pub unsafe fn get_main_state(state: *mut ffi::lua_State) -> Option<*mut ffi::lua
             None
         }
     }
+    #[cfg(feature = "luau")]
+    Some(ffi::lua_mainthread(state))
 }
 
 // Initialize the internal (with __gc method) metatable for a type T.
@@ -718,8 +749,11 @@ pub unsafe fn init_gc_metatable<T: Any>(
 
     push_table(state, 0, 3)?;
 
-    ffi::lua_pushcfunction(state, userdata_destructor::<T>);
-    rawset_field(state, -2, "__gc")?;
+    #[cfg(not(feature = "luau"))]
+    {
+        ffi::lua_pushcfunction(state, userdata_destructor::<T>);
+        rawset_field(state, -2, "__gc")?;
+    }
 
     ffi::lua_pushboolean(state, 0);
     rawset_field(state, -2, "__metatable")?;
@@ -879,8 +913,26 @@ pub unsafe fn init_error_registry(state: *mut ffi::lua_State) -> Result<()> {
 }
 
 pub(crate) enum WrappedFailure {
+    None,
     Error(Error),
     Panic(Option<Box<dyn Any + Send + 'static>>),
+}
+
+impl WrappedFailure {
+    pub(crate) unsafe fn new_userdata(state: *mut ffi::lua_State) -> *mut Self {
+        let size = mem::size_of::<WrappedFailure>();
+        #[cfg(feature = "luau")]
+        let ud = {
+            unsafe extern "C" fn destructor(p: *mut c_void) {
+                ptr::drop_in_place(p as *mut WrappedFailure);
+            }
+            ffi::lua_newuserdatadtor(state, size, destructor) as *mut Self
+        };
+        #[cfg(not(feature = "luau"))]
+        let ud = ffi::lua_newuserdata(state, size) as *mut Self;
+        ptr::write(ud, WrappedFailure::None);
+        ud
+    }
 }
 
 // Converts the given lua value to a string in a reasonable format without causing a Lua error or

@@ -11,3 +11,6 @@ pub use super::lua52::lualib::*;
 
 #[cfg(any(feature = "lua51", feature = "luajit"))]
 pub use super::lua51::lualib::*;
+
+#[cfg(feature = "luau")]
+pub use super::luau::lualib::*;

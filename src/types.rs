@@ -11,6 +11,7 @@ use futures_core::future::LocalBoxFuture;
 
 use crate::error::Result;
 use crate::ffi;
+#[cfg(not(feature = "luau"))]
 use crate::hook::Debug;
 use crate::lua::Lua;
 use crate::util::{assert_stack, StackGuard};
@@ -48,11 +49,10 @@ pub(crate) struct AsyncPollUpvalue<'lua> {
     pub(crate) lua: Lua,
     pub(crate) fut: LocalBoxFuture<'lua, Result<MultiValue<'lua>>>,
 }
-
-#[cfg(feature = "send")]
+#[cfg(all(feature = "send", not(feature = "luau")))]
 pub(crate) type HookCallback = Arc<Mutex<dyn FnMut(&Lua, Debug) -> Result<()> + Send>>;
 
-#[cfg(not(feature = "send"))]
+#[cfg(all(not(feature = "send"), not(feature = "luau")))]
 pub(crate) type HookCallback = Arc<Mutex<dyn FnMut(&Lua, Debug) -> Result<()>>>;
 
 #[cfg(all(feature = "send", feature = "lua54"))]
