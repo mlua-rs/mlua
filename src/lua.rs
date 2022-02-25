@@ -1481,16 +1481,22 @@ impl Lua {
     /// Resets thread (coroutine) and returns to the cache for later use.
     #[cfg(feature = "async")]
     #[cfg(any(feature = "lua54", all(feature = "luajit", feature = "vendored")))]
-    pub(crate) fn recycle_thread(&self, thread: &mut Thread) {
-        unsafe {
-            let extra = &mut *self.extra.get();
-            let thread_state = ffi::lua_tothread(extra.ref_thread, thread.0.index);
-            if extra.recycled_thread_cache.len() < extra.recycled_thread_cache.capacity()
-                && ffi::lua_resetthreadx(self.state, thread_state) == ffi::LUA_OK
-            {
-                extra.recycled_thread_cache.push(thread.0.index);
-                thread.0.index = 0;
+    pub(crate) unsafe fn recycle_thread(&self, thread: &mut Thread) {
+        let extra = &mut *self.extra.get();
+        let thread_state = ffi::lua_tothread(extra.ref_thread, thread.0.index);
+        if extra.recycled_thread_cache.len() < extra.recycled_thread_cache.capacity() {
+            #[cfg(feature = "lua54")]
+            let status = ffi::lua_resetthread(thread_state);
+            #[cfg(feature = "lua54")]
+            if status != ffi::LUA_OK {
+                return;
             }
+            #[cfg(all(feature = "luajit", feature = "vendored"))]
+            ffi::lua_resetthread(self.state, thread_state);
+            #[cfg(feature = "luau")]
+            ffi::lua_resetthread(thread_state);
+            extra.recycled_thread_cache.push(thread.0.index);
+            thread.0.index = 0;
         }
     }
 

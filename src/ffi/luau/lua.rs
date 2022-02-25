@@ -74,7 +74,6 @@ pub type lua_Udestructor = unsafe extern "C" fn(*mut c_void);
 
 /// Type for memory-allocation functions.
 pub type lua_Alloc = unsafe extern "C" fn(
-    L: *mut lua_State,
     ud: *mut c_void,
     ptr: *mut c_void,
     osize: usize,
@@ -169,15 +168,12 @@ extern "C" {
     //
     // Get functions (Lua -> stack)
     //
-    #[link_name = "lua_gettable"]
-    pub fn lua_gettable_(L: *mut lua_State, idx: c_int);
-    #[link_name = "lua_getfield"]
-    pub fn lua_getfield_(L: *mut lua_State, idx: c_int, k: *const c_char);
-    pub fn lua_rawgetfield(L: *mut lua_State, idx: c_int, k: *const c_char);
-    #[link_name = "lua_rawget"]
-    pub fn lua_rawget_(L: *mut lua_State, idx: c_int);
+    pub fn lua_gettable(L: *mut lua_State, idx: c_int) -> c_int;
+    pub fn lua_getfield(L: *mut lua_State, idx: c_int, k: *const c_char) -> c_int;
+    pub fn lua_rawgetfield(L: *mut lua_State, idx: c_int, k: *const c_char) -> c_int;
+    pub fn lua_rawget(L: *mut lua_State, idx: c_int) -> c_int;
     #[link_name = "lua_rawgeti"]
-    pub fn lua_rawgeti_(L: *mut lua_State, idx: c_int, n: c_int);
+    pub fn lua_rawgeti_(L: *mut lua_State, idx: c_int, n: c_int) -> c_int;
     pub fn lua_createtable(L: *mut lua_State, narr: c_int, nrec: c_int);
 
     pub fn lua_setreadonly(L: *mut lua_State, idx: c_int, enabled: c_int);
@@ -382,8 +378,8 @@ pub unsafe fn lua_setglobal(L: *mut lua_State, var: *const c_char) {
 }
 
 #[inline(always)]
-pub unsafe fn lua_getglobal_(L: *mut lua_State, var: *const c_char) {
-    lua_getfield_(L, LUA_GLOBALSINDEX, var)
+pub unsafe fn lua_getglobal(L: *mut lua_State, var: *const c_char) -> c_int {
+    lua_getfield(L, LUA_GLOBALSINDEX, var)
 }
 
 #[inline(always)]

@@ -1,15 +1,11 @@
 //! Contains definitions from `lualib.h`.
 
-use std::alloc;
-use std::ffi::CStr;
 use std::os::raw::{c_char, c_float, c_int, c_void};
 use std::ptr;
 
 use super::lua::{
-    self, lua_CFunction, lua_Integer, lua_Number, lua_State, lua_Unsigned, LUA_ERRSYNTAX, LUA_OK,
-    LUA_REGISTRYINDEX,
+    self, lua_CFunction, lua_Integer, lua_Number, lua_State, lua_Unsigned, LUA_REGISTRYINDEX,
 };
-use super::luacode;
 
 #[repr(C)]
 pub struct luaL_Reg {
@@ -112,8 +108,8 @@ pub unsafe fn luaL_typename(L: *mut lua_State, i: c_int) -> *const c_char {
 }
 
 #[inline(always)]
-pub unsafe fn luaL_getmetatable(L: *mut lua_State, n: *const c_char) {
-    lua::lua_getfield_(L, LUA_REGISTRYINDEX, n);
+pub unsafe fn luaL_getmetatable(L: *mut lua_State, n: *const c_char) -> c_int {
+    lua::lua_getfield(L, LUA_REGISTRYINDEX, n)
 }
 
 #[inline(always)]
@@ -128,59 +124,6 @@ pub unsafe fn luaL_ref(L: *mut lua_State, t: c_int) -> c_int {
 pub unsafe fn luaL_unref(L: *mut lua_State, t: c_int, r#ref: c_int) {
     assert_eq!(t, LUA_REGISTRYINDEX);
     lua::lua_unref(L, r#ref)
-}
-
-pub unsafe fn luaL_loadbufferx(
-    L: *mut lua_State,
-    data: *const c_char,
-    mut size: usize,
-    name: *const c_char,
-    mode: *const c_char,
-) -> c_int {
-    let chunk_is_text = (*data as u8) >= b'\n';
-    if !mode.is_null() {
-        let modeb = CStr::from_ptr(mode).to_bytes();
-        if !chunk_is_text && !modeb.contains(&b'b') {
-            lua::lua_pushfstring(
-                L,
-                cstr!("attempt to load a binary chunk (mode is '%s')"),
-                mode,
-            );
-            return LUA_ERRSYNTAX;
-        } else if chunk_is_text && !modeb.contains(&b't') {
-            lua::lua_pushfstring(
-                L,
-                cstr!("attempt to load a text chunk (mode is '%s')"),
-                mode,
-            );
-            return LUA_ERRSYNTAX;
-        }
-    }
-
-    if chunk_is_text {
-        let data = luacode::luau_compile(data, size, ptr::null_mut(), &mut size);
-        let layout = alloc::Layout::from_size_align_unchecked(size, super::super::SYS_MIN_ALIGN);
-        let ok = lua::luau_load(L, name, data, size, 0) == 0;
-        alloc::dealloc(data as *mut u8, layout);
-        if !ok {
-            return LUA_ERRSYNTAX;
-        }
-    } else {
-        if lua::luau_load(L, name, data, size, 0) != 0 {
-            return LUA_ERRSYNTAX;
-        }
-    }
-    LUA_OK
-}
-
-#[inline(always)]
-pub unsafe fn luaL_loadbuffer(
-    L: *mut lua_State,
-    data: *const c_char,
-    size: usize,
-    name: *const c_char,
-) -> c_int {
-    luaL_loadbufferx(L, data, size, name, ptr::null())
 }
 
 //

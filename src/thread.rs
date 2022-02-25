@@ -192,10 +192,16 @@ impl<'lua> Thread<'lua> {
             lua.push_ref(&self.0);
             let thread_state = ffi::lua_tothread(lua.state, -1);
 
-            let ret = ffi::lua_resetthreadx(lua.state, thread_state);
-            if ret != ffi::LUA_OK {
-                return Err(pop_error(thread_state, ret));
+            #[cfg(feature = "lua54")]
+            let status = ffi::lua_resetthread(thread_state);
+            #[cfg(feature = "lua54")]
+            if status != ffi::LUA_OK {
+                return Err(pop_error(thread_state, status));
             }
+            #[cfg(all(feature = "luajit", feature = "vendored"))]
+            ffi::lua_resetthread(lua.state, thread_state);
+            #[cfg(feature = "luau")]
+            ffi::lua_resetthread(thread_state);
 
             lua.push_ref(&func.0);
             ffi::lua_xmove(lua.state, thread_state, 1);
@@ -285,7 +291,9 @@ impl<'lua, R> AsyncThread<'lua, R> {
 impl<'lua, R> Drop for AsyncThread<'lua, R> {
     fn drop(&mut self) {
         if self.recycle {
-            self.thread.0.lua.recycle_thread(&mut self.thread);
+            unsafe {
+                self.thread.0.lua.recycle_thread(&mut self.thread);
+            }
         }
     }
 }

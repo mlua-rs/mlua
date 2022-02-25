@@ -2,9 +2,38 @@
 
 #![allow(non_camel_case_types, non_snake_case, dead_code)]
 
-pub use lauxlib::*;
-pub use lua::*;
-pub use lualib::*;
+use std::os::raw::c_int;
+
+#[cfg(feature = "lua54")]
+pub use lua54::*;
+
+#[cfg(feature = "lua53")]
+pub use lua53::*;
+
+#[cfg(feature = "lua52")]
+pub use lua52::*;
+
+#[cfg(any(feature = "lua51", feature = "luajit"))]
+pub use lua51::*;
+
+#[cfg(feature = "luau")]
+pub use luau::*;
+
+#[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+pub const LUA_MAX_UPVALUES: c_int = 255;
+
+#[cfg(any(feature = "lua51", all(feature = "luajit", not(feature = "vendored"))))]
+pub const LUA_MAX_UPVALUES: c_int = 60;
+
+#[cfg(all(feature = "luajit", feature = "vendored"))]
+pub const LUA_MAX_UPVALUES: c_int = 120;
+
+#[cfg(feature = "luau")]
+pub const LUA_MAX_UPVALUES: c_int = 200;
+
+// I believe `luaL_traceback` < 5.4 requires this much free stack to not error.
+// 5.4 uses `luaL_Buffer`
+pub const LUA_TRACEBACK_STACK: c_int = 11;
 
 // The minimum alignment guaranteed by the architecture. This value is used to
 // add fast paths for low alignment values.
@@ -55,18 +84,6 @@ pub(crate) fn keep_lua_symbols() {
         symbols.push(lua_setglobal as _);
     }
 }
-
-mod lauxlib;
-mod lua;
-mod lualib;
-
-#[cfg(any(
-    feature = "lua52",
-    feature = "lua51",
-    feature = "luajit",
-    feature = "luau"
-))]
-mod compat53;
 
 #[cfg(feature = "lua54")]
 pub mod lua54;
