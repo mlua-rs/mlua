@@ -1,5 +1,6 @@
 use std::cell::UnsafeCell;
 use std::ffi::CStr;
+#[cfg(not(feature = "luau"))]
 use std::ops::{BitOr, BitOrAssign};
 use std::os::raw::{c_char, c_int};
 
@@ -18,9 +19,12 @@ use crate::lua::Lua;
 pub struct Debug<'lua> {
     lua: &'lua Lua,
     ar: ActivationRecord,
+    #[cfg(feature = "luau")]
+    level: c_int,
 }
 
 impl<'lua> Debug<'lua> {
+    #[cfg(not(feature = "luau"))]
     pub(crate) fn new(lua: &'lua Lua, ar: *mut lua_Debug) -> Self {
         Debug {
             lua,
@@ -28,10 +32,12 @@ impl<'lua> Debug<'lua> {
         }
     }
 
-    pub(crate) fn new_owned(lua: &'lua Lua, ar: lua_Debug) -> Self {
+    pub(crate) fn new_owned(lua: &'lua Lua, _level: c_int, ar: lua_Debug) -> Self {
         Debug {
             lua,
             ar: ActivationRecord::Owned(UnsafeCell::new(ar)),
+            #[cfg(feature = "luau")]
+            level: _level,
         }
     }
 
@@ -41,6 +47,7 @@ impl<'lua> Debug<'lua> {
     /// from a function that did a tail call.
     ///
     /// [Lua 5.1]: https://www.lua.org/manual/5.1/manual.html#pdf-LUA_HOOKTAILRET
+    #[cfg(not(feature = "luau"))]
     pub fn event(&self) -> DebugEvent {
         unsafe {
             match (*self.ar.get()).event {
@@ -57,13 +64,23 @@ impl<'lua> Debug<'lua> {
     /// Corresponds to the `n` what mask.
     pub fn names(&self) -> DebugNames<'lua> {
         unsafe {
+            #[cfg(not(feature = "luau"))]
             mlua_assert!(
                 ffi::lua_getinfo(self.lua.state, cstr!("n"), self.ar.get()) != 0,
                 "lua_getinfo failed with `n`"
             );
+            #[cfg(feature = "luau")]
+            mlua_assert!(
+                ffi::lua_getinfo(self.lua.state, self.level, cstr!("n"), self.ar.get()) != 0,
+                "lua_getinfo failed with `n`"
+            );
+
             DebugNames {
                 name: ptr_to_str((*self.ar.get()).name),
+                #[cfg(not(feature = "luau"))]
                 name_what: ptr_to_str((*self.ar.get()).namewhat),
+                #[cfg(feature = "luau")]
+                name_what: None,
             }
         }
     }
@@ -71,14 +88,22 @@ impl<'lua> Debug<'lua> {
     /// Corresponds to the `S` what mask.
     pub fn source(&self) -> DebugSource<'lua> {
         unsafe {
+            #[cfg(not(feature = "luau"))]
             mlua_assert!(
                 ffi::lua_getinfo(self.lua.state, cstr!("S"), self.ar.get()) != 0,
                 "lua_getinfo failed with `S`"
             );
+            #[cfg(feature = "luau")]
+            mlua_assert!(
+                ffi::lua_getinfo(self.lua.state, self.level, cstr!("s"), self.ar.get()) != 0,
+                "lua_getinfo failed with `s`"
+            );
+
             DebugSource {
                 source: ptr_to_str((*self.ar.get()).source),
                 short_src: ptr_to_str((*self.ar.get()).short_src.as_ptr()),
                 line_defined: (*self.ar.get()).linedefined as i32,
+                #[cfg(not(feature = "luau"))]
                 last_line_defined: (*self.ar.get()).lastlinedefined as i32,
                 what: ptr_to_str((*self.ar.get()).what),
             }
@@ -88,16 +113,24 @@ impl<'lua> Debug<'lua> {
     /// Corresponds to the `l` what mask. Returns the current line.
     pub fn curr_line(&self) -> i32 {
         unsafe {
+            #[cfg(not(feature = "luau"))]
             mlua_assert!(
                 ffi::lua_getinfo(self.lua.state, cstr!("l"), self.ar.get()) != 0,
                 "lua_getinfo failed with `l`"
             );
+            #[cfg(feature = "luau")]
+            mlua_assert!(
+                ffi::lua_getinfo(self.lua.state, self.level, cstr!("l"), self.ar.get()) != 0,
+                "lua_getinfo failed with `l`"
+            );
+
             (*self.ar.get()).currentline as i32
         }
     }
 
     /// Corresponds to the `t` what mask. Returns true if the hook is in a function tail call, false
     /// otherwise.
+    #[cfg(not(feature = "luau"))]
     pub fn is_tail_call(&self) -> bool {
         unsafe {
             mlua_assert!(
@@ -111,22 +144,38 @@ impl<'lua> Debug<'lua> {
     /// Corresponds to the `u` what mask.
     pub fn stack(&self) -> DebugStack {
         unsafe {
+            #[cfg(not(feature = "luau"))]
             mlua_assert!(
                 ffi::lua_getinfo(self.lua.state, cstr!("u"), self.ar.get()) != 0,
                 "lua_getinfo failed with `u`"
             );
-            DebugStack {
+            #[cfg(feature = "luau")]
+            mlua_assert!(
+                ffi::lua_getinfo(self.lua.state, self.level, cstr!("a"), self.ar.get()) != 0,
+                "lua_getinfo failed with `a`"
+            );
+
+            #[cfg(not(feature = "luau"))]
+            let stack = DebugStack {
                 num_ups: (*self.ar.get()).nups as i32,
                 #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
                 num_params: (*self.ar.get()).nparams as i32,
                 #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
                 is_vararg: (*self.ar.get()).isvararg != 0,
-            }
+            };
+            #[cfg(feature = "luau")]
+            let stack = DebugStack {
+                num_ups: (*self.ar.get()).nupvals as i32,
+                num_params: (*self.ar.get()).nparams as i32,
+                is_vararg: (*self.ar.get()).isvararg != 0,
+            };
+            stack
         }
     }
 }
 
 enum ActivationRecord {
+    #[cfg(not(feature = "luau"))]
     Borrowed(*mut lua_Debug),
     Owned(UnsafeCell<lua_Debug>),
 }
@@ -135,6 +184,7 @@ impl ActivationRecord {
     #[inline]
     fn get(&self) -> *mut lua_Debug {
         match self {
+            #[cfg(not(feature = "luau"))]
             ActivationRecord::Borrowed(x) => *x,
             ActivationRecord::Owned(x) => x.get(),
         }
@@ -163,6 +213,7 @@ pub struct DebugSource<'a> {
     pub source: Option<&'a [u8]>,
     pub short_src: Option<&'a [u8]>,
     pub line_defined: i32,
+    #[cfg(not(feature = "luau"))]
     pub last_line_defined: i32,
     pub what: Option<&'a [u8]>,
 }
@@ -170,15 +221,26 @@ pub struct DebugSource<'a> {
 #[derive(Copy, Clone, Debug)]
 pub struct DebugStack {
     pub num_ups: i32,
-    /// Requires `feature = "lua54/lua53/lua52"`
-    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+    /// Requires `feature = "lua54/lua53/lua52/luau"`
+    #[cfg(any(
+        feature = "lua54",
+        feature = "lua53",
+        feature = "lua52",
+        feature = "luau"
+    ))]
     pub num_params: i32,
-    /// Requires `feature = "lua54/lua53/lua52"`
-    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+    /// Requires `feature = "lua54/lua53/lua52/luau"`
+    #[cfg(any(
+        feature = "lua54",
+        feature = "lua53",
+        feature = "lua52",
+        feature = "luau"
+    ))]
     pub is_vararg: bool,
 }
 
 /// Determines when a hook function will be called by Lua.
+#[cfg(not(feature = "luau"))]
 #[derive(Clone, Copy, Debug, Default)]
 pub struct HookTriggers {
     /// Before a function call.
@@ -196,6 +258,7 @@ pub struct HookTriggers {
     pub every_nth_instruction: Option<u32>,
 }
 
+#[cfg(not(feature = "luau"))]
 impl HookTriggers {
     /// Returns a new instance of `HookTriggers` with [`on_calls`] trigger set.
     ///
@@ -262,6 +325,7 @@ impl HookTriggers {
     }
 }
 
+#[cfg(not(feature = "luau"))]
 impl BitOr for HookTriggers {
     type Output = Self;
 
@@ -276,6 +340,7 @@ impl BitOr for HookTriggers {
     }
 }
 
+#[cfg(not(feature = "luau"))]
 impl BitOrAssign for HookTriggers {
     fn bitor_assign(&mut self, rhs: Self) {
         *self = *self | rhs;

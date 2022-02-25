@@ -14,16 +14,15 @@ use rustc_hash::FxHashMap;
 use crate::error::{Error, Result};
 use crate::ffi;
 use crate::function::Function;
-#[cfg(not(feature = "luau"))]
-use crate::hook::{Debug, HookTriggers};
+use crate::hook::Debug;
 use crate::scope::Scope;
 use crate::stdlib::StdLib;
 use crate::string::String;
 use crate::table::Table;
 use crate::thread::Thread;
 use crate::types::{
-    Callback, CallbackUpvalue, DestructedUserdataMT, /*HookCallback,*/ Integer, LightUserData,
-    LuaRef, MaybeSend, Number, RegistryKey,
+    Callback, CallbackUpvalue, DestructedUserdataMT, Integer, LightUserData, LuaRef, MaybeSend,
+    Number, RegistryKey,
 };
 use crate::userdata::{
     AnyUserData, MetaMethod, UserData, UserDataCell, UserDataFields, UserDataMethods,
@@ -36,9 +35,6 @@ use crate::util::{
 };
 use crate::value::{FromLua, FromLuaMulti, MultiValue, Nil, ToLua, ToLuaMulti, Value};
 
-#[cfg(not(feature = "luau"))]
-use crate::types::HookCallback;
-
 #[cfg(not(feature = "lua54"))]
 use crate::util::push_userdata;
 #[cfg(feature = "lua54")]
@@ -46,6 +42,9 @@ use {
     crate::{types::WarnCallback, userdata::USER_VALUE_MAXSLOT, util::push_userdata_uv},
     std::ffi::CStr,
 };
+
+#[cfg(not(feature = "luau"))]
+use crate::{hook::HookTriggers, types::HookCallback};
 
 #[cfg(not(feature = "send"))]
 use std::rc::Rc;
@@ -933,14 +932,19 @@ impl Lua {
     /// function that has called level `n` (except for tail calls, which do not count in the stack).
     ///
     /// [`Debug`]: crate::hook::Debug
-    #[cfg(not(feature = "luau"))]
     pub fn inspect_stack(&self, level: usize) -> Option<Debug> {
         unsafe {
             let mut ar: ffi::lua_Debug = mem::zeroed();
-            if ffi::lua_getstack(self.state, level as c_int, &mut ar) == 0 {
+            let level = level as c_int;
+            #[cfg(not(feature = "luau"))]
+            if ffi::lua_getstack(self.state, level, &mut ar) == 0 {
                 return None;
             }
-            Some(Debug::new_owned(self, ar))
+            #[cfg(feature = "luau")]
+            if ffi::lua_getinfo(self.state, level, cstr!(""), &mut ar) == 0 {
+                return None;
+            }
+            Some(Debug::new_owned(self, level, ar))
         }
     }
 

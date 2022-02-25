@@ -397,6 +397,15 @@ const LUA_IDSIZE: usize = 256;
 /// Type for functions to be called on debug events.
 pub type lua_Hook = unsafe extern "C" fn(L: *mut lua_State, ar: *mut lua_Debug);
 
+pub type lua_Coverage = unsafe extern "C" fn(
+    context: *mut c_void,
+    function: *const c_char,
+    linedefined: c_int,
+    depth: c_int,
+    hits: *const c_int,
+    size: usize,
+);
+
 extern "C" {
     pub fn lua_getinfo(
         L: *mut lua_State,
@@ -413,7 +422,14 @@ extern "C" {
     pub fn lua_singlestep(L: *mut lua_State, enabled: c_int);
     pub fn lua_breakpoint(L: *mut lua_State, funcindex: c_int, line: c_int, enabled: c_int);
 
-    // TODO: lua_Coverage, lua_getcoverage
+    pub fn lua_getcoverage(
+        L: *mut lua_State,
+        funcindex: c_int,
+        context: *mut c_void,
+        callback: lua_Coverage,
+    );
+
+    pub fn lua_debugtrace(L: *mut lua_State) -> *const c_char;
 }
 
 #[repr(C)]
@@ -435,4 +451,31 @@ pub struct lua_Debug {
 // These are shared between all coroutines.
 //
 
-// TODO: lua_Callbacks, lua_callbacks
+#[repr(C)]
+pub struct lua_Callbacks {
+    /// arbitrary userdata pointer that is never overwritten by Luau
+    pub userdata: *mut c_void,
+
+    /// gets called at safepoints (loop back edges, call/ret, gc) if set
+    pub interrupt: Option<unsafe extern "C" fn(L: *mut lua_State, gc: c_int)>,
+    /// gets called when an unprotected error is raised (if longjmp is used)
+    pub panic: Option<unsafe extern "C" fn(L: *mut lua_State, errcode: c_int)>,
+
+    /// gets called when L is created (LP == parent) or destroyed (LP == NULL)
+    pub userthread: Option<unsafe extern "C" fn(LP: *mut lua_State, L: *mut lua_State)>,
+    /// gets called when a string is created; returned atom can be retrieved via tostringatom
+    pub useratom: Option<unsafe extern "C" fn(s: *const c_char, l: usize) -> i16>,
+
+    /// gets called when BREAK instruction is encountered
+    pub debugbreak: Option<unsafe extern "C" fn(L: *mut lua_State, ar: *mut lua_Debug)>,
+    /// gets called after each instruction in single step mode
+    pub debugstep: Option<unsafe extern "C" fn(L: *mut lua_State, ar: *mut lua_Debug)>,
+    /// gets called when thread execution is interrupted by break in another thread
+    pub debuginterrupt: Option<unsafe extern "C" fn(L: *mut lua_State, ar: *mut lua_Debug)>,
+    /// gets called when protected call results in an error
+    pub debugprotectederror: Option<unsafe extern "C" fn(L: *mut lua_State)>,
+}
+
+extern "C" {
+    pub fn lua_callbacks(L: *mut lua_State) -> *mut lua_Callbacks;
+}

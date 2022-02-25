@@ -17,8 +17,8 @@ use crate::userdata::{
     AnyUserData, MetaMethod, UserData, UserDataCell, UserDataFields, UserDataMethods,
 };
 use crate::util::{
-    assert_stack, check_stack, get_userdata, init_userdata_metatable, push_table, push_userdata,
-    rawset_field, take_userdata, StackGuard,
+    assert_stack, check_stack, get_userdata, init_userdata_metatable, push_table, rawset_field,
+    take_userdata, StackGuard,
 };
 use crate::value::{FromLua, FromLuaMulti, MultiValue, ToLua, ToLuaMulti, Value};
 
@@ -352,7 +352,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
             })?;
             #[cfg(feature = "luau")]
             let ud_ptr = {
-                push_userdata::<UserDataCell<Rc<RefCell<T>>>>(
+                crate::util::push_userdata::<UserDataCell<Rc<RefCell<T>>>>(
                     lua.state,
                     UserDataCell::new(data.clone()),
                 )?;

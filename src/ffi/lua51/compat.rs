@@ -7,8 +7,8 @@ use std::mem;
 use std::os::raw::{c_char, c_int, c_void};
 use std::ptr;
 
-use super::lua::*;
 use super::lauxlib::*;
+use super::lua::*;
 
 #[inline(always)]
 unsafe fn compat53_reverse(L: *mut lua_State, mut a: c_int, mut b: c_int) {

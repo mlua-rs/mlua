@@ -1169,7 +1169,6 @@ fn test_load_from_function() -> Result<()> {
     Ok(())
 }
 
-#[cfg(not(feature = "luau"))]
 #[test]
 fn test_inspect_stack() -> Result<()> {
     let lua = Lua::new();
