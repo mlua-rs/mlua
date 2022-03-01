@@ -1,3 +1,10 @@
+## v0.7.4
+
+- Improved `Lua::create_registry_value` to reuse previously expired registry keys.
+  No need to call `Lua::expire_registry_values` when creating/dropping registry values.
+- Added `Lua::replace_registry_value` to change value of an existing Registry Key
+- Async calls optimization
+
 ## v0.7.3
 
 - Fixed cross-compilation issue (introduced in 84a174c)
