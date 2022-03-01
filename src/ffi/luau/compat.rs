@@ -380,7 +380,7 @@ pub unsafe fn luaL_loadbufferx(
     }
 
     if chunk_is_text {
-        let data = luau_compile(data, size, ptr::null_mut(), &mut size);
+        let data = luau_compile_(data, size, ptr::null_mut(), &mut size);
         let ok = luau_load(L, name, data, size, 0) == 0;
         free(data as *mut c_void);
         if !ok {

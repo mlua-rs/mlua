@@ -81,6 +81,7 @@
 #[macro_use]
 mod macros;
 
+mod chunk;
 mod conversion;
 mod error;
 mod ffi;
@@ -102,10 +103,11 @@ pub mod prelude;
 
 pub use crate::{ffi::lua_CFunction, ffi::lua_State};
 
+pub use crate::chunk::{AsChunk, Chunk, ChunkMode};
 pub use crate::error::{Error, ExternalError, ExternalResult, Result};
 pub use crate::function::Function;
 pub use crate::hook::{Debug, DebugEvent, DebugNames, DebugSource, DebugStack};
-pub use crate::lua::{AsChunk, Chunk, ChunkMode, GCMode, Lua, LuaOptions};
+pub use crate::lua::{GCMode, Lua, LuaOptions};
 pub use crate::multi::Variadic;
 pub use crate::scope::Scope;
 pub use crate::stdlib::StdLib;
@@ -120,6 +122,9 @@ pub use crate::value::{FromLua, FromLuaMulti, MultiValue, Nil, ToLua, ToLuaMulti
 
 #[cfg(not(feature = "luau"))]
 pub use crate::hook::HookTriggers;
+
+#[cfg(feature = "luau")]
+pub use crate::chunk::Compiler;
 
 #[cfg(feature = "async")]
 pub use crate::thread::AsyncThread;

@@ -152,7 +152,6 @@ fn test_eval() -> Result<()> {
     Ok(())
 }
 
-#[cfg(not(feature = "luau"))]
 #[test]
 fn test_load_mode() -> Result<()> {
     let lua = unsafe { Lua::unsafe_new() };
@@ -169,7 +168,10 @@ fn test_load_mode() -> Result<()> {
         Err(e) => panic!("expected SyntaxError, got {:?}", e),
     };
 
+    #[cfg(not(feature = "luau"))]
     let bytecode = lua.load("return 1 + 1").into_function()?.dump(true);
+    #[cfg(feature = "luau")]
+    let bytecode = mlua::Compiler::new().compile("return 1 + 1");
     assert_eq!(lua.load(&bytecode).eval::<i32>()?, 2);
     assert_eq!(
         lua.load(&bytecode)

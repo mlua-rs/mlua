@@ -1,4 +1,5 @@
 use std::any::{Any, TypeId};
+use std::borrow::Cow;
 use std::cell::{Ref, RefCell, RefMut, UnsafeCell};
 use std::collections::HashMap;
 use std::ffi::CString;
@@ -11,6 +12,7 @@ use std::{mem, ptr, str};
 
 use rustc_hash::FxHashMap;
 
+use crate::chunk::{AsChunk, Chunk, ChunkMode};
 use crate::error::{Error, Result};
 use crate::ffi;
 use crate::function::Function;
@@ -1145,17 +1147,19 @@ impl Lua {
     {
         Chunk {
             lua: self,
-            source: source.source(),
+            source: Cow::Borrowed(source.source()),
             name: match source.name() {
                 Some(name) => Some(name),
                 None => CString::new(Location::caller().to_string()).ok(),
             },
             env: source.env(self),
             mode: source.mode(),
+            #[cfg(feature = "luau")]
+            compiler: None,
         }
     }
 
-    fn load_chunk<'lua>(
+    pub(crate) fn load_chunk<'lua>(
         &'lua self,
         source: &[u8],
         name: Option<&CString>,
@@ -2702,225 +2706,6 @@ impl Lua {
                 extra.multivalue_cache.push(mem::transmute(multivalue));
             }
         }
-    }
-}
-
-/// Returned from [`Lua::load`] and is used to finalize loading and executing Lua main chunks.
-///
-/// [`Lua::load`]: crate::Lua::load
-#[must_use = "`Chunk`s do nothing unless one of `exec`, `eval`, `call`, or `into_function` are called on them"]
-pub struct Chunk<'lua, 'a> {
-    lua: &'lua Lua,
-    source: &'a [u8],
-    name: Option<CString>,
-    env: Result<Option<Value<'lua>>>,
-    mode: Option<ChunkMode>,
-}
-
-/// Represents chunk mode (text or binary).
-#[derive(Clone, Copy, Debug)]
-pub enum ChunkMode {
-    Text,
-    Binary,
-}
-
-/// Trait for types [loadable by Lua] and convertible to a [`Chunk`]
-///
-/// [loadable by Lua]: https://www.lua.org/manual/5.4/manual.html#3.3.2
-/// [`Chunk`]: crate::Chunk
-pub trait AsChunk<'lua> {
-    /// Returns chunk data (can be text or binary)
-    fn source(&self) -> &[u8];
-
-    /// Returns optional chunk name
-    fn name(&self) -> Option<CString> {
-        None
-    }
-
-    /// Returns optional chunk [environment]
-    ///
-    /// [environment]: https://www.lua.org/manual/5.4/manual.html#2.2
-    fn env(&self, _lua: &'lua Lua) -> Result<Option<Value<'lua>>> {
-        Ok(None)
-    }
-
-    /// Returns optional chunk mode (text or binary)
-    fn mode(&self) -> Option<ChunkMode> {
-        None
-    }
-}
-
-impl<'lua, 'a> Chunk<'lua, 'a> {
-    /// Sets the name of this chunk, which results in more informative error traces.
-    pub fn set_name<S: AsRef<[u8]> + ?Sized>(mut self, name: &S) -> Result<Chunk<'lua, 'a>> {
-        let name =
-            CString::new(name.as_ref().to_vec()).map_err(|e| Error::ToLuaConversionError {
-                from: "&str",
-                to: "string",
-                message: Some(e.to_string()),
-            })?;
-        self.name = Some(name);
-        Ok(self)
-    }
-
-    /// Sets the first upvalue (`_ENV`) of the loaded chunk to the given value.
-    ///
-    /// Lua main chunks always have exactly one upvalue, and this upvalue is used as the `_ENV`
-    /// variable inside the chunk. By default this value is set to the global environment.
-    ///
-    /// Calling this method changes the `_ENV` upvalue to the value provided, and variables inside
-    /// the chunk will refer to the given environment rather than the global one.
-    ///
-    /// All global variables (including the standard library!) are looked up in `_ENV`, so it may be
-    /// necessary to populate the environment in order for scripts using custom environments to be
-    /// useful.
-    pub fn set_environment<V: ToLua<'lua>>(mut self, env: V) -> Result<Chunk<'lua, 'a>> {
-        // Prefer to propagate errors here and wrap to `Ok`
-        self.env = Ok(Some(env.to_lua(self.lua)?));
-        Ok(self)
-    }
-
-    /// Sets whether the chunk is text or binary (autodetected by default).
-    ///
-    /// Lua does not check the consistency of binary chunks, therefore this mode is allowed only
-    /// for instances created with [`Lua::unsafe_new`].
-    ///
-    /// [`Lua::unsafe_new`]: crate::Lua::unsafe_new
-    pub fn set_mode(mut self, mode: ChunkMode) -> Chunk<'lua, 'a> {
-        self.mode = Some(mode);
-        self
-    }
-
-    /// Execute this chunk of code.
-    ///
-    /// This is equivalent to calling the chunk function with no arguments and no return values.
-    pub fn exec(self) -> Result<()> {
-        self.call(())?;
-        Ok(())
-    }
-
-    /// Asynchronously execute this chunk of code.
-    ///
-    /// See [`exec`] for more details.
-    ///
-    /// Requires `feature = "async"`
-    ///
-    /// [`exec`]: #method.exec
-    #[cfg(feature = "async")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
-    pub fn exec_async<'fut>(self) -> LocalBoxFuture<'fut, Result<()>>
-    where
-        'lua: 'fut,
-    {
-        self.call_async(())
-    }
-
-    /// Evaluate the chunk as either an expression or block.
-    ///
-    /// If the chunk can be parsed as an expression, this loads and executes the chunk and returns
-    /// the value that it evaluates to. Otherwise, the chunk is interpreted as a block as normal,
-    /// and this is equivalent to calling `exec`.
-    pub fn eval<R: FromLuaMulti<'lua>>(self) -> Result<R> {
-        // Bytecode is always interpreted as a statement.
-        // For source code, first try interpreting the lua as an expression by adding
-        // "return", then as a statement. This is the same thing the
-        // actual lua repl does.
-        if self.source[0] < b'\n' {
-            self.call(())
-        } else if let Ok(function) = self.lua.load_chunk(
-            &self.expression_source(),
-            self.name.as_ref(),
-            self.env()?,
-            self.mode,
-        ) {
-            function.call(())
-        } else {
-            self.call(())
-        }
-    }
-
-    /// Asynchronously evaluate the chunk as either an expression or block.
-    ///
-    /// See [`eval`] for more details.
-    ///
-    /// Requires `feature = "async"`
-    ///
-    /// [`eval`]: #method.eval
-    #[cfg(feature = "async")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
-    pub fn eval_async<'fut, R>(self) -> LocalBoxFuture<'fut, Result<R>>
-    where
-        'lua: 'fut,
-        R: FromLuaMulti<'lua> + 'fut,
-    {
-        if self.source[0] < b'\n' {
-            self.call_async(())
-        } else if let Ok(function) = self.lua.load_chunk(
-            &self.expression_source(),
-            self.name.as_ref(),
-            match self.env() {
-                Ok(env) => env,
-                Err(e) => return Box::pin(future::err(e)),
-            },
-            self.mode,
-        ) {
-            function.call_async(())
-        } else {
-            self.call_async(())
-        }
-    }
-
-    /// Load the chunk function and call it with the given arguments.
-    ///
-    /// This is equivalent to `into_function` and calling the resulting function.
-    pub fn call<A: ToLuaMulti<'lua>, R: FromLuaMulti<'lua>>(self, args: A) -> Result<R> {
-        self.into_function()?.call(args)
-    }
-
-    /// Load the chunk function and asynchronously call it with the given arguments.
-    ///
-    /// See [`call`] for more details.
-    ///
-    /// Requires `feature = "async"`
-    ///
-    /// [`call`]: #method.call
-    #[cfg(feature = "async")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
-    pub fn call_async<'fut, A, R>(self, args: A) -> LocalBoxFuture<'fut, Result<R>>
-    where
-        'lua: 'fut,
-        A: ToLuaMulti<'lua>,
-        R: FromLuaMulti<'lua> + 'fut,
-    {
-        match self.into_function() {
-            Ok(func) => func.call_async(args),
-            Err(e) => Box::pin(future::err(e)),
-        }
-    }
-
-    /// Load this chunk into a regular `Function`.
-    ///
-    /// This simply compiles the chunk without actually executing it.
-    pub fn into_function(self) -> Result<Function<'lua>> {
-        self.lua
-            .load_chunk(self.source, self.name.as_ref(), self.env()?, self.mode)
-    }
-
-    fn env(&self) -> Result<Option<Value<'lua>>> {
-        self.env.clone()
-    }
-
-    fn expression_source(&self) -> Vec<u8> {
-        let mut buf = Vec::with_capacity(b"return ".len() + self.source.len());
-        buf.extend(b"return ");
-        buf.extend(self.source);
-        buf
-    }
-}
-
-impl<'lua, T: AsRef<[u8]> + ?Sized> AsChunk<'lua> for T {
-    fn source(&self) -> &[u8] {
-        self.as_ref()
     }
 }
 
