@@ -70,6 +70,8 @@ extern "C" {
     pub fn luaL_newstate() -> *mut lua_State;
 
     // TODO: luaL_findtable
+
+    pub fn luaL_typename(L: *mut lua_State, idx: c_int) -> *const c_char;
 }
 
 //
@@ -101,11 +103,6 @@ pub unsafe fn luaL_optstring(L: *mut lua_State, n: c_int, d: *const c_char) -> *
 }
 
 // TODO: luaL_opt
-
-#[inline(always)]
-pub unsafe fn luaL_typename(L: *mut lua_State, i: c_int) -> *const c_char {
-    lua::lua_typename(L, lua::lua_type(L, i))
-}
 
 #[inline(always)]
 pub unsafe fn luaL_getmetatable(L: *mut lua_State, n: *const c_char) -> c_int {

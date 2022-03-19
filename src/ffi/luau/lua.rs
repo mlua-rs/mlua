@@ -162,8 +162,11 @@ extern "C" {
         cont: Option<lua_Continuation>,
     );
     pub fn lua_pushboolean(L: *mut lua_State, b: c_int);
-    pub fn lua_pushlightuserdata(L: *mut lua_State, p: *mut c_void);
     pub fn lua_pushthread(L: *mut lua_State) -> c_int;
+
+    pub fn lua_pushlightuserdata(L: *mut lua_State, p: *mut c_void);
+    pub fn lua_newuserdatatagged(L: *mut lua_State, sz: usize, tag: c_int) -> *mut c_void;
+    pub fn lua_newuserdatadtor(L: *mut lua_State, sz: usize, dtor: lua_Udestructor) -> *mut c_void;
 
     //
     // Get functions (Lua -> stack)
@@ -180,8 +183,6 @@ extern "C" {
     pub fn lua_getreadonly(L: *mut lua_State, idx: c_int) -> c_int;
     pub fn lua_setsafeenv(L: *mut lua_State, idx: c_int, enabled: c_int);
 
-    pub fn lua_newuserdatatagged(L: *mut lua_State, sz: usize, tag: c_int) -> *mut c_void;
-    pub fn lua_newuserdatadtor(L: *mut lua_State, sz: usize, dtor: lua_Udestructor) -> *mut c_void;
     pub fn lua_getmetatable(L: *mut lua_State, objindex: c_int) -> c_int;
     pub fn lua_getfenv(L: *mut lua_State, idx: c_int);
 
@@ -242,14 +243,24 @@ extern "C" {
 }
 
 //
+// Memory statistics
+//
+extern "C" {
+    pub fn lua_setmemcat(L: *mut lua_State, category: c_int);
+    pub fn lua_totalbytes(L: *mut lua_State, category: c_int) -> usize;
+}
+
+//
 // Miscellaneous functions
 //
 extern "C" {
     pub fn lua_error(L: *mut lua_State) -> !;
     pub fn lua_next(L: *mut lua_State, idx: c_int) -> c_int;
     pub fn lua_concat(L: *mut lua_State, n: c_int);
-    // TODO: lua_encodepointer, lua_clock
+    // TODO: lua_encodepointer
+    pub fn lua_clock() -> c_double;
     pub fn lua_setuserdatadtor(L: *mut lua_State, tag: c_int, dtor: Option<lua_Udestructor>);
+    pub fn lua_clonefunction(L: *mut lua_State, idx: c_int);
 }
 
 //
@@ -407,6 +418,7 @@ pub type lua_Coverage = unsafe extern "C" fn(
 );
 
 extern "C" {
+    pub fn lua_stackdepth(L: *mut lua_State) -> c_int;
     pub fn lua_getinfo(
         L: *mut lua_State,
         level: c_int,
