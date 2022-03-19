@@ -348,47 +348,73 @@ pub unsafe fn get_gc_userdata<T: Any>(state: *mut ffi::lua_State, index: c_int) 
 pub unsafe fn init_userdata_metatable_index(
     state: *mut ffi::lua_State
 ) -> Result<()> {
-    match ffi::luaL_dostring(state, cstr!(r#"return function (__index, field_getters, methods)
-        return function (self, key)
-            if field_getters ~= nil and rawget(field_getters, key) ~= nil then
-                return field_getters[key](self)
-            elseif methods ~= nil and methods[key] ~= nil then
-                return methods[key]
-            elseif type(__index) == 'table' then
-                return rawget(__index, key)
-            elseif type(__index) == 'function' then
-                return __index(self, key)
-            else
-                error(string.format('attempt to get an unknown field \'%s\'', key))
+    protect_lua!(state, 0, 1, |state| {
+        let ret = ffi::luaL_dostring(state, cstr!(r#"
+            return function (__index, field_getters, methods)
+                return function (self, key)
+                    if field_getters ~= nil then
+                        local field_getter = field_getters[key]
+                        if field_getter ~= nil then
+                            return field_getter(self)
+                        end
+                    end
+
+                    if methods ~= nil then
+                        local method = methods[key]
+                        if method ~= nil then
+                            return method
+                        end
+                    end
+
+                    if type(__index) == 'function' then
+                        return __index(self, key)
+                    elseif __index == nil then
+                        error('attempt to get an unknown field \'' .. key .. '\'')
+                    else
+                        return __index[key]
+                    end
+                end
             end
-        end
-    end"#)) {
-        0 => Ok(()),
-        ret => Err(pop_error(state, ret))?
-    }
+        "#));
+        if ret != ffi::LUA_OK {
+            ffi::lua_error(state);
+        }
+    })?;
+
+    Ok(())
 }
 
 pub unsafe fn init_userdata_metatable_newindex(
     state: *mut ffi::lua_State
 ) -> Result<()> {
-    match ffi::luaL_dostring(state, cstr!(r#"
-        return function (__newindex, field_setters)
-            return function (self, key, value)
-                if field_setters ~= nil and rawget(field_setters, key) ~= nil then
-                    field_setters[key](self, value)
-                elseif type(__newindex) == 'table' then
-                    rawset(__newindex, key, value)
-                elseif type(__newindex) == 'function' then
-                    __newindex(self, key, value)
-                else
-                    error(string.format('attempt to set an unknown field \'%s\'', key))
+    protect_lua!(state, 0, 1, |state| {
+        let ret = ffi::luaL_dostring(state, cstr!(r#"
+            return function (__newindex, field_setters)
+                return function (self, key, value)
+                    if field_setters ~= nil then
+                        local field_setter = rawget(field_setters, key)
+                        if field_setter ~= nil then
+                            field_setter(self, value)
+                            return
+                        end
+                    end
+
+                    if type(__newindex) == 'function' then
+                        __newindex(self, key, value)
+                    elseif __newindex == nil then
+                        error('attempt to set an unknown field \'' .. key .. '\'')
+                    else
+                        __newindex[key] = value
+                    end
                 end
             end
-        end
-    "#)) {
-        0 => Ok(()),
-        ret => Err(pop_error(state, ret))?
-    }
+        "#));
+        if ret != ffi::LUA_OK {
+            ffi::lua_error(state);
+        }
+    })?;
+
+    Ok(())
 }
 
 // Populates the given table with the appropriate members to be a userdata metatable for the given type.
@@ -423,7 +449,7 @@ pub unsafe fn init_userdata_metatable<T>(
                     }
                 }
 
-                ffi::lua_call(state, 3, 1);
+                protect_lua!(state, 4, 1, |state| ffi::lua_call(state, 3, 1))?;
             }
             _ => mlua_panic!("improper __index type {}", index_type),
         }
@@ -440,7 +466,7 @@ pub unsafe fn init_userdata_metatable<T>(
             ffi::LUA_TNIL | ffi::LUA_TTABLE | ffi::LUA_TFUNCTION => {
                 ffi::lua_pushvalue(state, field_setters);
 
-                ffi::lua_call(state, 2, 1);
+                protect_lua!(state, 3, 1, |state| ffi::lua_call(state, 2, 1))?;
             }
             _ => mlua_panic!("improper __newindex type {}", newindex_type),
         }
