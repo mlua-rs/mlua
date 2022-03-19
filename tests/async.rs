@@ -306,6 +306,7 @@ async fn test_async_userdata() -> Result<()> {
                 Ok(format!("elapsed:{}ms", n))
             });
 
+            #[cfg(not(feature = "lua51"))]
             methods.add_async_meta_method(MetaMethod::Index, |lua, data, key: String| async move {
                 Delay::new(Duration::from_millis(10)).await;
 
@@ -316,6 +317,7 @@ async fn test_async_userdata() -> Result<()> {
                 }
             });
 
+            #[cfg(not(feature = "lua51"))]
             methods.add_async_meta_method(MetaMethod::NewIndex, |_, data, (key, value): (String, Value)| async move {
                 Delay::new(Duration::from_millis(10)).await;
 
@@ -353,12 +355,6 @@ async fn test_async_userdata() -> Result<()> {
         userdata:set_value(12)
         assert(userdata.sleep(5) == "elapsed:5ms")
         assert(userdata:get_value() == 12)
-
-        userdata.ms = 2000
-        assert(userdata.s == 2)
-
-        userdata.s = 15
-        assert(userdata.ms == 15000)
     "#,
     )
     .exec_async()
@@ -369,6 +365,12 @@ async fn test_async_userdata() -> Result<()> {
         r#"
         userdata:set_value(15)
         assert(userdata() == "elapsed:15ms")
+
+        userdata.ms = 2000
+        assert(userdata.s == 2)
+
+        userdata.s = 15
+        assert(userdata.ms == 15000)
     "#,
     )
     .exec_async()
