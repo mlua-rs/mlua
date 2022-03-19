@@ -369,33 +369,33 @@ pub unsafe fn init_userdata_metatable_index(state: *mut ffi::lua_State) -> Resul
             state,
             cstr!(
                 r#"
-            return function (isfunction, error)
-                return function (__index, field_getters, methods)
-                    return function (self, key)
-                        if field_getters ~= nil then
-                            local field_getter = field_getters[key]
-                            if field_getter ~= nil then
-                                return field_getter(self)
+                return function (isfunction, error)
+                    return function (__index, field_getters, methods)
+                        return function (self, key)
+                            if field_getters ~= nil then
+                                local field_getter = field_getters[key]
+                                if field_getter ~= nil then
+                                    return field_getter(self)
+                                end
                             end
-                        end
 
-                        if methods ~= nil then
-                            local method = methods[key]
-                            if method ~= nil then
-                                return method
+                            if methods ~= nil then
+                                local method = methods[key]
+                                if method ~= nil then
+                                    return method
+                                end
                             end
-                        end
 
-                        if isfunction(__index) then
-                            return __index(self, key)
-                        elseif __index == nil then
-                            error('attempt to get an unknown field \'' .. key .. '\'')
-                        else
-                            return __index[key]
+                            if isfunction(__index) then
+                                return __index(self, key)
+                            elseif __index == nil then
+                                error('attempt to get an unknown field \'' .. key .. '\'')
+                            else
+                                return __index[key]
+                            end
                         end
                     end
                 end
-            end
         "#
             ),
         );
@@ -416,25 +416,27 @@ pub unsafe fn init_userdata_metatable_newindex(state: *mut ffi::lua_State) -> Re
             state,
             cstr!(
                 r#"
-            return function (__newindex, field_setters)
-                return function (self, key, value)
-                    if field_setters ~= nil then
-                        local field_setter = rawget(field_setters, key)
-                        if field_setter ~= nil then
-                            field_setter(self, value)
-                            return
+                return function (isfunction, error)
+                    return function (__newindex, field_setters)
+                        return function (self, key, value)
+                            if field_setters ~= nil then
+                                local field_setter = field_setters[key]
+                                if field_setter ~= nil then
+                                    field_setter(self, value)
+                                    return
+                                end
+                            end
+
+                            if isfunction(__newindex) then
+                                __newindex(self, key, value)
+                            elseif __newindex == nil then
+                                error('attempt to set an unknown field \'' .. key .. '\'')
+                            else
+                                __newindex[key] = value
+                            end
                         end
                     end
-
-                    if isfunction(__newindex) then
-                        __newindex(self, key, value)
-                    elseif __newindex == nil then
-                        error('attempt to set an unknown field \'' .. key .. '\'')
-                    else
-                        __newindex[key] = value
-                    end
                 end
-            end
         "#
             ),
         );
