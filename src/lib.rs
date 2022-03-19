@@ -96,6 +96,7 @@ mod table;
 mod thread;
 mod types;
 mod userdata;
+mod userdata_impl;
 mod util;
 mod value;
 
