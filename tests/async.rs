@@ -7,13 +7,14 @@ use std::sync::{
     Arc,
 };
 use std::time::Duration;
+use std::unreachable;
 
 use futures_timer::Delay;
 use futures_util::stream::TryStreamExt;
 
 use mlua::{
     Error, Function, Lua, LuaOptions, MetaMethod, Result, StdLib, Table, TableExt, Thread,
-    UserData, UserDataMethods, Value,
+    UserData, UserDataMethods, Value, ToLua, ExternalError,
 };
 
 #[tokio::test]
@@ -304,6 +305,39 @@ async fn test_async_userdata() -> Result<()> {
                 Delay::new(Duration::from_millis(n)).await;
                 Ok(format!("elapsed:{}ms", n))
             });
+
+            methods.add_async_meta_method(MetaMethod::Index, |lua, data, key: String| async move {
+                Delay::new(Duration::from_millis(10)).await;
+
+                match key.as_str() {
+                    "ms" => Ok(data.0.load(Ordering::Relaxed).to_lua(lua)?),
+                    "s" => Ok(((data.0.load(Ordering::Relaxed) as f64) / 1000.0).to_lua(lua)?),
+                    _ => Ok(Value::Nil),
+                }
+            });
+
+            methods.add_async_meta_method(MetaMethod::NewIndex, |_, data, (key, value): (String, Value)| async move {
+                Delay::new(Duration::from_millis(10)).await;
+
+                match key.as_str() {
+                    "ms" | "s" => {
+                        let value = match value {
+                            Value::Integer(value) => value as f64,
+                            Value::Number(value) => value,
+                            _ => Err("wrong type for value".to_lua_err())?
+                        };
+                        let value = match key.as_str() {
+                            "ms" => value,
+                            "s" => value * 1000.0,
+                            _ => unreachable!(),
+                        };
+                        data.0.store(value as u64, Ordering::Relaxed);
+
+                        Ok(())
+                    },
+                    _ => Err(format!("key '{}' not found", key).to_lua_err())
+                }
+            });
         }
     }
 
@@ -319,6 +353,12 @@ async fn test_async_userdata() -> Result<()> {
         userdata:set_value(12)
         assert(userdata.sleep(5) == "elapsed:5ms")
         assert(userdata:get_value() == 12)
+
+        userdata.ms = 2000
+        assert(userdata.s == 2)
+
+        userdata.s = 15
+        assert(userdata.ms == 15000)
     "#,
     )
     .exec_async()
