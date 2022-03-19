@@ -226,14 +226,16 @@ fn userdata_index(c: &mut Criterion) {
         b.iter_batched_ref(
             || {
                 collect_gc_twice(&lua);
-                lua.load(r#"
+                lua.load(
+                    r#"
                     function()
                         for i = 1,10 do
                             local v = userdata.test
                         end
-                    end"#)
-                    .eval::<LuaFunction>()
-                    .unwrap()
+                    end"#,
+                )
+                .eval::<LuaFunction>()
+                .unwrap()
             },
             |function| {
                 function.call::<_, ()>(()).unwrap();

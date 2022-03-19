@@ -13,8 +13,8 @@ use futures_timer::Delay;
 use futures_util::stream::TryStreamExt;
 
 use mlua::{
-    Error, Function, Lua, LuaOptions, MetaMethod, Result, StdLib, Table, TableExt, Thread,
-    UserData, UserDataMethods, Value, ToLua, ExternalError,
+    Error, ExternalError, Function, Lua, LuaOptions, MetaMethod, Result, StdLib, Table, TableExt,
+    Thread, ToLua, UserData, UserDataMethods, Value,
 };
 
 #[tokio::test]
@@ -318,28 +318,31 @@ async fn test_async_userdata() -> Result<()> {
             });
 
             #[cfg(not(feature = "lua51"))]
-            methods.add_async_meta_method(MetaMethod::NewIndex, |_, data, (key, value): (String, Value)| async move {
-                Delay::new(Duration::from_millis(10)).await;
+            methods.add_async_meta_method(
+                MetaMethod::NewIndex,
+                |_, data, (key, value): (String, Value)| async move {
+                    Delay::new(Duration::from_millis(10)).await;
 
-                match key.as_str() {
-                    "ms" | "s" => {
-                        let value = match value {
-                            Value::Integer(value) => value as f64,
-                            Value::Number(value) => value,
-                            _ => Err("wrong type for value".to_lua_err())?
-                        };
-                        let value = match key.as_str() {
-                            "ms" => value,
-                            "s" => value * 1000.0,
-                            _ => unreachable!(),
-                        };
-                        data.0.store(value as u64, Ordering::Relaxed);
+                    match key.as_str() {
+                        "ms" | "s" => {
+                            let value = match value {
+                                Value::Integer(value) => value as f64,
+                                Value::Number(value) => value,
+                                _ => Err("wrong type for value".to_lua_err())?,
+                            };
+                            let value = match key.as_str() {
+                                "ms" => value,
+                                "s" => value * 1000.0,
+                                _ => unreachable!(),
+                            };
+                            data.0.store(value as u64, Ordering::Relaxed);
 
-                        Ok(())
-                    },
-                    _ => Err(format!("key '{}' not found", key).to_lua_err())
-                }
-            });
+                            Ok(())
+                        }
+                        _ => Err(format!("key '{}' not found", key).to_lua_err()),
+                    }
+                },
+            );
         }
     }
 

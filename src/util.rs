@@ -363,11 +363,12 @@ unsafe extern "C" fn error_impl(state: *mut ffi::lua_State) -> c_int {
     lua_error(state);
 }
 
-pub unsafe fn init_userdata_metatable_index(
-    state: *mut ffi::lua_State
-) -> Result<()> {
+pub unsafe fn init_userdata_metatable_index(state: *mut ffi::lua_State) -> Result<()> {
     protect_lua!(state, 0, 1, |state| {
-        let ret = ffi::luaL_dostring(state, cstr!(r#"
+        let ret = ffi::luaL_dostring(
+            state,
+            cstr!(
+                r#"
             return function (isfunction, error)
                 return function (__index, field_getters, methods)
                     return function (self, key)
@@ -395,7 +396,9 @@ pub unsafe fn init_userdata_metatable_index(
                     end
                 end
             end
-        "#));
+        "#
+            ),
+        );
         if ret != ffi::LUA_OK {
             ffi::lua_error(state);
         }
@@ -407,11 +410,12 @@ pub unsafe fn init_userdata_metatable_index(
     Ok(())
 }
 
-pub unsafe fn init_userdata_metatable_newindex(
-    state: *mut ffi::lua_State
-) -> Result<()> {
+pub unsafe fn init_userdata_metatable_newindex(state: *mut ffi::lua_State) -> Result<()> {
     protect_lua!(state, 0, 1, |state| {
-        let ret = ffi::luaL_dostring(state, cstr!(r#"
+        let ret = ffi::luaL_dostring(
+            state,
+            cstr!(
+                r#"
             return function (__newindex, field_setters)
                 return function (self, key, value)
                     if field_setters ~= nil then
@@ -431,7 +435,9 @@ pub unsafe fn init_userdata_metatable_newindex(
                     end
                 end
             end
-        "#));
+        "#
+            ),
+        );
         if ret != ffi::LUA_OK {
             ffi::lua_error(state);
         }
