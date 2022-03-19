@@ -47,23 +47,6 @@ fn test_safety() -> Result<()> {
         Err(e) => panic!("expected RuntimeError, got {:?}", e),
         Ok(_) => panic!("expected RuntimeError, got no error"),
     }
-
-    match lua.load("1 + 1").set_mode(ChunkMode::Binary).exec() {
-        Err(Error::SafetyError(msg)) => {
-            assert!(msg.contains("binary chunks are disabled in safe mode"))
-        }
-        Err(e) => panic!("expected SafetyError, got {:?}", e),
-        Ok(_) => panic!("expected SafetyError, got no error"),
-    }
-
-    let bytecode = lua.load("return 1 + 1").into_function()?.dump(true);
-    match lua.load(&bytecode).exec() {
-        Err(Error::SafetyError(msg)) => {
-            assert!(msg.contains("binary chunks are disabled in safe mode"))
-        }
-        Err(e) => panic!("expected SafetyError, got {:?}", e),
-        Ok(_) => panic!("expected SafetyError, got no error"),
-    }
     drop(lua);
 
     // Test safety rules after dynamically loading `package` library

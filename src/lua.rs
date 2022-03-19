@@ -1135,11 +1135,7 @@ impl Lua {
     /// similar on the returned builder. Code is not even parsed until one of these methods is
     /// called.
     ///
-    /// If this `Lua` was created with [`unsafe_new`], `load` will automatically detect and load
-    /// chunks of either text or binary type, as if passing `bt` mode to `luaL_loadbufferx`.
-    ///
     /// [`Chunk::exec`]: crate::Chunk::exec
-    /// [`unsafe_new`]: #method.unsafe_new
     #[track_caller]
     pub fn load<'lua, 'a, S>(&'lua self, source: &'a S) -> Chunk<'lua, 'a>
     where
@@ -1171,19 +1167,8 @@ impl Lua {
             check_stack(self.state, 1)?;
 
             let mode_str = match mode {
-                Some(ChunkMode::Binary) if self.safe => {
-                    return Err(Error::SafetyError(
-                        "binary chunks are disabled in safe mode".to_string(),
-                    ))
-                }
                 Some(ChunkMode::Binary) => cstr!("b"),
                 Some(ChunkMode::Text) => cstr!("t"),
-                #[cfg(not(feature = "luau"))]
-                None if source.starts_with(ffi::LUA_SIGNATURE) && self.safe => {
-                    return Err(Error::SafetyError(
-                        "binary chunks are disabled in safe mode".to_string(),
-                    ))
-                }
                 None => cstr!("bt"),
             };
 
