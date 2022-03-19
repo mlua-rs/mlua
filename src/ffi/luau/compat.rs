@@ -26,26 +26,6 @@ unsafe fn compat53_reverse(L: *mut lua_State, mut a: c_int, mut b: c_int) {
 const COMPAT53_LEVELS1: c_int = 12; // size of the first part of the stack
 const COMPAT53_LEVELS2: c_int = 10; // size of the second part of the stack
 
-unsafe fn compat53_countlevels(L: *mut lua_State) -> c_int {
-    let mut ar: lua_Debug = mem::zeroed();
-    let (mut li, mut le) = (1, 1);
-    // find an upper bound
-    while lua_getinfo(L, le, cstr!(""), &mut ar) != 0 {
-        li = le;
-        le *= 2;
-    }
-    // do a binary search
-    while li < le {
-        let m = (li + le) / 2;
-        if lua_getinfo(L, m, cstr!(""), &mut ar) != 0 {
-            li = m + 1;
-        } else {
-            le = m;
-        }
-    }
-    le - 1
-}
-
 unsafe fn compat53_findfield(L: *mut lua_State, objidx: c_int, level: c_int) -> c_int {
     if level == 0 || lua_istable(L, -1) == 0 {
         return 0; // not found
@@ -425,7 +405,7 @@ pub unsafe fn luaL_traceback(
 ) {
     let mut ar: lua_Debug = mem::zeroed();
     let top = lua_gettop(L);
-    let numlevels = compat53_countlevels(L1);
+    let numlevels = lua_stackdepth(L);
     let mark = if numlevels > COMPAT53_LEVELS1 + COMPAT53_LEVELS2 {
         COMPAT53_LEVELS1
     } else {
