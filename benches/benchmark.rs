@@ -209,6 +209,40 @@ fn create_userdata(c: &mut Criterion) {
     });
 }
 
+fn userdata_index(c: &mut Criterion) {
+    struct UserData(i64);
+    impl LuaUserData for UserData {
+        fn add_methods<'lua, M: mlua::UserDataMethods<'lua, Self>>(methods: &mut M) {
+            methods.add_meta_method(mlua::MetaMethod::Index, move |_, _, index: String| {
+                Ok(index)
+            });
+        }
+    }
+
+    let lua = Lua::new();
+    lua.globals().set("userdata", UserData(10)).unwrap();
+
+    c.bench_function("index [table userdata] 10", |b| {
+        b.iter_batched_ref(
+            || {
+                collect_gc_twice(&lua);
+                lua.load(r#"
+                    function()
+                        for i = 1,10 do
+                            local v = userdata.test
+                        end
+                    end"#)
+                    .eval::<LuaFunction>()
+                    .unwrap()
+            },
+            |function| {
+                function.call::<_, ()>(()).unwrap();
+            },
+            BatchSize::SmallInput,
+        );
+    });
+}
+
 fn call_userdata_method(c: &mut Criterion) {
     struct UserData(i64);
     impl LuaUserData for UserData {
@@ -283,6 +317,7 @@ criterion_group! {
         call_concat_callback,
         create_registry_values,
         create_userdata,
+        userdata_index,
         call_userdata_method,
         call_async_userdata_method,
 }
