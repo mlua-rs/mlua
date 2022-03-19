@@ -9,7 +9,7 @@ use once_cell::sync::Lazy;
 use rustc_hash::FxHashMap;
 
 use crate::error::{Error, Result};
-use crate::ffi;
+use crate::ffi::{self, lua_error};
 
 static METATABLE_CACHE: Lazy<FxHashMap<TypeId, u8>> = Lazy::new(|| {
     let mut map = FxHashMap::with_capacity_and_hasher(32, Default::default());
@@ -345,33 +345,53 @@ pub unsafe fn get_gc_userdata<T: Any>(state: *mut ffi::lua_State, index: c_int) 
     ud
 }
 
+unsafe extern "C" fn isfunction_impl(state: *mut ffi::lua_State) -> c_int {
+    // stack: var
+    ffi::luaL_checkstack(state, 1, ptr::null());
+
+    let t = ffi::lua_type(state, -1);
+    ffi::lua_pop(state, 1);
+    ffi::lua_pushboolean(state, if t == ffi::LUA_TFUNCTION { 1 } else { 0 });
+
+    1
+}
+
+unsafe extern "C" fn error_impl(state: *mut ffi::lua_State) -> c_int {
+    // stack: message
+    ffi::luaL_checkstack(state, 1, ptr::null());
+
+    lua_error(state);
+}
+
 pub unsafe fn init_userdata_metatable_index(
     state: *mut ffi::lua_State
 ) -> Result<()> {
     protect_lua!(state, 0, 1, |state| {
         let ret = ffi::luaL_dostring(state, cstr!(r#"
-            return function (__index, field_getters, methods)
-                return function (self, key)
-                    if field_getters ~= nil then
-                        local field_getter = field_getters[key]
-                        if field_getter ~= nil then
-                            return field_getter(self)
+            return function (isfunction, error)
+                return function (__index, field_getters, methods)
+                    return function (self, key)
+                        if field_getters ~= nil then
+                            local field_getter = field_getters[key]
+                            if field_getter ~= nil then
+                                return field_getter(self)
+                            end
                         end
-                    end
 
-                    if methods ~= nil then
-                        local method = methods[key]
-                        if method ~= nil then
-                            return method
+                        if methods ~= nil then
+                            local method = methods[key]
+                            if method ~= nil then
+                                return method
+                            end
                         end
-                    end
 
-                    if type(__index) == 'function' then
-                        return __index(self, key)
-                    elseif __index == nil then
-                        error('attempt to get an unknown field \'' .. key .. '\'')
-                    else
-                        return __index[key]
+                        if isfunction(__index) then
+                            return __index(self, key)
+                        elseif __index == nil then
+                            error('attempt to get an unknown field \'' .. key .. '\'')
+                        else
+                            return __index[key]
+                        end
                     end
                 end
             end
@@ -379,6 +399,9 @@ pub unsafe fn init_userdata_metatable_index(
         if ret != ffi::LUA_OK {
             ffi::lua_error(state);
         }
+        ffi::lua_pushcfunction(state, isfunction_impl);
+        ffi::lua_pushcfunction(state, error_impl);
+        ffi::lua_call(state, 2, 1);
     })?;
 
     Ok(())
@@ -399,7 +422,7 @@ pub unsafe fn init_userdata_metatable_newindex(
                         end
                     end
 
-                    if type(__newindex) == 'function' then
+                    if isfunction(__newindex) then
                         __newindex(self, key, value)
                     elseif __newindex == nil then
                         error('attempt to set an unknown field \'' .. key .. '\'')
@@ -412,6 +435,9 @@ pub unsafe fn init_userdata_metatable_newindex(
         if ret != ffi::LUA_OK {
             ffi::lua_error(state);
         }
+        ffi::lua_pushcfunction(state, isfunction_impl);
+        ffi::lua_pushcfunction(state, error_impl);
+        ffi::lua_call(state, 2, 1);
     })?;
 
     Ok(())
