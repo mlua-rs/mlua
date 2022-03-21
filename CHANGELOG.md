@@ -1,3 +1,9 @@
+## v0.8.0-beta.1
+
+- Roblox Luau support
+- Refactored ffi module. C glue is no longer required
+- Added async support to `__index` and `__newindex` metamethods
+
 ## v0.7.4
 
 - Improved `Lua::create_registry_value` to reuse previously expired registry keys.

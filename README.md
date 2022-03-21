@@ -16,11 +16,12 @@
 `mlua` is bindings to [Lua](https://www.lua.org) programming language for Rust with a goal to provide
 _safe_ (as far as it's possible), high level, easy to use, practical and flexible API.
 
-Started as `rlua` fork, `mlua` supports Lua 5.4, 5.3, 5.2 and 5.1 including LuaJIT (2.0.5 and 2.1 beta) and allows to write native Lua modules in Rust as well as use Lua in a standalone mode.
+Started as `rlua` fork, `mlua` supports Lua 5.4, 5.3, 5.2, 5.1 (including LuaJIT) and [Roblox Luau] and allows to write native Lua modules in Rust as well as use Lua in a standalone mode.
 
 `mlua` tested on Windows/macOS/Linux including module mode in [GitHub Actions] on `x86_64` platform and cross-compilation to `aarch64` (other targets are also supported).
 
 [GitHub Actions]: https://github.com/khvzak/mlua/actions
+[Roblox Luau]: https://github.com/Roblox/luau
 
 ## Usage
 
@@ -35,6 +36,7 @@ Below is a list of the available feature flags. By default `mlua` does not enabl
 * `lua51`: activate Lua [5.1] support
 * `luajit`: activate [LuaJIT] support
 * `luajit52`: activate [LuaJIT] support with partial compatibility with Lua 5.2
+* `luau`: activate [Luau] support (auto vendored mode)
 * `vendored`: build static Lua(JIT) library from sources during `mlua` compilation using [lua-src] or [luajit-src] crates
 * `module`: enable module mode (building loadable `cdylib` library for Lua)
 * `async`: enable async/await support (any executor can be used, eg. [tokio] or [async-std])
@@ -47,6 +49,7 @@ Below is a list of the available feature flags. By default `mlua` does not enabl
 [5.2]: https://www.lua.org/manual/5.2/manual.html
 [5.1]: https://www.lua.org/manual/5.1/manual.html
 [LuaJIT]: https://luajit.org/
+[Luau]: https://luau-lang.org
 [lua-src]: https://github.com/khvzak/lua-src-rs
 [luajit-src]: https://github.com/khvzak/luajit-src-rs
 [tokio]: https://github.com/tokio-rs/tokio
@@ -56,7 +59,9 @@ Below is a list of the available feature flags. By default `mlua` does not enabl
 
 ### Async/await support
 
-`mlua` supports async/await for all Lua versions. This works using Lua [coroutines](https://www.lua.org/manual/5.3/manual.html#2.6) and require running [Thread](https://docs.rs/mlua/latest/mlua/struct.Thread.html) along with enabling `feature = "async"` in `Cargo.toml`.
+`mlua` supports async/await for all Lua versions including Luau.
+
+This works using Lua [coroutines](https://www.lua.org/manual/5.3/manual.html#2.6) and require running [Thread](https://docs.rs/mlua/latest/mlua/struct.Thread.html) along with enabling `feature = "async"` in `Cargo.toml`.
 
 **Examples**:
 - [HTTP Client](examples/async_http_client.rs)
@@ -76,7 +81,7 @@ With `serialize` feature flag enabled, `mlua` allows you to serialize/deserializ
 
 ### Compiling
 
-You have to enable one of the features `lua54`, `lua53`, `lua52`, `lua51` or `luajit(52)`, according to the chosen Lua version.
+You have to enable one of the features: `lua54`, `lua53`, `lua52`, `lua51`, `luajit(52)` or `luau`, according to the chosen Lua version.
 
 By default `mlua` uses `pkg-config` tool to find lua includes and libraries for the chosen Lua version.
 In most cases it works as desired, although sometimes could be more preferable to use a custom lua library.
