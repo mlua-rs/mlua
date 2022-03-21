@@ -7,14 +7,13 @@ use std::sync::{
     Arc,
 };
 use std::time::Duration;
-use std::unreachable;
 
 use futures_timer::Delay;
 use futures_util::stream::TryStreamExt;
 
 use mlua::{
-    Error, ExternalError, Function, Lua, LuaOptions, Result, StdLib, Table, TableExt, Thread,
-    ToLua, UserData, UserDataMethods, Value,
+    Error, Function, Lua, LuaOptions, Result, StdLib, Table, TableExt, Thread, UserData,
+    UserDataMethods, Value,
 };
 
 #[tokio::test]
@@ -306,40 +305,28 @@ async fn test_async_userdata() -> Result<()> {
                 Ok(format!("elapsed:{}ms", n))
             });
 
-            #[cfg(not(feature = "lua51"))]
-            methods.add_async_meta_method(MetaMethod::Index, |lua, data, key: String| async move {
-                Delay::new(Duration::from_millis(10)).await;
-
-                match key.as_str() {
-                    "ms" => Ok(data.0.load(Ordering::Relaxed).to_lua(lua)?),
-                    "s" => Ok(((data.0.load(Ordering::Relaxed) as f64) / 1000.0).to_lua(lua)?),
-                    _ => Ok(Value::Nil),
-                }
-            });
-
-            #[cfg(not(feature = "lua51"))]
+            #[cfg(not(any(feature = "lua51", feature = "luau")))]
             methods.add_async_meta_method(
-                MetaMethod::NewIndex,
-                |_, data, (key, value): (String, Value)| async move {
+                mlua::MetaMethod::Index,
+                |_, data, key: String| async move {
                     Delay::new(Duration::from_millis(10)).await;
-
                     match key.as_str() {
-                        "ms" | "s" => {
-                            let value = match value {
-                                Value::Integer(value) => value as f64,
-                                Value::Number(value) => value,
-                                _ => Err("wrong type for value".to_lua_err())?,
-                            };
-                            let value = match key.as_str() {
-                                "ms" => value,
-                                "s" => value * 1000.0,
-                                _ => unreachable!(),
-                            };
-                            data.0.store(value as u64, Ordering::Relaxed);
+                        "ms" => Ok(Some(data.0.load(Ordering::Relaxed) as f64)),
+                        "s" => Ok(Some((data.0.load(Ordering::Relaxed) as f64) / 1000.0)),
+                        _ => Ok(None),
+                    }
+                },
+            );
 
-                            Ok(())
-                        }
-                        _ => Err(format!("key '{}' not found", key).to_lua_err()),
+            #[cfg(not(any(feature = "lua51", feature = "luau")))]
+            methods.add_async_meta_method(
+                mlua::MetaMethod::NewIndex,
+                |_, data, (key, value): (String, f64)| async move {
+                    Delay::new(Duration::from_millis(10)).await;
+                    match key.as_str() {
+                        "ms" => Ok(data.0.store(value as u64, Ordering::Relaxed)),
+                        "s" => Ok(data.0.store((value * 1000.0) as u64, Ordering::Relaxed)),
+                        _ => Err(Error::external(format!("key '{}' not found", key))),
                     }
                 },
             );

@@ -1,4 +1,5 @@
 use std::any::{Any, TypeId};
+use std::ffi::CStr;
 use std::fmt::Write;
 use std::os::raw::{c_char, c_int, c_void};
 use std::panic::{catch_unwind, resume_unwind, AssertUnwindSafe};
@@ -9,7 +10,7 @@ use once_cell::sync::Lazy;
 use rustc_hash::FxHashMap;
 
 use crate::error::{Error, Result};
-use crate::ffi::{self, lua_error};
+use crate::ffi;
 
 static METATABLE_CACHE: Lazy<FxHashMap<TypeId, u8>> = Lazy::new(|| {
     let mut map = FxHashMap::with_capacity_and_hasher(32, Default::default());
@@ -370,110 +371,117 @@ pub unsafe fn get_gc_userdata<T: Any>(state: *mut ffi::lua_State, index: c_int) 
     ud
 }
 
-unsafe extern "C" fn isfunction_impl(state: *mut ffi::lua_State) -> c_int {
-    // stack: var
-    ffi::luaL_checkstack(state, 1, ptr::null());
+unsafe extern "C" fn lua_error_impl(state: *mut ffi::lua_State) -> c_int {
+    ffi::lua_error(state);
+}
 
+unsafe extern "C" fn lua_isfunction_impl(state: *mut ffi::lua_State) -> c_int {
     let t = ffi::lua_type(state, -1);
     ffi::lua_pop(state, 1);
-    ffi::lua_pushboolean(state, if t == ffi::LUA_TFUNCTION { 1 } else { 0 });
-
+    ffi::lua_pushboolean(state, (t == ffi::LUA_TFUNCTION) as c_int);
     1
 }
 
-unsafe extern "C" fn error_impl(state: *mut ffi::lua_State) -> c_int {
-    // stack: message
-    ffi::luaL_checkstack(state, 1, ptr::null());
+unsafe fn init_userdata_metatable_index(state: *mut ffi::lua_State) -> Result<()> {
+    let index_key = &USERDATA_METATABLE_INDEX as *const u8 as *const _;
+    if ffi::lua_rawgetp(state, ffi::LUA_REGISTRYINDEX, index_key) == ffi::LUA_TFUNCTION {
+        return Ok(());
+    }
+    ffi::lua_pop(state, 1);
 
-    lua_error(state);
-}
-
-pub unsafe fn init_userdata_metatable_index(state: *mut ffi::lua_State) -> Result<()> {
-    protect_lua!(state, 0, 1, |state| {
-        let ret = ffi::luaL_dostring(
-            state,
-            cstr!(
-                r#"
-                return function (isfunction, error)
-                    return function (__index, field_getters, methods)
-                        return function (self, key)
-                            if field_getters ~= nil then
-                                local field_getter = field_getters[key]
-                                if field_getter ~= nil then
-                                    return field_getter(self)
-                                end
-                            end
-
-                            if methods ~= nil then
-                                local method = methods[key]
-                                if method ~= nil then
-                                    return method
-                                end
-                            end
-
-                            if isfunction(__index) then
-                                return __index(self, key)
-                            elseif __index == nil then
-                                error('attempt to get an unknown field \'' .. key .. '\'')
-                            else
-                                return __index[key]
-                            end
+    // Create and cache `__index` helper
+    let code = cstr!(
+        r#"
+            local error, isfunction = ...
+            return function (__index, field_getters, methods)
+                return function (self, key)
+                    if field_getters ~= nil then
+                        local field_getter = field_getters[key]
+                        if field_getter ~= nil then
+                            return field_getter(self)
                         end
                     end
+
+                    if methods ~= nil then
+                        local method = methods[key]
+                        if method ~= nil then
+                            return method
+                        end
+                    end
+
+                    if isfunction(__index) then
+                        return __index(self, key)
+                    elseif __index == nil then
+                        error("attempt to get an unknown field '"..key.."'")
+                    else
+                        return __index[key]
+                    end
                 end
-        "#
-            ),
-        );
+            end
+    "#
+    );
+    let code_len = CStr::from_ptr(code).to_bytes().len();
+    protect_lua!(state, 0, 1, |state| {
+        let ret = ffi::luaL_loadbuffer(state, code, code_len, cstr!("__mlua_index"));
         if ret != ffi::LUA_OK {
             ffi::lua_error(state);
         }
-        ffi::lua_pushcfunction(state, isfunction_impl);
-        ffi::lua_pushcfunction(state, error_impl);
+        ffi::lua_pushcfunction(state, lua_error_impl);
+        ffi::lua_pushcfunction(state, lua_isfunction_impl);
         ffi::lua_call(state, 2, 1);
-    })?;
 
-    Ok(())
+        // Store in the registry
+        ffi::lua_pushvalue(state, -1);
+        ffi::lua_rawsetp(state, ffi::LUA_REGISTRYINDEX, index_key);
+    })
 }
 
 pub unsafe fn init_userdata_metatable_newindex(state: *mut ffi::lua_State) -> Result<()> {
-    protect_lua!(state, 0, 1, |state| {
-        let ret = ffi::luaL_dostring(
-            state,
-            cstr!(
-                r#"
-                return function (isfunction, error)
-                    return function (__newindex, field_setters)
-                        return function (self, key, value)
-                            if field_setters ~= nil then
-                                local field_setter = field_setters[key]
-                                if field_setter ~= nil then
-                                    field_setter(self, value)
-                                    return
-                                end
-                            end
+    let newindex_key = &USERDATA_METATABLE_NEWINDEX as *const u8 as *const _;
+    if ffi::lua_rawgetp(state, ffi::LUA_REGISTRYINDEX, newindex_key) == ffi::LUA_TFUNCTION {
+        return Ok(());
+    }
+    ffi::lua_pop(state, 1);
 
-                            if isfunction(__newindex) then
-                                __newindex(self, key, value)
-                            elseif __newindex == nil then
-                                error('attempt to set an unknown field \'' .. key .. '\'')
-                            else
-                                __newindex[key] = value
-                            end
+    // Create and cache `__newindex` helper
+    let code = cstr!(
+        r#"
+            local error, isfunction = ...
+            return function (__newindex, field_setters)
+                return function (self, key, value)
+                    if field_setters ~= nil then
+                        local field_setter = field_setters[key]
+                        if field_setter ~= nil then
+                            field_setter(self, value)
+                            return
                         end
                     end
+
+                    if isfunction(__newindex) then
+                        __newindex(self, key, value)
+                    elseif __newindex == nil then
+                        error("attempt to set an unknown field '"..key.."'")
+                    else
+                        __newindex[key] = value
+                    end
                 end
-        "#
-            ),
-        );
+            end
+    "#
+    );
+    let code_len = CStr::from_ptr(code).to_bytes().len();
+    protect_lua!(state, 0, 1, |state| {
+        let ret = ffi::luaL_loadbuffer(state, code, code_len, cstr!("__mlua_newindex"));
         if ret != ffi::LUA_OK {
             ffi::lua_error(state);
         }
-        ffi::lua_pushcfunction(state, isfunction_impl);
-        ffi::lua_pushcfunction(state, error_impl);
+        ffi::lua_pushcfunction(state, lua_error_impl);
+        ffi::lua_pushcfunction(state, lua_isfunction_impl);
         ffi::lua_call(state, 2, 1);
-    })?;
 
-    Ok(())
+        // Store in the registry
+        ffi::lua_pushvalue(state, -1);
+        ffi::lua_rawsetp(state, ffi::LUA_REGISTRYINDEX, newindex_key);
+    })
 }
 
 // Populates the given table with the appropriate members to be a userdata metatable for the given type.
@@ -494,6 +502,7 @@ pub unsafe fn init_userdata_metatable<T>(
     ffi::lua_pushvalue(state, metatable);
 
     if field_getters.is_some() || methods.is_some() {
+        // Push `__index` generator function
         init_userdata_metatable_index(state)?;
 
         push_string(state, "__index")?;
@@ -508,7 +517,8 @@ pub unsafe fn init_userdata_metatable<T>(
                     }
                 }
 
-                protect_lua!(state, 4, 1, |state| ffi::lua_call(state, 3, 1))?;
+                // Generate `__index`
+                protect_lua!(state, 4, 1, fn(state) ffi::lua_call(state, 3, 1))?;
             }
             _ => mlua_panic!("improper __index type {}", index_type),
         }
@@ -517,6 +527,7 @@ pub unsafe fn init_userdata_metatable<T>(
     }
 
     if let Some(field_setters) = field_setters {
+        // Push `__newindex` generator function
         init_userdata_metatable_newindex(state)?;
 
         push_string(state, "__newindex")?;
@@ -524,8 +535,8 @@ pub unsafe fn init_userdata_metatable<T>(
         match newindex_type {
             ffi::LUA_TNIL | ffi::LUA_TTABLE | ffi::LUA_TFUNCTION => {
                 ffi::lua_pushvalue(state, field_setters);
-
-                protect_lua!(state, 3, 1, |state| ffi::lua_call(state, 2, 1))?;
+                // Generate `__newindex`
+                protect_lua!(state, 3, 1, fn(state) ffi::lua_call(state, 2, 1))?;
             }
             _ => mlua_panic!("improper __newindex type {}", newindex_type),
         }
@@ -976,3 +987,5 @@ pub(crate) unsafe fn get_destructed_userdata_metatable(state: *mut ffi::lua_Stat
 
 static DESTRUCTED_USERDATA_METATABLE: u8 = 0;
 static ERROR_PRINT_BUFFER_KEY: u8 = 0;
+static USERDATA_METATABLE_INDEX: u8 = 0;
+static USERDATA_METATABLE_NEWINDEX: u8 = 0;
