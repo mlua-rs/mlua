@@ -348,6 +348,26 @@ impl<'lua> Table<'lua> {
         }
     }
 
+    /// Sets `readonly` attribute on the table.
+    ///
+    /// Requires `feature = "luau"`
+    #[cfg(feature = "luau")]
+    pub fn set_readonly(&self, enabled: bool) {
+        let lua = self.0.lua;
+        unsafe {
+            lua.ref_thread_exec(|refthr| ffi::lua_setreadonly(refthr, self.0.index, enabled as _));
+        }
+    }
+
+    /// Returns `readonly` attribute of the table.
+    ///
+    /// Requires `feature = "luau"`
+    #[cfg(feature = "luau")]
+    pub fn is_readonly(&self) -> bool {
+        let lua = self.0.lua;
+        unsafe { lua.ref_thread_exec(|refthr| ffi::lua_getreadonly(refthr, self.0.index) != 0) }
+    }
+
     /// Consume this table and return an iterator over the pairs of the table.
     ///
     /// This works like the Lua `pairs` function, but does not invoke the `__pairs` metamethod.

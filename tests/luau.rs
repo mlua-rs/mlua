@@ -3,7 +3,7 @@
 use std::env;
 use std::fs;
 
-use mlua::{Lua, Result, Value};
+use mlua::{Error, Lua, Result, Value};
 
 #[test]
 fn test_require() -> Result<()> {
@@ -44,6 +44,26 @@ fn test_vectors() -> Result<()> {
         .load("return vector(1, 2, 3) + vector(3, 2, 1)")
         .eval()?;
     assert_eq!(v, [4.0, 4.0, 4.0]);
+
+    Ok(())
+}
+
+#[test]
+fn test_readonly_table() -> Result<()> {
+    let lua = Lua::new();
+
+    let t = lua.create_table()?;
+    assert!(!t.is_readonly());
+    t.set_readonly(true);
+    assert!(t.is_readonly());
+
+    match t.set("key", "value") {
+        Err(Error::RuntimeError(err)) if err.contains("Attempt to modify a readonly table") => {}
+        r => panic!(
+            "expected RuntimeError(...) with a specific message, got {:?}",
+            r
+        ),
+    };
 
     Ok(())
 }
