@@ -103,7 +103,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
     {
         let func = RefCell::new(func);
         self.create_function(move |lua, args| {
-            (&mut *func
+            (*func
                 .try_borrow_mut()
                 .map_err(|_| Error::RecursiveMutCallback)?)(lua, args)
         })
@@ -306,7 +306,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
                         let mut data = data
                             .try_borrow_mut()
                             .map_err(|_| Error::UserDataBorrowMutError)?;
-                        (&mut *method)(lua, &mut *data, args)
+                        (*method)(lua, &mut *data, args)
                     });
                     unsafe { scope.create_callback(f) }
                 }
@@ -314,7 +314,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
                 NonStaticMethod::FunctionMut(function) => {
                     let function = RefCell::new(function);
                     let f = Box::new(move |lua, args| {
-                        (&mut *function
+                        (*function
                             .try_borrow_mut()
                             .map_err(|_| Error::RecursiveMutCallback)?)(
                             lua, args

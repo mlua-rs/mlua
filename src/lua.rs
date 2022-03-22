@@ -1351,7 +1351,7 @@ impl Lua {
     {
         let func = RefCell::new(func);
         self.create_function(move |lua, args| {
-            (&mut *func
+            (*func
                 .try_borrow_mut()
                 .map_err(|_| Error::RecursiveMutCallback)?)(lua, args)
         })
@@ -2613,12 +2613,12 @@ impl Lua {
             match option.to_str() {
                 Ok("collect") => {
                     ffi::lua_gc(state, ffi::LUA_GCCOLLECT, 0);
-                    return 0;
+                    0
                 }
                 Ok("count") => {
                     let n = ffi::lua_gc(state, ffi::LUA_GCCOUNT, 0);
                     ffi::lua_pushnumber(state, n as ffi::lua_Number);
-                    return 1;
+                    1
                 }
                 // TODO: More variants
                 _ => ffi::luaL_error(
@@ -2629,7 +2629,7 @@ impl Lua {
         }
 
         fn lua_require(lua: &Lua, name: Option<std::string::String>) -> Result<Value> {
-            let name = name.ok_or(Error::RuntimeError("name is nil".into()))?;
+            let name = name.ok_or_else(|| Error::RuntimeError("name is nil".into()))?;
 
             // Find module in the cache
             let loaded = unsafe {
@@ -2651,8 +2651,8 @@ impl Lua {
             }
 
             let mut source = None;
-            for path in search_path.split(";") {
-                if let Ok(buf) = std::fs::read(path.replacen("?", &name, 1)) {
+            for path in search_path.split(';') {
+                if let Ok(buf) = std::fs::read(path.replacen('?', &name, 1)) {
                     source = Some(buf);
                     break;
                 }

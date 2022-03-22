@@ -2,7 +2,6 @@
 //!
 //! Based on github.com/keplerproject/lua-compat-5.3
 
-use std::convert::TryInto;
 use std::ffi::CStr;
 use std::mem;
 use std::os::raw::{c_char, c_int, c_void};
@@ -51,7 +50,7 @@ unsafe fn compat53_findfield(L: *mut lua_State, objidx: c_int, level: c_int) -> 
         }
         lua_pop(L, 1); // remove value
     }
-    return 0; // not found
+    0 // not found
 }
 
 unsafe fn compat53_pushglobalfuncname(
@@ -66,10 +65,10 @@ unsafe fn compat53_pushglobalfuncname(
     if compat53_findfield(L, top + 1, 2) != 0 {
         lua_copy(L, -1, top + 1); // move name to proper place
         lua_pop(L, 2); // remove pushed values
-        return 1;
+        1
     } else {
         lua_settop(L, top); // remove function and global table
-        return 0;
+        0
     }
 }
 
@@ -77,13 +76,11 @@ unsafe fn compat53_pushfuncname(L: *mut lua_State, level: c_int, ar: *mut lua_De
     if !(*ar).name.is_null() {
         // is there a name?
         lua_pushfstring(L, cstr!("function '%s'"), (*ar).name);
+    } else if compat53_pushglobalfuncname(L, level, ar) != 0 {
+        lua_pushfstring(L, cstr!("function '%s'"), lua_tostring(L, -1));
+        lua_remove(L, -2); // remove name
     } else {
-        if compat53_pushglobalfuncname(L, level, ar) != 0 {
-            lua_pushfstring(L, cstr!("function '%s'"), lua_tostring(L, -1));
-            lua_remove(L, -2); // remove name
-        } else {
-            lua_pushliteral(L, "?");
-        }
+        lua_pushliteral(L, "?");
     }
 }
 
@@ -177,7 +174,6 @@ pub unsafe fn lua_geti(L: *mut lua_State, mut idx: c_int, n: lua_Integer) -> c_i
 
 #[inline(always)]
 pub unsafe fn lua_rawgeti(L: *mut lua_State, idx: c_int, n: lua_Integer) -> c_int {
-    let n = n.try_into().expect("cannot convert index to lua_Integer");
     lua_rawgeti_(L, idx, n)
 }
 
@@ -213,7 +209,6 @@ pub unsafe fn lua_seti(L: *mut lua_State, mut idx: c_int, n: lua_Integer) {
 
 #[inline(always)]
 pub unsafe fn lua_rawseti(L: *mut lua_State, idx: c_int, n: lua_Integer) {
-    let n = n.try_into().expect("cannot convert index from lua_Integer");
     lua_rawseti_(L, idx, n)
 }
 
@@ -366,10 +361,8 @@ pub unsafe fn luaL_loadbufferx(
         if !ok {
             return LUA_ERRSYNTAX;
         }
-    } else {
-        if luau_load(L, name, data, size, 0) != 0 {
-            return LUA_ERRSYNTAX;
-        }
+    } else if luau_load(L, name, data, size, 0) != 0 {
+        return LUA_ERRSYNTAX;
     }
     LUA_OK
 }

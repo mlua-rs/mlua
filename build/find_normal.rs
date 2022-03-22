@@ -70,7 +70,7 @@ pub fn probe_lua() -> Option<PathBuf> {
                 .probe(alt_probe);
         }
 
-        lua.expect(&format!("cannot find Lua {} using `pkg-config`", ver))
+        lua.unwrap_or_else(|_| panic!("cannot find Lua {} using `pkg-config`", ver))
             .include_paths
             .get(0)
             .cloned()

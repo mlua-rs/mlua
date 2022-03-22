@@ -110,10 +110,10 @@ unsafe fn compat53_pushglobalfuncname(L: *mut lua_State, ar: *mut lua_Debug) -> 
     if compat53_findfield(L, top + 1, 2) != 0 {
         lua_copy(L, -1, top + 1); // move name to proper place
         lua_pop(L, 2); // remove pushed values
-        return 1;
+        1
     } else {
         lua_settop(L, top); // remove function and global table
-        return 0;
+        0
     }
 }
 
