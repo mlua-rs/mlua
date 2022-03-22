@@ -21,7 +21,7 @@ Started as `rlua` fork, `mlua` supports Lua 5.4, 5.3, 5.2, 5.1 (including LuaJIT
 `mlua` tested on Windows/macOS/Linux including module mode in [GitHub Actions] on `x86_64` platform and cross-compilation to `aarch64` (other targets are also supported).
 
 [GitHub Actions]: https://github.com/khvzak/mlua/actions
-[Roblox Luau]: https://github.com/Roblox/luau
+[Roblox Luau]: https://luau-lang.org
 
 ## Usage
 
@@ -49,7 +49,7 @@ Below is a list of the available feature flags. By default `mlua` does not enabl
 [5.2]: https://www.lua.org/manual/5.2/manual.html
 [5.1]: https://www.lua.org/manual/5.1/manual.html
 [LuaJIT]: https://luajit.org/
-[Luau]: https://luau-lang.org
+[Luau]: https://github.com/Roblox/luau
 [lua-src]: https://github.com/khvzak/lua-src-rs
 [luajit-src]: https://github.com/khvzak/luajit-src-rs
 [tokio]: https://github.com/tokio-rs/tokio
@@ -104,7 +104,7 @@ Add to `Cargo.toml` :
 
 ``` toml
 [dependencies]
-mlua = { version = "0.7", features = ["lua54", "vendored"] }
+mlua = { version = "0.8.0-beta.1", features = ["lua54", "vendored"] }
 ```
 
 `main.rs`
@@ -139,7 +139,7 @@ Add to `Cargo.toml` :
 crate-type = ["cdylib"]
 
 [dependencies]
-mlua = { version = "0.7", features = ["lua54", "vendored", "module"] }
+mlua = { version = "0.8.0-beta.1", features = ["lua54", "vendored", "module"] }
 ```
 
 `lib.rs` :
