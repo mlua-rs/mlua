@@ -965,6 +965,13 @@ pub(crate) unsafe fn to_string(state: *mut ffi::lua_State, index: c_int) -> Stri
                 i.to_string()
             }
         }
+        #[cfg(feature = "luau")]
+        ffi::LUA_TVECTOR => {
+            let v = ffi::lua_tovector(state, index);
+            mlua_debug_assert!(!v.is_null(), "vector is null");
+            let (x, y, z) = (*v, *v.add(1), *v.add(2));
+            format!("vector({},{},{})", x, y, z)
+        }
         ffi::LUA_TSTRING => {
             let mut size = 0;
             // This will not trigger a 'm' error, because the reference is guaranteed to be of

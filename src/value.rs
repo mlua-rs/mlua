@@ -34,6 +34,9 @@ pub enum Value<'lua> {
     Integer(Integer),
     /// A floating point number.
     Number(Number),
+    /// A Luau vector.
+    #[cfg(feature = "luau")]
+    Vector(f32, f32, f32),
     /// An interned string, managed by Lua.
     ///
     /// Unlike Rust strings, Lua strings may not be valid UTF-8.
@@ -61,6 +64,8 @@ impl<'lua> Value<'lua> {
             Value::LightUserData(_) => "lightuserdata",
             Value::Integer(_) => "integer",
             Value::Number(_) => "number",
+            #[cfg(feature = "luau")]
+            Value::Vector(_, _, _) => "vector",
             Value::String(_) => "string",
             Value::Table(_) => "table",
             Value::Function(_) => "function",
@@ -99,6 +104,8 @@ impl<'lua> PartialEq for Value<'lua> {
             (Value::Integer(a), Value::Number(b)) => *a as Number == *b,
             (Value::Number(a), Value::Integer(b)) => *a == *b as Number,
             (Value::Number(a), Value::Number(b)) => *a == *b,
+            #[cfg(feature = "luau")]
+            (Value::Vector(x1, y1, z1), Value::Vector(x2, y2, z2)) => (x1, y1, z1) == (x2, y2, z2),
             (Value::String(a), Value::String(b)) => a == b,
             (Value::Table(a), Value::Table(b)) => a == b,
             (Value::Function(a), Value::Function(b)) => a == b,
@@ -130,6 +137,8 @@ impl<'lua> Serialize for Value<'lua> {
                 .serialize_i64((*i).try_into().expect("cannot convert lua_Integer to i64")),
             #[allow(clippy::useless_conversion)]
             Value::Number(n) => serializer.serialize_f64(*n),
+            #[cfg(feature = "luau")]
+            Value::Vector(x, y, z) => (x, y, z).serialize(serializer),
             Value::String(s) => s.serialize(serializer),
             Value::Table(t) => t.serialize(serializer),
             Value::UserData(ud) => ud.serialize(serializer),

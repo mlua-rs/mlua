@@ -1972,6 +1972,11 @@ impl Lua {
                 ffi::lua_pushnumber(self.state, n);
             }
 
+            #[cfg(feature = "luau")]
+            Value::Vector(x, y, z) => {
+                ffi::lua_pushvector(self.state, x, y, z);
+            }
+
             Value::String(s) => {
                 self.push_ref(&s.0);
             }
@@ -2031,6 +2036,15 @@ impl Lua {
                     ffi::lua_pop(state, 1);
                     n
                 }
+            }
+
+            #[cfg(feature = "luau")]
+            ffi::LUA_TVECTOR => {
+                let v = ffi::lua_tovector(state, -1);
+                mlua_debug_assert!(!v.is_null(), "vector is null");
+                let vec = Value::Vector(*v, *v.add(1), *v.add(2));
+                ffi::lua_pop(state, 1);
+                vec
             }
 
             ffi::LUA_TSTRING => Value::String(String(self.pop_ref())),

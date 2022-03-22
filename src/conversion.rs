@@ -464,21 +464,33 @@ impl<'lua, T, const N: usize> FromLua<'lua> for [T; N]
 where
     T: FromLua<'lua>,
 {
-    fn from_lua(value: Value<'lua>, _: &'lua Lua) -> Result<Self> {
-        if let Value::Table(table) = value {
-            let vec = table.sequence_values().collect::<Result<Vec<_>>>()?;
-            vec.try_into()
-                .map_err(|vec: Vec<T>| Error::FromLuaConversionError {
-                    from: "Table",
-                    to: "Array",
-                    message: Some(format!("expected table of length {}, got {}", N, vec.len())),
-                })
-        } else {
-            Err(Error::FromLuaConversionError {
+    fn from_lua(value: Value<'lua>, _lua: &'lua Lua) -> Result<Self> {
+        match value {
+            #[cfg(feature = "luau")]
+            Value::Vector(x, y, z) if N == 3 => Ok(mlua_expect!(
+                vec![
+                    T::from_lua(Value::Number(x as _), _lua)?,
+                    T::from_lua(Value::Number(y as _), _lua)?,
+                    T::from_lua(Value::Number(z as _), _lua)?,
+                ]
+                .try_into()
+                .map_err(|_| ()),
+                "cannot convert vector to array"
+            )),
+            Value::Table(table) => {
+                let vec = table.sequence_values().collect::<Result<Vec<_>>>()?;
+                vec.try_into()
+                    .map_err(|vec: Vec<T>| Error::FromLuaConversionError {
+                        from: "Table",
+                        to: "Array",
+                        message: Some(format!("expected table of length {}, got {}", N, vec.len())),
+                    })
+            }
+            _ => Err(Error::FromLuaConversionError {
                 from: value.type_name(),
                 to: "Array",
                 message: Some("expected table".to_string()),
-            })
+            }),
         }
     }
 }
@@ -490,16 +502,8 @@ impl<'lua, T: ToLua<'lua>> ToLua<'lua> for Box<[T]> {
 }
 
 impl<'lua, T: FromLua<'lua>> FromLua<'lua> for Box<[T]> {
-    fn from_lua(value: Value<'lua>, _: &'lua Lua) -> Result<Self> {
-        if let Value::Table(table) = value {
-            table.sequence_values().collect()
-        } else {
-            Err(Error::FromLuaConversionError {
-                from: value.type_name(),
-                to: "Box<[T]>",
-                message: Some("expected table".to_string()),
-            })
-        }
+    fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> Result<Self> {
+        Ok(Vec::<T>::from_lua(value, lua)?.into_boxed_slice())
     }
 }
 
@@ -510,15 +514,20 @@ impl<'lua, T: ToLua<'lua>> ToLua<'lua> for Vec<T> {
 }
 
 impl<'lua, T: FromLua<'lua>> FromLua<'lua> for Vec<T> {
-    fn from_lua(value: Value<'lua>, _: &'lua Lua) -> Result<Self> {
-        if let Value::Table(table) = value {
-            table.sequence_values().collect()
-        } else {
-            Err(Error::FromLuaConversionError {
+    fn from_lua(value: Value<'lua>, _lua: &'lua Lua) -> Result<Self> {
+        match value {
+            #[cfg(feature = "luau")]
+            Value::Vector(x, y, z) => Ok(vec![
+                T::from_lua(Value::Number(x as _), _lua)?,
+                T::from_lua(Value::Number(y as _), _lua)?,
+                T::from_lua(Value::Number(z as _), _lua)?,
+            ]),
+            Value::Table(table) => table.sequence_values().collect(),
+            _ => Err(Error::FromLuaConversionError {
                 from: value.type_name(),
                 to: "Vec",
                 message: Some("expected table".to_string()),
-            })
+            }),
         }
     }
 }

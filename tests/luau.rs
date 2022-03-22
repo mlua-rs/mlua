@@ -3,7 +3,7 @@
 use std::env;
 use std::fs;
 
-use mlua::{Lua, Result};
+use mlua::{Lua, Result, Value};
 
 #[test]
 fn test_require() -> Result<()> {
@@ -28,4 +28,22 @@ fn test_require() -> Result<()> {
     "#,
     )
     .exec()
+}
+
+#[test]
+fn test_vectors() -> Result<()> {
+    let lua = Lua::new();
+
+    let globals = lua.globals();
+    globals.set(
+        "vector",
+        lua.create_function(|_, (x, y, z)| Ok(Value::Vector(x, y, z)))?,
+    )?;
+
+    let v: [f32; 3] = lua
+        .load("return vector(1, 2, 3) + vector(3, 2, 1)")
+        .eval()?;
+    assert_eq!(v, [4.0, 4.0, 4.0]);
+
+    Ok(())
 }
