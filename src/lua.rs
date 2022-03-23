@@ -408,11 +408,6 @@ impl Lua {
         #[cfg(any(feature = "lua51", feature = "luajit", feature = "luau"))]
         let state = ffi::luaL_newstate();
 
-        // #[cfg(feature = "luau")]
-        // {
-        //     ffi::luaL_sandbox(state);
-        // }
-
         ffi::luaL_requiref(state, cstr!("_G"), ffi::luaopen_base, 1);
         ffi::lua_pop(state, 1);
 
@@ -2095,8 +2090,13 @@ impl Lua {
             "Lua instance passed Value created from a different main Lua state"
         );
         let extra = &*self.extra.get();
-        ffi::lua_pushvalue(extra.ref_thread, lref.index);
-        ffi::lua_xmove(extra.ref_thread, self.state, 1);
+        #[cfg(not(feature = "luau"))]
+        {
+            ffi::lua_pushvalue(extra.ref_thread, lref.index);
+            ffi::lua_xmove(extra.ref_thread, self.state, 1);
+        }
+        #[cfg(feature = "luau")]
+        ffi::lua_xpush(extra.ref_thread, self.state, lref.index);
     }
 
     // Pops the topmost element of the stack and stores a reference to it. This pins the object,
