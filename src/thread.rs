@@ -7,7 +7,11 @@ use crate::types::LuaRef;
 use crate::util::{check_stack, error_traceback, pop_error, StackGuard};
 use crate::value::{FromLuaMulti, ToLuaMulti};
 
-#[cfg(any(feature = "lua54", all(feature = "luajit", feature = "vendored")))]
+#[cfg(any(
+    feature = "lua54",
+    all(feature = "luajit", feature = "vendored"),
+    feature = "luau",
+))]
 use crate::function::Function;
 
 #[cfg(feature = "async")]
@@ -173,16 +177,20 @@ impl<'lua> Thread<'lua> {
     /// Returns a error in case of either the original error that stopped the thread or errors
     /// in closing methods.
     ///
-    /// In [LuaJIT]: resets to the initial state of a newly created Lua thread.
+    /// In [LuaJIT] and Luau: resets to the initial state of a newly created Lua thread.
     /// Lua threads in arbitrary states (like yielded or errored) can be reset properly.
     ///
     /// Sets a Lua function for the thread afterwards.
     ///
-    /// Requires `feature = "lua54"` OR `feature = "luajit,vendored"`
+    /// Requires `feature = "lua54"` OR `feature = "luajit,vendored"` OR `feature = "luau"`
     ///
     /// [Lua 5.4]: https://www.lua.org/manual/5.4/manual.html#lua_resetthread
     /// [LuaJIT]: https://github.com/openresty/luajit2#lua_resetthread
-    #[cfg(any(feature = "lua54", all(feature = "luajit", feature = "vendored")))]
+    #[cfg(any(
+        feature = "lua54",
+        all(feature = "luajit", feature = "vendored"),
+        feature = "luau",
+    ))]
     pub fn reset(&self, func: Function<'lua>) -> Result<()> {
         let lua = self.0.lua;
         unsafe {
