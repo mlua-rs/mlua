@@ -64,7 +64,8 @@ pub enum ChunkMode {
 }
 
 /// Luau compiler
-#[cfg(feature = "luau")]
+#[cfg(any(feature = "luau", doc))]
+#[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
 #[derive(Clone, Copy, Debug)]
 pub struct Compiler {
     optimization_level: u8,
@@ -72,7 +73,7 @@ pub struct Compiler {
     coverage_level: u8,
 }
 
-#[cfg(feature = "luau")]
+#[cfg(any(feature = "luau", doc))]
 impl Default for Compiler {
     fn default() -> Self {
         // Defaults are taken from luacode.h
@@ -84,7 +85,7 @@ impl Default for Compiler {
     }
 }
 
-#[cfg(feature = "luau")]
+#[cfg(any(feature = "luau", doc))]
 impl Compiler {
     /// Creates Luau compiler instance with default options
     pub fn new() -> Self {
@@ -97,7 +98,6 @@ impl Compiler {
     /// 0 - no optimization
     /// 1 - baseline optimization level that doesn't prevent debuggability (default)
     /// 2 - includes optimizations that harm debuggability such as inlining
-    #[cfg(feature = "luau")]
     pub fn set_optimization_level(mut self, level: u8) -> Self {
         self.optimization_level = level;
         self
@@ -109,7 +109,6 @@ impl Compiler {
     /// 0 - no debugging support
     /// 1 - line info & function names only; sufficient for backtraces (default)
     /// 2 - full debug info with local & upvalue names; necessary for debugger
-    #[cfg(feature = "luau")]
     pub fn set_debug_level(mut self, level: u8) -> Self {
         self.debug_level = level;
         self
@@ -121,7 +120,6 @@ impl Compiler {
     /// 0 - no code coverage support (default)
     /// 1 - statement coverage
     /// 2 - statement and expression coverage (verbose)
-    #[cfg(feature = "luau")]
     pub fn set_coverage_level(mut self, level: u8) -> Self {
         self.coverage_level = level;
         self
@@ -190,7 +188,8 @@ impl<'lua, 'a> Chunk<'lua, 'a> {
     /// See [`Compiler::set_optimization_level`] for details.
     ///
     /// Requires `feature = "luau`
-    #[cfg(feature = "luau")]
+    #[cfg(any(feature = "luau", doc))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
     pub fn set_optimization_level(mut self, level: u8) -> Self {
         self.compiler
             .get_or_insert_with(Default::default)
@@ -203,7 +202,8 @@ impl<'lua, 'a> Chunk<'lua, 'a> {
     /// See [`Compiler::set_debug_level`] for details.
     ///
     /// Requires `feature = "luau`
-    #[cfg(feature = "luau")]
+    #[cfg(any(feature = "luau", doc))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
     pub fn set_debug_level(mut self, level: u8) -> Self {
         self.compiler
             .get_or_insert_with(Default::default)
@@ -216,7 +216,8 @@ impl<'lua, 'a> Chunk<'lua, 'a> {
     /// See [`Compiler::set_coverage_level`] for details.
     ///
     /// Requires `feature = "luau`
-    #[cfg(feature = "luau")]
+    #[cfg(any(feature = "luau", doc))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
     pub fn set_coverage_level(mut self, level: u8) -> Self {
         self.compiler
             .get_or_insert_with(Default::default)

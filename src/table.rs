@@ -352,6 +352,7 @@ impl<'lua> Table<'lua> {
     ///
     /// Requires `feature = "luau"`
     #[cfg(feature = "luau")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
     pub fn set_readonly(&self, enabled: bool) {
         let lua = self.0.lua;
         unsafe {
@@ -363,6 +364,7 @@ impl<'lua> Table<'lua> {
     ///
     /// Requires `feature = "luau"`
     #[cfg(feature = "luau")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
     pub fn is_readonly(&self) -> bool {
         let lua = self.0.lua;
         unsafe { lua.ref_thread_exec(|refthr| ffi::lua_getreadonly(refthr, self.0.index) != 0) }

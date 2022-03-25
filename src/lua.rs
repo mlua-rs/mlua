@@ -810,6 +810,7 @@ impl Lua {
     /// [`HookTriggers`]: crate::HookTriggers
     /// [`HookTriggers.every_nth_instruction`]: crate::HookTriggers::every_nth_instruction
     #[cfg(not(feature = "luau"))]
+    #[cfg_attr(docsrs, doc(cfg(not(feature = "luau"))))]
     pub fn set_hook<F>(&self, triggers: HookTriggers, callback: F) -> Result<()>
     where
         F: 'static + MaybeSend + FnMut(&Lua, Debug) -> Result<()>,
@@ -848,6 +849,7 @@ impl Lua {
     /// Remove any hook previously set by `set_hook`. This function has no effect if a hook was not
     /// previously set.
     #[cfg(not(feature = "luau"))]
+    #[cfg_attr(docsrs, doc(cfg(not(feature = "luau"))))]
     pub fn remove_hook(&self) {
         // If main_state is not available, then sethook wasn't called.
         let state = match self.main_state {
@@ -982,7 +984,7 @@ impl Lua {
 
     /// Returns true if the garbage collector is currently running automatically.
     ///
-    /// Requires `feature = "lua54/lua53/lua52"`
+    /// Requires `feature = "lua54/lua53/lua52/luau"`
     #[cfg(any(
         feature = "lua54",
         feature = "lua53",
@@ -1046,6 +1048,7 @@ impl Lua {
     ///
     /// [lua_doc]: https://www.lua.org/manual/5.4/manual.html#2.5
     #[cfg(not(feature = "luau"))]
+    #[cfg_attr(docsrs, doc(cfg(not(feature = "luau"))))]
     pub fn gc_set_pause(&self, pause: c_int) -> c_int {
         let state = self.main_state.unwrap_or(self.state);
         unsafe { ffi::lua_gc(state, ffi::LUA_GCSETPAUSE, pause) }
@@ -1069,6 +1072,7 @@ impl Lua {
     ///
     /// [lua_doc]: https://www.lua.org/manual/5.4/manual.html#2.5.1
     #[cfg(not(feature = "luau"))]
+    #[cfg_attr(docsrs, doc(cfg(not(feature = "luau"))))]
     pub fn gc_inc(&self, pause: c_int, step_multiplier: c_int, step_size: c_int) -> GCMode {
         let state = self.main_state.unwrap_or(self.state);
 

@@ -35,7 +35,8 @@ pub enum Value<'lua> {
     /// A floating point number.
     Number(Number),
     /// A Luau vector.
-    #[cfg(feature = "luau")]
+    #[cfg(any(feature = "luau", doc))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
     Vector(f32, f32, f32),
     /// An interned string, managed by Lua.
     ///

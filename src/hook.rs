@@ -48,6 +48,7 @@ impl<'lua> Debug<'lua> {
     ///
     /// [Lua 5.1]: https://www.lua.org/manual/5.1/manual.html#pdf-LUA_HOOKTAILRET
     #[cfg(not(feature = "luau"))]
+    #[cfg_attr(docsrs, doc(cfg(not(feature = "luau"))))]
     pub fn event(&self) -> DebugEvent {
         unsafe {
             match (*self.ar.get()).event {
@@ -131,6 +132,7 @@ impl<'lua> Debug<'lua> {
     /// Corresponds to the `t` what mask. Returns true if the hook is in a function tail call, false
     /// otherwise.
     #[cfg(not(feature = "luau"))]
+    #[cfg_attr(docsrs, doc(cfg(not(feature = "luau"))))]
     pub fn is_tail_call(&self) -> bool {
         unsafe {
             mlua_assert!(
@@ -241,6 +243,7 @@ pub struct DebugStack {
 
 /// Determines when a hook function will be called by Lua.
 #[cfg(not(feature = "luau"))]
+#[cfg_attr(docsrs, doc(cfg(not(feature = "luau"))))]
 #[derive(Clone, Copy, Debug, Default)]
 pub struct HookTriggers {
     /// Before a function call.
