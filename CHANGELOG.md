@@ -1,3 +1,9 @@
+## v0.8.0-beta.2
+
+- Luau vector datatype support
+- Luau readonly table attribute
+- Other Luau improvements
+
 ## v0.8.0-beta.1
 
 - Roblox Luau support
