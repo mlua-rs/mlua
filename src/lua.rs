@@ -108,6 +108,9 @@ struct ExtraData {
     hook_callback: Option<HookCallback>,
     #[cfg(feature = "lua54")]
     warn_callback: Option<WarnCallback>,
+
+    #[cfg(feature = "luau")]
+    sandboxed: bool,
 }
 
 #[cfg_attr(any(feature = "lua51", feature = "luajit"), allow(dead_code))]
@@ -548,6 +551,8 @@ impl Lua {
             hook_callback: None,
             #[cfg(feature = "lua54")]
             warn_callback: None,
+            #[cfg(feature = "luau")]
+            sandboxed: false,
         }));
 
         mlua_expect!(
@@ -748,6 +753,60 @@ impl Lua {
         F: 'static + MaybeSend + Fn(&'lua Lua) -> Result<R>,
     {
         self.entrypoint(move |lua, _: ()| func(lua))
+    }
+
+    /// Enables (or disables) sandbox mode on this Lua instance.
+    ///
+    /// This method, in particular:
+    /// - Set all libraries to read-only
+    /// - Set all builtin metatables to read-only
+    /// - Set globals to read-only (and activates safeenv)
+    /// - Setup local environment table that performs writes locally and proxies reads
+    ///   to the global environment.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use mlua::{Lua, Result};
+    /// # fn main() -> Result<()> {
+    /// let lua = Lua::new();
+    ///
+    /// lua.sandbox(true)?;
+    /// lua.load("var = 123").exec()?;
+    /// assert_eq!(lua.globals().get::<_, u32>("var")?, 123);
+    ///
+    /// // Restore the global environment (clear changes made in sandbox)
+    /// lua.sandbox(false)?;
+    /// assert_eq!(lua.globals().get::<_, Option<u32>>("var")?, None);
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// Requires `feature = "luau"`
+    #[cfg(feature = "luau")]
+    pub fn sandbox(&self, enabled: bool) -> Result<()> {
+        unsafe {
+            let extra = &mut *self.extra.get();
+            if extra.sandboxed != enabled {
+                let state = self.main_state.ok_or(Error::MainThreadNotAvailable)?;
+                check_stack(state, 3)?;
+                protect_lua!(state, 0, 0, |state| {
+                    if enabled {
+                        ffi::luaL_sandbox(state, 1);
+                        ffi::luaL_sandboxthread(state);
+                    } else {
+                        // Restore original `LUA_GLOBALSINDEX`
+                        self.ref_thread_exec(|ref_thread| {
+                            ffi::lua_xpush(ref_thread, state, ffi::LUA_GLOBALSINDEX);
+                            ffi::lua_replace(state, ffi::LUA_GLOBALSINDEX);
+                        });
+                        ffi::luaL_sandbox(state, 0);
+                    }
+                })?;
+                extra.sandboxed = enabled;
+            }
+            Ok(())
+        }
     }
 
     /// Sets a 'hook' function that will periodically be called as Lua code executes.
@@ -1424,7 +1483,11 @@ impl Lua {
         &'lua self,
         func: Function<'lua>,
     ) -> Result<Thread<'lua>> {
-        #[cfg(any(feature = "lua54", all(feature = "luajit", feature = "vendored")))]
+        #[cfg(any(
+            feature = "lua54",
+            all(feature = "luajit", feature = "vendored"),
+            feature = "luau",
+        ))]
         unsafe {
             let _sg = StackGuard::new(self.state);
             check_stack(self.state, 1)?;
@@ -1434,6 +1497,14 @@ impl Lua {
                 let thread_state = ffi::lua_tothread(extra.ref_thread, index);
                 self.push_ref(&func.0);
                 ffi::lua_xmove(self.state, thread_state, 1);
+
+                #[cfg(feature = "luau")]
+                {
+                    // Inherit `LUA_GLOBALSINDEX` from the caller
+                    ffi::lua_xpush(self.state, thread_state, ffi::LUA_GLOBALSINDEX);
+                    ffi::lua_replace(thread_state, ffi::LUA_GLOBALSINDEX);
+                }
+
                 return Ok(Thread(LuaRef { lua: self, index }));
             }
         };
@@ -1442,7 +1513,11 @@ impl Lua {
 
     /// Resets thread (coroutine) and returns to the cache for later use.
     #[cfg(feature = "async")]
-    #[cfg(any(feature = "lua54", all(feature = "luajit", feature = "vendored")))]
+    #[cfg(any(
+        feature = "lua54",
+        all(feature = "luajit", feature = "vendored"),
+        feature = "luau",
+    ))]
     pub(crate) unsafe fn recycle_thread(&self, thread: &mut Thread) {
         let extra = &mut *self.extra.get();
         let thread_state = ffi::lua_tothread(extra.ref_thread, thread.0.index);

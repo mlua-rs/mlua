@@ -356,7 +356,13 @@ impl<'lua> Table<'lua> {
     pub fn set_readonly(&self, enabled: bool) {
         let lua = self.0.lua;
         unsafe {
-            lua.ref_thread_exec(|refthr| ffi::lua_setreadonly(refthr, self.0.index, enabled as _));
+            lua.ref_thread_exec(|refthr| {
+                ffi::lua_setreadonly(refthr, self.0.index, enabled as _);
+                if !enabled {
+                    // Reset "safeenv" flag
+                    ffi::lua_setsafeenv(refthr, self.0.index, 0);
+                }
+            });
         }
     }
 
