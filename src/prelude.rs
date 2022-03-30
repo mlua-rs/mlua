@@ -15,6 +15,10 @@ pub use crate::{
     Value as LuaValue,
 };
 
+#[cfg(feature = "luau")]
+#[doc(no_inline)]
+pub use crate::VmState as LuaVmState;
+
 #[cfg(feature = "async")]
 #[doc(no_inline)]
 pub use crate::AsyncThread as LuaAsyncThread;

@@ -126,7 +126,7 @@ pub use crate::hook::HookTriggers;
 
 #[cfg(any(feature = "luau", doc))]
 #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
-pub use crate::chunk::Compiler;
+pub use crate::{chunk::Compiler, types::VmState};
 
 #[cfg(feature = "async")]
 pub use crate::thread::AsyncThread;

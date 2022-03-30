@@ -55,6 +55,20 @@ pub(crate) type HookCallback = Arc<Mutex<dyn FnMut(&Lua, Debug) -> Result<()> + 
 #[cfg(all(not(feature = "send"), not(feature = "luau")))]
 pub(crate) type HookCallback = Arc<Mutex<dyn FnMut(&Lua, Debug) -> Result<()>>>;
 
+/// Type to set next Lua VM action after executing interrupt function.
+#[cfg(any(feature = "luau", doc))]
+#[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
+pub enum VmState {
+    Continue,
+    Yield,
+}
+
+#[cfg(all(feature = "luau", feature = "send"))]
+pub(crate) type InterruptCallback = Arc<dyn Fn(&Lua) -> Result<VmState> + Send>;
+
+#[cfg(all(feature = "luau", not(feature = "send")))]
+pub(crate) type InterruptCallback = Arc<dyn Fn(&Lua) -> Result<VmState>>;
+
 #[cfg(all(feature = "send", feature = "lua54"))]
 pub(crate) type WarnCallback = Box<dyn Fn(&Lua, &CStr, bool) -> Result<()> + Send>;
 
