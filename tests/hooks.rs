@@ -3,6 +3,7 @@
 use std::cell::RefCell;
 use std::ops::Deref;
 use std::str;
+use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use mlua::{DebugEvent, Error, HookTriggers, Lua, Result, Value};
@@ -128,18 +129,17 @@ fn test_error_within_hook() -> Result<()> {
 #[test]
 fn test_limit_execution_instructions() -> Result<()> {
     let lua = Lua::new();
-    let mut max_instructions = 10000;
 
-    #[cfg(feature = "luajit")]
     // For LuaJIT disable JIT, as compiled code does not trigger hooks
+    #[cfg(feature = "luajit")]
     lua.load("jit.off()").exec()?;
 
+    let max_instructions = AtomicI64::new(10000);
     lua.set_hook(
         HookTriggers::every_nth_instruction(30),
         move |_lua, debug| {
             assert_eq!(debug.event(), DebugEvent::Count);
-            max_instructions -= 30;
-            if max_instructions < 0 {
+            if max_instructions.fetch_sub(30, Ordering::Relaxed) <= 30 {
                 Err(Error::RuntimeError("time's up".to_string()))
             } else {
                 Ok(())

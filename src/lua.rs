@@ -868,7 +868,7 @@ impl Lua {
     #[cfg_attr(docsrs, doc(cfg(not(feature = "luau"))))]
     pub fn set_hook<F>(&self, triggers: HookTriggers, callback: F) -> Result<()>
     where
-        F: 'static + MaybeSend + FnMut(&Lua, Debug) -> Result<()>,
+        F: 'static + MaybeSend + Fn(&Lua, Debug) -> Result<()>,
     {
         unsafe extern "C" fn hook_proc(state: *mut ffi::lua_State, ar: *mut ffi::lua_Debug) {
             let lua = match Lua::make_from_ptr(state) {
@@ -880,29 +880,24 @@ impl Lua {
                 let debug = Debug::new(&lua, ar);
                 let hook_cb = (*lua.extra.get()).hook_callback.clone();
                 let hook_cb = mlua_expect!(hook_cb, "no hook callback set in hook_proc");
-
-                #[allow(clippy::match_wild_err_arm)]
-                match hook_cb.try_lock() {
-                    Ok(mut cb) => cb(&lua, debug),
-                    Err(_) => {
-                        mlua_panic!("Lua should not allow hooks to be called within another hook")
-                    }
-                }?;
-
-                Ok(())
+                if Arc::strong_count(&hook_cb) > 2 {
+                    return Ok(()); // Don't allow recursion
+                }
+                hook_cb(&lua, debug)
             })
         }
 
         let state = self.main_state.ok_or(Error::MainThreadNotAvailable)?;
         unsafe {
-            (*self.extra.get()).hook_callback = Some(Arc::new(Mutex::new(callback)));
+            (*self.extra.get()).hook_callback = Some(Arc::new(callback));
             ffi::lua_sethook(state, Some(hook_proc), triggers.mask(), triggers.count());
         }
         Ok(())
     }
 
-    /// Remove any hook previously set by `set_hook`. This function has no effect if a hook was not
-    /// previously set.
+    /// Removes any hook previously set by `set_hook`.
+    ///
+    /// This function has no effect if a hook was not previously set.
     #[cfg(not(feature = "luau"))]
     #[cfg_attr(docsrs, doc(cfg(not(feature = "luau"))))]
     pub fn remove_hook(&self) {

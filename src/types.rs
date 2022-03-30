@@ -49,19 +49,20 @@ pub(crate) struct AsyncPollUpvalue<'lua> {
     pub(crate) lua: Lua,
     pub(crate) fut: LocalBoxFuture<'lua, Result<MultiValue<'lua>>>,
 }
-#[cfg(all(feature = "send", not(feature = "luau")))]
-pub(crate) type HookCallback = Arc<Mutex<dyn FnMut(&Lua, Debug) -> Result<()> + Send>>;
 
-#[cfg(all(not(feature = "send"), not(feature = "luau")))]
-pub(crate) type HookCallback = Arc<Mutex<dyn FnMut(&Lua, Debug) -> Result<()>>>;
-
-/// Type to set next Lua VM action after executing interrupt function.
+/// Type to set next Luau VM action after executing interrupt function.
 #[cfg(any(feature = "luau", doc))]
 #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
 pub enum VmState {
     Continue,
     Yield,
 }
+
+#[cfg(all(feature = "send", not(feature = "luau")))]
+pub(crate) type HookCallback = Arc<dyn Fn(&Lua, Debug) -> Result<()> + Send>;
+
+#[cfg(all(not(feature = "send"), not(feature = "luau")))]
+pub(crate) type HookCallback = Arc<dyn Fn(&Lua, Debug) -> Result<()>>;
 
 #[cfg(all(feature = "luau", feature = "send"))]
 pub(crate) type InterruptCallback = Arc<dyn Fn(&Lua) -> Result<VmState> + Send>;
