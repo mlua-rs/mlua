@@ -212,8 +212,8 @@ impl LuaOptions {
 pub(crate) static ASYNC_POLL_PENDING: u8 = 0;
 pub(crate) static EXTRA_REGISTRY_KEY: u8 = 0;
 
-const WRAPPED_FAILURES_CACHE_SIZE: usize = 16;
-const MULTIVALUE_CACHE_SIZE: usize = 16;
+const WRAPPED_FAILURES_CACHE_SIZE: usize = 32;
+const MULTIVALUE_CACHE_SIZE: usize = 32;
 
 /// Requires `feature = "send"`
 #[cfg(feature = "send")]
