@@ -73,6 +73,7 @@ pub struct Compiler {
     coverage_level: u8,
     vector_lib: Option<String>,
     vector_ctor: Option<String>,
+    mutable_globals: Vec<String>,
 }
 
 #[cfg(any(feature = "luau", doc))]
@@ -85,6 +86,7 @@ impl Default for Compiler {
             coverage_level: 0,
             vector_lib: None,
             vector_ctor: None,
+            mutable_globals: Vec::new(),
         }
     }
 }
@@ -141,6 +143,14 @@ impl Compiler {
         self
     }
 
+    /// Sets a list of globals that are mutable.
+    ///
+    /// It disables the import optimization for fields accessed through these.
+    pub fn set_mutable_globals(&mut self, globals: Vec<String>) -> &mut Self {
+        self.mutable_globals = globals;
+        self
+    }
+
     /// Compiles the `source` into bytecode.
     pub fn compile(&self, source: impl AsRef<[u8]>) -> Vec<u8> {
         use std::os::raw::c_int;
@@ -153,6 +163,22 @@ impl Compiler {
         let vector_ctor = vector_ctor.and_then(|ctor| CString::new(ctor).ok());
         let vector_ctor = vector_ctor.as_ref();
 
+        let mutable_globals = self
+            .mutable_globals
+            .iter()
+            .map(|name| CString::new(name.clone()).ok())
+            .collect::<Option<Vec<_>>>()
+            .unwrap_or_default();
+        let mut mutable_globals = mutable_globals
+            .iter()
+            .map(|s| s.as_ptr())
+            .collect::<Vec<_>>();
+        let mut mutable_globals_ptr = ptr::null_mut();
+        if mutable_globals.len() > 0 {
+            mutable_globals.push(ptr::null());
+            mutable_globals_ptr = mutable_globals.as_mut_ptr();
+        }
+
         unsafe {
             let options = ffi::lua_CompileOptions {
                 optimizationLevel: self.optimization_level as c_int,
@@ -160,7 +186,7 @@ impl Compiler {
                 coverageLevel: self.coverage_level as c_int,
                 vectorLib: vector_lib.map_or(ptr::null(), |s| s.as_ptr()),
                 vectorCtor: vector_ctor.map_or(ptr::null(), |s| s.as_ptr()),
-                mutableGlobals: ptr::null_mut(),
+                mutableGlobals: mutable_globals_ptr,
             };
             ffi::luau_compile(source.as_ref(), options)
         }
@@ -210,7 +236,7 @@ impl<'lua, 'a> Chunk<'lua, 'a> {
     ///
     /// See [`Compiler::set_optimization_level`] for details.
     ///
-    /// Requires `feature = "luau`
+    /// Requires `feature = "luau"`
     #[cfg(any(feature = "luau", doc))]
     #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
     pub fn set_optimization_level(mut self, level: u8) -> Self {
@@ -238,7 +264,7 @@ impl<'lua, 'a> Chunk<'lua, 'a> {
     ///
     /// See [`Compiler::set_coverage_level`] for details.
     ///
-    /// Requires `feature = "luau`
+    /// Requires `feature = "luau"`
     #[cfg(any(feature = "luau", doc))]
     #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
     pub fn set_coverage_level(mut self, level: u8) -> Self {
@@ -265,6 +291,20 @@ impl<'lua, 'a> Chunk<'lua, 'a> {
         self.compiler
             .get_or_insert_with(Default::default)
             .set_vector_ctor(ctor);
+        self
+    }
+
+    /// Sets a list of globals that are mutable for Luau compiler.
+    ///
+    /// See [`Compiler::set_mutable_globals`] for details.
+    ///
+    /// Requires `feature = "luau"`
+    #[cfg(any(feature = "luau", doc))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
+    pub fn set_mutable_globals(mut self, globals: Vec<String>) -> Self {
+        self.compiler
+            .get_or_insert_with(Default::default)
+            .set_mutable_globals(globals);
         self
     }
 
