@@ -66,11 +66,13 @@ pub enum ChunkMode {
 /// Luau compiler
 #[cfg(any(feature = "luau", doc))]
 #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct Compiler {
     optimization_level: u8,
     debug_level: u8,
     coverage_level: u8,
+    vector_lib: Option<String>,
+    vector_ctor: Option<String>,
 }
 
 #[cfg(any(feature = "luau", doc))]
@@ -81,6 +83,8 @@ impl Default for Compiler {
             optimization_level: 1,
             debug_level: 1,
             coverage_level: 0,
+            vector_lib: None,
+            vector_ctor: None,
         }
     }
 }
@@ -95,10 +99,10 @@ impl Compiler {
     /// Sets Luau compiler optimization level.
     ///
     /// Possible values:
-    /// 0 - no optimization
-    /// 1 - baseline optimization level that doesn't prevent debuggability (default)
-    /// 2 - includes optimizations that harm debuggability such as inlining
-    pub fn set_optimization_level(mut self, level: u8) -> Self {
+    /// * 0 - no optimization
+    /// * 1 - baseline optimization level that doesn't prevent debuggability (default)
+    /// * 2 - includes optimizations that harm debuggability such as inlining
+    pub fn set_optimization_level(&mut self, level: u8) -> &mut Self {
         self.optimization_level = level;
         self
     }
@@ -106,10 +110,10 @@ impl Compiler {
     /// Sets Luau compiler debug level.
     ///
     /// Possible values:
-    /// 0 - no debugging support
-    /// 1 - line info & function names only; sufficient for backtraces (default)
-    /// 2 - full debug info with local & upvalue names; necessary for debugger
-    pub fn set_debug_level(mut self, level: u8) -> Self {
+    /// * 0 - no debugging support
+    /// * 1 - line info & function names only; sufficient for backtraces (default)
+    /// * 2 - full debug info with local & upvalue names; necessary for debugger
+    pub fn set_debug_level(&mut self, level: u8) -> &mut Self {
         self.debug_level = level;
         self
     }
@@ -117,11 +121,23 @@ impl Compiler {
     /// Sets Luau compiler code coverage level.
     ///
     /// Possible values:
-    /// 0 - no code coverage support (default)
-    /// 1 - statement coverage
-    /// 2 - statement and expression coverage (verbose)
-    pub fn set_coverage_level(mut self, level: u8) -> Self {
+    /// * 0 - no code coverage support (default)
+    /// * 1 - statement coverage
+    /// * 2 - statement and expression coverage (verbose)
+    pub fn set_coverage_level(&mut self, level: u8) -> &mut Self {
         self.coverage_level = level;
+        self
+    }
+
+    #[doc(hidden)]
+    pub fn set_vector_lib(&mut self, lib: Option<String>) -> &mut Self {
+        self.vector_lib = lib;
+        self
+    }
+
+    #[doc(hidden)]
+    pub fn set_vector_ctor(&mut self, ctor: Option<String>) -> &mut Self {
+        self.vector_ctor = ctor;
         self
     }
 
@@ -130,13 +146,20 @@ impl Compiler {
         use std::os::raw::c_int;
         use std::ptr;
 
+        let vector_lib = self.vector_lib.clone();
+        let vector_lib = vector_lib.and_then(|lib| CString::new(lib).ok());
+        let vector_lib = vector_lib.as_ref();
+        let vector_ctor = self.vector_ctor.clone();
+        let vector_ctor = vector_ctor.and_then(|ctor| CString::new(ctor).ok());
+        let vector_ctor = vector_ctor.as_ref();
+
         unsafe {
             let options = ffi::lua_CompileOptions {
                 optimizationLevel: self.optimization_level as c_int,
                 debugLevel: self.debug_level as c_int,
                 coverageLevel: self.coverage_level as c_int,
-                vectorLib: ptr::null(),
-                vectorCtor: ptr::null(),
+                vectorLib: vector_lib.map_or(ptr::null(), |s| s.as_ptr()),
+                vectorCtor: vector_ctor.map_or(ptr::null(), |s| s.as_ptr()),
                 mutableGlobals: ptr::null_mut(),
             };
             ffi::luau_compile(source.as_ref(), options)
@@ -146,7 +169,7 @@ impl Compiler {
 
 impl<'lua, 'a> Chunk<'lua, 'a> {
     /// Sets the name of this chunk, which results in more informative error traces.
-    pub fn set_name<S: AsRef<[u8]> + ?Sized>(mut self, name: &S) -> Result<Chunk<'lua, 'a>> {
+    pub fn set_name<S: AsRef<[u8]> + ?Sized>(mut self, name: &S) -> Result<Self> {
         let name =
             CString::new(name.as_ref().to_vec()).map_err(|e| Error::ToLuaConversionError {
                 from: "&str",
@@ -168,7 +191,7 @@ impl<'lua, 'a> Chunk<'lua, 'a> {
     /// All global variables (including the standard library!) are looked up in `_ENV`, so it may be
     /// necessary to populate the environment in order for scripts using custom environments to be
     /// useful.
-    pub fn set_environment<V: ToLua<'lua>>(mut self, env: V) -> Result<Chunk<'lua, 'a>> {
+    pub fn set_environment<V: ToLua<'lua>>(mut self, env: V) -> Result<Self> {
         // Prefer to propagate errors here and wrap to `Ok`
         self.env = Ok(Some(env.to_lua(self.lua)?));
         Ok(self)
@@ -178,7 +201,7 @@ impl<'lua, 'a> Chunk<'lua, 'a> {
     ///
     /// Be aware, Lua does not check the consistency of the code inside binary chunks.
     /// Running maliciously crafted bytecode can crash the interpreter.
-    pub fn set_mode(mut self, mode: ChunkMode) -> Chunk<'lua, 'a> {
+    pub fn set_mode(mut self, mode: ChunkMode) -> Self {
         self.mode = Some(mode);
         self
     }
@@ -225,6 +248,26 @@ impl<'lua, 'a> Chunk<'lua, 'a> {
         self
     }
 
+    #[cfg(any(feature = "luau", doc))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
+    #[doc(hidden)]
+    pub fn set_vector_lib(mut self, lib: Option<String>) -> Self {
+        self.compiler
+            .get_or_insert_with(Default::default)
+            .set_vector_lib(lib);
+        self
+    }
+
+    #[cfg(any(feature = "luau", doc))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
+    #[doc(hidden)]
+    pub fn set_vector_ctor(mut self, ctor: Option<String>) -> Self {
+        self.compiler
+            .get_or_insert_with(Default::default)
+            .set_vector_ctor(ctor);
+        self
+    }
+
     /// Compiles the chunk and changes mode to binary.
     ///
     /// It does nothing if the chunk is already binary.
@@ -234,7 +277,7 @@ impl<'lua, 'a> Chunk<'lua, 'a> {
         if self.detect_mode() == ChunkMode::Text {
             let data = self
                 .compiler
-                .unwrap_or_default()
+                .get_or_insert_with(Default::default)
                 .compile(self.source.as_ref());
             self.mode = Some(ChunkMode::Binary);
             self.source = Cow::Owned(data);
@@ -373,7 +416,11 @@ impl<'lua, 'a> Chunk<'lua, 'a> {
         let source = self.expression_source();
         // We don't need to compile source if no compiler options set
         #[cfg(feature = "luau")]
-        let source = self.compiler.map(|c| c.compile(&source)).unwrap_or(source);
+        let source = self
+            .compiler
+            .as_ref()
+            .map(|c| c.compile(&source))
+            .unwrap_or(source);
 
         self.lua
             .load_chunk(&source, self.name.as_ref(), self.env()?, None)
