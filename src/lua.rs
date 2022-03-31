@@ -956,7 +956,7 @@ impl Lua {
     /// ```
     #[cfg(feature = "luau")]
     #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
-    pub fn set_interrupt<'lua, F>(&'lua self, callback: F)
+    pub fn set_interrupt<F>(&self, callback: F)
     where
         F: 'static + MaybeSend + Fn(&Lua) -> Result<VmState>,
     {
