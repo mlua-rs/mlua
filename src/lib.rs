@@ -88,6 +88,8 @@ mod ffi;
 mod function;
 mod hook;
 mod lua;
+#[cfg(feature = "luau")]
+mod luau;
 mod multi;
 mod scope;
 mod stdlib;

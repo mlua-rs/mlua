@@ -36,16 +36,31 @@ fn test_require() -> Result<()> {
 fn test_vectors() -> Result<()> {
     let lua = Lua::new();
 
-    let globals = lua.globals();
-    globals.set(
-        "vector",
-        lua.create_function(|_, (x, y, z)| Ok(Value::Vector(x, y, z)))?,
-    )?;
-
-    let v: [f32; 3] = lua
-        .load("return vector(1, 2, 3) + vector(3, 2, 1)")
-        .eval()?;
+    let v: [f32; 3] = lua.load("vector(1, 2, 3) + vector(3, 2, 1)").eval()?;
     assert_eq!(v, [4.0, 4.0, 4.0]);
+
+    // Test vector methods
+    lua.load(
+        r#"
+        local v = vector(1, 2, 3)
+        assert(v.x == 1)
+        assert(v.y == 2)
+        assert(v.z == 3)
+    "#,
+    )
+    .exec()?;
+
+    // Test vector methods (fastcall)
+    lua.load(
+        r#"
+        local v = vector(1, 2, 3)
+        assert(v.x == 1)
+        assert(v.y == 2)
+        assert(v.z == 3)
+    "#,
+    )
+    .set_vector_ctor(Some("vector".to_string()))
+    .exec()?;
 
     Ok(())
 }
