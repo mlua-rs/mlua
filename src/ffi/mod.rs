@@ -19,7 +19,7 @@ pub use lua51::*;
 #[cfg(feature = "luau")]
 pub use luau::*;
 
-#[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+#[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "lua-factorio"))]
 pub const LUA_MAX_UPVALUES: c_int = 255;
 
 #[cfg(any(feature = "lua51", all(feature = "luajit", not(feature = "vendored"))))]

@@ -961,6 +961,7 @@ impl<'lua> AnyUserData<'lua> {
             check_stack(lua.state, 4)?;
 
             lua.push_userdata_ref(&self.0)?;
+
             #[cfg(feature = "lua54")]
             if n < USER_VALUE_MAXSLOT {
                 ffi::lua_getiuservalue(lua.state, -1, n as c_int);
