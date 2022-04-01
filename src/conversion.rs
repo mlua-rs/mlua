@@ -2,6 +2,7 @@
 
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::convert::TryInto;
 use std::ffi::{CStr, CString};
 use std::hash::{BuildHasher, Hash};
 use std::string::String as StdString;
@@ -348,25 +349,24 @@ macro_rules! lua_convert_int {
     ($x:ty) => {
         impl<'lua> ToLua<'lua> for $x {
             fn to_lua(self, _: &'lua Lua) -> Result<Value<'lua>> {
-                if let Some(i) = cast(self) {
-                    Ok(Value::Integer(i))
-                } else {
-                    // TODO: Remove conversion to Number in v0.7
-                    cast(self)
-                        .ok_or_else(|| Error::ToLuaConversionError {
-                            from: stringify!($x),
-                            to: "number",
-                            message: Some("out of range".to_owned()),
-                        })
-                        .map(Value::Number)
-                }
+                cast(self)
+                    .map(Value::Integer)
+                    .or_else(|| cast(self).map(Value::Number))
+                    // This is impossible error because conversion to Number never fails
+                    .ok_or_else(|| Error::ToLuaConversionError {
+                        from: stringify!($x),
+                        to: "number",
+                        message: Some("out of range".to_owned()),
+                    })
             }
         }
 
         impl<'lua> FromLua<'lua> for $x {
             fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> Result<Self> {
                 let ty = value.type_name();
-                (if let Some(i) = lua.coerce_integer(value.clone())? {
+                (if let Value::Integer(i) = value {
+                    cast(i)
+                } else if let Some(i) = lua.coerce_integer(value.clone())? {
                     cast(i)
                 } else {
                     cast(lua.coerce_number(value)?.ok_or_else(|| {
@@ -451,37 +451,48 @@ where
     }
 }
 
-macro_rules! lua_convert_array {
-    ($($N:literal)+) => {
-        $(
-            impl<'lua, T> ToLua<'lua> for [T; $N]
-            where
-                T: Clone + ToLua<'lua>,
-            {
-                fn to_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
-                    (&self).to_lua(lua)
-                }
-            }
-
-            impl<'lua, T> ToLua<'lua> for &[T; $N]
-            where
-                T: Clone + ToLua<'lua>,
-            {
-                fn to_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
-                    Ok(Value::Table(
-                        lua.create_sequence_from(self.iter().cloned())?,
-                    ))
-                }
-            }
-        )+
+impl<'lua, T, const N: usize> ToLua<'lua> for [T; N]
+where
+    T: ToLua<'lua>,
+{
+    fn to_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
+        Ok(Value::Table(lua.create_sequence_from(self)?))
     }
 }
 
-lua_convert_array! {
-    0  1  2  3  4  5  6  7  8  9
-   10 11 12 13 14 15 16 17 18 19
-   20 21 22 23 24 25 26 27 28 29
-   30 31 32
+impl<'lua, T, const N: usize> FromLua<'lua> for [T; N]
+where
+    T: FromLua<'lua>,
+{
+    fn from_lua(value: Value<'lua>, _lua: &'lua Lua) -> Result<Self> {
+        match value {
+            #[cfg(feature = "luau")]
+            Value::Vector(x, y, z) if N == 3 => Ok(mlua_expect!(
+                vec![
+                    T::from_lua(Value::Number(x as _), _lua)?,
+                    T::from_lua(Value::Number(y as _), _lua)?,
+                    T::from_lua(Value::Number(z as _), _lua)?,
+                ]
+                .try_into()
+                .map_err(|_| ()),
+                "cannot convert vector to array"
+            )),
+            Value::Table(table) => {
+                let vec = table.sequence_values().collect::<Result<Vec<_>>>()?;
+                vec.try_into()
+                    .map_err(|vec: Vec<T>| Error::FromLuaConversionError {
+                        from: "Table",
+                        to: "Array",
+                        message: Some(format!("expected table of length {}, got {}", N, vec.len())),
+                    })
+            }
+            _ => Err(Error::FromLuaConversionError {
+                from: value.type_name(),
+                to: "Array",
+                message: Some("expected table".to_string()),
+            }),
+        }
+    }
 }
 
 impl<'lua, T: ToLua<'lua>> ToLua<'lua> for Box<[T]> {
@@ -491,16 +502,8 @@ impl<'lua, T: ToLua<'lua>> ToLua<'lua> for Box<[T]> {
 }
 
 impl<'lua, T: FromLua<'lua>> FromLua<'lua> for Box<[T]> {
-    fn from_lua(value: Value<'lua>, _: &'lua Lua) -> Result<Self> {
-        if let Value::Table(table) = value {
-            table.sequence_values().collect()
-        } else {
-            Err(Error::FromLuaConversionError {
-                from: value.type_name(),
-                to: "Box<[T]>",
-                message: Some("expected table".to_string()),
-            })
-        }
+    fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> Result<Self> {
+        Ok(Vec::<T>::from_lua(value, lua)?.into_boxed_slice())
     }
 }
 
@@ -511,15 +514,20 @@ impl<'lua, T: ToLua<'lua>> ToLua<'lua> for Vec<T> {
 }
 
 impl<'lua, T: FromLua<'lua>> FromLua<'lua> for Vec<T> {
-    fn from_lua(value: Value<'lua>, _: &'lua Lua) -> Result<Self> {
-        if let Value::Table(table) = value {
-            table.sequence_values().collect()
-        } else {
-            Err(Error::FromLuaConversionError {
+    fn from_lua(value: Value<'lua>, _lua: &'lua Lua) -> Result<Self> {
+        match value {
+            #[cfg(feature = "luau")]
+            Value::Vector(x, y, z) => Ok(vec![
+                T::from_lua(Value::Number(x as _), _lua)?,
+                T::from_lua(Value::Number(y as _), _lua)?,
+                T::from_lua(Value::Number(z as _), _lua)?,
+            ]),
+            Value::Table(table) => table.sequence_values().collect(),
+            _ => Err(Error::FromLuaConversionError {
                 from: value.type_name(),
                 to: "Vec",
                 message: Some("expected table".to_string()),
-            })
+            }),
         }
     }
 }

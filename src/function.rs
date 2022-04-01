@@ -1,12 +1,11 @@
-use std::os::raw::{c_int, c_void};
+use std::os::raw::c_int;
 use std::ptr;
-use std::slice;
 
 use crate::error::{Error, Result};
 use crate::ffi;
 use crate::types::LuaRef;
 use crate::util::{assert_stack, check_stack, error_traceback, pop_error, StackGuard};
-use crate::value::{FromLuaMulti, MultiValue, ToLuaMulti};
+use crate::value::{FromLuaMulti, ToLuaMulti};
 
 #[cfg(feature = "async")]
 use {futures_core::future::LocalBoxFuture, futures_util::future};
@@ -59,7 +58,7 @@ impl<'lua> Function<'lua> {
     pub fn call<A: ToLuaMulti<'lua>, R: FromLuaMulti<'lua>>(&self, args: A) -> Result<R> {
         let lua = self.0.lua;
 
-        let args = args.to_lua_multi(lua)?;
+        let mut args = args.to_lua_multi(lua)?;
         let nargs = args.len() as c_int;
 
         let results = unsafe {
@@ -69,7 +68,7 @@ impl<'lua> Function<'lua> {
             ffi::lua_pushcfunction(lua.state, error_traceback);
             let stack_start = ffi::lua_gettop(lua.state);
             lua.push_ref(&self.0);
-            for arg in args {
+            for arg in args.drain_all() {
                 lua.push_value(arg)?;
             }
             let ret = ffi::lua_pcall(lua.state, nargs, ffi::LUA_MULTRET, stack_start);
@@ -77,7 +76,7 @@ impl<'lua> Function<'lua> {
                 return Err(pop_error(lua.state, ret));
             }
             let nresults = ffi::lua_gettop(lua.state) - stack_start;
-            let mut results = MultiValue::new();
+            let mut results = args; // Reuse MultiValue container
             assert_stack(lua.state, 2);
             for _ in 0..nresults {
                 results.push_front(lua.pop_value());
@@ -126,8 +125,12 @@ impl<'lua> Function<'lua> {
         R: FromLuaMulti<'lua> + 'fut,
     {
         let lua = self.0.lua;
-        match lua.create_thread(self.clone()) {
-            Ok(t) => Box::pin(t.into_async(args)),
+        match lua.create_recycled_thread(self.clone()) {
+            Ok(t) => {
+                let mut t = t.into_async(args);
+                t.set_recyclable(true);
+                Box::pin(t)
+            }
             Err(e) => Box::pin(future::err(e)),
         }
     }
@@ -210,7 +213,12 @@ impl<'lua> Function<'lua> {
     ///
     /// If `strip` is true, the binary representation may not include all debug information
     /// about the function, to save space.
+    #[cfg(not(feature = "luau"))]
+    #[cfg_attr(docsrs, doc(cfg(not(feature = "luau"))))]
     pub fn dump(&self, strip: bool) -> Vec<u8> {
+        use std::os::raw::c_void;
+        use std::slice;
+
         unsafe extern "C" fn writer(
             _state: *mut ffi::lua_State,
             buf: *const c_void,

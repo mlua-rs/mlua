@@ -120,7 +120,8 @@ fn call_sum_callback(c: &mut Criterion) {
 }
 
 fn call_async_sum_callback(c: &mut Criterion) {
-    let lua = Lua::new();
+    let options = LuaOptions::new().thread_cache_size(1024);
+    let lua = Lua::new_with(LuaStdLib::ALL_SAFE, options).unwrap();
     let callback = lua
         .create_async_function(|_, (a, b, c): (i64, i64, i64)| async move {
             task::yield_now().await;
@@ -208,6 +209,33 @@ fn create_userdata(c: &mut Criterion) {
     });
 }
 
+fn call_userdata_index(c: &mut Criterion) {
+    struct UserData(i64);
+    impl LuaUserData for UserData {
+        fn add_methods<'lua, M: LuaUserDataMethods<'lua, Self>>(methods: &mut M) {
+            methods.add_meta_method(LuaMetaMethod::Index, move |_, _, index: String| Ok(index));
+        }
+    }
+
+    let lua = Lua::new();
+    lua.globals().set("userdata", UserData(10)).unwrap();
+
+    c.bench_function("call [userdata index] 10", |b| {
+        b.iter_batched_ref(
+            || {
+                collect_gc_twice(&lua);
+                lua.load("function() for i = 1,10 do local v = userdata.test end end")
+                    .eval::<LuaFunction>()
+                    .unwrap()
+            },
+            |function| {
+                function.call::<_, ()>(()).unwrap();
+            },
+            BatchSize::SmallInput,
+        );
+    });
+}
+
 fn call_userdata_method(c: &mut Criterion) {
     struct UserData(i64);
     impl LuaUserData for UserData {
@@ -244,7 +272,8 @@ fn call_async_userdata_method(c: &mut Criterion) {
         }
     }
 
-    let lua = Lua::new();
+    let options = LuaOptions::new().thread_cache_size(1024);
+    let lua = Lua::new_with(LuaStdLib::ALL_SAFE, options).unwrap();
     lua.globals().set("userdata", UserData(10)).unwrap();
 
     c.bench_function("call async [userdata method] 10", |b| {
@@ -281,6 +310,7 @@ criterion_group! {
         call_concat_callback,
         create_registry_values,
         create_userdata,
+        call_userdata_index,
         call_userdata_method,
         call_async_userdata_method,
 }

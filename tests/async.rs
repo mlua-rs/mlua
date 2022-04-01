@@ -3,7 +3,7 @@
 use std::cell::Cell;
 use std::rc::Rc;
 use std::sync::{
-    atomic::{AtomicI64, Ordering},
+    atomic::{AtomicI64, AtomicU64, Ordering},
     Arc,
 };
 use std::time::Duration;
@@ -12,7 +12,8 @@ use futures_timer::Delay;
 use futures_util::stream::TryStreamExt;
 
 use mlua::{
-    Error, Function, Lua, Result, Table, TableExt, Thread, UserData, UserDataMethods, Value,
+    Error, Function, Lua, LuaOptions, Result, StdLib, Table, TableExt, Thread, UserData,
+    UserDataMethods, Value,
 };
 
 #[tokio::test]
@@ -227,7 +228,8 @@ async fn test_async_thread() -> Result<()> {
 
 #[tokio::test]
 async fn test_async_table() -> Result<()> {
-    let lua = Lua::new();
+    let options = LuaOptions::new().thread_cache_size(4);
+    let lua = Lua::new_with(StdLib::ALL_SAFE, options)?;
 
     let table = lua.create_table()?;
     table.set("val", 10)?;
@@ -276,7 +278,7 @@ async fn test_async_table() -> Result<()> {
 #[tokio::test]
 async fn test_async_userdata() -> Result<()> {
     #[derive(Clone)]
-    struct MyUserData(Arc<AtomicI64>);
+    struct MyUserData(Arc<AtomicU64>);
 
     impl UserData for MyUserData {
         fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
@@ -295,13 +297,46 @@ async fn test_async_userdata() -> Result<()> {
                 Delay::new(Duration::from_millis(n)).await;
                 Ok(format!("elapsed:{}ms", n))
             });
+
+            #[cfg(not(any(feature = "lua51", feature = "luau")))]
+            methods.add_async_meta_method(mlua::MetaMethod::Call, |_, data, ()| async move {
+                let n = data.0.load(Ordering::Relaxed);
+                Delay::new(Duration::from_millis(n)).await;
+                Ok(format!("elapsed:{}ms", n))
+            });
+
+            #[cfg(not(any(feature = "lua51", feature = "luau")))]
+            methods.add_async_meta_method(
+                mlua::MetaMethod::Index,
+                |_, data, key: String| async move {
+                    Delay::new(Duration::from_millis(10)).await;
+                    match key.as_str() {
+                        "ms" => Ok(Some(data.0.load(Ordering::Relaxed) as f64)),
+                        "s" => Ok(Some((data.0.load(Ordering::Relaxed) as f64) / 1000.0)),
+                        _ => Ok(None),
+                    }
+                },
+            );
+
+            #[cfg(not(any(feature = "lua51", feature = "luau")))]
+            methods.add_async_meta_method(
+                mlua::MetaMethod::NewIndex,
+                |_, data, (key, value): (String, f64)| async move {
+                    Delay::new(Duration::from_millis(10)).await;
+                    match key.as_str() {
+                        "ms" => Ok(data.0.store(value as u64, Ordering::Relaxed)),
+                        "s" => Ok(data.0.store((value * 1000.0) as u64, Ordering::Relaxed)),
+                        _ => Err(Error::external(format!("key '{}' not found", key))),
+                    }
+                },
+            );
         }
     }
 
     let lua = Lua::new();
     let globals = lua.globals();
 
-    let userdata = lua.create_userdata(MyUserData(Arc::new(AtomicI64::new(11))))?;
+    let userdata = lua.create_userdata(MyUserData(Arc::new(AtomicU64::new(11))))?;
     globals.set("userdata", userdata.clone())?;
 
     lua.load(
@@ -310,6 +345,22 @@ async fn test_async_userdata() -> Result<()> {
         userdata:set_value(12)
         assert(userdata.sleep(5) == "elapsed:5ms")
         assert(userdata:get_value() == 12)
+    "#,
+    )
+    .exec_async()
+    .await?;
+
+    #[cfg(not(any(feature = "lua51", feature = "luau")))]
+    lua.load(
+        r#"
+        userdata:set_value(15)
+        assert(userdata() == "elapsed:15ms")
+
+        userdata.ms = 2000
+        assert(userdata.s == 2)
+
+        userdata.s = 15
+        assert(userdata.ms == 15000)
     "#,
     )
     .exec_async()

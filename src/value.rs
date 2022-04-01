@@ -4,6 +4,7 @@ use std::{slice, str, vec};
 #[cfg(feature = "serialize")]
 use {
     serde::ser::{self, Serialize, Serializer},
+    std::convert::TryInto,
     std::result::Result as StdResult,
 };
 
@@ -33,6 +34,10 @@ pub enum Value<'lua> {
     Integer(Integer),
     /// A floating point number.
     Number(Number),
+    /// A Luau vector.
+    #[cfg(any(feature = "luau", doc))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
+    Vector(f32, f32, f32),
     /// An interned string, managed by Lua.
     ///
     /// Unlike Rust strings, Lua strings may not be valid UTF-8.
@@ -53,13 +58,15 @@ pub enum Value<'lua> {
 pub use self::Value::Nil;
 
 impl<'lua> Value<'lua> {
-    pub fn type_name(&self) -> &'static str {
+    pub const fn type_name(&self) -> &'static str {
         match *self {
             Value::Nil => "nil",
             Value::Boolean(_) => "boolean",
             Value::LightUserData(_) => "lightuserdata",
             Value::Integer(_) => "integer",
             Value::Number(_) => "number",
+            #[cfg(feature = "luau")]
+            Value::Vector(_, _, _) => "vector",
             Value::String(_) => "string",
             Value::Table(_) => "table",
             Value::Function(_) => "function",
@@ -98,6 +105,8 @@ impl<'lua> PartialEq for Value<'lua> {
             (Value::Integer(a), Value::Number(b)) => *a as Number == *b,
             (Value::Number(a), Value::Integer(b)) => *a == *b as Number,
             (Value::Number(a), Value::Number(b)) => *a == *b,
+            #[cfg(feature = "luau")]
+            (Value::Vector(x1, y1, z1), Value::Vector(x2, y2, z2)) => (x1, y1, z1) == (x2, y2, z2),
             (Value::String(a), Value::String(b)) => a == b,
             (Value::Table(a), Value::Table(b)) => a == b,
             (Value::Function(a), Value::Function(b)) => a == b,
@@ -125,9 +134,12 @@ impl<'lua> Serialize for Value<'lua> {
             Value::Nil => serializer.serialize_unit(),
             Value::Boolean(b) => serializer.serialize_bool(*b),
             #[allow(clippy::useless_conversion)]
-            Value::Integer(i) => serializer.serialize_i64((*i).into()),
+            Value::Integer(i) => serializer
+                .serialize_i64((*i).try_into().expect("cannot convert lua_Integer to i64")),
             #[allow(clippy::useless_conversion)]
-            Value::Number(n) => serializer.serialize_f64((*n).into()),
+            Value::Number(n) => serializer.serialize_f64(*n),
+            #[cfg(feature = "luau")]
+            Value::Vector(x, y, z) => (x, y, z).serialize(serializer),
             Value::String(s) => s.serialize(serializer),
             Value::Table(t) => t.serialize(serializer),
             Value::UserData(ud) => ud.serialize(serializer),
@@ -161,6 +173,12 @@ impl<'lua> MultiValue<'lua> {
     #[inline]
     pub fn new() -> MultiValue<'lua> {
         MultiValue(Vec::new())
+    }
+
+    /// Similar to `new` but can return previously used container with allocated capacity.
+    #[inline]
+    pub(crate) fn new_or_cached(lua: &'lua Lua) -> MultiValue<'lua> {
+        lua.new_or_cached_multivalue()
     }
 }
 
@@ -228,18 +246,41 @@ impl<'lua> MultiValue<'lua> {
     }
 
     #[inline]
+    pub fn clear(&mut self) {
+        self.0.clear();
+    }
+
+    #[inline]
     pub fn len(&self) -> usize {
         self.0.len()
     }
 
     #[inline]
     pub fn is_empty(&self) -> bool {
-        self.0.len() == 0
+        self.0.is_empty()
     }
 
     #[inline]
     pub fn iter(&self) -> iter::Rev<slice::Iter<Value<'lua>>> {
         self.0.iter().rev()
+    }
+
+    #[inline]
+    pub(crate) fn drain_all(&mut self) -> iter::Rev<vec::Drain<Value<'lua>>> {
+        self.0.drain(..).rev()
+    }
+
+    #[inline]
+    pub(crate) fn refill(
+        &mut self,
+        iter: impl IntoIterator<Item = Result<Value<'lua>>>,
+    ) -> Result<()> {
+        self.0.clear();
+        for value in iter {
+            self.0.push(value?);
+        }
+        self.0.reverse();
+        Ok(())
     }
 }
 

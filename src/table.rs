@@ -2,8 +2,9 @@ use std::marker::PhantomData;
 
 #[cfg(feature = "serialize")]
 use {
-    serde::ser::{Serialize, SerializeMap, SerializeSeq, Serializer},
-    std::result::Result as StdResult,
+    rustc_hash::FxHashSet,
+    serde::ser::{self, Serialize, SerializeMap, SerializeSeq, Serializer},
+    std::{cell::RefCell, os::raw::c_void, result::Result as StdResult},
 };
 
 use crate::error::{Error, Result};
@@ -347,6 +348,28 @@ impl<'lua> Table<'lua> {
         }
     }
 
+    /// Sets `readonly` attribute on the table.
+    ///
+    /// Requires `feature = "luau"`
+    #[cfg(feature = "luau")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
+    pub fn set_readonly(&self, enabled: bool) {
+        let lua = self.0.lua;
+        unsafe {
+            lua.ref_thread_exec(|refthr| ffi::lua_setreadonly(refthr, self.0.index, enabled as _));
+        }
+    }
+
+    /// Returns `readonly` attribute of the table.
+    ///
+    /// Requires `feature = "luau"`
+    #[cfg(feature = "luau")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
+    pub fn is_readonly(&self) -> bool {
+        let lua = self.0.lua;
+        unsafe { lua.ref_thread_exec(|refthr| ffi::lua_getreadonly(refthr, self.0.index) != 0) }
+    }
+
     /// Consume this table and return an iterator over the pairs of the table.
     ///
     /// This works like the Lua `pairs` function, but does not invoke the `__pairs` metamethod.
@@ -379,7 +402,7 @@ impl<'lua> Table<'lua> {
     /// ```
     ///
     /// [`Result`]: crate::Result
-    /// [Lua manual]: http://www.lua.org/manual/5.3/manual.html#pdf-next
+    /// [Lua manual]: http://www.lua.org/manual/5.4/manual.html#pdf-next
     pub fn pairs<K: FromLua<'lua>, V: FromLua<'lua>>(self) -> TablePairs<'lua, K, V> {
         TablePairs {
             table: self.0,
@@ -428,7 +451,7 @@ impl<'lua> Table<'lua> {
     ///
     /// [`pairs`]: #method.pairs
     /// [`Result`]: crate::Result
-    /// [Lua manual]: http://www.lua.org/manual/5.3/manual.html#pdf-next
+    /// [Lua manual]: http://www.lua.org/manual/5.4/manual.html#pdf-next
     pub fn sequence_values<V: FromLua<'lua>>(self) -> TableSequence<'lua, V> {
         TableSequence {
             table: self.0,
@@ -454,7 +477,7 @@ impl<'lua> Table<'lua> {
         }
     }
 
-    #[cfg(any(feature = "async", feature = "serialize"))]
+    #[cfg(any(feature = "serialize"))]
     pub(crate) fn raw_sequence_values_by_len<V: FromLua<'lua>>(
         self,
         len: Option<Integer>,
@@ -501,6 +524,25 @@ impl<'lua> AsRef<Table<'lua>> for Table<'lua> {
 
 /// An extension trait for `Table`s that provides a variety of convenient functionality.
 pub trait TableExt<'lua> {
+    /// Calls the table as function assuming it has `__call` metamethod.
+    ///
+    /// The metamethod is called with the table as its first argument, followed by the passed arguments.
+    fn call<A, R>(&self, args: A) -> Result<R>
+    where
+        A: ToLuaMulti<'lua>,
+        R: FromLuaMulti<'lua>;
+
+    /// Asynchronously calls the table as function assuming it has `__call` metamethod.
+    ///
+    /// The metamethod is called with the table as its first argument, followed by the passed arguments.
+    #[cfg(feature = "async")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
+    fn call_async<'fut, A, R>(&self, args: A) -> LocalBoxFuture<'fut, Result<R>>
+    where
+        'lua: 'fut,
+        A: ToLuaMulti<'lua>,
+        R: FromLuaMulti<'lua> + 'fut;
+
     /// Gets the function associated to `key` from the table and executes it,
     /// passing the table itself along with `args` as function arguments.
     ///
@@ -563,6 +605,25 @@ pub trait TableExt<'lua> {
 }
 
 impl<'lua> TableExt<'lua> for Table<'lua> {
+    fn call<A, R>(&self, args: A) -> Result<R>
+    where
+        A: ToLuaMulti<'lua>,
+        R: FromLuaMulti<'lua>,
+    {
+        // Convert table to a function and call via pcall that respects the `__call` metamethod.
+        Function(self.0.clone()).call(args)
+    }
+
+    #[cfg(feature = "async")]
+    fn call_async<'fut, A, R>(&self, args: A) -> LocalBoxFuture<'fut, Result<R>>
+    where
+        'lua: 'fut,
+        A: ToLuaMulti<'lua>,
+        R: FromLuaMulti<'lua> + 'fut,
+    {
+        Function(self.0.clone()).call_async(args)
+    }
+
     fn call_method<K, A, R>(&self, key: K, args: A) -> Result<R>
     where
         K: ToLua<'lua>,
@@ -622,22 +683,42 @@ impl<'lua> Serialize for Table<'lua> {
     where
         S: Serializer,
     {
-        let len = self.raw_len() as usize;
-        if len > 0 || self.is_array() {
-            let mut seq = serializer.serialize_seq(Some(len))?;
-            for v in self.clone().raw_sequence_values_by_len::<Value>(None) {
-                let v = v.map_err(serde::ser::Error::custom)?;
-                seq.serialize_element(&v)?;
-            }
-            return seq.end();
+        thread_local! {
+            static VISITED: RefCell<FxHashSet<*const c_void>> = RefCell::new(FxHashSet::default());
         }
 
-        let mut map = serializer.serialize_map(None)?;
-        for kv in self.clone().pairs::<Value, Value>() {
-            let (k, v) = kv.map_err(serde::ser::Error::custom)?;
-            map.serialize_entry(&k, &v)?;
-        }
-        map.end()
+        let lua = self.0.lua;
+        let ptr = unsafe { lua.ref_thread_exec(|refthr| ffi::lua_topointer(refthr, self.0.index)) };
+        let res = VISITED.with(|visited| {
+            {
+                let mut visited = visited.borrow_mut();
+                if visited.contains(&ptr) {
+                    return Err(ser::Error::custom("recursive table detected"));
+                }
+                visited.insert(ptr);
+            }
+
+            let len = self.raw_len() as usize;
+            if len > 0 || self.is_array() {
+                let mut seq = serializer.serialize_seq(Some(len))?;
+                for v in self.clone().raw_sequence_values_by_len::<Value>(None) {
+                    let v = v.map_err(serde::ser::Error::custom)?;
+                    seq.serialize_element(&v)?;
+                }
+                return seq.end();
+            }
+
+            let mut map = serializer.serialize_map(None)?;
+            for kv in self.clone().pairs::<Value, Value>() {
+                let (k, v) = kv.map_err(serde::ser::Error::custom)?;
+                map.serialize_entry(&k, &v)?;
+            }
+            map.end()
+        });
+        VISITED.with(|visited| {
+            visited.borrow_mut().remove(&ptr);
+        });
+        res
     }
 }
 

@@ -93,6 +93,7 @@ fn test_c_function() -> Result<()> {
     Ok(())
 }
 
+#[cfg(not(feature = "luau"))]
 #[test]
 fn test_dump() -> Result<()> {
     let lua = unsafe { Lua::unsafe_new() };

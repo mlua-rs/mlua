@@ -1,14 +1,17 @@
-use std::cell::RefCell;
 use std::hash::{Hash, Hasher};
 use std::os::raw::{c_int, c_void};
 use std::sync::{Arc, Mutex};
 use std::{fmt, mem, ptr};
+
+#[cfg(feature = "lua54")]
+use std::ffi::CStr;
 
 #[cfg(feature = "async")]
 use futures_core::future::LocalBoxFuture;
 
 use crate::error::Result;
 use crate::ffi;
+#[cfg(not(feature = "luau"))]
 use crate::hook::Debug;
 use crate::lua::Lua;
 use crate::util::{assert_stack, StackGuard};
@@ -46,12 +49,17 @@ pub(crate) struct AsyncPollUpvalue<'lua> {
     pub(crate) lua: Lua,
     pub(crate) fut: LocalBoxFuture<'lua, Result<MultiValue<'lua>>>,
 }
+#[cfg(all(feature = "send", not(feature = "luau")))]
+pub(crate) type HookCallback = Arc<Mutex<dyn FnMut(&Lua, Debug) -> Result<()> + Send>>;
 
-#[cfg(feature = "send")]
-pub(crate) type HookCallback = Arc<RefCell<dyn FnMut(&Lua, Debug) -> Result<()> + Send>>;
+#[cfg(all(not(feature = "send"), not(feature = "luau")))]
+pub(crate) type HookCallback = Arc<Mutex<dyn FnMut(&Lua, Debug) -> Result<()>>>;
 
-#[cfg(not(feature = "send"))]
-pub(crate) type HookCallback = Arc<RefCell<dyn FnMut(&Lua, Debug) -> Result<()>>>;
+#[cfg(all(feature = "send", feature = "lua54"))]
+pub(crate) type WarnCallback = Box<dyn Fn(&Lua, &CStr, bool) -> Result<()> + Send>;
+
+#[cfg(all(not(feature = "send"), feature = "lua54"))]
+pub(crate) type WarnCallback = Box<dyn Fn(&Lua, &CStr, bool) -> Result<()>>;
 
 #[cfg(feature = "send")]
 pub trait MaybeSend: Send {}
@@ -147,7 +155,9 @@ impl<'lua> Clone for LuaRef<'lua> {
 
 impl<'lua> Drop for LuaRef<'lua> {
     fn drop(&mut self) {
-        self.lua.drop_ref(self)
+        if self.index > 0 {
+            self.lua.drop_ref(self);
+        }
     }
 }
 

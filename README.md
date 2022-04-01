@@ -1,5 +1,5 @@
 # mlua
-[![Build Status]][github-actions] [![Latest Version]][crates.io] [![API Documentation]][docs.rs] [![Coverage Status]][codecov.io]
+[![Build Status]][github-actions] [![Latest Version]][crates.io] [![API Documentation]][docs.rs] [![Coverage Status]][codecov.io] ![MSRV]
 
 [Build Status]: https://github.com/khvzak/mlua/workflows/CI/badge.svg
 [github-actions]: https://github.com/khvzak/mlua/actions
@@ -9,17 +9,19 @@
 [docs.rs]: https://docs.rs/mlua
 [Coverage Status]: https://codecov.io/gh/khvzak/mlua/branch/master/graph/badge.svg?token=99339FS1CG
 [codecov.io]: https://codecov.io/gh/khvzak/mlua
+[MSRV]: https://img.shields.io/badge/rust-1.53+-brightgreen.svg?&logo=rust
 
 [Guided Tour](examples/guided_tour.rs)
 
 `mlua` is bindings to [Lua](https://www.lua.org) programming language for Rust with a goal to provide
 _safe_ (as far as it's possible), high level, easy to use, practical and flexible API.
 
-Started as [rlua](https://github.com/amethyst/rlua/tree/0.15.3) fork, `mlua` supports Lua 5.4, 5.3, 5.2 and 5.1 including LuaJIT (2.0.5 and 2.1 beta) and allows to write native Lua modules in Rust as well as use Lua in a standalone mode.
+Started as `rlua` fork, `mlua` supports Lua 5.4, 5.3, 5.2, 5.1 (including LuaJIT) and [Roblox Luau] and allows to write native Lua modules in Rust as well as use Lua in a standalone mode.
 
 `mlua` tested on Windows/macOS/Linux including module mode in [GitHub Actions] on `x86_64` platform and cross-compilation to `aarch64` (other targets are also supported).
 
 [GitHub Actions]: https://github.com/khvzak/mlua/actions
+[Roblox Luau]: https://luau-lang.org
 
 ## Usage
 
@@ -33,6 +35,8 @@ Below is a list of the available feature flags. By default `mlua` does not enabl
 * `lua52`: activate Lua [5.2] support
 * `lua51`: activate Lua [5.1] support
 * `luajit`: activate [LuaJIT] support
+* `luajit52`: activate [LuaJIT] support with partial compatibility with Lua 5.2
+* `luau`: activate [Luau] support (auto vendored mode)
 * `vendored`: build static Lua(JIT) library from sources during `mlua` compilation using [lua-src] or [luajit-src] crates
 * `module`: enable module mode (building loadable `cdylib` library for Lua)
 * `async`: enable async/await support (any executor can be used, eg. [tokio] or [async-std])
@@ -45,6 +49,7 @@ Below is a list of the available feature flags. By default `mlua` does not enabl
 [5.2]: https://www.lua.org/manual/5.2/manual.html
 [5.1]: https://www.lua.org/manual/5.1/manual.html
 [LuaJIT]: https://luajit.org/
+[Luau]: https://github.com/Roblox/luau
 [lua-src]: https://github.com/khvzak/lua-src-rs
 [luajit-src]: https://github.com/khvzak/luajit-src-rs
 [tokio]: https://github.com/tokio-rs/tokio
@@ -54,7 +59,9 @@ Below is a list of the available feature flags. By default `mlua` does not enabl
 
 ### Async/await support
 
-`mlua` supports async/await for all Lua versions. This works using Lua [coroutines](https://www.lua.org/manual/5.3/manual.html#2.6) and require running [Thread](https://docs.rs/mlua/latest/mlua/struct.Thread.html) along with enabling `feature = "async"` in `Cargo.toml`.
+`mlua` supports async/await for all Lua versions including Luau.
+
+This works using Lua [coroutines](https://www.lua.org/manual/5.3/manual.html#2.6) and require running [Thread](https://docs.rs/mlua/latest/mlua/struct.Thread.html) along with enabling `feature = "async"` in `Cargo.toml`.
 
 **Examples**:
 - [HTTP Client](examples/async_http_client.rs)
@@ -74,7 +81,7 @@ With `serialize` feature flag enabled, `mlua` allows you to serialize/deserializ
 
 ### Compiling
 
-You have to enable one of the features `lua54`, `lua53`, `lua52`, `lua51` or `luajit`, according to the chosen Lua version.
+You have to enable one of the features: `lua54`, `lua53`, `lua52`, `lua51`, `luajit(52)` or `luau`, according to the chosen Lua version.
 
 By default `mlua` uses `pkg-config` tool to find lua includes and libraries for the chosen Lua version.
 In most cases it works as desired, although sometimes could be more preferable to use a custom lua library.
@@ -97,7 +104,7 @@ Add to `Cargo.toml` :
 
 ``` toml
 [dependencies]
-mlua = { version = "0.6", features = ["lua53", "vendored"] }
+mlua = { version = "0.8.0-beta.2", features = ["lua54", "vendored"] }
 ```
 
 `main.rs`
@@ -121,7 +128,7 @@ fn main() -> LuaResult<()> {
 ```
 
 ### Module mode
-In a module mode `mlua` allows to create a compiled Lua module that can be loaded from Lua code using [`require`](https://www.lua.org/manual/5.3/manual.html#pdf-require). In this case `mlua` uses an external Lua runtime which could lead to potential unsafety due to unpredictability of the Lua environment and usage of libraries such as [`debug`](https://www.lua.org/manual/5.3/manual.html#6.10).
+In a module mode `mlua` allows to create a compiled Lua module that can be loaded from Lua code using [`require`](https://www.lua.org/manual/5.4/manual.html#pdf-require). In this case `mlua` uses an external Lua runtime which could lead to potential unsafety due to unpredictability of the Lua environment and usage of libraries such as [`debug`](https://www.lua.org/manual/5.4/manual.html#6.10).
 
 [Example](examples/module)
 
@@ -132,7 +139,7 @@ Add to `Cargo.toml` :
 crate-type = ["cdylib"]
 
 [dependencies]
-mlua = { version = "0.6", features = ["lua53", "vendored", "module"] }
+mlua = { version = "0.8.0-beta.2", features = ["lua54", "vendored", "module"] }
 ```
 
 `lib.rs` :
@@ -158,7 +165,7 @@ And then (**macOS** example):
 ``` sh
 $ cargo rustc -- -C link-arg=-undefined -C link-arg=dynamic_lookup
 $ ln -s ./target/debug/libmy_module.dylib ./my_module.so
-$ lua5.3 -e 'require("my_module").hello("world")'
+$ lua5.4 -e 'require("my_module").hello("world")'
 hello, world!
 ```
 

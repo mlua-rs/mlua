@@ -37,7 +37,8 @@ pub enum Error {
     /// Lua garbage collector error, aka `LUA_ERRGCMM`.
     ///
     /// The Lua VM returns this error when there is an error running a `__gc` metamethod.
-    #[cfg(any(feature = "lua53", feature = "lua52", feature = "lua-factorio"))]
+    #[cfg(any(feature = "lua53", feature = "lua52", feature = "lua-factorio" doc))]
+    #[cfg_attr(docsrs, doc(cfg(any(feature = "lua53", feature = "lua52", feature = "lua-factorio"))))]
     GarbageCollectorError(StdString),
     /// Potentially unsafe action in safe mode.
     SafetyError(StdString),
@@ -247,8 +248,28 @@ impl fmt::Display for Error {
             Error::MismatchedRegistryKey => {
                 write!(fmt, "RegistryKey used from different Lua state")
             }
-            Error::CallbackError { ref traceback, .. } => {
-                write!(fmt, "callback error\n{}", traceback)
+            Error::CallbackError { ref cause, ref traceback } => {
+                writeln!(fmt, "callback error")?;
+                // Trace errors down to the root
+                let (mut cause, mut full_traceback) = (cause, None);
+                while let Error::CallbackError { cause: ref cause2, traceback: ref traceback2 } = **cause {
+                    cause = cause2;
+                    full_traceback = Some(traceback2);
+                }
+                if let Some(full_traceback) = full_traceback {
+                    let traceback = traceback.trim_start_matches("stack traceback:");
+                    let traceback = traceback.trim_start().trim_end();
+                    // Try to find local traceback within the full traceback
+                    if let Some(pos) = full_traceback.find(traceback) {
+                        write!(fmt, "{}", &full_traceback[..pos])?;
+                        writeln!(fmt, ">{}", &full_traceback[pos..].trim_end())?;
+                    } else {
+                        writeln!(fmt, "{}", full_traceback.trim_end())?;
+                    }
+                } else {
+                    writeln!(fmt, "{}", traceback.trim_end())?;
+                }
+                write!(fmt, "caused by: {}", cause)
             }
             Error::PreviouslyResumedPanic => {
                 write!(fmt, "previously resumed panic returned again")
@@ -269,7 +290,11 @@ impl fmt::Display for Error {
 impl StdError for Error {
     fn source(&self) -> Option<&(dyn StdError + 'static)> {
         match *self {
-            Error::CallbackError { ref cause, .. } => Some(cause.as_ref()),
+            // An error type with a source error should either return that error via source or
+            // include that source's error message in its own Display output, but never both.
+            // https://blog.rust-lang.org/inside-rust/2021/07/01/What-the-error-handling-project-group-is-working-towards.html
+            // Given that we include source to fmt::Display implementation for `CallbackError`, this call returns nothing.
+            Error::CallbackError { .. } => None,
             Error::ExternalError(ref err) => err.source(),
             _ => None,
         }

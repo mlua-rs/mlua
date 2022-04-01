@@ -1,21 +1,15 @@
-#![allow(unreachable_code)]
-
-use std::env;
-use std::fs::File;
-use std::io::{Error, ErrorKind, Result, Write};
-use std::path::{Path, PathBuf};
-use std::process::Command;
-
-#[cfg_attr(
-    all(
-        feature = "vendored",
-        any(
-            feature = "lua54",
-            feature = "lua53",
-            feature = "lua52",
-            feature = "lua51",
-            feature = "lua-factorio",
-            feature = "luajit"
+    any(
+        feature = "luau",
+        all(
+            feature = "vendored",
+            any(
+                feature = "lua54",
+                feature = "lua53",
+                feature = "lua52",
+                feature = "lua51",
+                feature = "lua-factorio",
+                feature = "luajit"
+            )
         )
     ),
     path = "find_vendored.rs"
@@ -39,7 +33,8 @@ use std::process::Command;
         feature = "lua53",
         feature = "lua52",
         feature = "lua51",
-        feature = "luajit"
+        feature = "luajit",
+        feature = "luau"
     )),
     path = "find_dummy.rs"
 )]
@@ -202,10 +197,13 @@ fn main() {
         feature = "lua53",
         feature = "lua52",
         feature = "lua51",
-        feature = "lua-factorio",
-        feature = "luajit"
+        feature = "luajit",
+        feature = "luau",
+        feature = "lua-factorio"
     )))]
-    compile_error!("You must enable one of the features: lua54, lua53, lua52, lua51, luajit, lua-factorio");
+    compile_error!(
+        "You must enable one of the features: lua54, lua53, lua52, lua51, luajit, luajit52, luau, lua-factorio"
+    );
 
     #[cfg(all(
         feature = "lua54",
@@ -213,26 +211,51 @@ fn main() {
             feature = "lua53",
             feature = "lua52",
             feature = "lua51",
-            feature = "lua-factorio",
-            feature = "luajit"
+            feature = "luajit",
+            feature = "luau",
+            feature = "lua-factorio"
         )
     ))]
-    compile_error!("You can enable only one of the features: lua54, lua53, lua52, lua51, luajit, lua-factorio");
+    compile_error!(
+        "You can enable only one of the features: lua54, lua53, lua52, lua51, luajit, luajit52, luau, lua-factorio"
+    );
 
     #[cfg(all(
         feature = "lua53",
-        any(feature = "lua52", feature = "lua51", feature = "luajit", feature = "lua-factorio")
+        any(
+            feature = "lua52",
+            feature = "lua51",
+            feature = "luajit",
+            feature = "luau",
+            feature = "lua-factorio"
+        )
     ))]
-    compile_error!("You can enable only one of the features: lua54, lua53, lua52, lua51, luajit, lua-factorio");
+    compile_error!(
+        "You can enable only one of the features: lua54, lua53, lua52, lua51, luajit, luajit52, luau, lua-factorio"
+    );
 
-    #[cfg(all(feature = "lua52", any(feature = "lua51", feature = "luajit", feature = "lua-factorio")))]
-    compile_error!("You can enable only one of the features: lua54, lua53, lua52, lua51, luajit, lua-factorio");
+    #[cfg(all(
+        feature = "lua52",
+        any(feature = "lua51", feature = "luajit", feature = "luau", feature = "lua-factorio")
+    ))]
+    compile_error!(
+        "You can enable only one of the features: lua54, lua53, lua52, lua51, luajit, luajit52, luau, lua-factorio"
+    );
 
-    #[cfg(all(feature = "lua52", any(feature = "luajit", feature = "lua-factorio")))]
-    compile_error!("You can enable only one of the features: lua54, lua53, lua52, lua51, luajit, lua-factorio");
+    #[cfg(all(feature = "lua51", any(feature = "luajit", feature = "luau", feature = "lua-factorio")))]
+    compile_error!(
+        "You can enable only one of the features: lua54, lua53, lua52, lua51, luajit, luajit52, luau, lua-factorio"
+    );
 
-    #[cfg(all(feature = "lua51", feature = "lua-factorio"))]
-    compile_error!("You can enable only one of the features: lua54, lua53, lua52, lua51, luajit, lua-factorio");
+    #[cfg(all(feature = "luajit", any(feature = "luau", feature = "lua-factorio")))]
+    compile_error!(
+        "You can enable only one of the features: lua54, lua53, lua52, lua51, luajit, luajit52, luau, lua-factorio"
+    );
+    
+    #[cfg(all(feature = "luau", feature = "lua-factorio"))]
+    compile_error!(
+        "You can enable only one of the features: lua54, lua53, lua52, lua51, luajit, luajit52, luau, lua-factorio"
+    );
 
     // We don't support "vendored module" mode on windows
     #[cfg(all(feature = "vendored", feature = "module", target_os = "windows"))]
@@ -241,13 +264,7 @@ fn main() {
             + "Please, use `pkg-config` or custom mode to link to a Lua dll."
     );
 
-    let include_dir = find::probe_lua();
-    if env::var("TARGET").unwrap() != env::var("HOST").unwrap() {
-        generate_glue().unwrap();
-    } else {
-        build_glue(&include_dir);
-        println!("cargo:rerun-if-changed=src/ffi/glue/glue.c");
-    }
+    find::probe_lua();
 
     println!("cargo:rerun-if-changed=build");
 }

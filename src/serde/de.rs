@@ -1,9 +1,10 @@
 use std::cell::RefCell;
-use std::collections::HashSet;
+use std::convert::TryInto;
 use std::os::raw::c_void;
 use std::rc::Rc;
 use std::string::String as StdString;
 
+use rustc_hash::FxHashSet;
 use serde::de::{self, IntoDeserializer};
 
 use crate::error::{Error, Result};
@@ -16,7 +17,7 @@ use crate::value::Value;
 pub struct Deserializer<'lua> {
     value: Value<'lua>,
     options: Options,
-    visited: Rc<RefCell<HashSet<*const c_void>>>,
+    visited: Rc<RefCell<FxHashSet<*const c_void>>>,
 }
 
 /// A struct with options to change default deserializer behavior.
@@ -45,23 +46,24 @@ pub struct Options {
 
 impl Default for Options {
     fn default() -> Self {
-        Options {
-            deny_unsupported_types: true,
-            deny_recursive_tables: true,
-        }
+        Self::new()
     }
 }
 
 impl Options {
     /// Returns a new instance of `Options` with default parameters.
-    pub fn new() -> Self {
-        Self::default()
+    pub const fn new() -> Self {
+        Options {
+            deny_unsupported_types: true,
+            deny_recursive_tables: true,
+        }
     }
 
     /// Sets [`deny_unsupported_types`] option.
     ///
     /// [`deny_unsupported_types`]: #structfield.deny_unsupported_types
-    pub fn deny_unsupported_types(mut self, enabled: bool) -> Self {
+    #[must_use]
+    pub const fn deny_unsupported_types(mut self, enabled: bool) -> Self {
         self.deny_unsupported_types = enabled;
         self
     }
@@ -69,6 +71,7 @@ impl Options {
     /// Sets [`deny_recursive_tables`] option.
     ///
     /// [`deny_recursive_tables`]: #structfield.deny_recursive_tables
+    #[must_use]
     pub fn deny_recursive_tables(mut self, enabled: bool) -> Self {
         self.deny_recursive_tables = enabled;
         self
@@ -86,14 +89,14 @@ impl<'lua> Deserializer<'lua> {
         Deserializer {
             value,
             options,
-            visited: Rc::new(RefCell::new(HashSet::new())),
+            visited: Rc::new(RefCell::new(FxHashSet::default())),
         }
     }
 
     fn from_parts(
         value: Value<'lua>,
         options: Options,
-        visited: Rc<RefCell<HashSet<*const c_void>>>,
+        visited: Rc<RefCell<FxHashSet<*const c_void>>>,
     ) -> Self {
         Deserializer {
             value,
@@ -115,9 +118,13 @@ impl<'lua, 'de> serde::Deserializer<'de> for Deserializer<'lua> {
             Value::Nil => visitor.visit_unit(),
             Value::Boolean(b) => visitor.visit_bool(b),
             #[allow(clippy::useless_conversion)]
-            Value::Integer(i) => visitor.visit_i64(i.into()),
+            Value::Integer(i) => {
+                visitor.visit_i64(i.try_into().expect("cannot convert lua_Integer to i64"))
+            }
             #[allow(clippy::useless_conversion)]
             Value::Number(n) => visitor.visit_f64(n.into()),
+            #[cfg(feature = "luau")]
+            Value::Vector(_, _, _) => self.deserialize_seq(visitor),
             Value::String(s) => match s.to_str() {
                 Ok(s) => visitor.visit_str(s),
                 Err(_) => visitor.visit_bytes(s.as_bytes()),
@@ -209,6 +216,16 @@ impl<'lua, 'de> serde::Deserializer<'de> for Deserializer<'lua> {
         V: de::Visitor<'de>,
     {
         match self.value {
+            #[cfg(feature = "luau")]
+            Value::Vector(x, y, z) => {
+                let mut deserializer = VecDeserializer {
+                    vec: [x, y, z],
+                    next: 0,
+                    options: self.options,
+                    visited: self.visited,
+                };
+                visitor.visit_seq(&mut deserializer)
+            }
             Value::Table(t) => {
                 let _guard = RecursionGuard::new(&t, &self.visited);
 
@@ -313,7 +330,7 @@ impl<'lua, 'de> serde::Deserializer<'de> for Deserializer<'lua> {
 struct SeqDeserializer<'lua> {
     seq: TableSequence<'lua, Value<'lua>>,
     options: Options,
-    visited: Rc<RefCell<HashSet<*const c_void>>>,
+    visited: Rc<RefCell<FxHashSet<*const c_void>>>,
 }
 
 impl<'lua, 'de> de::SeqAccess<'de> for SeqDeserializer<'lua> {
@@ -347,11 +364,44 @@ impl<'lua, 'de> de::SeqAccess<'de> for SeqDeserializer<'lua> {
     }
 }
 
+#[cfg(feature = "luau")]
+struct VecDeserializer {
+    vec: [f32; 3],
+    next: usize,
+    options: Options,
+    visited: Rc<RefCell<FxHashSet<*const c_void>>>,
+}
+
+#[cfg(feature = "luau")]
+impl<'de> de::SeqAccess<'de> for VecDeserializer {
+    type Error = Error;
+
+    fn next_element_seed<T>(&mut self, seed: T) -> Result<Option<T::Value>>
+    where
+        T: de::DeserializeSeed<'de>,
+    {
+        match self.vec.get(self.next) {
+            Some(&n) => {
+                self.next += 1;
+                let visited = Rc::clone(&self.visited);
+                let deserializer =
+                    Deserializer::from_parts(Value::Number(n as _), self.options, visited);
+                seed.deserialize(deserializer).map(Some)
+            }
+            None => Ok(None),
+        }
+    }
+
+    fn size_hint(&self) -> Option<usize> {
+        Some(3)
+    }
+}
+
 struct MapDeserializer<'lua> {
     pairs: TablePairs<'lua, Value<'lua>, Value<'lua>>,
     value: Option<Value<'lua>>,
     options: Options,
-    visited: Rc<RefCell<HashSet<*const c_void>>>,
+    visited: Rc<RefCell<FxHashSet<*const c_void>>>,
     processed: usize,
 }
 
@@ -407,7 +457,7 @@ struct EnumDeserializer<'lua> {
     variant: StdString,
     value: Option<Value<'lua>>,
     options: Options,
-    visited: Rc<RefCell<HashSet<*const c_void>>>,
+    visited: Rc<RefCell<FxHashSet<*const c_void>>>,
 }
 
 impl<'lua, 'de> de::EnumAccess<'de> for EnumDeserializer<'lua> {
@@ -431,7 +481,7 @@ impl<'lua, 'de> de::EnumAccess<'de> for EnumDeserializer<'lua> {
 struct VariantDeserializer<'lua> {
     value: Option<Value<'lua>>,
     options: Options,
-    visited: Rc<RefCell<HashSet<*const c_void>>>,
+    visited: Rc<RefCell<FxHashSet<*const c_void>>>,
 }
 
 impl<'lua, 'de> de::VariantAccess<'de> for VariantDeserializer<'lua> {
@@ -499,12 +549,12 @@ impl<'lua, 'de> de::VariantAccess<'de> for VariantDeserializer<'lua> {
 // Used to track recursive tables but allow to traverse same tables multiple times
 struct RecursionGuard {
     ptr: *const c_void,
-    visited: Rc<RefCell<HashSet<*const c_void>>>,
+    visited: Rc<RefCell<FxHashSet<*const c_void>>>,
 }
 
 impl RecursionGuard {
     #[inline]
-    fn new(table: &Table, visited: &Rc<RefCell<HashSet<*const c_void>>>) -> Self {
+    fn new(table: &Table, visited: &Rc<RefCell<FxHashSet<*const c_void>>>) -> Self {
         let visited = Rc::clone(visited);
         let lua = table.0.lua;
         let ptr =
@@ -524,7 +574,7 @@ impl Drop for RecursionGuard {
 fn check_value_if_skip(
     value: &Value,
     options: Options,
-    visited: &RefCell<HashSet<*const c_void>>,
+    visited: &RefCell<FxHashSet<*const c_void>>,
 ) -> Result<bool> {
     match value {
         Value::Table(table) => {

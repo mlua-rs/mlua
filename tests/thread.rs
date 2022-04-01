@@ -94,7 +94,11 @@ fn test_thread() -> Result<()> {
 }
 
 #[test]
-#[cfg(any(feature = "lua54", all(feature = "luajit", feature = "vendored")))]
+#[cfg(any(
+    feature = "lua54",
+    all(feature = "luajit", feature = "vendored"),
+    feature = "luau",
+))]
 fn test_thread_reset() -> Result<()> {
     use mlua::{AnyUserData, UserData};
     use std::sync::Arc;
@@ -121,16 +125,29 @@ fn test_thread_reset() -> Result<()> {
         assert_eq!(Arc::strong_count(&arc), 1);
     }
 
-    // Check for errors (Lua 5.4 only)
+    // Check for errors
+    let func: Function = lua.load(r#"function(ud) error("test error") end"#).eval()?;
+    let thread = lua.create_thread(func.clone())?;
+    let _ = thread.resume::<_, AnyUserData>(MyUserData(arc.clone()));
+    assert_eq!(thread.status(), ThreadStatus::Error);
+    assert_eq!(Arc::strong_count(&arc), 2);
     #[cfg(feature = "lua54")]
     {
-        let func: Function = lua.load(r#"function(ud) error("test error") end"#).eval()?;
-        let thread = lua.create_thread(func.clone())?;
-        let _ = thread.resume::<_, AnyUserData>(MyUserData(arc.clone()));
-        assert_eq!(thread.status(), ThreadStatus::Error);
-        assert_eq!(Arc::strong_count(&arc), 2);
         assert!(thread.reset(func.clone()).is_err());
-        assert_eq!(thread.status(), ThreadStatus::Error);
+        // Reset behavior has changed in Lua v5.4.4
+        // It's became possible to force reset thread by popping error object
+        assert!(matches!(
+            thread.status(),
+            ThreadStatus::Unresumable | ThreadStatus::Error
+        ));
+        // Would pass in 5.4.4
+        // assert!(thread.reset(func.clone()).is_ok());
+        // assert_eq!(thread.status(), ThreadStatus::Resumable);
+    }
+    #[cfg(any(feature = "lua54", feature = "luau"))]
+    {
+        assert!(thread.reset(func.clone()).is_ok());
+        assert_eq!(thread.status(), ThreadStatus::Resumable);
     }
 
     Ok(())
@@ -147,7 +164,8 @@ fn test_coroutine_from_closure() -> Result<()> {
         feature = "lua54",
         feature = "lua53",
         feature = "lua52",
-        feature = "luajit"
+        feature = "luajit",
+        feature = "luau"
     ))]
     let thrd: Thread = lua.load("coroutine.create(main)").eval()?;
     #[cfg(feature = "lua51")]
