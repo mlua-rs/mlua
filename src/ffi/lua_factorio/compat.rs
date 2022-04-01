@@ -160,6 +160,7 @@ pub unsafe fn lua_dump(
     lua_dump_(L, writer, data)
 }
 
+/*
 #[inline(always)]
 pub unsafe fn lua_resume(
     L: *mut lua_State,
@@ -173,6 +174,7 @@ pub unsafe fn lua_resume(
     }
     ret
 }
+*/
 
 //
 // lauxlib ported functions
