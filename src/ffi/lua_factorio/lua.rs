@@ -127,8 +127,10 @@ extern "C" {
     //
     // Access functions (stack -> C)
     //
-    pub fn lua_isnumberorstringconvertabletonumber(L: *mut lua_State, idx: c_int) -> c_int;
-    pub fn lua_isstringornumberconvertabletostring(L: *mut lua_State, idx: c_int) -> c_int;
+    #[link_name = "lua_isnumberorstringconvertabletonumber"]
+    pub fn lua_isnumber(L: *mut lua_State, idx: c_int) -> c_int;
+    #[link_name = "lua_isstringornumberconvertabletostring"]
+    pub fn lua_isstring(L: *mut lua_State, idx: c_int) -> c_int;
     pub fn lua_iscfunction(L: *mut lua_State, idx: c_int) -> c_int;
     pub fn lua_isuserdata(L: *mut lua_State, idx: c_int) -> c_int;
     pub fn lua_type(L: *mut lua_State, idx: c_int) -> c_int;
