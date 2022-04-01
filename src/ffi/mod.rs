@@ -19,6 +19,9 @@ pub use lua51::*;
 #[cfg(feature = "luau")]
 pub use luau::*;
 
+#[cfg(feature = "lua-factorio")]
+pub use lua_factorio::*;
+
 #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "lua-factorio"))]
 pub const LUA_MAX_UPVALUES: c_int = 255;
 
@@ -99,3 +102,6 @@ pub mod lua51;
 
 #[cfg(feature = "luau")]
 pub mod luau;
+
+#[cfg(feature = "lua-factorio")]
+pub mod lua_factorio;
