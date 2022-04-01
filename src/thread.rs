@@ -155,6 +155,7 @@ impl<'lua> Thread<'lua> {
     }
 
     /// Gets the status of the thread.
+    #[cfg(not(feature = "lua-factorio"))]
     pub fn status(&self) -> ThreadStatus {
         let lua = self.0.lua;
         unsafe {
