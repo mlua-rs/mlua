@@ -92,6 +92,12 @@ pub type lua_Alloc = unsafe extern "C" fn(
 ) -> *mut c_void;
 
 extern "C" {
+    pub fn lua_registertracehandler(handler: Option<extern "C" fn(*const c_char)>);
+    pub fn lua_trace(message: *const c_char);
+    pub fn lua_traceandabort(message: *const c_char) -> c_int;
+}
+
+extern "C" {
     //
     // State manipulation
     //
@@ -121,12 +127,13 @@ extern "C" {
     //
     // Access functions (stack -> C)
     //
-    pub fn lua_isnumber(L: *mut lua_State, idx: c_int) -> c_int;
-    pub fn lua_isstring(L: *mut lua_State, idx: c_int) -> c_int;
+    pub fn lua_isnumberorstringconvertabletonumber(L: *mut lua_State, idx: c_int) -> c_int;
+    pub fn lua_isstringornumberconvertabletostring(L: *mut lua_State, idx: c_int) -> c_int;
     pub fn lua_iscfunction(L: *mut lua_State, idx: c_int) -> c_int;
     pub fn lua_isuserdata(L: *mut lua_State, idx: c_int) -> c_int;
     pub fn lua_type(L: *mut lua_State, idx: c_int) -> c_int;
     pub fn lua_typename(L: *mut lua_State, tp: c_int) -> *const c_char;
+    pub fn lua_getstring(L: *mut lua_State, idx: c_int, len: *mut usize) -> *const c_char;
 
     pub fn lua_tonumberx(L: *mut lua_State, idx: c_int, isnum: *mut c_int) -> lua_Number;
     #[link_name = "lua_tointegerx"]
@@ -134,6 +141,8 @@ extern "C" {
     pub fn lua_tounsignedx(L: *mut lua_State, idx: c_int, isnum: *mut c_int) -> lua_Unsigned;
     pub fn lua_toboolean(L: *mut lua_State, idx: c_int) -> c_int;
     pub fn lua_tolstring(L: *mut lua_State, idx: c_int, len: *mut usize) -> *const c_char;
+    pub fn lua_uncheckedtolstring(L: *mut lua_State, idx: c_int, len: *mut usize) -> *const c_char;
+    pub fn lua_uncheckedaslstring(L: *mut lua_State, idx: c_int, len: *mut usize) -> *const c_char;
     pub fn lua_rawlen(L: *mut lua_State, idx: c_int) -> usize;
     pub fn lua_tocfunction(L: *mut lua_State, idx: c_int) -> Option<lua_CFunction>;
     pub fn lua_touserdata(L: *mut lua_State, idx: c_int) -> *mut c_void;
@@ -190,6 +199,7 @@ extern "C" {
     pub fn lua_getglobal_(L: *mut lua_State, name: *const c_char);
     #[link_name = "lua_gettable"]
     pub fn lua_gettable_(L: *mut lua_State, idx: c_int);
+    pub fn lua_getfield(L: *mut lua_State, idx: c_int, k: *const c_char);
     #[link_name = "lua_getfield"]
     pub fn lua_getfield_(L: *mut lua_State, idx: c_int, k: *const c_char);
     #[link_name = "lua_rawget"]
@@ -198,11 +208,13 @@ extern "C" {
     pub fn lua_rawgeti_(L: *mut lua_State, idx: c_int, n: c_int);
     #[link_name = "lua_rawgetp"]
     pub fn lua_rawgetp_(L: *mut lua_State, idx: c_int, p: *const c_void);
+    pub fn lua_rawgetglobal(L: *mut lua_State, var: *const c_char);
     pub fn lua_createtable(L: *mut lua_State, narr: c_int, nrec: c_int);
     pub fn lua_newuserdata(L: *mut lua_State, sz: usize) -> *mut c_void;
     pub fn lua_getmetatable(L: *mut lua_State, objindex: c_int) -> c_int;
     #[link_name = "lua_getuservalue"]
     pub fn lua_getuservalue_(L: *mut lua_State, idx: c_int);
+    pub fn lua_rawwgetTablesizes(L: *mut lua_State, idx: c_int, outarraysize: *mut c_int, outhashsize: *mut c_int);
 
     //
     // Set functions (stack -> Lua)
@@ -259,6 +271,7 @@ pub unsafe fn lua_pcall(L: *mut lua_State, n: c_int, r: c_int, f: c_int) -> c_in
     lua_pcallk(L, n, r, f, 0, None)
 }
 
+/* // Disabled in Factorio lua
 extern "C" {
     //
     // Coroutine functions
@@ -278,6 +291,7 @@ extern "C" {
 pub unsafe fn lua_yield(L: *mut lua_State, n: c_int) -> c_int {
     lua_yieldk(L, n, 0, None)
 }
+*/
 
 //
 // Garbage-collection function and options
@@ -307,6 +321,10 @@ extern "C" {
     pub fn lua_next(L: *mut lua_State, idx: c_int) -> c_int;
     pub fn lua_concat(L: *mut lua_State, n: c_int);
     pub fn lua_len(L: *mut lua_State, idx: c_int);
+    pub fn lua_tablesize(L: *mut lua_State, idx: c_int, fuzzy: c_int) -> c_int;
+    pub fn lua_getnparams(L: *mut lua_State, idx: c_int) -> c_int;
+    pub fn lua_tableresize(L: *mut lua_State, idx: c_int, narr: c_int, nrec: c_int);
+    pub fn lua_isvalidIndex(L: *mut lua_State, idx: c_int) -> c_int;
     pub fn lua_getallocf(L: *mut lua_State, ud: *mut *mut c_void) -> lua_Alloc;
     pub fn lua_setallocf(L: *mut lua_State, f: lua_Alloc, ud: *mut c_void);
 }
@@ -433,6 +451,7 @@ pub type lua_Hook = unsafe extern "C" fn(L: *mut lua_State, ar: *mut lua_Debug);
 extern "C" {
     pub fn lua_getstack(L: *mut lua_State, level: c_int, ar: *mut lua_Debug) -> c_int;
     pub fn lua_getinfo(L: *mut lua_State, what: *const c_char, ar: *mut lua_Debug) -> c_int;
+    pub fn lua_getnresults(L: *mut lua_State) -> c_int;
     pub fn lua_getlocal(L: *mut lua_State, ar: *const lua_Debug, n: c_int) -> *const c_char;
     pub fn lua_setlocal(L: *mut lua_State, ar: *const lua_Debug, n: c_int) -> *const c_char;
     pub fn lua_getupvalue(L: *mut lua_State, funcindex: c_int, n: c_int) -> *const c_char;
