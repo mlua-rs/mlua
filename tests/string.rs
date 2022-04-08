@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::collections::HashSet;
 
 use mlua::{Lua, Result, String};
 
@@ -64,6 +65,21 @@ fn test_raw_string() -> Result<()> {
 
     let rs = lua.create_string(&[0, 1, 2, 3, 0, 1, 2, 3])?;
     assert_eq!(rs.as_bytes(), &[0, 1, 2, 3, 0, 1, 2, 3]);
+
+    Ok(())
+}
+
+#[test]
+fn test_string_hash() -> Result<()> {
+    let lua = Lua::new();
+
+    let set: HashSet<String> = lua.load(r#"{"hello", "world", "abc", 321}"#).eval()?;
+    assert_eq!(set.len(), 4);
+    assert!(set.contains(b"hello".as_ref()));
+    assert!(set.contains(b"world".as_ref()));
+    assert!(set.contains(b"abc".as_ref()));
+    assert!(set.contains(b"321".as_ref()));
+    assert!(!set.contains(b"Hello".as_ref()));
 
     Ok(())
 }
