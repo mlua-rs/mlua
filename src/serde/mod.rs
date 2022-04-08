@@ -257,7 +257,7 @@ pub(crate) unsafe fn init_metatables(state: *mut ffi::lua_State) -> Result<()> {
 }
 
 pub(crate) unsafe fn push_array_metatable(state: *mut ffi::lua_State) {
-    let array_metatable_key = &ARRAY_METATABLE_REGISTRY_KEY as *const u8 as *mut c_void;
+    let array_metatable_key = &ARRAY_METATABLE_REGISTRY_KEY as *const u8 as *const c_void;
     ffi::lua_rawgetp(state, ffi::LUA_REGISTRYINDEX, array_metatable_key);
 }
 

@@ -24,7 +24,6 @@ use {
     std::{
         cell::RefCell,
         marker::PhantomData,
-        os::raw::c_void,
         pin::Pin,
         task::{Context, Poll, Waker},
     },
@@ -436,7 +435,7 @@ where
 fn is_poll_pending(val: &MultiValue) -> bool {
     match val.iter().enumerate().last() {
         Some((0, Value::LightUserData(ud))) => {
-            ud.0 == &ASYNC_POLL_PENDING as *const u8 as *mut c_void
+            ud.0 as *const u8 == &ASYNC_POLL_PENDING as *const u8
         }
         _ => false,
     }
