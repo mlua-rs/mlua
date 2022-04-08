@@ -150,7 +150,7 @@ fn test_interrupts() -> Result<()> {
     let interrupts_count = Arc::new(AtomicU64::new(0));
     let interrupts_count2 = interrupts_count.clone();
 
-    lua.set_interrupt(move |_lua| {
+    lua.set_interrupt(move || {
         interrupts_count2.fetch_add(1, Ordering::Relaxed);
         Ok(VmState::Continue)
     });
@@ -172,7 +172,7 @@ fn test_interrupts() -> Result<()> {
     //
     let yield_count = Arc::new(AtomicU64::new(0));
     let yield_count2 = yield_count.clone();
-    lua.set_interrupt(move |_lua| {
+    lua.set_interrupt(move || {
         if yield_count2.fetch_add(1, Ordering::Relaxed) == 1 {
             return Ok(VmState::Yield);
         }
@@ -199,7 +199,7 @@ fn test_interrupts() -> Result<()> {
     //
     // Test errors in interrupts
     //
-    lua.set_interrupt(|_| Err(Error::RuntimeError("error from interrupt".into())));
+    lua.set_interrupt(|| Err(Error::RuntimeError("error from interrupt".into())));
     match f.call::<_, ()>(()) {
         Err(Error::CallbackError { cause, .. }) => match *cause {
             Error::RuntimeError(ref m) if m == "error from interrupt" => {}

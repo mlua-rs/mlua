@@ -65,10 +65,10 @@ pub(crate) type HookCallback = Arc<dyn Fn(&Lua, Debug) -> Result<()> + Send>;
 pub(crate) type HookCallback = Arc<dyn Fn(&Lua, Debug) -> Result<()>>;
 
 #[cfg(all(feature = "luau", feature = "send"))]
-pub(crate) type InterruptCallback = Arc<dyn Fn(&Lua) -> Result<VmState> + Send>;
+pub(crate) type InterruptCallback = Arc<dyn Fn() -> Result<VmState> + Send>;
 
 #[cfg(all(feature = "luau", not(feature = "send")))]
-pub(crate) type InterruptCallback = Arc<dyn Fn(&Lua) -> Result<VmState>>;
+pub(crate) type InterruptCallback = Arc<dyn Fn() -> Result<VmState>>;
 
 #[cfg(all(feature = "send", feature = "lua54"))]
 pub(crate) type WarnCallback = Box<dyn Fn(&Lua, &CStr, bool) -> Result<()> + Send>;

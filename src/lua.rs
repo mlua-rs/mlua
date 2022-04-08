@@ -934,7 +934,7 @@ impl Lua {
     /// # fn main() -> Result<()> {
     /// let lua = Lua::new();
     /// let count = Arc::new(AtomicU64::new(0));
-    /// lua.set_interrupt(move |_lua| {
+    /// lua.set_interrupt(move || {
     ///     if count.fetch_add(1, Ordering::Relaxed) % 2 == 0 {
     ///         return Ok(VmState::Yield);
     ///     }
@@ -958,19 +958,17 @@ impl Lua {
     #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
     pub fn set_interrupt<F>(&self, callback: F)
     where
-        F: 'static + MaybeSend + Fn(&Lua) -> Result<VmState>,
+        F: 'static + MaybeSend + Fn() -> Result<VmState>,
     {
         unsafe extern "C" fn interrupt_proc(state: *mut ffi::lua_State, gc: c_int) {
-            if gc != -1 {
+            if gc >= 0 {
                 // We don't support GC interrupts since they cannot survive Lua exceptions
                 return;
             }
-            // TODO: think about not using drop types here
-            let lua = match Lua::make_from_ptr(state) {
-                Some(lua) => lua,
+            let extra = match extra_data(state) {
+                Some(e) => e.get(),
                 None => return,
             };
-            let extra = lua.extra.get();
             let result = callback_error_ext(state, extra, move |_| {
                 let interrupt_cb = (*extra).interrupt_callback.clone();
                 let interrupt_cb =
@@ -978,7 +976,7 @@ impl Lua {
                 if Arc::strong_count(&interrupt_cb) > 2 {
                     return Ok(VmState::Continue); // Don't allow recursion
                 }
-                interrupt_cb(&lua)
+                interrupt_cb()
             });
             match result {
                 VmState::Continue => {}
@@ -2855,7 +2853,6 @@ pub(crate) fn init_metatable_cache(cache: &mut FxHashMap<TypeId, u8>) {
 
 // An optimized version of `callback_error` that does not allocate `WrappedFailure` userdata
 // and instead reuses unsed and cached values from previous calls (or allocates new).
-// It requires `get_extra` function to return `ExtraData` value.
 unsafe fn callback_error_ext<F, R>(state: *mut ffi::lua_State, extra: *mut ExtraData, f: F) -> R
 where
     F: FnOnce(c_int) -> Result<R>,
@@ -2867,14 +2864,6 @@ where
 
     let nargs = ffi::lua_gettop(state);
 
-    // We need 2 extra stack spaces to store preallocated memory and error/panic metatable.
-    let extra_stack = if nargs < 2 { 2 - nargs } else { 1 };
-    ffi::luaL_checkstack(
-        state,
-        extra_stack,
-        cstr!("not enough stack space for callback error handling"),
-    );
-
     enum PreallocatedFailure {
         New(*mut WrappedFailure),
         Cached(i32),
@@ -2885,6 +2874,13 @@ where
     let prealloc_failure = match extra.wrapped_failures_cache.pop() {
         Some(index) => PreallocatedFailure::Cached(index),
         None => {
+            // We need 2 extra stack spaces to store userdata and error/panic metatable.
+            let extra_stack = if nargs < 2 { 2 - nargs } else { 1 };
+            ffi::luaL_checkstack(
+                state,
+                extra_stack,
+                cstr!("not enough stack space for callback error handling"),
+            );
             let ud = WrappedFailure::new_userdata(state);
             ffi::lua_rotate(state, 1, 1);
             PreallocatedFailure::New(ud)
