@@ -299,9 +299,8 @@ impl<'lua> Thread<'lua> {
     /// # Examples
     ///
     /// ```
-    /// # #[cfg(feature = "luau")]
-    /// # fn main() -> mlua::Result<()> {
-    /// use mlua::Lua;
+    /// # use mlua::{Lua, Result};
+    /// # fn main() -> Result<()> {
     /// let lua = Lua::new();
     /// let thread = lua.create_thread(lua.create_function(|lua2, ()| {
     ///     lua2.load("var = 123").exec()?;
@@ -315,13 +314,10 @@ impl<'lua> Thread<'lua> {
     /// assert_eq!(lua.globals().get::<_, Option<u32>>("var")?, None);
     /// # Ok(())
     /// # }
-    ///
-    /// # #[cfg(not(feature = "luau"))]
-    /// fn main() {}
     /// ```
     ///
     /// Requires `feature = "luau"`
-    #[cfg(any(feature = "luau", doc))]
+    #[cfg(any(feature = "luau", docsrs))]
     #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
     #[doc(hidden)]
     pub fn sandbox(&self) -> Result<()> {

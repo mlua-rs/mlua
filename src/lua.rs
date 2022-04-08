@@ -48,7 +48,9 @@ use {
 use crate::{hook::HookTriggers, types::HookCallback};
 
 #[cfg(feature = "luau")]
-use crate::types::{InterruptCallback, VmState};
+use crate::types::InterruptCallback;
+#[cfg(any(feature = "luau", doc))]
+use crate::types::VmState;
 
 #[cfg(feature = "async")]
 use {
@@ -137,6 +139,7 @@ pub enum GCMode {
     Incremental,
     /// Requires `feature = "lua54"`
     #[cfg(any(feature = "lua54"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "lua54")))]
     Generational,
 }
 
@@ -311,6 +314,7 @@ impl Lua {
     ///
     /// [`StdLib`]: crate::StdLib
     pub fn new_with(libs: StdLib, options: LuaOptions) -> Result<Lua> {
+        #[cfg(not(feature = "luau"))]
         if libs.contains(StdLib::DEBUG) {
             return Err(Error::SafetyError(
                 "the unsafe `debug` module can't be loaded using safe `new_with`".to_string(),
@@ -583,10 +587,10 @@ impl Lua {
         // Register `DestructedUserdataMT` type
         get_destructed_userdata_metatable(main_state);
         let destructed_mt_ptr = ffi::lua_topointer(main_state, -1);
-        (*extra.get()).registered_userdata_mt.insert(
-            destructed_mt_ptr,
-            Some(TypeId::of::<DestructedUserdataMT>()),
-        );
+        let destructed_mt_typeid = Some(TypeId::of::<DestructedUserdataMT>());
+        (*extra.get())
+            .registered_userdata_mt
+            .insert(destructed_mt_ptr, destructed_mt_typeid);
         ffi::lua_pop(main_state, 1);
 
         mlua_debug_assert!(
@@ -619,6 +623,7 @@ impl Lua {
     ///
     /// [`StdLib`]: crate::StdLib
     pub fn load_from_std_lib(&self, libs: StdLib) -> Result<()> {
+        #[cfg(not(feature = "luau"))]
         if self.safe && libs.contains(StdLib::DEBUG) {
             return Err(Error::SafetyError(
                 "the unsafe `debug` module can't be loaded in safe mode".to_string(),
@@ -805,7 +810,8 @@ impl Lua {
     /// ```
     ///
     /// Requires `feature = "luau"`
-    #[cfg(feature = "luau")]
+    #[cfg(any(feature = "luau", docsrs))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
     pub fn sandbox(&self, enabled: bool) -> Result<()> {
         unsafe {
             let extra = &mut *self.extra.get();
@@ -954,7 +960,7 @@ impl Lua {
     /// # Ok(())
     /// # }
     /// ```
-    #[cfg(feature = "luau")]
+    #[cfg(any(feature = "luau", docsrs))]
     #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
     pub fn set_interrupt<F>(&self, callback: F)
     where
@@ -996,7 +1002,7 @@ impl Lua {
     /// Removes any 'interrupt' previously set by `set_interrupt`.
     ///
     /// This function has no effect if an 'interrupt' was not previously set.
-    #[cfg(feature = "luau")]
+    #[cfg(any(feature = "luau", docsrs))]
     #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
     pub fn remove_interrupt(&self) {
         let state = mlua_expect!(self.main_state, "Luau should always has main state");
@@ -1010,6 +1016,7 @@ impl Lua {
     ///
     /// Requires `feature = "lua54"`
     #[cfg(feature = "lua54")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "lua54")))]
     pub fn set_warning_function<F>(&self, callback: F)
     where
         F: 'static + MaybeSend + Fn(&Lua, &CStr, bool) -> Result<()>,
@@ -1044,6 +1051,7 @@ impl Lua {
     ///
     /// Requires `feature = "lua54"`
     #[cfg(feature = "lua54")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "lua54")))]
     pub fn remove_warning_function(&self) {
         let state = self.main_state.unwrap_or(self.state);
         unsafe {
@@ -1058,6 +1066,7 @@ impl Lua {
     ///
     /// Requires `feature = "lua54"`
     #[cfg(feature = "lua54")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "lua54")))]
     pub fn warning<S: Into<Vec<u8>>>(&self, msg: S, tocont: bool) -> Result<()> {
         let msg = CString::new(msg).map_err(|err| Error::RuntimeError(err.to_string()))?;
         unsafe { ffi::lua_warning(self.state, msg.as_ptr(), if tocont { 1 } else { 0 }) };
@@ -1188,22 +1197,27 @@ impl Lua {
     /// Sets the 'pause' value of the collector.
     ///
     /// Returns the previous value of 'pause'. More information can be found in the Lua
-    /// [documentation][lua_doc].
+    /// [documentation].
     ///
-    /// [lua_doc]: https://www.lua.org/manual/5.4/manual.html#2.5
-    #[cfg(not(feature = "luau"))]
-    #[cfg_attr(docsrs, doc(cfg(not(feature = "luau"))))]
+    /// For Luau this parameter sets GC goal
+    ///
+    /// [documentation]: https://www.lua.org/manual/5.4/manual.html#2.5
     pub fn gc_set_pause(&self, pause: c_int) -> c_int {
         let state = self.main_state.unwrap_or(self.state);
-        unsafe { ffi::lua_gc(state, ffi::LUA_GCSETPAUSE, pause) }
+        unsafe {
+            #[cfg(not(feature = "luau"))]
+            return ffi::lua_gc(state, ffi::LUA_GCSETPAUSE, pause);
+            #[cfg(feature = "luau")]
+            return ffi::lua_gc(state, ffi::LUA_GCSETGOAL, pause);
+        }
     }
 
     /// Sets the 'step multiplier' value of the collector.
     ///
     /// Returns the previous value of the 'step multiplier'. More information can be found in the
-    /// Lua [documentation][lua_doc].
+    /// Lua [documentation].
     ///
-    /// [lua_doc]: https://www.lua.org/manual/5.4/manual.html#2.5
+    /// [documentation]: https://www.lua.org/manual/5.4/manual.html#2.5
     pub fn gc_set_step_multiplier(&self, step_multiplier: c_int) -> c_int {
         let state = self.main_state.unwrap_or(self.state);
         unsafe { ffi::lua_gc(state, ffi::LUA_GCSETSTEPMUL, step_multiplier) }
@@ -1212,11 +1226,9 @@ impl Lua {
     /// Changes the collector to incremental mode with the given parameters.
     ///
     /// Returns the previous mode (always `GCMode::Incremental` in Lua < 5.4).
-    /// More information can be found in the Lua [documentation][lua_doc].
+    /// More information can be found in the Lua [documentation].
     ///
-    /// [lua_doc]: https://www.lua.org/manual/5.4/manual.html#2.5.1
-    #[cfg(not(feature = "luau"))]
-    #[cfg_attr(docsrs, doc(cfg(not(feature = "luau"))))]
+    /// [documentation]: https://www.lua.org/manual/5.4/manual.html#2.5.1
     pub fn gc_inc(&self, pause: c_int, step_multiplier: c_int, step_size: c_int) -> GCMode {
         let state = self.main_state.unwrap_or(self.state);
 
@@ -1224,16 +1236,28 @@ impl Lua {
             feature = "lua53",
             feature = "lua52",
             feature = "lua51",
-            feature = "luajit"
+            feature = "luajit",
+            feature = "luau"
         ))]
-        {
+        unsafe {
             if pause > 0 {
-                unsafe { ffi::lua_gc(state, ffi::LUA_GCSETPAUSE, pause) };
+                #[cfg(not(feature = "luau"))]
+                ffi::lua_gc(state, ffi::LUA_GCSETPAUSE, pause);
+                #[cfg(feature = "luau")]
+                ffi::lua_gc(state, ffi::LUA_GCSETGOAL, pause);
             }
+
             if step_multiplier > 0 {
-                unsafe { ffi::lua_gc(state, ffi::LUA_GCSETSTEPMUL, step_multiplier) };
+                ffi::lua_gc(state, ffi::LUA_GCSETSTEPMUL, step_multiplier);
             }
+
+            #[cfg(feature = "luau")]
+            if step_size > 0 {
+                ffi::lua_gc(state, ffi::LUA_GCSETSTEPSIZE, step_size);
+            }
+            #[cfg(not(feature = "luau"))]
             let _ = step_size; // Ignored
+
             GCMode::Incremental
         }
 
@@ -1257,6 +1281,7 @@ impl Lua {
     ///
     /// [lua_doc]: https://www.lua.org/manual/5.4/manual.html#2.5.2
     #[cfg(any(feature = "lua54"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "lua54")))]
     pub fn gc_gen(&self, minor_multiplier: c_int, major_multiplier: c_int) -> GCMode {
         let state = self.main_state.unwrap_or(self.state);
         let prev_mode =
@@ -2972,7 +2997,7 @@ unsafe fn load_from_std_lib(state: *mut ffi::lua_State, libs: StdLib) -> Result<
         openf: ffi::lua_CFunction,
         glb: c_int,
     ) -> Result<()> {
-        let modname = mlua_expect!(CString::new(modname.as_ref()), "modname contains nil bytes");
+        let modname = mlua_expect!(CString::new(modname.as_ref()), "modname contains nil byte");
         protect_lua!(state, 0, 1, |state| {
             ffi::luaL_requiref(state, modname.as_ptr() as *const c_char, openf, glb)
         })

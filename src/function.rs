@@ -213,6 +213,10 @@ impl<'lua> Function<'lua> {
     ///
     /// If `strip` is true, the binary representation may not include all debug information
     /// about the function, to save space.
+    ///
+    /// For Luau a [Compiler] can be used to compile Lua chunks to bytecode.
+    ///
+    /// [Compiler]: crate::chunk::Compiler
     #[cfg(not(feature = "luau"))]
     #[cfg_attr(docsrs, doc(cfg(not(feature = "luau"))))]
     pub fn dump(&self, strip: bool) -> Vec<u8> {

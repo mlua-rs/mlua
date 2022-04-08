@@ -351,7 +351,7 @@ impl<'lua> Table<'lua> {
     /// Sets `readonly` attribute on the table.
     ///
     /// Requires `feature = "luau"`
-    #[cfg(feature = "luau")]
+    #[cfg(any(feature = "luau", doc))]
     #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
     pub fn set_readonly(&self, enabled: bool) {
         let lua = self.0.lua;
@@ -369,7 +369,7 @@ impl<'lua> Table<'lua> {
     /// Returns `readonly` attribute of the table.
     ///
     /// Requires `feature = "luau"`
-    #[cfg(feature = "luau")]
+    #[cfg(any(feature = "luau", doc))]
     #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
     pub fn is_readonly(&self) -> bool {
         let lua = self.0.lua;
