@@ -69,7 +69,7 @@ use serde::Serialize;
 /// Top level Lua struct which holds the Lua state itself.
 pub struct Lua {
     pub(crate) state: *mut ffi::lua_State,
-    main_state: Option<*mut ffi::lua_State>,
+    main_state: *mut ffi::lua_State,
     extra: Arc<UnsafeCell<ExtraData>>,
     ephemeral: bool,
     safe: bool,
@@ -255,7 +255,7 @@ impl Drop for Lua {
                         && extra.ref_stack_top as usize == extra.ref_free.len(),
                     "reference leak detected"
                 );
-                ffi::lua_close(mlua_expect!(self.main_state, "main_state is null"));
+                ffi::lua_close(self.main_state);
             }
         }
     }
@@ -485,8 +485,7 @@ impl Lua {
     /// by calling this function again.
     #[allow(clippy::missing_safety_doc)]
     pub unsafe fn init_from_ptr(state: *mut ffi::lua_State) -> Lua {
-        let maybe_main_state = get_main_state(state);
-        let main_state = maybe_main_state.unwrap_or(state);
+        let main_state = get_main_state(state).unwrap_or(state);
         let main_state_top = ffi::lua_gettop(main_state);
 
         if let Some(lua) = Lua::make_from_ptr(state) {
@@ -576,7 +575,7 @@ impl Lua {
         mlua_expect!(
             (|state| {
                 push_gc_userdata(state, Arc::clone(&extra))?;
-                protect_lua!(main_state, 1, 0, fn(state) {
+                protect_lua!(state, 1, 0, fn(state) {
                     let extra_key = &EXTRA_REGISTRY_KEY as *const u8 as *const c_void;
                     ffi::lua_rawsetp(state, ffi::LUA_REGISTRYINDEX, extra_key);
                 })
@@ -609,7 +608,7 @@ impl Lua {
 
         Lua {
             state,
-            main_state: maybe_main_state,
+            main_state,
             extra,
             ephemeral: true,
             safe: false,
@@ -638,8 +637,7 @@ impl Lua {
             }
         }
 
-        let state = self.main_state.unwrap_or(self.state);
-        let res = unsafe { load_from_std_lib(state, libs) };
+        let res = unsafe { load_from_std_lib(self.main_state, libs) };
 
         // If `package` library loaded into a safe lua state then disable C modules
         let extra = unsafe { &mut *self.extra.get() };
@@ -816,7 +814,7 @@ impl Lua {
         unsafe {
             let extra = &mut *self.extra.get();
             if extra.sandboxed != enabled {
-                let state = self.main_state.ok_or(Error::MainThreadNotAvailable)?;
+                let state = self.main_state;
                 check_stack(state, 3)?;
                 protect_lua!(state, 0, 0, |state| {
                     if enabled {
@@ -893,8 +891,8 @@ impl Lua {
             })
         }
 
-        let state = self.main_state.ok_or(Error::MainThreadNotAvailable)?;
         unsafe {
+            let state = get_main_state(self.main_state).ok_or(Error::MainThreadNotAvailable)?;
             (*self.extra.get()).hook_callback = Some(Arc::new(callback));
             ffi::lua_sethook(state, Some(hook_proc), triggers.mask(), triggers.count());
         }
@@ -907,12 +905,12 @@ impl Lua {
     #[cfg(not(feature = "luau"))]
     #[cfg_attr(docsrs, doc(cfg(not(feature = "luau"))))]
     pub fn remove_hook(&self) {
-        // If main_state is not available, then sethook wasn't called.
-        let state = match self.main_state {
-            Some(state) => state,
-            None => return,
-        };
         unsafe {
+            // If main_state is not available, then sethook wasn't called.
+            let state = match get_main_state(self.main_state) {
+                Some(state) => state,
+                None => return,
+            };
             (*self.extra.get()).hook_callback = None;
             ffi::lua_sethook(state, None, 0, 0);
         }
@@ -992,10 +990,9 @@ impl Lua {
             }
         }
 
-        let state = mlua_expect!(self.main_state, "Luau should always has main state");
         unsafe {
             (*self.extra.get()).interrupt_callback = Some(Arc::new(callback));
-            (*ffi::lua_callbacks(state)).interrupt = Some(interrupt_proc);
+            (*ffi::lua_callbacks(self.main_state)).interrupt = Some(interrupt_proc);
         }
     }
 
@@ -1005,10 +1002,9 @@ impl Lua {
     #[cfg(any(feature = "luau", docsrs))]
     #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
     pub fn remove_interrupt(&self) {
-        let state = mlua_expect!(self.main_state, "Luau should always has main state");
         unsafe {
             (*self.extra.get()).interrupt_callback = None;
-            (*ffi::lua_callbacks(state)).interrupt = None;
+            (*ffi::lua_callbacks(self.main_state)).interrupt = None;
         }
     }
 
@@ -1038,7 +1034,7 @@ impl Lua {
             });
         }
 
-        let state = self.main_state.unwrap_or(self.state);
+        let state = self.main_state;
         unsafe {
             (*self.extra.get()).warn_callback = Some(Box::new(callback));
             ffi::lua_setwarnf(state, Some(warn_proc), state as *mut c_void);
@@ -1053,10 +1049,9 @@ impl Lua {
     #[cfg(feature = "lua54")]
     #[cfg_attr(docsrs, doc(cfg(feature = "lua54")))]
     pub fn remove_warning_function(&self) {
-        let state = self.main_state.unwrap_or(self.state);
         unsafe {
             (*self.extra.get()).warn_callback = None;
-            ffi::lua_setwarnf(state, None, ptr::null_mut());
+            ffi::lua_setwarnf(self.main_state, None, ptr::null_mut());
         }
     }
 
@@ -1099,13 +1094,12 @@ impl Lua {
     /// Returns the amount of memory (in bytes) currently used inside this Lua state.
     pub fn used_memory(&self) -> usize {
         unsafe {
-            let state = self.main_state.unwrap_or(self.state);
             match (*self.extra.get()).mem_info.map(|x| x.as_ref()) {
                 Some(mem_info) => mem_info.used_memory as usize,
                 None => {
                     // Get data from the Lua GC
-                    let used_kbytes = ffi::lua_gc(state, ffi::LUA_GCCOUNT, 0);
-                    let used_kbytes_rem = ffi::lua_gc(state, ffi::LUA_GCCOUNTB, 0);
+                    let used_kbytes = ffi::lua_gc(self.main_state, ffi::LUA_GCCOUNT, 0);
+                    let used_kbytes_rem = ffi::lua_gc(self.main_state, ffi::LUA_GCCOUNTB, 0);
                     (used_kbytes as usize) * 1024 + (used_kbytes_rem as usize)
                 }
             }
@@ -1145,20 +1139,17 @@ impl Lua {
         feature = "luau"
     ))]
     pub fn gc_is_running(&self) -> bool {
-        let state = self.main_state.unwrap_or(self.state);
-        unsafe { ffi::lua_gc(state, ffi::LUA_GCISRUNNING, 0) != 0 }
+        unsafe { ffi::lua_gc(self.main_state, ffi::LUA_GCISRUNNING, 0) != 0 }
     }
 
     /// Stop the Lua GC from running
     pub fn gc_stop(&self) {
-        let state = self.main_state.unwrap_or(self.state);
-        unsafe { ffi::lua_gc(state, ffi::LUA_GCSTOP, 0) };
+        unsafe { ffi::lua_gc(self.main_state, ffi::LUA_GCSTOP, 0) };
     }
 
     /// Restarts the Lua GC if it is not running
     pub fn gc_restart(&self) {
-        let state = self.main_state.unwrap_or(self.state);
-        unsafe { ffi::lua_gc(state, ffi::LUA_GCRESTART, 0) };
+        unsafe { ffi::lua_gc(self.main_state, ffi::LUA_GCRESTART, 0) };
     }
 
     /// Perform a full garbage-collection cycle.
@@ -1166,10 +1157,9 @@ impl Lua {
     /// It may be necessary to call this function twice to collect all currently unreachable
     /// objects. Once to finish the current gc cycle, and once to start and finish the next cycle.
     pub fn gc_collect(&self) -> Result<()> {
-        let state = self.main_state.unwrap_or(self.state);
         unsafe {
-            check_stack(state, 3)?;
-            protect_lua!(state, 0, 0, fn(state) ffi::lua_gc(state, ffi::LUA_GCCOLLECT, 0))
+            check_stack(self.main_state, 2)?;
+            protect_lua!(self.main_state, 0, 0, fn(state) ffi::lua_gc(state, ffi::LUA_GCCOLLECT, 0))
         }
     }
 
@@ -1185,10 +1175,9 @@ impl Lua {
     /// if `kbytes` is 0, then this is the same as calling `gc_step`. Returns true if this step has
     /// finished a collection cycle.
     pub fn gc_step_kbytes(&self, kbytes: c_int) -> Result<bool> {
-        let state = self.main_state.unwrap_or(self.state);
         unsafe {
-            check_stack(state, 3)?;
-            protect_lua!(state, 0, 0, |state| {
+            check_stack(self.main_state, 3)?;
+            protect_lua!(self.main_state, 0, 0, |state| {
                 ffi::lua_gc(state, ffi::LUA_GCSTEP, kbytes) != 0
             })
         }
@@ -1203,12 +1192,11 @@ impl Lua {
     ///
     /// [documentation]: https://www.lua.org/manual/5.4/manual.html#2.5
     pub fn gc_set_pause(&self, pause: c_int) -> c_int {
-        let state = self.main_state.unwrap_or(self.state);
         unsafe {
             #[cfg(not(feature = "luau"))]
-            return ffi::lua_gc(state, ffi::LUA_GCSETPAUSE, pause);
+            return ffi::lua_gc(self.main_state, ffi::LUA_GCSETPAUSE, pause);
             #[cfg(feature = "luau")]
-            return ffi::lua_gc(state, ffi::LUA_GCSETGOAL, pause);
+            return ffi::lua_gc(self.main_state, ffi::LUA_GCSETGOAL, pause);
         }
     }
 
@@ -1219,8 +1207,7 @@ impl Lua {
     ///
     /// [documentation]: https://www.lua.org/manual/5.4/manual.html#2.5
     pub fn gc_set_step_multiplier(&self, step_multiplier: c_int) -> c_int {
-        let state = self.main_state.unwrap_or(self.state);
-        unsafe { ffi::lua_gc(state, ffi::LUA_GCSETSTEPMUL, step_multiplier) }
+        unsafe { ffi::lua_gc(self.main_state, ffi::LUA_GCSETSTEPMUL, step_multiplier) }
     }
 
     /// Changes the collector to incremental mode with the given parameters.
@@ -1230,7 +1217,7 @@ impl Lua {
     ///
     /// [documentation]: https://www.lua.org/manual/5.4/manual.html#2.5.1
     pub fn gc_inc(&self, pause: c_int, step_multiplier: c_int, step_size: c_int) -> GCMode {
-        let state = self.main_state.unwrap_or(self.state);
+        let state = self.main_state;
 
         #[cfg(any(
             feature = "lua53",
@@ -1283,7 +1270,7 @@ impl Lua {
     #[cfg(any(feature = "lua54"))]
     #[cfg_attr(docsrs, doc(cfg(feature = "lua54")))]
     pub fn gc_gen(&self, minor_multiplier: c_int, major_multiplier: c_int) -> GCMode {
-        let state = self.main_state.unwrap_or(self.state);
+        let state = self.main_state;
         let prev_mode =
             unsafe { ffi::lua_gc(state, ffi::LUA_GCGEN, minor_multiplier, major_multiplier) };
         match prev_mode {
@@ -2812,7 +2799,7 @@ impl Lua {
         let safe = (*extra.get()).safe;
         Some(Lua {
             state,
-            main_state: get_main_state(state),
+            main_state: get_main_state(state).unwrap_or(state),
             extra,
             ephemeral: true,
             safe,
