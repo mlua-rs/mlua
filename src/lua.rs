@@ -2542,7 +2542,8 @@ impl Lua {
                     args.push_front(lua.pop_value());
                 }
 
-                let mut results = ((*upvalue).func)(&lua, args)?;
+                let func = &*(*upvalue).data;
+                let mut results = func(&lua, args)?;
                 let nresults = results.len() as c_int;
 
                 check_stack(state, nresults)?;
@@ -2561,7 +2562,7 @@ impl Lua {
 
             let func = mem::transmute(func);
             let extra = Arc::clone(&self.extra);
-            push_gc_userdata(self.state, CallbackUpvalue { extra, func })?;
+            push_gc_userdata(self.state, CallbackUpvalue { data: func, extra })?;
             protect_lua!(self.state, 1, 1, fn(state) {
                 ffi::lua_pushcclosure(state, call_callback, 1);
             })?;
@@ -2617,9 +2618,10 @@ impl Lua {
                     args.push_front(lua.pop_value());
                 }
 
-                let fut = ((*upvalue).func)(lua, args);
+                let func = &*(*upvalue).data;
+                let fut = func(lua, args);
                 let extra = Arc::clone(&(*upvalue).extra);
-                push_gc_userdata(state, AsyncPollUpvalue { extra, fut })?;
+                push_gc_userdata(state, AsyncPollUpvalue { data: fut, extra })?;
                 protect_lua!(state, 1, 1, fn(state) {
                     ffi::lua_pushcclosure(state, poll_future, 1);
                 })?;
@@ -2654,7 +2656,7 @@ impl Lua {
                 let waker = lua.waker().unwrap_or_else(noop_waker);
                 let mut ctx = Context::from_waker(&waker);
 
-                let fut = &mut (*upvalue).fut;
+                let fut = &mut (*upvalue).data;
                 match fut.as_mut().poll(&mut ctx) {
                     Poll::Pending => {
                         check_stack(state, 1)?;
@@ -2681,7 +2683,7 @@ impl Lua {
 
             let func = mem::transmute(func);
             let extra = Arc::clone(&self.extra);
-            push_gc_userdata(self.state, AsyncCallbackUpvalue { extra, func })?;
+            push_gc_userdata(self.state, AsyncCallbackUpvalue { data: func, extra })?;
             protect_lua!(self.state, 1, 1, fn(state) {
                 ffi::lua_pushcclosure(state, call_callback, 1);
             })?;

@@ -30,26 +30,22 @@ pub struct LightUserData(pub *mut c_void);
 pub(crate) type Callback<'lua, 'a> =
     Box<dyn Fn(&'lua Lua, MultiValue<'lua>) -> Result<MultiValue<'lua>> + 'a>;
 
-pub(crate) struct CallbackUpvalue<'lua> {
+pub(crate) struct Upvalue<T> {
+    pub(crate) data: T,
     pub(crate) extra: Arc<UnsafeCell<ExtraData>>,
-    pub(crate) func: Callback<'lua, 'static>,
 }
+
+pub(crate) type CallbackUpvalue = Upvalue<Callback<'static, 'static>>;
 
 #[cfg(feature = "async")]
 pub(crate) type AsyncCallback<'lua, 'a> =
     Box<dyn Fn(&'lua Lua, MultiValue<'lua>) -> LocalBoxFuture<'lua, Result<MultiValue<'lua>>> + 'a>;
 
 #[cfg(feature = "async")]
-pub(crate) struct AsyncCallbackUpvalue<'lua> {
-    pub(crate) extra: Arc<UnsafeCell<ExtraData>>,
-    pub(crate) func: AsyncCallback<'lua, 'static>,
-}
+pub(crate) type AsyncCallbackUpvalue = Upvalue<AsyncCallback<'static, 'static>>;
 
 #[cfg(feature = "async")]
-pub(crate) struct AsyncPollUpvalue<'lua> {
-    pub(crate) extra: Arc<UnsafeCell<ExtraData>>,
-    pub(crate) fut: LocalBoxFuture<'lua, Result<MultiValue<'lua>>>,
-}
+pub(crate) type AsyncPollUpvalue = Upvalue<LocalBoxFuture<'static, Result<MultiValue<'static>>>>;
 
 /// Type to set next Luau VM action after executing interrupt function.
 #[cfg(any(feature = "luau", doc))]
