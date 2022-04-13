@@ -29,26 +29,42 @@ impl Lua {
 unsafe extern "C" fn lua_collectgarbage(state: *mut ffi::lua_State) -> c_int {
     let option = ffi::luaL_optstring(state, 1, cstr!("collect"));
     let option = CStr::from_ptr(option);
+    let arg = ffi::luaL_optinteger(state, 2, 0);
     match option.to_str() {
         Ok("collect") => {
             ffi::lua_gc(state, ffi::LUA_GCCOLLECT, 0);
             0
         }
+        Ok("stop") => {
+            ffi::lua_gc(state, ffi::LUA_GCSTOP, 0);
+            0
+        }
+        Ok("restart") => {
+            ffi::lua_gc(state, ffi::LUA_GCRESTART, 0);
+            0
+        }
         Ok("count") => {
-            let n = ffi::lua_gc(state, ffi::LUA_GCCOUNT, 0);
-            ffi::lua_pushnumber(state, n as ffi::lua_Number);
+            let kbytes = ffi::lua_gc(state, ffi::LUA_GCCOUNT, 0) as ffi::lua_Number;
+            let kbytes_rem = ffi::lua_gc(state, ffi::LUA_GCCOUNTB, 0) as ffi::lua_Number;
+            ffi::lua_pushnumber(state, kbytes + kbytes_rem / 1024.0);
             1
         }
-        // TODO: More variants
-        _ => ffi::luaL_error(
-            state,
-            cstr!("collectgarbage must be called with 'count' or 'collect'"),
-        ),
+        Ok("step") => {
+            let res = ffi::lua_gc(state, ffi::LUA_GCSTEP, arg);
+            ffi::lua_pushboolean(state, res);
+            1
+        }
+        Ok("isrunning") => {
+            let res = ffi::lua_gc(state, ffi::LUA_GCISRUNNING, 0);
+            ffi::lua_pushboolean(state, res);
+            1
+        }
+        _ => ffi::luaL_error(state, cstr!("collectgarbage called with invalid option")),
     }
 }
 
 fn lua_require(lua: &Lua, name: Option<std::string::String>) -> Result<Value> {
-    let name = name.ok_or_else(|| Error::RuntimeError("name is nil".into()))?;
+    let name = name.ok_or_else(|| Error::RuntimeError("invalid module name".into()))?;
 
     // Find module in the cache
     let loaded = unsafe {
