@@ -19,7 +19,7 @@ error[E0373]: closure may outlive the current function, but it borrows `inner`, 
   --> tests/compile/scope_callback_inner.rs:8:34
    |
 5  |     lua.scope(|scope| {
-   |                ----- has type `&Scope<'_, '2>`
+   |                ----- has type `&mlua::Scope<'_, '2>`
 ...
 8  |             .create_function_mut(|_, t: Table| {
    |                                  ^^^^^^^^^^^^^ may outlive borrowed value `inner`
