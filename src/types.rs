@@ -1,3 +1,4 @@
+use std::cell::UnsafeCell;
 use std::hash::{Hash, Hasher};
 use std::os::raw::{c_int, c_void};
 use std::sync::{Arc, Mutex};
@@ -13,7 +14,7 @@ use crate::error::Result;
 use crate::ffi;
 #[cfg(not(feature = "luau"))]
 use crate::hook::Debug;
-use crate::lua::Lua;
+use crate::lua::{ExtraData, Lua};
 use crate::util::{assert_stack, StackGuard};
 use crate::value::MultiValue;
 
@@ -30,7 +31,7 @@ pub(crate) type Callback<'lua, 'a> =
     Box<dyn Fn(&'lua Lua, MultiValue<'lua>) -> Result<MultiValue<'lua>> + 'a>;
 
 pub(crate) struct CallbackUpvalue<'lua> {
-    pub(crate) lua: Lua,
+    pub(crate) extra: Arc<UnsafeCell<ExtraData>>,
     pub(crate) func: Callback<'lua, 'static>,
 }
 
@@ -40,13 +41,13 @@ pub(crate) type AsyncCallback<'lua, 'a> =
 
 #[cfg(feature = "async")]
 pub(crate) struct AsyncCallbackUpvalue<'lua> {
-    pub(crate) lua: Lua,
+    pub(crate) extra: Arc<UnsafeCell<ExtraData>>,
     pub(crate) func: AsyncCallback<'lua, 'static>,
 }
 
 #[cfg(feature = "async")]
 pub(crate) struct AsyncPollUpvalue<'lua> {
-    pub(crate) lua: Lua,
+    pub(crate) extra: Arc<UnsafeCell<ExtraData>>,
     pub(crate) fut: LocalBoxFuture<'lua, Result<MultiValue<'lua>>>,
 }
 
