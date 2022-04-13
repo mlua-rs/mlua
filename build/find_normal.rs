@@ -79,7 +79,7 @@ pub fn probe_lua() -> Option<PathBuf> {
     #[cfg(feature = "luajit")]
     {
         let lua = pkg_config::Config::new()
-            .range_version((Bound::Included("2.0.5"), Bound::Unbounded))
+            .range_version((Bound::Included("2.0.4"), Bound::Unbounded))
             .cargo_metadata(need_lua_lib)
             .probe("luajit");
 
