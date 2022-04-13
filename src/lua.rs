@@ -753,6 +753,32 @@ impl Lua {
         Ok(())
     }
 
+    /// Consumes and leaks `Lua` object, returning a static reference `&'static Lua`.
+    ///
+    /// This function is useful when the `Lua` object is supposed to live for the remainder
+    /// of the program's life.
+    /// In particular in asynchronous context this will allow to spawn Lua tasks to execute
+    /// in background.
+    ///
+    /// Dropping the returned reference will cause a memory leak. If this is not acceptable,
+    /// the reference should first be wrapped with the [`Lua::from_static`] function producing a `Lua`.
+    /// This `Lua` object can then be dropped which will properly release the allocated memory.
+    ///
+    /// [`Lua::from_static`]: #method.from_static
+    #[doc(hidden)]
+    pub fn into_static(self) -> &'static Self {
+        Box::leak(Box::new(self))
+    }
+
+    /// Constructs a `Lua` from a static reference to it.
+    ///
+    /// # Safety
+    /// This function is unsafe because improper use may lead to memory problems or undefined behavior.
+    #[doc(hidden)]
+    pub unsafe fn from_static(lua: &'static Lua) -> Self {
+        *Box::from_raw(lua as *const Lua as *mut Lua)
+    }
+
     // Executes module entrypoint function, which returns only one Value.
     // The returned value then pushed onto the stack.
     #[doc(hidden)]
