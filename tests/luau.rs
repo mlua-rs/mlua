@@ -5,7 +5,7 @@ use std::fs;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
-use mlua::{Error, Lua, Result, Table, ThreadStatus, Value, VmState};
+use mlua::{Compiler, Error, Lua, Result, Table, ThreadStatus, Value, VmState};
 
 #[test]
 fn test_require() -> Result<()> {
@@ -59,7 +59,7 @@ fn test_vectors() -> Result<()> {
         assert(v.z == 3)
     "#,
     )
-    .set_vector_ctor(Some("vector".to_string()))
+    .set_compiler(Compiler::new().set_vector_ctor(Some("vector".to_string())))
     .exec()?;
 
     Ok(())

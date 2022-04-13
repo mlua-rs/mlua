@@ -52,7 +52,7 @@ use crate::{hook::HookTriggers, types::HookCallback};
 #[cfg(feature = "luau")]
 use crate::types::InterruptCallback;
 #[cfg(any(feature = "luau", doc))]
-use crate::types::VmState;
+use crate::{chunk::Compiler, types::VmState};
 
 #[cfg(feature = "async")]
 use {
@@ -78,6 +78,8 @@ pub struct LuaInner {
     main_state: *mut ffi::lua_State,
     extra: Arc<UnsafeCell<ExtraData>>,
     safe: bool,
+    #[cfg(feature = "luau")]
+    compiler: Option<Compiler>,
     // Lua has lots of interior mutability, should not be RefUnwindSafe
     _no_ref_unwind_safe: PhantomData<UnsafeCell<()>>,
 }
@@ -633,6 +635,8 @@ impl Lua {
             main_state,
             extra: Arc::clone(&extra),
             safe: false,
+            #[cfg(feature = "luau")]
+            compiler: None,
             _no_ref_unwind_safe: PhantomData,
         }));
 
@@ -1333,6 +1337,20 @@ impl Lua {
         }
     }
 
+    /// Sets a default Luau compiler (with custom options).
+    ///
+    /// This compiler will be used by default to load all Lua chunks
+    /// including via `require` function.
+    ///
+    /// See [`Compiler`] for details and possible options.
+    ///
+    /// Requires `feature = "luau"`
+    #[cfg(any(feature = "luau", doc))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
+    pub fn set_compiler(&self, compiler: Compiler) {
+        unsafe { (*self.0.get()).compiler = Some(compiler) };
+    }
+
     /// Returns Lua source code as a `Chunk` builder type.
     ///
     /// In order to actually compile or run the resulting code, you must call [`Chunk::exec`] or
@@ -1355,7 +1373,7 @@ impl Lua {
             env: source.env(self),
             mode: source.mode(),
             #[cfg(feature = "luau")]
-            compiler: None,
+            compiler: self.compiler.clone(),
         }
     }
 

@@ -104,7 +104,7 @@ impl Compiler {
     /// * 0 - no optimization
     /// * 1 - baseline optimization level that doesn't prevent debuggability (default)
     /// * 2 - includes optimizations that harm debuggability such as inlining
-    pub fn set_optimization_level(&mut self, level: u8) -> &mut Self {
+    pub fn set_optimization_level(mut self, level: u8) -> Self {
         self.optimization_level = level;
         self
     }
@@ -115,7 +115,7 @@ impl Compiler {
     /// * 0 - no debugging support
     /// * 1 - line info & function names only; sufficient for backtraces (default)
     /// * 2 - full debug info with local & upvalue names; necessary for debugger
-    pub fn set_debug_level(&mut self, level: u8) -> &mut Self {
+    pub fn set_debug_level(mut self, level: u8) -> Self {
         self.debug_level = level;
         self
     }
@@ -126,19 +126,19 @@ impl Compiler {
     /// * 0 - no code coverage support (default)
     /// * 1 - statement coverage
     /// * 2 - statement and expression coverage (verbose)
-    pub fn set_coverage_level(&mut self, level: u8) -> &mut Self {
+    pub fn set_coverage_level(mut self, level: u8) -> Self {
         self.coverage_level = level;
         self
     }
 
     #[doc(hidden)]
-    pub fn set_vector_lib(&mut self, lib: Option<String>) -> &mut Self {
+    pub fn set_vector_lib(mut self, lib: Option<String>) -> Self {
         self.vector_lib = lib;
         self
     }
 
     #[doc(hidden)]
-    pub fn set_vector_ctor(&mut self, ctor: Option<String>) -> &mut Self {
+    pub fn set_vector_ctor(mut self, ctor: Option<String>) -> Self {
         self.vector_ctor = ctor;
         self
     }
@@ -146,7 +146,7 @@ impl Compiler {
     /// Sets a list of globals that are mutable.
     ///
     /// It disables the import optimization for fields accessed through these.
-    pub fn set_mutable_globals(&mut self, globals: Vec<String>) -> &mut Self {
+    pub fn set_mutable_globals(mut self, globals: Vec<String>) -> Self {
         self.mutable_globals = globals;
         self
     }
@@ -232,79 +232,15 @@ impl<'lua, 'a> Chunk<'lua, 'a> {
         self
     }
 
-    /// Sets Luau compiler optimization level.
+    /// Sets or overwrites a Luau compiler used for this chunk.
     ///
-    /// See [`Compiler::set_optimization_level`] for details.
-    ///
-    /// Requires `feature = "luau"`
-    #[cfg(any(feature = "luau", doc))]
-    #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
-    pub fn set_optimization_level(mut self, level: u8) -> Self {
-        self.compiler
-            .get_or_insert_with(Default::default)
-            .set_optimization_level(level);
-        self
-    }
-
-    /// Sets Luau compiler debug level.
-    ///
-    /// See [`Compiler::set_debug_level`] for details.
-    ///
-    /// Requires `feature = "luau`
-    #[cfg(any(feature = "luau", doc))]
-    #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
-    pub fn set_debug_level(mut self, level: u8) -> Self {
-        self.compiler
-            .get_or_insert_with(Default::default)
-            .set_debug_level(level);
-        self
-    }
-
-    /// Sets Luau compiler code coverage level.
-    ///
-    /// See [`Compiler::set_coverage_level`] for details.
+    /// See [`Compiler`] for details and possible options.
     ///
     /// Requires `feature = "luau"`
     #[cfg(any(feature = "luau", doc))]
     #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
-    pub fn set_coverage_level(mut self, level: u8) -> Self {
-        self.compiler
-            .get_or_insert_with(Default::default)
-            .set_coverage_level(level);
-        self
-    }
-
-    #[cfg(any(feature = "luau", doc))]
-    #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
-    #[doc(hidden)]
-    pub fn set_vector_lib(mut self, lib: Option<String>) -> Self {
-        self.compiler
-            .get_or_insert_with(Default::default)
-            .set_vector_lib(lib);
-        self
-    }
-
-    #[cfg(any(feature = "luau", doc))]
-    #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
-    #[doc(hidden)]
-    pub fn set_vector_ctor(mut self, ctor: Option<String>) -> Self {
-        self.compiler
-            .get_or_insert_with(Default::default)
-            .set_vector_ctor(ctor);
-        self
-    }
-
-    /// Sets a list of globals that are mutable for Luau compiler.
-    ///
-    /// See [`Compiler::set_mutable_globals`] for details.
-    ///
-    /// Requires `feature = "luau"`
-    #[cfg(any(feature = "luau", doc))]
-    #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
-    pub fn set_mutable_globals(mut self, globals: Vec<String>) -> Self {
-        self.compiler
-            .get_or_insert_with(Default::default)
-            .set_mutable_globals(globals);
+    pub fn set_compiler(mut self, compiler: Compiler) -> Self {
+        self.compiler = Some(compiler);
         self
     }
 
