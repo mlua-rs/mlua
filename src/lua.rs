@@ -1,8 +1,7 @@
 use std::any::{Any, TypeId};
-use std::borrow::Cow;
 use std::cell::{Ref, RefCell, RefMut, UnsafeCell};
 use std::collections::HashMap;
-use std::ffi::CString;
+use std::ffi::{CStr, CString};
 use std::fmt;
 use std::marker::PhantomData;
 use std::mem::ManuallyDrop;
@@ -41,10 +40,7 @@ use crate::value::{FromLua, FromLuaMulti, MultiValue, Nil, ToLua, ToLuaMulti, Va
 #[cfg(not(feature = "lua54"))]
 use crate::util::push_userdata;
 #[cfg(feature = "lua54")]
-use {
-    crate::{types::WarnCallback, userdata::USER_VALUE_MAXSLOT, util::push_userdata_uv},
-    std::ffi::CStr,
-};
+use crate::{types::WarnCallback, userdata::USER_VALUE_MAXSLOT, util::push_userdata_uv};
 
 #[cfg(not(feature = "luau"))]
 use crate::{hook::HookTriggers, types::HookCallback};
@@ -1359,19 +1355,20 @@ impl Lua {
     ///
     /// [`Chunk::exec`]: crate::Chunk::exec
     #[track_caller]
-    pub fn load<'lua, 'a, S>(&'lua self, source: &'a S) -> Chunk<'lua, 'a>
+    pub fn load<'lua, 'a, S>(&'lua self, chunk: &'a S) -> Chunk<'lua, 'a>
     where
         S: AsChunk<'lua> + ?Sized,
     {
+        let name = chunk
+            .name()
+            .unwrap_or_else(|| Location::caller().to_string());
+
         Chunk {
             lua: self,
-            source: Cow::Borrowed(source.source()),
-            name: match source.name() {
-                Some(name) => Some(name),
-                None => CString::new(Location::caller().to_string()).ok(),
-            },
-            env: source.env(self),
-            mode: source.mode(),
+            source: chunk.source(),
+            name: Some(name),
+            env: chunk.env(self),
+            mode: chunk.mode(),
             #[cfg(feature = "luau")]
             compiler: self.compiler.clone(),
         }
@@ -1380,7 +1377,7 @@ impl Lua {
     pub(crate) fn load_chunk<'lua>(
         &'lua self,
         source: &[u8],
-        name: Option<&CString>,
+        name: Option<&CStr>,
         env: Option<Value<'lua>>,
         mode: Option<ChunkMode>,
     ) -> Result<Function<'lua>> {

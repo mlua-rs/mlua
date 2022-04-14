@@ -1,5 +1,8 @@
 use std::borrow::Cow;
 use std::ffi::CString;
+use std::io::Result as IoResult;
+use std::path::{Path, PathBuf};
+use std::string::String as StdString;
 
 use crate::error::{Error, Result};
 use crate::ffi;
@@ -16,10 +19,10 @@ use {futures_core::future::LocalBoxFuture, futures_util::future};
 /// [`Chunk`]: crate::Chunk
 pub trait AsChunk<'lua> {
     /// Returns chunk data (can be text or binary)
-    fn source(&self) -> &[u8];
+    fn source(&self) -> IoResult<Cow<[u8]>>;
 
     /// Returns optional chunk name
-    fn name(&self) -> Option<CString> {
+    fn name(&self) -> Option<StdString> {
         None
     }
 
@@ -36,9 +39,47 @@ pub trait AsChunk<'lua> {
     }
 }
 
-impl<'lua, T: AsRef<[u8]> + ?Sized> AsChunk<'lua> for T {
-    fn source(&self) -> &[u8] {
-        self.as_ref()
+impl<'lua> AsChunk<'lua> for str {
+    fn source(&self) -> IoResult<Cow<[u8]>> {
+        Ok(Cow::Borrowed(self.as_ref()))
+    }
+}
+
+impl<'lua> AsChunk<'lua> for StdString {
+    fn source(&self) -> IoResult<Cow<[u8]>> {
+        Ok(Cow::Borrowed(self.as_ref()))
+    }
+}
+
+impl<'lua> AsChunk<'lua> for [u8] {
+    fn source(&self) -> IoResult<Cow<[u8]>> {
+        Ok(Cow::Borrowed(self))
+    }
+}
+
+impl<'lua> AsChunk<'lua> for Vec<u8> {
+    fn source(&self) -> IoResult<Cow<[u8]>> {
+        Ok(Cow::Borrowed(self))
+    }
+}
+
+impl<'lua> AsChunk<'lua> for Path {
+    fn source(&self) -> IoResult<Cow<[u8]>> {
+        std::fs::read(self).map(Cow::Owned)
+    }
+
+    fn name(&self) -> Option<StdString> {
+        Some(format!("@{}", self.display()))
+    }
+}
+
+impl<'lua> AsChunk<'lua> for PathBuf {
+    fn source(&self) -> IoResult<Cow<[u8]>> {
+        std::fs::read(self).map(Cow::Owned)
+    }
+
+    fn name(&self) -> Option<StdString> {
+        Some(format!("@{}", self.display()))
     }
 }
 
@@ -48,8 +89,8 @@ impl<'lua, T: AsRef<[u8]> + ?Sized> AsChunk<'lua> for T {
 #[must_use = "`Chunk`s do nothing unless one of `exec`, `eval`, `call`, or `into_function` are called on them"]
 pub struct Chunk<'lua, 'a> {
     pub(crate) lua: &'lua Lua,
-    pub(crate) source: Cow<'a, [u8]>,
-    pub(crate) name: Option<CString>,
+    pub(crate) source: IoResult<Cow<'a, [u8]>>,
+    pub(crate) name: Option<StdString>,
     pub(crate) env: Result<Option<Value<'lua>>>,
     pub(crate) mode: Option<ChunkMode>,
     #[cfg(feature = "luau")]
@@ -174,7 +215,7 @@ impl Compiler {
             .map(|s| s.as_ptr())
             .collect::<Vec<_>>();
         let mut mutable_globals_ptr = ptr::null_mut();
-        if mutable_globals.len() > 0 {
+        if !mutable_globals.is_empty() {
             mutable_globals.push(ptr::null());
             mutable_globals_ptr = mutable_globals.as_mut_ptr();
         }
@@ -195,14 +236,10 @@ impl Compiler {
 
 impl<'lua, 'a> Chunk<'lua, 'a> {
     /// Sets the name of this chunk, which results in more informative error traces.
-    pub fn set_name<S: AsRef<[u8]> + ?Sized>(mut self, name: &S) -> Result<Self> {
-        let name =
-            CString::new(name.as_ref().to_vec()).map_err(|e| Error::ToLuaConversionError {
-                from: "&str",
-                to: "string",
-                message: Some(e.to_string()),
-            })?;
-        self.name = Some(name);
+    pub fn set_name(mut self, name: impl AsRef<str>) -> Result<Self> {
+        self.name = Some(name.as_ref().to_string());
+        // Do extra validation
+        let _ = self.convert_name()?;
         Ok(self)
     }
 
@@ -241,23 +278,6 @@ impl<'lua, 'a> Chunk<'lua, 'a> {
     #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
     pub fn set_compiler(mut self, compiler: Compiler) -> Self {
         self.compiler = Some(compiler);
-        self
-    }
-
-    /// Compiles the chunk and changes mode to binary.
-    ///
-    /// It does nothing if the chunk is already binary.
-    #[cfg(feature = "luau")]
-    #[doc(hidden)]
-    pub fn compile(mut self) -> Self {
-        if self.detect_mode() == ChunkMode::Text {
-            let data = self
-                .compiler
-                .get_or_insert_with(Default::default)
-                .compile(self.source.as_ref());
-            self.mode = Some(ChunkMode::Binary);
-            self.source = Cow::Owned(data);
-        }
         self
     }
 
@@ -358,38 +378,41 @@ impl<'lua, 'a> Chunk<'lua, 'a> {
     /// Load this chunk into a regular `Function`.
     ///
     /// This simply compiles the chunk without actually executing it.
-    pub fn into_function(self) -> Result<Function<'lua>> {
-        #[cfg(not(feature = "luau"))]
-        let self_ = self;
+    #[cfg_attr(not(feature = "luau"), allow(unused_mut))]
+    pub fn into_function(mut self) -> Result<Function<'lua>> {
         #[cfg(feature = "luau")]
-        let self_ = match self.compiler {
-            // We don't need to compile source if no compiler options set
-            Some(_) => self.compile(),
-            _ => self,
-        };
+        if self.compiler.is_some() {
+            // We don't need to compile source if no compiler set
+            self.compile();
+        }
 
-        self_.lua.load_chunk(
-            self_.source.as_ref(),
-            self_.name.as_ref(),
-            self_.env()?,
-            self_.mode,
-        )
+        let name = self.convert_name()?;
+        self.lua
+            .load_chunk(self.source?.as_ref(), name.as_deref(), self.env?, self.mode)
     }
 
-    fn env(&self) -> Result<Option<Value<'lua>>> {
-        self.env.clone()
-    }
-
-    fn expression_source(&self) -> Vec<u8> {
-        let mut buf = Vec::with_capacity(b"return ".len() + self.source.len());
-        buf.extend(b"return ");
-        buf.extend(self.source.as_ref());
-        buf
+    /// Compiles the chunk and changes mode to binary.
+    ///
+    /// It does nothing if the chunk is already binary.
+    #[cfg(feature = "luau")]
+    fn compile(&mut self) {
+        if let Ok(ref source) = self.source {
+            if self.detect_mode() == ChunkMode::Text {
+                let data = self
+                    .compiler
+                    .get_or_insert_with(Default::default)
+                    .compile(source);
+                self.mode = Some(ChunkMode::Binary);
+                self.source = Ok(Cow::Owned(data));
+            }
+        }
     }
 
     fn to_expression(&self) -> Result<Function<'lua>> {
         // We assume that mode is Text
-        let source = self.expression_source();
+        let source = self.source.as_ref();
+        let source = source.map_err(|err| Error::RuntimeError(err.to_string()))?;
+        let source = Self::expression_source(source);
         // We don't need to compile source if no compiler options set
         #[cfg(feature = "luau")]
         let source = self
@@ -398,24 +421,42 @@ impl<'lua, 'a> Chunk<'lua, 'a> {
             .map(|c| c.compile(&source))
             .unwrap_or(source);
 
+        let name = self.convert_name()?;
         self.lua
-            .load_chunk(&source, self.name.as_ref(), self.env()?, None)
+            .load_chunk(&source, name.as_deref(), self.env.clone()?, None)
     }
 
     fn detect_mode(&self) -> ChunkMode {
-        match self.mode {
-            Some(mode) => mode,
-            None => {
+        match (self.mode, &self.source) {
+            (Some(mode), _) => mode,
+            (None, Ok(source)) if source.len() == 0 => ChunkMode::Text,
+            (None, Ok(source)) => {
                 #[cfg(not(feature = "luau"))]
-                if self.source.starts_with(ffi::LUA_SIGNATURE) {
+                if source.starts_with(ffi::LUA_SIGNATURE) {
                     return ChunkMode::Binary;
                 }
                 #[cfg(feature = "luau")]
-                if self.source[0] < b'\n' {
+                if source[0] < b'\n' {
                     return ChunkMode::Binary;
                 }
                 ChunkMode::Text
             }
+            (None, Err(_)) => ChunkMode::Text, // any value is fine
         }
+    }
+
+    fn convert_name(&self) -> Result<Option<CString>> {
+        self.name
+            .clone()
+            .map(CString::new)
+            .transpose()
+            .map_err(|err| Error::RuntimeError(format!("invalid name: {err}")))
+    }
+
+    fn expression_source(source: &[u8]) -> Vec<u8> {
+        let mut buf = Vec::with_capacity(b"return ".len() + source.len());
+        buf.extend(b"return ");
+        buf.extend(source);
+        buf
     }
 }
