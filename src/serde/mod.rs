@@ -158,6 +158,7 @@ pub trait LuaSerdeExt<'lua> {
     ///     Ok(())
     /// }
     /// ```
+    #[allow(clippy::wrong_self_convention)]
     fn from_value<T: Deserialize<'lua>>(&'lua self, value: Value<'lua>) -> Result<T>;
 
     /// Deserializes a [`Value`] into any serde deserializable object with options.
@@ -189,6 +190,7 @@ pub trait LuaSerdeExt<'lua> {
     ///     Ok(())
     /// }
     /// ```
+    #[allow(clippy::wrong_self_convention)]
     fn from_value_with<T: Deserialize<'lua>>(
         &'lua self,
         value: Value<'lua>,

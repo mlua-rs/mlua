@@ -435,7 +435,7 @@ where
 fn is_poll_pending(val: &MultiValue) -> bool {
     match val.iter().enumerate().last() {
         Some((0, Value::LightUserData(ud))) => {
-            ud.0 as *const u8 == &ASYNC_POLL_PENDING as *const u8
+            std::ptr::eq(ud.0 as *const u8, &ASYNC_POLL_PENDING as *const u8)
         }
         _ => false,
     }

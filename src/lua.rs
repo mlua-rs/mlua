@@ -2558,7 +2558,7 @@ impl Lua {
                 }
 
                 let func = &*(*upvalue).data;
-                let mut results = func(&lua, args)?;
+                let mut results = func(lua, args)?;
                 let nresults = results.len() as c_int;
 
                 check_stack(state, nresults)?;
