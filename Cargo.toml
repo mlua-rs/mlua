@@ -17,7 +17,7 @@ with async/await features and support of writing native Lua modules in Rust.
 """
 
 [package.metadata.docs.rs]
-features = ["lua54", "vendored", "async", "send", "serialize", "macros"]
+features = ["lua54", "vendored", "async", "send", "serialize", "macros", "parking_lot"]
 rustdoc-args = ["--cfg", "docsrs"]
 
 [workspace]
@@ -53,6 +53,7 @@ futures-task = { version = "0.3.5", optional = true }
 futures-util = { version = "0.3.5", optional = true }
 serde = { version = "1.0", optional = true }
 erased-serde = { version = "0.3", optional = true }
+parking_lot = { version = "0.12", optional = true }
 
 [build-dependencies]
 cc = { version = "1.0" }
