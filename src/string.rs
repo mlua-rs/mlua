@@ -18,9 +18,9 @@ use crate::util::{assert_stack, StackGuard};
 ///
 /// Unlike Rust strings, Lua strings may not be valid UTF-8.
 #[derive(Clone, Debug)]
-pub struct String<'lua>(pub(crate) LuaRef<'lua>);
+pub struct String(pub(crate) LuaRef);
 
-impl<'lua> String<'lua> {
+impl String {
     /// Get a `&str` slice if the Lua string is valid UTF-8.
     ///
     /// # Examples
@@ -93,7 +93,7 @@ impl<'lua> String<'lua> {
 
     /// Get the bytes that make up this string, including the trailing nul byte.
     pub fn as_bytes_with_nul(&self) -> &[u8] {
-        let lua = self.0.lua;
+        let lua = self.0.lua.required();
         unsafe {
             let _sg = StackGuard::new(lua.state);
             assert_stack(lua.state, 1);
@@ -114,13 +114,13 @@ impl<'lua> String<'lua> {
     }
 }
 
-impl<'lua> AsRef<[u8]> for String<'lua> {
+impl AsRef<[u8]> for String {
     fn as_ref(&self) -> &[u8] {
         self.as_bytes()
     }
 }
 
-impl<'lua> Borrow<[u8]> for String<'lua> {
+impl Borrow<[u8]> for String {
     fn borrow(&self) -> &[u8] {
         self.as_bytes()
     }
@@ -134,7 +134,7 @@ impl<'lua> Borrow<[u8]> for String<'lua> {
 // The only downside is that this disallows a comparison with `Cow<str>`, as that only implements
 // `AsRef<str>`, which collides with this impl. Requiring `AsRef<str>` would fix that, but limit us
 // in other ways.
-impl<'lua, T> PartialEq<T> for String<'lua>
+impl<T> PartialEq<T> for String
 where
     T: AsRef<[u8]>,
 {
@@ -143,16 +143,16 @@ where
     }
 }
 
-impl<'lua> Eq for String<'lua> {}
+impl Eq for String {}
 
-impl<'lua> Hash for String<'lua> {
+impl Hash for String {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.as_bytes().hash(state);
     }
 }
 
 #[cfg(feature = "serialize")]
-impl<'lua> Serialize for String<'lua> {
+impl Serialize for String {
     fn serialize<S>(&self, serializer: S) -> StdResult<S::Ok, S::Error>
     where
         S: Serializer,

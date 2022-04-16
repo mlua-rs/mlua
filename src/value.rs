@@ -21,7 +21,7 @@ use crate::userdata::AnyUserData;
 /// variants contain handle types into the internal Lua state. It is a logic error to mix handle
 /// types between separate `Lua` instances, and doing so will result in a panic.
 #[derive(Debug, Clone)]
-pub enum Value<'lua> {
+pub enum Value {
     /// The Lua value `nil`.
     Nil,
     /// The Lua value `true` or `false`.
@@ -41,23 +41,23 @@ pub enum Value<'lua> {
     /// An interned string, managed by Lua.
     ///
     /// Unlike Rust strings, Lua strings may not be valid UTF-8.
-    String(String<'lua>),
+    String(String),
     /// Reference to a Lua table.
-    Table(Table<'lua>),
+    Table(Table),
     /// Reference to a Lua function (or closure).
-    Function(Function<'lua>),
+    Function(Function),
     /// Reference to a Lua thread (or coroutine).
-    Thread(Thread<'lua>),
+    Thread(Thread),
     /// Reference to a userdata object that holds a custom type which implements `UserData`.
     /// Special builtin userdata types will be represented as other `Value` variants.
-    UserData(AnyUserData<'lua>),
+    UserData(AnyUserData),
     /// `Error` is a special builtin userdata type. When received from Lua it is implicitly cloned.
     Error(Error),
 }
 
 pub use self::Value::Nil;
 
-impl<'lua> Value<'lua> {
+impl Value {
     pub const fn type_name(&self) -> &'static str {
         match *self {
             Value::Nil => "nil",
@@ -95,7 +95,7 @@ impl<'lua> Value<'lua> {
     }
 }
 
-impl<'lua> PartialEq for Value<'lua> {
+impl PartialEq for Value {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Value::Nil, Value::Nil) => true,
@@ -117,7 +117,7 @@ impl<'lua> PartialEq for Value<'lua> {
     }
 }
 
-impl<'lua> AsRef<Value<'lua>> for Value<'lua> {
+impl AsRef<Value> for Value {
     #[inline]
     fn as_ref(&self) -> &Self {
         self
@@ -125,7 +125,7 @@ impl<'lua> AsRef<Value<'lua>> for Value<'lua> {
 }
 
 #[cfg(feature = "serialize")]
-impl<'lua> Serialize for Value<'lua> {
+impl Serialize for Value {
     fn serialize<S>(&self, serializer: S) -> StdResult<S::Ok, S::Error>
     where
         S: Serializer,
@@ -153,52 +153,52 @@ impl<'lua> Serialize for Value<'lua> {
 }
 
 /// Trait for types convertible to `Value`.
-pub trait ToLua<'lua> {
+pub trait ToLua {
     /// Performs the conversion.
-    fn to_lua(self, lua: &'lua Lua) -> Result<Value<'lua>>;
+    fn to_lua(self, lua: &Lua) -> Result<Value>;
 }
 
 /// Trait for types convertible from `Value`.
-pub trait FromLua<'lua>: Sized {
+pub trait FromLua: Sized {
     /// Performs the conversion.
-    fn from_lua(lua_value: Value<'lua>, lua: &'lua Lua) -> Result<Self>;
+    fn from_lua(lua_value: Value, lua: &Lua) -> Result<Self>;
 }
 
 /// Multiple Lua values used for both argument passing and also for multiple return values.
 #[derive(Debug, Clone)]
-pub struct MultiValue<'lua>(Vec<Value<'lua>>);
+pub struct MultiValue(Vec<Value>);
 
-impl<'lua> MultiValue<'lua> {
+impl MultiValue {
     /// Creates an empty `MultiValue` containing no values.
     #[inline]
-    pub fn new() -> MultiValue<'lua> {
+    pub fn new() -> MultiValue {
         MultiValue(Vec::new())
     }
 
     /// Similar to `new` but can return previously used container with allocated capacity.
     #[inline]
-    pub(crate) fn new_or_cached(lua: &'lua Lua) -> MultiValue<'lua> {
+    pub(crate) fn new_or_cached(lua: &Lua) -> MultiValue {
         lua.new_or_cached_multivalue()
     }
 }
 
-impl<'lua> Default for MultiValue<'lua> {
+impl Default for MultiValue {
     #[inline]
-    fn default() -> MultiValue<'lua> {
+    fn default() -> MultiValue {
         MultiValue::new()
     }
 }
 
-impl<'lua> FromIterator<Value<'lua>> for MultiValue<'lua> {
+impl FromIterator<Value> for MultiValue {
     #[inline]
-    fn from_iter<I: IntoIterator<Item = Value<'lua>>>(iter: I) -> Self {
+    fn from_iter<I: IntoIterator<Item = Value>>(iter: I) -> Self {
         MultiValue::from_vec(Vec::from_iter(iter))
     }
 }
 
-impl<'lua> IntoIterator for MultiValue<'lua> {
-    type Item = Value<'lua>;
-    type IntoIter = iter::Rev<vec::IntoIter<Value<'lua>>>;
+impl IntoIterator for MultiValue {
+    type Item = Value;
+    type IntoIter = iter::Rev<vec::IntoIter<Value>>;
 
     #[inline]
     fn into_iter(self) -> Self::IntoIter {
@@ -206,9 +206,9 @@ impl<'lua> IntoIterator for MultiValue<'lua> {
     }
 }
 
-impl<'a, 'lua> IntoIterator for &'a MultiValue<'lua> {
-    type Item = &'a Value<'lua>;
-    type IntoIter = iter::Rev<slice::Iter<'a, Value<'lua>>>;
+impl<'a, 'lua> IntoIterator for &'a MultiValue {
+    type Item = &'a Value;
+    type IntoIter = iter::Rev<slice::Iter<'a, Value>>;
 
     #[inline]
     fn into_iter(self) -> Self::IntoIter {
@@ -216,15 +216,15 @@ impl<'a, 'lua> IntoIterator for &'a MultiValue<'lua> {
     }
 }
 
-impl<'lua> MultiValue<'lua> {
+impl MultiValue {
     #[inline]
-    pub fn from_vec(mut v: Vec<Value<'lua>>) -> MultiValue<'lua> {
+    pub fn from_vec(mut v: Vec<Value>) -> MultiValue {
         v.reverse();
         MultiValue(v)
     }
 
     #[inline]
-    pub fn into_vec(self) -> Vec<Value<'lua>> {
+    pub fn into_vec(self) -> Vec<Value> {
         let mut v = self.0;
         v.reverse();
         v
@@ -236,12 +236,12 @@ impl<'lua> MultiValue<'lua> {
     }
 
     #[inline]
-    pub(crate) fn push_front(&mut self, value: Value<'lua>) {
+    pub(crate) fn push_front(&mut self, value: Value) {
         self.0.push(value);
     }
 
     #[inline]
-    pub(crate) fn pop_front(&mut self) -> Option<Value<'lua>> {
+    pub(crate) fn pop_front(&mut self) -> Option<Value> {
         self.0.pop()
     }
 
@@ -261,19 +261,19 @@ impl<'lua> MultiValue<'lua> {
     }
 
     #[inline]
-    pub fn iter(&self) -> iter::Rev<slice::Iter<Value<'lua>>> {
+    pub fn iter(&self) -> iter::Rev<slice::Iter<Value>> {
         self.0.iter().rev()
     }
 
     #[inline]
-    pub(crate) fn drain_all(&mut self) -> iter::Rev<vec::Drain<Value<'lua>>> {
+    pub(crate) fn drain_all(&mut self) -> iter::Rev<vec::Drain<Value>> {
         self.0.drain(..).rev()
     }
 
     #[inline]
     pub(crate) fn refill(
         &mut self,
-        iter: impl IntoIterator<Item = Result<Value<'lua>>>,
+        iter: impl IntoIterator<Item = Result<Value>>,
     ) -> Result<()> {
         self.0.clear();
         for value in iter {
@@ -288,21 +288,21 @@ impl<'lua> MultiValue<'lua> {
 ///
 /// This is a generalization of `ToLua`, allowing any number of resulting Lua values instead of just
 /// one. Any type that implements `ToLua` will automatically implement this trait.
-pub trait ToLuaMulti<'lua> {
+pub trait ToLuaMulti {
     /// Performs the conversion.
-    fn to_lua_multi(self, lua: &'lua Lua) -> Result<MultiValue<'lua>>;
+    fn to_lua_multi(self, lua: &Lua) -> Result<MultiValue>;
 }
 
 /// Trait for types that can be created from an arbitrary number of Lua values.
 ///
 /// This is a generalization of `FromLua`, allowing an arbitrary number of Lua values to participate
 /// in the conversion. Any type that implements `FromLua` will automatically implement this trait.
-pub trait FromLuaMulti<'lua>: Sized {
+pub trait FromLuaMulti: Sized {
     /// Performs the conversion.
     ///
     /// In case `values` contains more values than needed to perform the conversion, the excess
     /// values should be ignored. This reflects the semantics of Lua when calling a function or
     /// assigning values. Similarly, if not enough values are given, conversions should assume that
     /// any missing values are nil.
-    fn from_lua_multi(values: MultiValue<'lua>, lua: &'lua Lua) -> Result<Self>;
+    fn from_lua_multi(values: MultiValue, lua: &Lua) -> Result<Self>;
 }

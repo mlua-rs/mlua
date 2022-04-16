@@ -14,8 +14,8 @@ use crate::value::Value;
 
 /// A struct for deserializing Lua values into Rust values.
 #[derive(Debug)]
-pub struct Deserializer<'lua> {
-    value: Value<'lua>,
+pub struct Deserializer {
+    value: Value,
     options: Options,
     visited: Rc<RefCell<FxHashSet<*const c_void>>>,
 }
@@ -78,14 +78,14 @@ impl Options {
     }
 }
 
-impl<'lua> Deserializer<'lua> {
+impl Deserializer {
     /// Creates a new Lua Deserializer for the `Value`.
-    pub fn new(value: Value<'lua>) -> Self {
+    pub fn new(value: Value) -> Self {
         Self::new_with_options(value, Options::default())
     }
 
     /// Creates a new Lua Deserializer for the `Value` with custom options.
-    pub fn new_with_options(value: Value<'lua>, options: Options) -> Self {
+    pub fn new_with_options(value: Value, options: Options) -> Self {
         Deserializer {
             value,
             options,
@@ -94,7 +94,7 @@ impl<'lua> Deserializer<'lua> {
     }
 
     fn from_parts(
-        value: Value<'lua>,
+        value: Value,
         options: Options,
         visited: Rc<RefCell<FxHashSet<*const c_void>>>,
     ) -> Self {
@@ -106,7 +106,7 @@ impl<'lua> Deserializer<'lua> {
     }
 }
 
-impl<'lua, 'de> serde::Deserializer<'de> for Deserializer<'lua> {
+impl<'lua, 'de> serde::Deserializer<'de> for Deserializer {
     type Error = Error;
 
     #[inline]
@@ -327,13 +327,13 @@ impl<'lua, 'de> serde::Deserializer<'de> for Deserializer<'lua> {
     }
 }
 
-struct SeqDeserializer<'lua> {
-    seq: TableSequence<'lua, Value<'lua>>,
+struct SeqDeserializer {
+    seq: TableSequence<'lua, Value>,
     options: Options,
     visited: Rc<RefCell<FxHashSet<*const c_void>>>,
 }
 
-impl<'lua, 'de> de::SeqAccess<'de> for SeqDeserializer<'lua> {
+impl<'lua, 'de> de::SeqAccess<'de> for SeqDeserializer {
     type Error = Error;
 
     fn next_element_seed<T>(&mut self, seed: T) -> Result<Option<T::Value>>
@@ -397,15 +397,15 @@ impl<'de> de::SeqAccess<'de> for VecDeserializer {
     }
 }
 
-struct MapDeserializer<'lua> {
-    pairs: TablePairs<'lua, Value<'lua>, Value<'lua>>,
-    value: Option<Value<'lua>>,
+struct MapDeserializer {
+    pairs: TablePairs<'lua, Value, Value>,
+    value: Option<Value>,
     options: Options,
     visited: Rc<RefCell<FxHashSet<*const c_void>>>,
     processed: usize,
 }
 
-impl<'lua, 'de> de::MapAccess<'de> for MapDeserializer<'lua> {
+impl<'lua, 'de> de::MapAccess<'de> for MapDeserializer {
     type Error = Error;
 
     fn next_key_seed<T>(&mut self, seed: T) -> Result<Option<T::Value>>
@@ -453,16 +453,16 @@ impl<'lua, 'de> de::MapAccess<'de> for MapDeserializer<'lua> {
     }
 }
 
-struct EnumDeserializer<'lua> {
+struct EnumDeserializer {
     variant: StdString,
-    value: Option<Value<'lua>>,
+    value: Option<Value>,
     options: Options,
     visited: Rc<RefCell<FxHashSet<*const c_void>>>,
 }
 
-impl<'lua, 'de> de::EnumAccess<'de> for EnumDeserializer<'lua> {
+impl<'lua, 'de> de::EnumAccess<'de> for EnumDeserializer {
     type Error = Error;
-    type Variant = VariantDeserializer<'lua>;
+    type Variant = VariantDeserializer;
 
     fn variant_seed<T>(self, seed: T) -> Result<(T::Value, Self::Variant)>
     where
@@ -478,13 +478,13 @@ impl<'lua, 'de> de::EnumAccess<'de> for EnumDeserializer<'lua> {
     }
 }
 
-struct VariantDeserializer<'lua> {
-    value: Option<Value<'lua>>,
+struct VariantDeserializer {
+    value: Option<Value>,
     options: Options,
     visited: Rc<RefCell<FxHashSet<*const c_void>>>,
 }
 
-impl<'lua, 'de> de::VariantAccess<'de> for VariantDeserializer<'lua> {
+impl<'lua, 'de> de::VariantAccess<'de> for VariantDeserializer {
     type Error = Error;
 
     fn unit_variant(self) -> Result<()> {

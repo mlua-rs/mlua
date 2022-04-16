@@ -178,6 +178,7 @@ pub enum Error {
     /// error. The Rust code that originally invoked the Lua code then receives a `CallbackError`,
     /// from which the original error (and a stack traceback) can be recovered.
     ExternalError(Arc<dyn StdError + Send + Sync>),
+    LuaUnavailable
 }
 
 /// A specialized `Result` type used by `mlua`'s API.
@@ -283,6 +284,7 @@ impl fmt::Display for Error {
                 write!(fmt, "deserialize error: {}", err)
             },
             Error::ExternalError(ref err) => write!(fmt, "{}", err),
+            Error::LuaUnavailable => write!(fmt, "lua unavailable")
         }
     }
 }

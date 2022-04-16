@@ -75,7 +75,7 @@ fn test_scope_userdata_fields() -> Result<()> {
     struct MyUserData<'a>(&'a Cell<i64>);
 
     impl<'a> UserData for MyUserData<'a> {
-        fn add_fields<'lua, F: UserDataFields<'lua, Self>>(fields: &mut F) {
+        fn add_fields< F: UserDataFields< Self>>(fields: &mut F) {
             fields.add_field_method_get("val", |_, data| Ok(data.0.get()));
             fields.add_field_method_set("val", |_, data, val| {
                 data.0.set(val);
@@ -110,7 +110,7 @@ fn test_scope_userdata_methods() -> Result<()> {
     struct MyUserData<'a>(&'a Cell<i64>);
 
     impl<'a> UserData for MyUserData<'a> {
-        fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
+        fn add_methods< M: UserDataMethods< Self>>(methods: &mut M) {
             methods.add_method("inc", |_, data, ()| {
                 data.0.set(data.0.get() + 1);
                 Ok(())
@@ -151,7 +151,7 @@ fn test_scope_userdata_functions() -> Result<()> {
     struct MyUserData<'a>(&'a i64);
 
     impl<'a> UserData for MyUserData<'a> {
-        fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
+        fn add_methods< M: UserDataMethods< Self>>(methods: &mut M) {
             methods.add_meta_function(MetaMethod::Add, |lua, ()| {
                 let globals = lua.globals();
                 globals.set("i", globals.get::<_, i64>("i")? + 1)?;
@@ -193,7 +193,7 @@ fn test_scope_userdata_mismatch() -> Result<()> {
     struct MyUserData<'a>(&'a Cell<i64>);
 
     impl<'a> UserData for MyUserData<'a> {
-        fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
+        fn add_methods< M: UserDataMethods< Self>>(methods: &mut M) {
             methods.add_method("inc", |_, data, ()| {
                 data.0.set(data.0.get() + 1);
                 Ok(())
@@ -247,7 +247,7 @@ fn test_scope_userdata_drop() -> Result<()> {
     struct MyUserData(Rc<()>);
 
     impl UserData for MyUserData {
-        fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
+        fn add_methods< M: UserDataMethods< Self>>(methods: &mut M) {
             methods.add_method("method", |_, _, ()| Ok(()));
         }
     }
@@ -305,7 +305,7 @@ fn test_scope_nonstatic_userdata_drop() -> Result<()> {
     struct MyUserData<'a>(&'a Cell<i64>, Arc<()>);
 
     impl<'a> UserData for MyUserData<'a> {
-        fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
+        fn add_methods< M: UserDataMethods< Self>>(methods: &mut M) {
             methods.add_method("inc", |_, data, ()| {
                 data.0.set(data.0.get() + 1);
                 Ok(())

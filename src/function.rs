@@ -12,9 +12,9 @@ use {futures_core::future::LocalBoxFuture, futures_util::future};
 
 /// Handle to an internal Lua function.
 #[derive(Clone, Debug)]
-pub struct Function<'lua>(pub(crate) LuaRef<'lua>);
+pub struct Function(pub(crate) LuaRef);
 
-impl<'lua> Function<'lua> {
+impl Function {
     /// Calls the function, passing `args` as function arguments.
     ///
     /// The function's return values are converted to the generic type `R`.
@@ -55,8 +55,8 @@ impl<'lua> Function<'lua> {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn call<A: ToLuaMulti<'lua>, R: FromLuaMulti<'lua>>(&self, args: A) -> Result<R> {
-        let lua = self.0.lua;
+    pub fn call<A: ToLuaMulti, R: FromLuaMulti>(&self, args: A) -> Result<R> {
+        let lua = &self.0.lua.optional()?;
 
         let mut args = args.to_lua_multi(lua)?;
         let nargs = args.len() as c_int;
@@ -120,11 +120,10 @@ impl<'lua> Function<'lua> {
     #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
     pub fn call_async<'fut, A, R>(&self, args: A) -> LocalBoxFuture<'fut, Result<R>>
     where
-        'lua: 'fut,
-        A: ToLuaMulti<'lua>,
-        R: FromLuaMulti<'lua> + 'fut,
+        A: ToLuaMulti,
+        R: FromLuaMulti + 'fut,
     {
-        let lua = self.0.lua;
+        let lua = self.0.lua.required();
         match lua.create_recycled_thread(self.clone()) {
             Ok(t) => {
                 let mut t = t.into_async(args);
@@ -162,7 +161,7 @@ impl<'lua> Function<'lua> {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn bind<A: ToLuaMulti<'lua>>(&self, args: A) -> Result<Function<'lua>> {
+    pub fn bind<A: ToLuaMulti>(&self, args: A) -> Result<Function> {
         unsafe extern "C" fn bind_call_impl(state: *mut ffi::lua_State) -> c_int {
             let nargs = ffi::lua_gettop(state);
             let nbinds = ffi::lua_tointeger(state, ffi::lua_upvalueindex(2)) as c_int;
@@ -183,7 +182,7 @@ impl<'lua> Function<'lua> {
             ffi::lua_gettop(state)
         }
 
-        let lua = self.0.lua;
+        let lua = &self.0.lua.optional()?;
 
         let args = args.to_lua_multi(lua)?;
         let nargs = args.len() as c_int;
@@ -235,7 +234,7 @@ impl<'lua> Function<'lua> {
             0
         }
 
-        let lua = self.0.lua;
+        let lua = &self.0.lua.required();
         let mut data: Vec<u8> = Vec::new();
         unsafe {
             let _sg = StackGuard::new(lua.state);
@@ -252,7 +251,7 @@ impl<'lua> Function<'lua> {
     }
 }
 
-impl<'lua> PartialEq for Function<'lua> {
+impl PartialEq for Function {
     fn eq(&self, other: &Self) -> bool {
         self.0 == other.0
     }

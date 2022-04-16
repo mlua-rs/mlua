@@ -40,7 +40,7 @@ fn test_methods() -> Result<()> {
     struct MyUserData(i64);
 
     impl UserData for MyUserData {
-        fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
+        fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
             methods.add_method("get_value", |_, data, ()| Ok(data.0));
             methods.add_method_mut("set_value", |_, data, args| {
                 data.0 = args;
@@ -91,7 +91,7 @@ fn test_metamethods() -> Result<()> {
     struct MyUserData(i64);
 
     impl UserData for MyUserData {
-        fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
+        fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
             methods.add_method("get", |_, data, ()| Ok(data.0));
             methods.add_meta_function(
                 MetaMethod::Add,
@@ -197,7 +197,7 @@ fn test_metamethod_close() -> Result<()> {
     struct MyUserData(Arc<AtomicI64>);
 
     impl UserData for MyUserData {
-        fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
+        fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
             methods.add_method("get", |_, data, ()| Ok(data.0.load(Ordering::Relaxed)));
             methods.add_meta_method(MetaMethod::Close, |_, data, _err: Value| {
                 data.0.store(0, Ordering::Relaxed);
@@ -243,7 +243,7 @@ fn test_gc_userdata() -> Result<()> {
     }
 
     impl UserData for MyUserdata {
-        fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
+        fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
             methods.add_method("access", |_, this, ()| {
                 assert!(this.id == 123);
                 Ok(())
@@ -282,7 +282,7 @@ fn test_userdata_take() -> Result<()> {
     struct MyUserdata(Arc<i64>);
 
     impl UserData for MyUserdata {
-        fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
+        fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
             methods.add_method("num", |_, this, ()| Ok(*this.0))
         }
     }
@@ -410,7 +410,7 @@ fn test_functions() -> Result<()> {
     struct MyUserData(i64);
 
     impl UserData for MyUserData {
-        fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
+        fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
             methods.add_function("get_value", |_, ud: AnyUserData| {
                 Ok(ud.borrow::<MyUserData>()?.0)
             });
@@ -461,7 +461,7 @@ fn test_fields() -> Result<()> {
     struct MyUserData(i64);
 
     impl UserData for MyUserData {
-        fn add_fields<'lua, F: UserDataFields<'lua, Self>>(fields: &mut F) {
+        fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
             fields.add_field_method_get("val", |_, data| Ok(data.0));
             fields.add_field_method_set("val", |_, data, val| {
                 data.0 = val;
@@ -517,11 +517,11 @@ fn test_metatable() -> Result<()> {
     struct MyUserData(i64);
 
     impl UserData for MyUserData {
-        fn add_fields<'lua, F: UserDataFields<'lua, Self>>(fields: &mut F) {
+        fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
             fields.add_meta_field_with("__type_name", |_| Ok("MyUserData"));
         }
 
-        fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
+        fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
             methods.add_function("my_type_name", |_, data: AnyUserData| {
                 let metatable = data.get_metatable()?;
                 metatable.get::<_, String>("__type_name")
@@ -566,7 +566,7 @@ fn test_metatable() -> Result<()> {
     struct MyUserData2(i64);
 
     impl UserData for MyUserData2 {
-        fn add_fields<'lua, F: UserDataFields<'lua, Self>>(fields: &mut F) {
+        fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
             fields.add_meta_field_with("__index", |_| Ok(1));
         }
     }
@@ -585,7 +585,7 @@ fn test_userdata_wrapped() -> Result<()> {
     struct MyUserData(i64);
 
     impl UserData for MyUserData {
-        fn add_fields<'lua, F: UserDataFields<'lua, Self>>(fields: &mut F) {
+        fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
             fields.add_field_method_get("data", |_, this| Ok(this.0));
             fields.add_field_method_set("data", |_, this, val| {
                 this.0 = val;

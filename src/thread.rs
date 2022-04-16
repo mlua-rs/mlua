@@ -28,6 +28,7 @@ use {
         task::{Context, Poll, Waker},
     },
 };
+use crate::lua::LuaWeakRef;
 
 /// Status of a Lua thread (or coroutine).
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
@@ -46,7 +47,7 @@ pub enum ThreadStatus {
 
 /// Handle to an internal Lua thread (or coroutine).
 #[derive(Clone, Debug)]
-pub struct Thread<'lua>(pub(crate) LuaRef<'lua>);
+pub struct Thread(pub(crate) LuaRef);
 
 /// Thread (coroutine) representation as an async [`Future`] or [`Stream`].
 ///
@@ -57,14 +58,14 @@ pub struct Thread<'lua>(pub(crate) LuaRef<'lua>);
 #[cfg(feature = "async")]
 #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
 #[derive(Debug)]
-pub struct AsyncThread<'lua, R> {
-    thread: Thread<'lua>,
-    args0: RefCell<Option<Result<MultiValue<'lua>>>>,
+pub struct AsyncThread<R> {
+    thread: Thread,
+    args0: RefCell<Option<Result<MultiValue>>>,
     ret: PhantomData<R>,
     recycle: bool,
 }
 
-impl<'lua> Thread<'lua> {
+impl Thread {
     /// Resumes execution of this thread.
     ///
     /// Equivalent to `coroutine.resume`.
@@ -108,10 +109,10 @@ impl<'lua> Thread<'lua> {
     /// ```
     pub fn resume<A, R>(&self, args: A) -> Result<R>
     where
-        A: ToLuaMulti<'lua>,
-        R: FromLuaMulti<'lua>,
+        A: ToLuaMulti,
+        R: FromLuaMulti,
     {
-        let lua = self.0.lua;
+        let lua = &self.0.lua.optional()?;
         let mut args = args.to_lua_multi(lua)?;
         let nargs = args.len() as c_int;
         let results = unsafe {
@@ -154,7 +155,7 @@ impl<'lua> Thread<'lua> {
 
     /// Gets the status of the thread.
     pub fn status(&self) -> ThreadStatus {
-        let lua = self.0.lua;
+        let lua = &self.0.lua.required();
         unsafe {
             let thread_state =
                 lua.ref_thread_exec(|ref_thread| ffi::lua_tothread(ref_thread, self.0.index));
@@ -190,8 +191,8 @@ impl<'lua> Thread<'lua> {
         all(feature = "luajit", feature = "vendored"),
         feature = "luau",
     ))]
-    pub fn reset(&self, func: Function<'lua>) -> Result<()> {
-        let lua = self.0.lua;
+    pub fn reset(&self, func: Function) -> Result<()> {
+        let lua = &self.0.lua.optional()?;
         unsafe {
             let _sg = StackGuard::new(lua.state);
             check_stack(lua.state, 2)?;
@@ -271,12 +272,13 @@ impl<'lua> Thread<'lua> {
     /// ```
     #[cfg(feature = "async")]
     #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
-    pub fn into_async<A, R>(self, args: A) -> AsyncThread<'lua, R>
+    pub fn into_async<A, R>(self, args: A) -> AsyncThread<R>
     where
-        A: ToLuaMulti<'lua>,
-        R: FromLuaMulti<'lua>,
+        A: ToLuaMulti,
+        R: FromLuaMulti,
     {
-        let args = args.to_lua_multi(self.0.lua);
+        let lua = &self.0.lua.optional()?;
+        let args = args.to_lua_multi(lua);
         AsyncThread {
             thread: self,
             args0: RefCell::new(Some(args)),
@@ -320,7 +322,7 @@ impl<'lua> Thread<'lua> {
     #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
     #[doc(hidden)]
     pub fn sandbox(&self) -> Result<()> {
-        let lua = self.0.lua;
+        let lua = &self.0.lua.optional()?;
         unsafe {
             let thread = lua.ref_thread_exec(|t| ffi::lua_tothread(t, self.0.index));
             check_stack(thread, 1)?;
@@ -333,14 +335,14 @@ impl<'lua> Thread<'lua> {
     }
 }
 
-impl<'lua> PartialEq for Thread<'lua> {
+impl PartialEq for Thread {
     fn eq(&self, other: &Self) -> bool {
         self.0 == other.0
     }
 }
 
 #[cfg(feature = "async")]
-impl<'lua, R> AsyncThread<'lua, R> {
+impl<R> AsyncThread<R> {
     #[inline]
     pub(crate) fn set_recyclable(&mut self, recyclable: bool) {
         self.recycle = recyclable;
@@ -353,7 +355,7 @@ impl<'lua, R> AsyncThread<'lua, R> {
     all(feature = "luajit", feature = "vendored"),
     feature = "luau",
 ))]
-impl<'lua, R> Drop for AsyncThread<'lua, R> {
+impl<R> Drop for AsyncThread<R> {
     fn drop(&mut self) {
         if self.recycle {
             unsafe {
@@ -364,14 +366,14 @@ impl<'lua, R> Drop for AsyncThread<'lua, R> {
 }
 
 #[cfg(feature = "async")]
-impl<'lua, R> Stream for AsyncThread<'lua, R>
+impl<R> Stream for AsyncThread<R>
 where
-    R: FromLuaMulti<'lua>,
+    R: FromLuaMulti,
 {
     type Item = Result<R>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        let lua = self.thread.0.lua;
+        let lua = &self.thread.0.lua.optional()?;
 
         match self.thread.status() {
             ThreadStatus::Resumable => {}
@@ -395,14 +397,14 @@ where
 }
 
 #[cfg(feature = "async")]
-impl<'lua, R> Future for AsyncThread<'lua, R>
+impl<R> Future for AsyncThread<R>
 where
-    R: FromLuaMulti<'lua>,
+    R: FromLuaMulti,
 {
     type Output = Result<R>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let lua = self.thread.0.lua;
+        let lua = &self.thread.0.lua.optional()?;
 
         match self.thread.status() {
             ThreadStatus::Resumable => {}
@@ -442,24 +444,24 @@ fn is_poll_pending(val: &MultiValue) -> bool {
 }
 
 #[cfg(feature = "async")]
-struct WakerGuard<'lua> {
-    lua: &'lua Lua,
+struct WakerGuard {
+    lua: LuaWeakRef,
     prev: Option<Waker>,
 }
 
 #[cfg(feature = "async")]
-impl<'lua> WakerGuard<'lua> {
+impl WakerGuard {
     #[inline]
     pub fn new(lua: &Lua, waker: Waker) -> Result<WakerGuard> {
         unsafe {
             let prev = lua.set_waker(Some(waker));
-            Ok(WakerGuard { lua, prev })
+            Ok(WakerGuard { lua: LuaWeakRef::new(lua), prev })
         }
     }
 }
 
 #[cfg(feature = "async")]
-impl<'lua> Drop for WakerGuard<'lua> {
+impl Drop for WakerGuard {
     fn drop(&mut self) {
         unsafe {
             self.lua.set_waker(self.prev.take());

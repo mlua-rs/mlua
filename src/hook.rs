@@ -16,25 +16,25 @@ use crate::lua::Lua;
 ///
 /// [lua_doc]: https://www.lua.org/manual/5.4/manual.html#lua_Debug
 /// [`Lua::set_hook`]: crate::Lua::set_hook
-pub struct Debug<'lua> {
-    lua: &'lua Lua,
+pub struct Debug {
+    lua: Lua,
     ar: ActivationRecord,
     #[cfg(feature = "luau")]
     level: c_int,
 }
 
-impl<'lua> Debug<'lua> {
+impl Debug {
     #[cfg(not(feature = "luau"))]
-    pub(crate) fn new(lua: &'lua Lua, ar: *mut lua_Debug) -> Self {
+    pub(crate) fn new(lua: &Lua, ar: *mut lua_Debug) -> Self {
         Debug {
-            lua,
+            lua: lua.clone(),
             ar: ActivationRecord::Borrowed(ar),
         }
     }
 
-    pub(crate) fn new_owned(lua: &'lua Lua, _level: c_int, ar: lua_Debug) -> Self {
+    pub(crate) fn new_owned(lua: &Lua, _level: c_int, ar: lua_Debug) -> Self {
         Debug {
-            lua,
+            lua: lua.clone(),
             ar: ActivationRecord::Owned(UnsafeCell::new(ar)),
             #[cfg(feature = "luau")]
             level: _level,
@@ -63,7 +63,7 @@ impl<'lua> Debug<'lua> {
     }
 
     /// Corresponds to the `n` what mask.
-    pub fn names(&self) -> DebugNames<'lua> {
+    pub fn names(&self) -> DebugNames {
         unsafe {
             #[cfg(not(feature = "luau"))]
             mlua_assert!(
@@ -87,7 +87,7 @@ impl<'lua> Debug<'lua> {
     }
 
     /// Corresponds to the `S` what mask.
-    pub fn source(&self) -> DebugSource<'lua> {
+    pub fn source(&self) -> DebugSource {
         unsafe {
             #[cfg(not(feature = "luau"))]
             mlua_assert!(

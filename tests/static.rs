@@ -7,7 +7,7 @@ fn test_static_lua() -> Result<()> {
     let lua = Lua::new().into_static();
 
     thread_local! {
-        static TABLE: RefCell<Option<Table<'static>>> = RefCell::new(None);
+        static TABLE: RefCell<Option<Table>> = RefCell::new(None);
     }
 
     let f = lua.create_function(|_, table: Table| {
@@ -38,7 +38,7 @@ fn test_static_lua_coroutine() -> Result<()> {
     let lua = Lua::new().into_static();
 
     thread_local! {
-        static TABLE: RefCell<Option<Table<'static>>> = RefCell::new(None);
+        static TABLE: RefCell<Option<Table>> = RefCell::new(None);
     }
 
     let f = lua.create_function(|_, table: Table| {

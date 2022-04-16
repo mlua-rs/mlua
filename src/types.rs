@@ -14,7 +14,7 @@ use crate::error::Result;
 use crate::ffi;
 #[cfg(not(feature = "luau"))]
 use crate::hook::Debug;
-use crate::lua::{ExtraData, Lua};
+use crate::lua::{ExtraData, Lua, LuaWeakRef};
 use crate::util::{assert_stack, StackGuard};
 use crate::value::MultiValue;
 
@@ -27,25 +27,25 @@ pub type Number = ffi::lua_Number;
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub struct LightUserData(pub *mut c_void);
 
-pub(crate) type Callback<'lua, 'a> =
-    Box<dyn Fn(&'lua Lua, MultiValue<'lua>) -> Result<MultiValue<'lua>> + 'a>;
+pub(crate) type Callback<'a> =
+    Box<dyn Fn(&'a Lua, MultiValue) -> Result<MultiValue> + 'a>;
 
 pub(crate) struct Upvalue<T> {
     pub(crate) data: T,
     pub(crate) extra: Arc<UnsafeCell<ExtraData>>,
 }
 
-pub(crate) type CallbackUpvalue = Upvalue<Callback<'static, 'static>>;
+pub(crate) type CallbackUpvalue = Upvalue<Callback<'static>>;
 
 #[cfg(feature = "async")]
-pub(crate) type AsyncCallback<'lua, 'a> =
-    Box<dyn Fn(&'lua Lua, MultiValue<'lua>) -> LocalBoxFuture<'lua, Result<MultiValue<'lua>>> + 'a>;
+pub(crate) type AsyncCallback<'a> =
+    Box<dyn Fn(&Lua, MultiValue) -> LocalBoxFuture<Result<MultiValue>> + 'a>;
 
 #[cfg(feature = "async")]
-pub(crate) type AsyncCallbackUpvalue = Upvalue<AsyncCallback<'static, 'static>>;
+pub(crate) type AsyncCallbackUpvalue = Upvalue<AsyncCallback<'static>>;
 
 #[cfg(feature = "async")]
-pub(crate) type AsyncPollUpvalue = Upvalue<LocalBoxFuture<'static, Result<MultiValue<'static>>>>;
+pub(crate) type AsyncPollUpvalue = Upvalue<LocalBoxFuture<'static, Result<MultiValue>>>;
 
 /// Type to set next Luau VM action after executing interrupt function.
 #[cfg(any(feature = "luau", doc))]
@@ -148,34 +148,36 @@ impl RegistryKey {
     }
 }
 
-pub(crate) struct LuaRef<'lua> {
-    pub(crate) lua: &'lua Lua,
+pub(crate) struct LuaRef {
+    pub(crate) lua: LuaWeakRef,
     pub(crate) index: c_int,
 }
 
-impl<'lua> fmt::Debug for LuaRef<'lua> {
+impl fmt::Debug for LuaRef {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "Ref({})", self.index)
     }
 }
 
-impl<'lua> Clone for LuaRef<'lua> {
+impl Clone for LuaRef {
     fn clone(&self) -> Self {
-        self.lua.clone_ref(self)
+        self.lua.required().clone_ref(self)
     }
 }
 
-impl<'lua> Drop for LuaRef<'lua> {
+impl Drop for LuaRef {
     fn drop(&mut self) {
-        if self.index > 0 {
-            self.lua.drop_ref(self);
+        if let Ok(lua) = self.lua.optional() {
+            if self.index > 0 {
+                lua.drop_ref(self);
+            }
         }
     }
 }
 
-impl<'lua> PartialEq for LuaRef<'lua> {
+impl PartialEq for LuaRef {
     fn eq(&self, other: &Self) -> bool {
-        let lua = self.lua;
+        let lua = self.lua.required();
         unsafe {
             let _sg = StackGuard::new(lua.state);
             assert_stack(lua.state, 2);

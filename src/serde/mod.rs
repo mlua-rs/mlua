@@ -15,7 +15,7 @@ use crate::value::Value;
 
 /// Trait for serializing/deserializing Lua values using Serde.
 #[cfg_attr(docsrs, doc(cfg(feature = "serialize")))]
-pub trait LuaSerdeExt<'lua> {
+pub trait LuaSerdeExt {
     /// A special value (lightuserdata) to encode/decode optional (none) values.
     ///
     /// Requires `feature = "serialize"`
@@ -37,7 +37,7 @@ pub trait LuaSerdeExt<'lua> {
     ///     Ok(())
     /// }
     /// ```
-    fn null(&'lua self) -> Value<'lua>;
+    fn null(&'lua self) -> Value;
 
     /// A metatable attachable to a Lua table to systematically encode it as Array (instead of Map).
     /// As result, encoded Array will contain only sequence part of the table, with the same length
@@ -68,7 +68,7 @@ pub trait LuaSerdeExt<'lua> {
     ///     Ok(())
     /// }
     /// ```
-    fn array_metatable(&'lua self) -> Table<'lua>;
+    fn array_metatable(&'lua self) -> Table;
 
     /// Converts `T` into a [`Value`] instance.
     ///
@@ -101,7 +101,7 @@ pub trait LuaSerdeExt<'lua> {
     ///     "#).exec()
     /// }
     /// ```
-    fn to_value<T: Serialize + ?Sized>(&'lua self, t: &T) -> Result<Value<'lua>>;
+    fn to_value<T: Serialize + ?Sized>(&'lua self, t: &T) -> Result<Value>;
 
     /// Converts `T` into a [`Value`] instance with options.
     ///
@@ -126,7 +126,7 @@ pub trait LuaSerdeExt<'lua> {
     ///     "#).exec()
     /// }
     /// ```
-    fn to_value_with<T>(&'lua self, t: &T, options: ser::Options) -> Result<Value<'lua>>
+    fn to_value_with<T>(&'lua self, t: &T, options: ser::Options) -> Result<Value>
     where
         T: Serialize + ?Sized;
 
@@ -159,7 +159,7 @@ pub trait LuaSerdeExt<'lua> {
     /// }
     /// ```
     #[allow(clippy::wrong_self_convention)]
-    fn from_value<T: Deserialize<'lua>>(&'lua self, value: Value<'lua>) -> Result<T>;
+    fn from_value<T: Deserialize>(&'lua self, value: Value) -> Result<T>;
 
     /// Deserializes a [`Value`] into any serde deserializable object with options.
     ///
@@ -191,19 +191,19 @@ pub trait LuaSerdeExt<'lua> {
     /// }
     /// ```
     #[allow(clippy::wrong_self_convention)]
-    fn from_value_with<T: Deserialize<'lua>>(
+    fn from_value_with<T: Deserialize>(
         &'lua self,
-        value: Value<'lua>,
+        value: Value,
         options: de::Options,
     ) -> Result<T>;
 }
 
-impl<'lua> LuaSerdeExt<'lua> for Lua {
-    fn null(&'lua self) -> Value<'lua> {
+impl LuaSerdeExt for Lua {
+    fn null(&'lua self) -> Value {
         Value::LightUserData(LightUserData(ptr::null_mut()))
     }
 
-    fn array_metatable(&'lua self) -> Table<'lua> {
+    fn array_metatable(&'lua self) -> Table {
         unsafe {
             let _sg = StackGuard::new(self.state);
             assert_stack(self.state, 1);
@@ -214,30 +214,30 @@ impl<'lua> LuaSerdeExt<'lua> for Lua {
         }
     }
 
-    fn to_value<T>(&'lua self, t: &T) -> Result<Value<'lua>>
+    fn to_value<T>(&'lua self, t: &T) -> Result<Value>
     where
         T: Serialize + ?Sized,
     {
         t.serialize(ser::Serializer::new(self))
     }
 
-    fn to_value_with<T>(&'lua self, t: &T, options: ser::Options) -> Result<Value<'lua>>
+    fn to_value_with<T>(&'lua self, t: &T, options: ser::Options) -> Result<Value>
     where
         T: Serialize + ?Sized,
     {
         t.serialize(ser::Serializer::new_with_options(self, options))
     }
 
-    fn from_value<T>(&'lua self, value: Value<'lua>) -> Result<T>
+    fn from_value<T>(&'lua self, value: Value) -> Result<T>
     where
-        T: Deserialize<'lua>,
+        T: Deserialize,
     {
         T::deserialize(de::Deserializer::new(value))
     }
 
-    fn from_value_with<T>(&'lua self, value: Value<'lua>, options: de::Options) -> Result<T>
+    fn from_value_with<T>(&'lua self, value: Value, options: de::Options) -> Result<T>
     where
-        T: Deserialize<'lua>,
+        T: Deserialize,
     {
         T::deserialize(de::Deserializer::new_with_options(value, options))
     }
