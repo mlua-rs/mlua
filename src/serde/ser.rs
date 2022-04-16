@@ -5,7 +5,7 @@ use serde::{ser, Serialize};
 use super::LuaSerdeExt;
 use crate::error::{Error, Result};
 use crate::ffi;
-use crate::lua::Lua;
+use crate::lua::{Lua, LuaWeakRef};
 use crate::string::String;
 use crate::table::Table;
 use crate::types::Integer;
@@ -15,7 +15,7 @@ use crate::value::{ToLua, Value};
 /// A struct for serializing Rust values into Lua values.
 #[derive(Debug)]
 pub struct Serializer {
-    lua: &Lua,
+    lua: LuaWeakRef,
     options: Options,
 }
 
@@ -102,7 +102,7 @@ impl Serializer {
 
     /// Creates a new Lua Serializer with custom options.
     pub fn new_with_options(lua: &Lua, options: Options) -> Self {
-        Serializer { lua, options }
+        Serializer { lua: LuaWeakRef::new(lua), options }
     }
 }
 
@@ -319,7 +319,7 @@ impl ser::SerializeSeq for SerializeVec {
     where
         T: Serialize + ?Sized,
     {
-        let lua = self.table.0.lua;
+        let lua = &self.table.0.lua.optional()?;
         let value = lua.to_value_with(value, self.options)?;
         unsafe {
             let _sg = StackGuard::new(lua.state);
@@ -386,14 +386,14 @@ impl ser::SerializeTupleVariant for SerializeTupleVariant {
     where
         T: Serialize + ?Sized,
     {
-        let lua = self.table.0.lua;
+        let lua =  &self.table.0.lua.optional()?;
         let idx = self.table.raw_len() + 1;
         self.table
             .raw_insert(idx, lua.to_value_with(value, self.options)?)
     }
 
     fn end(self) -> Result<Value> {
-        let lua = self.table.0.lua;
+        let lua = &self.table.0.lua.optional()?;
         let table = lua.create_table()?;
         table.raw_set(self.name, self.table)?;
         Ok(Value::Table(table))
@@ -415,7 +415,7 @@ impl ser::SerializeMap for SerializeMap {
     where
         T: Serialize + ?Sized,
     {
-        let lua = self.table.0.lua;
+        let lua = &self.table.0.lua.optional()?;
         self.key = Some(lua.to_value_with(key, self.options)?);
         Ok(())
     }
@@ -424,7 +424,7 @@ impl ser::SerializeMap for SerializeMap {
     where
         T: Serialize + ?Sized,
     {
-        let lua = self.table.0.lua;
+        let lua =  &self.table.0.lua.optional()?;
         let key = mlua_expect!(
             self.key.take(),
             "serialize_value called before serialize_key"
@@ -470,14 +470,14 @@ impl ser::SerializeStructVariant for SerializeStructVariant {
     where
         T: Serialize + ?Sized,
     {
-        let lua = self.table.0.lua;
+        let lua =  &self.table.0.lua.optional()?;
         self.table
             .raw_set(key, lua.to_value_with(value, self.options)?)?;
         Ok(())
     }
 
     fn end(self) -> Result<Value> {
-        let lua = self.table.0.lua;
+        let lua =  &self.table.0.lua.optional()?;
         let table = lua.create_table()?;
         table.raw_set(self.name, self.table)?;
         Ok(Value::Table(table))

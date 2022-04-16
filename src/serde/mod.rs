@@ -37,7 +37,7 @@ pub trait LuaSerdeExt {
     ///     Ok(())
     /// }
     /// ```
-    fn null(&'lua self) -> Value;
+    fn null(&self) -> Value;
 
     /// A metatable attachable to a Lua table to systematically encode it as Array (instead of Map).
     /// As result, encoded Array will contain only sequence part of the table, with the same length
@@ -68,7 +68,7 @@ pub trait LuaSerdeExt {
     ///     Ok(())
     /// }
     /// ```
-    fn array_metatable(&'lua self) -> Table;
+    fn array_metatable(&self) -> Table;
 
     /// Converts `T` into a [`Value`] instance.
     ///
@@ -101,7 +101,7 @@ pub trait LuaSerdeExt {
     ///     "#).exec()
     /// }
     /// ```
-    fn to_value<T: Serialize + ?Sized>(&'lua self, t: &T) -> Result<Value>;
+    fn to_value<T: Serialize + ?Sized>(&self, t: &T) -> Result<Value>;
 
     /// Converts `T` into a [`Value`] instance with options.
     ///
@@ -126,7 +126,7 @@ pub trait LuaSerdeExt {
     ///     "#).exec()
     /// }
     /// ```
-    fn to_value_with<T>(&'lua self, t: &T, options: ser::Options) -> Result<Value>
+    fn to_value_with<T>(&self, t: &T, options: ser::Options) -> Result<Value>
     where
         T: Serialize + ?Sized;
 
@@ -159,7 +159,7 @@ pub trait LuaSerdeExt {
     /// }
     /// ```
     #[allow(clippy::wrong_self_convention)]
-    fn from_value<T: Deserialize>(&'lua self, value: Value) -> Result<T>;
+    fn from_value<T: Deserialize>(&self, value: Value) -> Result<T>;
 
     /// Deserializes a [`Value`] into any serde deserializable object with options.
     ///
@@ -192,18 +192,18 @@ pub trait LuaSerdeExt {
     /// ```
     #[allow(clippy::wrong_self_convention)]
     fn from_value_with<T: Deserialize>(
-        &'lua self,
+        &self,
         value: Value,
         options: de::Options,
     ) -> Result<T>;
 }
 
 impl LuaSerdeExt for Lua {
-    fn null(&'lua self) -> Value {
+    fn null(&self) -> Value {
         Value::LightUserData(LightUserData(ptr::null_mut()))
     }
 
-    fn array_metatable(&'lua self) -> Table {
+    fn array_metatable(&self) -> Table {
         unsafe {
             let _sg = StackGuard::new(self.state);
             assert_stack(self.state, 1);
@@ -214,28 +214,28 @@ impl LuaSerdeExt for Lua {
         }
     }
 
-    fn to_value<T>(&'lua self, t: &T) -> Result<Value>
+    fn to_value<T>(&self, t: &T) -> Result<Value>
     where
         T: Serialize + ?Sized,
     {
         t.serialize(ser::Serializer::new(self))
     }
 
-    fn to_value_with<T>(&'lua self, t: &T, options: ser::Options) -> Result<Value>
+    fn to_value_with<T>(&self, t: &T, options: ser::Options) -> Result<Value>
     where
         T: Serialize + ?Sized,
     {
         t.serialize(ser::Serializer::new_with_options(self, options))
     }
 
-    fn from_value<T>(&'lua self, value: Value) -> Result<T>
+    fn from_value<T>(&self, value: Value) -> Result<T>
     where
         T: Deserialize,
     {
         T::deserialize(de::Deserializer::new(value))
     }
 
-    fn from_value_with<T>(&'lua self, value: Value, options: de::Options) -> Result<T>
+    fn from_value_with<T>(&self, value: Value, options: de::Options) -> Result<T>
     where
         T: Deserialize,
     {

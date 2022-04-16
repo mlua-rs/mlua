@@ -328,7 +328,7 @@ impl<'lua, 'de> serde::Deserializer<'de> for Deserializer {
 }
 
 struct SeqDeserializer {
-    seq: TableSequence<'lua, Value>,
+    seq: TableSequence<Value>,
     options: Options,
     visited: Rc<RefCell<FxHashSet<*const c_void>>>,
 }
@@ -398,7 +398,7 @@ impl<'de> de::SeqAccess<'de> for VecDeserializer {
 }
 
 struct MapDeserializer {
-    pairs: TablePairs<'lua, Value, Value>,
+    pairs: TablePairs<Value, Value>,
     value: Option<Value>,
     options: Options,
     visited: Rc<RefCell<FxHashSet<*const c_void>>>,
@@ -556,7 +556,7 @@ impl RecursionGuard {
     #[inline]
     fn new(table: &Table, visited: &Rc<RefCell<FxHashSet<*const c_void>>>) -> Self {
         let visited = Rc::clone(visited);
-        let lua = table.0.lua;
+        let lua = &table.0.lua.optional()?;
         let ptr =
             unsafe { lua.ref_thread_exec(|refthr| ffi::lua_topointer(refthr, table.0.index)) };
         visited.borrow_mut().insert(ptr);
@@ -578,7 +578,7 @@ fn check_value_if_skip(
 ) -> Result<bool> {
     match value {
         Value::Table(table) => {
-            let lua = table.0.lua;
+            let lua = &table.0.lua.optional()?;
             let ptr =
                 unsafe { lua.ref_thread_exec(|refthr| ffi::lua_topointer(refthr, table.0.index)) };
             if visited.borrow().contains(&ptr) {
