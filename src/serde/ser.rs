@@ -155,18 +155,18 @@ impl ser::Serializer for Serializer {
 
     #[inline]
     fn serialize_str(self, value: &str) -> Result<Value> {
-        self.lua.create_string(value).map(Value::String)
+        self.lua.optional()?.create_string(value).map(Value::String)
     }
 
     #[inline]
     fn serialize_bytes(self, value: &[u8]) -> Result<Value> {
-        self.lua.create_string(value).map(Value::String)
+        self.lua.optional()?.create_string(value).map(Value::String)
     }
 
     #[inline]
     fn serialize_none(self) -> Result<Value> {
         if self.options.serialize_none_to_null {
-            Ok(self.lua.null())
+            Ok(self.lua.optional()?.null())
         } else {
             Ok(Value::Nil)
         }
@@ -183,7 +183,7 @@ impl ser::Serializer for Serializer {
     #[inline]
     fn serialize_unit(self) -> Result<Value> {
         if self.options.serialize_unit_to_null {
-            Ok(self.lua.null())
+            Ok(self.lua.optional()?.null())
         } else {
             Ok(Value::Nil)
         }
@@ -192,7 +192,7 @@ impl ser::Serializer for Serializer {
     #[inline]
     fn serialize_unit_struct(self, _name: &'static str) -> Result<Value> {
         if self.options.serialize_unit_to_null {
-            Ok(self.lua.null())
+            Ok(self.lua.optional()?.null())
         } else {
             Ok(Value::Nil)
         }
@@ -227,19 +227,21 @@ impl ser::Serializer for Serializer {
     where
         T: Serialize + ?Sized,
     {
-        let table = self.lua.create_table()?;
-        let variant = self.lua.create_string(variant)?;
-        let value = self.lua.to_value_with(value, self.options)?;
+        let lua = &self.lua.optional()?;
+        let table = lua.create_table()?;
+        let variant = lua.create_string(variant)?;
+        let value = lua.to_value_with(value, self.options)?;
         table.raw_set(variant, value)?;
         Ok(Value::Table(table))
     }
 
     #[inline]
     fn serialize_seq(self, len: Option<usize>) -> Result<Self::SerializeSeq> {
+        let lua = &self.lua.optional()?;
         let len = len.unwrap_or(0) as c_int;
-        let table = self.lua.create_table_with_capacity(len, 0)?;
+        let table = lua.create_table_with_capacity(len, 0)?;
         if self.options.set_array_metatable {
-            table.set_metatable(Some(self.lua.array_metatable()));
+            table.set_metatable(Some(lua.array_metatable()));
         }
         let options = self.options;
         Ok(SerializeVec { table, options })
@@ -267,19 +269,22 @@ impl ser::Serializer for Serializer {
         variant: &'static str,
         _len: usize,
     ) -> Result<Self::SerializeTupleVariant> {
+        let lua = &self.lua.optional()?;
         Ok(SerializeTupleVariant {
-            name: self.lua.create_string(variant)?,
-            table: self.lua.create_table()?,
+            name: lua.create_string(variant)?,
+            table: lua.create_table()?,
             options: self.options,
         })
     }
 
     #[inline]
     fn serialize_map(self, len: Option<usize>) -> Result<Self::SerializeMap> {
+        let lua = &self.lua.optional()?;
+
         let len = len.unwrap_or(0) as c_int;
         Ok(SerializeMap {
             key: None,
-            table: self.lua.create_table_with_capacity(0, len)?,
+            table: lua.create_table_with_capacity(0, len)?,
             options: self.options,
         })
     }
@@ -297,9 +302,10 @@ impl ser::Serializer for Serializer {
         variant: &'static str,
         len: usize,
     ) -> Result<Self::SerializeStructVariant> {
+        let lua = &self.lua.optional()?;
         Ok(SerializeStructVariant {
-            name: self.lua.create_string(variant)?,
-            table: self.lua.create_table_with_capacity(0, len as c_int)?,
+            name: lua.create_string(variant)?,
+            table: lua.create_table_with_capacity(0, len as c_int)?,
             options: self.options,
         })
     }
