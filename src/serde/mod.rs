@@ -159,7 +159,7 @@ pub trait LuaSerdeExt {
     /// }
     /// ```
     #[allow(clippy::wrong_self_convention)]
-    fn from_value<T: Deserialize>(&self, value: Value) -> Result<T>;
+    fn from_value<'a, T: Deserialize<'a>>(&self, value: Value) -> Result<T>;
 
     /// Deserializes a [`Value`] into any serde deserializable object with options.
     ///
@@ -191,7 +191,7 @@ pub trait LuaSerdeExt {
     /// }
     /// ```
     #[allow(clippy::wrong_self_convention)]
-    fn from_value_with<T: Deserialize>(
+    fn from_value_with<'a, T: Deserialize<'a>>(
         &self,
         value: Value,
         options: de::Options,
@@ -228,16 +228,16 @@ impl LuaSerdeExt for Lua {
         t.serialize(ser::Serializer::new_with_options(self, options))
     }
 
-    fn from_value<T>(&self, value: Value) -> Result<T>
+    fn from_value<'a, T>(&self, value: Value) -> Result<T>
     where
-        T: Deserialize,
+        T: Deserialize<'a>,
     {
         T::deserialize(de::Deserializer::new(value))
     }
 
-    fn from_value_with<T>(&self, value: Value, options: de::Options) -> Result<T>
+    fn from_value_with<'a, T>(&self, value: Value, options: de::Options) -> Result<T>
     where
-        T: Deserialize,
+        T: Deserialize<'a>,
     {
         T::deserialize(de::Deserializer::new_with_options(value, options))
     }
