@@ -1218,7 +1218,7 @@ impl Serialize for AnyUserData {
     where
         S: Serializer,
     {
-        let lua = &self.0.lua.optional()?;
+        let lua = &self.0.lua.required();
         let data = unsafe {
             let _sg = StackGuard::new(lua.state);
             check_stack(lua.state, 3).map_err(ser::Error::custom)?;

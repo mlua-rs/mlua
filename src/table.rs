@@ -500,7 +500,7 @@ impl Table {
 
     #[cfg(feature = "serialize")]
     pub(crate) fn is_array(&self) -> bool {
-        let lua = &self.0.lua.optional()?;
+        let lua = &self.0.lua.required();
         unsafe {
             let _sg = StackGuard::new(lua.state);
             assert_stack(lua.state, 3);
@@ -693,7 +693,7 @@ impl Serialize for Table {
             static VISITED: RefCell<FxHashSet<*const c_void>> = RefCell::new(FxHashSet::default());
         }
 
-        let lua = &self.0.lua.optional()?;
+        let lua = &self.0.lua.required();
         let ptr = unsafe { lua.ref_thread_exec(|refthr| ffi::lua_topointer(refthr, self.0.index)) };
         let res = VISITED.with(|visited| {
             {
