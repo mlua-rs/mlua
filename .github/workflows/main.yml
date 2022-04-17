@@ -29,6 +29,7 @@ jobs:
       run: |
         cargo build --features "${{ matrix.lua }},vendored"
         cargo build --features "${{ matrix.lua }},vendored,async,send,serialize,macros"
+        cargo build --features "${{ matrix.lua }},vendored,async,serialize,macros,parking_lot"
       shell: bash
     - name: Build ${{ matrix.lua }} pkg-config
       if: ${{ matrix.os == 'ubuntu-20.04' && matrix.lua != 'lua54' }}
@@ -128,12 +129,14 @@ jobs:
       run: |
         cargo test --features "${{ matrix.lua }},vendored"
         cargo test --features "${{ matrix.lua }},vendored,async,send,serialize,macros"
+        cargo test --features "${{ matrix.lua }},vendored,async,serialize,macros,parking_lot"
       shell: bash
     - name: Run compile tests (macos lua54)
       if: ${{ matrix.os == 'macos-latest' && matrix.lua == 'lua54' }}
       run: |
         TRYBUILD=overwrite cargo test --features "${{ matrix.lua }},vendored" -- --ignored
         TRYBUILD=overwrite cargo test --features "${{ matrix.lua }},vendored,async,send,serialize,macros" -- --ignored
+        TRYBUILD=overwrite cargo test --features "${{ matrix.lua }},vendored,async,serialize,macros,parking_lot" -- --ignored
       shell: bash
 
   test_with_sanitizer:
