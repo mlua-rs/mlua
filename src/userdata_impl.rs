@@ -309,24 +309,26 @@ impl<'lua, T: 'static + UserData> StaticUserDataMethods<'lua, T> {
                         }
                         Some(id) if id == TypeId::of::<Arc<Mutex<T>>>() => {
                             let ud = get_userdata_mut::<Arc<Mutex<T>>>(lua.state)?;
-                            let mut ud = ud.try_lock().map_err(|_| Error::UserDataBorrowError)?;
+                            let mut ud =
+                                ud.try_lock().map_err(|_| Error::UserDataBorrowMutError)?;
                             method(lua, &mut ud, A::from_lua_multi(args, lua)?)?.to_lua_multi(lua)
                         }
                         #[cfg(feature = "parking_lot")]
                         Some(id) if id == TypeId::of::<Arc<parking_lot::Mutex<T>>>() => {
                             let ud = get_userdata_mut::<Arc<parking_lot::Mutex<T>>>(lua.state)?;
-                            let mut ud = ud.try_lock().ok_or(Error::UserDataBorrowError)?;
+                            let mut ud = ud.try_lock().ok_or(Error::UserDataBorrowMutError)?;
                             method(lua, &mut ud, A::from_lua_multi(args, lua)?)?.to_lua_multi(lua)
                         }
                         Some(id) if id == TypeId::of::<Arc<RwLock<T>>>() => {
                             let ud = get_userdata_mut::<Arc<RwLock<T>>>(lua.state)?;
-                            let mut ud = ud.try_write().map_err(|_| Error::UserDataBorrowError)?;
+                            let mut ud =
+                                ud.try_write().map_err(|_| Error::UserDataBorrowMutError)?;
                             method(lua, &mut ud, A::from_lua_multi(args, lua)?)?.to_lua_multi(lua)
                         }
                         #[cfg(feature = "parking_lot")]
                         Some(id) if id == TypeId::of::<Arc<parking_lot::RwLock<T>>>() => {
                             let ud = get_userdata_mut::<Arc<parking_lot::RwLock<T>>>(lua.state)?;
-                            let mut ud = ud.try_write().ok_or(Error::UserDataBorrowError)?;
+                            let mut ud = ud.try_write().ok_or(Error::UserDataBorrowMutError)?;
                             method(lua, &mut ud, A::from_lua_multi(args, lua)?)?.to_lua_multi(lua)
                         }
                         _ => Err(Error::UserDataTypeMismatch),
