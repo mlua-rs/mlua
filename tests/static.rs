@@ -1,6 +1,6 @@
 use std::cell::RefCell;
 
-use mlua::{Function, Lua, Result, Table};
+use mlua::{Lua, Result, Table};
 
 #[test]
 fn test_static_lua() -> Result<()> {
@@ -73,16 +73,17 @@ fn test_static_lua_coroutine() -> Result<()> {
 async fn test_static_async() -> Result<()> {
     let lua = Lua::new().into_static();
 
-    let timer = lua.create_async_function(|_, (i, n, f): (u64, u64, Function)| async move {
-        tokio::task::spawn_local(async move {
-            let dur = std::time::Duration::from_millis(i);
-            for _ in 0..n {
-                tokio::task::spawn_local(f.call_async::<(), ()>(()));
-                tokio::time::sleep(dur).await;
-            }
-        });
-        Ok(())
-    })?;
+    let timer =
+        lua.create_async_function(|_, (i, n, f): (u64, u64, mlua::Function)| async move {
+            tokio::task::spawn_local(async move {
+                let dur = std::time::Duration::from_millis(i);
+                for _ in 0..n {
+                    tokio::task::spawn_local(f.call_async::<(), ()>(()));
+                    tokio::time::sleep(dur).await;
+                }
+            });
+            Ok(())
+        })?;
     lua.globals().set("timer", timer)?;
 
     {
