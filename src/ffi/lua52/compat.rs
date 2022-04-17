@@ -27,6 +27,13 @@ unsafe fn compat53_reverse(L: *mut lua_State, mut a: c_int, mut b: c_int) {
 
 pub unsafe fn lua_rotate(L: *mut lua_State, mut idx: c_int, mut n: c_int) {
     idx = lua_absindex(L, idx);
+    if n > 0 {
+        // Faster version
+        for _ in 0..n {
+            lua_insert(L, idx);
+        }
+        return;
+    }
     let n_elems = lua_gettop(L) - idx + 1;
     if n < 0 {
         n += n_elems;
