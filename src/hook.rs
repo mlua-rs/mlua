@@ -1,11 +1,11 @@
 use std::cell::UnsafeCell;
-use std::ffi::CStr;
 #[cfg(not(feature = "luau"))]
 use std::ops::{BitOr, BitOrAssign};
-use std::os::raw::{c_char, c_int};
+use std::os::raw::c_int;
 
 use crate::ffi::{self, lua_Debug};
 use crate::lua::Lua;
+use crate::util::ptr_to_cstr_bytes;
 
 /// Contains information about currently executing Lua code.
 ///
@@ -77,9 +77,9 @@ impl<'lua> Debug<'lua> {
             );
 
             DebugNames {
-                name: ptr_to_str((*self.ar.get()).name),
+                name: ptr_to_cstr_bytes((*self.ar.get()).name),
                 #[cfg(not(feature = "luau"))]
-                name_what: ptr_to_str((*self.ar.get()).namewhat),
+                name_what: ptr_to_cstr_bytes((*self.ar.get()).namewhat),
                 #[cfg(feature = "luau")]
                 name_what: None,
             }
@@ -101,12 +101,12 @@ impl<'lua> Debug<'lua> {
             );
 
             DebugSource {
-                source: ptr_to_str((*self.ar.get()).source),
-                short_src: ptr_to_str((*self.ar.get()).short_src.as_ptr()),
+                source: ptr_to_cstr_bytes((*self.ar.get()).source),
+                short_src: ptr_to_cstr_bytes((*self.ar.get()).short_src.as_ptr()),
                 line_defined: (*self.ar.get()).linedefined as i32,
                 #[cfg(not(feature = "luau"))]
                 last_line_defined: (*self.ar.get()).lastlinedefined as i32,
-                what: ptr_to_str((*self.ar.get()).what),
+                what: ptr_to_cstr_bytes((*self.ar.get()).what),
             }
         }
     }
@@ -347,13 +347,5 @@ impl BitOr for HookTriggers {
 impl BitOrAssign for HookTriggers {
     fn bitor_assign(&mut self, rhs: Self) {
         *self = *self | rhs;
-    }
-}
-
-unsafe fn ptr_to_str<'a>(input: *const c_char) -> Option<&'a [u8]> {
-    if input.is_null() {
-        None
-    } else {
-        Some(CStr::from_ptr(input).to_bytes())
     }
 }

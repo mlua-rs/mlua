@@ -992,6 +992,13 @@ pub(crate) unsafe fn get_destructed_userdata_metatable(state: *mut ffi::lua_Stat
     ffi::lua_rawgetp(state, ffi::LUA_REGISTRYINDEX, key);
 }
 
+pub(crate) unsafe fn ptr_to_cstr_bytes<'a>(input: *const c_char) -> Option<&'a [u8]> {
+    if input.is_null() {
+        return None;
+    }
+    Some(CStr::from_ptr(input).to_bytes())
+}
+
 static DESTRUCTED_USERDATA_METATABLE: u8 = 0;
 static ERROR_PRINT_BUFFER_KEY: u8 = 0;
 static USERDATA_METATABLE_INDEX: u8 = 0;
