@@ -35,7 +35,8 @@
         feature = "lua52",
         feature = "lua51",
         feature = "luajit",
-        feature = "luau"
+        feature = "luau",
+        feature = "lua-factorio"
     )),
     path = "find_dummy.rs"
 )]
