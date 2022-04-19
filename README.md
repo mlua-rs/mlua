@@ -43,6 +43,7 @@ Below is a list of the available feature flags. By default `mlua` does not enabl
 * `send`: make `mlua::Lua` transferable across thread boundaries (adds [`Send`] requirement to `mlua::Function` and `mlua::UserData`)
 * `serialize`: add serialization and deserialization support to `mlua` types using [serde] framework
 * `macros`: enable procedural macros (such as `chunk!`)
+* `parking_lot`: support UserData types wrapped in [parking_lot]'s primitives (`Arc<Mutex>` and `Arc<RwLock>`)
 
 [5.4]: https://www.lua.org/manual/5.4/manual.html
 [5.3]: https://www.lua.org/manual/5.3/manual.html
@@ -56,6 +57,7 @@ Below is a list of the available feature flags. By default `mlua` does not enabl
 [async-std]: https://github.com/async-rs/async-std
 [`Send`]: https://doc.rust-lang.org/std/marker/trait.Send.html
 [serde]: https://github.com/serde-rs/serde
+[parking_lot]: https://github.com/Amanieu/parking_lot
 
 ### Async/await support
 
