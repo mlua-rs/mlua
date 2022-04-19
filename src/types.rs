@@ -1,3 +1,4 @@
+use std::cell::UnsafeCell;
 use std::hash::{Hash, Hasher};
 use std::os::raw::{c_int, c_void};
 use std::sync::{Arc, Mutex};
@@ -13,7 +14,7 @@ use crate::error::Result;
 use crate::ffi;
 #[cfg(not(feature = "luau"))]
 use crate::hook::Debug;
-use crate::lua::Lua;
+use crate::lua::{ExtraData, Lua};
 use crate::util::{assert_stack, StackGuard};
 use crate::value::MultiValue;
 
@@ -29,31 +30,42 @@ pub struct LightUserData(pub *mut c_void);
 pub(crate) type Callback<'lua, 'a> =
     Box<dyn Fn(&'lua Lua, MultiValue<'lua>) -> Result<MultiValue<'lua>> + 'a>;
 
-pub(crate) struct CallbackUpvalue<'lua> {
-    pub(crate) lua: Lua,
-    pub(crate) func: Callback<'lua, 'static>,
+pub(crate) struct Upvalue<T> {
+    pub(crate) data: T,
+    pub(crate) extra: Arc<UnsafeCell<ExtraData>>,
 }
+
+pub(crate) type CallbackUpvalue = Upvalue<Callback<'static, 'static>>;
 
 #[cfg(feature = "async")]
 pub(crate) type AsyncCallback<'lua, 'a> =
     Box<dyn Fn(&'lua Lua, MultiValue<'lua>) -> LocalBoxFuture<'lua, Result<MultiValue<'lua>>> + 'a>;
 
 #[cfg(feature = "async")]
-pub(crate) struct AsyncCallbackUpvalue<'lua> {
-    pub(crate) lua: Lua,
-    pub(crate) func: AsyncCallback<'lua, 'static>,
-}
+pub(crate) type AsyncCallbackUpvalue = Upvalue<AsyncCallback<'static, 'static>>;
 
 #[cfg(feature = "async")]
-pub(crate) struct AsyncPollUpvalue<'lua> {
-    pub(crate) lua: Lua,
-    pub(crate) fut: LocalBoxFuture<'lua, Result<MultiValue<'lua>>>,
+pub(crate) type AsyncPollUpvalue = Upvalue<LocalBoxFuture<'static, Result<MultiValue<'static>>>>;
+
+/// Type to set next Luau VM action after executing interrupt function.
+#[cfg(any(feature = "luau", doc))]
+#[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
+pub enum VmState {
+    Continue,
+    Yield,
 }
+
 #[cfg(all(feature = "send", not(feature = "luau")))]
-pub(crate) type HookCallback = Arc<Mutex<dyn FnMut(&Lua, Debug) -> Result<()> + Send>>;
+pub(crate) type HookCallback = Arc<dyn Fn(&Lua, Debug) -> Result<()> + Send>;
 
 #[cfg(all(not(feature = "send"), not(feature = "luau")))]
-pub(crate) type HookCallback = Arc<Mutex<dyn FnMut(&Lua, Debug) -> Result<()>>>;
+pub(crate) type HookCallback = Arc<dyn Fn(&Lua, Debug) -> Result<()>>;
+
+#[cfg(all(feature = "luau", feature = "send"))]
+pub(crate) type InterruptCallback = Arc<dyn Fn() -> Result<VmState> + Send>;
+
+#[cfg(all(feature = "luau", not(feature = "send")))]
+pub(crate) type InterruptCallback = Arc<dyn Fn() -> Result<VmState>>;
 
 #[cfg(all(feature = "send", feature = "lua54"))]
 pub(crate) type WarnCallback = Box<dyn Fn(&Lua, &CStr, bool) -> Result<()> + Send>;

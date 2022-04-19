@@ -62,6 +62,8 @@ pub fn chunk(input: TokenStream) -> TokenStream {
 
     let wrapped_code = quote! {{
         use ::mlua::{AsChunk, ChunkMode, Lua, Result, Value};
+        use ::std::borrow::Cow;
+        use ::std::io::Result as IoResult;
         use ::std::marker::PhantomData;
         use ::std::sync::Mutex;
 
@@ -73,8 +75,8 @@ pub fn chunk(input: TokenStream) -> TokenStream {
         where
             F: FnOnce(&'lua Lua) -> Result<Value<'lua>>,
         {
-            fn source(&self) -> &[u8] {
-                (#source).as_bytes()
+            fn source(&self) -> IoResult<Cow<[u8]>> {
+                Ok(Cow::Borrowed((#source).as_bytes()))
             }
 
             fn env(&self, lua: &'lua Lua) -> Result<Option<Value<'lua>>> {

@@ -26,8 +26,4 @@ extern "C" {
 
     // open all builtin libraries
     pub fn luaL_openlibs(L: *mut lua_State);
-
-    // sandbox libraries and globals
-    pub fn luaL_sandbox(L: *mut lua_State);
-    pub fn luaL_sandboxthread(L: *mut lua_State);
 }

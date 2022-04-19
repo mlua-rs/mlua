@@ -917,16 +917,16 @@ impl<'lua> AnyUserData<'lua> {
 
             // Multiple (extra) user values are emulated by storing them in a table
             protect_lua!(lua.state, 2, 0, |state| {
-                if getuservalue_table(lua.state, -2) != ffi::LUA_TTABLE {
+                if getuservalue_table(state, -2) != ffi::LUA_TTABLE {
                     // Create a new table to use as uservalue
-                    ffi::lua_pop(lua.state, 1);
+                    ffi::lua_pop(state, 1);
                     ffi::lua_newtable(state);
                     ffi::lua_pushvalue(state, -1);
 
                     #[cfg(feature = "lua54")]
-                    ffi::lua_setiuservalue(lua.state, -4, USER_VALUE_MAXSLOT as c_int);
+                    ffi::lua_setiuservalue(state, -4, USER_VALUE_MAXSLOT as c_int);
                     #[cfg(not(feature = "lua54"))]
-                    ffi::lua_setuservalue(lua.state, -4);
+                    ffi::lua_setuservalue(state, -4);
                 }
                 ffi::lua_pushvalue(state, -2);
                 #[cfg(feature = "lua54")]
@@ -970,8 +970,8 @@ impl<'lua> AnyUserData<'lua> {
 
             // Multiple (extra) user values are emulated by storing them in a table
             protect_lua!(lua.state, 1, 1, |state| {
-                if getuservalue_table(lua.state, -1) != ffi::LUA_TTABLE {
-                    ffi::lua_pushnil(lua.state);
+                if getuservalue_table(state, -1) != ffi::LUA_TTABLE {
+                    ffi::lua_pushnil(state);
                     return;
                 }
                 #[cfg(feature = "lua54")]
@@ -1005,16 +1005,16 @@ impl<'lua> AnyUserData<'lua> {
             // Multiple (extra) user values are emulated by storing them in a table
             let name = name.as_ref();
             protect_lua!(lua.state, 2, 0, |state| {
-                if getuservalue_table(lua.state, -2) != ffi::LUA_TTABLE {
+                if getuservalue_table(state, -2) != ffi::LUA_TTABLE {
                     // Create a new table to use as uservalue
-                    ffi::lua_pop(lua.state, 1);
+                    ffi::lua_pop(state, 1);
                     ffi::lua_newtable(state);
                     ffi::lua_pushvalue(state, -1);
 
                     #[cfg(feature = "lua54")]
-                    ffi::lua_setiuservalue(lua.state, -4, USER_VALUE_MAXSLOT as c_int);
+                    ffi::lua_setiuservalue(state, -4, USER_VALUE_MAXSLOT as c_int);
                     #[cfg(not(feature = "lua54"))]
-                    ffi::lua_setuservalue(lua.state, -4);
+                    ffi::lua_setuservalue(state, -4);
                 }
                 ffi::lua_pushlstring(state, name.as_ptr() as *const c_char, name.len());
                 ffi::lua_pushvalue(state, -3);
@@ -1043,8 +1043,8 @@ impl<'lua> AnyUserData<'lua> {
             // Multiple (extra) user values are emulated by storing them in a table
             let name = name.as_ref();
             protect_lua!(lua.state, 1, 1, |state| {
-                if getuservalue_table(lua.state, -1) != ffi::LUA_TTABLE {
-                    ffi::lua_pushnil(lua.state);
+                if getuservalue_table(state, -1) != ffi::LUA_TTABLE {
+                    ffi::lua_pushnil(state);
                     return;
                 }
                 ffi::lua_pushlstring(state, name.as_ptr() as *const c_char, name.len());

@@ -158,6 +158,7 @@ pub trait LuaSerdeExt<'lua> {
     ///     Ok(())
     /// }
     /// ```
+    #[allow(clippy::wrong_self_convention)]
     fn from_value<T: Deserialize<'lua>>(&'lua self, value: Value<'lua>) -> Result<T>;
 
     /// Deserializes a [`Value`] into any serde deserializable object with options.
@@ -189,6 +190,7 @@ pub trait LuaSerdeExt<'lua> {
     ///     Ok(())
     /// }
     /// ```
+    #[allow(clippy::wrong_self_convention)]
     fn from_value_with<T: Deserialize<'lua>>(
         &'lua self,
         value: Value<'lua>,
@@ -257,7 +259,7 @@ pub(crate) unsafe fn init_metatables(state: *mut ffi::lua_State) -> Result<()> {
 }
 
 pub(crate) unsafe fn push_array_metatable(state: *mut ffi::lua_State) {
-    let array_metatable_key = &ARRAY_METATABLE_REGISTRY_KEY as *const u8 as *mut c_void;
+    let array_metatable_key = &ARRAY_METATABLE_REGISTRY_KEY as *const u8 as *const c_void;
     ffi::lua_rawgetp(state, ffi::LUA_REGISTRYINDEX, array_metatable_key);
 }
 

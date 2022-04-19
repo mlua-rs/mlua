@@ -24,7 +24,6 @@ use {
     std::{
         cell::RefCell,
         marker::PhantomData,
-        os::raw::c_void,
         pin::Pin,
         task::{Context, Poll, Waker},
     },
@@ -216,6 +215,13 @@ impl<'lua> Thread<'lua> {
             lua.push_ref(&func.0);
             ffi::lua_xmove(lua.state, thread_state, 1);
 
+            #[cfg(feature = "luau")]
+            {
+                // Inherit `LUA_GLOBALSINDEX` from the caller
+                ffi::lua_xpush(lua.state, thread_state, ffi::LUA_GLOBALSINDEX);
+                ffi::lua_replace(thread_state, ffi::LUA_GLOBALSINDEX);
+            }
+
             Ok(())
         }
     }
@@ -280,6 +286,53 @@ impl<'lua> Thread<'lua> {
             recycle: false,
         }
     }
+
+    /// Enables sandbox mode on this thread.
+    ///
+    /// Under the hood replaces the global environment table with a new table,
+    /// that performs writes locally and proxies reads to caller's global environment.
+    ///
+    /// This mode ideally should be used together with the global sandbox mode [`Lua::sandbox()`].
+    ///
+    /// Please note that Luau links environment table with chunk when loading it into Lua state.
+    /// Therefore you need to load chunks into a thread to link with the thread environment.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use mlua::{Lua, Result};
+    /// # fn main() -> Result<()> {
+    /// let lua = Lua::new();
+    /// let thread = lua.create_thread(lua.create_function(|lua2, ()| {
+    ///     lua2.load("var = 123").exec()?;
+    ///     assert_eq!(lua2.globals().get::<_, u32>("var")?, 123);
+    ///     Ok(())
+    /// })?)?;
+    /// thread.sandbox()?;
+    /// thread.resume(())?;
+    ///
+    /// // The global environment should be unchanged
+    /// assert_eq!(lua.globals().get::<_, Option<u32>>("var")?, None);
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// Requires `feature = "luau"`
+    #[cfg(any(feature = "luau", docsrs))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
+    #[doc(hidden)]
+    pub fn sandbox(&self) -> Result<()> {
+        let lua = self.0.lua;
+        unsafe {
+            let thread = lua.ref_thread_exec(|t| ffi::lua_tothread(t, self.0.index));
+            check_stack(thread, 1)?;
+            check_stack(lua.state, 3)?;
+            // Inherit `LUA_GLOBALSINDEX` from the caller
+            ffi::lua_xpush(lua.state, thread, ffi::LUA_GLOBALSINDEX);
+            ffi::lua_replace(thread, ffi::LUA_GLOBALSINDEX);
+            protect_lua!(lua.state, 0, 0, |_| ffi::luaL_sandboxthread(thread))
+        }
+    }
 }
 
 impl<'lua> PartialEq for Thread<'lua> {
@@ -297,7 +350,11 @@ impl<'lua, R> AsyncThread<'lua, R> {
 }
 
 #[cfg(feature = "async")]
-#[cfg(any(feature = "lua54", all(feature = "luajit", feature = "vendored")))]
+#[cfg(any(
+    feature = "lua54",
+    all(feature = "luajit", feature = "vendored"),
+    feature = "luau",
+))]
 impl<'lua, R> Drop for AsyncThread<'lua, R> {
     fn drop(&mut self) {
         if self.recycle {
@@ -380,7 +437,7 @@ where
 fn is_poll_pending(val: &MultiValue) -> bool {
     match val.iter().enumerate().last() {
         Some((0, Value::LightUserData(ud))) => {
-            ud.0 == &ASYNC_POLL_PENDING as *const u8 as *mut c_void
+            std::ptr::eq(ud.0 as *const u8, &ASYNC_POLL_PENDING as *const u8)
         }
         _ => false,
     }

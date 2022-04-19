@@ -1,6 +1,6 @@
 [package]
 name = "mlua"
-version = "0.8.0-beta.2" # remember to update html_root_url and mlua_derive
+version = "0.8.0-beta.3" # remember to update html_root_url and mlua_derive
 authors = ["Aleksandr Orlenko <zxteam@pm.me>", "kyren <catherine@chucklefish.org>"]
 edition = "2018"
 repository = "https://github.com/khvzak/mlua"
@@ -17,7 +17,7 @@ with async/await features and support of writing native Lua modules in Rust.
 """
 
 [package.metadata.docs.rs]
-features = ["lua54", "vendored", "async", "send", "serialize", "macros"]
+features = ["lua54", "vendored", "async", "send", "serialize", "macros", "parking_lot"]
 rustdoc-args = ["--cfg", "docsrs"]
 
 [workspace]
@@ -55,13 +55,14 @@ futures-util = { version = "0.3.5", optional = true }
 serde = { version = "1.0", optional = true }
 erased-serde = { version = "0.3", optional = true }
 link-cplusplus = { version = "1.0", optional = true}
+parking_lot = { version = "0.12", optional = true }
 
 [build-dependencies]
 cc = { version = "1.0" }
 pkg-config = { version = "0.3.17" }
-lua-src = { version = ">= 540.0.0, < 550.0.0", optional = true }
+lua-src = { version = ">= 544.0.0, < 550.0.0", optional = true }
 luajit-src = { version = ">= 210.3.1, < 220.0.0", optional = true }
-luau0-src = { version = "0.2.1", optional = true }
+luau0-src = { version = "0.2.2", optional = true }
 
 [dev-dependencies]
 rustyline = "9.0"
@@ -72,6 +73,7 @@ hyper = { version = "0.14", features = ["client", "server"] }
 reqwest = { version = "0.11", features = ["json"] }
 tokio = { version = "1.0", features = ["full"] }
 futures-timer = "3.0"
+serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 maplit = "1.0"
 tempfile = "3"

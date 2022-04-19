@@ -1,10 +1,13 @@
+use std::mem;
 use std::os::raw::c_int;
 use std::ptr;
 
 use crate::error::{Error, Result};
 use crate::ffi;
 use crate::types::LuaRef;
-use crate::util::{assert_stack, check_stack, error_traceback, pop_error, StackGuard};
+use crate::util::{
+    assert_stack, check_stack, error_traceback, pop_error, ptr_to_cstr_bytes, StackGuard,
+};
 use crate::value::{FromLuaMulti, ToLuaMulti};
 
 #[cfg(feature = "async")]
@@ -13,6 +16,18 @@ use {futures_core::future::LocalBoxFuture, futures_util::future};
 /// Handle to an internal Lua function.
 #[derive(Clone, Debug)]
 pub struct Function<'lua>(pub(crate) LuaRef<'lua>);
+
+#[derive(Clone, Debug)]
+pub struct FunctionInfo {
+    pub name: Option<Vec<u8>>,
+    pub name_what: Option<Vec<u8>>,
+    pub what: Option<Vec<u8>>,
+    pub source: Option<Vec<u8>>,
+    pub short_src: Option<Vec<u8>>,
+    pub line_defined: i32,
+    #[cfg(not(feature = "luau"))]
+    pub last_line_defined: i32,
+}
 
 impl<'lua> Function<'lua> {
     /// Calls the function, passing `args` as function arguments.
@@ -209,10 +224,49 @@ impl<'lua> Function<'lua> {
         }
     }
 
+    /// Returns information about the function.
+    ///
+    /// Corresponds to the `>Sn` what mask for [`lua_getinfo`] when applied to the function.
+    ///
+    /// [`lua_getinfo`]: https://www.lua.org/manual/5.4/manual.html#lua_getinfo
+    pub fn info(&self) -> FunctionInfo {
+        let lua = self.0.lua;
+        unsafe {
+            let _sg = StackGuard::new(lua.state);
+            assert_stack(lua.state, 1);
+
+            let mut ar: ffi::lua_Debug = mem::zeroed();
+            lua.push_ref(&self.0);
+            #[cfg(not(feature = "luau"))]
+            let res = ffi::lua_getinfo(lua.state, cstr!(">Sn"), &mut ar);
+            #[cfg(feature = "luau")]
+            let res = ffi::lua_getinfo(lua.state, -1, cstr!("sn"), &mut ar);
+            mlua_assert!(res != 0, "lua_getinfo failed with `>Sn`");
+
+            FunctionInfo {
+                name: ptr_to_cstr_bytes(ar.name).map(|s| s.to_vec()),
+                #[cfg(not(feature = "luau"))]
+                name_what: ptr_to_cstr_bytes(ar.namewhat).map(|s| s.to_vec()),
+                #[cfg(feature = "luau")]
+                name_what: None,
+                what: ptr_to_cstr_bytes(ar.what).map(|s| s.to_vec()),
+                source: ptr_to_cstr_bytes(ar.source).map(|s| s.to_vec()),
+                short_src: ptr_to_cstr_bytes(&ar.short_src as *const _).map(|s| s.to_vec()),
+                line_defined: ar.linedefined as i32,
+                #[cfg(not(feature = "luau"))]
+                last_line_defined: ar.lastlinedefined as i32,
+            }
+        }
+    }
+
     /// Dumps the function as a binary chunk.
     ///
     /// If `strip` is true, the binary representation may not include all debug information
     /// about the function, to save space.
+    ///
+    /// For Luau a [Compiler] can be used to compile Lua chunks to bytecode.
+    ///
+    /// [Compiler]: crate::chunk::Compiler
     #[cfg(not(feature = "luau"))]
     #[cfg_attr(docsrs, doc(cfg(not(feature = "luau"))))]
     pub fn dump(&self, strip: bool) -> Vec<u8> {

@@ -72,6 +72,11 @@ extern "C" {
     // TODO: luaL_findtable
 
     pub fn luaL_typename(L: *mut lua_State, idx: c_int) -> *const c_char;
+
+    // sandbox libraries and globals
+    #[link_name = "luaL_sandbox"]
+    pub fn luaL_sandbox_(L: *mut lua_State);
+    pub fn luaL_sandboxthread(L: *mut lua_State);
 }
 
 //
@@ -121,6 +126,29 @@ pub unsafe fn luaL_ref(L: *mut lua_State, t: c_int) -> c_int {
 pub unsafe fn luaL_unref(L: *mut lua_State, t: c_int, r#ref: c_int) {
     assert_eq!(t, LUA_REGISTRYINDEX);
     lua::lua_unref(L, r#ref)
+}
+
+pub unsafe fn luaL_sandbox(L: *mut lua_State, enabled: c_int) {
+    use super::lua::*;
+
+    // set all libraries to read-only
+    lua_pushnil(L);
+    while lua_next(L, LUA_GLOBALSINDEX) != 0 {
+        if lua_istable(L, -1) != 0 {
+            lua_setreadonly(L, -1, enabled);
+        }
+        lua_pop(L, 1);
+    }
+
+    // set all builtin metatables to read-only
+    lua_pushliteral(L, "");
+    lua_getmetatable(L, -1);
+    lua_setreadonly(L, -1, enabled);
+    lua_pop(L, 2);
+
+    // set globals to readonly and activate safeenv since the env is immutable
+    lua_setreadonly(L, LUA_GLOBALSINDEX, enabled);
+    lua_setsafeenv(L, LUA_GLOBALSINDEX, enabled);
 }
 
 //

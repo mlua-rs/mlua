@@ -1,4 +1,9 @@
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::Arc;
+#[cfg(not(feature = "parking_lot"))]
+use std::sync::{Mutex, RwLock};
+
+#[cfg(feature = "parking_lot")]
+use parking_lot::{Mutex, RwLock};
 
 #[cfg(not(feature = "send"))]
 use std::{cell::RefCell, rc::Rc};
@@ -623,7 +628,10 @@ fn test_userdata_wrapped() -> Result<()> {
     "#,
     )
     .exec()?;
+    #[cfg(not(feature = "parking_lot"))]
     assert_eq!(ud2.lock().unwrap().0, 3);
+    #[cfg(feature = "parking_lot")]
+    assert_eq!(ud2.lock().0, 3);
 
     let ud3 = Arc::new(RwLock::new(MyUserData(3)));
     globals.set("arc_rwlock_ud", ud3.clone())?;
@@ -634,7 +642,10 @@ fn test_userdata_wrapped() -> Result<()> {
     "#,
     )
     .exec()?;
+    #[cfg(not(feature = "parking_lot"))]
     assert_eq!(ud3.read().unwrap().0, 4);
+    #[cfg(feature = "parking_lot")]
+    assert_eq!(ud3.read().0, 4);
 
     // Test drop
     globals.set("arc_mutex_ud", Nil)?;

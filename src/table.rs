@@ -351,19 +351,25 @@ impl<'lua> Table<'lua> {
     /// Sets `readonly` attribute on the table.
     ///
     /// Requires `feature = "luau"`
-    #[cfg(feature = "luau")]
+    #[cfg(any(feature = "luau", doc))]
     #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
     pub fn set_readonly(&self, enabled: bool) {
         let lua = self.0.lua;
         unsafe {
-            lua.ref_thread_exec(|refthr| ffi::lua_setreadonly(refthr, self.0.index, enabled as _));
+            lua.ref_thread_exec(|refthr| {
+                ffi::lua_setreadonly(refthr, self.0.index, enabled as _);
+                if !enabled {
+                    // Reset "safeenv" flag
+                    ffi::lua_setsafeenv(refthr, self.0.index, 0);
+                }
+            });
         }
     }
 
     /// Returns `readonly` attribute of the table.
     ///
     /// Requires `feature = "luau"`
-    #[cfg(feature = "luau")]
+    #[cfg(any(feature = "luau", doc))]
     #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
     pub fn is_readonly(&self) -> bool {
         let lua = self.0.lua;

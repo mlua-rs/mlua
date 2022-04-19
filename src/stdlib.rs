@@ -49,12 +49,14 @@ impl StdLib {
     ///
     /// Requires `feature = "luajit"`
     #[cfg(any(feature = "luajit", doc))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "luajit")))]
     pub const JIT: StdLib = StdLib(1 << 9);
 
     /// (**unsafe**) [`ffi`](http://luajit.org/ext_ffi.html) library
     ///
     /// Requires `feature = "luajit"`
     #[cfg(any(feature = "luajit", doc))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "luajit")))]
     pub const FFI: StdLib = StdLib(1 << 30);
     /// (**unsafe**) [`debug`](https://www.lua.org/manual/5.4/manual.html#6.10) library
     pub const DEBUG: StdLib = StdLib(1 << 31);
@@ -64,7 +66,10 @@ impl StdLib {
     /// (**unsafe**) All standard libraries
     pub const ALL: StdLib = StdLib(u32::MAX);
     /// The safe subset of the standard libraries
+    #[cfg(not(feature = "luau"))]
     pub const ALL_SAFE: StdLib = StdLib((1 << 30) - 1);
+    #[cfg(feature = "luau")]
+    pub const ALL_SAFE: StdLib = StdLib(u32::MAX);
 
     pub fn contains(self, lib: Self) -> bool {
         (self & lib).0 != 0

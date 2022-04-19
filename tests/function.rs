@@ -107,3 +107,57 @@ fn test_dump() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn test_function_info() -> Result<()> {
+    let lua = Lua::new();
+
+    let globals = lua.globals();
+    lua.load(
+        r#"
+        function function1()
+            return function() end
+        end
+    "#,
+    )
+    .set_name("source1")?
+    .exec()?;
+
+    let function1 = globals.get::<_, Function>("function1")?;
+    let function2 = function1.call::<_, Function>(())?;
+    let function3 = lua.create_function(|_, ()| Ok(()))?;
+
+    let function1_info = function1.info();
+    #[cfg(feature = "luau")]
+    assert_eq!(function1_info.name, Some(b"function1".to_vec()));
+    assert_eq!(function1_info.source, Some(b"source1".to_vec()));
+    assert_eq!(function1_info.line_defined, 2);
+    #[cfg(not(feature = "luau"))]
+    assert_eq!(function1_info.last_line_defined, 4);
+    assert_eq!(function1_info.what, Some(b"Lua".to_vec()));
+
+    let function2_info = function2.info();
+    assert_eq!(function2_info.name, None);
+    assert_eq!(function2_info.source, Some(b"source1".to_vec()));
+    assert_eq!(function2_info.line_defined, 3);
+    #[cfg(not(feature = "luau"))]
+    assert_eq!(function2_info.last_line_defined, 3);
+    assert_eq!(function2_info.what, Some(b"Lua".to_vec()));
+
+    let function3_info = function3.info();
+    assert_eq!(function3_info.name, None);
+    assert_eq!(function3_info.source, Some(b"=[C]".to_vec()));
+    assert_eq!(function3_info.line_defined, -1);
+    #[cfg(not(feature = "luau"))]
+    assert_eq!(function3_info.last_line_defined, -1);
+    assert_eq!(function3_info.what, Some(b"C".to_vec()));
+
+    let print_info = globals.get::<_, Function>("print")?.info();
+    #[cfg(feature = "luau")]
+    assert_eq!(print_info.name, Some(b"print".to_vec()));
+    assert_eq!(print_info.source, Some(b"=[C]".to_vec()));
+    assert_eq!(print_info.what, Some(b"C".to_vec()));
+    assert_eq!(print_info.line_defined, -1);
+
+    Ok(())
+}

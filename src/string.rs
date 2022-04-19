@@ -1,4 +1,5 @@
-use std::borrow::Cow;
+use std::borrow::{Borrow, Cow};
+use std::hash::{Hash, Hasher};
 use std::string::String as StdString;
 use std::{slice, str};
 
@@ -119,6 +120,12 @@ impl<'lua> AsRef<[u8]> for String<'lua> {
     }
 }
 
+impl<'lua> Borrow<[u8]> for String<'lua> {
+    fn borrow(&self) -> &[u8] {
+        self.as_bytes()
+    }
+}
+
 // Lua strings are basically &[u8] slices, so implement PartialEq for anything resembling that.
 //
 // This makes our `String` comparable with `Vec<u8>`, `[u8]`, `&str`, `String` and `mlua::String`
@@ -133,6 +140,14 @@ where
 {
     fn eq(&self, other: &T) -> bool {
         self.as_bytes() == other.as_ref()
+    }
+}
+
+impl<'lua> Eq for String<'lua> {}
+
+impl<'lua> Hash for String<'lua> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.as_bytes().hash(state);
     }
 }
 

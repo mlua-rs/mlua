@@ -1,3 +1,11 @@
+## v0.8.0-beta.3
+
+- Luau vector constructor
+- Luau sandboxing support
+- Luau interrupts (yieldable)
+- More Luau compiler options (mutable globals)
+- Other performance improvements
+
 ## v0.8.0-beta.2
 
 - Luau vector datatype support

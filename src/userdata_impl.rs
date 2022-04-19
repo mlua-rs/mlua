@@ -246,9 +246,21 @@ impl<'lua, T: 'static + UserData> StaticUserDataMethods<'lua, T> {
                             let ud = ud.try_lock().map_err(|_| Error::UserDataBorrowError)?;
                             method(lua, &ud, A::from_lua_multi(args, lua)?)?.to_lua_multi(lua)
                         }
+                        #[cfg(feature = "parking_lot")]
+                        Some(id) if id == TypeId::of::<Arc<parking_lot::Mutex<T>>>() => {
+                            let ud = get_userdata_ref::<Arc<parking_lot::Mutex<T>>>(lua.state)?;
+                            let ud = ud.try_lock().ok_or(Error::UserDataBorrowError)?;
+                            method(lua, &ud, A::from_lua_multi(args, lua)?)?.to_lua_multi(lua)
+                        }
                         Some(id) if id == TypeId::of::<Arc<RwLock<T>>>() => {
                             let ud = get_userdata_ref::<Arc<RwLock<T>>>(lua.state)?;
                             let ud = ud.try_read().map_err(|_| Error::UserDataBorrowError)?;
+                            method(lua, &ud, A::from_lua_multi(args, lua)?)?.to_lua_multi(lua)
+                        }
+                        #[cfg(feature = "parking_lot")]
+                        Some(id) if id == TypeId::of::<Arc<parking_lot::RwLock<T>>>() => {
+                            let ud = get_userdata_ref::<Arc<parking_lot::RwLock<T>>>(lua.state)?;
+                            let ud = ud.try_read().ok_or(Error::UserDataBorrowError)?;
                             method(lua, &ud, A::from_lua_multi(args, lua)?)?.to_lua_multi(lua)
                         }
                         _ => Err(Error::UserDataTypeMismatch),
@@ -301,10 +313,22 @@ impl<'lua, T: 'static + UserData> StaticUserDataMethods<'lua, T> {
                                 ud.try_lock().map_err(|_| Error::UserDataBorrowMutError)?;
                             method(lua, &mut ud, A::from_lua_multi(args, lua)?)?.to_lua_multi(lua)
                         }
+                        #[cfg(feature = "parking_lot")]
+                        Some(id) if id == TypeId::of::<Arc<parking_lot::Mutex<T>>>() => {
+                            let ud = get_userdata_mut::<Arc<parking_lot::Mutex<T>>>(lua.state)?;
+                            let mut ud = ud.try_lock().ok_or(Error::UserDataBorrowMutError)?;
+                            method(lua, &mut ud, A::from_lua_multi(args, lua)?)?.to_lua_multi(lua)
+                        }
                         Some(id) if id == TypeId::of::<Arc<RwLock<T>>>() => {
                             let ud = get_userdata_mut::<Arc<RwLock<T>>>(lua.state)?;
                             let mut ud =
                                 ud.try_write().map_err(|_| Error::UserDataBorrowMutError)?;
+                            method(lua, &mut ud, A::from_lua_multi(args, lua)?)?.to_lua_multi(lua)
+                        }
+                        #[cfg(feature = "parking_lot")]
+                        Some(id) if id == TypeId::of::<Arc<parking_lot::RwLock<T>>>() => {
+                            let ud = get_userdata_mut::<Arc<parking_lot::RwLock<T>>>(lua.state)?;
+                            let mut ud = ud.try_write().ok_or(Error::UserDataBorrowMutError)?;
                             method(lua, &mut ud, A::from_lua_multi(args, lua)?)?.to_lua_multi(lua)
                         }
                         _ => Err(Error::UserDataTypeMismatch),
@@ -354,9 +378,22 @@ impl<'lua, T: 'static + UserData> StaticUserDataMethods<'lua, T> {
                                 let ud = ud.try_lock().map_err(|_| Error::UserDataBorrowError)?;
                                 Ok(method(lua, ud.clone(), A::from_lua_multi(args, lua)?))
                             }
+                            #[cfg(feature = "parking_lot")]
+                            Some(id) if id == TypeId::of::<Arc<parking_lot::Mutex<T>>>() => {
+                                let ud = get_userdata_ref::<Arc<parking_lot::Mutex<T>>>(lua.state)?;
+                                let ud = ud.try_lock().ok_or(Error::UserDataBorrowError)?;
+                                Ok(method(lua, ud.clone(), A::from_lua_multi(args, lua)?))
+                            }
                             Some(id) if id == TypeId::of::<Arc<RwLock<T>>>() => {
                                 let ud = get_userdata_ref::<Arc<RwLock<T>>>(lua.state)?;
                                 let ud = ud.try_read().map_err(|_| Error::UserDataBorrowError)?;
+                                Ok(method(lua, ud.clone(), A::from_lua_multi(args, lua)?))
+                            }
+                            #[cfg(feature = "parking_lot")]
+                            Some(id) if id == TypeId::of::<Arc<parking_lot::RwLock<T>>>() => {
+                                let ud =
+                                    get_userdata_ref::<Arc<parking_lot::RwLock<T>>>(lua.state)?;
+                                let ud = ud.try_read().ok_or(Error::UserDataBorrowError)?;
                                 Ok(method(lua, ud.clone(), A::from_lua_multi(args, lua)?))
                             }
                             _ => Err(Error::UserDataTypeMismatch),
@@ -581,3 +618,7 @@ macro_rules! lua_userdata_impl {
 lua_userdata_impl!(Rc<RefCell<T>>);
 lua_userdata_impl!(Arc<Mutex<T>>);
 lua_userdata_impl!(Arc<RwLock<T>>);
+#[cfg(feature = "parking_lot")]
+lua_userdata_impl!(Arc<parking_lot::Mutex<T>>);
+#[cfg(feature = "parking_lot")]
+lua_userdata_impl!(Arc<parking_lot::RwLock<T>>);
