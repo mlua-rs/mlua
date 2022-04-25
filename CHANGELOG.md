@@ -1,3 +1,17 @@
+## v0.8.0-beta.4
+
+- Removed `&Lua` from `Lua::set_interrupt` as it's not safe (introduced in v0.8.0-beta.3)
+- Enabled `Lua::gc_inc` for Luau
+- Luau `debug` module marked as safe (enabled by default)
+- Implemented `Hash` for Lua String
+- Support mode options in `collectgarbage` for Luau
+- Added ability to set global Luau compiler (used for loading all chunks).
+- Refactored `AsChunk` trait (breaking changes).
+  `AsChunk` now implemented for `Path` and `PathBuf` to load lua files from fs.
+- Added `parking_lot` dependency and feature flag (for `UserData`)
+- Added `Function::info()` to get information about functions (#149).
+- Bugfixes and improvements (#104 #142)
+
 ## v0.8.0-beta.3
 
 - Luau vector constructor
