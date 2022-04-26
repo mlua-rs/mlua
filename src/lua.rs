@@ -2910,6 +2910,18 @@ where
 
     let nargs = ffi::lua_gettop(state);
 
+    // We need 2 extra stack spaces to store userdata and error/panic metatable.
+    // Luau workaround can be removed after solving https://github.com/Roblox/luau/issues/446
+    // Also see #142 and #153
+    if !cfg!(feature = "luau") || extra.wrapped_failures_cache.is_empty() {
+        let extra_stack = if nargs < 2 { 2 - nargs } else { 1 };
+        ffi::luaL_checkstack(
+            state,
+            extra_stack,
+            cstr!("not enough stack space for callback error handling"),
+        );
+    }
+
     enum PreallocatedFailure {
         New(*mut WrappedFailure),
         Cached(i32),
@@ -2920,13 +2932,6 @@ where
     let prealloc_failure = match extra.wrapped_failures_cache.pop() {
         Some(index) => PreallocatedFailure::Cached(index),
         None => {
-            // We need 2 extra stack spaces to store userdata and error/panic metatable.
-            let extra_stack = if nargs < 2 { 2 - nargs } else { 1 };
-            ffi::luaL_checkstack(
-                state,
-                extra_stack,
-                cstr!("not enough stack space for callback error handling"),
-            );
             let ud = WrappedFailure::new_userdata(state);
             ffi::lua_rotate(state, 1, 1);
             PreallocatedFailure::New(ud)
@@ -2940,6 +2945,8 @@ where
         }
         PreallocatedFailure::Cached(index) => {
             ffi::lua_settop(state, 0);
+            #[cfg(feature = "luau")]
+            assert_stack(state, 2);
             ffi::lua_pushvalue(extra.ref_thread, index);
             ffi::lua_xmove(extra.ref_thread, state, 1);
             ffi::lua_pushnil(extra.ref_thread);
