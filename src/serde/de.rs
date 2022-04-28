@@ -1,3 +1,4 @@
+use core::marker::PhantomData;
 use std::cell::RefCell;
 use std::convert::TryInto;
 use std::os::raw::c_void;
@@ -9,8 +10,9 @@ use serde::de::{self, IntoDeserializer};
 
 use crate::error::{Error, Result};
 use crate::ffi;
+use crate::lua::Lua;
 use crate::table::{Table, TablePairs, TableSequence};
-use crate::value::Value;
+use crate::value::{FromLua, Value};
 
 /// A struct for deserializing Lua values into Rust values.
 #[derive(Debug)]
@@ -600,4 +602,25 @@ fn check_value_if_skip(
         _ => {}
     }
     Ok(false) // do not skip
+}
+
+pub struct DeserializeFromLua<'lua, T: de::Deserialize<'lua>>(T, PhantomData<&'lua ()>);
+impl<'lua, T: de::Deserialize<'lua>> DeserializeFromLua<'lua, T> {
+    pub fn into_inner(self) -> T {
+        self.0
+    }
+}
+impl<'lua, T: de::Deserialize<'lua>> From<T> for DeserializeFromLua<'lua, T> {
+    fn from(t: T) -> Self {
+        Self(t, PhantomData)
+    }
+}
+impl<'lua, T: de::Deserialize<'lua>> FromLua<'lua> for DeserializeFromLua<'lua, T> {
+    fn from_lua(lua_value: Value<'lua>, _: &'lua Lua) -> Result<Self> {
+        let deserializer = Deserializer::new(lua_value);
+        match T::deserialize(deserializer) {
+            Ok(data) => Ok(data.into()),
+            Err(err) => Err(err.into()),
+        }
+    }
 }

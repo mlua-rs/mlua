@@ -483,3 +483,21 @@ impl<'lua> ser::SerializeStructVariant for SerializeStructVariant<'lua> {
         Ok(Value::Table(table))
     }
 }
+
+pub struct SerializeToLua<T: Serialize>(T);
+impl<T: Serialize> SerializeToLua<T> {
+    pub fn into_inner(self) -> T {
+        self.0
+    }
+}
+impl<T: Serialize> From<T> for SerializeToLua<T> {
+    fn from(t: T) -> Self {
+        Self(t)
+    }
+}
+impl<'lua, T: Serialize> ToLua<'lua> for SerializeToLua<T> {
+    fn to_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
+        let serializer = Serializer::new(lua);
+        self.0.serialize(serializer)
+    }
+}

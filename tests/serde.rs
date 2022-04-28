@@ -502,3 +502,45 @@ fn test_from_value_with_options() -> Result<(), Box<dyn std::error::Error>> {
 
     Ok(())
 }
+
+#[test]
+fn test_serialize_lua() -> LuaResult<()> {
+    use mlua::serde::de::DeserializeFromLua;
+    use mlua::serde::ser::SerializeToLua;
+    let lua = Lua::new();
+    let globals = lua.globals();
+    globals.set("null", lua.null())?;
+
+    #[derive(Clone, Serialize, Deserialize)]
+    struct Test {
+        name: String,
+        key: i64,
+        data: Option<bool>,
+    }
+
+    let test = Test {
+        name: "alex".to_string(),
+        key: -16,
+        data: None,
+    };
+
+    fn add_one(_: &Lua, arg: DeserializeFromLua<Test>) -> LuaResult<SerializeToLua<Test>> {
+        let mut arg = arg.into_inner();
+        arg.key += 1;
+        Ok(arg.into())
+    }
+    globals.set("add_one", lua.create_function(add_one)?)?;
+    globals.set("value", SerializeToLua::from(test))?;
+    lua.load(
+        r#"
+            val=add_one(value)
+            assert(val["key"] == value["key"]+1)
+            assert(val["data"]==null)
+        "#,
+    )
+    .exec()?;
+    let val: DeserializeFromLua<Test> = globals.get("val")?;
+    let val = val.into_inner();
+    assert_eq!(val.key, -15);
+    Ok(())
+}
