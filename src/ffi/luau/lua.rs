@@ -259,7 +259,11 @@ extern "C" {
     pub fn lua_concat(L: *mut lua_State, n: c_int);
     // TODO: lua_encodepointer
     pub fn lua_clock() -> c_double;
-    pub fn lua_setuserdatadtor(L: *mut lua_State, tag: c_int, dtor: Option<lua_Udestructor>);
+    pub fn lua_setuserdatadtor(
+        L: *mut lua_State,
+        tag: c_int,
+        dtor: Option<unsafe extern "C" fn(*mut lua_State, *mut c_void)>,
+    );
     pub fn lua_clonefunction(L: *mut lua_State, idx: c_int);
 }
 
