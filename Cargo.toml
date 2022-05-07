@@ -23,8 +23,6 @@ rustdoc-args = ["--cfg", "docsrs"]
 [workspace]
 members = [
     "mlua_derive",
-    "examples/module",
-    "tests/module",
 ]
 
 [features]

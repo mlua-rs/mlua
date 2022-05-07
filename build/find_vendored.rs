@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use std::path::PathBuf;
 
 pub fn probe_lua() -> Option<PathBuf> {
@@ -20,7 +22,6 @@ pub fn probe_lua() -> Option<PathBuf> {
     #[cfg(feature = "luau")]
     let artifacts = luau0_src::Build::new().build();
 
-    #[cfg(not(feature = "module"))]
     artifacts.print_cargo_metadata();
 
     Some(artifacts.include_dir().to_owned())
