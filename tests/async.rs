@@ -75,7 +75,10 @@ async fn test_async_call() -> Result<()> {
 async fn test_async_bind_call() -> Result<()> {
     let lua = Lua::new();
 
-    let sum = lua.create_async_function(|_lua, (a, b): (i64, i64)| async move { Ok(a + b) })?;
+    let sum = lua.create_async_function(|_lua, (a, b): (i64, i64)| async move {
+        tokio::task::yield_now().await;
+        Ok(a + b)
+    })?;
 
     let plus_10 = sum.bind(10)?;
     lua.globals().set("plus_10", plus_10)?;

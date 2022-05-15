@@ -178,24 +178,17 @@ impl<'lua> Function<'lua> {
     /// # }
     /// ```
     pub fn bind<A: ToLuaMulti<'lua>>(&self, args: A) -> Result<Function<'lua>> {
-        unsafe extern "C" fn bind_call_impl(state: *mut ffi::lua_State) -> c_int {
+        unsafe extern "C" fn args_wrapper_impl(state: *mut ffi::lua_State) -> c_int {
             let nargs = ffi::lua_gettop(state);
-            let nbinds = ffi::lua_tointeger(state, ffi::lua_upvalueindex(2)) as c_int;
-            ffi::luaL_checkstack(state, nbinds + 2, ptr::null());
-
-            ffi::lua_settop(state, nargs + nbinds + 1);
-            ffi::lua_rotate(state, -(nargs + nbinds + 1), nbinds + 1);
-
-            ffi::lua_pushvalue(state, ffi::lua_upvalueindex(1));
-            ffi::lua_replace(state, 1);
+            let nbinds = ffi::lua_tointeger(state, ffi::lua_upvalueindex(1)) as c_int;
+            ffi::luaL_checkstack(state, nbinds, ptr::null());
 
             for i in 0..nbinds {
-                ffi::lua_pushvalue(state, ffi::lua_upvalueindex(i + 3));
-                ffi::lua_replace(state, i + 2);
+                ffi::lua_pushvalue(state, ffi::lua_upvalueindex(i + 2));
             }
+            ffi::lua_rotate(state, 1, nbinds);
 
-            ffi::lua_call(state, nargs + nbinds, ffi::LUA_MULTRET);
-            ffi::lua_gettop(state)
+            nargs + nbinds
         }
 
         let lua = self.0.lua;
@@ -203,25 +196,35 @@ impl<'lua> Function<'lua> {
         let args = args.to_lua_multi(lua)?;
         let nargs = args.len() as c_int;
 
-        if nargs + 2 > ffi::LUA_MAX_UPVALUES {
+        if nargs + 1 > ffi::LUA_MAX_UPVALUES {
             return Err(Error::BindError);
         }
 
-        unsafe {
+        let args_wrapper = unsafe {
             let _sg = StackGuard::new(lua.state);
-            check_stack(lua.state, nargs + 5)?;
+            check_stack(lua.state, nargs + 3)?;
 
-            lua.push_ref(&self.0);
             ffi::lua_pushinteger(lua.state, nargs as ffi::lua_Integer);
             for arg in args {
                 lua.push_value(arg)?;
             }
-            protect_lua!(lua.state, nargs + 2, 1, fn(state) {
-                ffi::lua_pushcclosure(state, bind_call_impl, ffi::lua_gettop(state));
+            protect_lua!(lua.state, nargs + 1, 1, fn(state) {
+                ffi::lua_pushcclosure(state, args_wrapper_impl, ffi::lua_gettop(state));
             })?;
 
-            Ok(Function(lua.pop_ref()))
-        }
+            Function(lua.pop_ref())
+        };
+
+        lua.load(
+            r#"
+            local func, args_wrapper = ...
+            return function(...)
+                return func(args_wrapper(...))
+            end
+            "#,
+        )
+        .set_name("_mlua_bind")?
+        .call((self.clone(), args_wrapper))
     }
 
     /// Returns information about the function.
