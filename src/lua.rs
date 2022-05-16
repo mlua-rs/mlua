@@ -2741,6 +2741,7 @@ impl Lua {
             end
             "#,
         )
+        .try_cache()
         .set_name("_mlua_async_poll")?
         .set_environment(env)?
         .into_function()

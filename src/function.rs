@@ -223,6 +223,7 @@ impl<'lua> Function<'lua> {
             end
             "#,
         )
+        .try_cache()
         .set_name("_mlua_bind")?
         .call((self.clone(), args_wrapper))
     }
