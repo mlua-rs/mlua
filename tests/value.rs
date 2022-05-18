@@ -1,3 +1,5 @@
+use std::ptr;
+
 use mlua::{Lua, Result, Value};
 
 #[test]
@@ -41,17 +43,23 @@ fn test_value_eq() -> Result<()> {
     let thread2: Value = globals.get("thread2")?;
 
     assert!(table1 != table2);
-    assert!(table1.equals(table2)?);
+    assert!(table1.equals(&table2)?);
     assert!(string1 == string2);
-    assert!(string1.equals(string2)?);
+    assert!(string1.equals(&string2)?);
     assert!(num1 == num2);
     assert!(num1.equals(num2)?);
     assert!(num1 != num3);
     assert!(func1 == func2);
     assert!(func1 != func3);
-    assert!(!func1.equals(func3)?);
+    assert!(!func1.equals(&func3)?);
     assert!(thread1 == thread2);
-    assert!(thread1.equals(thread2)?);
+    assert!(thread1.equals(&thread2)?);
+
+    assert!(!table1.to_pointer().is_null());
+    assert!(!ptr::eq(table1.to_pointer(), table2.to_pointer()));
+    assert!(ptr::eq(string1.to_pointer(), string2.to_pointer()));
+    assert!(ptr::eq(func1.to_pointer(), func2.to_pointer()));
+    assert!(num1.to_pointer().is_null());
 
     Ok(())
 }
