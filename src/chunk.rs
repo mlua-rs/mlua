@@ -417,7 +417,7 @@ impl<'lua, 'a> Chunk<'lua, 'a> {
         }
     }
 
-    /// Fetches compiled bytecode of this chink from the cache.
+    /// Fetches compiled bytecode of this chunk from the cache.
     ///
     /// If not found, compiles the source code and stores it on the cache.
     pub(crate) fn try_cache(mut self) -> Self {
