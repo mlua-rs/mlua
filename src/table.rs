@@ -1,4 +1,5 @@
 use std::marker::PhantomData;
+use std::os::raw::c_void;
 
 #[cfg(feature = "serialize")]
 use {
@@ -512,6 +513,14 @@ impl<'lua> Table<'lua> {
             crate::serde::push_array_metatable(lua.state);
             ffi::lua_rawequal(lua.state, -1, -2) != 0
         }
+    }
+
+    /// Returns the underlying lua pointer value associated with the Table.
+    /// There is no way to convert a pointer back to its original value;
+    /// this function is useful for hashing or debug purposes.
+    pub fn to_pointer(&self) -> *const c_void {
+        let lua = self.0.lua;
+        unsafe { lua.ref_thread_exec(|refthr| ffi::lua_topointer(refthr, self.0.index)) }
     }
 }
 
