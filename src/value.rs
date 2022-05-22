@@ -1,5 +1,6 @@
 use std::iter::{self, FromIterator};
-use std::{slice, str, vec};
+use std::os::raw::c_void;
+use std::{ptr, slice, str, vec};
 
 #[cfg(feature = "serialize")]
 use {
@@ -9,6 +10,7 @@ use {
 };
 
 use crate::error::{Error, Result};
+use crate::ffi;
 use crate::function::Function;
 use crate::lua::Lua;
 use crate::string::String;
@@ -91,6 +93,29 @@ impl<'lua> Value<'lua> {
             (Value::Table(a), Value::Table(b)) => a.equals(b),
             (Value::UserData(a), Value::UserData(b)) => a.equals(b),
             _ => Ok(self == other.as_ref()),
+        }
+    }
+
+    /// Converts the value to a generic C pointer.
+    ///
+    /// The value can be a userdata, a table, a thread, a string, or a function; otherwise it returns NULL.
+    /// Different objects will give different pointers.
+    /// There is no way to convert the pointer back to its original value.
+    ///
+    /// Typically this function is used only for hashing and debug information.
+    pub fn to_pointer(&self) -> *const c_void {
+        unsafe {
+            match self {
+                Value::LightUserData(ud) => ud.0,
+                Value::String(String(v))
+                | Value::Table(Table(v))
+                | Value::Function(Function(v))
+                | Value::Thread(Thread(v))
+                | Value::UserData(AnyUserData(v)) => v
+                    .lua
+                    .ref_thread_exec(|refthr| ffi::lua_topointer(refthr, v.index)),
+                _ => ptr::null(),
+            }
         }
     }
 }

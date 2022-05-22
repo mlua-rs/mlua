@@ -39,7 +39,7 @@ jobs:
 
   build_aarch64_cross_macos:
     name: Cross-compile to aarch64-apple-darwin
-    runs-on: macos-11.0
+    runs-on: macos-latest
     needs: build
     strategy:
       matrix:
@@ -186,8 +186,8 @@ jobs:
     - uses: Swatinem/rust-cache@v1
     - name: Run ${{ matrix.lua }} module tests
       run: |
-        (cd examples/module && cargo build --release --features "${{ matrix.lua }},vendored")
-        (cd tests/module && cargo test --release --features "${{ matrix.lua }},vendored")
+        (cd tests/module && cargo build --release --features "${{ matrix.lua }}")
+        (cd tests/module/loader && cargo test --release --features "${{ matrix.lua }},vendored")
       shell: bash
 
   test_modules_windows:
@@ -208,8 +208,8 @@ jobs:
         pacman -S --noconfirm mingw-w64-x86_64-rust mingw-w64-x86_64-lua mingw-w64-x86_64-luajit mingw-w64-x86_64-pkg-config
     - name: Run ${{ matrix.lua }} module tests
       run: |
-        (cd examples/module && cargo build --release --features "${{ matrix.lua }}")
-        (cd tests/module && cargo test --release --features "${{ matrix.lua }}")
+        (cd tests/module && cargo build --release --features "${{ matrix.lua }}")
+        (cd tests/module/loader && cargo test --release --features "${{ matrix.lua }}")
 
   rustfmt:
     name: Rustfmt

@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::collections::HashMap;
 use std::ffi::CString;
 use std::io::Result as IoResult;
 use std::path::{Path, PathBuf};
@@ -394,18 +395,66 @@ impl<'lua, 'a> Chunk<'lua, 'a> {
     /// Compiles the chunk and changes mode to binary.
     ///
     /// It does nothing if the chunk is already binary.
-    #[cfg(feature = "luau")]
     fn compile(&mut self) {
         if let Ok(ref source) = self.source {
             if self.detect_mode() == ChunkMode::Text {
-                let data = self
-                    .compiler
-                    .get_or_insert_with(Default::default)
-                    .compile(source);
-                self.mode = Some(ChunkMode::Binary);
-                self.source = Ok(Cow::Owned(data));
+                #[cfg(feature = "luau")]
+                {
+                    let data = self
+                        .compiler
+                        .get_or_insert_with(Default::default)
+                        .compile(source);
+                    self.source = Ok(Cow::Owned(data));
+                    self.mode = Some(ChunkMode::Binary);
+                }
+                #[cfg(not(feature = "luau"))]
+                if let Ok(func) = self.lua.load_chunk(source.as_ref(), None, None, None) {
+                    let data = func.dump(false);
+                    self.source = Ok(Cow::Owned(data));
+                    self.mode = Some(ChunkMode::Binary);
+                }
             }
         }
+    }
+
+    /// Fetches compiled bytecode of this chunk from the cache.
+    ///
+    /// If not found, compiles the source code and stores it on the cache.
+    pub(crate) fn try_cache(mut self) -> Self {
+        struct ChunksCache(HashMap<Vec<u8>, Vec<u8>>);
+
+        // Try to fetch compiled chunk from cache
+        let mut text_source = None;
+        if let Ok(ref source) = self.source {
+            if self.detect_mode() == ChunkMode::Text {
+                if let Some(cache) = self.lua.app_data_ref::<ChunksCache>() {
+                    if let Some(data) = cache.0.get(source.as_ref()) {
+                        self.source = Ok(Cow::Owned(data.clone()));
+                        self.mode = Some(ChunkMode::Binary);
+                        return self;
+                    }
+                }
+                text_source = Some(source.as_ref().to_vec());
+            }
+        }
+
+        // Compile and cache the chunk
+        if let Some(text_source) = text_source {
+            self.compile();
+            if let Ok(ref binary_source) = self.source {
+                if self.detect_mode() == ChunkMode::Binary {
+                    if let Some(mut cache) = self.lua.app_data_mut::<ChunksCache>() {
+                        cache.0.insert(text_source, binary_source.as_ref().to_vec());
+                    } else {
+                        let mut cache = ChunksCache(HashMap::new());
+                        cache.0.insert(text_source, binary_source.as_ref().to_vec());
+                        self.lua.set_app_data(cache);
+                    }
+                }
+            }
+        }
+
+        self
     }
 
     fn to_expression(&self) -> Result<Function<'lua>> {
@@ -429,14 +478,13 @@ impl<'lua, 'a> Chunk<'lua, 'a> {
     fn detect_mode(&self) -> ChunkMode {
         match (self.mode, &self.source) {
             (Some(mode), _) => mode,
-            (None, Ok(source)) if source.len() == 0 => ChunkMode::Text,
             (None, Ok(source)) => {
                 #[cfg(not(feature = "luau"))]
                 if source.starts_with(ffi::LUA_SIGNATURE) {
                     return ChunkMode::Binary;
                 }
                 #[cfg(feature = "luau")]
-                if source[0] < b'\n' {
+                if *source.get(0).unwrap_or(&u8::MAX) < b'\n' {
                     return ChunkMode::Binary;
                 }
                 ChunkMode::Text

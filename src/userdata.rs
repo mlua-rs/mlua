@@ -119,7 +119,17 @@ pub enum MetaMethod {
     ///
     /// [`ipairs`]: https://www.lua.org/manual/5.2/manual.html#pdf-ipairs
     #[cfg(any(feature = "lua52", feature = "luajit52", feature = "lua-factorio", doc))]
+    #[cfg_attr(docsrs, doc(cfg(any(feature = "lua52", feature = "luajit52", feature = "lua-factorio"))))]
     IPairs,
+    /// The `__iter` metamethod.
+    ///
+    /// Executed before the iteration begins, and should return an iterator function like `next`
+    /// (or a custom one).
+    ///
+    /// Requires `feature = "lua"`
+    #[cfg(any(feature = "luau", doc))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
+    Iter,
     /// The `__close` metamethod.
     ///
     /// Executed when a variable, that marked as to-be-closed, goes out of scope.
@@ -205,6 +215,8 @@ impl MetaMethod {
             MetaMethod::Pairs => "__pairs",
             #[cfg(any(feature = "lua52", feature = "luajit52", feature = "lua-factorio"))]
             MetaMethod::IPairs => "__ipairs",
+            #[cfg(feature = "luau")]
+            MetaMethod::Iter => "__iter",
 
             #[cfg(feature = "lua54")]
             MetaMethod::Close => "__close",
@@ -273,6 +285,8 @@ impl From<StdString> for MetaMethod {
             "__pairs" => MetaMethod::Pairs,
             #[cfg(any(feature = "lua52", feature = "luajit52", feature = "lua-factorio"))]
             "__ipairs" => MetaMethod::IPairs,
+            #[cfg(feature = "luau")]
+            "__iter" => MetaMethod::Iter,
 
             #[cfg(feature = "lua54")]
             "__close" => MetaMethod::Close,

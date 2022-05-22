@@ -226,7 +226,7 @@ const MULTIVALUE_CACHE_SIZE: usize = 32;
 /// Requires `feature = "send"`
 #[cfg(feature = "send")]
 #[cfg_attr(docsrs, doc(cfg(feature = "send")))]
-unsafe impl Send for LuaInner {}
+unsafe impl Send for Lua {}
 
 #[cfg(not(feature = "module"))]
 impl Drop for LuaInner {
@@ -2744,6 +2744,7 @@ impl Lua {
             end
             "#,
         )
+        .try_cache()
         .set_name("_mlua_async_poll")?
         .set_environment(env)?
         .into_function()
