@@ -376,6 +376,19 @@ fn test_from_value_struct() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[test]
+fn test_from_value_newtype_struct() -> Result<(), Box<dyn std::error::Error>> {
+    let lua = Lua::new();
+
+    #[derive(Deserialize, PartialEq, Debug)]
+    struct Test(f64);
+
+    let got = lua.from_value(Value::Number(123.456))?;
+    assert_eq!(Test(123.456), got);
+
+    Ok(())
+}
+
+#[test]
 fn test_from_value_enum() -> Result<(), Box<dyn std::error::Error>> {
     let lua = Lua::new();
 
