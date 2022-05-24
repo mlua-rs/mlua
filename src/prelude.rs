@@ -21,7 +21,7 @@ pub use crate::HookTriggers as LuaHookTriggers;
 
 #[cfg(feature = "luau")]
 #[doc(no_inline)]
-pub use crate::VmState as LuaVmState;
+pub use crate::{CoverageInfo as LuaCoverageInfo, VmState as LuaVmState};
 
 #[cfg(feature = "async")]
 #[doc(no_inline)]
