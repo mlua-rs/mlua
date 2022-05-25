@@ -1,3 +1,11 @@
+## v0.8.0-beta.5
+
+- Lua sources no longer needed to build modules
+- Added `__iter` metamethod for Luau
+- Added `Value::to_pointer()` function
+- Added `Function::coverage` for Luau to obtain coverage report
+- Bugfixes and improvements (#153 #161 #168)
+
 ## v0.8.0-beta.4
 
 - Removed `&Lua` from `Lua::set_interrupt` as it's not safe (introduced in v0.8.0-beta.3)
