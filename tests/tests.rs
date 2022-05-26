@@ -1272,3 +1272,14 @@ fn test_luajit_cdata() {
         )
         .eval();
 }
+
+#[test]
+#[cfg(feature = "send")]
+fn test_send() {
+    let lua = Lua::new();
+    std::thread::spawn(move || {
+        let _lua = lua;
+    })
+    .join()
+    .unwrap();
+}
