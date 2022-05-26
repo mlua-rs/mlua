@@ -2137,6 +2137,7 @@ impl Lua {
     ///     Ok(())
     /// }
     /// ```
+    #[track_caller]
     pub fn set_app_data<T: 'static + MaybeSend>(&self, data: T) {
         let extra = unsafe { &mut (*self.extra.get()) };
         extra
@@ -2147,6 +2148,7 @@ impl Lua {
     }
 
     /// Gets a reference to an application data object stored by [`Lua::set_app_data()`] of type `T`.
+    #[track_caller]
     pub fn app_data_ref<T: 'static>(&self) -> Option<Ref<T>> {
         let extra = unsafe { &(*self.extra.get()) };
         let app_data = extra
@@ -2158,6 +2160,7 @@ impl Lua {
     }
 
     /// Gets a mutable reference to an application data object stored by [`Lua::set_app_data()`] of type `T`.
+    #[track_caller]
     pub fn app_data_mut<T: 'static>(&self) -> Option<RefMut<T>> {
         let extra = unsafe { &(*self.extra.get()) };
         let mut app_data = extra
@@ -2169,6 +2172,7 @@ impl Lua {
     }
 
     /// Removes an application data of type `T`.
+    #[track_caller]
     pub fn remove_app_data<T: 'static>(&self) -> Option<T> {
         let extra = unsafe { &mut (*self.extra.get()) };
         extra
