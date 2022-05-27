@@ -69,7 +69,10 @@ pub const LUA_RIDX_LAST: lua_Integer = LUA_RIDX_GLOBALS;
 pub type lua_Number = c_double;
 
 /// A Lua integer, usually equivalent to `i64`
-pub type lua_Integer = isize;
+#[cfg(target_pointer_width = "32")]
+pub type lua_Integer = i32;
+#[cfg(target_pointer_width = "64")]
+pub type lua_Integer = i64;
 
 /// A Lua unsigned integer, equivalent to `u32` in Lua 5.2
 pub type lua_Unsigned = c_uint;

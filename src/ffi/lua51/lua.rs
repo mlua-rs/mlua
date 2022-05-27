@@ -67,7 +67,10 @@ pub const LUA_MINSTACK: c_int = 20;
 pub type lua_Number = c_double;
 
 /// A Lua integer, usually equivalent to `i64`
-pub type lua_Integer = isize;
+#[cfg(target_pointer_width = "32")]
+pub type lua_Integer = i32;
+#[cfg(target_pointer_width = "64")]
+pub type lua_Integer = i64;
 
 /// Type for native C functions that can be passed to Lua.
 pub type lua_CFunction = unsafe extern "C" fn(L: *mut lua_State) -> c_int;
