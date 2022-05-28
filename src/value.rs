@@ -196,7 +196,7 @@ pub struct MultiValue<'lua>(Vec<Value<'lua>>);
 impl<'lua> MultiValue<'lua> {
     /// Creates an empty `MultiValue` containing no values.
     #[inline]
-    pub fn new() -> MultiValue<'lua> {
+    pub const fn new() -> MultiValue<'lua> {
         MultiValue(Vec::new())
     }
 

@@ -83,7 +83,7 @@ pub struct Variadic<T>(Vec<T>);
 
 impl<T> Variadic<T> {
     /// Creates an empty `Variadic` wrapper containing no values.
-    pub fn new() -> Variadic<T> {
+    pub const fn new() -> Variadic<T> {
         Variadic(Vec::new())
     }
 }
