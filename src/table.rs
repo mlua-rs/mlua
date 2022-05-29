@@ -198,7 +198,13 @@ impl<'lua> Table<'lua> {
             lua.push_ref(&self.0);
             lua.push_value(key)?;
             lua.push_value(value)?;
-            protect_lua!(lua.state, 3, 0, fn(state) ffi::lua_rawset(state, -3))
+            if lua.unlikely_memory_error() {
+                ffi::lua_rawset(lua.state, -3);
+                ffi::lua_pop(lua.state, 1);
+                Ok(())
+            } else {
+                protect_lua!(lua.state, 3, 0, fn(state) ffi::lua_rawset(state, -3))
+            }
         }
     }
 
