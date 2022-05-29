@@ -11,6 +11,7 @@ use crate::value::{FromLua, FromLuaMulti, MultiValue, Nil, ToLua, ToLuaMulti};
 /// Result is convertible to `MultiValue` following the common Lua idiom of returning the result
 /// on success, or in the case of an error, returning `nil` and an error message.
 impl<'lua, T: ToLua<'lua>, E: ToLua<'lua>> ToLuaMulti<'lua> for StdResult<T, E> {
+    #[inline]
     fn to_lua_multi(self, lua: &'lua Lua) -> Result<MultiValue<'lua>> {
         let mut result = MultiValue::new_or_cached(lua);
         match self {
@@ -25,6 +26,7 @@ impl<'lua, T: ToLua<'lua>, E: ToLua<'lua>> ToLuaMulti<'lua> for StdResult<T, E> 
 }
 
 impl<'lua, T: ToLua<'lua>> ToLuaMulti<'lua> for T {
+    #[inline]
     fn to_lua_multi(self, lua: &'lua Lua) -> Result<MultiValue<'lua>> {
         let mut v = MultiValue::new_or_cached(lua);
         v.push_front(self.to_lua(lua)?);
@@ -33,6 +35,7 @@ impl<'lua, T: ToLua<'lua>> ToLuaMulti<'lua> for T {
 }
 
 impl<'lua, T: FromLua<'lua>> FromLuaMulti<'lua> for T {
+    #[inline]
     fn from_lua_multi(mut values: MultiValue<'lua>, lua: &'lua Lua) -> Result<Self> {
         let res = T::from_lua(values.pop_front().unwrap_or(Nil), lua);
         lua.cache_multivalue(values);
@@ -41,12 +44,14 @@ impl<'lua, T: FromLua<'lua>> FromLuaMulti<'lua> for T {
 }
 
 impl<'lua> ToLuaMulti<'lua> for MultiValue<'lua> {
+    #[inline]
     fn to_lua_multi(self, _: &'lua Lua) -> Result<MultiValue<'lua>> {
         Ok(self)
     }
 }
 
 impl<'lua> FromLuaMulti<'lua> for MultiValue<'lua> {
+    #[inline]
     fn from_lua_multi(values: MultiValue<'lua>, _: &'lua Lua) -> Result<Self> {
         Ok(values)
     }
@@ -124,6 +129,7 @@ impl<T> DerefMut for Variadic<T> {
 }
 
 impl<'lua, T: ToLua<'lua>> ToLuaMulti<'lua> for Variadic<T> {
+    #[inline]
     fn to_lua_multi(self, lua: &'lua Lua) -> Result<MultiValue<'lua>> {
         let mut values = MultiValue::new_or_cached(lua);
         values.refill(self.0.into_iter().map(|e| e.to_lua(lua)))?;
@@ -132,6 +138,7 @@ impl<'lua, T: ToLua<'lua>> ToLuaMulti<'lua> for Variadic<T> {
 }
 
 impl<'lua, T: FromLua<'lua>> FromLuaMulti<'lua> for Variadic<T> {
+    #[inline]
     fn from_lua_multi(mut values: MultiValue<'lua>, lua: &'lua Lua) -> Result<Self> {
         let res = values
             .drain_all()
@@ -146,12 +153,14 @@ impl<'lua, T: FromLua<'lua>> FromLuaMulti<'lua> for Variadic<T> {
 macro_rules! impl_tuple {
     () => (
         impl<'lua> ToLuaMulti<'lua> for () {
+            #[inline]
             fn to_lua_multi(self, lua: &'lua Lua) -> Result<MultiValue<'lua>> {
                 Ok(MultiValue::new_or_cached(lua))
             }
         }
 
         impl<'lua> FromLuaMulti<'lua> for () {
+            #[inline]
             fn from_lua_multi(values: MultiValue<'lua>, lua: &'lua Lua) -> Result<Self> {
                 lua.cache_multivalue(values);
                 Ok(())
@@ -166,6 +175,7 @@ macro_rules! impl_tuple {
         {
             #[allow(unused_mut)]
             #[allow(non_snake_case)]
+            #[inline]
             fn to_lua_multi(self, lua: &'lua Lua) -> Result<MultiValue<'lua>> {
                 let ($($name,)* $last,) = self;
 
@@ -181,6 +191,7 @@ macro_rules! impl_tuple {
         {
             #[allow(unused_mut)]
             #[allow(non_snake_case)]
+            #[inline]
             fn from_lua_multi(mut values: MultiValue<'lua>, lua: &'lua Lua) -> Result<Self> {
                 $(let $name = values.pop_front().unwrap_or(Nil);)*
                 let $last = FromLuaMulti::from_lua_multi(values, lua)?;
