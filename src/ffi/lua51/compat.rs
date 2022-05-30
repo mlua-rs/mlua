@@ -568,11 +568,10 @@ pub unsafe fn luaL_requiref(
             lua_getfield(L, -1, modname);
         }
     }
-    if cfg!(feature = "lua51") && glb != 0 {
+    if glb != 0 {
         lua_pushvalue(L, -1);
         lua_setglobal(L, modname);
-    }
-    if cfg!(feature = "luajit") && glb == 0 {
+    } else {
         lua_pushnil(L);
         lua_setglobal(L, modname);
     }

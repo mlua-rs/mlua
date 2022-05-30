@@ -513,6 +513,9 @@ pub unsafe fn luaL_requiref(
     if glb != 0 {
         lua_pushvalue(L, -1);
         lua_setglobal(L, modname);
+    } else {
+        lua_pushnil(L);
+        lua_setglobal(L, modname);
     }
     lua_replace(L, -2);
 }
