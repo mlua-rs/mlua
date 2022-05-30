@@ -376,20 +376,24 @@ macro_rules! lua_convert_int {
             #[inline]
             fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> Result<Self> {
                 let ty = value.type_name();
-                (if let Value::Integer(i) = value {
-                    cast(i)
-                } else if let Some(i) = lua.coerce_integer(value.clone())? {
-                    cast(i)
-                } else {
-                    cast(lua.coerce_number(value)?.ok_or_else(|| {
-                        Error::FromLuaConversionError {
-                            from: ty,
-                            to: stringify!($x),
-                            message: Some(
-                                "expected number or string coercible to number".to_string(),
-                            ),
+                (match value {
+                    Value::Integer(i) => cast(i),
+                    Value::Number(n) => cast(n),
+                    _ => {
+                        if let Some(i) = lua.coerce_integer(value.clone())? {
+                            cast(i)
+                        } else {
+                            cast(lua.coerce_number(value)?.ok_or_else(|| {
+                                Error::FromLuaConversionError {
+                                    from: ty,
+                                    to: stringify!($x),
+                                    message: Some(
+                                        "expected number or string coercible to number".to_string(),
+                                    ),
+                                }
+                            })?)
                         }
-                    })?)
+                    }
                 })
                 .ok_or_else(|| Error::FromLuaConversionError {
                     from: ty,

@@ -2304,15 +2304,29 @@ impl Lua {
                 ud
             }
 
+            #[cfg(any(feature = "lua54", feature = "lua53"))]
             ffi::LUA_TNUMBER => {
-                if ffi::lua_isinteger(state, -1) != 0 {
-                    let i = Value::Integer(ffi::lua_tointeger(state, -1));
-                    ffi::lua_pop(state, 1);
-                    i
+                let v = if ffi::lua_isinteger(state, -1) != 0 {
+                    Value::Integer(ffi::lua_tointeger(state, -1))
                 } else {
-                    let n = Value::Number(ffi::lua_tonumber(state, -1));
-                    ffi::lua_pop(state, 1);
-                    n
+                    Value::Number(ffi::lua_tonumber(state, -1))
+                };
+                ffi::lua_pop(state, 1);
+                v
+            }
+
+            #[cfg(any(
+                feature = "lua52",
+                feature = "lua51",
+                feature = "luajit",
+                feature = "luau"
+            ))]
+            ffi::LUA_TNUMBER => {
+                let n = ffi::lua_tonumber(state, -1);
+                ffi::lua_pop(state, 1);
+                match num_traits::cast(n) {
+                    Some(i) if (n - (i as Number)).abs() < Number::EPSILON => Value::Integer(i),
+                    _ => Value::Number(n),
                 }
             }
 

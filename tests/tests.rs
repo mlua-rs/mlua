@@ -560,7 +560,12 @@ fn test_num_conversion() -> Result<()> {
     assert_eq!(lua.load("1.0").eval::<f64>()?, 1.0);
     #[cfg(any(feature = "lua54", feature = "lua53"))]
     assert_eq!(lua.load("1.0").eval::<String>()?, "1.0");
-    #[cfg(any(feature = "lua52", feature = "lua51", feature = "luajit"))]
+    #[cfg(any(
+        feature = "lua52",
+        feature = "lua51",
+        feature = "luajit",
+        feature = "luau"
+    ))]
     assert_eq!(lua.load("1.0").eval::<String>()?, "1");
 
     assert_eq!(lua.load("1.5").eval::<i64>()?, 1);
