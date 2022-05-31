@@ -8,6 +8,7 @@ use std::mem::ManuallyDrop;
 use std::ops::{Deref, DerefMut};
 use std::os::raw::{c_char, c_int, c_void};
 use std::panic::{catch_unwind, resume_unwind, AssertUnwindSafe, Location};
+use std::ptr::NonNull;
 use std::sync::{Arc, Mutex};
 use std::{mem, ptr, str};
 
@@ -95,7 +96,7 @@ pub(crate) struct ExtraData {
     app_data: RefCell<HashMap<TypeId, Box<dyn Any + Send>>>,
 
     libs: StdLib,
-    mem_info: Option<ptr::NonNull<MemoryInfo>>,
+    mem_info: Option<NonNull<MemoryInfo>>,
 
     ref_thread: *mut ffi::lua_State,
     ref_stack_size: c_int,
@@ -378,25 +379,20 @@ impl Lua {
     }
 
     unsafe fn inner_new(libs: StdLib, options: LuaOptions) -> Lua {
-        #[cfg_attr(
-            any(feature = "lua51", feature = "luajit", feature = "luau"),
-            allow(dead_code)
-        )]
         unsafe extern "C" fn allocator(
             extra_data: *mut c_void,
             ptr: *mut c_void,
             osize: usize,
             nsize: usize,
         ) -> *mut c_void {
-            use std::alloc;
+            use std::alloc::{self, Layout};
 
             let mem_info = &mut *(extra_data as *mut MemoryInfo);
 
             if nsize == 0 {
                 // Free memory
                 if !ptr.is_null() {
-                    let layout =
-                        alloc::Layout::from_size_align_unchecked(osize, ffi::SYS_MIN_ALIGN);
+                    let layout = Layout::from_size_align_unchecked(osize, ffi::SYS_MIN_ALIGN);
                     alloc::dealloc(ptr as *mut u8, layout);
                     mem_info.used_memory -= osize as isize;
                 }
@@ -413,52 +409,40 @@ impl Lua {
                 return ptr::null_mut();
             }
 
-            let new_layout = alloc::Layout::from_size_align_unchecked(nsize, ffi::SYS_MIN_ALIGN);
+            let new_layout = Layout::from_size_align_unchecked(nsize, ffi::SYS_MIN_ALIGN);
+            mem_info.used_memory += mem_diff;
 
             if ptr.is_null() {
                 // Allocate new memory
                 let new_ptr = alloc::alloc(new_layout) as *mut c_void;
-                if !new_ptr.is_null() {
-                    mem_info.used_memory += mem_diff;
+                if new_ptr.is_null() {
+                    alloc::handle_alloc_error(new_layout);
                 }
                 return new_ptr;
             }
 
             // Reallocate memory
-            let old_layout = alloc::Layout::from_size_align_unchecked(osize, ffi::SYS_MIN_ALIGN);
+            let old_layout = Layout::from_size_align_unchecked(osize, ffi::SYS_MIN_ALIGN);
             let new_ptr = alloc::realloc(ptr as *mut u8, old_layout, nsize) as *mut c_void;
-
-            if !new_ptr.is_null() {
-                mem_info.used_memory += mem_diff;
-            } else if !ptr.is_null() && nsize < osize {
-                // Should not happen
+            if new_ptr.is_null() {
                 alloc::handle_alloc_error(new_layout);
             }
-
             new_ptr
         }
 
-        #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
         let mem_info = Box::into_raw(Box::new(MemoryInfo {
             used_memory: 0,
             memory_limit: 0,
         }));
 
-        #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
         let state = ffi::lua_newstate(allocator, mem_info as *mut c_void);
-        #[cfg(any(feature = "lua51", feature = "luajit", feature = "luau"))]
-        let state = ffi::luaL_newstate();
 
         ffi::luaL_requiref(state, cstr!("_G"), ffi::luaopen_base, 1);
         ffi::lua_pop(state, 1);
 
         let lua = Lua::init_from_ptr(state);
         let extra = &mut *lua.extra.get();
-
-        #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
-        {
-            extra.mem_info = ptr::NonNull::new(mem_info);
-        }
+        extra.mem_info = NonNull::new(mem_info);
 
         mlua_expect!(
             load_from_std_lib(state, libs),
@@ -2923,12 +2907,11 @@ impl Lua {
     #[inline]
     pub(crate) unsafe fn unlikely_memory_error(&self) -> bool {
         let extra = &mut *self.extra.get();
-        cfg!(target_os = "linux")
-            && cfg!(not(feature = "module"))
-            && extra
-                .mem_info
-                .map(|x| x.as_ref().memory_limit == 0)
-                .unwrap_or(true)
+        // MemoryInfo is empty in module mode so we cannot predict memory limits
+        extra
+            .mem_info
+            .map(|x| x.as_ref().memory_limit == 0)
+            .unwrap_or_default()
     }
 }
 
