@@ -1,3 +1,17 @@
+## v0.8.0
+Changes since 0.7.4
+- Roblox Luau support
+- Removed C glue
+- Added async support to `__index` and `__newindex` metamethods
+- Added `Function::info()` to get information about functions (#149).
+- Added `parking_lot` dependency under feature flag (for `UserData`)
+- `Hash` implementation for Lua String
+- Added `Value::to_pointer()` function
+- Performance improvements
+
+Breaking changes:
+- Refactored `AsChunk` trait (added implementation for `Path` and `PathBuf`).
+
 ## v0.8.0-beta.5
 
 - Lua sources no longer needed to build modules
