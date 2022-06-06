@@ -538,7 +538,7 @@ impl Lua {
         #[cfg(feature = "async")]
         let ref_waker_idx = {
             mlua_expect!(
-                push_gc_userdata::<Option<Waker>>(ref_thread, None),
+                push_gc_userdata::<Option<Waker>>(ref_thread, None, true),
                 "Error while creating Waker slot"
             );
             ffi::lua_gettop(ref_thread)
@@ -578,7 +578,7 @@ impl Lua {
 
         mlua_expect!(
             (|state| {
-                push_gc_userdata(state, Arc::clone(&extra))?;
+                push_gc_userdata(state, Arc::clone(&extra), true)?;
                 protect_lua!(state, 1, 0, fn(state) {
                     let extra_key = &EXTRA_REGISTRY_KEY as *const u8 as *const c_void;
                     ffi::lua_rawsetp(state, ffi::LUA_REGISTRYINDEX, extra_key);
@@ -1408,29 +1408,15 @@ impl Lua {
             let _sg = StackGuard::new(self.state);
             check_stack(self.state, 3)?;
 
-            if self.unlikely_memory_error() {
-                let s = s.as_ref();
-                ffi::lua_pushlstring(self.state, s.as_ptr() as *const c_char, s.len());
-            } else {
-                push_string(self.state, s)?;
-            }
+            let protect = !self.unlikely_memory_error();
+            push_string(self.state, s, protect)?;
             Ok(String(self.pop_ref()))
         }
     }
 
     /// Creates and returns a new empty table.
     pub fn create_table(&self) -> Result<Table> {
-        unsafe {
-            let _sg = StackGuard::new(self.state);
-            check_stack(self.state, 2)?;
-
-            if self.unlikely_memory_error() {
-                ffi::lua_newtable(self.state);
-            } else {
-                protect_lua!(self.state, 0, 1, fn(state) ffi::lua_newtable(state))?;
-            }
-            Ok(Table(self.pop_ref()))
-        }
+        self.create_table_with_capacity(0, 0)
     }
 
     /// Creates and returns a new empty table, with the specified capacity.
@@ -1442,12 +1428,8 @@ impl Lua {
             let _sg = StackGuard::new(self.state);
             check_stack(self.state, 3)?;
 
-            if self.unlikely_memory_error() {
-                ffi::lua_createtable(self.state, narr, nrec);
-            } else {
-                push_table(self.state, narr, nrec)?;
-            }
-
+            let protect = !self.unlikely_memory_error();
+            push_table(self.state, narr, nrec, protect)?;
             Ok(Table(self.pop_ref()))
         }
     }
@@ -1465,20 +1447,15 @@ impl Lua {
 
             let iter = iter.into_iter();
             let lower_bound = iter.size_hint().0;
-
-            if self.unlikely_memory_error() {
-                ffi::lua_createtable(self.state, 0, lower_bound as c_int);
-                for (k, v) in iter {
-                    self.push_value(k.to_lua(self)?)?;
-                    self.push_value(v.to_lua(self)?)?;
-                    ffi::lua_rawset(self.state, -3);
-                }
-            } else {
-                push_table(self.state, 0, lower_bound as c_int)?;
-                for (k, v) in iter {
-                    self.push_value(k.to_lua(self)?)?;
-                    self.push_value(v.to_lua(self)?)?;
+            let protect = !self.unlikely_memory_error();
+            push_table(self.state, 0, lower_bound as c_int, protect)?;
+            for (k, v) in iter {
+                self.push_value(k.to_lua(self)?)?;
+                self.push_value(v.to_lua(self)?)?;
+                if protect {
                     protect_lua!(self.state, 3, 1, fn(state) ffi::lua_rawset(state, -3))?;
+                } else {
+                    ffi::lua_rawset(self.state, -3);
                 }
             }
 
@@ -1498,20 +1475,16 @@ impl Lua {
 
             let iter = iter.into_iter();
             let lower_bound = iter.size_hint().0;
-
-            if self.unlikely_memory_error() {
-                ffi::lua_createtable(self.state, lower_bound as c_int, 0);
-                for (i, v) in iter.enumerate() {
-                    self.push_value(v.to_lua(self)?)?;
-                    ffi::lua_rawseti(self.state, -2, (i + 1) as Integer);
-                }
-            } else {
-                push_table(self.state, lower_bound as c_int, 0)?;
-                for (i, v) in iter.enumerate() {
-                    self.push_value(v.to_lua(self)?)?;
+            let protect = !self.unlikely_memory_error();
+            push_table(self.state, lower_bound as c_int, 0, protect)?;
+            for (i, v) in iter.enumerate() {
+                self.push_value(v.to_lua(self)?)?;
+                if protect {
                     protect_lua!(self.state, 2, 1, |state| {
                         ffi::lua_rawseti(state, -2, (i + 1) as Integer);
                     })?;
+                } else {
+                    ffi::lua_rawseti(self.state, -2, (i + 1) as Integer);
                 }
             }
 
@@ -1972,7 +1945,8 @@ impl Lua {
             let _sg = StackGuard::new(self.state);
             check_stack(self.state, 3)?;
 
-            push_string(self.state, name)?;
+            let protect = !self.unlikely_memory_error();
+            push_string(self.state, name, protect)?;
             ffi::lua_rawget(self.state, ffi::LUA_REGISTRYINDEX);
 
             self.pop_value()
@@ -2260,7 +2234,8 @@ impl Lua {
             }
 
             Value::Error(err) => {
-                push_gc_userdata(self.state, WrappedFailure::Error(err))?;
+                let protect = !self.unlikely_memory_error();
+                push_gc_userdata(self.state, WrappedFailure::Error(err), protect)?;
             }
         }
 
@@ -2445,7 +2420,7 @@ impl Lua {
         let metatable_nrec = methods.meta_methods.len() + fields.meta_fields.len();
         #[cfg(feature = "async")]
         let metatable_nrec = metatable_nrec + methods.async_meta_methods.len();
-        push_table(self.state, 0, metatable_nrec as c_int)?;
+        push_table(self.state, 0, metatable_nrec as c_int, true)?;
         for (k, m) in methods.meta_methods {
             self.push_value(Value::Function(self.create_callback(m)?))?;
             rawset_field(self.state, -2, k.validate()?.name())?;
@@ -2466,7 +2441,7 @@ impl Lua {
         let mut field_getters_index = None;
         let field_getters_nrec = fields.field_getters.len();
         if field_getters_nrec > 0 {
-            push_table(self.state, 0, field_getters_nrec as c_int)?;
+            push_table(self.state, 0, field_getters_nrec as c_int, true)?;
             for (k, m) in fields.field_getters {
                 self.push_value(Value::Function(self.create_callback(m)?))?;
                 rawset_field(self.state, -2, &k)?;
@@ -2478,7 +2453,7 @@ impl Lua {
         let mut field_setters_index = None;
         let field_setters_nrec = fields.field_setters.len();
         if field_setters_nrec > 0 {
-            push_table(self.state, 0, field_setters_nrec as c_int)?;
+            push_table(self.state, 0, field_setters_nrec as c_int, true)?;
             for (k, m) in fields.field_setters {
                 self.push_value(Value::Function(self.create_callback(m)?))?;
                 rawset_field(self.state, -2, &k)?;
@@ -2492,7 +2467,7 @@ impl Lua {
         #[cfg(feature = "async")]
         let methods_nrec = methods_nrec + methods.async_methods.len();
         if methods_nrec > 0 {
-            push_table(self.state, 0, methods_nrec as c_int)?;
+            push_table(self.state, 0, methods_nrec as c_int, true)?;
             for (k, m) in methods.methods {
                 self.push_value(Value::Function(self.create_callback(m)?))?;
                 rawset_field(self.state, -2, &k)?;
@@ -2623,13 +2598,14 @@ impl Lua {
 
             let func = mem::transmute(func);
             let extra = Arc::clone(&self.extra);
-            push_gc_userdata(self.state, CallbackUpvalue { data: func, extra })?;
-            if self.unlikely_memory_error() {
-                ffi::lua_pushcclosure(self.state, call_callback, 1);
-            } else {
+            let protect = !self.unlikely_memory_error();
+            push_gc_userdata(self.state, CallbackUpvalue { data: func, extra }, protect)?;
+            if protect {
                 protect_lua!(self.state, 1, 1, fn(state) {
                     ffi::lua_pushcclosure(state, call_callback, 1);
                 })?;
+            } else {
+                ffi::lua_pushcclosure(self.state, call_callback, 1);
             }
 
             Ok(Function(self.pop_ref()))
@@ -2686,13 +2662,14 @@ impl Lua {
                 let func = &*(*upvalue).data;
                 let fut = func(lua, args);
                 let extra = Arc::clone(&(*upvalue).extra);
-                push_gc_userdata(state, AsyncPollUpvalue { data: fut, extra })?;
-                if lua.unlikely_memory_error() {
-                    ffi::lua_pushcclosure(state, poll_future, 1);
-                } else {
+                let protect = !lua.unlikely_memory_error();
+                push_gc_userdata(state, AsyncPollUpvalue { data: fut, extra }, protect)?;
+                if protect {
                     protect_lua!(state, 1, 1, fn(state) {
                         ffi::lua_pushcclosure(state, poll_future, 1);
                     })?;
+                } else {
+                    ffi::lua_pushcclosure(state, poll_future, 1);
                 }
 
                 Ok(1)
@@ -2752,13 +2729,15 @@ impl Lua {
 
             let func = mem::transmute(func);
             let extra = Arc::clone(&self.extra);
-            push_gc_userdata(self.state, AsyncCallbackUpvalue { data: func, extra })?;
-            if self.unlikely_memory_error() {
-                ffi::lua_pushcclosure(self.state, call_callback, 1);
-            } else {
+            let protect = !self.unlikely_memory_error();
+            let upvalue = AsyncCallbackUpvalue { data: func, extra };
+            push_gc_userdata(self.state, upvalue, protect)?;
+            if protect {
                 protect_lua!(self.state, 1, 1, fn(state) {
                     ffi::lua_pushcclosure(state, call_callback, 1);
                 })?;
+            } else {
+                ffi::lua_pushcclosure(self.state, call_callback, 1);
             }
 
             Function(self.pop_ref())
@@ -2833,10 +2812,11 @@ impl Lua {
         // We push metatable first to ensure having correct metatable with `__gc` method
         ffi::lua_pushnil(self.state);
         self.push_userdata_metatable::<T>()?;
+        let protect = !self.unlikely_memory_error();
         #[cfg(not(feature = "lua54"))]
-        push_userdata(self.state, data)?;
+        push_userdata(self.state, data, protect)?;
         #[cfg(feature = "lua54")]
-        push_userdata_uv(self.state, data, USER_VALUE_MAXSLOT as c_int)?;
+        push_userdata_uv(self.state, data, USER_VALUE_MAXSLOT as c_int, protect)?;
         ffi::lua_replace(self.state, -3);
         ffi::lua_setmetatable(self.state, -2);
 

@@ -355,13 +355,14 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
                 crate::util::push_userdata::<UserDataCell<Rc<RefCell<T>>>>(
                     lua.state,
                     UserDataCell::new(data.clone()),
+                    true,
                 )?;
                 ffi::lua_touserdata(lua.state, -1)
             };
 
             // Prepare metatable, add meta methods first and then meta fields
             let meta_methods_nrec = ud_methods.meta_methods.len() + ud_fields.meta_fields.len() + 1;
-            push_table(lua.state, 0, meta_methods_nrec as c_int)?;
+            push_table(lua.state, 0, meta_methods_nrec as c_int, true)?;
 
             for (k, m) in ud_methods.meta_methods {
                 let data = data.clone();
@@ -377,7 +378,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
             let mut field_getters_index = None;
             let field_getters_nrec = ud_fields.field_getters.len();
             if field_getters_nrec > 0 {
-                push_table(lua.state, 0, field_getters_nrec as c_int)?;
+                push_table(lua.state, 0, field_getters_nrec as c_int, true)?;
                 for (k, m) in ud_fields.field_getters {
                     let data = data.clone();
                     lua.push_value(Value::Function(wrap_method(self, data, ud_ptr, m)?))?;
@@ -389,7 +390,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
             let mut field_setters_index = None;
             let field_setters_nrec = ud_fields.field_setters.len();
             if field_setters_nrec > 0 {
-                push_table(lua.state, 0, field_setters_nrec as c_int)?;
+                push_table(lua.state, 0, field_setters_nrec as c_int, true)?;
                 for (k, m) in ud_fields.field_setters {
                     let data = data.clone();
                     lua.push_value(Value::Function(wrap_method(self, data, ud_ptr, m)?))?;
@@ -402,7 +403,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
             let methods_nrec = ud_methods.methods.len();
             if methods_nrec > 0 {
                 // Create table used for methods lookup
-                push_table(lua.state, 0, methods_nrec as c_int)?;
+                push_table(lua.state, 0, methods_nrec as c_int, true)?;
                 for (k, m) in ud_methods.methods {
                     let data = data.clone();
                     lua.push_value(Value::Function(wrap_method(self, data, ud_ptr, m)?))?;
