@@ -133,6 +133,7 @@ extern "C" {
     pub fn lua_namecallatom(L: *mut lua_State, atom: *mut c_int) -> *const c_char;
     pub fn lua_objlen(L: *mut lua_State, idx: c_int) -> usize;
     pub fn lua_tocfunction(L: *mut lua_State, idx: c_int) -> Option<lua_CFunction>;
+    pub fn lua_tolightuserdata(L: *mut lua_State, idx: c_int) -> *mut c_void;
     pub fn lua_touserdata(L: *mut lua_State, idx: c_int) -> *mut c_void;
     pub fn lua_touserdatatagged(L: *mut lua_State, idx: c_int, tag: c_int) -> *mut c_void;
     pub fn lua_userdatatag(L: *mut lua_State, idx: c_int) -> c_int;
