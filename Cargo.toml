@@ -6,7 +6,7 @@ edition = "2021"
 repository = "https://github.com/khvzak/mlua"
 documentation = "https://docs.rs/mlua"
 readme = "README.md"
-keywords = ["lua", "luajit", "async", "futures", "scripting"]
+keywords = ["lua", "luajit", "luau", "async", "scripting"]
 categories = ["api-bindings", "asynchronous"]
 license = "MIT"
 links = "lua"
@@ -57,8 +57,8 @@ parking_lot = { version = "0.12", optional = true }
 cc = { version = "1.0" }
 pkg-config = { version = "0.3.17" }
 lua-src = { version = ">= 544.0.0, < 550.0.0", optional = true }
-luajit-src = { version = ">= 210.3.1, < 220.0.0", optional = true }
-luau0-src = { version = "0.3", optional = true }
+luajit-src = { version = ">= 210.4.0, < 220.0.0", optional = true }
+luau0-src = { version = "0.3.2", optional = true }
 
 [dev-dependencies]
 rustyline = "9.0"
