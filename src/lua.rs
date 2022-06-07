@@ -2822,10 +2822,15 @@ impl Lua {
 
         // Set empty environment for Lua 5.1
         #[cfg(any(feature = "lua51", feature = "luajit"))]
-        protect_lua!(self.state, 1, 1, fn(state) {
-            ffi::lua_newtable(state);
-            ffi::lua_setuservalue(state, -2);
-        })?;
+        if protect {
+            protect_lua!(self.state, 1, 1, fn(state) {
+                ffi::lua_newtable(state);
+                ffi::lua_setuservalue(state, -2);
+            })?;
+        } else {
+            ffi::lua_newtable(self.state);
+            ffi::lua_setuservalue(self.state, -2);
+        }
 
         Ok(AnyUserData(self.pop_ref()))
     }
