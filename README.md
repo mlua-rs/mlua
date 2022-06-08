@@ -256,6 +256,14 @@ If you encounter them, a bug report would be very welcome:
 
   + If you detect that, after catching a panic or during a Drop triggered from a panic, a `Lua` or handle method is triggering other bugs or there is a Lua stack space leak, this is a bug. `mlua` instances are supposed to remain fully usable in the face of user generated panics. This guarantee does not extend to panics marked with "mlua internal error" simply because that is already indicative of a separate bug.
 
+## Sandboxing
+
+Please check the [Luau Sandboxing] page if you are interested in running untrusted Lua scripts in controlled environment.
+
+`mlua` provides `Lua::sandbox` method for enabling sandbox mode (Luau only).
+
+[Luau Sandboxing]: https://luau-lang.org/sandbox
+
 ## License
 
 This project is licensed under the [MIT license](LICENSE)
