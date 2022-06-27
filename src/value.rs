@@ -103,13 +103,14 @@ impl<'lua> Value<'lua> {
     /// There is no way to convert the pointer back to its original value.
     ///
     /// Typically this function is used only for hashing and debug information.
+    #[inline]
     pub fn to_pointer(&self) -> *const c_void {
         unsafe {
             match self {
                 Value::LightUserData(ud) => ud.0,
-                Value::String(String(v))
-                | Value::Table(Table(v))
-                | Value::Function(Function(v))
+                Value::Table(t) => t.to_pointer(),
+                Value::String(s) => s.to_pointer(),
+                Value::Function(Function(v))
                 | Value::Thread(Thread(v))
                 | Value::UserData(AnyUserData(v)) => v
                     .lua

@@ -1,5 +1,6 @@
 use std::borrow::{Borrow, Cow};
 use std::hash::{Hash, Hasher};
+use std::os::raw::c_void;
 use std::string::String as StdString;
 use std::{slice, str};
 
@@ -111,6 +112,17 @@ impl<'lua> String<'lua> {
 
             slice::from_raw_parts(data as *const u8, size + 1)
         }
+    }
+
+    /// Converts the string to a generic C pointer.
+    ///
+    /// There is no way to convert the pointer back to its original value.
+    ///
+    /// Typically this function is used only for hashing and debug information.
+    #[inline]
+    pub fn to_pointer(&self) -> *const c_void {
+        let lua = self.0.lua;
+        unsafe { lua.ref_thread_exec(|refthr| ffi::lua_topointer(refthr, self.0.index)) }
     }
 }
 

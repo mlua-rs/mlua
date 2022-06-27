@@ -1,10 +1,11 @@
 use std::marker::PhantomData;
+use std::os::raw::c_void;
 
 #[cfg(feature = "serialize")]
 use {
     rustc_hash::FxHashSet,
     serde::ser::{self, Serialize, SerializeMap, SerializeSeq, Serializer},
-    std::{cell::RefCell, os::raw::c_void, result::Result as StdResult},
+    std::{cell::RefCell, result::Result as StdResult},
 };
 
 use crate::error::{Error, Result};
@@ -382,6 +383,18 @@ impl<'lua> Table<'lua> {
         unsafe { lua.ref_thread_exec(|refthr| ffi::lua_getreadonly(refthr, self.0.index) != 0) }
     }
 
+    /// Converts the table to a generic C pointer.
+    ///
+    /// Different tables will give different pointers.
+    /// There is no way to convert the pointer back to its original value.
+    ///
+    /// Typically this function is used only for hashing and debug information.
+    #[inline]
+    pub fn to_pointer(&self) -> *const c_void {
+        let lua = self.0.lua;
+        unsafe { lua.ref_thread_exec(|refthr| ffi::lua_topointer(refthr, self.0.index)) }
+    }
+
     /// Consume this table and return an iterator over the pairs of the table.
     ///
     /// This works like the Lua `pairs` function, but does not invoke the `__pairs` metamethod.
@@ -699,8 +712,7 @@ impl<'lua> Serialize for Table<'lua> {
             static VISITED: RefCell<FxHashSet<*const c_void>> = RefCell::new(FxHashSet::default());
         }
 
-        let lua = self.0.lua;
-        let ptr = unsafe { lua.ref_thread_exec(|refthr| ffi::lua_topointer(refthr, self.0.index)) };
+        let ptr = self.to_pointer();
         let res = VISITED.with(|visited| {
             {
                 let mut visited = visited.borrow_mut();

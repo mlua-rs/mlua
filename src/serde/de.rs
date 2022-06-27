@@ -8,7 +8,6 @@ use rustc_hash::FxHashSet;
 use serde::de::{self, IntoDeserializer};
 
 use crate::error::{Error, Result};
-use crate::ffi;
 use crate::table::{Table, TablePairs, TableSequence};
 use crate::value::Value;
 
@@ -563,9 +562,7 @@ impl RecursionGuard {
     #[inline]
     fn new(table: &Table, visited: &Rc<RefCell<FxHashSet<*const c_void>>>) -> Self {
         let visited = Rc::clone(visited);
-        let lua = table.0.lua;
-        let ptr =
-            unsafe { lua.ref_thread_exec(|refthr| ffi::lua_topointer(refthr, table.0.index)) };
+        let ptr = table.to_pointer();
         visited.borrow_mut().insert(ptr);
         RecursionGuard { ptr, visited }
     }
@@ -585,9 +582,7 @@ fn check_value_if_skip(
 ) -> Result<bool> {
     match value {
         Value::Table(table) => {
-            let lua = table.0.lua;
-            let ptr =
-                unsafe { lua.ref_thread_exec(|refthr| ffi::lua_topointer(refthr, table.0.index)) };
+            let ptr = table.to_pointer();
             if visited.borrow().contains(&ptr) {
                 if options.deny_recursive_tables {
                     return Err(de::Error::custom("recursive table detected"));
