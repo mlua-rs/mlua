@@ -126,7 +126,6 @@ pub(crate) struct ExtraData {
     sandboxed: bool,
 }
 
-#[cfg_attr(any(feature = "lua51", feature = "luajit"), allow(dead_code))]
 struct MemoryInfo {
     used_memory: isize,
     memory_limit: isize,
@@ -430,12 +429,19 @@ impl Lua {
             new_ptr
         }
 
-        let mem_info = Box::into_raw(Box::new(MemoryInfo {
-            used_memory: 0,
-            memory_limit: 0,
-        }));
+        // Skip Rust allocator for non-vendored LuaJIT (see https://github.com/khvzak/mlua/issues/176)
+        let use_rust_allocator = !(cfg!(feature = "luajit") && cfg!(not(feature = "vendored")));
 
-        let state = ffi::lua_newstate(allocator, mem_info as *mut c_void);
+        let (state, mem_info) = if use_rust_allocator {
+            let mem_info = Box::into_raw(Box::new(MemoryInfo {
+                used_memory: 0,
+                memory_limit: 0,
+            }));
+            let state = ffi::lua_newstate(allocator, mem_info as *mut c_void);
+            (state, mem_info)
+        } else {
+            (ffi::luaL_newstate(), ptr::null_mut())
+        };
 
         ffi::luaL_requiref(state, cstr!("_G"), ffi::luaopen_base, 1);
         ffi::lua_pop(state, 1);
