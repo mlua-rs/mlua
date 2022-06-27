@@ -126,6 +126,7 @@ pub(crate) struct ExtraData {
     sandboxed: bool,
 }
 
+#[derive(Default)]
 struct MemoryInfo {
     used_memory: isize,
     memory_limit: isize,
@@ -433,10 +434,7 @@ impl Lua {
         let use_rust_allocator = !(cfg!(feature = "luajit") && cfg!(not(feature = "vendored")));
 
         let (state, mem_info) = if use_rust_allocator {
-            let mem_info = Box::into_raw(Box::new(MemoryInfo {
-                used_memory: 0,
-                memory_limit: 0,
-            }));
+            let mem_info = Box::into_raw(Box::new(MemoryInfo::default()));
             let state = ffi::lua_newstate(allocator, mem_info as *mut c_void);
             (state, mem_info)
         } else {
