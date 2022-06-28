@@ -85,10 +85,12 @@ fn lua_require(lua: &Lua, name: Option<std::string::String>) -> Result<Value> {
         search_path = "?.luau;?.lua".into();
     }
 
-    let mut source = None;
+    let (mut source, mut source_name) = (None, String::new());
     for path in search_path.split(';') {
-        if let Ok(buf) = std::fs::read(path.replacen('?', &name, 1)) {
+        let file_path = path.replacen('?', &name, 1);
+        if let Ok(buf) = std::fs::read(&file_path) {
             source = Some(buf);
+            source_name = file_path;
             break;
         }
     }
@@ -96,7 +98,7 @@ fn lua_require(lua: &Lua, name: Option<std::string::String>) -> Result<Value> {
 
     let value = lua
         .load(&source)
-        .set_name(&format!("={}", name))?
+        .set_name(&format!("={}", source_name))?
         .set_mode(ChunkMode::Text)
         .call::<_, Value>(())?;
 

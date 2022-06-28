@@ -15,8 +15,11 @@ fn test_require() -> Result<()> {
     fs::write(
         temp_dir.path().join("module.luau"),
         r#"
-        counter = counter or 0
-        return counter + 1
+        counter = (counter or 0) + 1
+        return {
+            counter = counter,
+            error = function() error("test") end,
+        }
     "#,
     )?;
 
@@ -24,9 +27,12 @@ fn test_require() -> Result<()> {
     lua.load(
         r#"
         local module = require("module")
-        assert(module == 1)
+        assert(module.counter == 1)
         module = require("module")
-        assert(module == 1)
+        assert(module.counter == 1)
+
+        local ok, err = pcall(module.error)
+        assert(not ok and string.find(err, "module.luau") ~= nil)
     "#,
     )
     .exec()
