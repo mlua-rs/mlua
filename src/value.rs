@@ -1,4 +1,5 @@
 use std::iter::{self, FromIterator};
+use std::ops::Index;
 use std::os::raw::c_void;
 use std::{ptr, slice, str, vec};
 
@@ -242,6 +243,15 @@ impl<'a, 'lua> IntoIterator for &'a MultiValue<'lua> {
     }
 }
 
+impl<'lua> Index<usize> for MultiValue<'lua> {
+    type Output = Value<'lua>;
+
+    #[inline]
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.0[self.0.len() - index - 1]
+    }
+}
+
 impl<'lua> MultiValue<'lua> {
     #[inline]
     pub fn from_vec(mut v: Vec<Value<'lua>>) -> MultiValue<'lua> {
@@ -262,13 +272,13 @@ impl<'lua> MultiValue<'lua> {
     }
 
     #[inline]
-    pub(crate) fn push_front(&mut self, value: Value<'lua>) {
-        self.0.push(value);
+    pub fn pop_front(&mut self) -> Option<Value<'lua>> {
+        self.0.pop()
     }
 
     #[inline]
-    pub(crate) fn pop_front(&mut self) -> Option<Value<'lua>> {
-        self.0.pop()
+    pub fn push_front(&mut self, value: Value<'lua>) {
+        self.0.push(value);
     }
 
     #[inline]
