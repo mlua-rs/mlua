@@ -622,3 +622,8 @@ lua_userdata_impl!(Arc<RwLock<T>>);
 lua_userdata_impl!(Arc<parking_lot::Mutex<T>>);
 #[cfg(feature = "parking_lot")]
 lua_userdata_impl!(Arc<parking_lot::RwLock<T>>);
+
+// A special proxy object for UserData
+pub(crate) struct UserDataProxy<T>(pub(crate) PhantomData<T>);
+
+lua_userdata_impl!(UserDataProxy<T>);
