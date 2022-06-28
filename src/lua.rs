@@ -1721,6 +1721,8 @@ impl Lua {
     }
 
     /// Create a Lua userdata object from a custom userdata type.
+    ///
+    /// All userdata instances of type `T` shares the same metatable.
     #[inline]
     pub fn create_userdata<T>(&self, data: T) -> Result<AnyUserData>
     where
