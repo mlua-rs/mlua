@@ -656,3 +656,44 @@ fn test_userdata_wrapped() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn test_userdata_proxy() -> Result<()> {
+    struct MyUserData(i64);
+
+    impl UserData for MyUserData {
+        fn add_fields<'lua, F: UserDataFields<'lua, Self>>(fields: &mut F) {
+            fields.add_field_function_get("static_field", |_, _| Ok(123));
+            fields.add_field_method_get("n", |_, this| Ok(this.0));
+        }
+
+        fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
+            methods.add_function("new", |_, n| Ok(Self(n)));
+
+            methods.add_method("plus", |_, this, n: i64| Ok(this.0 + n));
+        }
+    }
+
+    let lua = Lua::new();
+    let globals = lua.globals();
+    globals.set("MyUserData", lua.create_proxy::<MyUserData>()?)?;
+
+    lua.load(
+        r#"
+        assert(MyUserData.static_field == 123)
+        local data = MyUserData.new(321)
+        assert(data.static_field == 123)
+        assert(data.n == 321)
+        assert(data:plus(1) == 322)
+
+        -- Error when accessing the proxy object fields and methods that require instance
+
+        local ok = pcall(function() return MyUserData.n end)
+        assert(not ok)
+
+        ok = pcall(function() return MyUserData:plus(1) end)
+        assert(not ok)
+    "#,
+    )
+    .exec()
+}

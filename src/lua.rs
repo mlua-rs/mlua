@@ -29,7 +29,7 @@ use crate::types::{
     Number, RegistryKey,
 };
 use crate::userdata::{AnyUserData, UserData, UserDataCell};
-use crate::userdata_impl::{StaticUserDataFields, StaticUserDataMethods};
+use crate::userdata_impl::{StaticUserDataFields, StaticUserDataMethods, UserDataProxy};
 use crate::util::{
     self, assert_stack, callback_error, check_stack, get_destructed_userdata_metatable,
     get_gc_metatable, get_gc_userdata, get_main_state, get_userdata, init_error_registry,
@@ -1721,6 +1721,7 @@ impl Lua {
     }
 
     /// Create a Lua userdata object from a custom userdata type.
+    #[inline]
     pub fn create_userdata<T>(&self, data: T) -> Result<AnyUserData>
     where
         T: 'static + MaybeSend + UserData,
@@ -1733,11 +1734,52 @@ impl Lua {
     /// Requires `feature = "serialize"`
     #[cfg(feature = "serialize")]
     #[cfg_attr(docsrs, doc(cfg(feature = "serialize")))]
+    #[inline]
     pub fn create_ser_userdata<T>(&self, data: T) -> Result<AnyUserData>
     where
         T: 'static + MaybeSend + UserData + Serialize,
     {
         unsafe { self.make_userdata(UserDataCell::new_ser(data)) }
+    }
+
+    /// Create a Lua userdata "proxy" object from a custom userdata type.
+    ///
+    /// Proxy object is an empty userdata object that has `T` metatable attached.
+    /// The main purpose of this object is to provide access to static fields and functions
+    /// without creating an instance of type `T`.
+    ///
+    /// You can get or set uservalues on this object but you cannot borrow any Rust type.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use mlua::{Lua, Result, UserData, UserDataFields, UserDataMethods};
+    /// # fn main() -> Result<()> {
+    /// # let lua = Lua::new();
+    /// struct MyUserData(i32);
+    ///
+    /// impl UserData for MyUserData {
+    ///     fn add_fields<'lua, F: UserDataFields<'lua, Self>>(fields: &mut F) {
+    ///         fields.add_field_method_get("val", |_, this| Ok(this.0));
+    ///     }
+    ///
+    ///     fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
+    ///         methods.add_function("new", |_, value: i32| Ok(MyUserData(value)));
+    ///     }
+    /// }
+    ///
+    /// lua.globals().set("MyUserData", lua.create_proxy::<MyUserData>()?)?;
+    ///
+    /// lua.load("assert(MyUserData.new(321).val == 321)").exec()?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    #[inline]
+    pub fn create_proxy<T>(&self) -> Result<AnyUserData>
+    where
+        T: 'static + UserData,
+    {
+        unsafe { self.make_userdata(UserDataCell::new(UserDataProxy::<T>(PhantomData))) }
     }
 
     /// Returns a handle to the global environment.
