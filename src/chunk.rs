@@ -484,7 +484,7 @@ impl<'lua, 'a> Chunk<'lua, 'a> {
                     return ChunkMode::Binary;
                 }
                 #[cfg(feature = "luau")]
-                if *source.get(0).unwrap_or(&u8::MAX) < b'\n' {
+                if *source.first().unwrap_or(&u8::MAX) < b'\n' {
                     return ChunkMode::Binary;
                 }
                 ChunkMode::Text

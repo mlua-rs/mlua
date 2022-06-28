@@ -2870,7 +2870,7 @@ impl Lua {
         let _sg = StackGuard::new(state);
         assert_stack(state, 1);
         let extra = extra_data(state)?;
-        let inner = &*(*extra.get()).inner.as_ref().unwrap();
+        let inner = (*extra.get()).inner.as_ref().unwrap();
         Some(Lua(Arc::clone(inner)))
     }
 

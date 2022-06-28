@@ -597,6 +597,7 @@ impl<'lua, 'scope> Drop for Scope<'lua, 'scope> {
     }
 }
 
+#[allow(clippy::type_complexity)]
 enum NonStaticMethod<'lua, T> {
     Method(Box<dyn Fn(&'lua Lua, &T, MultiValue<'lua>) -> Result<MultiValue<'lua>>>),
     MethodMut(Box<dyn FnMut(&'lua Lua, &mut T, MultiValue<'lua>) -> Result<MultiValue<'lua>>>),
