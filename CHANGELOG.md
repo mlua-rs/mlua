@@ -1,3 +1,9 @@
+## v0.8.1
+
+- Added `Lua::create_proxy` for accessing to UserData static fields and functions without instance
+- Added `Table::to_pointer()` and `String::to_pointer()` functions
+- Bugfixes and improvements (#176 #179)
+
 ## v0.8.0
 Changes since 0.7.4
 - Roblox Luau support
