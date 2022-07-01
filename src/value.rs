@@ -248,7 +248,15 @@ impl<'lua> Index<usize> for MultiValue<'lua> {
 
     #[inline]
     fn index(&self, index: usize) -> &Self::Output {
-        &self.0[self.0.len() - index - 1]
+        if let Some(result) = self.get(index) {
+            result
+        } else {
+            panic!(
+                "index out of bounds: the len is {} but the index is {}",
+                self.len(),
+                index
+            )
+        }
     }
 }
 
@@ -264,6 +272,11 @@ impl<'lua> MultiValue<'lua> {
         let mut v = self.0;
         v.reverse();
         v
+    }
+
+    #[inline]
+    pub fn get(&self, index: usize) -> Option<&Value<'lua>> {
+        self.0.get(self.0.len() - index - 1)
     }
 
     #[inline]
