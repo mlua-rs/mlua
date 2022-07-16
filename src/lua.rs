@@ -2394,12 +2394,6 @@ impl Lua {
             "Lua instance passed Value created from a different main Lua state"
         );
         let extra = &*self.extra.get();
-        #[cfg(not(feature = "luau"))]
-        {
-            ffi::lua_pushvalue(extra.ref_thread, lref.index);
-            ffi::lua_xmove(extra.ref_thread, self.state, 1);
-        }
-        #[cfg(feature = "luau")]
         ffi::lua_xpush(extra.ref_thread, self.state, lref.index);
     }
 
