@@ -2961,14 +2961,14 @@ struct StateGuard<'a>(&'a mut LuaInner, *mut ffi::lua_State);
 
 impl<'a> StateGuard<'a> {
     fn new(inner: &'a mut LuaInner, mut state: *mut ffi::lua_State) -> Self {
-        mem::swap(&mut (*inner).state, &mut state);
+        mem::swap(&mut inner.state, &mut state);
         Self(inner, state)
     }
 }
 
 impl<'a> Drop for StateGuard<'a> {
     fn drop(&mut self) {
-        mem::swap(&mut (*self.0).state, &mut self.1);
+        mem::swap(&mut self.0.state, &mut self.1);
     }
 }
 

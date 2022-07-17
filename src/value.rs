@@ -239,7 +239,7 @@ impl<'a, 'lua> IntoIterator for &'a MultiValue<'lua> {
 
     #[inline]
     fn into_iter(self) -> Self::IntoIter {
-        (&self.0).iter().rev()
+        self.0.iter().rev()
     }
 }
 
