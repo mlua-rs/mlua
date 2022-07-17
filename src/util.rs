@@ -1,6 +1,7 @@
 use std::any::{Any, TypeId};
 use std::ffi::CStr;
 use std::fmt::Write;
+use std::mem::MaybeUninit;
 use std::os::raw::{c_char, c_int, c_void};
 use std::panic::{catch_unwind, resume_unwind, AssertUnwindSafe};
 use std::sync::Arc;
@@ -136,26 +137,21 @@ where
     F: Fn(*mut ffi::lua_State) -> R,
     R: Copy,
 {
-    union URes<R: Copy> {
-        uninit: (),
-        init: R,
-    }
-
     struct Params<F, R: Copy> {
         function: F,
-        result: URes<R>,
+        result: MaybeUninit<R>,
         nresults: c_int,
     }
 
     unsafe extern "C" fn do_call<F, R>(state: *mut ffi::lua_State) -> c_int
     where
-        R: Copy,
         F: Fn(*mut ffi::lua_State) -> R,
+        R: Copy,
     {
         let params = ffi::lua_touserdata(state, -1) as *mut Params<F, R>;
         ffi::lua_pop(state, 1);
 
-        (*params).result.init = ((*params).function)(state);
+        (*params).result.write(((*params).function)(state));
 
         if (*params).nresults == ffi::LUA_MULTRET {
             ffi::lua_gettop(state)
@@ -174,7 +170,7 @@ where
 
     let mut params = Params {
         function: f,
-        result: URes { uninit: () },
+        result: MaybeUninit::uninit(),
         nresults,
     };
 
@@ -185,7 +181,7 @@ where
     if ret == ffi::LUA_OK {
         // `LUA_OK` is only returned when the `do_call` function has completed successfully, so
         // `params.result` is definitely initialized.
-        Ok(params.result.init)
+        Ok(params.result.assume_init())
     } else {
         Err(pop_error(state, ret))
     }
