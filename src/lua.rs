@@ -111,6 +111,9 @@ pub(crate) struct ExtraData {
     #[cfg(feature = "async")]
     recycled_thread_cache: Vec<c_int>,
 
+    // Address of `WrappedFailure` metatable
+    wrapped_failure_mt_ptr: *const c_void,
+
     // Index of `Option<Waker>` userdata on the ref thread
     #[cfg(feature = "async")]
     ref_waker_idx: c_int,
@@ -538,6 +541,13 @@ impl Lua {
             "Error while creating ref thread",
         );
 
+        let wrapped_failure_mt_ptr = {
+            get_gc_metatable::<WrappedFailure>(state);
+            let ptr = ffi::lua_topointer(state, -1);
+            ffi::lua_pop(state, 1);
+            ptr
+        };
+
         // Create empty Waker slot on the ref thread
         #[cfg(feature = "async")]
         let ref_waker_idx = {
@@ -568,6 +578,7 @@ impl Lua {
             multivalue_cache: Vec::with_capacity(MULTIVALUE_CACHE_SIZE),
             #[cfg(feature = "async")]
             recycled_thread_cache: Vec::new(),
+            wrapped_failure_mt_ptr,
             #[cfg(feature = "async")]
             ref_waker_idx,
             #[cfg(not(feature = "luau"))]
@@ -2293,6 +2304,8 @@ impl Lua {
     // Uses 2 stack spaces, does not call checkstack
     pub(crate) unsafe fn pop_value(&self) -> Value {
         let state = self.state;
+        let extra = &mut *self.extra.get();
+
         match ffi::lua_type(state, -1) {
             ffi::LUA_TNIL => {
                 ffi::lua_pop(state, 1);
@@ -2353,9 +2366,11 @@ impl Lua {
             ffi::LUA_TFUNCTION => Value::Function(Function(self.pop_ref())),
 
             ffi::LUA_TUSERDATA => {
+                let wrapped_failure_mt_ptr = extra.wrapped_failure_mt_ptr;
                 // We must prevent interaction with userdata types other than UserData OR a WrappedError.
                 // WrappedPanics are automatically resumed.
-                match get_gc_userdata::<WrappedFailure>(state, -1).as_mut() {
+                match get_gc_userdata::<WrappedFailure>(state, -1, wrapped_failure_mt_ptr).as_mut()
+                {
                     Some(WrappedFailure::Error(err)) => {
                         let err = err.clone();
                         ffi::lua_pop(state, 1);
