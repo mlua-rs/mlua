@@ -260,6 +260,7 @@ extern "C" {
     pub fn lua_concat(L: *mut lua_State, n: c_int);
     // TODO: lua_encodepointer
     pub fn lua_clock() -> c_double;
+    pub fn lua_setuserdatatag(L: *mut lua_State, idx: c_int, tag: c_int);
     pub fn lua_setuserdatadtor(
         L: *mut lua_State,
         tag: c_int,
@@ -437,7 +438,12 @@ extern "C" {
     pub fn lua_setupvalue(L: *mut lua_State, funcindex: c_int, n: c_int) -> *const c_char;
 
     pub fn lua_singlestep(L: *mut lua_State, enabled: c_int);
-    pub fn lua_breakpoint(L: *mut lua_State, funcindex: c_int, line: c_int, enabled: c_int);
+    pub fn lua_breakpoint(
+        L: *mut lua_State,
+        funcindex: c_int,
+        line: c_int,
+        enabled: c_int,
+    ) -> c_int;
 
     pub fn lua_getcoverage(
         L: *mut lua_State,

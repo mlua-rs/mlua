@@ -25,7 +25,7 @@ use crate::string::String;
 use crate::table::Table;
 use crate::thread::Thread;
 use crate::types::{
-    Callback, CallbackUpvalue, DestructedUserdataMT, Integer, LightUserData, LuaRef, MaybeSend,
+    Callback, CallbackUpvalue, DestructedUserdata, Integer, LightUserData, LuaRef, MaybeSend,
     Number, RegistryKey,
 };
 use crate::userdata::{AnyUserData, UserData, UserDataCell};
@@ -602,13 +602,13 @@ impl Lua {
             "Error while storing extra data",
         );
 
-        // Register `DestructedUserdataMT` type
+        // Register `DestructedUserdata` type
         get_destructed_userdata_metatable(main_state);
         let destructed_mt_ptr = ffi::lua_topointer(main_state, -1);
-        let destructed_mt_typeid = Some(TypeId::of::<DestructedUserdataMT>());
+        let destructed_ud_typeid = TypeId::of::<DestructedUserdata>();
         (*extra.get())
             .registered_userdata_mt
-            .insert(destructed_mt_ptr, destructed_mt_typeid);
+            .insert(destructed_mt_ptr, Some(destructed_ud_typeid));
         ffi::lua_pop(main_state, 1);
 
         mlua_debug_assert!(
@@ -2587,7 +2587,7 @@ impl Lua {
 
         let extra = &*self.extra.get();
         match extra.registered_userdata_mt.get(&mt_ptr) {
-            Some(&type_id) if type_id == Some(TypeId::of::<DestructedUserdataMT>()) => {
+            Some(&type_id) if type_id == Some(TypeId::of::<DestructedUserdata>()) => {
                 Err(Error::UserDataDestructed)
             }
             Some(&type_id) => Ok(type_id),

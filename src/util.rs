@@ -310,10 +310,7 @@ pub unsafe fn push_userdata<T>(state: *mut ffi::lua_State, t: T, protect: bool) 
 #[inline]
 pub unsafe fn push_userdata<T>(state: *mut ffi::lua_State, t: T, protect: bool) -> Result<()> {
     unsafe extern "C" fn destructor<T>(ud: *mut c_void) {
-        let ud = ud as *mut T;
-        if *(ud.offset(1) as *mut u8) == 0 {
-            ptr::drop_in_place(ud);
-        }
+        ptr::drop_in_place(ud as *mut T);
     }
 
     let size = mem::size_of::<T>() + 1;
@@ -325,7 +322,6 @@ pub unsafe fn push_userdata<T>(state: *mut ffi::lua_State, t: T, protect: bool) 
         ffi::lua_newuserdatadtor(state, size, destructor::<T>) as *mut T
     };
     ptr::write(ud, t);
-    *(ud.offset(1) as *mut u8) = 0; // Mark as not destructed
 
     Ok(())
 }
@@ -369,10 +365,12 @@ pub unsafe fn take_userdata<T>(state: *mut ffi::lua_State) -> T {
     get_destructed_userdata_metatable(state);
     ffi::lua_setmetatable(state, -2);
     let ud = get_userdata::<T>(state, -1);
+
+    // Update userdata tag to disable destructor and mark as destructed
+    #[cfg(feature = "luau")]
+    ffi::lua_setuserdatatag(state, -1, 1);
+
     ffi::lua_pop(state, 1);
-    if cfg!(feature = "luau") {
-        *(ud.offset(1) as *mut u8) = 1; // Mark as destructed
-    }
     ptr::read(ud)
 }
 
