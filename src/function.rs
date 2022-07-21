@@ -210,6 +210,10 @@ impl<'lua> Function<'lua> {
         let args = args.to_lua_multi(lua)?;
         let nargs = args.len() as c_int;
 
+        if nargs == 0 {
+            return Ok(self.clone());
+        }
+
         if nargs + 1 > ffi::LUA_MAX_UPVALUES {
             return Err(Error::BindError);
         }
