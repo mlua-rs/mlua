@@ -42,10 +42,16 @@ fn test_bind() -> Result<()> {
     concat = concat.bind("foo")?;
     concat = concat.bind("bar")?;
     concat = concat.bind(("baz", "baf"))?;
+    assert_eq!(concat.call::<_, String>(())?, "foobarbazbaf");
     assert_eq!(
         concat.call::<_, String>(("hi", "wut"))?,
         "foobarbazbafhiwut"
     );
+
+    let mut concat2 = globals.get::<_, Function>("concat")?;
+    concat2 = concat2.bind(())?;
+    assert_eq!(concat2.call::<_, String>(())?, "");
+    assert_eq!(concat2.call::<_, String>(("ab", "cd"))?, "abcd");
 
     Ok(())
 }

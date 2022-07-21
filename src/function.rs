@@ -198,7 +198,9 @@ impl<'lua> Function<'lua> {
             for i in 0..nbinds {
                 ffi::lua_pushvalue(state, ffi::lua_upvalueindex(i + 2));
             }
-            ffi::lua_rotate(state, 1, nbinds);
+            if nargs > 0 {
+                ffi::lua_rotate(state, 1, nbinds);
+            }
 
             nargs + nbinds
         }
