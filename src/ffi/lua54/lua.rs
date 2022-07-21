@@ -456,6 +456,12 @@ pub unsafe fn lua_replace(L: *mut lua_State, idx: c_int) {
 }
 
 #[inline(always)]
+pub unsafe fn lua_xpush(from: *mut lua_State, to: *mut lua_State, idx: c_int) {
+    lua_pushvalue(from, idx);
+    lua_xmove(from, to, 1);
+}
+
+#[inline(always)]
 pub unsafe fn lua_newuserdata(L: *mut lua_State, sz: usize) -> *mut c_void {
     lua_newuserdatauv(L, sz, 1)
 }

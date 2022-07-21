@@ -1,6 +1,7 @@
 use std::any::{Any, TypeId};
 use std::ffi::CStr;
 use std::fmt::Write;
+use std::mem::MaybeUninit;
 use std::os::raw::{c_char, c_int, c_void};
 use std::panic::{catch_unwind, resume_unwind, AssertUnwindSafe};
 use std::sync::Arc;
@@ -136,26 +137,21 @@ where
     F: Fn(*mut ffi::lua_State) -> R,
     R: Copy,
 {
-    union URes<R: Copy> {
-        uninit: (),
-        init: R,
-    }
-
     struct Params<F, R: Copy> {
         function: F,
-        result: URes<R>,
+        result: MaybeUninit<R>,
         nresults: c_int,
     }
 
     unsafe extern "C" fn do_call<F, R>(state: *mut ffi::lua_State) -> c_int
     where
-        R: Copy,
         F: Fn(*mut ffi::lua_State) -> R,
+        R: Copy,
     {
         let params = ffi::lua_touserdata(state, -1) as *mut Params<F, R>;
         ffi::lua_pop(state, 1);
 
-        (*params).result.init = ((*params).function)(state);
+        (*params).result.write(((*params).function)(state));
 
         if (*params).nresults == ffi::LUA_MULTRET {
             ffi::lua_gettop(state)
@@ -174,7 +170,7 @@ where
 
     let mut params = Params {
         function: f,
-        result: URes { uninit: () },
+        result: MaybeUninit::uninit(),
         nresults,
     };
 
@@ -185,7 +181,7 @@ where
     if ret == ffi::LUA_OK {
         // `LUA_OK` is only returned when the `do_call` function has completed successfully, so
         // `params.result` is definitely initialized.
-        Ok(params.result.init)
+        Ok(params.result.assume_init())
     } else {
         Err(pop_error(state, ret))
     }
@@ -203,7 +199,7 @@ pub unsafe fn pop_error(state: *mut ffi::lua_State, err_code: c_int) -> Error {
         "pop_error called with non-error return code"
     );
 
-    match get_gc_userdata::<WrappedFailure>(state, -1).as_mut() {
+    match get_gc_userdata::<WrappedFailure>(state, -1, ptr::null()).as_mut() {
         Some(WrappedFailure::Error(err)) => {
             ffi::lua_pop(state, 1);
             err.clone()
@@ -314,10 +310,7 @@ pub unsafe fn push_userdata<T>(state: *mut ffi::lua_State, t: T, protect: bool) 
 #[inline]
 pub unsafe fn push_userdata<T>(state: *mut ffi::lua_State, t: T, protect: bool) -> Result<()> {
     unsafe extern "C" fn destructor<T>(ud: *mut c_void) {
-        let ud = ud as *mut T;
-        if *(ud.offset(1) as *mut u8) == 0 {
-            ptr::drop_in_place(ud);
-        }
+        ptr::drop_in_place(ud as *mut T);
     }
 
     let size = mem::size_of::<T>() + 1;
@@ -329,7 +322,6 @@ pub unsafe fn push_userdata<T>(state: *mut ffi::lua_State, t: T, protect: bool) 
         ffi::lua_newuserdatadtor(state, size, destructor::<T>) as *mut T
     };
     ptr::write(ud, t);
-    *(ud.offset(1) as *mut u8) = 0; // Mark as not destructed
 
     Ok(())
 }
@@ -373,10 +365,12 @@ pub unsafe fn take_userdata<T>(state: *mut ffi::lua_State) -> T {
     get_destructed_userdata_metatable(state);
     ffi::lua_setmetatable(state, -2);
     let ud = get_userdata::<T>(state, -1);
+
+    // Update userdata tag to disable destructor and mark as destructed
+    #[cfg(feature = "luau")]
+    ffi::lua_setuserdatatag(state, -1, 1);
+
     ffi::lua_pop(state, 1);
-    if cfg!(feature = "luau") {
-        *(ud.offset(1) as *mut u8) = 1; // Mark as destructed
-    }
     ptr::read(ud)
 }
 
@@ -394,16 +388,28 @@ pub unsafe fn push_gc_userdata<T: Any>(
 }
 
 // Uses 2 stack spaces, does not call checkstack
-pub unsafe fn get_gc_userdata<T: Any>(state: *mut ffi::lua_State, index: c_int) -> *mut T {
+pub unsafe fn get_gc_userdata<T: Any>(
+    state: *mut ffi::lua_State,
+    index: c_int,
+    mt_ptr: *const c_void,
+) -> *mut T {
     let ud = ffi::lua_touserdata(state, index) as *mut T;
     if ud.is_null() || ffi::lua_getmetatable(state, index) == 0 {
         return ptr::null_mut();
     }
-    get_gc_metatable::<T>(state);
-    let res = ffi::lua_rawequal(state, -1, -2);
-    ffi::lua_pop(state, 2);
-    if res == 0 {
-        return ptr::null_mut();
+    if !mt_ptr.is_null() {
+        let ud_mt_ptr = ffi::lua_topointer(state, -1);
+        ffi::lua_pop(state, 1);
+        if !ptr::eq(ud_mt_ptr, mt_ptr) {
+            return ptr::null_mut();
+        }
+    } else {
+        get_gc_metatable::<T>(state);
+        let res = ffi::lua_rawequal(state, -1, -2);
+        ffi::lua_pop(state, 2);
+        if res == 0 {
+            return ptr::null_mut();
+        }
     }
     ud
 }
@@ -679,7 +685,7 @@ pub unsafe extern "C" fn error_traceback(state: *mut ffi::lua_State) -> c_int {
         return 1;
     }
 
-    if get_gc_userdata::<WrappedFailure>(state, -1).is_null() {
+    if get_gc_userdata::<WrappedFailure>(state, -1, ptr::null()).is_null() {
         let s = ffi::luaL_tolstring(state, -1, ptr::null_mut());
         if ffi::lua_checkstack(state, ffi::LUA_TRACEBACK_STACK) != 0 {
             ffi::luaL_traceback(state, state, s, 0);
@@ -706,7 +712,7 @@ pub unsafe extern "C" fn safe_pcall(state: *mut ffi::lua_State) -> c_int {
         ffi::lua_gettop(state)
     } else {
         if let Some(WrappedFailure::Panic(_)) =
-            get_gc_userdata::<WrappedFailure>(state, -1).as_ref()
+            get_gc_userdata::<WrappedFailure>(state, -1, ptr::null()).as_ref()
         {
             ffi::lua_error(state);
         }
@@ -722,7 +728,7 @@ pub unsafe extern "C" fn safe_xpcall(state: *mut ffi::lua_State) -> c_int {
         ffi::luaL_checkstack(state, 2, ptr::null());
 
         if let Some(WrappedFailure::Panic(_)) =
-            get_gc_userdata::<WrappedFailure>(state, -1).as_ref()
+            get_gc_userdata::<WrappedFailure>(state, -1, ptr::null()).as_ref()
         {
             1
         } else {
@@ -752,7 +758,7 @@ pub unsafe extern "C" fn safe_xpcall(state: *mut ffi::lua_State) -> c_int {
         ffi::lua_gettop(state) - 1
     } else {
         if let Some(WrappedFailure::Panic(_)) =
-            get_gc_userdata::<WrappedFailure>(state, -1).as_ref()
+            get_gc_userdata::<WrappedFailure>(state, -1, ptr::null()).as_ref()
         {
             ffi::lua_error(state);
         }
@@ -836,7 +842,7 @@ pub unsafe fn init_error_registry(state: *mut ffi::lua_State) -> Result<()> {
         callback_error(state, |_| {
             check_stack(state, 3)?;
 
-            let err_buf = match get_gc_userdata::<WrappedFailure>(state, -1).as_ref() {
+            let err_buf = match get_gc_userdata::<WrappedFailure>(state, -1, ptr::null()).as_ref() {
                 Some(WrappedFailure::Error(error)) => {
                     let err_buf_key = &ERROR_PRINT_BUFFER_KEY as *const u8 as *const c_void;
                     ffi::lua_rawgetp(state, ffi::LUA_REGISTRYINDEX, err_buf_key);

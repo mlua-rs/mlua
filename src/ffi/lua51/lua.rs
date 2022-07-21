@@ -324,6 +324,12 @@ pub unsafe fn lua_tostring(L: *mut lua_State, i: c_int) -> *const c_char {
     lua_tolstring(L, i, ptr::null_mut())
 }
 
+#[inline(always)]
+pub unsafe fn lua_xpush(from: *mut lua_State, to: *mut lua_State, idx: c_int) {
+    lua_pushvalue(from, idx);
+    lua_xmove(from, to, 1);
+}
+
 //
 // Debug API
 //

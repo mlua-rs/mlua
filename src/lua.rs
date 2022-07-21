@@ -25,7 +25,7 @@ use crate::string::String;
 use crate::table::Table;
 use crate::thread::Thread;
 use crate::types::{
-    Callback, CallbackUpvalue, DestructedUserdataMT, Integer, LightUserData, LuaRef, MaybeSend,
+    Callback, CallbackUpvalue, DestructedUserdata, Integer, LightUserData, LuaRef, MaybeSend,
     Number, RegistryKey,
 };
 use crate::userdata::{AnyUserData, UserData, UserDataCell};
@@ -110,6 +110,9 @@ pub(crate) struct ExtraData {
     // Cache of recycled `Thread`s (coroutines)
     #[cfg(feature = "async")]
     recycled_thread_cache: Vec<c_int>,
+
+    // Address of `WrappedFailure` metatable
+    wrapped_failure_mt_ptr: *const c_void,
 
     // Index of `Option<Waker>` userdata on the ref thread
     #[cfg(feature = "async")]
@@ -538,6 +541,13 @@ impl Lua {
             "Error while creating ref thread",
         );
 
+        let wrapped_failure_mt_ptr = {
+            get_gc_metatable::<WrappedFailure>(state);
+            let ptr = ffi::lua_topointer(state, -1);
+            ffi::lua_pop(state, 1);
+            ptr
+        };
+
         // Create empty Waker slot on the ref thread
         #[cfg(feature = "async")]
         let ref_waker_idx = {
@@ -568,6 +578,7 @@ impl Lua {
             multivalue_cache: Vec::with_capacity(MULTIVALUE_CACHE_SIZE),
             #[cfg(feature = "async")]
             recycled_thread_cache: Vec::new(),
+            wrapped_failure_mt_ptr,
             #[cfg(feature = "async")]
             ref_waker_idx,
             #[cfg(not(feature = "luau"))]
@@ -591,13 +602,13 @@ impl Lua {
             "Error while storing extra data",
         );
 
-        // Register `DestructedUserdataMT` type
+        // Register `DestructedUserdata` type
         get_destructed_userdata_metatable(main_state);
         let destructed_mt_ptr = ffi::lua_topointer(main_state, -1);
-        let destructed_mt_typeid = Some(TypeId::of::<DestructedUserdataMT>());
+        let destructed_ud_typeid = TypeId::of::<DestructedUserdata>();
         (*extra.get())
             .registered_userdata_mt
-            .insert(destructed_mt_ptr, destructed_mt_typeid);
+            .insert(destructed_mt_ptr, Some(destructed_ud_typeid));
         ffi::lua_pop(main_state, 1);
 
         mlua_debug_assert!(
@@ -2293,6 +2304,8 @@ impl Lua {
     // Uses 2 stack spaces, does not call checkstack
     pub(crate) unsafe fn pop_value(&self) -> Value {
         let state = self.state;
+        let extra = &mut *self.extra.get();
+
         match ffi::lua_type(state, -1) {
             ffi::LUA_TNIL => {
                 ffi::lua_pop(state, 1);
@@ -2353,9 +2366,11 @@ impl Lua {
             ffi::LUA_TFUNCTION => Value::Function(Function(self.pop_ref())),
 
             ffi::LUA_TUSERDATA => {
+                let wrapped_failure_mt_ptr = extra.wrapped_failure_mt_ptr;
                 // We must prevent interaction with userdata types other than UserData OR a WrappedError.
                 // WrappedPanics are automatically resumed.
-                match get_gc_userdata::<WrappedFailure>(state, -1).as_mut() {
+                match get_gc_userdata::<WrappedFailure>(state, -1, wrapped_failure_mt_ptr).as_mut()
+                {
                     Some(WrappedFailure::Error(err)) => {
                         let err = err.clone();
                         ffi::lua_pop(state, 1);
@@ -2394,12 +2409,6 @@ impl Lua {
             "Lua instance passed Value created from a different main Lua state"
         );
         let extra = &*self.extra.get();
-        #[cfg(not(feature = "luau"))]
-        {
-            ffi::lua_pushvalue(extra.ref_thread, lref.index);
-            ffi::lua_xmove(extra.ref_thread, self.state, 1);
-        }
-        #[cfg(feature = "luau")]
         ffi::lua_xpush(extra.ref_thread, self.state, lref.index);
     }
 
@@ -2578,7 +2587,7 @@ impl Lua {
 
         let extra = &*self.extra.get();
         match extra.registered_userdata_mt.get(&mt_ptr) {
-            Some(&type_id) if type_id == Some(TypeId::of::<DestructedUserdataMT>()) => {
+            Some(&type_id) if type_id == Some(TypeId::of::<DestructedUserdata>()) => {
                 Err(Error::UserDataDestructed)
             }
             Some(&type_id) => Ok(type_id),
@@ -2952,14 +2961,14 @@ struct StateGuard<'a>(&'a mut LuaInner, *mut ffi::lua_State);
 
 impl<'a> StateGuard<'a> {
     fn new(inner: &'a mut LuaInner, mut state: *mut ffi::lua_State) -> Self {
-        mem::swap(&mut (*inner).state, &mut state);
+        mem::swap(&mut inner.state, &mut state);
         Self(inner, state)
     }
 }
 
 impl<'a> Drop for StateGuard<'a> {
     fn drop(&mut self) {
-        mem::swap(&mut (*self.0).state, &mut self.1);
+        mem::swap(&mut self.0.state, &mut self.1);
     }
 }
 
