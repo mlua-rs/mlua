@@ -3252,6 +3252,12 @@ unsafe fn load_from_std_lib(state: *mut ffi::lua_State, libs: StdLib) -> Result<
         }
     }
 
+    #[cfg(feature = "yuescript")]
+    if libs.contains(StdLib::YUE) {
+        requiref(state, ffi::LUA_YUELIBNAME, ffi::luaopen_yue, 1)?;
+        ffi::lua_pop(state, 1);
+    }
+
     Ok(())
 }
 

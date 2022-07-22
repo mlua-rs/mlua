@@ -39,6 +39,7 @@ async = ["futures-core", "futures-task", "futures-util"]
 send = []
 serialize = ["serde", "erased-serde"]
 macros = ["mlua_derive/macros"]
+yuescript = ["yuescript-src"]
 
 [dependencies]
 mlua_derive = { version = "=0.8.0", optional = true, path = "mlua_derive" }
@@ -59,6 +60,7 @@ pkg-config = { version = "0.3.17" }
 lua-src = { version = ">= 544.0.0, < 550.0.0", optional = true }
 luajit-src = { version = ">= 210.4.0, < 220.0.0", optional = true }
 luau0-src = { version = "0.3.6", optional = true }
+yuescript-src = { version = "0.13.6", optional = true }
 
 [dev-dependencies]
 rustyline = "9.0"
@@ -106,3 +108,11 @@ required-features = ["serialize"]
 [[example]]
 name = "userdata"
 required-features = ["macros"]
+
+[[example]]
+name = "yuescript"
+required-features = ["yuescript"]
+
+[[example]]
+name = "yuescript_repl"
+required-features = ["yuescript"]

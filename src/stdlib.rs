@@ -49,6 +49,11 @@ impl StdLib {
     #[cfg_attr(docsrs, doc(cfg(feature = "luajit")))]
     pub const JIT: StdLib = StdLib(1 << 9);
 
+    /// Requires `feature = "yuescript"`
+    #[cfg(any(feature = "yuescript", doc))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "yuescript")))]
+    pub const YUE: StdLib = StdLib(1 << 10);
+
     /// (**unsafe**) [`ffi`](http://luajit.org/ext_ffi.html) library
     ///
     /// Requires `feature = "luajit"`

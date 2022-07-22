@@ -108,8 +108,32 @@ fn main() {
     #[cfg(all(feature = "luau", feature = "module"))]
     compile_error!("Luau does not support module mode");
 
-    #[cfg(any(not(feature = "module"), target_os = "windows"))]
-    find::probe_lua();
+    #[cfg(all(feature = "yuescript", feature = "module"))]
+    compile_error!("Yuescript does not support module mode");
+
+    #[cfg(all(feature = "yuescript", feature = "luau"))]
+    compile_error!("Yuescript does not support LuaU");
+
+    #[cfg(not(feature = "module"))]
+    {
+        #[cfg(not(target_os = "windows"))]
+        let include_dir = find::probe_lua();
+
+        #[cfg(target_os = "windows")]
+        let include_dir: Option<PathBuf> = None;
+
+        let _ = include_dir;
+
+        #[cfg(feature = "yuescript")]
+        {
+            let mut yuescript = yuescript_src::Build::new();
+            if let Some(include_dir) = include_dir {
+                yuescript.include_dirs(vec![include_dir]);
+            }
+
+            yuescript.build();
+        };
+    }
 
     println!("cargo:rerun-if-changed=build");
 }
