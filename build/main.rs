@@ -1,5 +1,3 @@
-use std::path::PathBuf;
-
 #[cfg_attr(
     any(
         feature = "luau",
@@ -122,7 +120,7 @@ fn main() {
         let include_dir = find::probe_lua();
 
         #[cfg(target_os = "windows")]
-        let include_dir: Option<PathBuf> = None;
+        let include_dir: Option<std::path::PathBuf> = None;
 
         let _ = include_dir;
 
