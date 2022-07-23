@@ -11,7 +11,11 @@
 [codecov.io]: https://codecov.io/gh/khvzak/mlua
 [MSRV]: https://img.shields.io/badge/rust-1.56+-brightgreen.svg?&logo=rust
 
-[Guided Tour](examples/guided_tour.rs)
+[Guided Tour] | [Benchmarks] | [FAQ]
+
+[Guided Tour]: examples/guided_tour.rs
+[Benchmarks]: https://github.com/khvzak/script-bench-rs
+[FAQ]: FAQ.md
 
 `mlua` is bindings to [Lua](https://www.lua.org) programming language for Rust with a goal to provide
 _safe_ (as far as it's possible), high level, easy to use, practical and flexible API.
