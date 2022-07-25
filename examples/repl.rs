@@ -5,7 +5,7 @@ use rustyline::Editor;
 
 fn main() {
     let lua = Lua::new();
-    let mut editor = Editor::<()>::new();
+    let mut editor = Editor::<()>::new().expect("Failed to make rustyline editor");
 
     loop {
         let mut prompt = "> ";
