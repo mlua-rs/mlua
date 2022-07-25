@@ -1,3 +1,9 @@
+## v0.8.2
+
+- Performance optimizations in handling UserData
+- Minimal Luau updated to 0.536
+- Fixed bug in `Function::bind` when passing empty binds and no arguments (#189)
+
 ## v0.8.1
 
 - Added `Lua::create_proxy` for accessing to UserData static fields and functions without instance
