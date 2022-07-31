@@ -1712,15 +1712,16 @@ impl Lua {
         all(feature = "luajit", feature = "vendored"),
         feature = "luau",
     ))]
-    pub(crate) unsafe fn recycle_thread(&self, thread: &mut Thread) {
+    pub(crate) unsafe fn recycle_thread(&self, thread: &mut Thread) -> bool {
         let extra = &mut *self.extra.get();
-        let thread_state = ffi::lua_tothread(extra.ref_thread, thread.0.index);
         if extra.recycled_thread_cache.len() < extra.recycled_thread_cache.capacity() {
+            let thread_state = ffi::lua_tothread(extra.ref_thread, thread.0.index);
             #[cfg(feature = "lua54")]
             let status = ffi::lua_resetthread(thread_state);
             #[cfg(feature = "lua54")]
             if status != ffi::LUA_OK {
-                return;
+                // Error object is on top, drop it
+                ffi::lua_settop(thread_state, 0);
             }
             #[cfg(all(feature = "luajit", feature = "vendored"))]
             ffi::lua_resetthread(self.state, thread_state);
@@ -1728,7 +1729,9 @@ impl Lua {
             ffi::lua_resetthread(thread_state);
             extra.recycled_thread_cache.push(thread.0.index);
             thread.0.index = 0;
+            return true;
         }
+        false
     }
 
     /// Create a Lua userdata object from a custom userdata type.

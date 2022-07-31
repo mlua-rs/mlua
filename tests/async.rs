@@ -174,6 +174,38 @@ async fn test_async_return_async_closure() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "lua54")]
+#[tokio::test]
+async fn test_async_lua54_to_be_closed() -> Result<()> {
+    let lua = Lua::new();
+
+    let globals = lua.globals();
+    globals.set("close_count", 0)?;
+
+    let code = r#"
+        local t <close> = setmetatable({}, {
+            __close = function()
+                close_count = close_count + 1
+            end
+        })
+        error "test"
+    "#;
+    let f = lua.load(code).into_function()?;
+
+    // Test close using call_async
+    let _ = f.call_async::<_, ()>(()).await;
+    assert_eq!(globals.get::<_, usize>("close_count")?, 1);
+
+    // Don't close by default when awaiting async threads
+    let co = lua.create_thread(f.clone())?;
+    let _ = co.clone().into_async::<_, ()>(()).await;
+    assert_eq!(globals.get::<_, usize>("close_count")?, 1);
+    let _ = co.reset(f);
+    assert_eq!(globals.get::<_, usize>("close_count")?, 2);
+
+    Ok(())
+}
+
 #[tokio::test]
 async fn test_async_thread_stream() -> Result<()> {
     let lua = Lua::new();
@@ -274,6 +306,28 @@ async fn test_async_table() -> Result<()> {
             .await?,
         "elapsed:7ms"
     );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_async_thread_cache() -> Result<()> {
+    let options = LuaOptions::new().thread_cache_size(4);
+    let lua = Lua::new_with(StdLib::ALL_SAFE, options)?;
+
+    let error_f = lua.create_async_function(|_, ()| async move {
+        Delay::new(Duration::from_millis(10)).await;
+        Err::<(), _>(Error::RuntimeError("test".to_string()))
+    })?;
+
+    let sleep = lua.create_async_function(|_, n| async move {
+        Delay::new(Duration::from_millis(n)).await;
+        Ok(format!("elapsed:{}ms", n))
+    })?;
+
+    assert!(error_f.call_async::<_, ()>(()).await.is_err());
+    // Next call should use cached thread
+    assert_eq!(sleep.call_async::<_, String>(3).await?, "elapsed:3ms");
 
     Ok(())
 }

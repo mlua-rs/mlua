@@ -357,7 +357,16 @@ impl<'lua, R> Drop for AsyncThread<'lua, R> {
     fn drop(&mut self) {
         if self.recycle {
             unsafe {
-                self.thread.0.lua.recycle_thread(&mut self.thread);
+                let lua = self.thread.0.lua;
+                // For Lua 5.4 this also closes all pending to-be-closed variables
+                if !lua.recycle_thread(&mut self.thread) {
+                    #[cfg(feature = "lua54")]
+                    if self.thread.status() == ThreadStatus::Error {
+                        let thread_state =
+                            lua.ref_thread_exec(|t| ffi::lua_tothread(t, self.thread.0.index));
+                        ffi::lua_resetthread(thread_state);
+                    }
+                }
             }
         }
     }
