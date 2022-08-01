@@ -696,6 +696,20 @@ pub unsafe extern "C" fn error_traceback(state: *mut ffi::lua_State) -> c_int {
     1
 }
 
+// A variant of `error_traceback` that can safely inspect another (yielded) thread stack
+pub unsafe fn error_traceback_thread(state: *mut ffi::lua_State, thread: *mut ffi::lua_State) {
+    // Move error object to the main thread to safely call `__tostring` metamethod if present
+    ffi::lua_xmove(thread, state, 1);
+
+    if get_gc_userdata::<WrappedFailure>(state, -1, ptr::null()).is_null() {
+        let s = ffi::luaL_tolstring(state, -1, ptr::null_mut());
+        if ffi::lua_checkstack(state, ffi::LUA_TRACEBACK_STACK) != 0 {
+            ffi::luaL_traceback(state, thread, s, 0);
+            ffi::lua_remove(state, -2);
+        }
+    }
+}
+
 // A variant of `pcall` that does not allow Lua to catch Rust panics from `callback_error`.
 pub unsafe extern "C" fn safe_pcall(state: *mut ffi::lua_State) -> c_int {
     ffi::luaL_checkstack(state, 2, ptr::null());

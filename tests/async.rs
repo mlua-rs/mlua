@@ -427,6 +427,30 @@ async fn test_async_userdata() -> Result<()> {
 }
 
 #[tokio::test]
+async fn test_async_thread_error() -> Result<()> {
+    struct MyUserData;
+
+    impl UserData for MyUserData {
+        fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
+            methods.add_meta_method("__tostring", |_, _this, ()| Ok("myuserdata error"))
+        }
+    }
+
+    let lua = Lua::new();
+    let result = lua
+        .load("function x(...) error(...) end x(...)")
+        .set_name("chunk")?
+        .call_async::<_, ()>(MyUserData)
+        .await;
+    assert!(
+        matches!(result, Err(Error::RuntimeError(cause)) if cause.contains("myuserdata error")),
+        "improper error traceback from dead thread"
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
 async fn test_async_scope() -> Result<()> {
     let ref lua = Lua::new();
 

@@ -4,7 +4,7 @@ use std::os::raw::c_int;
 use crate::error::{Error, Result};
 use crate::ffi;
 use crate::types::LuaRef;
-use crate::util::{check_stack, error_traceback, pop_error, StackGuard};
+use crate::util::{check_stack, error_traceback_thread, pop_error, StackGuard};
 use crate::value::{FromLuaMulti, ToLuaMulti};
 
 #[cfg(any(
@@ -136,8 +136,12 @@ impl<'lua> Thread<'lua> {
 
             let ret = ffi::lua_resume(thread_state, lua.state, nargs, &mut nresults as *mut c_int);
             if ret != ffi::LUA_OK && ret != ffi::LUA_YIELD {
-                protect_lua!(lua.state, 0, 0, |_| error_traceback(thread_state))?;
-                return Err(pop_error(thread_state, ret));
+                check_stack(lua.state, 3)?;
+                protect_lua!(lua.state, 0, 1, |state| error_traceback_thread(
+                    state,
+                    thread_state
+                ))?;
+                return Err(pop_error(lua.state, ret));
             }
 
             let mut results = args; // Reuse MultiValue container
