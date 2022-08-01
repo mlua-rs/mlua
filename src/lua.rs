@@ -443,6 +443,7 @@ impl Lua {
         } else {
             (ffi::luaL_newstate(), ptr::null_mut())
         };
+        assert!(!state.is_null(), "Failed to instantiate Lua VM");
 
         ffi::luaL_requiref(state, cstr!("_G"), ffi::luaopen_base, 1);
         ffi::lua_pop(state, 1);
