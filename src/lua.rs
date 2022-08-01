@@ -497,6 +497,7 @@ impl Lua {
     /// by calling this function again.
     #[allow(clippy::missing_safety_doc)]
     pub unsafe fn init_from_ptr(state: *mut ffi::lua_State) -> Lua {
+        assert!(!state.is_null(), "Lua state is NULL");
         let main_state = get_main_state(state).unwrap_or(state);
         let main_state_top = ffi::lua_gettop(main_state);
 
