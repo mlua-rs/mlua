@@ -437,8 +437,14 @@ impl Lua {
         let use_rust_allocator = !(cfg!(feature = "luajit") && cfg!(not(feature = "vendored")));
 
         let (state, mem_info) = if use_rust_allocator {
-            let mem_info = Box::into_raw(Box::new(MemoryInfo::default()));
-            let state = ffi::lua_newstate(allocator, mem_info as *mut c_void);
+            let mut mem_info = Box::into_raw(Box::new(MemoryInfo::default()));
+            let mut state = ffi::lua_newstate(allocator, mem_info as *mut c_void);
+            // If state is null (it's possible for LuaJIT on non-x86 arch) then switch to Lua internal allocator
+            if state.is_null() {
+                drop(Box::from_raw(mem_info));
+                mem_info = ptr::null_mut();
+                state = ffi::luaL_newstate();
+            }
             (state, mem_info)
         } else {
             (ffi::luaL_newstate(), ptr::null_mut())
