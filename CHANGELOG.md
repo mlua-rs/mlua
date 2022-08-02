@@ -1,3 +1,9 @@
+## v0.8.3
+
+- Close to-be-closed variables for Lua 5.4 when using call_async functions (#192)
+- Fixed Lua assertion when inspecting another thread stack. (#195)
+- Use more reliable way to create LuaJIT VM (which can fail if use Rust allocator on non-x86 platforms)
+
 ## v0.8.2
 
 - Performance optimizations in handling UserData
