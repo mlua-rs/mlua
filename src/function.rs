@@ -114,7 +114,7 @@ impl<'lua> Function<'lua> {
         R::from_lua_multi(results, lua)
     }
 
-    /// Returns a Feature that, when polled, calls `self`, passing `args` as function arguments,
+    /// Returns a future that, when polled, calls `self`, passing `args` as function arguments,
     /// and drives the execution.
     ///
     /// Internally it wraps the function to an [`AsyncThread`].
