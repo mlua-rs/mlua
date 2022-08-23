@@ -1,41 +1,14 @@
-error[E0495]: cannot infer an appropriate lifetime due to conflicting requirements
-   --> tests/compile/async_nonstatic_userdata.rs:11:72
-    |
-11  |               methods.add_async_method("print", |_, data, ()| async move {
-    |  ________________________________________________________________________^
-12  | |                 println!("{}", data.0);
-13  | |                 Ok(())
-14  | |             });
-    | |_____________^
-    |
-note: first, the lifetime cannot outlive the lifetime `'a` as defined here...
-   --> tests/compile/async_nonstatic_userdata.rs:9:10
-    |
-9   |     impl<'a> UserData for MyUserData<'a> {
-    |          ^^
-note: ...so that the types are compatible
-   --> tests/compile/async_nonstatic_userdata.rs:11:72
-    |
-11  |               methods.add_async_method("print", |_, data, ()| async move {
-    |  ________________________________________________________________________^
-12  | |                 println!("{}", data.0);
-13  | |                 Ok(())
-14  | |             });
-    | |_____________^
-    = note: expected `(MyUserData<'_>,)`
-               found `(MyUserData<'a>,)`
-note: but, the lifetime must be valid for the lifetime `'lua` as defined here...
-   --> tests/compile/async_nonstatic_userdata.rs:10:24
-    |
-10  |         fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
-    |                        ^^^^
-note: ...so that the type `impl Future<Output = [async output]>` will meet its required lifetime bounds...
-   --> tests/compile/async_nonstatic_userdata.rs:11:21
-    |
-11  |             methods.add_async_method("print", |_, data, ()| async move {
-    |                     ^^^^^^^^^^^^^^^^
-note: ...that is required by this bound
-   --> src/userdata.rs
-    |
-    |         MR: 'lua + Future<Output = Result<R>>;
-    |             ^^^^
+error: lifetime may not live long enough
+  --> tests/compile/async_nonstatic_userdata.rs:9:13
+   |
+7  |       impl<'a> UserData for MyUserData<'a> {
+   |            -- lifetime `'a` defined here
+8  |           fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
+   |                          ---- lifetime `'lua` defined here
+9  | /             methods.add_async_method("print", |_, data, ()| async move {
+10 | |                 println!("{}", data.0);
+11 | |                 Ok(())
+12 | |             });
+   | |______________^ argument requires that `'a` must outlive `'lua`
+   |
+   = help: consider adding the following bound: `'a: 'lua`

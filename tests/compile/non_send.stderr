@@ -10,7 +10,14 @@ error[E0277]: `Rc<Cell<i32>>` cannot be sent between threads safely
      | |_____- within this `[closure@$DIR/tests/compile/non_send.rs:11:25: 13:6]`
      |
      = help: within `[closure@$DIR/tests/compile/non_send.rs:11:25: 13:6]`, the trait `Send` is not implemented for `Rc<Cell<i32>>`
-     = note: required because it appears within the type `[closure@$DIR/tests/compile/non_send.rs:11:25: 13:6]`
+note: required because it's used within this closure
+    --> tests/compile/non_send.rs:11:25
+     |
+11   |       lua.create_function(move |_, ()| {
+     |  _________________________^
+12   | |         Ok(data.get())
+13   | |     })?
+     | |_____^
      = note: required because of the requirements on the impl of `mlua::types::MaybeSend` for `[closure@$DIR/tests/compile/non_send.rs:11:25: 13:6]`
 note: required by a bound in `Lua::create_function`
     --> src/lua.rs

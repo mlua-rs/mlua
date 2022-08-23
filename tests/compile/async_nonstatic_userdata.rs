@@ -1,8 +1,6 @@
-use mlua::{Lua, UserData, UserDataMethods};
+use mlua::{UserData, UserDataMethods};
 
 fn main() {
-    let ref lua = Lua::new();
-
     #[derive(Clone)]
     struct MyUserData<'a>(&'a i64);
 
