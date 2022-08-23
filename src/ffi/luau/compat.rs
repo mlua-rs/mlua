@@ -341,7 +341,7 @@ pub unsafe fn luaL_loadbufferx(
         fn free(p: *mut c_void);
     }
 
-    let chunk_is_text = (*data as u8) >= b'\n';
+    let chunk_is_text = size == 0 || (*data as u8) >= b'\n';
     if !mode.is_null() {
         let modeb = CStr::from_ptr(mode).to_bytes();
         if !chunk_is_text && !modeb.contains(&b'b') {

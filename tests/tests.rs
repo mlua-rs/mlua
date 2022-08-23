@@ -73,6 +73,7 @@ fn test_load() -> Result<()> {
     let result: i32 = func.call(())?;
     assert_eq!(result, 3);
 
+    assert!(lua.load("").exec().is_ok());
     assert!(lua.load("§$%§&$%&").exec().is_err());
 
     Ok(())
