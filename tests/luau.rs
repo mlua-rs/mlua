@@ -81,7 +81,7 @@ fn test_readonly_table() -> Result<()> {
     assert!(t.is_readonly());
 
     match t.set("key", "value") {
-        Err(Error::RuntimeError(err)) if err.contains("Attempt to modify a readonly table") => {}
+        Err(Error::RuntimeError(err)) if err.contains("attempt to modify a readonly table") => {}
         r => panic!(
             "expected RuntimeError(...) with a specific message, got {:?}",
             r
