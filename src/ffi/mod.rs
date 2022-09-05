@@ -79,9 +79,11 @@ pub(crate) fn keep_lua_symbols() {
     symbols.push(lua_tocfunction as _);
     symbols.push(luaL_loadstring as _);
     symbols.push(luaL_openlibs as _);
-    if cfg!(any(feature = "lua54", feature = "lua53", feature = "lua52")) {
+    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+    {
         symbols.push(lua_getglobal as _);
         symbols.push(lua_setglobal as _);
+        symbols.push(luaL_setfuncs as _);
     }
 }
 
