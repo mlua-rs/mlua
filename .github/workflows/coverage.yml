@@ -10,14 +10,14 @@ jobs:
       options: --security-opt seccomp=unconfined
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
-      - name: Generate code coverage
+      - name: Generate coverage report
         run: |
           cargo tarpaulin --verbose --features lua54,vendored,async,send,serialize,macros --out xml --exclude-files benches --exclude-files build --exclude-files mlua_derive --exclude-files src/ffi --exclude-files tests
 
-      - name: Upload to codecov.io
-        uses: codecov/codecov-action@v1
+      - name: Upload report to codecov.io
+        uses: codecov/codecov-action@v3
         with:
           token: ${{secrets.CODECOV_TOKEN}}
           fail_ci_if_error: false

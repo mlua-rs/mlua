@@ -7,35 +7,34 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-20.04, macos-latest, windows-latest]
+        os: [ubuntu-22.04, macos-latest, windows-latest]
         rust: [stable]
         lua: [lua54, lua53, lua52, lua51, luajit, luau]
         include:
-        - os: ubuntu-20.04
-          target: x86_64-unknown-linux-gnu
-        - os: macos-latest
-          target: x86_64-apple-darwin
-        - os: windows-latest
-          target: x86_64-pc-windows-msvc
+          - os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+          - os: macos-latest
+            target: x86_64-apple-darwin
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
     steps:
-    - uses: actions/checkout@v2
-    - uses: actions-rs/toolchain@v1
-      with:
-        toolchain: ${{ matrix.rust }}
-        target: ${{ matrix.target }}
-        override: true
-    - uses: Swatinem/rust-cache@v1
-    - name: Build ${{ matrix.lua }} vendored
-      run: |
-        cargo build --features "${{ matrix.lua }},vendored"
-        cargo build --features "${{ matrix.lua }},vendored,async,send,serialize,macros,parking_lot"
-      shell: bash
-    - name: Build ${{ matrix.lua }} pkg-config
-      if: ${{ matrix.os == 'ubuntu-20.04' && matrix.lua != 'lua54' }}
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y --no-install-recommends liblua5.3-dev liblua5.2-dev liblua5.1-0-dev libluajit-5.1-dev
-        cargo build --features "${{ matrix.lua }}"
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ matrix.rust }}
+          target: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+      - name: Build ${{ matrix.lua }} vendored
+        run: |
+          cargo build --features "${{ matrix.lua }},vendored"
+          cargo build --features "${{ matrix.lua }},vendored,async,send,serialize,macros,parking_lot"
+        shell: bash
+      - name: Build ${{ matrix.lua }} pkg-config
+        if: ${{ matrix.os == 'ubuntu-22.04' }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends liblua5.4-dev liblua5.3-dev liblua5.2-dev liblua5.1-0-dev libluajit-5.1-dev
+          cargo build --features "${{ matrix.lua }}"
 
   build_aarch64_cross_macos:
     name: Cross-compile to aarch64-apple-darwin
@@ -45,60 +44,57 @@ jobs:
       matrix:
         lua: [lua54, lua53, lua52, lua51, luajit]
     steps:
-    - uses: actions/checkout@v2
-    - uses: actions-rs/toolchain@v1
-      with:
-        toolchain: stable
-        target: aarch64-apple-darwin
-        override: true
-    - name: Cross-compile
-      run: cargo build --target aarch64-apple-darwin --features "${{ matrix.lua }},vendored,async,send,serialize,macros,parking_lot"
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+          target: aarch64-apple-darwin
+      - name: Cross-compile
+        run: cargo build --target aarch64-apple-darwin --features "${{ matrix.lua }},vendored,async,send,serialize,macros,parking_lot"
 
   build_aarch64_cross_ubuntu:
     name: Cross-compile to aarch64-unknown-linux-gnu
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     needs: build
     strategy:
       matrix:
         lua: [lua54, lua53, lua52, lua51, luajit]
     steps:
-    - uses: actions/checkout@v2
-    - uses: actions-rs/toolchain@v1
-      with:
-        toolchain: stable
-        target: aarch64-unknown-linux-gnu
-        override: true
-    - name: Install ARM compiler toolchain
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y --no-install-recommends gcc-aarch64-linux-gnu libc6-dev-arm64-cross
-      shell: bash
-    - name: Cross-compile
-      run: cargo build --target aarch64-unknown-linux-gnu --features "${{ matrix.lua }},vendored,async,send,serialize,macros,parking_lot"
-      shell: bash
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+          target: aarch64-unknown-linux-gnu
+      - name: Install ARM compiler toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends gcc-aarch64-linux-gnu libc6-dev-arm64-cross
+        shell: bash
+      - name: Cross-compile
+        run: cargo build --target aarch64-unknown-linux-gnu --features "${{ matrix.lua }},vendored,async,send,serialize,macros,parking_lot"
+        shell: bash
 
   build_armv7_cross_ubuntu:
     name: Cross-compile to armv7-unknown-linux-gnueabihf
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     needs: build
     strategy:
       matrix:
         lua: [lua54, lua53, lua52, lua51]
     steps:
-    - uses: actions/checkout@v2
-    - uses: actions-rs/toolchain@v1
-      with:
-        toolchain: stable
-        target: armv7-unknown-linux-gnueabihf
-        override: true
-    - name: Install ARM compiler toolchain
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y --no-install-recommends gcc-arm-linux-gnueabihf libc-dev-armhf-cross
-      shell: bash
-    - name: Cross-compile
-      run: cargo build --target armv7-unknown-linux-gnueabihf --features "${{ matrix.lua }},vendored,async,send,serialize,macros,parking_lot"
-      shell: bash
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+          target: armv7-unknown-linux-gnueabihf
+      - name: Install ARM compiler toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends gcc-arm-linux-gnueabihf libc-dev-armhf-cross
+        shell: bash
+      - name: Cross-compile
+        run: cargo build --target armv7-unknown-linux-gnueabihf --features "${{ matrix.lua }},vendored,async,send,serialize,macros,parking_lot"
+        shell: bash
 
   test:
     name: Test
@@ -106,35 +102,34 @@ jobs:
     needs: build
     strategy:
       matrix:
-        os: [ubuntu-20.04, macos-latest, windows-latest]
+        os: [ubuntu-22.04, macos-latest, windows-latest]
         rust: [stable, nightly]
         lua: [lua54, lua53, lua52, lua51, luajit, luajit52, luau]
         include:
-        - os: ubuntu-20.04
-          target: x86_64-unknown-linux-gnu
-        - os: macos-latest
-          target: x86_64-apple-darwin
-        - os: windows-latest
-          target: x86_64-pc-windows-msvc
+          - os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+          - os: macos-latest
+            target: x86_64-apple-darwin
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
     steps:
-    - uses: actions/checkout@v2
-    - uses: actions-rs/toolchain@v1
-      with:
-        toolchain: ${{ matrix.rust }}
-        target: ${{ matrix.target }}
-        override: true
-    - uses: Swatinem/rust-cache@v1
-    - name: Run ${{ matrix.lua }} tests
-      run: |
-        cargo test --features "${{ matrix.lua }},vendored"
-        cargo test --features "${{ matrix.lua }},vendored,async,send,serialize,macros,parking_lot"
-      shell: bash
-    - name: Run compile tests (macos lua54)
-      if: ${{ matrix.os == 'macos-latest' && matrix.lua == 'lua54' }}
-      run: |
-        TRYBUILD=overwrite cargo test --features "${{ matrix.lua }},vendored" -- --ignored
-        TRYBUILD=overwrite cargo test --features "${{ matrix.lua }},vendored,async,send,serialize,macros,parking_lot" -- --ignored
-      shell: bash
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ matrix.rust }}
+          target: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v1
+      - name: Run ${{ matrix.lua }} tests
+        run: |
+          cargo test --features "${{ matrix.lua }},vendored"
+          cargo test --features "${{ matrix.lua }},vendored,async,send,serialize,macros,parking_lot"
+        shell: bash
+      - name: Run compile tests (macos lua54)
+        if: ${{ matrix.os == 'macos-latest' && matrix.lua == 'lua54' }}
+        run: |
+          TRYBUILD=overwrite cargo test --features "${{ matrix.lua }},vendored" -- --ignored
+          TRYBUILD=overwrite cargo test --features "${{ matrix.lua }},vendored,async,send,serialize,macros,parking_lot" -- --ignored
+        shell: bash
 
   test_with_sanitizer:
     name: Test with address sanitizer
@@ -142,25 +137,24 @@ jobs:
     needs: build
     strategy:
       matrix:
-        os: [ubuntu-20.04]
+        os: [ubuntu-22.04]
         rust: [nightly]
         lua: [lua54, lua53, lua52, lua51, luajit, luau]
         include:
-        - os: ubuntu-20.04
-          target: x86_64-unknown-linux-gnu
+          - os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
     steps:
-    - uses: actions/checkout@v2
-    - uses: actions-rs/toolchain@v1
-      with:
-        toolchain: ${{ matrix.rust }}
-        target: ${{ matrix.target }}
-        override: true
-    - uses: Swatinem/rust-cache@v1
-    - name: Run ${{ matrix.lua }} tests with address sanitizer
-      run: |
-        RUSTFLAGS="-Z sanitizer=address" \
-          cargo test --tests --features "${{ matrix.lua }},vendored,async,send,serialize,macros,parking_lot" --target x86_64-unknown-linux-gnu -- --skip test_too_many_recursions
-      shell: bash
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ matrix.rust }}
+          target: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v1
+      - name: Run ${{ matrix.lua }} tests with address sanitizer
+        run: |
+          RUSTFLAGS="-Z sanitizer=address" \
+            cargo test --tests --features "${{ matrix.lua }},vendored,async,send,serialize,macros,parking_lot" --target x86_64-unknown-linux-gnu -- --skip test_too_many_recursions
+        shell: bash
 
   test_modules:
     name: Test modules
@@ -168,27 +162,26 @@ jobs:
     needs: build
     strategy:
       matrix:
-        os: [ubuntu-20.04, macos-latest]
+        os: [ubuntu-22.04, macos-latest]
         rust: [stable]
         lua: [lua54, lua53, lua52, lua51, luajit]
         include:
-        - os: ubuntu-20.04
-          target: x86_64-unknown-linux-gnu
-        - os: macos-latest
-          target: x86_64-apple-darwin
+          - os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+          - os: macos-latest
+            target: x86_64-apple-darwin
     steps:
-    - uses: actions/checkout@v2
-    - uses: actions-rs/toolchain@v1
-      with:
-        toolchain: ${{ matrix.rust }}
-        target: ${{ matrix.target }}
-        override: true
-    - uses: Swatinem/rust-cache@v1
-    - name: Run ${{ matrix.lua }} module tests
-      run: |
-        (cd tests/module && cargo build --release --features "${{ matrix.lua }}")
-        (cd tests/module/loader && cargo test --release --features "${{ matrix.lua }},vendored")
-      shell: bash
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ matrix.rust }}
+          target: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v1
+      - name: Run ${{ matrix.lua }} module tests
+        run: |
+          (cd tests/module && cargo build --release --features "${{ matrix.lua }}")
+          (cd tests/module/loader && cargo test --release --features "${{ matrix.lua }},vendored")
+        shell: bash
 
   test_modules_windows:
     name: Test modules on Windows
@@ -201,41 +194,39 @@ jobs:
       run:
         shell: msys2 {0}
     steps:
-    - uses: msys2/setup-msys2@v2
-    - uses: actions/checkout@v2
-    - name: Install Rust & Lua
-      run: |
-        pacman -S --noconfirm mingw-w64-x86_64-rust mingw-w64-x86_64-lua mingw-w64-x86_64-luajit mingw-w64-x86_64-pkg-config
-    - name: Run ${{ matrix.lua }} module tests
-      run: |
-        (cd tests/module && cargo build --release --features "${{ matrix.lua }}")
-        (cd tests/module/loader && cargo test --release --features "${{ matrix.lua }}")
+      - uses: msys2/setup-msys2@v2
+      - uses: actions/checkout@v3
+      - name: Install Rust & Lua
+        run: |
+          pacman -S --noconfirm mingw-w64-x86_64-rust mingw-w64-x86_64-lua mingw-w64-x86_64-luajit mingw-w64-x86_64-pkg-config
+      - name: Run ${{ matrix.lua }} module tests
+        run: |
+          (cd tests/module && cargo build --release --features "${{ matrix.lua }}")
+          (cd tests/module/loader && cargo test --release --features "${{ matrix.lua }}")
 
   rustfmt:
     name: Rustfmt
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     steps:
-    - uses: actions/checkout@v2
-    - uses: actions-rs/toolchain@v1
-      with:
-        toolchain: stable
-        components: rustfmt
-        override: true
-    - run: cargo fmt -- --check
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+          components: rustfmt
+      - run: cargo fmt -- --check
 
   clippy:
     name: Clippy check
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     strategy:
       matrix:
         lua: [lua54, lua53, lua52, lua51, luajit, luau]
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@stable
         with:
-            toolchain: nightly
-            components: clippy
-            override: true
+          toolchain: nightly
+          components: clippy
       - uses: actions-rs/clippy-check@v1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
