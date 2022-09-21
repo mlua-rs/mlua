@@ -40,6 +40,24 @@ pub trait AsChunk<'lua> {
     }
 }
 
+impl<'lua, 'a, T: AsChunk<'lua> + ?Sized> AsChunk<'lua> for &'a T {
+    fn source(&self) -> IoResult<Cow<[u8]>> {
+        (*self).source()
+    }
+
+    fn name(&self) -> Option<StdString> {
+        (*self).name()
+    }
+
+    fn env(&self, lua: &'lua Lua) -> Result<Option<Value<'lua>>> {
+        (*self).env(lua)
+    }
+
+    fn mode(&self) -> Option<ChunkMode> {
+        (*self).mode()
+    }
+}
+
 impl<'lua> AsChunk<'lua> for str {
     fn source(&self) -> IoResult<Cow<[u8]>> {
         Ok(Cow::Borrowed(self.as_ref()))
