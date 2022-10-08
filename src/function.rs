@@ -273,7 +273,10 @@ impl<'lua> Function<'lua> {
                 name_what: None,
                 what: ptr_to_cstr_bytes(ar.what).map(|s| s.to_vec()),
                 source: ptr_to_cstr_bytes(ar.source).map(|s| s.to_vec()),
-                short_src: ptr_to_cstr_bytes(&ar.short_src as *const _).map(|s| s.to_vec()),
+                #[cfg(not(feature = "luau"))]
+                short_src: ptr_to_cstr_bytes(ar.short_src.as_ptr()).map(|s| s.to_vec()),
+                #[cfg(feature = "luau")]
+                short_src: ptr_to_cstr_bytes(ar.short_src).map(|s| s.to_vec()),
                 line_defined: ar.linedefined as i32,
                 #[cfg(not(feature = "luau"))]
                 last_line_defined: ar.lastlinedefined as i32,

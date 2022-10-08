@@ -257,6 +257,7 @@ extern "C" {
 extern "C" {
     pub fn lua_error(L: *mut lua_State) -> !;
     pub fn lua_next(L: *mut lua_State, idx: c_int) -> c_int;
+    pub fn lua_rawiter(L: *mut lua_State, idx: c_int, iter: c_int) -> c_int;
     pub fn lua_concat(L: *mut lua_State, n: c_int);
     // TODO: lua_encodepointer
     pub fn lua_clock() -> c_double;
@@ -267,6 +268,7 @@ extern "C" {
         dtor: Option<unsafe extern "C" fn(*mut lua_State, *mut c_void)>,
     );
     pub fn lua_clonefunction(L: *mut lua_State, idx: c_int);
+    pub fn lua_cleartable(L: *mut lua_State, idx: c_int);
 }
 
 //
@@ -460,13 +462,14 @@ pub struct lua_Debug {
     pub name: *const c_char,
     pub what: *const c_char,
     pub source: *const c_char,
+    pub short_src: *const c_char,
     pub linedefined: c_int,
     pub currentline: c_int,
     pub nupvals: u8,
     pub nparams: u8,
     pub isvararg: c_char,
-    pub short_src: [c_char; LUA_IDSIZE],
     pub userdata: *mut c_void,
+    pub ssbuf: [c_char; LUA_IDSIZE],
 }
 
 //

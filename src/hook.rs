@@ -102,7 +102,10 @@ impl<'lua> Debug<'lua> {
 
             DebugSource {
                 source: ptr_to_cstr_bytes((*self.ar.get()).source),
+                #[cfg(not(feature = "luau"))]
                 short_src: ptr_to_cstr_bytes((*self.ar.get()).short_src.as_ptr()),
+                #[cfg(feature = "luau")]
+                short_src: ptr_to_cstr_bytes((*self.ar.get()).short_src),
                 line_defined: (*self.ar.get()).linedefined as i32,
                 #[cfg(not(feature = "luau"))]
                 last_line_defined: (*self.ar.get()).lastlinedefined as i32,
