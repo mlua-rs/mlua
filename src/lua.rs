@@ -2591,6 +2591,7 @@ impl Lua {
     pub(crate) unsafe fn push_userdata_ref(&self, lref: &LuaRef) -> Result<Option<TypeId>> {
         self.push_ref(lref);
         if ffi::lua_getmetatable(self.state, -1) == 0 {
+            ffi::lua_pop(self.state, 1);
             return Err(Error::UserDataTypeMismatch);
         }
         let mt_ptr = ffi::lua_topointer(self.state, -1);
