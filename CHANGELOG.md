@@ -1,3 +1,7 @@
+## v0.8.4
+
+- Minimal Luau updated to 0.548
+
 ## v0.8.3
 
 - Close to-be-closed variables for Lua 5.4 when using call_async functions (#192)
