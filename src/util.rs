@@ -313,7 +313,7 @@ pub unsafe fn push_userdata<T>(state: *mut ffi::lua_State, t: T, protect: bool) 
         ptr::drop_in_place(ud as *mut T);
     }
 
-    let size = mem::size_of::<T>() + 1;
+    let size = mem::size_of::<T>();
     let ud = if protect {
         protect_lua!(state, 0, 1, |state| {
             ffi::lua_newuserdatadtor(state, size, destructor::<T>) as *mut T
