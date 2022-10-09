@@ -106,9 +106,9 @@ impl<'lua> Debug<'lua> {
                 short_src: ptr_to_cstr_bytes((*self.ar.get()).short_src.as_ptr()),
                 #[cfg(feature = "luau")]
                 short_src: ptr_to_cstr_bytes((*self.ar.get()).short_src),
-                line_defined: (*self.ar.get()).linedefined as i32,
+                line_defined: (*self.ar.get()).linedefined,
                 #[cfg(not(feature = "luau"))]
-                last_line_defined: (*self.ar.get()).lastlinedefined as i32,
+                last_line_defined: (*self.ar.get()).lastlinedefined,
                 what: ptr_to_cstr_bytes((*self.ar.get()).what),
             }
         }
@@ -128,7 +128,7 @@ impl<'lua> Debug<'lua> {
                 "lua_getinfo failed with `l`"
             );
 
-            (*self.ar.get()).currentline as i32
+            (*self.ar.get()).currentline
         }
     }
 

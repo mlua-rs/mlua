@@ -277,9 +277,9 @@ impl<'lua> Function<'lua> {
                 short_src: ptr_to_cstr_bytes(ar.short_src.as_ptr()).map(|s| s.to_vec()),
                 #[cfg(feature = "luau")]
                 short_src: ptr_to_cstr_bytes(ar.short_src).map(|s| s.to_vec()),
-                line_defined: ar.linedefined as i32,
+                line_defined: ar.linedefined,
                 #[cfg(not(feature = "luau"))]
-                last_line_defined: ar.lastlinedefined as i32,
+                last_line_defined: ar.lastlinedefined,
             }
         }
     }
@@ -315,8 +315,7 @@ impl<'lua> Function<'lua> {
 
             lua.push_ref(&self.0);
             let data_ptr = &mut data as *mut Vec<u8> as *mut c_void;
-            let strip = if strip { 1 } else { 0 };
-            ffi::lua_dump(lua.state, writer, data_ptr, strip);
+            ffi::lua_dump(lua.state, writer, data_ptr, strip as i32);
             ffi::lua_pop(lua.state, 1);
         }
 

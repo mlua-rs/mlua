@@ -1124,7 +1124,7 @@ impl Lua {
     #[cfg_attr(docsrs, doc(cfg(feature = "lua54")))]
     pub fn warning<S: Into<Vec<u8>>>(&self, msg: S, tocont: bool) -> Result<()> {
         let msg = CString::new(msg).map_err(|err| Error::RuntimeError(err.to_string()))?;
-        unsafe { ffi::lua_warning(self.state, msg.as_ptr(), if tocont { 1 } else { 0 }) };
+        unsafe { ffi::lua_warning(self.state, msg.as_ptr(), tocont as c_int) };
         Ok(())
     }
 
@@ -2263,7 +2263,7 @@ impl Lua {
             }
 
             Value::Boolean(b) => {
-                ffi::lua_pushboolean(self.state, if b { 1 } else { 0 });
+                ffi::lua_pushboolean(self.state, b as c_int);
             }
 
             Value::LightUserData(ud) => {
