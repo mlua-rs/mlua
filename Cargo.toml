@@ -42,7 +42,7 @@ macros = ["mlua_derive/macros"]
 
 [dependencies]
 mlua_derive = { version = "=0.8.0", optional = true, path = "mlua_derive" }
-bstr = { version = "0.2", features = ["std"], default_features = false }
+bstr = { version = "1.0", features = ["std"], default_features = false }
 once_cell = { version = "1.0" }
 num-traits = { version = "0.2.14" }
 rustc-hash = "1.0"
