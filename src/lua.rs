@@ -2101,11 +2101,8 @@ impl Lua {
             let _sg = StackGuard::new(self.state);
             check_stack(self.state, 1)?;
 
-            ffi::lua_rawgeti(
-                self.state,
-                ffi::LUA_REGISTRYINDEX,
-                key.registry_id as Integer,
-            );
+            let id = key.registry_id as Integer;
+            ffi::lua_rawgeti(self.state, ffi::LUA_REGISTRYINDEX, id);
             self.pop_value()
         };
         T::from_lua(value, self)
@@ -2151,14 +2148,10 @@ impl Lua {
 
             self.push_value(t)?;
             // It must be safe to replace the value without triggering memory error
-            ffi::lua_rawseti(
-                self.state,
-                ffi::LUA_REGISTRYINDEX,
-                key.registry_id as Integer,
-            );
-
-            Ok(())
+            let id = key.registry_id as Integer;
+            ffi::lua_rawseti(self.state, ffi::LUA_REGISTRYINDEX, id);
         }
+        Ok(())
     }
 
     /// Returns true if the given `RegistryKey` was created by a `Lua` which shares the underlying
