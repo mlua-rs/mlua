@@ -20,7 +20,7 @@ use crate::ffi;
 use crate::function::Function;
 use crate::lua::Lua;
 use crate::table::{Table, TablePairs};
-use crate::types::{Callback, LuaRef, MaybeSend};
+use crate::types::{Callback, LuaOwnedRef, LuaRef, MaybeSend};
 use crate::util::{check_stack, get_userdata, take_userdata, StackGuard};
 use crate::value::{FromLua, FromLuaMulti, ToLua, ToLuaMulti};
 
@@ -799,6 +799,15 @@ impl Serialize for UserDataSerializeError {
 #[derive(Clone, Debug)]
 pub struct AnyUserData<'lua>(pub(crate) LuaRef<'lua>);
 
+#[derive(Clone, Debug)]
+pub struct OwnedAnyUserData(pub(crate) LuaOwnedRef);
+
+impl OwnedAnyUserData {
+    pub const fn to_ref(&self) -> AnyUserData {
+        AnyUserData(self.0.to_ref())
+    }
+}
+
 impl<'lua> AnyUserData<'lua> {
     /// Checks whether the type of this userdata is `T`.
     pub fn is<T: 'static + UserData>(&self) -> bool {
@@ -1088,6 +1097,11 @@ impl<'lua> AnyUserData<'lua> {
             ffi::lua_getmetatable(lua.state, -1); // Checked that non-empty on the previous call
             Ok(Table(lua.pop_ref()))
         }
+    }
+
+    #[inline]
+    pub fn into_owned(self) -> OwnedAnyUserData {
+        OwnedAnyUserData(self.0.into_owned())
     }
 
     pub(crate) fn equals<T: AsRef<Self>>(&self, other: T) -> Result<bool> {

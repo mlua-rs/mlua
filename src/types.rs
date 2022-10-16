@@ -180,6 +180,21 @@ impl RegistryKey {
 pub(crate) struct LuaRef<'lua> {
     pub(crate) lua: &'lua Lua,
     pub(crate) index: c_int,
+    pub(crate) drop: bool,
+}
+
+impl<'lua> LuaRef<'lua> {
+    pub(crate) const fn new(lua: &'lua Lua, index: c_int) -> Self {
+        LuaRef {
+            lua,
+            index,
+            drop: true,
+        }
+    }
+
+    pub(crate) fn into_owned(self) -> LuaOwnedRef {
+        self.lua.make_owned_ref(self)
+    }
 }
 
 impl<'lua> fmt::Debug for LuaRef<'lua> {
@@ -196,7 +211,7 @@ impl<'lua> Clone for LuaRef<'lua> {
 
 impl<'lua> Drop for LuaRef<'lua> {
     fn drop(&mut self) {
-        if self.index > 0 {
+        if self.drop {
             self.lua.drop_ref(self);
         }
     }
@@ -211,6 +226,43 @@ impl<'lua> PartialEq for LuaRef<'lua> {
             lua.push_ref(self);
             lua.push_ref(other);
             ffi::lua_rawequal(lua.state, -1, -2) == 1
+        }
+    }
+}
+
+pub(crate) struct LuaOwnedRef {
+    pub(crate) lua: Lua,
+    pub(crate) index: c_int,
+}
+
+impl fmt::Debug for LuaOwnedRef {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "OwnedRef({})", self.index)
+    }
+}
+
+impl Clone for LuaOwnedRef {
+    fn clone(&self) -> Self {
+        self.lua.make_owned_ref(self.to_ref().clone())
+    }
+}
+
+impl Drop for LuaOwnedRef {
+    fn drop(&mut self) {
+        self.lua.drop_ref(&LuaRef {
+            lua: &self.lua,
+            index: self.index,
+            drop: false,
+        });
+    }
+}
+
+impl LuaOwnedRef {
+    pub(crate) const fn to_ref(&self) -> LuaRef {
+        LuaRef {
+            lua: &self.lua,
+            index: self.index,
+            drop: false,
         }
     }
 }

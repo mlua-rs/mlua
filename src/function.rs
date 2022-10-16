@@ -5,7 +5,7 @@ use std::slice;
 
 use crate::error::{Error, Result};
 use crate::ffi;
-use crate::types::LuaRef;
+use crate::types::{LuaOwnedRef, LuaRef};
 use crate::util::{
     assert_stack, check_stack, error_traceback, pop_error, ptr_to_cstr_bytes, StackGuard,
 };
@@ -17,6 +17,17 @@ use {futures_core::future::LocalBoxFuture, futures_util::future};
 /// Handle to an internal Lua function.
 #[derive(Clone, Debug)]
 pub struct Function<'lua>(pub(crate) LuaRef<'lua>);
+
+/// Owned handle to an internal Lua function.
+#[derive(Clone, Debug)]
+pub struct OwnedFunction(pub(crate) LuaOwnedRef);
+
+impl OwnedFunction {
+    /// Get borrowed handle to the underlying Lua function.
+    pub const fn to_ref(&self) -> Function {
+        Function(self.0.to_ref())
+    }
+}
 
 #[derive(Clone, Debug)]
 pub struct FunctionInfo {
@@ -372,6 +383,12 @@ impl<'lua> Function<'lua> {
             let func_ptr = &mut func as *mut F as *mut c_void;
             ffi::lua_getcoverage(lua.state, -1, func_ptr, callback::<F>);
         }
+    }
+
+    /// Convert this handle to owned version.
+    #[inline]
+    pub fn into_owned(self) -> OwnedFunction {
+        OwnedFunction(self.0.into_owned())
     }
 }
 

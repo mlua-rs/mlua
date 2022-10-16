@@ -1,7 +1,6 @@
 use std::future::Future;
 use std::net::SocketAddr;
 use std::pin::Pin;
-use std::rc::Rc;
 use std::task::{Context, Poll};
 
 use hyper::server::conn::AddrStream;
@@ -9,7 +8,8 @@ use hyper::service::Service;
 use hyper::{Body, Request, Response, Server};
 
 use mlua::{
-    chunk, Error as LuaError, Function, Lua, String as LuaString, Table, UserData, UserDataMethods,
+    chunk, Error as LuaError, Function, Lua, OwnedFunction, String as LuaString, Table, UserData,
+    UserDataMethods,
 };
 
 struct LuaRequest(SocketAddr, Request<Body>);
@@ -21,7 +21,10 @@ impl UserData for LuaRequest {
     }
 }
 
-pub struct Svc(Rc<Lua>, SocketAddr);
+#[derive(Clone)]
+struct Handler(OwnedFunction);
+
+pub struct Svc(Handler, SocketAddr);
 
 impl Service<Request<Body>> for Svc {
     type Response = Response<Body>;
@@ -34,11 +37,10 @@ impl Service<Request<Body>> for Svc {
 
     fn call(&mut self, req: Request<Body>) -> Self::Future {
         // If handler returns an error then generate 5xx response
-        let lua = self.0.clone();
+        let handler = self.0.clone();
         let lua_req = LuaRequest(self.1, req);
         Box::pin(async move {
-            let handler: Function = lua.named_registry_value("http_handler")?;
-            match handler.call_async::<_, Table>(lua_req).await {
+            match handler.0.to_ref().call_async::<_, Table>(lua_req).await {
                 Ok(lua_resp) => {
                     let status = lua_resp.get::<_, Option<u16>>("status")?.unwrap_or(200);
                     let mut resp = Response::builder().status(status);
@@ -72,10 +74,10 @@ impl Service<Request<Body>> for Svc {
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
-    let lua = Rc::new(Lua::new());
+    let lua = Lua::new();
 
     // Create Lua handler function
-    let handler: Function = lua
+    let handler_fn: Function = lua
         .load(chunk! {
             function(req)
                 return {
@@ -91,12 +93,10 @@ async fn main() {
         .eval()
         .expect("cannot create Lua handler");
 
-    // Store it in the Registry
-    lua.set_named_registry_value("http_handler", handler)
-        .expect("cannot store Lua handler");
-
     let addr = ([127, 0, 0, 1], 3000).into();
-    let server = Server::bind(&addr).executor(LocalExec).serve(MakeSvc(lua));
+    let server = Server::bind(&addr)
+        .executor(LocalExec)
+        .serve(MakeSvc(Handler(handler_fn.into_owned())));
 
     println!("Listening on http://{}", addr);
 
@@ -105,7 +105,7 @@ async fn main() {
     local.run_until(server).await.expect("cannot run server")
 }
 
-struct MakeSvc(Rc<Lua>);
+struct MakeSvc(Handler);
 
 impl Service<&AddrStream> for MakeSvc {
     type Response = Svc;
@@ -117,9 +117,9 @@ impl Service<&AddrStream> for MakeSvc {
     }
 
     fn call(&mut self, stream: &AddrStream) -> Self::Future {
-        let lua = self.0.clone();
+        let handler = self.0.clone();
         let remote_addr = stream.remote_addr();
-        Box::pin(async move { Ok(Svc(lua, remote_addr)) })
+        Box::pin(async move { Ok(Svc(handler, remote_addr)) })
     }
 }
 

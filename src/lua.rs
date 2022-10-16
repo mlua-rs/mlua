@@ -25,8 +25,8 @@ use crate::string::String;
 use crate::table::Table;
 use crate::thread::Thread;
 use crate::types::{
-    Callback, CallbackUpvalue, DestructedUserdata, Integer, LightUserData, LuaRef, MaybeSend,
-    Number, RegistryKey,
+    Callback, CallbackUpvalue, DestructedUserdata, Integer, LightUserData, LuaOwnedRef, LuaRef,
+    MaybeSend, Number, RegistryKey,
 };
 use crate::userdata::{AnyUserData, UserData, UserDataCell};
 use crate::userdata_impl::{StaticUserDataFields, StaticUserDataMethods, UserDataProxy};
@@ -1721,7 +1721,7 @@ impl Lua {
                     ffi::lua_replace(thread_state, ffi::LUA_GLOBALSINDEX);
                 }
 
-                return Ok(Thread(LuaRef { lua: self, index }));
+                return Ok(Thread(LuaRef::new(self, index)));
             }
         };
         self.create_thread(func)
@@ -1750,7 +1750,7 @@ impl Lua {
             #[cfg(feature = "luau")]
             ffi::lua_resetthread(thread_state);
             extra.recycled_thread_cache.push(thread.0.index);
-            thread.0.index = 0;
+            thread.0.drop = false;
             return true;
         }
         false
@@ -2440,7 +2440,7 @@ impl Lua {
     // Pushes a LuaRef value onto the stack, uses 1 stack space, does not call checkstack
     pub(crate) unsafe fn push_ref(&self, lref: &LuaRef) {
         assert!(
-            Arc::ptr_eq(&lref.lua.extra, &self.extra),
+            Arc::ptr_eq(&lref.lua.0, &self.0),
             "Lua instance passed Value created from a different main Lua state"
         );
         let extra = &*self.extra.get();
@@ -2460,14 +2460,14 @@ impl Lua {
         let extra = &mut *self.extra.get();
         ffi::lua_xmove(self.state, extra.ref_thread, 1);
         let index = ref_stack_pop(extra);
-        LuaRef { lua: self, index }
+        LuaRef::new(self, index)
     }
 
     // Same as `pop_ref` but assumes the value is already on the reference thread
     pub(crate) unsafe fn pop_ref_thread(&self) -> LuaRef {
         let extra = &mut *self.extra.get();
         let index = ref_stack_pop(extra);
-        LuaRef { lua: self, index }
+        LuaRef::new(self, index)
     }
 
     pub(crate) fn clone_ref<'lua>(&'lua self, lref: &LuaRef<'lua>) -> LuaRef<'lua> {
@@ -2475,7 +2475,7 @@ impl Lua {
             let extra = &mut *self.extra.get();
             ffi::lua_pushvalue(extra.ref_thread, lref.index);
             let index = ref_stack_pop(extra);
-            LuaRef { lua: self, index }
+            LuaRef::new(self, index)
         }
     }
 
@@ -2486,6 +2486,29 @@ impl Lua {
             ffi::lua_replace(extra.ref_thread, lref.index);
             extra.ref_free.push(lref.index);
         }
+    }
+
+    pub(crate) fn make_owned_ref(&self, lref: LuaRef) -> LuaOwnedRef {
+        assert!(lref.drop, "Cannot make owned non-drop reference");
+        let owned_ref = LuaOwnedRef {
+            lua: Lua(self.0.clone()),
+            index: lref.index,
+        };
+        mem::forget(lref);
+        owned_ref
+    }
+
+    pub(crate) fn adopt_owned_ref(&self, loref: LuaOwnedRef) -> LuaRef {
+        assert!(
+            Arc::ptr_eq(&loref.lua.0, &self.0),
+            "Lua instance passed Value created from a different main Lua state"
+        );
+        let index = loref.index;
+        unsafe {
+            ptr::read(&loref.lua);
+            mem::forget(loref);
+        }
+        LuaRef::new(self, index)
     }
 
     unsafe fn push_userdata_metatable<T: 'static + UserData>(&self) -> Result<()> {

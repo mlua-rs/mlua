@@ -11,7 +11,7 @@ use {
 use crate::error::{Error, Result};
 use crate::ffi;
 use crate::function::Function;
-use crate::types::{Integer, LuaRef};
+use crate::types::{Integer, LuaOwnedRef, LuaRef};
 use crate::util::{assert_stack, check_stack, StackGuard};
 use crate::value::{FromLua, FromLuaMulti, Nil, ToLua, ToLuaMulti, Value};
 
@@ -21,6 +21,17 @@ use {futures_core::future::LocalBoxFuture, futures_util::future};
 /// Handle to an internal Lua table.
 #[derive(Clone, Debug)]
 pub struct Table<'lua>(pub(crate) LuaRef<'lua>);
+
+/// Owned handle to an internal Lua table.
+#[derive(Clone, Debug)]
+pub struct OwnedTable(pub(crate) LuaOwnedRef);
+
+impl OwnedTable {
+    /// Get borrowed handle to the underlying Lua table.
+    pub const fn to_ref(&self) -> Table {
+        Table(self.0.to_ref())
+    }
+}
 
 #[allow(clippy::len_without_is_empty)]
 impl<'lua> Table<'lua> {
@@ -510,6 +521,12 @@ impl<'lua> Table<'lua> {
     pub fn to_pointer(&self) -> *const c_void {
         let ref_thread = self.0.lua.ref_thread();
         unsafe { ffi::lua_topointer(ref_thread, self.0.index) }
+    }
+
+    /// Convert this handle to owned version.
+    #[inline]
+    pub fn into_owned(self) -> OwnedTable {
+        OwnedTable(self.0.into_owned())
     }
 
     /// Consume this table and return an iterator over the pairs of the table.
