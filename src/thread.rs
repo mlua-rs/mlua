@@ -118,8 +118,7 @@ impl<'lua> Thread<'lua> {
             let _sg = StackGuard::new(lua.state);
             check_stack(lua.state, cmp::max(nargs + 1, 3))?;
 
-            let thread_state =
-                lua.ref_thread_exec(|ref_thread| ffi::lua_tothread(ref_thread, self.0.index));
+            let thread_state = ffi::lua_tothread(lua.ref_thread(), self.0.index);
 
             let status = ffi::lua_status(thread_state);
             if status != ffi::LUA_YIELD && ffi::lua_gettop(thread_state) == 0 {
@@ -160,8 +159,7 @@ impl<'lua> Thread<'lua> {
     pub fn status(&self) -> ThreadStatus {
         let lua = self.0.lua;
         unsafe {
-            let thread_state =
-                lua.ref_thread_exec(|ref_thread| ffi::lua_tothread(ref_thread, self.0.index));
+            let thread_state = ffi::lua_tothread(lua.ref_thread(), self.0.index);
 
             let status = ffi::lua_status(thread_state);
             if status != ffi::LUA_OK && status != ffi::LUA_YIELD {
@@ -326,7 +324,7 @@ impl<'lua> Thread<'lua> {
     pub fn sandbox(&self) -> Result<()> {
         let lua = self.0.lua;
         unsafe {
-            let thread = lua.ref_thread_exec(|t| ffi::lua_tothread(t, self.0.index));
+            let thread = ffi::lua_tothread(lua.ref_thread(), self.0.index);
             check_stack(thread, 1)?;
             check_stack(lua.state, 3)?;
             // Inherit `LUA_GLOBALSINDEX` from the caller
@@ -366,8 +364,7 @@ impl<'lua, R> Drop for AsyncThread<'lua, R> {
                 if !lua.recycle_thread(&mut self.thread) {
                     #[cfg(feature = "lua54")]
                     if self.thread.status() == ThreadStatus::Error {
-                        let thread_state =
-                            lua.ref_thread_exec(|t| ffi::lua_tothread(t, self.thread.0.index));
+                        let thread_state = ffi::lua_tothread(lua.ref_thread(), self.thread.0.index);
                         ffi::lua_resetthread(thread_state);
                     }
                 }

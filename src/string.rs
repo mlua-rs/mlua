@@ -122,7 +122,7 @@ impl<'lua> String<'lua> {
     #[inline]
     pub fn to_pointer(&self) -> *const c_void {
         let lua = self.0.lua;
-        unsafe { lua.ref_thread_exec(|refthr| ffi::lua_topointer(refthr, self.0.index)) }
+        unsafe { ffi::lua_topointer(lua.ref_thread(), self.0.index) }
     }
 }
 

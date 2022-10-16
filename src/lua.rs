@@ -889,10 +889,8 @@ impl Lua {
                         ffi::luaL_sandboxthread(state);
                     } else {
                         // Restore original `LUA_GLOBALSINDEX`
-                        self.ref_thread_exec(|ref_thread| {
-                            ffi::lua_xpush(ref_thread, state, ffi::LUA_GLOBALSINDEX);
-                            ffi::lua_replace(state, ffi::LUA_GLOBALSINDEX);
-                        });
+                        ffi::lua_xpush(self.ref_thread(), state, ffi::LUA_GLOBALSINDEX);
+                        ffi::lua_replace(state, ffi::LUA_GLOBALSINDEX);
                         ffi::luaL_sandbox(state, 0);
                     }
                 })?;
@@ -2457,16 +2455,6 @@ impl Lua {
         }
     }
 
-    /// Executes the function provided on the ref thread
-    #[inline]
-    pub(crate) unsafe fn ref_thread_exec<F, R>(&self, f: F) -> R
-    where
-        F: FnOnce(*mut ffi::lua_State) -> R,
-    {
-        let ref_thread = (*self.extra.get()).ref_thread;
-        f(ref_thread)
-    }
-
     unsafe fn push_userdata_metatable<T: 'static + UserData>(&self) -> Result<()> {
         let extra = &mut *self.extra.get();
 
@@ -2966,6 +2954,13 @@ impl Lua {
             .mem_info
             .map(|x| x.as_ref().memory_limit == 0)
             .unwrap_or_default()
+    }
+}
+
+impl LuaInner {
+    #[inline(always)]
+    pub(crate) fn ref_thread(&self) -> *mut ffi::lua_State {
+        unsafe { (*self.extra.get()).ref_thread }
     }
 }
 

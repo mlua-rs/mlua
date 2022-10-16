@@ -363,13 +363,12 @@ impl<'lua> Table<'lua> {
     pub fn set_readonly(&self, enabled: bool) {
         let lua = self.0.lua;
         unsafe {
-            lua.ref_thread_exec(|refthr| {
-                ffi::lua_setreadonly(refthr, self.0.index, enabled as _);
-                if !enabled {
-                    // Reset "safeenv" flag
-                    ffi::lua_setsafeenv(refthr, self.0.index, 0);
-                }
-            });
+            let ref_thread = lua.ref_thread();
+            ffi::lua_setreadonly(ref_thread, self.0.index, enabled as _);
+            if !enabled {
+                // Reset "safeenv" flag
+                ffi::lua_setsafeenv(ref_thread, self.0.index, 0);
+            }
         }
     }
 
@@ -380,7 +379,7 @@ impl<'lua> Table<'lua> {
     #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
     pub fn is_readonly(&self) -> bool {
         let lua = self.0.lua;
-        unsafe { lua.ref_thread_exec(|refthr| ffi::lua_getreadonly(refthr, self.0.index) != 0) }
+        unsafe { ffi::lua_getreadonly(lua.ref_thread(), self.0.index) != 0 }
     }
 
     /// Converts the table to a generic C pointer.
@@ -392,7 +391,7 @@ impl<'lua> Table<'lua> {
     #[inline]
     pub fn to_pointer(&self) -> *const c_void {
         let lua = self.0.lua;
-        unsafe { lua.ref_thread_exec(|refthr| ffi::lua_topointer(refthr, self.0.index)) }
+        unsafe { ffi::lua_topointer(lua.ref_thread(), self.0.index) }
     }
 
     /// Consume this table and return an iterator over the pairs of the table.

@@ -111,11 +111,11 @@ impl<'lua> Value<'lua> {
                 Value::LightUserData(ud) => ud.0,
                 Value::Table(t) => t.to_pointer(),
                 Value::String(s) => s.to_pointer(),
-                Value::Function(Function(v))
-                | Value::Thread(Thread(v))
-                | Value::UserData(AnyUserData(v)) => v
-                    .lua
-                    .ref_thread_exec(|refthr| ffi::lua_topointer(refthr, v.index)),
+                Value::Function(Function(r))
+                | Value::Thread(Thread(r))
+                | Value::UserData(AnyUserData(r)) => {
+                    ffi::lua_topointer(r.lua.ref_thread(), r.index)
+                }
                 _ => ptr::null(),
             }
         }
