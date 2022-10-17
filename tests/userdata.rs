@@ -408,9 +408,9 @@ fn test_user_values() -> Result<()> {
     ud.set_named_user_value("name", "alex")?;
     ud.set_named_user_value("age", 10)?;
 
-    assert_eq!(ud.get_named_user_value::<_, String>("name")?, "alex");
-    assert_eq!(ud.get_named_user_value::<_, i32>("age")?, 10);
-    assert_eq!(ud.get_named_user_value::<_, Value>("nonexist")?, Value::Nil);
+    assert_eq!(ud.get_named_user_value::<String>("name")?, "alex");
+    assert_eq!(ud.get_named_user_value::<i32>("age")?, 10);
+    assert_eq!(ud.get_named_user_value::<Value>("nonexist")?, Value::Nil);
 
     Ok(())
 }

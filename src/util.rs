@@ -272,11 +272,7 @@ pub unsafe fn push_table(
 }
 
 // Uses 4 stack spaces, does not call checkstack.
-pub unsafe fn rawset_field<S>(state: *mut ffi::lua_State, table: c_int, field: &S) -> Result<()>
-where
-    S: AsRef<[u8]> + ?Sized,
-{
-    let field = field.as_ref();
+pub unsafe fn rawset_field(state: *mut ffi::lua_State, table: c_int, field: &str) -> Result<()> {
     ffi::lua_pushvalue(state, table);
     protect_lua!(state, 2, 0, |state| {
         ffi::lua_pushlstring(state, field.as_ptr() as *const c_char, field.len());

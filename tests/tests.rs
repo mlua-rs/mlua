@@ -730,9 +730,9 @@ fn test_set_metatable_nil() -> Result<()> {
 fn test_named_registry_value() -> Result<()> {
     let lua = Lua::new();
 
-    lua.set_named_registry_value::<_, i32>("test", 42)?;
+    lua.set_named_registry_value::<i32>("test", 42)?;
     let f = lua.create_function(move |lua, ()| {
-        assert_eq!(lua.named_registry_value::<_, i32>("test")?, 42);
+        assert_eq!(lua.named_registry_value::<i32>("test")?, 42);
         Ok(())
     })?;
 
