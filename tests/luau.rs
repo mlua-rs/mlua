@@ -220,7 +220,7 @@ fn test_interrupts() -> Result<()> {
 }
 
 #[test]
-fn test_coverate() -> Result<()> {
+fn test_coverage() -> Result<()> {
     let lua = Lua::new();
 
     lua.set_compiler(Compiler::default().set_coverage_level(1));
