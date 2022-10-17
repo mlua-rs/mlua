@@ -13,7 +13,6 @@ use {
 use crate::error::{Error, Result};
 use crate::ffi;
 use crate::types::LuaRef;
-use crate::util::{assert_stack, StackGuard};
 
 /// Handle to an internal Lua string.
 ///
@@ -40,6 +39,7 @@ impl<'lua> String<'lua> {
     /// # Ok(())
     /// # }
     /// ```
+    #[inline]
     pub fn to_str(&self) -> Result<&str> {
         str::from_utf8(self.as_bytes()).map_err(|e| Error::FromLuaConversionError {
             from: "string",
@@ -66,6 +66,7 @@ impl<'lua> String<'lua> {
     /// # Ok(())
     /// # }
     /// ```
+    #[inline]
     pub fn to_string_lossy(&self) -> Cow<'_, str> {
         StdString::from_utf8_lossy(self.as_bytes())
     }
@@ -87,6 +88,7 @@ impl<'lua> String<'lua> {
     /// # Ok(())
     /// # }
     /// ```
+    #[inline]
     pub fn as_bytes(&self) -> &[u8] {
         let nulled = self.as_bytes_with_nul();
         &nulled[..nulled.len() - 1]
@@ -94,21 +96,17 @@ impl<'lua> String<'lua> {
 
     /// Get the bytes that make up this string, including the trailing nul byte.
     pub fn as_bytes_with_nul(&self) -> &[u8] {
-        let lua = self.0.lua;
+        let ref_thread = self.0.lua.ref_thread();
         unsafe {
-            let _sg = StackGuard::new(lua.state);
-            assert_stack(lua.state, 1);
-
-            lua.push_ref(&self.0);
             mlua_debug_assert!(
-                ffi::lua_type(lua.state, -1) == ffi::LUA_TSTRING,
+                ffi::lua_type(ref_thread, self.0.index) == ffi::LUA_TSTRING,
                 "string ref is not string type"
             );
 
             let mut size = 0;
             // This will not trigger a 'm' error, because the reference is guaranteed to be of
             // string type
-            let data = ffi::lua_tolstring(lua.state, -1, &mut size);
+            let data = ffi::lua_tolstring(ref_thread, self.0.index, &mut size);
 
             slice::from_raw_parts(data as *const u8, size + 1)
         }
@@ -121,8 +119,8 @@ impl<'lua> String<'lua> {
     /// Typically this function is used only for hashing and debug information.
     #[inline]
     pub fn to_pointer(&self) -> *const c_void {
-        let lua = self.0.lua;
-        unsafe { ffi::lua_topointer(lua.ref_thread(), self.0.index) }
+        let ref_thread = self.0.lua.ref_thread();
+        unsafe { ffi::lua_topointer(ref_thread, self.0.index) }
     }
 }
 
