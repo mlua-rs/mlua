@@ -58,6 +58,11 @@ impl<'lua> Table<'lua> {
     ///
     /// [`raw_set`]: #method.raw_set
     pub fn set<K: ToLua<'lua>, V: ToLua<'lua>>(&self, key: K, value: V) -> Result<()> {
+        // Fast track
+        if !self.has_metatable() {
+            return self.raw_set(key, value);
+        }
+
         let lua = self.0.lua;
         let key = key.to_lua(lua)?;
         let value = value.to_lua(lua)?;
@@ -98,6 +103,11 @@ impl<'lua> Table<'lua> {
     ///
     /// [`raw_get`]: #method.raw_get
     pub fn get<K: ToLua<'lua>, V: FromLua<'lua>>(&self, key: K) -> Result<V> {
+        // Fast track
+        if !self.has_metatable() {
+            return self.raw_get(key);
+        }
+
         let lua = self.0.lua;
         let key = key.to_lua(lua)?;
 
@@ -116,18 +126,7 @@ impl<'lua> Table<'lua> {
 
     /// Checks whether the table contains a non-nil value for `key`.
     pub fn contains_key<K: ToLua<'lua>>(&self, key: K) -> Result<bool> {
-        let lua = self.0.lua;
-        let key = key.to_lua(lua)?;
-
-        unsafe {
-            let _sg = StackGuard::new(lua.state);
-            check_stack(lua.state, 4)?;
-
-            lua.push_ref(&self.0);
-            lua.push_value(key)?;
-            protect_lua!(lua.state, 2, 1, fn(state) ffi::lua_gettable(state, -2))?;
-            Ok(ffi::lua_isnil(lua.state, -1) == 0)
-        }
+        Ok(self.get::<_, Value>(key)? != Value::Nil)
     }
 
     /// Compares two tables for equality.
@@ -199,7 +198,14 @@ impl<'lua> Table<'lua> {
             lua.push_ref(&self.0);
             lua.push_value(key)?;
             lua.push_value(value)?;
-            if lua.unlikely_memory_error() {
+
+            #[cfg(not(feature = "luau"))]
+            let protect = !lua.unlikely_memory_error();
+            // If Luau table is readonly it will throw an exception
+            #[cfg(feature = "luau")]
+            let protect = !lua.unlikely_memory_error() || self.is_readonly();
+
+            if !protect {
                 ffi::lua_rawset(lua.state, -3);
                 ffi::lua_pop(lua.state, 1);
                 Ok(())
@@ -295,6 +301,11 @@ impl<'lua> Table<'lua> {
     ///
     /// [`raw_len`]: #method.raw_len
     pub fn len(&self) -> Result<Integer> {
+        // Fast track
+        if !self.has_metatable() {
+            return Ok(self.raw_len());
+        }
+
         let lua = self.0.lua;
         unsafe {
             let _sg = StackGuard::new(lua.state);
@@ -307,14 +318,8 @@ impl<'lua> Table<'lua> {
 
     /// Returns the result of the Lua `#` operator, without invoking the `__len` metamethod.
     pub fn raw_len(&self) -> Integer {
-        let lua = self.0.lua;
-        unsafe {
-            let _sg = StackGuard::new(lua.state);
-            assert_stack(lua.state, 1);
-
-            lua.push_ref(&self.0);
-            ffi::lua_rawlen(lua.state, -1) as Integer
-        }
+        let ref_thread = self.0.lua.ref_thread();
+        unsafe { ffi::lua_rawlen(ref_thread, self.0.index) as Integer }
     }
 
     /// Returns a reference to the metatable of this table, or `None` if no metatable is set.
@@ -355,15 +360,28 @@ impl<'lua> Table<'lua> {
         }
     }
 
+    /// Returns true if the table has metatable attached.
+    #[doc(hidden)]
+    #[inline]
+    pub fn has_metatable(&self) -> bool {
+        let ref_thread = self.0.lua.ref_thread();
+        unsafe {
+            if ffi::lua_getmetatable(ref_thread, self.0.index) != 0 {
+                ffi::lua_pop(ref_thread, 1);
+                return true;
+            }
+        }
+        false
+    }
+
     /// Sets `readonly` attribute on the table.
     ///
     /// Requires `feature = "luau"`
     #[cfg(any(feature = "luau", doc))]
     #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
     pub fn set_readonly(&self, enabled: bool) {
-        let lua = self.0.lua;
+        let ref_thread = self.0.lua.ref_thread();
         unsafe {
-            let ref_thread = lua.ref_thread();
             ffi::lua_setreadonly(ref_thread, self.0.index, enabled as _);
             if !enabled {
                 // Reset "safeenv" flag
@@ -378,8 +396,8 @@ impl<'lua> Table<'lua> {
     #[cfg(any(feature = "luau", doc))]
     #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
     pub fn is_readonly(&self) -> bool {
-        let lua = self.0.lua;
-        unsafe { ffi::lua_getreadonly(lua.ref_thread(), self.0.index) != 0 }
+        let ref_thread = self.0.lua.ref_thread();
+        unsafe { ffi::lua_getreadonly(ref_thread, self.0.index) != 0 }
     }
 
     /// Converts the table to a generic C pointer.
@@ -390,8 +408,8 @@ impl<'lua> Table<'lua> {
     /// Typically this function is used only for hashing and debug information.
     #[inline]
     pub fn to_pointer(&self) -> *const c_void {
-        let lua = self.0.lua;
-        unsafe { ffi::lua_topointer(lua.ref_thread(), self.0.index) }
+        let ref_thread = self.0.lua.ref_thread();
+        unsafe { ffi::lua_topointer(ref_thread, self.0.index) }
     }
 
     /// Consume this table and return an iterator over the pairs of the table.
