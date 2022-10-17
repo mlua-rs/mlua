@@ -1433,11 +1433,15 @@ impl Lua {
         S: AsRef<[u8]> + ?Sized,
     {
         unsafe {
+            if self.unlikely_memory_error() {
+                push_string(self.ref_thread(), s.as_ref(), false)?;
+                return Ok(String(self.pop_ref_thread()));
+            }
+
             let _sg = StackGuard::new(self.state);
             check_stack(self.state, 3)?;
 
-            let protect = !self.unlikely_memory_error();
-            push_string(self.state, s, protect)?;
+            push_string(self.state, s.as_ref(), true)?;
             Ok(String(self.pop_ref()))
         }
     }
@@ -2021,7 +2025,7 @@ impl Lua {
             check_stack(self.state, 3)?;
 
             let protect = !self.unlikely_memory_error();
-            push_string(self.state, name, protect)?;
+            push_string(self.state, name.as_ref(), protect)?;
             ffi::lua_rawget(self.state, ffi::LUA_REGISTRYINDEX);
 
             self.pop_value()
@@ -2433,6 +2437,13 @@ impl Lua {
     pub(crate) unsafe fn pop_ref(&self) -> LuaRef {
         let extra = &mut *self.extra.get();
         ffi::lua_xmove(self.state, extra.ref_thread, 1);
+        let index = ref_stack_pop(extra);
+        LuaRef { lua: self, index }
+    }
+
+    // Same as `pop_ref` but assumes the value is already on the reference thread
+    pub(crate) unsafe fn pop_ref_thread(&self) -> LuaRef {
+        let extra = &mut *self.extra.get();
         let index = ref_stack_pop(extra);
         LuaRef { lua: self, index }
     }

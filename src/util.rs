@@ -242,14 +242,9 @@ pub unsafe fn pop_error(state: *mut ffi::lua_State, err_code: c_int) -> Error {
     }
 }
 
-// Uses 3 stack spaces, does not call checkstack.
-#[inline]
-pub unsafe fn push_string<S: AsRef<[u8]> + ?Sized>(
-    state: *mut ffi::lua_State,
-    s: &S,
-    protect: bool,
-) -> Result<()> {
-    let s = s.as_ref();
+// Uses 3 (or 1 if unprotected) stack spaces, does not call checkstack.
+#[inline(always)]
+pub unsafe fn push_string(state: *mut ffi::lua_State, s: &[u8], protect: bool) -> Result<()> {
     if protect {
         protect_lua!(state, 0, 1, |state| {
             ffi::lua_pushlstring(state, s.as_ptr() as *const c_char, s.len());
@@ -548,7 +543,7 @@ pub unsafe fn init_userdata_metatable<T>(
         // Push `__index` generator function
         init_userdata_metatable_index(state)?;
 
-        push_string(state, "__index", true)?;
+        push_string(state, b"__index", true)?;
         let index_type = ffi::lua_rawget(state, -3);
         match index_type {
             ffi::LUA_TNIL | ffi::LUA_TTABLE | ffi::LUA_TFUNCTION => {
@@ -573,7 +568,7 @@ pub unsafe fn init_userdata_metatable<T>(
         // Push `__newindex` generator function
         init_userdata_metatable_newindex(state)?;
 
-        push_string(state, "__newindex", true)?;
+        push_string(state, b"__newindex", true)?;
         let newindex_type = ffi::lua_rawget(state, -3);
         match newindex_type {
             ffi::LUA_TNIL | ffi::LUA_TTABLE | ffi::LUA_TFUNCTION => {
@@ -893,7 +888,7 @@ pub unsafe fn init_error_registry(state: *mut ffi::lua_State) -> Result<()> {
                 }
             }?;
 
-            push_string(state, &*err_buf, true)?;
+            push_string(state, (*err_buf).as_bytes(), true)?;
             (*err_buf).clear();
 
             Ok(1)
