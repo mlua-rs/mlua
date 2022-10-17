@@ -840,39 +840,21 @@ impl<'lua> AnyUserData<'lua> {
         self.inspect(|cell| cell.try_borrow_mut())
     }
 
-    /// Takes out the value of `UserData` and sets the special "destructed" metatable that prevents
-    /// any further operations with this userdata.
+    /// Takes the value out of this userdata.
+    /// Sets the special "destructed" metatable that prevents any further operations with this userdata.
     ///
-    /// All associated user values will be also cleared.
+    /// Keeps associated user values unchanged (they will be collected by Lua's GC).
     pub fn take<T: 'static + UserData>(&self) -> Result<T> {
         let lua = self.0.lua;
         unsafe {
             let _sg = StackGuard::new(lua.state);
-            check_stack(lua.state, 3)?;
+            check_stack(lua.state, 2)?;
 
             let type_id = lua.push_userdata_ref(&self.0)?;
             match type_id {
                 Some(type_id) if type_id == TypeId::of::<T>() => {
                     // Try to borrow userdata exclusively
                     let _ = (*get_userdata::<UserDataCell<T>>(lua.state, -1)).try_borrow_mut()?;
-
-                    // Clear associated user values
-                    #[cfg(feature = "lua54")]
-                    for i in 1..=USER_VALUE_MAXSLOT {
-                        ffi::lua_pushnil(lua.state);
-                        ffi::lua_setiuservalue(lua.state, -2, i as c_int);
-                    }
-                    #[cfg(any(feature = "lua53", feature = "lua52", feature = "luau"))]
-                    {
-                        ffi::lua_pushnil(lua.state);
-                        ffi::lua_setuservalue(lua.state, -2);
-                    }
-                    #[cfg(any(feature = "lua51", feature = "luajit"))]
-                    protect_lua!(lua.state, 1, 1, fn(state) {
-                        ffi::lua_newtable(state);
-                        ffi::lua_setuservalue(state, -2);
-                    })?;
-
                     Ok(take_userdata::<UserDataCell<T>>(lua.state).into_inner())
                 }
                 _ => Err(Error::UserDataTypeMismatch),
@@ -1083,6 +1065,7 @@ impl<'lua> AnyUserData<'lua> {
     /// For `T: UserData + 'static` returned metatable is shared among all instances of type `T`.
     ///
     /// [`UserDataMetatable`]: crate::UserDataMetatable
+    #[inline]
     pub fn get_metatable(&self) -> Result<UserDataMetatable<'lua>> {
         self.get_raw_metatable().map(UserDataMetatable)
     }

@@ -305,21 +305,19 @@ fn test_userdata_take() -> Result<()> {
     fn check_userdata_take(lua: &Lua, userdata: AnyUserData, rc: Arc<i64>) -> Result<()> {
         lua.globals().set("userdata", userdata.clone())?;
         assert_eq!(Arc::strong_count(&rc), 3);
-        let userdata_copy = userdata.clone();
         {
             let _value = userdata.borrow::<MyUserdata>()?;
             // We should not be able to take userdata if it's borrowed
-            match userdata_copy.take::<MyUserdata>() {
+            match userdata.take::<MyUserdata>() {
                 Err(Error::UserDataBorrowMutError) => {}
                 r => panic!("expected `UserDataBorrowMutError` error, got {:?}", r),
             }
         }
 
-        let value = userdata_copy.take::<MyUserdata>()?;
+        let value = userdata.take::<MyUserdata>()?;
         assert_eq!(*value.0, 18);
         drop(value);
-        lua.gc_collect()?;
-        assert_eq!(Arc::strong_count(&rc), 1);
+        assert_eq!(Arc::strong_count(&rc), 2);
 
         match userdata.borrow::<MyUserdata>() {
             Err(Error::UserDataDestructed) => {}
@@ -332,6 +330,13 @@ fn test_userdata_take() -> Result<()> {
             },
             r => panic!("improper return for destructed userdata: {:?}", r),
         }
+
+        drop(userdata);
+        lua.globals().raw_remove("userdata")?;
+        lua.gc_collect()?;
+        lua.gc_collect()?;
+        assert_eq!(Arc::strong_count(&rc), 1);
+
         Ok(())
     }
 
