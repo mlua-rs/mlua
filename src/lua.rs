@@ -1457,11 +1457,15 @@ impl Lua {
     /// Lua may use these hints to preallocate memory for the new table.
     pub fn create_table_with_capacity(&self, narr: c_int, nrec: c_int) -> Result<Table> {
         unsafe {
+            if self.unlikely_memory_error() {
+                push_table(self.ref_thread(), narr, nrec, false)?;
+                return Ok(Table(self.pop_ref_thread()));
+            }
+
             let _sg = StackGuard::new(self.state);
             check_stack(self.state, 3)?;
 
-            let protect = !self.unlikely_memory_error();
-            push_table(self.state, narr, nrec, protect)?;
+            push_table(self.state, narr, nrec, true)?;
             Ok(Table(self.pop_ref()))
         }
     }
