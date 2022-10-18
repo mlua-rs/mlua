@@ -711,11 +711,7 @@ impl Lua {
     /// Behavior is similar to Lua's [`require`] function.
     ///
     /// [`require`]: https://www.lua.org/manual/5.4/manual.html#pdf-require
-    pub fn load_from_function<'lua, T>(
-        &'lua self,
-        modname: impl AsRef<str>,
-        func: Function<'lua>,
-    ) -> Result<T>
+    pub fn load_from_function<'lua, T>(&'lua self, modname: &str, func: Function<'lua>) -> Result<T>
     where
         T: FromLua<'lua>,
     {
@@ -728,7 +724,7 @@ impl Lua {
             Table(self.pop_ref())
         };
 
-        let modname = self.create_string(modname.as_ref())?;
+        let modname = self.create_string(modname)?;
         let value = match loaded.raw_get(modname.clone())? {
             Value::Nil => {
                 let result = match func.call(modname.clone())? {
@@ -750,7 +746,7 @@ impl Lua {
     /// unloaded only by closing Lua state.
     ///
     /// [`package.loaded`]: https://www.lua.org/manual/5.4/manual.html#pdf-package.loaded
-    pub fn unload(&self, modname: impl AsRef<str>) -> Result<()> {
+    pub fn unload(&self, modname: &str) -> Result<()> {
         let loaded = unsafe {
             let _sg = StackGuard::new(self.state);
             check_stack(self.state, 2)?;
@@ -760,7 +756,7 @@ impl Lua {
             Table(self.pop_ref())
         };
 
-        let modname = self.create_string(modname.as_ref())?;
+        let modname = self.create_string(modname)?;
         loaded.raw_remove(modname)?;
         Ok(())
     }
@@ -1992,7 +1988,7 @@ impl Lua {
     ///
     /// This value will be available to rust from all `Lua` instances which share the same main
     /// state.
-    pub fn set_named_registry_value<'lua, T>(&'lua self, name: impl AsRef<str>, t: T) -> Result<()>
+    pub fn set_named_registry_value<'lua, T>(&'lua self, name: &str, t: T) -> Result<()>
     where
         T: ToLua<'lua>,
     {
@@ -2002,7 +1998,7 @@ impl Lua {
             check_stack(self.state, 5)?;
 
             self.push_value(t)?;
-            rawset_field(self.state, ffi::LUA_REGISTRYINDEX, name.as_ref())
+            rawset_field(self.state, ffi::LUA_REGISTRYINDEX, name)
         }
     }
 
@@ -2012,7 +2008,7 @@ impl Lua {
     /// get a value previously set by [`set_named_registry_value`].
     ///
     /// [`set_named_registry_value`]: #method.set_named_registry_value
-    pub fn named_registry_value<'lua, T>(&'lua self, name: impl AsRef<str>) -> Result<T>
+    pub fn named_registry_value<'lua, T>(&'lua self, name: &str) -> Result<T>
     where
         T: FromLua<'lua>,
     {
@@ -2021,7 +2017,7 @@ impl Lua {
             check_stack(self.state, 3)?;
 
             let protect = !self.unlikely_memory_error();
-            push_string(self.state, name.as_ref().as_bytes(), protect)?;
+            push_string(self.state, name.as_bytes(), protect)?;
             ffi::lua_rawget(self.state, ffi::LUA_REGISTRYINDEX);
 
             self.pop_value()
@@ -2034,7 +2030,7 @@ impl Lua {
     /// Equivalent to calling [`set_named_registry_value`] with a value of Nil.
     ///
     /// [`set_named_registry_value`]: #method.set_named_registry_value
-    pub fn unset_named_registry_value(&self, name: impl AsRef<str>) -> Result<()> {
+    pub fn unset_named_registry_value(&self, name: &str) -> Result<()> {
         self.set_named_registry_value(name, Nil)
     }
 
@@ -3183,11 +3179,11 @@ unsafe fn load_from_std_lib(state: *mut ffi::lua_State, libs: StdLib) -> Result<
     #[inline(always)]
     pub unsafe fn requiref(
         state: *mut ffi::lua_State,
-        modname: impl AsRef<str>,
+        modname: &str,
         openf: ffi::lua_CFunction,
         glb: c_int,
     ) -> Result<()> {
-        let modname = mlua_expect!(CString::new(modname.as_ref()), "modname contains nil byte");
+        let modname = mlua_expect!(CString::new(modname), "modname contains nil byte");
         protect_lua!(state, 0, 1, |state| {
             ffi::luaL_requiref(state, modname.as_ptr() as *const c_char, openf, glb)
         })

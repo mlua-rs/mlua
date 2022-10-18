@@ -310,7 +310,7 @@ pub trait UserDataMethods<'lua, T: UserData> {
     ///
     /// If `add_meta_method` is used to set the `__index` metamethod, the `__index` metamethod will
     /// be used as a fall-back if no regular method is found.
-    fn add_method<A, R, M>(&mut self, name: impl AsRef<str>, method: M)
+    fn add_method<A, R, M>(&mut self, name: &str, method: M)
     where
         A: FromLuaMulti<'lua>,
         R: ToLuaMulti<'lua>,
@@ -321,7 +321,7 @@ pub trait UserDataMethods<'lua, T: UserData> {
     /// Refer to [`add_method`] for more information about the implementation.
     ///
     /// [`add_method`]: #method.add_method
-    fn add_method_mut<A, R, M>(&mut self, name: impl AsRef<str>, method: M)
+    fn add_method_mut<A, R, M>(&mut self, name: &str, method: M)
     where
         A: FromLuaMulti<'lua>,
         R: ToLuaMulti<'lua>,
@@ -337,7 +337,7 @@ pub trait UserDataMethods<'lua, T: UserData> {
     /// [`add_method`]: #method.add_method
     #[cfg(feature = "async")]
     #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
-    fn add_async_method<A, R, M, MR>(&mut self, name: impl AsRef<str>, method: M)
+    fn add_async_method<A, R, M, MR>(&mut self, name: &str, method: M)
     where
         T: Clone,
         A: FromLuaMulti<'lua>,
@@ -355,7 +355,7 @@ pub trait UserDataMethods<'lua, T: UserData> {
     /// [`AnyUserData`]: crate::AnyUserData
     /// [`add_method`]: #method.add_method
     /// [`add_method_mut`]: #method.add_method_mut
-    fn add_function<A, R, F>(&mut self, name: impl AsRef<str>, function: F)
+    fn add_function<A, R, F>(&mut self, name: &str, function: F)
     where
         A: FromLuaMulti<'lua>,
         R: ToLuaMulti<'lua>,
@@ -366,7 +366,7 @@ pub trait UserDataMethods<'lua, T: UserData> {
     /// This is a version of [`add_function`] that accepts a FnMut argument.
     ///
     /// [`add_function`]: #method.add_function
-    fn add_function_mut<A, R, F>(&mut self, name: impl AsRef<str>, function: F)
+    fn add_function_mut<A, R, F>(&mut self, name: &str, function: F)
     where
         A: FromLuaMulti<'lua>,
         R: ToLuaMulti<'lua>,
@@ -382,7 +382,7 @@ pub trait UserDataMethods<'lua, T: UserData> {
     /// [`add_function`]: #method.add_function
     #[cfg(feature = "async")]
     #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
-    fn add_async_function<A, R, F, FR>(&mut self, name: impl AsRef<str>, function: F)
+    fn add_async_function<A, R, F, FR>(&mut self, name: &str, function: F)
     where
         A: FromLuaMulti<'lua>,
         R: ToLuaMulti<'lua>,
@@ -508,7 +508,7 @@ pub trait UserDataFields<'lua, T: UserData> {
     ///
     /// If `add_meta_method` is used to set the `__index` metamethod, the `__index` metamethod will
     /// be used as a fall-back if no regular field or method are found.
-    fn add_field_method_get<R, M>(&mut self, name: impl AsRef<str>, method: M)
+    fn add_field_method_get<R, M>(&mut self, name: &str, method: M)
     where
         R: ToLua<'lua>,
         M: 'static + MaybeSend + Fn(&'lua Lua, &T) -> Result<R>;
@@ -520,7 +520,7 @@ pub trait UserDataFields<'lua, T: UserData> {
     ///
     /// If `add_meta_method` is used to set the `__newindex` metamethod, the `__newindex` metamethod will
     /// be used as a fall-back if no regular field is found.
-    fn add_field_method_set<A, M>(&mut self, name: impl AsRef<str>, method: M)
+    fn add_field_method_set<A, M>(&mut self, name: &str, method: M)
     where
         A: FromLua<'lua>,
         M: 'static + MaybeSend + FnMut(&'lua Lua, &mut T, A) -> Result<()>;
@@ -532,7 +532,7 @@ pub trait UserDataFields<'lua, T: UserData> {
     ///
     /// [`AnyUserData`]: crate::AnyUserData
     /// [`add_field_method_get`]: #method.add_field_method_get
-    fn add_field_function_get<R, F>(&mut self, name: impl AsRef<str>, function: F)
+    fn add_field_function_get<R, F>(&mut self, name: &str, function: F)
     where
         R: ToLua<'lua>,
         F: 'static + MaybeSend + Fn(&'lua Lua, AnyUserData<'lua>) -> Result<R>;
@@ -544,7 +544,7 @@ pub trait UserDataFields<'lua, T: UserData> {
     ///
     /// [`AnyUserData`]: crate::AnyUserData
     /// [`add_field_method_set`]: #method.add_field_method_set
-    fn add_field_function_set<A, F>(&mut self, name: impl AsRef<str>, function: F)
+    fn add_field_function_set<A, F>(&mut self, name: &str, function: F)
     where
         A: FromLua<'lua>,
         F: 'static + MaybeSend + FnMut(&'lua Lua, AnyUserData<'lua>, A) -> Result<()>;
@@ -974,7 +974,7 @@ impl<'lua> AnyUserData<'lua> {
     /// The value can be retrieved with [`get_named_user_value`].
     ///
     /// [`get_named_user_value`]: #method.get_named_user_value
-    pub fn set_named_user_value<V>(&self, name: impl AsRef<str>, v: V) -> Result<()>
+    pub fn set_named_user_value<V>(&self, name: &str, v: V) -> Result<()>
     where
         V: ToLua<'lua>,
     {
@@ -987,7 +987,6 @@ impl<'lua> AnyUserData<'lua> {
             lua.push_value(v.to_lua(lua)?)?;
 
             // Multiple (extra) user values are emulated by storing them in a table
-            let name = name.as_ref();
             protect_lua!(lua.state, 2, 0, |state| {
                 if getuservalue_table(state, -2) != ffi::LUA_TTABLE {
                     // Create a new table to use as uservalue
@@ -1012,7 +1011,7 @@ impl<'lua> AnyUserData<'lua> {
     /// Returns an associated value by name set by [`set_named_user_value`].
     ///
     /// [`set_named_user_value`]: #method.set_named_user_value
-    pub fn get_named_user_value<V>(&self, name: impl AsRef<str>) -> Result<V>
+    pub fn get_named_user_value<V>(&self, name: &str) -> Result<V>
     where
         V: FromLua<'lua>,
     {
@@ -1024,7 +1023,6 @@ impl<'lua> AnyUserData<'lua> {
             lua.push_userdata_ref(&self.0)?;
 
             // Multiple (extra) user values are emulated by storing them in a table
-            let name = name.as_ref();
             protect_lua!(lua.state, 1, 1, |state| {
                 if getuservalue_table(state, -1) != ffi::LUA_TTABLE {
                     ffi::lua_pushnil(state);
