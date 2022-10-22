@@ -402,6 +402,11 @@ impl Lua {
                 return ptr::null_mut();
             }
 
+            // Do not allocate more than isize::MAX
+            if nsize > isize::MAX as usize {
+                return ptr::null_mut();
+            }
+
             // Are we fit to the memory limits?
             let mut mem_diff = nsize as isize;
             if !ptr.is_null() {
@@ -411,12 +416,14 @@ impl Lua {
             if mem_info.memory_limit > 0 && new_used_memory > mem_info.memory_limit {
                 return ptr::null_mut();
             }
-
-            let new_layout = Layout::from_size_align_unchecked(nsize, ffi::SYS_MIN_ALIGN);
             mem_info.used_memory += mem_diff;
 
             if ptr.is_null() {
                 // Allocate new memory
+                let new_layout = match Layout::from_size_align(nsize, ffi::SYS_MIN_ALIGN) {
+                    Ok(layout) => layout,
+                    Err(_) => return ptr::null_mut(),
+                };
                 let new_ptr = alloc::alloc(new_layout) as *mut c_void;
                 if new_ptr.is_null() {
                     alloc::handle_alloc_error(new_layout);
@@ -428,7 +435,7 @@ impl Lua {
             let old_layout = Layout::from_size_align_unchecked(osize, ffi::SYS_MIN_ALIGN);
             let new_ptr = alloc::realloc(ptr as *mut u8, old_layout, nsize) as *mut c_void;
             if new_ptr.is_null() {
-                alloc::handle_alloc_error(new_layout);
+                alloc::handle_alloc_error(old_layout);
             }
             new_ptr
         }
