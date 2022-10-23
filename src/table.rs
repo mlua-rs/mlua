@@ -129,6 +129,53 @@ impl<'lua> Table<'lua> {
         Ok(self.get::<_, Value>(key)? != Value::Nil)
     }
 
+    /// Appends a value to the back of the table.
+    pub fn push<V: ToLua<'lua>>(&self, value: V) -> Result<()> {
+        // Fast track
+        if !self.has_metatable() {
+            return self.raw_push(value);
+        }
+
+        let lua = self.0.lua;
+        let value = value.to_lua(lua)?;
+        unsafe {
+            let _sg = StackGuard::new(lua.state);
+            check_stack(lua.state, 4)?;
+
+            lua.push_ref(&self.0);
+            lua.push_value(value)?;
+            protect_lua!(lua.state, 2, 0, fn(state) {
+                let len = ffi::luaL_len(state, -2) as Integer;
+                ffi::lua_seti(state, -2, len + 1);
+            })?
+        }
+        Ok(())
+    }
+
+    /// Removes the last element from the table and returns it.
+    pub fn pop<V: FromLua<'lua>>(&self) -> Result<V> {
+        // Fast track
+        if !self.has_metatable() {
+            return self.raw_pop();
+        }
+
+        let lua = self.0.lua;
+        let value = unsafe {
+            let _sg = StackGuard::new(lua.state);
+            check_stack(lua.state, 4)?;
+
+            lua.push_ref(&self.0);
+            protect_lua!(lua.state, 1, 1, fn(state) {
+                let len = ffi::luaL_len(state, -1) as Integer;
+                ffi::lua_geti(state, -1, len);
+                ffi::lua_pushnil(state);
+                ffi::lua_seti(state, -3, len);
+            })?;
+            lua.pop_value()
+        };
+        V::from_lua(value, lua)
+    }
+
     /// Compares two tables for equality.
     ///
     /// Tables are compared by reference first.
@@ -258,6 +305,48 @@ impl<'lua> Table<'lua> {
                 ffi::lua_rawseti(state, -2, idx)
             })
         }
+    }
+
+    /// Appends a value to the back of the table without invoking metamethods.
+    pub fn raw_push<V: ToLua<'lua>>(&self, value: V) -> Result<()> {
+        let lua = self.0.lua;
+        let value = value.to_lua(lua)?;
+        unsafe {
+            let _sg = StackGuard::new(lua.state);
+            check_stack(lua.state, 4)?;
+
+            lua.push_ref(&self.0);
+            lua.push_value(value)?;
+
+            unsafe fn callback(state: *mut ffi::lua_State) {
+                let len = ffi::lua_rawlen(state, -2) as Integer;
+                ffi::lua_rawseti(state, -2, len + 1);
+            }
+            if lua.unlikely_memory_error() {
+                callback(lua.state);
+            } else {
+                protect_lua!(lua.state, 2, 0, fn(state) callback(state))?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Removes the last element from the table and returns it, without invoking metamethods.
+    pub fn raw_pop<V: FromLua<'lua>>(&self) -> Result<V> {
+        let lua = self.0.lua;
+        let value = unsafe {
+            let _sg = StackGuard::new(lua.state);
+            check_stack(lua.state, 3)?;
+
+            lua.push_ref(&self.0);
+            let len = ffi::lua_rawlen(lua.state, -1) as Integer;
+            ffi::lua_rawgeti(lua.state, -1, len);
+            // Set slot to nil (it must be safe to do)
+            ffi::lua_pushnil(lua.state);
+            ffi::lua_rawseti(lua.state, -3, len);
+            lua.pop_value()
+        };
+        V::from_lua(value, lua)
     }
 
     /// Removes a key from the table.

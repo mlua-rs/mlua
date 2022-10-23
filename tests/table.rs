@@ -110,6 +110,49 @@ fn test_table() -> Result<()> {
 }
 
 #[test]
+fn test_table_push_pop() -> Result<()> {
+    let lua = Lua::new();
+
+    // Test raw access
+    let table1 = lua.create_sequence_from(vec![123])?;
+    table1.raw_push(321)?;
+    assert_eq!(
+        table1
+            .clone()
+            .raw_sequence_values::<i64>()
+            .collect::<Result<Vec<_>>>()?,
+        vec![123, 321]
+    );
+    assert_eq!(table1.raw_pop::<i64>()?, 321);
+    assert_eq!(table1.raw_pop::<i64>()?, 123);
+    assert_eq!(table1.raw_pop::<Value>()?, Value::Nil); // An extra pop should do nothing
+    assert_eq!(table1.raw_len(), 0);
+
+    // Test access through metamethods
+    let table2 = lua
+        .load(
+            r#"
+        local proxy_table = {234}
+        table2 = setmetatable({}, {
+            __len = function() return #proxy_table end,
+            __index = proxy_table,
+            __newindex = proxy_table,
+        })
+        return table2
+    "#,
+        )
+        .eval::<Table>()?;
+    table2.push(345)?;
+    assert_eq!(table2.len()?, 2);
+    assert_eq!(table2.pop::<i64>()?, 345);
+    assert_eq!(table2.pop::<i64>()?, 234);
+    assert_eq!(table2.pop::<Value>()?, Value::Nil);
+    assert_eq!(table2.len()?, 0);
+
+    Ok(())
+}
+
+#[test]
 fn test_table_sequence_from() -> Result<()> {
     let lua = Lua::new();
 
