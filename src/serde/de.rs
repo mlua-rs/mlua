@@ -71,7 +71,7 @@ impl Options {
     ///
     /// [`deny_recursive_tables`]: #structfield.deny_recursive_tables
     #[must_use]
-    pub fn deny_recursive_tables(mut self, enabled: bool) -> Self {
+    pub const fn deny_recursive_tables(mut self, enabled: bool) -> Self {
         self.deny_recursive_tables = enabled;
         self
     }
