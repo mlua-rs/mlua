@@ -1371,9 +1371,8 @@ impl Lua {
     where
         S: AsChunk<'lua> + ?Sized,
     {
-        let name = chunk
-            .name()
-            .unwrap_or_else(|| Location::caller().to_string());
+        let caller = Location::caller();
+        let name = chunk.name().unwrap_or_else(|| caller.to_string());
 
         Chunk {
             lua: self,
