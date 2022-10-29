@@ -322,7 +322,13 @@ impl<'lua> Table<'lua> {
                 let len = ffi::lua_rawlen(state, -2) as Integer;
                 ffi::lua_rawseti(state, -2, len + 1);
             }
-            if lua.unlikely_memory_error() {
+
+            #[cfg(not(feature = "luau"))]
+            let protect = !lua.unlikely_memory_error();
+            // If Luau table is readonly it will throw an exception
+            #[cfg(feature = "luau")]
+            let protect = !lua.unlikely_memory_error() || self.is_readonly();
+            if !protect {
                 callback(lua.state);
             } else {
                 protect_lua!(lua.state, 2, 0, fn(state) callback(state))?;
