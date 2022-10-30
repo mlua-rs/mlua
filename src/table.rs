@@ -234,6 +234,9 @@ impl<'lua> Table<'lua> {
 
     /// Sets a key-value pair without invoking metamethods.
     pub fn raw_set<K: ToLua<'lua>, V: ToLua<'lua>>(&self, key: K, value: V) -> Result<()> {
+        #[cfg(feature = "luau")]
+        self.check_readonly_write()?;
+
         let lua = self.0.lua;
         let key = key.to_lua(lua)?;
         let value = value.to_lua(lua)?;
@@ -246,13 +249,7 @@ impl<'lua> Table<'lua> {
             lua.push_value(key)?;
             lua.push_value(value)?;
 
-            #[cfg(not(feature = "luau"))]
-            let protect = !lua.unlikely_memory_error();
-            // If Luau table is readonly it will throw an exception
-            #[cfg(feature = "luau")]
-            let protect = !lua.unlikely_memory_error() || self.is_readonly();
-
-            if !protect {
+            if lua.unlikely_memory_error() {
                 ffi::lua_rawset(lua.state, -3);
                 ffi::lua_pop(lua.state, 1);
                 Ok(())
@@ -309,8 +306,12 @@ impl<'lua> Table<'lua> {
 
     /// Appends a value to the back of the table without invoking metamethods.
     pub fn raw_push<V: ToLua<'lua>>(&self, value: V) -> Result<()> {
+        #[cfg(feature = "luau")]
+        self.check_readonly_write()?;
+
         let lua = self.0.lua;
         let value = value.to_lua(lua)?;
+
         unsafe {
             let _sg = StackGuard::new(lua.state);
             check_stack(lua.state, 4)?;
@@ -323,12 +324,7 @@ impl<'lua> Table<'lua> {
                 ffi::lua_rawseti(state, -2, len + 1);
             }
 
-            #[cfg(not(feature = "luau"))]
-            let protect = !lua.unlikely_memory_error();
-            // If Luau table is readonly it will throw an exception
-            #[cfg(feature = "luau")]
-            let protect = !lua.unlikely_memory_error() || self.is_readonly();
-            if !protect {
+            if lua.unlikely_memory_error() {
                 callback(lua.state);
             } else {
                 protect_lua!(lua.state, 2, 0, fn(state) callback(state))?;
@@ -339,6 +335,9 @@ impl<'lua> Table<'lua> {
 
     /// Removes the last element from the table and returns it, without invoking metamethods.
     pub fn raw_pop<V: FromLua<'lua>>(&self) -> Result<V> {
+        #[cfg(feature = "luau")]
+        self.check_readonly_write()?;
+
         let lua = self.0.lua;
         let value = unsafe {
             let _sg = StackGuard::new(lua.state);
@@ -440,6 +439,12 @@ impl<'lua> Table<'lua> {
     /// If `metatable` is `None`, the metatable is removed (if no metatable is set, this does
     /// nothing).
     pub fn set_metatable(&self, metatable: Option<Table<'lua>>) {
+        // Workaround to throw readonly error without returning Result
+        #[cfg(feature = "luau")]
+        if self.is_readonly() {
+            panic!("attempt to modify a readonly table");
+        }
+
         let lua = self.0.lua;
         unsafe {
             let _sg = StackGuard::new(lua.state);
@@ -643,6 +648,16 @@ impl<'lua> Table<'lua> {
             crate::serde::push_array_metatable(lua.state);
             ffi::lua_rawequal(lua.state, -1, -2) != 0
         }
+    }
+
+    #[cfg(feature = "luau")]
+    #[inline(always)]
+    pub(crate) fn check_readonly_write(&self) -> Result<()> {
+        if self.is_readonly() {
+            let err = "attempt to modify a readonly table".to_string();
+            return Err(Error::RuntimeError(err));
+        }
+        Ok(())
     }
 }
 

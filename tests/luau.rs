@@ -1,7 +1,9 @@
 #![cfg(feature = "luau")]
 
 use std::env;
+use std::fmt::Debug;
 use std::fs;
+use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
@@ -75,18 +77,33 @@ fn test_vectors() -> Result<()> {
 fn test_readonly_table() -> Result<()> {
     let lua = Lua::new();
 
-    let t = lua.create_table()?;
+    let t = lua.create_sequence_from([1])?;
     assert!(!t.is_readonly());
     t.set_readonly(true);
     assert!(t.is_readonly());
 
-    match t.set("key", "value") {
-        Err(Error::RuntimeError(err)) if err.contains("attempt to modify a readonly table") => {}
-        r => panic!(
-            "expected RuntimeError(...) with a specific message, got {:?}",
-            r
-        ),
-    };
+    #[track_caller]
+    fn check_readonly_error<T: Debug>(res: Result<T>) {
+        match res {
+            Err(Error::RuntimeError(e)) if e.contains("attempt to modify a readonly table") => {}
+            r => panic!("expected RuntimeError(...) with a specific message, got {r:?}"),
+        }
+    }
+
+    check_readonly_error(t.set("key", "value"));
+    check_readonly_error(t.raw_set("key", "value"));
+    check_readonly_error(t.raw_insert(1, "value"));
+    check_readonly_error(t.raw_remove(1));
+    check_readonly_error(t.push("value"));
+    check_readonly_error(t.pop::<Value>());
+    check_readonly_error(t.raw_push("value"));
+    check_readonly_error(t.raw_pop::<Value>());
+
+    // Special case
+    match catch_unwind(AssertUnwindSafe(|| t.set_metatable(None))) {
+        Ok(_) => panic!("expected panic, got nothing"),
+        Err(_) => {}
+    }
 
     Ok(())
 }
