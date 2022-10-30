@@ -1,3 +1,12 @@
+## v0.8.5
+
+- Fixed potential unsoundness when using `Layout::from_size_align_unchecked` and Rust 1.65+
+- Performance optimizations around string and table creation in standalone mode
+- Added fast track path to Table `get`/`set`/`len` methods without metatable
+- Added new methods `push`/`pop`/`raw_push`/`raw_pop` to Table
+- Fix getting caller information from `Lua::load`
+- Better checks and tests when trying to modify a Luau readonly table
+
 ## v0.8.4
 
 - Minimal Luau updated to 0.548
