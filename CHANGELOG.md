@@ -1,3 +1,7 @@
+## v0.8.6
+
+- Fixed bug when recycled Registry slot can be set to Nil
+
 ## v0.8.5
 
 - Fixed potential unsoundness when using `Layout::from_size_align_unchecked` and Rust 1.65+
