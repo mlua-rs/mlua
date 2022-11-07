@@ -1,6 +1,7 @@
 use std::cell::UnsafeCell;
 use std::hash::{Hash, Hasher};
 use std::os::raw::{c_int, c_void};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::{fmt, mem, ptr};
 
@@ -104,6 +105,7 @@ pub(crate) struct DestructedUserdata;
 /// [`AnyUserData::get_user_value`]: crate::AnyUserData::get_user_value
 pub struct RegistryKey {
     pub(crate) registry_id: c_int,
+    pub(crate) is_nil: AtomicBool,
     pub(crate) unref_list: Arc<Mutex<Option<Vec<c_int>>>>,
 }
 
@@ -129,15 +131,27 @@ impl Eq for RegistryKey {}
 
 impl Drop for RegistryKey {
     fn drop(&mut self) {
-        let mut unref_list = mlua_expect!(self.unref_list.lock(), "unref list poisoned");
-        if let Some(list) = unref_list.as_mut() {
-            list.push(self.registry_id);
+        // We don't need to collect nil slot
+        if self.registry_id > ffi::LUA_REFNIL {
+            let mut unref_list = mlua_expect!(self.unref_list.lock(), "unref list poisoned");
+            if let Some(list) = unref_list.as_mut() {
+                list.push(self.registry_id);
+            }
         }
     }
 }
 
 impl RegistryKey {
-    // Destroys the RegistryKey without adding to the drop list
+    // Creates a new instance of `RegistryKey`
+    pub(crate) const fn new(id: c_int, unref_list: Arc<Mutex<Option<Vec<c_int>>>>) -> Self {
+        RegistryKey {
+            registry_id: id,
+            is_nil: AtomicBool::new(id == ffi::LUA_REFNIL),
+            unref_list,
+        }
+    }
+
+    // Destroys the `RegistryKey` without adding to the unref list
     pub(crate) fn take(self) -> c_int {
         let registry_id = self.registry_id;
         unsafe {
@@ -145,6 +159,21 @@ impl RegistryKey {
             mem::forget(self);
         }
         registry_id
+    }
+
+    // Returns true if this `RegistryKey` holds a nil value
+    #[inline(always)]
+    pub(crate) fn is_nil(&self) -> bool {
+        self.is_nil.load(Ordering::Relaxed)
+    }
+
+    // Marks value of this `RegistryKey` as `Nil`
+    #[inline(always)]
+    pub(crate) fn set_nil(&self, enabled: bool) {
+        // We cannot replace previous value with nil in as this will break
+        // Lua mechanism to find free keys.
+        // Instead, we set a special flag to mark value as nil.
+        self.is_nil.store(enabled, Ordering::Relaxed);
     }
 }
 

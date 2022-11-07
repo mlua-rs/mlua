@@ -793,6 +793,17 @@ fn test_replace_registry_value() -> Result<()> {
     let key = lua.create_registry_value::<i32>(42)?;
     lua.replace_registry_value(&key, "new value")?;
     assert_eq!(lua.registry_value::<String>(&key)?, "new value");
+    lua.replace_registry_value(&key, Value::Nil)?;
+    assert_eq!(lua.registry_value::<Value>(&key)?, Value::Nil);
+    lua.replace_registry_value(&key, 123)?;
+    assert_eq!(lua.registry_value::<i32>(&key)?, 123);
+
+    // It should be impossible to replace (initial) nil value with non-nil
+    let key2 = lua.create_registry_value(Value::Nil)?;
+    match lua.replace_registry_value(&key2, "abc") {
+        Err(Error::RuntimeError(_)) => {}
+        r => panic!("expected RuntimeError, got {r:?}"),
+    }
 
     Ok(())
 }
@@ -840,6 +851,28 @@ fn test_mismatched_registry_key() -> Result<()> {
         Err(Error::MismatchedRegistryKey) => {}
         r => panic!("wrong result type for mismatched registry key, {:?}", r),
     };
+
+    Ok(())
+}
+
+#[test]
+fn test_registry_value_reuse() -> Result<()> {
+    let lua = Lua::new();
+
+    let r1 = lua.create_registry_value("value1")?;
+    let r1_slot = format!("{r1:?}");
+    drop(r1);
+
+    // Previous slot must not be reused by nil value
+    let r2 = lua.create_registry_value(Value::Nil)?;
+    let r2_slot = format!("{r2:?}");
+    assert_ne!(r1_slot, r2_slot);
+    drop(r2);
+
+    // But should be reused by non-nil value
+    let r3 = lua.create_registry_value("value3")?;
+    let r3_slot = format!("{r3:?}");
+    assert_eq!(r1_slot, r3_slot);
 
     Ok(())
 }

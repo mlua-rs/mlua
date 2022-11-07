@@ -88,6 +88,8 @@ pub(crate) struct ExtraData {
 
     registered_userdata: FxHashMap<TypeId, c_int>,
     registered_userdata_mt: FxHashMap<*const c_void, Option<TypeId>>,
+
+    // When Lua instance dropped, setting `None` would prevent collecting `RegistryKey`s
     registry_unref_list: Arc<Mutex<Option<Vec<c_int>>>>,
 
     #[cfg(not(feature = "send"))]
@@ -2060,6 +2062,12 @@ impl Lua {
     /// [`RegistryKey`]: crate::RegistryKey
     pub fn create_registry_value<'lua, T: ToLua<'lua>>(&'lua self, t: T) -> Result<RegistryKey> {
         let t = t.to_lua(self)?;
+        if t == Value::Nil {
+            // Special case to skip calling `luaL_ref` and use `LUA_REFNIL` instead
+            let unref_list = unsafe { (*self.extra.get()).registry_unref_list.clone() };
+            return Ok(RegistryKey::new(ffi::LUA_REFNIL, unref_list));
+        }
+
         unsafe {
             let _sg = StackGuard::new(self.state);
             check_stack(self.state, 4)?;
@@ -2067,27 +2075,20 @@ impl Lua {
             let unref_list = (*self.extra.get()).registry_unref_list.clone();
             self.push_value(t)?;
 
-            // Try to reuse previously allocated RegistryKey
+            // Try to reuse previously allocated slot
             let unref_list2 = unref_list.clone();
             let mut unref_list2 = mlua_expect!(unref_list2.lock(), "unref list poisoned");
             if let Some(registry_id) = unref_list2.as_mut().and_then(|x| x.pop()) {
                 // It must be safe to replace the value without triggering memory error
                 ffi::lua_rawseti(self.state, ffi::LUA_REGISTRYINDEX, registry_id as Integer);
-                return Ok(RegistryKey {
-                    registry_id,
-                    unref_list,
-                });
+                return Ok(RegistryKey::new(registry_id, unref_list));
             }
 
             // Allocate a new RegistryKey
             let registry_id = protect_lua!(self.state, 1, 0, |state| {
                 ffi::luaL_ref(state, ffi::LUA_REGISTRYINDEX)
             })?;
-
-            Ok(RegistryKey {
-                registry_id,
-                unref_list,
-            })
+            Ok(RegistryKey::new(registry_id, unref_list))
         }
     }
 
@@ -2102,13 +2103,16 @@ impl Lua {
             return Err(Error::MismatchedRegistryKey);
         }
 
-        let value = unsafe {
-            let _sg = StackGuard::new(self.state);
-            check_stack(self.state, 1)?;
+        let value = match key.is_nil() {
+            true => Value::Nil,
+            false => unsafe {
+                let _sg = StackGuard::new(self.state);
+                check_stack(self.state, 1)?;
 
-            let id = key.registry_id as Integer;
-            ffi::lua_rawgeti(self.state, ffi::LUA_REGISTRYINDEX, id);
-            self.pop_value()
+                let id = key.registry_id as Integer;
+                ffi::lua_rawgeti(self.state, ffi::LUA_REGISTRYINDEX, id);
+                self.pop_value()
+            },
         };
         T::from_lua(value, self)
     }
@@ -2147,13 +2151,28 @@ impl Lua {
         }
 
         let t = t.to_lua(self)?;
+        if t == Value::Nil && key.is_nil() {
+            // Nothing to replace
+            return Ok(());
+        } else if t != Value::Nil && key.registry_id == ffi::LUA_REFNIL {
+            // We cannot update `LUA_REFNIL` slot
+            let err = "cannot replace nil value with non-nil".to_string();
+            return Err(Error::RuntimeError(err));
+        }
+
         unsafe {
             let _sg = StackGuard::new(self.state);
             check_stack(self.state, 2)?;
 
-            self.push_value(t)?;
-            // It must be safe to replace the value without triggering memory error
             let id = key.registry_id as Integer;
+            if t == Value::Nil {
+                self.push_value(Value::Integer(id))?;
+                key.set_nil(true);
+            } else {
+                self.push_value(t)?;
+                key.set_nil(false);
+            }
+            // It must be safe to replace the value without triggering memory error
             ffi::lua_rawseti(self.state, ffi::LUA_REGISTRYINDEX, id);
         }
         Ok(())
