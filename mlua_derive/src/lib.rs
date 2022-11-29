@@ -1,7 +1,7 @@
 use proc_macro::TokenStream;
 use proc_macro2::{Ident, Span};
 use quote::quote;
-use syn::{parse_macro_input, AttributeArgs, Error, ItemFn};
+use syn::{parse_macro_input, AttributeArgs, ItemFn, Lit, Meta, NestedMeta};
 
 #[cfg(feature = "macros")]
 use {
@@ -9,19 +9,45 @@ use {
     proc_macro_error::proc_macro_error,
 };
 
+#[derive(Default)]
+struct ModuleArgs {
+    name: Option<Ident>,
+}
+impl ModuleArgs {
+    fn parse(attr: AttributeArgs) -> Self {
+        let mut ret = Self::default();
+
+        for arg in attr {
+            match arg {
+                NestedMeta::Meta(Meta::NameValue(meta)) => {
+                    if meta.path.segments.last().unwrap().ident == "name" {
+                        if let Lit::Str(val) = meta.lit {
+                            if let Ok(val) = val.parse() {
+                                ret.name = Some(val);
+                            }
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        ret
+    }
+}
+
 #[proc_macro_attribute]
 pub fn lua_module(attr: TokenStream, item: TokenStream) -> TokenStream {
     let args = parse_macro_input!(attr as AttributeArgs);
+    let args = ModuleArgs::parse(args);
     let func = parse_macro_input!(item as ItemFn);
 
-    if !args.is_empty() {
-        let err = Error::new(Span::call_site(), "the macro does not support arguments")
-            .to_compile_error();
-        return err.into();
-    }
-
     let func_name = func.sig.ident.clone();
-    let ext_entrypoint_name = Ident::new(&format!("luaopen_{}", func_name), Span::call_site());
+    let module_name = if let Some(name) = args.name {
+        name
+    } else {
+        func_name.clone()
+    };
+    let ext_entrypoint_name = Ident::new(&format!("luaopen_{}", module_name), Span::call_site());
 
     let wrapped = quote! {
         ::mlua::require_module_feature!();

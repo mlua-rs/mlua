@@ -12,7 +12,7 @@ fn check_userdata(_: &Lua, ud: MyUserData) -> LuaResult<i32> {
     Ok(ud.0)
 }
 
-#[mlua::lua_module]
+#[mlua::lua_module(name = "rust_module_first")]
 fn rust_module(lua: &Lua) -> LuaResult<LuaTable> {
     let exports = lua.create_table()?;
     exports.set("sum", lua.create_function(sum)?)?;
