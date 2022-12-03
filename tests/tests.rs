@@ -276,7 +276,10 @@ fn test_error() -> Result<()> {
             end, 3)
 
             local function handler(err)
-                if string.match(_VERSION, ' 5%.1$') or string.match(_VERSION, ' 5%.2$') or _VERSION == "Luau" then
+                if string.match(_VERSION, " 5%.1$")
+                    or string.match(_VERSION, " 5%.2$")
+                    or string.match(_VERSION, "Luau")
+                then
                     -- Special case for Lua 5.1/5.2 and Luau
                     local caps = string.match(err, ': (%d+)$')
                     if caps then
