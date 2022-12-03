@@ -7,12 +7,15 @@ use std::ptr;
 // Option for multiple returns in 'lua_pcall' and 'lua_call'
 pub const LUA_MULTRET: c_int = -1;
 
+// Max number of Lua stack slots
+const LUAI_MAXCSTACK: c_int = 100000;
+
 //
 // Pseudo-indices
 //
-pub const LUA_REGISTRYINDEX: c_int = -10000;
-pub const LUA_ENVIRONINDEX: c_int = -10001;
-pub const LUA_GLOBALSINDEX: c_int = -10002;
+pub const LUA_REGISTRYINDEX: c_int = -LUAI_MAXCSTACK - 2000;
+pub const LUA_ENVIRONINDEX: c_int = -LUAI_MAXCSTACK - 2001;
+pub const LUA_GLOBALSINDEX: c_int = -LUAI_MAXCSTACK - 2002;
 
 pub const fn lua_upvalueindex(i: c_int) -> c_int {
     LUA_GLOBALSINDEX - i
