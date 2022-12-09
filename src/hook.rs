@@ -63,7 +63,7 @@ impl<'lua> Debug<'lua> {
     }
 
     /// Corresponds to the `n` what mask.
-    pub fn names(&self) -> DebugNames<'lua> {
+    pub fn names(&self) -> DebugNames {
         unsafe {
             #[cfg(not(feature = "luau"))]
             mlua_assert!(
@@ -87,7 +87,7 @@ impl<'lua> Debug<'lua> {
     }
 
     /// Corresponds to the `S` what mask.
-    pub fn source(&self) -> DebugSource<'lua> {
+    pub fn source(&self) -> DebugSource {
         unsafe {
             #[cfg(not(feature = "luau"))]
             mlua_assert!(
