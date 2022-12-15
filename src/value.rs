@@ -197,7 +197,6 @@ pub struct MultiValue<'lua>(Vec<Value<'lua>>);
 
 impl<'lua> MultiValue<'lua> {
     /// Creates an empty `MultiValue` containing no values.
-    #[inline]
     pub const fn new() -> MultiValue<'lua> {
         MultiValue(Vec::new())
     }
@@ -276,7 +275,10 @@ impl<'lua> MultiValue<'lua> {
 
     #[inline]
     pub fn get(&self, index: usize) -> Option<&Value<'lua>> {
-        self.0.get(self.0.len() - index - 1)
+        if index < self.0.len() {
+            return self.0.get(self.0.len() - index - 1);
+        }
+        None
     }
 
     #[inline]

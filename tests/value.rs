@@ -1,6 +1,6 @@
 use std::ptr;
 
-use mlua::{Lua, Result, Value};
+use mlua::{Lua, MultiValue, Result, Value};
 
 #[test]
 fn test_value_eq() -> Result<()> {
@@ -62,4 +62,22 @@ fn test_value_eq() -> Result<()> {
     assert!(num1.to_pointer().is_null());
 
     Ok(())
+}
+
+#[test]
+fn test_multi_value() {
+    let mut multi_value = MultiValue::new();
+    assert_eq!(multi_value.len(), 0);
+    assert_eq!(multi_value.get(0), None);
+
+    multi_value.push_front(Value::Number(2.));
+    multi_value.push_front(Value::Number(1.));
+    assert_eq!(multi_value.get(0), Some(&Value::Number(1.)));
+    assert_eq!(multi_value.get(1), Some(&Value::Number(2.)));
+
+    assert_eq!(multi_value.pop_front(), Some(Value::Number(1.)));
+    assert_eq!(multi_value[0], Value::Number(2.));
+
+    multi_value.clear();
+    assert!(multi_value.is_empty());
 }
