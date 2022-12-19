@@ -320,20 +320,21 @@ impl<'lua> ser::SerializeSeq for SerializeVec<'lua> {
         T: Serialize + ?Sized,
     {
         let lua = self.table.0.lua;
+        let state = lua.state();
         let value = lua.to_value_with(value, self.options)?;
         unsafe {
-            let _sg = StackGuard::new(lua.state);
-            check_stack(lua.state, 4)?;
+            let _sg = StackGuard::new(state);
+            check_stack(state, 4)?;
 
             lua.push_ref(&self.table.0);
             lua.push_value(value)?;
             if lua.unlikely_memory_error() {
-                let len = ffi::lua_rawlen(lua.state, -2) as Integer;
-                ffi::lua_rawseti(lua.state, -2, len + 1);
-                ffi::lua_pop(lua.state, 1);
+                let len = ffi::lua_rawlen(state, -2) as Integer;
+                ffi::lua_rawseti(state, -2, len + 1);
+                ffi::lua_pop(state, 1);
                 Ok(())
             } else {
-                protect_lua!(lua.state, 2, 0, fn(state) {
+                protect_lua!(state, 2, 0, fn(state) {
                     let len = ffi::lua_rawlen(state, -2) as Integer;
                     ffi::lua_rawseti(state, -2, len + 1);
                 })

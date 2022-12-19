@@ -211,42 +211,43 @@ impl<'lua, T: 'static + UserData> StaticUserDataMethods<'lua, T> {
     {
         Box::new(move |lua, mut args| {
             if let Some(front) = args.pop_front() {
+                let state = lua.state();
                 let userdata = AnyUserData::from_lua(front, lua)?;
                 unsafe {
-                    let _sg = StackGuard::new(lua.state);
-                    check_stack(lua.state, 2)?;
+                    let _sg = StackGuard::new(state);
+                    check_stack(state, 2)?;
 
                     let type_id = lua.push_userdata_ref(&userdata.0)?;
                     match type_id {
                         Some(id) if id == TypeId::of::<T>() => {
-                            let ud = get_userdata_ref::<T>(lua.state)?;
+                            let ud = get_userdata_ref::<T>(state)?;
                             method(lua, &ud, A::from_lua_multi(args, lua)?)?.to_lua_multi(lua)
                         }
                         #[cfg(not(feature = "send"))]
                         Some(id) if id == TypeId::of::<Rc<RefCell<T>>>() => {
-                            let ud = get_userdata_ref::<Rc<RefCell<T>>>(lua.state)?;
+                            let ud = get_userdata_ref::<Rc<RefCell<T>>>(state)?;
                             let ud = ud.try_borrow().map_err(|_| Error::UserDataBorrowError)?;
                             method(lua, &ud, A::from_lua_multi(args, lua)?)?.to_lua_multi(lua)
                         }
                         Some(id) if id == TypeId::of::<Arc<Mutex<T>>>() => {
-                            let ud = get_userdata_ref::<Arc<Mutex<T>>>(lua.state)?;
+                            let ud = get_userdata_ref::<Arc<Mutex<T>>>(state)?;
                             let ud = ud.try_lock().map_err(|_| Error::UserDataBorrowError)?;
                             method(lua, &ud, A::from_lua_multi(args, lua)?)?.to_lua_multi(lua)
                         }
                         #[cfg(feature = "parking_lot")]
                         Some(id) if id == TypeId::of::<Arc<parking_lot::Mutex<T>>>() => {
-                            let ud = get_userdata_ref::<Arc<parking_lot::Mutex<T>>>(lua.state)?;
+                            let ud = get_userdata_ref::<Arc<parking_lot::Mutex<T>>>(state)?;
                             let ud = ud.try_lock().ok_or(Error::UserDataBorrowError)?;
                             method(lua, &ud, A::from_lua_multi(args, lua)?)?.to_lua_multi(lua)
                         }
                         Some(id) if id == TypeId::of::<Arc<RwLock<T>>>() => {
-                            let ud = get_userdata_ref::<Arc<RwLock<T>>>(lua.state)?;
+                            let ud = get_userdata_ref::<Arc<RwLock<T>>>(state)?;
                             let ud = ud.try_read().map_err(|_| Error::UserDataBorrowError)?;
                             method(lua, &ud, A::from_lua_multi(args, lua)?)?.to_lua_multi(lua)
                         }
                         #[cfg(feature = "parking_lot")]
                         Some(id) if id == TypeId::of::<Arc<parking_lot::RwLock<T>>>() => {
-                            let ud = get_userdata_ref::<Arc<parking_lot::RwLock<T>>>(lua.state)?;
+                            let ud = get_userdata_ref::<Arc<parking_lot::RwLock<T>>>(state)?;
                             let ud = ud.try_read().ok_or(Error::UserDataBorrowError)?;
                             method(lua, &ud, A::from_lua_multi(args, lua)?)?.to_lua_multi(lua)
                         }
@@ -272,49 +273,50 @@ impl<'lua, T: 'static + UserData> StaticUserDataMethods<'lua, T> {
         let method = RefCell::new(method);
         Box::new(move |lua, mut args| {
             if let Some(front) = args.pop_front() {
+                let state = lua.state();
                 let userdata = AnyUserData::from_lua(front, lua)?;
                 let mut method = method
                     .try_borrow_mut()
                     .map_err(|_| Error::RecursiveMutCallback)?;
                 unsafe {
-                    let _sg = StackGuard::new(lua.state);
-                    check_stack(lua.state, 2)?;
+                    let _sg = StackGuard::new(state);
+                    check_stack(state, 2)?;
 
                     let type_id = lua.push_userdata_ref(&userdata.0)?;
                     match type_id {
                         Some(id) if id == TypeId::of::<T>() => {
-                            let mut ud = get_userdata_mut::<T>(lua.state)?;
+                            let mut ud = get_userdata_mut::<T>(state)?;
                             method(lua, &mut ud, A::from_lua_multi(args, lua)?)?.to_lua_multi(lua)
                         }
                         #[cfg(not(feature = "send"))]
                         Some(id) if id == TypeId::of::<Rc<RefCell<T>>>() => {
-                            let ud = get_userdata_mut::<Rc<RefCell<T>>>(lua.state)?;
+                            let ud = get_userdata_mut::<Rc<RefCell<T>>>(state)?;
                             let mut ud = ud
                                 .try_borrow_mut()
                                 .map_err(|_| Error::UserDataBorrowMutError)?;
                             method(lua, &mut ud, A::from_lua_multi(args, lua)?)?.to_lua_multi(lua)
                         }
                         Some(id) if id == TypeId::of::<Arc<Mutex<T>>>() => {
-                            let ud = get_userdata_mut::<Arc<Mutex<T>>>(lua.state)?;
+                            let ud = get_userdata_mut::<Arc<Mutex<T>>>(state)?;
                             let mut ud =
                                 ud.try_lock().map_err(|_| Error::UserDataBorrowMutError)?;
                             method(lua, &mut ud, A::from_lua_multi(args, lua)?)?.to_lua_multi(lua)
                         }
                         #[cfg(feature = "parking_lot")]
                         Some(id) if id == TypeId::of::<Arc<parking_lot::Mutex<T>>>() => {
-                            let ud = get_userdata_mut::<Arc<parking_lot::Mutex<T>>>(lua.state)?;
+                            let ud = get_userdata_mut::<Arc<parking_lot::Mutex<T>>>(state)?;
                             let mut ud = ud.try_lock().ok_or(Error::UserDataBorrowMutError)?;
                             method(lua, &mut ud, A::from_lua_multi(args, lua)?)?.to_lua_multi(lua)
                         }
                         Some(id) if id == TypeId::of::<Arc<RwLock<T>>>() => {
-                            let ud = get_userdata_mut::<Arc<RwLock<T>>>(lua.state)?;
+                            let ud = get_userdata_mut::<Arc<RwLock<T>>>(state)?;
                             let mut ud =
                                 ud.try_write().map_err(|_| Error::UserDataBorrowMutError)?;
                             method(lua, &mut ud, A::from_lua_multi(args, lua)?)?.to_lua_multi(lua)
                         }
                         #[cfg(feature = "parking_lot")]
                         Some(id) if id == TypeId::of::<Arc<parking_lot::RwLock<T>>>() => {
-                            let ud = get_userdata_mut::<Arc<parking_lot::RwLock<T>>>(lua.state)?;
+                            let ud = get_userdata_mut::<Arc<parking_lot::RwLock<T>>>(state)?;
                             let mut ud = ud.try_write().ok_or(Error::UserDataBorrowMutError)?;
                             method(lua, &mut ud, A::from_lua_multi(args, lua)?)?.to_lua_multi(lua)
                         }
@@ -343,43 +345,43 @@ impl<'lua, T: 'static + UserData> StaticUserDataMethods<'lua, T> {
         Box::new(move |lua, mut args| {
             let fut_res = || {
                 if let Some(front) = args.pop_front() {
+                    let state = lua.state();
                     let userdata = AnyUserData::from_lua(front, lua)?;
                     unsafe {
-                        let _sg = StackGuard::new(lua.state);
-                        check_stack(lua.state, 2)?;
+                        let _sg = StackGuard::new(state);
+                        check_stack(state, 2)?;
 
                         let type_id = lua.push_userdata_ref(&userdata.0)?;
                         match type_id {
                             Some(id) if id == TypeId::of::<T>() => {
-                                let ud = get_userdata_ref::<T>(lua.state)?;
+                                let ud = get_userdata_ref::<T>(state)?;
                                 Ok(method(lua, ud.clone(), A::from_lua_multi(args, lua)?))
                             }
                             #[cfg(not(feature = "send"))]
                             Some(id) if id == TypeId::of::<Rc<RefCell<T>>>() => {
-                                let ud = get_userdata_ref::<Rc<RefCell<T>>>(lua.state)?;
+                                let ud = get_userdata_ref::<Rc<RefCell<T>>>(state)?;
                                 let ud = ud.try_borrow().map_err(|_| Error::UserDataBorrowError)?;
                                 Ok(method(lua, ud.clone(), A::from_lua_multi(args, lua)?))
                             }
                             Some(id) if id == TypeId::of::<Arc<Mutex<T>>>() => {
-                                let ud = get_userdata_ref::<Arc<Mutex<T>>>(lua.state)?;
+                                let ud = get_userdata_ref::<Arc<Mutex<T>>>(state)?;
                                 let ud = ud.try_lock().map_err(|_| Error::UserDataBorrowError)?;
                                 Ok(method(lua, ud.clone(), A::from_lua_multi(args, lua)?))
                             }
                             #[cfg(feature = "parking_lot")]
                             Some(id) if id == TypeId::of::<Arc<parking_lot::Mutex<T>>>() => {
-                                let ud = get_userdata_ref::<Arc<parking_lot::Mutex<T>>>(lua.state)?;
+                                let ud = get_userdata_ref::<Arc<parking_lot::Mutex<T>>>(state)?;
                                 let ud = ud.try_lock().ok_or(Error::UserDataBorrowError)?;
                                 Ok(method(lua, ud.clone(), A::from_lua_multi(args, lua)?))
                             }
                             Some(id) if id == TypeId::of::<Arc<RwLock<T>>>() => {
-                                let ud = get_userdata_ref::<Arc<RwLock<T>>>(lua.state)?;
+                                let ud = get_userdata_ref::<Arc<RwLock<T>>>(state)?;
                                 let ud = ud.try_read().map_err(|_| Error::UserDataBorrowError)?;
                                 Ok(method(lua, ud.clone(), A::from_lua_multi(args, lua)?))
                             }
                             #[cfg(feature = "parking_lot")]
                             Some(id) if id == TypeId::of::<Arc<parking_lot::RwLock<T>>>() => {
-                                let ud =
-                                    get_userdata_ref::<Arc<parking_lot::RwLock<T>>>(lua.state)?;
+                                let ud = get_userdata_ref::<Arc<parking_lot::RwLock<T>>>(state)?;
                                 let ud = ud.try_read().ok_or(Error::UserDataBorrowError)?;
                                 Ok(method(lua, ud.clone(), A::from_lua_multi(args, lua)?))
                             }

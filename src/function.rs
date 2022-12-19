@@ -95,31 +95,32 @@ impl<'lua> Function<'lua> {
     /// ```
     pub fn call<A: ToLuaMulti<'lua>, R: FromLuaMulti<'lua>>(&self, args: A) -> Result<R> {
         let lua = self.0.lua;
+        let state = lua.state();
 
         let mut args = args.to_lua_multi(lua)?;
         let nargs = args.len() as c_int;
 
         let results = unsafe {
-            let _sg = StackGuard::new(lua.state);
-            check_stack(lua.state, nargs + 3)?;
+            let _sg = StackGuard::new(state);
+            check_stack(state, nargs + 3)?;
 
-            ffi::lua_pushcfunction(lua.state, error_traceback);
-            let stack_start = ffi::lua_gettop(lua.state);
+            ffi::lua_pushcfunction(state, error_traceback);
+            let stack_start = ffi::lua_gettop(state);
             lua.push_ref(&self.0);
             for arg in args.drain_all() {
                 lua.push_value(arg)?;
             }
-            let ret = ffi::lua_pcall(lua.state, nargs, ffi::LUA_MULTRET, stack_start);
+            let ret = ffi::lua_pcall(state, nargs, ffi::LUA_MULTRET, stack_start);
             if ret != ffi::LUA_OK {
-                return Err(pop_error(lua.state, ret));
+                return Err(pop_error(state, ret));
             }
-            let nresults = ffi::lua_gettop(lua.state) - stack_start;
+            let nresults = ffi::lua_gettop(state) - stack_start;
             let mut results = args; // Reuse MultiValue container
-            assert_stack(lua.state, 2);
+            assert_stack(state, 2);
             for _ in 0..nresults {
                 results.push_front(lua.pop_value());
             }
-            ffi::lua_pop(lua.state, 1);
+            ffi::lua_pop(state, 1);
             results
         };
         R::from_lua_multi(results, lua)
@@ -217,6 +218,7 @@ impl<'lua> Function<'lua> {
         }
 
         let lua = self.0.lua;
+        let state = lua.state();
 
         let args = args.to_lua_multi(lua)?;
         let nargs = args.len() as c_int;
@@ -230,14 +232,14 @@ impl<'lua> Function<'lua> {
         }
 
         let args_wrapper = unsafe {
-            let _sg = StackGuard::new(lua.state);
-            check_stack(lua.state, nargs + 3)?;
+            let _sg = StackGuard::new(state);
+            check_stack(state, nargs + 3)?;
 
-            ffi::lua_pushinteger(lua.state, nargs as ffi::lua_Integer);
+            ffi::lua_pushinteger(state, nargs as ffi::lua_Integer);
             for arg in args {
                 lua.push_value(arg)?;
             }
-            protect_lua!(lua.state, nargs + 1, 1, fn(state) {
+            protect_lua!(state, nargs + 1, 1, fn(state) {
                 ffi::lua_pushcclosure(state, args_wrapper_impl, ffi::lua_gettop(state));
             })?;
 
@@ -264,16 +266,17 @@ impl<'lua> Function<'lua> {
     /// [`lua_getinfo`]: https://www.lua.org/manual/5.4/manual.html#lua_getinfo
     pub fn info(&self) -> FunctionInfo {
         let lua = self.0.lua;
+        let state = lua.state();
         unsafe {
-            let _sg = StackGuard::new(lua.state);
-            assert_stack(lua.state, 1);
+            let _sg = StackGuard::new(state);
+            assert_stack(state, 1);
 
             let mut ar: ffi::lua_Debug = mem::zeroed();
             lua.push_ref(&self.0);
             #[cfg(not(feature = "luau"))]
-            let res = ffi::lua_getinfo(lua.state, cstr!(">Sn"), &mut ar);
+            let res = ffi::lua_getinfo(state, cstr!(">Sn"), &mut ar);
             #[cfg(feature = "luau")]
-            let res = ffi::lua_getinfo(lua.state, -1, cstr!("sn"), &mut ar);
+            let res = ffi::lua_getinfo(state, -1, cstr!("sn"), &mut ar);
             mlua_assert!(res != 0, "lua_getinfo failed with `>Sn`");
 
             FunctionInfo {
@@ -319,15 +322,16 @@ impl<'lua> Function<'lua> {
         }
 
         let lua = self.0.lua;
+        let state = lua.state();
         let mut data: Vec<u8> = Vec::new();
         unsafe {
-            let _sg = StackGuard::new(lua.state);
-            assert_stack(lua.state, 1);
+            let _sg = StackGuard::new(state);
+            assert_stack(state, 1);
 
             lua.push_ref(&self.0);
             let data_ptr = &mut data as *mut Vec<u8> as *mut c_void;
-            ffi::lua_dump(lua.state, writer, data_ptr, strip as i32);
-            ffi::lua_pop(lua.state, 1);
+            ffi::lua_dump(state, writer, data_ptr, strip as i32);
+            ffi::lua_pop(state, 1);
         }
 
         data
@@ -375,13 +379,14 @@ impl<'lua> Function<'lua> {
         }
 
         let lua = self.0.lua;
+        let state = lua.state();
         unsafe {
-            let _sg = StackGuard::new(lua.state);
-            assert_stack(lua.state, 1);
+            let _sg = StackGuard::new(state);
+            assert_stack(state, 1);
 
             lua.push_ref(&self.0);
             let func_ptr = &mut func as *mut F as *mut c_void;
-            ffi::lua_getcoverage(lua.state, -1, func_ptr, callback::<F>);
+            ffi::lua_getcoverage(state, -1, func_ptr, callback::<F>);
         }
     }
 
@@ -396,4 +401,11 @@ impl<'lua> PartialEq for Function<'lua> {
     fn eq(&self, other: &Self) -> bool {
         self.0 == other.0
     }
+}
+
+#[cfg(test)]
+mod assertions {
+    use super::*;
+
+    static_assertions::assert_not_impl_any!(Function: Send);
 }

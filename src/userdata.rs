@@ -829,16 +829,17 @@ impl<'lua> AnyUserData<'lua> {
     /// Keeps associated user values unchanged (they will be collected by Lua's GC).
     pub fn take<T: 'static + UserData>(&self) -> Result<T> {
         let lua = self.0.lua;
+        let state = lua.state();
         unsafe {
-            let _sg = StackGuard::new(lua.state);
-            check_stack(lua.state, 2)?;
+            let _sg = StackGuard::new(state);
+            check_stack(state, 2)?;
 
             let type_id = lua.push_userdata_ref(&self.0)?;
             match type_id {
                 Some(type_id) if type_id == TypeId::of::<T>() => {
                     // Try to borrow userdata exclusively
-                    let _ = (*get_userdata::<UserDataCell<T>>(lua.state, -1)).try_borrow_mut()?;
-                    Ok(take_userdata::<UserDataCell<T>>(lua.state).into_inner())
+                    let _ = (*get_userdata::<UserDataCell<T>>(state, -1)).try_borrow_mut()?;
+                    Ok(take_userdata::<UserDataCell<T>>(state).into_inner())
                 }
                 _ => Err(Error::UserDataTypeMismatch),
             }
@@ -887,21 +888,22 @@ impl<'lua> AnyUserData<'lua> {
         }
 
         let lua = self.0.lua;
+        let state = lua.state();
         unsafe {
-            let _sg = StackGuard::new(lua.state);
-            check_stack(lua.state, 5)?;
+            let _sg = StackGuard::new(state);
+            check_stack(state, 5)?;
 
             lua.push_userdata_ref(&self.0)?;
             lua.push_value(v.to_lua(lua)?)?;
 
             #[cfg(feature = "lua54")]
             if n < USER_VALUE_MAXSLOT {
-                ffi::lua_setiuservalue(lua.state, -2, n as c_int);
+                ffi::lua_setiuservalue(state, -2, n as c_int);
                 return Ok(());
             }
 
             // Multiple (extra) user values are emulated by storing them in a table
-            protect_lua!(lua.state, 2, 0, |state| {
+            protect_lua!(state, 2, 0, |state| {
                 if getuservalue_table(state, -2) != ffi::LUA_TTABLE {
                     // Create a new table to use as uservalue
                     ffi::lua_pop(state, 1);
@@ -941,20 +943,21 @@ impl<'lua> AnyUserData<'lua> {
         }
 
         let lua = self.0.lua;
+        let state = lua.state();
         unsafe {
-            let _sg = StackGuard::new(lua.state);
-            check_stack(lua.state, 4)?;
+            let _sg = StackGuard::new(state);
+            check_stack(state, 4)?;
 
             lua.push_userdata_ref(&self.0)?;
 
             #[cfg(feature = "lua54")]
             if n < USER_VALUE_MAXSLOT {
-                ffi::lua_getiuservalue(lua.state, -1, n as c_int);
+                ffi::lua_getiuservalue(state, -1, n as c_int);
                 return V::from_lua(lua.pop_value(), lua);
             }
 
             // Multiple (extra) user values are emulated by storing them in a table
-            protect_lua!(lua.state, 1, 1, |state| {
+            protect_lua!(state, 1, 1, |state| {
                 if getuservalue_table(state, -1) != ffi::LUA_TTABLE {
                     ffi::lua_pushnil(state);
                     return;
@@ -979,15 +982,16 @@ impl<'lua> AnyUserData<'lua> {
         V: ToLua<'lua>,
     {
         let lua = self.0.lua;
+        let state = lua.state();
         unsafe {
-            let _sg = StackGuard::new(lua.state);
-            check_stack(lua.state, 5)?;
+            let _sg = StackGuard::new(state);
+            check_stack(state, 5)?;
 
             lua.push_userdata_ref(&self.0)?;
             lua.push_value(v.to_lua(lua)?)?;
 
             // Multiple (extra) user values are emulated by storing them in a table
-            protect_lua!(lua.state, 2, 0, |state| {
+            protect_lua!(state, 2, 0, |state| {
                 if getuservalue_table(state, -2) != ffi::LUA_TTABLE {
                     // Create a new table to use as uservalue
                     ffi::lua_pop(state, 1);
@@ -1016,14 +1020,15 @@ impl<'lua> AnyUserData<'lua> {
         V: FromLua<'lua>,
     {
         let lua = self.0.lua;
+        let state = lua.state();
         unsafe {
-            let _sg = StackGuard::new(lua.state);
-            check_stack(lua.state, 4)?;
+            let _sg = StackGuard::new(state);
+            check_stack(state, 4)?;
 
             lua.push_userdata_ref(&self.0)?;
 
             // Multiple (extra) user values are emulated by storing them in a table
-            protect_lua!(lua.state, 1, 1, |state| {
+            protect_lua!(state, 1, 1, |state| {
                 if getuservalue_table(state, -1) != ffi::LUA_TTABLE {
                     ffi::lua_pushnil(state);
                     return;
@@ -1050,13 +1055,14 @@ impl<'lua> AnyUserData<'lua> {
     }
 
     fn get_raw_metatable(&self) -> Result<Table<'lua>> {
+        let lua = self.0.lua;
+        let state = lua.state();
         unsafe {
-            let lua = self.0.lua;
-            let _sg = StackGuard::new(lua.state);
-            check_stack(lua.state, 3)?;
+            let _sg = StackGuard::new(state);
+            check_stack(state, 3)?;
 
             lua.push_userdata_ref(&self.0)?;
-            ffi::lua_getmetatable(lua.state, -1); // Checked that non-empty on the previous call
+            ffi::lua_getmetatable(state, -1); // Checked that non-empty on the previous call
             Ok(Table(lua.pop_ref()))
         }
     }
@@ -1093,14 +1099,15 @@ impl<'lua> AnyUserData<'lua> {
         F: FnOnce(&'a UserDataCell<T>) -> Result<R>,
     {
         let lua = self.0.lua;
+        let state = lua.state();
         unsafe {
-            let _sg = StackGuard::new(lua.state);
-            check_stack(lua.state, 2)?;
+            let _sg = StackGuard::new(state);
+            check_stack(state, 2)?;
 
             let type_id = lua.push_userdata_ref(&self.0)?;
             match type_id {
                 Some(type_id) if type_id == TypeId::of::<T>() => {
-                    func(&*get_userdata::<UserDataCell<T>>(lua.state, -1))
+                    func(&*get_userdata::<UserDataCell<T>>(state, -1))
                 }
                 _ => Err(Error::UserDataTypeMismatch),
             }
@@ -1209,12 +1216,13 @@ impl<'lua> Serialize for AnyUserData<'lua> {
         S: Serializer,
     {
         let lua = self.0.lua;
+        let state = lua.state();
         let data = unsafe {
-            let _sg = StackGuard::new(lua.state);
-            check_stack(lua.state, 3).map_err(ser::Error::custom)?;
+            let _sg = StackGuard::new(state);
+            check_stack(state, 3).map_err(ser::Error::custom)?;
 
             lua.push_userdata_ref(&self.0).map_err(ser::Error::custom)?;
-            let ud = &*get_userdata::<UserDataCell<()>>(lua.state, -1);
+            let ud = &*get_userdata::<UserDataCell<()>>(state, -1);
             ud.0.try_borrow()
                 .map_err(|_| ser::Error::custom(Error::UserDataBorrowError))?
         };
@@ -1223,4 +1231,11 @@ impl<'lua> Serialize for AnyUserData<'lua> {
             UserDataWrapped::Serializable(ser) => ser.serialize(serializer),
         }
     }
+}
+
+#[cfg(test)]
+mod assertions {
+    use super::*;
+
+    static_assertions::assert_not_impl_any!(AnyUserData: Send);
 }

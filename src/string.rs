@@ -190,3 +190,10 @@ impl<'lua> Serialize for String<'lua> {
         }
     }
 }
+
+#[cfg(test)]
+mod assertions {
+    use super::*;
+
+    static_assertions::assert_not_impl_any!(String: Send);
+}

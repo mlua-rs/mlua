@@ -192,6 +192,7 @@ impl<'lua> LuaRef<'lua> {
         }
     }
 
+    #[inline]
     pub(crate) fn into_owned(self) -> LuaOwnedRef {
         self.lua.make_owned_ref(self)
     }
@@ -220,12 +221,13 @@ impl<'lua> Drop for LuaRef<'lua> {
 impl<'lua> PartialEq for LuaRef<'lua> {
     fn eq(&self, other: &Self) -> bool {
         let lua = self.lua;
+        let state = lua.state();
         unsafe {
-            let _sg = StackGuard::new(lua.state);
-            assert_stack(lua.state, 2);
+            let _sg = StackGuard::new(state);
+            assert_stack(state, 2);
             lua.push_ref(self);
             lua.push_ref(other);
-            ffi::lua_rawequal(lua.state, -1, -2) == 1
+            ffi::lua_rawequal(state, -1, -2) == 1
         }
     }
 }
@@ -249,10 +251,10 @@ impl Clone for LuaOwnedRef {
 
 impl Drop for LuaOwnedRef {
     fn drop(&mut self) {
-        self.lua.drop_ref(&LuaRef {
+        drop(LuaRef {
             lua: &self.lua,
             index: self.index,
-            drop: false,
+            drop: true,
         });
     }
 }
@@ -265,4 +267,12 @@ impl LuaOwnedRef {
             drop: false,
         }
     }
+}
+
+#[cfg(test)]
+mod assertions {
+    use super::*;
+
+    static_assertions::assert_impl_all!(RegistryKey: Send, Sync);
+    static_assertions::assert_not_impl_any!(LuaRef: Send);
 }

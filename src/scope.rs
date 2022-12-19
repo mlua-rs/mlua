@@ -190,7 +190,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
             #[cfg(any(feature = "lua51", feature = "luajit"))]
             let newtable = self.lua.create_table()?;
             let destructor: DestructorCallback = Box::new(move |ud| {
-                let state = ud.lua.state;
+                let state = ud.lua.state();
                 let _sg = StackGuard::new(state);
                 assert_stack(state, 2);
 
@@ -275,11 +275,12 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
             // first argument).
             let check_ud_type = move |lua: &'callback Lua, value| {
                 if let Some(Value::UserData(ud)) = value {
+                    let state = lua.state();
                     unsafe {
-                        let _sg = StackGuard::new(lua.state);
-                        check_stack(lua.state, 2)?;
+                        let _sg = StackGuard::new(state);
+                        check_stack(state, 2)?;
                         lua.push_userdata_ref(&ud.0)?;
-                        if get_userdata(lua.state, -1) as *const _ == ud_ptr {
+                        if get_userdata(state, -1) as *const _ == ud_ptr {
                             return Ok(());
                         }
                     }
@@ -330,14 +331,15 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
         T::add_fields(&mut ud_fields);
         T::add_methods(&mut ud_methods);
 
+        let lua = self.lua;
+        let state = lua.state();
         unsafe {
-            let lua = self.lua;
-            let _sg = StackGuard::new(lua.state);
-            check_stack(lua.state, 13)?;
+            let _sg = StackGuard::new(state);
+            check_stack(state, 13)?;
 
             #[cfg(not(feature = "luau"))]
             #[allow(clippy::let_and_return)]
-            let ud_ptr = protect_lua!(lua.state, 0, 1, |state| {
+            let ud_ptr = protect_lua!(state, 0, 1, |state| {
                 let ud =
                     ffi::lua_newuserdata(state, mem::size_of::<UserDataCell<Rc<RefCell<T>>>>());
 
@@ -353,67 +355,67 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
             #[cfg(feature = "luau")]
             let ud_ptr = {
                 crate::util::push_userdata::<UserDataCell<Rc<RefCell<T>>>>(
-                    lua.state,
+                    state,
                     UserDataCell::new(data.clone()),
                     true,
                 )?;
-                ffi::lua_touserdata(lua.state, -1)
+                ffi::lua_touserdata(state, -1)
             };
 
             // Prepare metatable, add meta methods first and then meta fields
             let meta_methods_nrec = ud_methods.meta_methods.len() + ud_fields.meta_fields.len() + 1;
-            push_table(lua.state, 0, meta_methods_nrec as c_int, true)?;
+            push_table(state, 0, meta_methods_nrec as c_int, true)?;
 
             for (k, m) in ud_methods.meta_methods {
                 let data = data.clone();
                 lua.push_value(Value::Function(wrap_method(self, data, ud_ptr, m)?))?;
-                rawset_field(lua.state, -2, k.validate()?.name())?;
+                rawset_field(state, -2, k.validate()?.name())?;
             }
             for (k, f) in ud_fields.meta_fields {
                 lua.push_value(f(mem::transmute(lua))?)?;
-                rawset_field(lua.state, -2, k.validate()?.name())?;
+                rawset_field(state, -2, k.validate()?.name())?;
             }
-            let metatable_index = ffi::lua_absindex(lua.state, -1);
+            let metatable_index = ffi::lua_absindex(state, -1);
 
             let mut field_getters_index = None;
             let field_getters_nrec = ud_fields.field_getters.len();
             if field_getters_nrec > 0 {
-                push_table(lua.state, 0, field_getters_nrec as c_int, true)?;
+                push_table(state, 0, field_getters_nrec as c_int, true)?;
                 for (k, m) in ud_fields.field_getters {
                     let data = data.clone();
                     lua.push_value(Value::Function(wrap_method(self, data, ud_ptr, m)?))?;
-                    rawset_field(lua.state, -2, &k)?;
+                    rawset_field(state, -2, &k)?;
                 }
-                field_getters_index = Some(ffi::lua_absindex(lua.state, -1));
+                field_getters_index = Some(ffi::lua_absindex(state, -1));
             }
 
             let mut field_setters_index = None;
             let field_setters_nrec = ud_fields.field_setters.len();
             if field_setters_nrec > 0 {
-                push_table(lua.state, 0, field_setters_nrec as c_int, true)?;
+                push_table(state, 0, field_setters_nrec as c_int, true)?;
                 for (k, m) in ud_fields.field_setters {
                     let data = data.clone();
                     lua.push_value(Value::Function(wrap_method(self, data, ud_ptr, m)?))?;
-                    rawset_field(lua.state, -2, &k)?;
+                    rawset_field(state, -2, &k)?;
                 }
-                field_setters_index = Some(ffi::lua_absindex(lua.state, -1));
+                field_setters_index = Some(ffi::lua_absindex(state, -1));
             }
 
             let mut methods_index = None;
             let methods_nrec = ud_methods.methods.len();
             if methods_nrec > 0 {
                 // Create table used for methods lookup
-                push_table(lua.state, 0, methods_nrec as c_int, true)?;
+                push_table(state, 0, methods_nrec as c_int, true)?;
                 for (k, m) in ud_methods.methods {
                     let data = data.clone();
                     lua.push_value(Value::Function(wrap_method(self, data, ud_ptr, m)?))?;
-                    rawset_field(lua.state, -2, &k)?;
+                    rawset_field(state, -2, &k)?;
                 }
-                methods_index = Some(ffi::lua_absindex(lua.state, -1));
+                methods_index = Some(ffi::lua_absindex(state, -1));
             }
 
             init_userdata_metatable::<UserDataCell<Rc<RefCell<T>>>>(
-                lua.state,
+                state,
                 metatable_index,
                 field_getters_index,
                 field_setters_index,
@@ -423,20 +425,20 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
             let count = field_getters_index.map(|_| 1).unwrap_or(0)
                 + field_setters_index.map(|_| 1).unwrap_or(0)
                 + methods_index.map(|_| 1).unwrap_or(0);
-            ffi::lua_pop(lua.state, count);
+            ffi::lua_pop(state, count);
 
-            let mt_ptr = ffi::lua_topointer(lua.state, -1);
+            let mt_ptr = ffi::lua_topointer(state, -1);
             // Write userdata just before attaching metatable with `__gc` metamethod
             #[cfg(not(feature = "luau"))]
             std::ptr::write(ud_ptr as _, UserDataCell::new(data));
-            ffi::lua_setmetatable(lua.state, -2);
+            ffi::lua_setmetatable(state, -2);
             let ud = AnyUserData(lua.pop_ref());
             lua.register_userdata_metatable(mt_ptr, None);
 
             #[cfg(any(feature = "lua51", feature = "luajit"))]
             let newtable = lua.create_table()?;
             let destructor: DestructorCallback = Box::new(move |ud| {
-                let state = ud.lua.state;
+                let state = ud.lua.state();
                 let _sg = StackGuard::new(state);
                 assert_stack(state, 2);
 
@@ -498,7 +500,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
         let f = self.lua.create_callback(f)?;
 
         let destructor: DestructorCallback = Box::new(|f| {
-            let state = f.lua.state;
+            let state = f.lua.state();
             let _sg = StackGuard::new(state);
             assert_stack(state, 3);
 
@@ -532,7 +534,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
         let get_poll_str = self.lua.create_string("get_poll")?;
         let poll_str = self.lua.create_string("poll")?;
         let destructor: DestructorCallback = Box::new(move |f| {
-            let state = f.lua.state;
+            let state = f.lua.state();
             let _sg = StackGuard::new(state);
             assert_stack(state, 5);
 

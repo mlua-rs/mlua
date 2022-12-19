@@ -357,3 +357,11 @@ pub trait FromLuaMulti<'lua>: Sized {
     /// any missing values are nil.
     fn from_lua_multi(values: MultiValue<'lua>, lua: &'lua Lua) -> Result<Self>;
 }
+
+#[cfg(test)]
+mod assertions {
+    use super::*;
+
+    static_assertions::assert_not_impl_any!(Value: Send);
+    static_assertions::assert_not_impl_any!(MultiValue: Send);
+}

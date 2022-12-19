@@ -67,12 +67,12 @@ impl<'lua> Debug<'lua> {
         unsafe {
             #[cfg(not(feature = "luau"))]
             mlua_assert!(
-                ffi::lua_getinfo(self.lua.state, cstr!("n"), self.ar.get()) != 0,
+                ffi::lua_getinfo(self.lua.state(), cstr!("n"), self.ar.get()) != 0,
                 "lua_getinfo failed with `n`"
             );
             #[cfg(feature = "luau")]
             mlua_assert!(
-                ffi::lua_getinfo(self.lua.state, self.level, cstr!("n"), self.ar.get()) != 0,
+                ffi::lua_getinfo(self.lua.state(), self.level, cstr!("n"), self.ar.get()) != 0,
                 "lua_getinfo failed with `n`"
             );
 
@@ -91,12 +91,12 @@ impl<'lua> Debug<'lua> {
         unsafe {
             #[cfg(not(feature = "luau"))]
             mlua_assert!(
-                ffi::lua_getinfo(self.lua.state, cstr!("S"), self.ar.get()) != 0,
+                ffi::lua_getinfo(self.lua.state(), cstr!("S"), self.ar.get()) != 0,
                 "lua_getinfo failed with `S`"
             );
             #[cfg(feature = "luau")]
             mlua_assert!(
-                ffi::lua_getinfo(self.lua.state, self.level, cstr!("s"), self.ar.get()) != 0,
+                ffi::lua_getinfo(self.lua.state(), self.level, cstr!("s"), self.ar.get()) != 0,
                 "lua_getinfo failed with `s`"
             );
 
@@ -119,12 +119,12 @@ impl<'lua> Debug<'lua> {
         unsafe {
             #[cfg(not(feature = "luau"))]
             mlua_assert!(
-                ffi::lua_getinfo(self.lua.state, cstr!("l"), self.ar.get()) != 0,
+                ffi::lua_getinfo(self.lua.state(), cstr!("l"), self.ar.get()) != 0,
                 "lua_getinfo failed with `l`"
             );
             #[cfg(feature = "luau")]
             mlua_assert!(
-                ffi::lua_getinfo(self.lua.state, self.level, cstr!("l"), self.ar.get()) != 0,
+                ffi::lua_getinfo(self.lua.state(), self.level, cstr!("l"), self.ar.get()) != 0,
                 "lua_getinfo failed with `l`"
             );
 
@@ -139,7 +139,7 @@ impl<'lua> Debug<'lua> {
     pub fn is_tail_call(&self) -> bool {
         unsafe {
             mlua_assert!(
-                ffi::lua_getinfo(self.lua.state, cstr!("t"), self.ar.get()) != 0,
+                ffi::lua_getinfo(self.lua.state(), cstr!("t"), self.ar.get()) != 0,
                 "lua_getinfo failed with `t`"
             );
             (*self.ar.get()).currentline != 0
@@ -151,12 +151,12 @@ impl<'lua> Debug<'lua> {
         unsafe {
             #[cfg(not(feature = "luau"))]
             mlua_assert!(
-                ffi::lua_getinfo(self.lua.state, cstr!("u"), self.ar.get()) != 0,
+                ffi::lua_getinfo(self.lua.state(), cstr!("u"), self.ar.get()) != 0,
                 "lua_getinfo failed with `u`"
             );
             #[cfg(feature = "luau")]
             mlua_assert!(
-                ffi::lua_getinfo(self.lua.state, self.level, cstr!("a"), self.ar.get()) != 0,
+                ffi::lua_getinfo(self.lua.state(), self.level, cstr!("a"), self.ar.get()) != 0,
                 "lua_getinfo failed with `a`"
             );
 

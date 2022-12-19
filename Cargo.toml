@@ -73,6 +73,7 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 maplit = "1.0"
 tempfile = "3"
+static_assertions = "1.0"
 
 [[bench]]
 name = "benchmark"

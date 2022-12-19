@@ -1,5 +1,6 @@
 use std::ffi::CStr;
 use std::os::raw::{c_float, c_int};
+use std::string::String as StdString;
 
 use crate::chunk::ChunkMode;
 use crate::error::{Error, Result};
@@ -69,14 +70,15 @@ unsafe extern "C" fn lua_collectgarbage(state: *mut ffi::lua_State) -> c_int {
     }
 }
 
-fn lua_require(lua: &Lua, name: Option<std::string::String>) -> Result<Value> {
+fn lua_require(lua: &Lua, name: Option<StdString>) -> Result<Value> {
     let name = name.ok_or_else(|| Error::RuntimeError("invalid module name".into()))?;
 
     // Find module in the cache
+    let state = lua.state();
     let loaded = unsafe {
-        let _sg = StackGuard::new(lua.state);
-        check_stack(lua.state, 2)?;
-        protect_lua!(lua.state, 0, 1, fn(state) {
+        let _sg = StackGuard::new(state);
+        check_stack(state, 2)?;
+        protect_lua!(state, 0, 1, fn(state) {
             ffi::luaL_getsubtable(state, ffi::LUA_REGISTRYINDEX, cstr!("_LOADED"));
         })?;
         Table(lua.pop_ref())
