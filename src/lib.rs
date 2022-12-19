@@ -10,10 +10,10 @@
 //!
 //! # Converting data
 //!
-//! The [`ToLua`] and [`FromLua`] traits allow conversion from Rust types to Lua values and vice
+//! The [`IntoLua`] and [`FromLua`] traits allow conversion from Rust types to Lua values and vice
 //! versa. They are implemented for many data structures found in Rust's standard library.
 //!
-//! For more general conversions, the [`ToLuaMulti`] and [`FromLuaMulti`] traits allow converting
+//! For more general conversions, the [`IntoLuaMulti`] and [`FromLuaMulti`] traits allow converting
 //! between Rust types and *any number* of Lua values.
 //!
 //! Most code in `mlua` is generic over implementors of those traits, so in most places the normal
@@ -54,9 +54,9 @@
 //! [executing]: crate::Chunk::exec
 //! [evaluating]: crate::Chunk::eval
 //! [globals]: crate::Lua::globals
-//! [`ToLua`]: crate::ToLua
+//! [`IntoLua`]: crate::IntoLua
 //! [`FromLua`]: crate::FromLua
-//! [`ToLuaMulti`]: crate::ToLuaMulti
+//! [`IntoLuaMulti`]: crate::IntoLuaMulti
 //! [`FromLuaMulti`]: crate::FromLuaMulti
 //! [`Function`]: crate::Function
 //! [`UserData`]: crate::UserData
@@ -121,7 +121,7 @@ pub use crate::types::{Integer, LightUserData, Number, RegistryKey};
 pub use crate::userdata::{
     AnyUserData, MetaMethod, UserData, UserDataFields, UserDataMetatable, UserDataMethods,
 };
-pub use crate::value::{FromLua, FromLuaMulti, MultiValue, Nil, ToLua, ToLuaMulti, Value};
+pub use crate::value::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, MultiValue, Nil, Value};
 
 #[cfg(not(feature = "luau"))]
 pub use crate::hook::HookTriggers;
@@ -157,7 +157,7 @@ pub use crate::{function::OwnedFunction, table::OwnedTable};
 /// This macro allows to write Lua code directly in Rust code.
 ///
 /// Rust variables can be referenced from Lua using `$` prefix, as shown in the example below.
-/// User's Rust types needs to implement [`UserData`] or [`ToLua`] traits.
+/// User's Rust types needs to implement [`UserData`] or [`IntoLua`] traits.
 ///
 /// Captured variables are **moved** into the chunk.
 ///
@@ -203,7 +203,7 @@ pub use crate::{function::OwnedFunction, table::OwnedTable};
 ///
 /// [`AsChunk`]: crate::AsChunk
 /// [`UserData`]: crate::UserData
-/// [`ToLua`]: crate::ToLua
+/// [`IntoLua`]: crate::IntoLua
 #[cfg(any(feature = "macros"))]
 #[cfg_attr(docsrs, doc(cfg(feature = "macros")))]
 pub use mlua_derive::chunk;

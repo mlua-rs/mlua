@@ -1,5 +1,3 @@
-#![allow(clippy::wrong_self_convention)]
-
 use std::error::Error as StdError;
 use std::fmt;
 use std::io::Error as IoError;

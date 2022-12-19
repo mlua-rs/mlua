@@ -180,9 +180,9 @@ impl<'lua> Serialize for Value<'lua> {
 }
 
 /// Trait for types convertible to `Value`.
-pub trait ToLua<'lua> {
+pub trait IntoLua<'lua> {
     /// Performs the conversion.
-    fn to_lua(self, lua: &'lua Lua) -> Result<Value<'lua>>;
+    fn into_lua(self, lua: &'lua Lua) -> Result<Value<'lua>>;
 }
 
 /// Trait for types convertible from `Value`.
@@ -337,11 +337,11 @@ impl<'lua> MultiValue<'lua> {
 
 /// Trait for types convertible to any number of Lua values.
 ///
-/// This is a generalization of `ToLua`, allowing any number of resulting Lua values instead of just
-/// one. Any type that implements `ToLua` will automatically implement this trait.
-pub trait ToLuaMulti<'lua> {
+/// This is a generalization of `IntoLua`, allowing any number of resulting Lua values instead of just
+/// one. Any type that implements `IntoLua` will automatically implement this trait.
+pub trait IntoLuaMulti<'lua> {
     /// Performs the conversion.
-    fn to_lua_multi(self, lua: &'lua Lua) -> Result<MultiValue<'lua>>;
+    fn into_lua_multi(self, lua: &'lua Lua) -> Result<MultiValue<'lua>>;
 }
 
 /// Trait for types that can be created from an arbitrary number of Lua values.

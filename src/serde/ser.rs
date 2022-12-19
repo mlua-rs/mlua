@@ -10,7 +10,7 @@ use crate::string::String;
 use crate::table::Table;
 use crate::types::Integer;
 use crate::util::{check_stack, StackGuard};
-use crate::value::{ToLua, Value};
+use crate::value::{IntoLua, Value};
 
 /// A struct for serializing Rust values into Lua values.
 #[derive(Debug)]
@@ -110,7 +110,7 @@ macro_rules! lua_serialize_number {
     ($name:ident, $t:ty) => {
         #[inline]
         fn $name(self, value: $t) -> Result<Value<'lua>> {
-            value.to_lua(self.lua)
+            value.into_lua(self.lua)
         }
     };
 }

@@ -9,7 +9,7 @@ use crate::error::{Error, Result};
 use crate::ffi;
 use crate::function::Function;
 use crate::lua::Lua;
-use crate::value::{FromLuaMulti, ToLua, ToLuaMulti, Value};
+use crate::value::{FromLuaMulti, IntoLua, IntoLuaMulti, Value};
 
 #[cfg(feature = "async")]
 use {futures_core::future::LocalBoxFuture, futures_util::future};
@@ -266,8 +266,8 @@ impl<'lua, 'a> Chunk<'lua, 'a> {
     /// All global variables (including the standard library!) are looked up in `_ENV`, so it may be
     /// necessary to populate the environment in order for scripts using custom environments to be
     /// useful.
-    pub fn set_environment<V: ToLua<'lua>>(mut self, env: V) -> Self {
-        self.env = env.to_lua(self.lua);
+    pub fn set_environment<V: IntoLua<'lua>>(mut self, env: V) -> Self {
+        self.env = env.into_lua(self.lua);
         self
     }
 
@@ -358,7 +358,7 @@ impl<'lua, 'a> Chunk<'lua, 'a> {
     /// Load the chunk function and call it with the given arguments.
     ///
     /// This is equivalent to `into_function` and calling the resulting function.
-    pub fn call<A: ToLuaMulti<'lua>, R: FromLuaMulti<'lua>>(self, args: A) -> Result<R> {
+    pub fn call<A: IntoLuaMulti<'lua>, R: FromLuaMulti<'lua>>(self, args: A) -> Result<R> {
         self.into_function()?.call(args)
     }
 
@@ -374,7 +374,7 @@ impl<'lua, 'a> Chunk<'lua, 'a> {
     pub fn call_async<'fut, A, R>(self, args: A) -> LocalBoxFuture<'fut, Result<R>>
     where
         'lua: 'fut,
-        A: ToLuaMulti<'lua>,
+        A: IntoLuaMulti<'lua>,
         R: FromLuaMulti<'lua> + 'fut,
     {
         match self.into_function() {

@@ -1,23 +1,21 @@
-#![allow(clippy::wrong_self_convention)]
-
 use std::iter::FromIterator;
 use std::ops::{Deref, DerefMut};
 use std::result::Result as StdResult;
 
 use crate::error::Result;
 use crate::lua::Lua;
-use crate::value::{FromLua, FromLuaMulti, MultiValue, Nil, ToLua, ToLuaMulti};
+use crate::value::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, MultiValue, Nil};
 
 /// Result is convertible to `MultiValue` following the common Lua idiom of returning the result
 /// on success, or in the case of an error, returning `nil` and an error message.
-impl<'lua, T: ToLua<'lua>, E: ToLua<'lua>> ToLuaMulti<'lua> for StdResult<T, E> {
+impl<'lua, T: IntoLua<'lua>, E: IntoLua<'lua>> IntoLuaMulti<'lua> for StdResult<T, E> {
     #[inline]
-    fn to_lua_multi(self, lua: &'lua Lua) -> Result<MultiValue<'lua>> {
+    fn into_lua_multi(self, lua: &'lua Lua) -> Result<MultiValue<'lua>> {
         let mut result = MultiValue::new_or_cached(lua);
         match self {
-            Ok(v) => result.push_front(v.to_lua(lua)?),
+            Ok(v) => result.push_front(v.into_lua(lua)?),
             Err(e) => {
-                result.push_front(e.to_lua(lua)?);
+                result.push_front(e.into_lua(lua)?);
                 result.push_front(Nil);
             }
         }
@@ -25,11 +23,11 @@ impl<'lua, T: ToLua<'lua>, E: ToLua<'lua>> ToLuaMulti<'lua> for StdResult<T, E> 
     }
 }
 
-impl<'lua, T: ToLua<'lua>> ToLuaMulti<'lua> for T {
+impl<'lua, T: IntoLua<'lua>> IntoLuaMulti<'lua> for T {
     #[inline]
-    fn to_lua_multi(self, lua: &'lua Lua) -> Result<MultiValue<'lua>> {
+    fn into_lua_multi(self, lua: &'lua Lua) -> Result<MultiValue<'lua>> {
         let mut v = MultiValue::new_or_cached(lua);
-        v.push_front(self.to_lua(lua)?);
+        v.push_front(self.into_lua(lua)?);
         Ok(v)
     }
 }
@@ -43,9 +41,9 @@ impl<'lua, T: FromLua<'lua>> FromLuaMulti<'lua> for T {
     }
 }
 
-impl<'lua> ToLuaMulti<'lua> for MultiValue<'lua> {
+impl<'lua> IntoLuaMulti<'lua> for MultiValue<'lua> {
     #[inline]
-    fn to_lua_multi(self, _: &'lua Lua) -> Result<MultiValue<'lua>> {
+    fn into_lua_multi(self, _: &'lua Lua) -> Result<MultiValue<'lua>> {
         Ok(self)
     }
 }
@@ -128,11 +126,11 @@ impl<T> DerefMut for Variadic<T> {
     }
 }
 
-impl<'lua, T: ToLua<'lua>> ToLuaMulti<'lua> for Variadic<T> {
+impl<'lua, T: IntoLua<'lua>> IntoLuaMulti<'lua> for Variadic<T> {
     #[inline]
-    fn to_lua_multi(self, lua: &'lua Lua) -> Result<MultiValue<'lua>> {
+    fn into_lua_multi(self, lua: &'lua Lua) -> Result<MultiValue<'lua>> {
         let mut values = MultiValue::new_or_cached(lua);
-        values.refill(self.0.into_iter().map(|e| e.to_lua(lua)))?;
+        values.refill(self.0.into_iter().map(|e| e.into_lua(lua)))?;
         Ok(values)
     }
 }
@@ -152,9 +150,9 @@ impl<'lua, T: FromLua<'lua>> FromLuaMulti<'lua> for Variadic<T> {
 
 macro_rules! impl_tuple {
     () => (
-        impl<'lua> ToLuaMulti<'lua> for () {
+        impl<'lua> IntoLuaMulti<'lua> for () {
             #[inline]
-            fn to_lua_multi(self, lua: &'lua Lua) -> Result<MultiValue<'lua>> {
+            fn into_lua_multi(self, lua: &'lua Lua) -> Result<MultiValue<'lua>> {
                 Ok(MultiValue::new_or_cached(lua))
             }
         }
@@ -169,18 +167,18 @@ macro_rules! impl_tuple {
     );
 
     ($last:ident $($name:ident)*) => (
-        impl<'lua, $($name,)* $last> ToLuaMulti<'lua> for ($($name,)* $last,)
-            where $($name: ToLua<'lua>,)*
-                  $last: ToLuaMulti<'lua>
+        impl<'lua, $($name,)* $last> IntoLuaMulti<'lua> for ($($name,)* $last,)
+            where $($name: IntoLua<'lua>,)*
+                  $last: IntoLuaMulti<'lua>
         {
             #[allow(unused_mut)]
             #[allow(non_snake_case)]
             #[inline]
-            fn to_lua_multi(self, lua: &'lua Lua) -> Result<MultiValue<'lua>> {
+            fn into_lua_multi(self, lua: &'lua Lua) -> Result<MultiValue<'lua>> {
                 let ($($name,)* $last,) = self;
 
-                let mut results = $last.to_lua_multi(lua)?;
-                push_reverse!(results, $($name.to_lua(lua)?,)*);
+                let mut results = $last.into_lua_multi(lua)?;
+                push_reverse!(results, $($name.into_lua(lua)?,)*);
                 Ok(results)
             }
         }

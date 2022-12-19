@@ -37,7 +37,7 @@ use crate::util::{
     init_gc_metatable, init_userdata_metatable, pop_error, push_gc_userdata, push_string,
     push_table, rawset_field, safe_pcall, safe_xpcall, StackGuard, WrappedFailure,
 };
-use crate::value::{FromLua, FromLuaMulti, MultiValue, Nil, ToLua, ToLuaMulti, Value};
+use crate::value::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, MultiValue, Nil, Value};
 
 #[cfg(not(feature = "lua54"))]
 use crate::util::push_userdata;
@@ -785,7 +785,7 @@ impl Lua {
     pub unsafe fn entrypoint<'lua, A, R, F>(self, func: F) -> Result<c_int>
     where
         A: FromLuaMulti<'lua>,
-        R: ToLua<'lua>,
+        R: IntoLua<'lua>,
         F: 'static + MaybeSend + Fn(&'lua Lua, A) -> Result<R>,
     {
         let entrypoint_inner = |lua: &'lua Lua, func: F| {
@@ -802,7 +802,7 @@ impl Lua {
             // We create callback rather than call `func` directly to catch errors
             // with attached stacktrace.
             let callback = lua.create_callback(Box::new(move |lua, args| {
-                func(lua, A::from_lua_multi(args, lua)?)?.to_lua_multi(lua)
+                func(lua, A::from_lua_multi(args, lua)?)?.into_lua_multi(lua)
             }))?;
             callback.call(args)
         };
@@ -827,7 +827,7 @@ impl Lua {
     #[cfg(not(tarpaulin_include))]
     pub unsafe fn entrypoint1<'lua, R, F>(self, func: F) -> Result<c_int>
     where
-        R: ToLua<'lua>,
+        R: IntoLua<'lua>,
         F: 'static + MaybeSend + Fn(&'lua Lua) -> Result<R>,
     {
         self.entrypoint(move |lua, _: ()| func(lua))
@@ -1446,8 +1446,8 @@ impl Lua {
     /// Creates a table and fills it with values from an iterator.
     pub fn create_table_from<'lua, K, V, I>(&'lua self, iter: I) -> Result<Table<'lua>>
     where
-        K: ToLua<'lua>,
-        V: ToLua<'lua>,
+        K: IntoLua<'lua>,
+        V: IntoLua<'lua>,
         I: IntoIterator<Item = (K, V)>,
     {
         let state = self.state();
@@ -1460,8 +1460,8 @@ impl Lua {
             let protect = !self.unlikely_memory_error();
             push_table(state, 0, lower_bound as c_int, protect)?;
             for (k, v) in iter {
-                self.push_value(k.to_lua(self)?)?;
-                self.push_value(v.to_lua(self)?)?;
+                self.push_value(k.into_lua(self)?)?;
+                self.push_value(v.into_lua(self)?)?;
                 if protect {
                     protect_lua!(state, 3, 1, fn(state) ffi::lua_rawset(state, -3))?;
                 } else {
@@ -1476,7 +1476,7 @@ impl Lua {
     /// Creates a table from an iterator of values, using `1..` as the keys.
     pub fn create_sequence_from<'lua, T, I>(&'lua self, iter: I) -> Result<Table<'lua>>
     where
-        T: ToLua<'lua>,
+        T: IntoLua<'lua>,
         I: IntoIterator<Item = T>,
     {
         let state = self.state();
@@ -1489,7 +1489,7 @@ impl Lua {
             let protect = !self.unlikely_memory_error();
             push_table(state, lower_bound as c_int, 0, protect)?;
             for (i, v) in iter.enumerate() {
-                self.push_value(v.to_lua(self)?)?;
+                self.push_value(v.into_lua(self)?)?;
                 if protect {
                     protect_lua!(state, 2, 1, |state| {
                         ffi::lua_rawseti(state, -2, (i + 1) as Integer);
@@ -1511,7 +1511,7 @@ impl Lua {
     /// intermediate Lua code.
     ///
     /// If the function returns `Ok`, the contained value will be converted to one or more Lua
-    /// values. For details on Rust-to-Lua conversions, refer to the [`ToLua`] and [`ToLuaMulti`]
+    /// values. For details on Rust-to-Lua conversions, refer to the [`IntoLua`] and [`IntoLuaMulti`]
     /// traits.
     ///
     /// # Examples
@@ -1546,16 +1546,16 @@ impl Lua {
     /// # }
     /// ```
     ///
-    /// [`ToLua`]: crate::ToLua
-    /// [`ToLuaMulti`]: crate::ToLuaMulti
+    /// [`IntoLua`]: crate::IntoLua
+    /// [`IntoLuaMulti`]: crate::IntoLuaMulti
     pub fn create_function<'lua, A, R, F>(&'lua self, func: F) -> Result<Function<'lua>>
     where
         A: FromLuaMulti<'lua>,
-        R: ToLuaMulti<'lua>,
+        R: IntoLuaMulti<'lua>,
         F: 'static + MaybeSend + Fn(&'lua Lua, A) -> Result<R>,
     {
         self.create_callback(Box::new(move |lua, args| {
-            func(lua, A::from_lua_multi(args, lua)?)?.to_lua_multi(lua)
+            func(lua, A::from_lua_multi(args, lua)?)?.into_lua_multi(lua)
         }))
     }
 
@@ -1568,7 +1568,7 @@ impl Lua {
     pub fn create_function_mut<'lua, A, R, F>(&'lua self, func: F) -> Result<Function<'lua>>
     where
         A: FromLuaMulti<'lua>,
-        R: ToLuaMulti<'lua>,
+        R: IntoLuaMulti<'lua>,
         F: 'static + MaybeSend + FnMut(&'lua Lua, A) -> Result<R>,
     {
         let func = RefCell::new(func);
@@ -1635,7 +1635,7 @@ impl Lua {
     pub fn create_async_function<'lua, A, R, F, FR>(&'lua self, func: F) -> Result<Function<'lua>>
     where
         A: FromLuaMulti<'lua>,
-        R: ToLuaMulti<'lua>,
+        R: IntoLuaMulti<'lua>,
         F: 'static + MaybeSend + Fn(&'lua Lua, A) -> FR,
         FR: 'lua + Future<Output = Result<R>>,
     {
@@ -1644,7 +1644,7 @@ impl Lua {
                 Ok(args) => args,
                 Err(e) => return Box::pin(future::err(e)),
             };
-            Box::pin(func(lua, args).and_then(move |ret| future::ready(ret.to_lua_multi(lua))))
+            Box::pin(func(lua, args).and_then(move |ret| future::ready(ret.into_lua_multi(lua))))
         }))
     }
 
@@ -1954,9 +1954,9 @@ impl Lua {
         })
     }
 
-    /// Converts a value that implements `ToLua` into a `Value` instance.
-    pub fn pack<'lua, T: ToLua<'lua>>(&'lua self, t: T) -> Result<Value<'lua>> {
-        t.to_lua(self)
+    /// Converts a value that implements `IntoLua` into a `Value` instance.
+    pub fn pack<'lua, T: IntoLua<'lua>>(&'lua self, t: T) -> Result<Value<'lua>> {
+        t.into_lua(self)
     }
 
     /// Converts a `Value` instance into a value that implements `FromLua`.
@@ -1964,9 +1964,9 @@ impl Lua {
         T::from_lua(value, self)
     }
 
-    /// Converts a value that implements `ToLuaMulti` into a `MultiValue` instance.
-    pub fn pack_multi<'lua, T: ToLuaMulti<'lua>>(&'lua self, t: T) -> Result<MultiValue<'lua>> {
-        t.to_lua_multi(self)
+    /// Converts a value that implements `IntoLuaMulti` into a `MultiValue` instance.
+    pub fn pack_multi<'lua, T: IntoLuaMulti<'lua>>(&'lua self, t: T) -> Result<MultiValue<'lua>> {
+        t.into_lua_multi(self)
     }
 
     /// Converts a `MultiValue` instance into a value that implements `FromLuaMulti`.
@@ -1983,10 +1983,10 @@ impl Lua {
     /// state.
     pub fn set_named_registry_value<'lua, T>(&'lua self, name: &str, t: T) -> Result<()>
     where
-        T: ToLua<'lua>,
+        T: IntoLua<'lua>,
     {
         let state = self.state();
-        let t = t.to_lua(self)?;
+        let t = t.into_lua(self)?;
         unsafe {
             let _sg = StackGuard::new(state);
             check_stack(state, 5)?;
@@ -2039,8 +2039,8 @@ impl Lua {
     /// However, dropped [`RegistryKey`]s automatically reused to store new values.
     ///
     /// [`RegistryKey`]: crate::RegistryKey
-    pub fn create_registry_value<'lua, T: ToLua<'lua>>(&'lua self, t: T) -> Result<RegistryKey> {
-        let t = t.to_lua(self)?;
+    pub fn create_registry_value<'lua, T: IntoLua<'lua>>(&'lua self, t: T) -> Result<RegistryKey> {
+        let t = t.into_lua(self)?;
         if t == Value::Nil {
             // Special case to skip calling `luaL_ref` and use `LUA_REFNIL` instead
             let unref_list = unsafe { (*self.extra.get()).registry_unref_list.clone() };
@@ -2123,7 +2123,7 @@ impl Lua {
     /// See [`create_registry_value`] for more details.
     ///
     /// [`create_registry_value`]: #method.create_registry_value
-    pub fn replace_registry_value<'lua, T: ToLua<'lua>>(
+    pub fn replace_registry_value<'lua, T: IntoLua<'lua>>(
         &'lua self,
         key: &RegistryKey,
         t: T,
@@ -2132,7 +2132,7 @@ impl Lua {
             return Err(Error::MismatchedRegistryKey);
         }
 
-        let t = t.to_lua(self)?;
+        let t = t.into_lua(self)?;
         if t == Value::Nil && key.is_nil() {
             // Nothing to replace
             return Ok(());

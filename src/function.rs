@@ -9,7 +9,7 @@ use crate::types::LuaRef;
 use crate::util::{
     assert_stack, check_stack, error_traceback, pop_error, ptr_to_cstr_bytes, StackGuard,
 };
-use crate::value::{FromLuaMulti, ToLuaMulti};
+use crate::value::{FromLuaMulti, IntoLuaMulti};
 
 #[cfg(feature = "async")]
 use {futures_core::future::LocalBoxFuture, futures_util::future};
@@ -96,11 +96,11 @@ impl<'lua> Function<'lua> {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn call<A: ToLuaMulti<'lua>, R: FromLuaMulti<'lua>>(&self, args: A) -> Result<R> {
+    pub fn call<A: IntoLuaMulti<'lua>, R: FromLuaMulti<'lua>>(&self, args: A) -> Result<R> {
         let lua = self.0.lua;
         let state = lua.state();
 
-        let mut args = args.to_lua_multi(lua)?;
+        let mut args = args.into_lua_multi(lua)?;
         let nargs = args.len() as c_int;
 
         let results = unsafe {
@@ -163,7 +163,7 @@ impl<'lua> Function<'lua> {
     pub fn call_async<'fut, A, R>(&self, args: A) -> LocalBoxFuture<'fut, Result<R>>
     where
         'lua: 'fut,
-        A: ToLuaMulti<'lua>,
+        A: IntoLuaMulti<'lua>,
         R: FromLuaMulti<'lua> + 'fut,
     {
         let lua = self.0.lua;
@@ -204,7 +204,7 @@ impl<'lua> Function<'lua> {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn bind<A: ToLuaMulti<'lua>>(&self, args: A) -> Result<Function<'lua>> {
+    pub fn bind<A: IntoLuaMulti<'lua>>(&self, args: A) -> Result<Function<'lua>> {
         unsafe extern "C" fn args_wrapper_impl(state: *mut ffi::lua_State) -> c_int {
             let nargs = ffi::lua_gettop(state);
             let nbinds = ffi::lua_tointeger(state, ffi::lua_upvalueindex(1)) as c_int;
@@ -223,7 +223,7 @@ impl<'lua> Function<'lua> {
         let lua = self.0.lua;
         let state = lua.state();
 
-        let args = args.to_lua_multi(lua)?;
+        let args = args.into_lua_multi(lua)?;
         let nargs = args.len() as c_int;
 
         if nargs == 0 {

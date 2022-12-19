@@ -11,7 +11,7 @@ use crate::userdata::{
     AnyUserData, MetaMethod, UserData, UserDataCell, UserDataFields, UserDataMethods,
 };
 use crate::util::{check_stack, get_userdata, StackGuard};
-use crate::value::{FromLua, FromLuaMulti, ToLua, ToLuaMulti, Value};
+use crate::value::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, Value};
 
 #[cfg(not(feature = "send"))]
 use std::rc::Rc;
@@ -51,7 +51,7 @@ impl<'lua, T: 'static + UserData> UserDataMethods<'lua, T> for StaticUserDataMet
     fn add_method<A, R, M>(&mut self, name: &str, method: M)
     where
         A: FromLuaMulti<'lua>,
-        R: ToLuaMulti<'lua>,
+        R: IntoLuaMulti<'lua>,
         M: 'static + MaybeSend + Fn(&'lua Lua, &T, A) -> Result<R>,
     {
         self.methods.push((name.into(), Self::box_method(method)));
@@ -60,7 +60,7 @@ impl<'lua, T: 'static + UserData> UserDataMethods<'lua, T> for StaticUserDataMet
     fn add_method_mut<A, R, M>(&mut self, name: &str, method: M)
     where
         A: FromLuaMulti<'lua>,
-        R: ToLuaMulti<'lua>,
+        R: IntoLuaMulti<'lua>,
         M: 'static + MaybeSend + FnMut(&'lua Lua, &mut T, A) -> Result<R>,
     {
         self.methods
@@ -72,7 +72,7 @@ impl<'lua, T: 'static + UserData> UserDataMethods<'lua, T> for StaticUserDataMet
     where
         T: Clone,
         A: FromLuaMulti<'lua>,
-        R: ToLuaMulti<'lua>,
+        R: IntoLuaMulti<'lua>,
         M: 'static + MaybeSend + Fn(&'lua Lua, T, A) -> MR,
         MR: 'lua + Future<Output = Result<R>>,
     {
@@ -83,7 +83,7 @@ impl<'lua, T: 'static + UserData> UserDataMethods<'lua, T> for StaticUserDataMet
     fn add_function<A, R, F>(&mut self, name: &str, function: F)
     where
         A: FromLuaMulti<'lua>,
-        R: ToLuaMulti<'lua>,
+        R: IntoLuaMulti<'lua>,
         F: 'static + MaybeSend + Fn(&'lua Lua, A) -> Result<R>,
     {
         self.methods
@@ -93,7 +93,7 @@ impl<'lua, T: 'static + UserData> UserDataMethods<'lua, T> for StaticUserDataMet
     fn add_function_mut<A, R, F>(&mut self, name: &str, function: F)
     where
         A: FromLuaMulti<'lua>,
-        R: ToLuaMulti<'lua>,
+        R: IntoLuaMulti<'lua>,
         F: 'static + MaybeSend + FnMut(&'lua Lua, A) -> Result<R>,
     {
         self.methods
@@ -104,7 +104,7 @@ impl<'lua, T: 'static + UserData> UserDataMethods<'lua, T> for StaticUserDataMet
     fn add_async_function<A, R, F, FR>(&mut self, name: &str, function: F)
     where
         A: FromLuaMulti<'lua>,
-        R: ToLuaMulti<'lua>,
+        R: IntoLuaMulti<'lua>,
         F: 'static + MaybeSend + Fn(&'lua Lua, A) -> FR,
         FR: 'lua + Future<Output = Result<R>>,
     {
@@ -115,7 +115,7 @@ impl<'lua, T: 'static + UserData> UserDataMethods<'lua, T> for StaticUserDataMet
     fn add_meta_method<A, R, M>(&mut self, meta: impl Into<MetaMethod>, method: M)
     where
         A: FromLuaMulti<'lua>,
-        R: ToLuaMulti<'lua>,
+        R: IntoLuaMulti<'lua>,
         M: 'static + MaybeSend + Fn(&'lua Lua, &T, A) -> Result<R>,
     {
         self.meta_methods
@@ -125,7 +125,7 @@ impl<'lua, T: 'static + UserData> UserDataMethods<'lua, T> for StaticUserDataMet
     fn add_meta_method_mut<A, R, M>(&mut self, meta: impl Into<MetaMethod>, method: M)
     where
         A: FromLuaMulti<'lua>,
-        R: ToLuaMulti<'lua>,
+        R: IntoLuaMulti<'lua>,
         M: 'static + MaybeSend + FnMut(&'lua Lua, &mut T, A) -> Result<R>,
     {
         self.meta_methods
@@ -137,7 +137,7 @@ impl<'lua, T: 'static + UserData> UserDataMethods<'lua, T> for StaticUserDataMet
     where
         T: Clone,
         A: FromLuaMulti<'lua>,
-        R: ToLuaMulti<'lua>,
+        R: IntoLuaMulti<'lua>,
         M: 'static + MaybeSend + Fn(&'lua Lua, T, A) -> MR,
         MR: 'lua + Future<Output = Result<R>>,
     {
@@ -148,7 +148,7 @@ impl<'lua, T: 'static + UserData> UserDataMethods<'lua, T> for StaticUserDataMet
     fn add_meta_function<A, R, F>(&mut self, meta: impl Into<MetaMethod>, function: F)
     where
         A: FromLuaMulti<'lua>,
-        R: ToLuaMulti<'lua>,
+        R: IntoLuaMulti<'lua>,
         F: 'static + MaybeSend + Fn(&'lua Lua, A) -> Result<R>,
     {
         self.meta_methods
@@ -158,7 +158,7 @@ impl<'lua, T: 'static + UserData> UserDataMethods<'lua, T> for StaticUserDataMet
     fn add_meta_function_mut<A, R, F>(&mut self, meta: impl Into<MetaMethod>, function: F)
     where
         A: FromLuaMulti<'lua>,
-        R: ToLuaMulti<'lua>,
+        R: IntoLuaMulti<'lua>,
         F: 'static + MaybeSend + FnMut(&'lua Lua, A) -> Result<R>,
     {
         self.meta_methods
@@ -169,7 +169,7 @@ impl<'lua, T: 'static + UserData> UserDataMethods<'lua, T> for StaticUserDataMet
     fn add_async_meta_function<A, R, F, FR>(&mut self, meta: impl Into<MetaMethod>, function: F)
     where
         A: FromLuaMulti<'lua>,
-        R: ToLuaMulti<'lua>,
+        R: IntoLuaMulti<'lua>,
         F: 'static + MaybeSend + Fn(&'lua Lua, A) -> FR,
         FR: 'lua + Future<Output = Result<R>>,
     {
@@ -206,7 +206,7 @@ impl<'lua, T: 'static + UserData> StaticUserDataMethods<'lua, T> {
     fn box_method<A, R, M>(method: M) -> Callback<'lua, 'static>
     where
         A: FromLuaMulti<'lua>,
-        R: ToLuaMulti<'lua>,
+        R: IntoLuaMulti<'lua>,
         M: 'static + MaybeSend + Fn(&'lua Lua, &T, A) -> Result<R>,
     {
         Box::new(move |lua, mut args| {
@@ -221,35 +221,35 @@ impl<'lua, T: 'static + UserData> StaticUserDataMethods<'lua, T> {
                     match type_id {
                         Some(id) if id == TypeId::of::<T>() => {
                             let ud = get_userdata_ref::<T>(state)?;
-                            method(lua, &ud, A::from_lua_multi(args, lua)?)?.to_lua_multi(lua)
+                            method(lua, &ud, A::from_lua_multi(args, lua)?)?.into_lua_multi(lua)
                         }
                         #[cfg(not(feature = "send"))]
                         Some(id) if id == TypeId::of::<Rc<RefCell<T>>>() => {
                             let ud = get_userdata_ref::<Rc<RefCell<T>>>(state)?;
                             let ud = ud.try_borrow().map_err(|_| Error::UserDataBorrowError)?;
-                            method(lua, &ud, A::from_lua_multi(args, lua)?)?.to_lua_multi(lua)
+                            method(lua, &ud, A::from_lua_multi(args, lua)?)?.into_lua_multi(lua)
                         }
                         Some(id) if id == TypeId::of::<Arc<Mutex<T>>>() => {
                             let ud = get_userdata_ref::<Arc<Mutex<T>>>(state)?;
                             let ud = ud.try_lock().map_err(|_| Error::UserDataBorrowError)?;
-                            method(lua, &ud, A::from_lua_multi(args, lua)?)?.to_lua_multi(lua)
+                            method(lua, &ud, A::from_lua_multi(args, lua)?)?.into_lua_multi(lua)
                         }
                         #[cfg(feature = "parking_lot")]
                         Some(id) if id == TypeId::of::<Arc<parking_lot::Mutex<T>>>() => {
                             let ud = get_userdata_ref::<Arc<parking_lot::Mutex<T>>>(state)?;
                             let ud = ud.try_lock().ok_or(Error::UserDataBorrowError)?;
-                            method(lua, &ud, A::from_lua_multi(args, lua)?)?.to_lua_multi(lua)
+                            method(lua, &ud, A::from_lua_multi(args, lua)?)?.into_lua_multi(lua)
                         }
                         Some(id) if id == TypeId::of::<Arc<RwLock<T>>>() => {
                             let ud = get_userdata_ref::<Arc<RwLock<T>>>(state)?;
                             let ud = ud.try_read().map_err(|_| Error::UserDataBorrowError)?;
-                            method(lua, &ud, A::from_lua_multi(args, lua)?)?.to_lua_multi(lua)
+                            method(lua, &ud, A::from_lua_multi(args, lua)?)?.into_lua_multi(lua)
                         }
                         #[cfg(feature = "parking_lot")]
                         Some(id) if id == TypeId::of::<Arc<parking_lot::RwLock<T>>>() => {
                             let ud = get_userdata_ref::<Arc<parking_lot::RwLock<T>>>(state)?;
                             let ud = ud.try_read().ok_or(Error::UserDataBorrowError)?;
-                            method(lua, &ud, A::from_lua_multi(args, lua)?)?.to_lua_multi(lua)
+                            method(lua, &ud, A::from_lua_multi(args, lua)?)?.into_lua_multi(lua)
                         }
                         _ => Err(Error::UserDataTypeMismatch),
                     }
@@ -267,7 +267,7 @@ impl<'lua, T: 'static + UserData> StaticUserDataMethods<'lua, T> {
     fn box_method_mut<A, R, M>(method: M) -> Callback<'lua, 'static>
     where
         A: FromLuaMulti<'lua>,
-        R: ToLuaMulti<'lua>,
+        R: IntoLuaMulti<'lua>,
         M: 'static + MaybeSend + FnMut(&'lua Lua, &mut T, A) -> Result<R>,
     {
         let method = RefCell::new(method);
@@ -286,7 +286,7 @@ impl<'lua, T: 'static + UserData> StaticUserDataMethods<'lua, T> {
                     match type_id {
                         Some(id) if id == TypeId::of::<T>() => {
                             let mut ud = get_userdata_mut::<T>(state)?;
-                            method(lua, &mut ud, A::from_lua_multi(args, lua)?)?.to_lua_multi(lua)
+                            method(lua, &mut ud, A::from_lua_multi(args, lua)?)?.into_lua_multi(lua)
                         }
                         #[cfg(not(feature = "send"))]
                         Some(id) if id == TypeId::of::<Rc<RefCell<T>>>() => {
@@ -294,31 +294,31 @@ impl<'lua, T: 'static + UserData> StaticUserDataMethods<'lua, T> {
                             let mut ud = ud
                                 .try_borrow_mut()
                                 .map_err(|_| Error::UserDataBorrowMutError)?;
-                            method(lua, &mut ud, A::from_lua_multi(args, lua)?)?.to_lua_multi(lua)
+                            method(lua, &mut ud, A::from_lua_multi(args, lua)?)?.into_lua_multi(lua)
                         }
                         Some(id) if id == TypeId::of::<Arc<Mutex<T>>>() => {
                             let ud = get_userdata_mut::<Arc<Mutex<T>>>(state)?;
                             let mut ud =
                                 ud.try_lock().map_err(|_| Error::UserDataBorrowMutError)?;
-                            method(lua, &mut ud, A::from_lua_multi(args, lua)?)?.to_lua_multi(lua)
+                            method(lua, &mut ud, A::from_lua_multi(args, lua)?)?.into_lua_multi(lua)
                         }
                         #[cfg(feature = "parking_lot")]
                         Some(id) if id == TypeId::of::<Arc<parking_lot::Mutex<T>>>() => {
                             let ud = get_userdata_mut::<Arc<parking_lot::Mutex<T>>>(state)?;
                             let mut ud = ud.try_lock().ok_or(Error::UserDataBorrowMutError)?;
-                            method(lua, &mut ud, A::from_lua_multi(args, lua)?)?.to_lua_multi(lua)
+                            method(lua, &mut ud, A::from_lua_multi(args, lua)?)?.into_lua_multi(lua)
                         }
                         Some(id) if id == TypeId::of::<Arc<RwLock<T>>>() => {
                             let ud = get_userdata_mut::<Arc<RwLock<T>>>(state)?;
                             let mut ud =
                                 ud.try_write().map_err(|_| Error::UserDataBorrowMutError)?;
-                            method(lua, &mut ud, A::from_lua_multi(args, lua)?)?.to_lua_multi(lua)
+                            method(lua, &mut ud, A::from_lua_multi(args, lua)?)?.into_lua_multi(lua)
                         }
                         #[cfg(feature = "parking_lot")]
                         Some(id) if id == TypeId::of::<Arc<parking_lot::RwLock<T>>>() => {
                             let ud = get_userdata_mut::<Arc<parking_lot::RwLock<T>>>(state)?;
                             let mut ud = ud.try_write().ok_or(Error::UserDataBorrowMutError)?;
-                            method(lua, &mut ud, A::from_lua_multi(args, lua)?)?.to_lua_multi(lua)
+                            method(lua, &mut ud, A::from_lua_multi(args, lua)?)?.into_lua_multi(lua)
                         }
                         _ => Err(Error::UserDataTypeMismatch),
                     }
@@ -338,7 +338,7 @@ impl<'lua, T: 'static + UserData> StaticUserDataMethods<'lua, T> {
     where
         T: Clone,
         A: FromLuaMulti<'lua>,
-        R: ToLuaMulti<'lua>,
+        R: IntoLuaMulti<'lua>,
         M: 'static + MaybeSend + Fn(&'lua Lua, T, A) -> MR,
         MR: 'lua + Future<Output = Result<R>>,
     {
@@ -397,7 +397,9 @@ impl<'lua, T: 'static + UserData> StaticUserDataMethods<'lua, T> {
                 }
             };
             match fut_res() {
-                Ok(fut) => Box::pin(fut.and_then(move |ret| future::ready(ret.to_lua_multi(lua)))),
+                Ok(fut) => {
+                    Box::pin(fut.and_then(move |ret| future::ready(ret.into_lua_multi(lua))))
+                }
                 Err(e) => Box::pin(future::err(e)),
             }
         })
@@ -406,16 +408,16 @@ impl<'lua, T: 'static + UserData> StaticUserDataMethods<'lua, T> {
     fn box_function<A, R, F>(function: F) -> Callback<'lua, 'static>
     where
         A: FromLuaMulti<'lua>,
-        R: ToLuaMulti<'lua>,
+        R: IntoLuaMulti<'lua>,
         F: 'static + MaybeSend + Fn(&'lua Lua, A) -> Result<R>,
     {
-        Box::new(move |lua, args| function(lua, A::from_lua_multi(args, lua)?)?.to_lua_multi(lua))
+        Box::new(move |lua, args| function(lua, A::from_lua_multi(args, lua)?)?.into_lua_multi(lua))
     }
 
     fn box_function_mut<A, R, F>(function: F) -> Callback<'lua, 'static>
     where
         A: FromLuaMulti<'lua>,
-        R: ToLuaMulti<'lua>,
+        R: IntoLuaMulti<'lua>,
         F: 'static + MaybeSend + FnMut(&'lua Lua, A) -> Result<R>,
     {
         let function = RefCell::new(function);
@@ -423,7 +425,7 @@ impl<'lua, T: 'static + UserData> StaticUserDataMethods<'lua, T> {
             let function = &mut *function
                 .try_borrow_mut()
                 .map_err(|_| Error::RecursiveMutCallback)?;
-            function(lua, A::from_lua_multi(args, lua)?)?.to_lua_multi(lua)
+            function(lua, A::from_lua_multi(args, lua)?)?.into_lua_multi(lua)
         })
     }
 
@@ -431,7 +433,7 @@ impl<'lua, T: 'static + UserData> StaticUserDataMethods<'lua, T> {
     fn box_async_function<A, R, F, FR>(function: F) -> AsyncCallback<'lua, 'static>
     where
         A: FromLuaMulti<'lua>,
-        R: ToLuaMulti<'lua>,
+        R: IntoLuaMulti<'lua>,
         F: 'static + MaybeSend + Fn(&'lua Lua, A) -> FR,
         FR: 'lua + Future<Output = Result<R>>,
     {
@@ -440,7 +442,9 @@ impl<'lua, T: 'static + UserData> StaticUserDataMethods<'lua, T> {
                 Ok(args) => args,
                 Err(e) => return Box::pin(future::err(e)),
             };
-            Box::pin(function(lua, args).and_then(move |ret| future::ready(ret.to_lua_multi(lua))))
+            Box::pin(
+                function(lua, args).and_then(move |ret| future::ready(ret.into_lua_multi(lua))),
+            )
         })
     }
 }
@@ -470,7 +474,7 @@ impl<'lua, T: 'static + UserData> Default for StaticUserDataFields<'lua, T> {
 impl<'lua, T: 'static + UserData> UserDataFields<'lua, T> for StaticUserDataFields<'lua, T> {
     fn add_field_method_get<R, M>(&mut self, name: &str, method: M)
     where
-        R: ToLua<'lua>,
+        R: IntoLua<'lua>,
         M: 'static + MaybeSend + Fn(&'lua Lua, &T) -> Result<R>,
     {
         self.field_getters.push((
@@ -490,7 +494,7 @@ impl<'lua, T: 'static + UserData> UserDataFields<'lua, T> for StaticUserDataFiel
 
     fn add_field_function_get<R, F>(&mut self, name: &str, function: F)
     where
-        R: ToLua<'lua>,
+        R: IntoLua<'lua>,
         F: 'static + MaybeSend + Fn(&'lua Lua, AnyUserData<'lua>) -> Result<R>,
     {
         self.field_getters.push((
@@ -514,14 +518,14 @@ impl<'lua, T: 'static + UserData> UserDataFields<'lua, T> for StaticUserDataFiel
 
     fn add_meta_field_with<R, F>(&mut self, meta: impl Into<MetaMethod>, f: F)
     where
-        R: ToLua<'lua>,
+        R: IntoLua<'lua>,
         F: 'static + MaybeSend + Fn(&'lua Lua) -> Result<R>,
     {
         let meta = meta.into();
         self.meta_fields.push((
             meta.clone(),
             Box::new(move |lua| {
-                let value = f(lua)?.to_lua(lua)?;
+                let value = f(lua)?.into_lua(lua)?;
                 if meta == MetaMethod::Index || meta == MetaMethod::NewIndex {
                     match value {
                         Value::Nil | Value::Table(_) | Value::Function(_) => {}

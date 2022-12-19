@@ -5,7 +5,7 @@ use crate::error::{Error, Result};
 use crate::ffi;
 use crate::types::LuaRef;
 use crate::util::{check_stack, error_traceback_thread, pop_error, StackGuard};
-use crate::value::{FromLuaMulti, ToLuaMulti};
+use crate::value::{FromLuaMulti, IntoLuaMulti};
 
 #[cfg(any(
     feature = "lua54",
@@ -106,13 +106,13 @@ impl<'lua> Thread<'lua> {
     /// ```
     pub fn resume<A, R>(&self, args: A) -> Result<R>
     where
-        A: ToLuaMulti<'lua>,
+        A: IntoLuaMulti<'lua>,
         R: FromLuaMulti<'lua>,
     {
         let lua = self.0.lua;
         let state = lua.state();
 
-        let mut args = args.to_lua_multi(lua)?;
+        let mut args = args.into_lua_multi(lua)?;
         let nargs = args.len() as c_int;
         let results = unsafe {
             let _sg = StackGuard::new(state);
@@ -276,10 +276,10 @@ impl<'lua> Thread<'lua> {
     #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
     pub fn into_async<A, R>(self, args: A) -> AsyncThread<'lua, R>
     where
-        A: ToLuaMulti<'lua>,
+        A: IntoLuaMulti<'lua>,
         R: FromLuaMulti<'lua>,
     {
-        let args = args.to_lua_multi(self.0.lua);
+        let args = args.into_lua_multi(self.0.lua);
         AsyncThread {
             thread: self,
             args0: Some(args),

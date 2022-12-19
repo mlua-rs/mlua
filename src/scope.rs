@@ -20,7 +20,7 @@ use crate::util::{
     assert_stack, check_stack, get_userdata, init_userdata_metatable, push_table, rawset_field,
     take_userdata, StackGuard,
 };
-use crate::value::{FromLua, FromLuaMulti, MultiValue, ToLua, ToLuaMulti, Value};
+use crate::value::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, MultiValue, Value};
 
 #[cfg(feature = "lua54")]
 use crate::userdata::USER_VALUE_MAXSLOT;
@@ -65,7 +65,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
     pub fn create_function<'callback, A, R, F>(&'callback self, func: F) -> Result<Function<'lua>>
     where
         A: FromLuaMulti<'callback>,
-        R: ToLuaMulti<'callback>,
+        R: IntoLuaMulti<'callback>,
         F: 'scope + Fn(&'callback Lua, A) -> Result<R>,
     {
         // Safe, because 'scope must outlive 'callback (due to Self containing 'scope), however the
@@ -79,7 +79,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
         // scope, and owned inside the callback itself.
         unsafe {
             self.create_callback(Box::new(move |lua, args| {
-                func(lua, A::from_lua_multi(args, lua)?)?.to_lua_multi(lua)
+                func(lua, A::from_lua_multi(args, lua)?)?.into_lua_multi(lua)
             }))
         }
     }
@@ -98,7 +98,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
     ) -> Result<Function<'lua>>
     where
         A: FromLuaMulti<'callback>,
-        R: ToLuaMulti<'callback>,
+        R: IntoLuaMulti<'callback>,
         F: 'scope + FnMut(&'callback Lua, A) -> Result<R>,
     {
         let func = RefCell::new(func);
@@ -127,7 +127,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
     ) -> Result<Function<'lua>>
     where
         A: FromLuaMulti<'callback>,
-        R: ToLuaMulti<'callback>,
+        R: IntoLuaMulti<'callback>,
         F: 'scope + Fn(&'callback Lua, A) -> FR,
         FR: 'callback + Future<Output = Result<R>>,
     {
@@ -137,7 +137,9 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
                     Ok(args) => args,
                     Err(e) => return Box::pin(future::err(e)),
                 };
-                Box::pin(func(lua, args).and_then(move |ret| future::ready(ret.to_lua_multi(lua))))
+                Box::pin(
+                    func(lua, args).and_then(move |ret| future::ready(ret.into_lua_multi(lua))),
+                )
             }))
         }
     }
@@ -625,13 +627,13 @@ impl<'lua, T: UserData> UserDataMethods<'lua, T> for NonStaticUserDataMethods<'l
     fn add_method<A, R, M>(&mut self, name: &str, method: M)
     where
         A: FromLuaMulti<'lua>,
-        R: ToLuaMulti<'lua>,
+        R: IntoLuaMulti<'lua>,
         M: 'static + MaybeSend + Fn(&'lua Lua, &T, A) -> Result<R>,
     {
         self.methods.push((
             name.into(),
             NonStaticMethod::Method(Box::new(move |lua, ud, args| {
-                method(lua, ud, A::from_lua_multi(args, lua)?)?.to_lua_multi(lua)
+                method(lua, ud, A::from_lua_multi(args, lua)?)?.into_lua_multi(lua)
             })),
         ));
     }
@@ -639,13 +641,13 @@ impl<'lua, T: UserData> UserDataMethods<'lua, T> for NonStaticUserDataMethods<'l
     fn add_method_mut<A, R, M>(&mut self, name: &str, mut method: M)
     where
         A: FromLuaMulti<'lua>,
-        R: ToLuaMulti<'lua>,
+        R: IntoLuaMulti<'lua>,
         M: 'static + MaybeSend + FnMut(&'lua Lua, &mut T, A) -> Result<R>,
     {
         self.methods.push((
             name.into(),
             NonStaticMethod::MethodMut(Box::new(move |lua, ud, args| {
-                method(lua, ud, A::from_lua_multi(args, lua)?)?.to_lua_multi(lua)
+                method(lua, ud, A::from_lua_multi(args, lua)?)?.into_lua_multi(lua)
             })),
         ));
     }
@@ -655,7 +657,7 @@ impl<'lua, T: UserData> UserDataMethods<'lua, T> for NonStaticUserDataMethods<'l
     where
         T: Clone,
         A: FromLuaMulti<'lua>,
-        R: ToLuaMulti<'lua>,
+        R: IntoLuaMulti<'lua>,
         M: 'static + MaybeSend + Fn(&'lua Lua, T, A) -> MR,
         MR: 'lua + Future<Output = Result<R>>,
     {
@@ -667,13 +669,13 @@ impl<'lua, T: UserData> UserDataMethods<'lua, T> for NonStaticUserDataMethods<'l
     fn add_function<A, R, F>(&mut self, name: &str, function: F)
     where
         A: FromLuaMulti<'lua>,
-        R: ToLuaMulti<'lua>,
+        R: IntoLuaMulti<'lua>,
         F: 'static + MaybeSend + Fn(&'lua Lua, A) -> Result<R>,
     {
         self.methods.push((
             name.into(),
             NonStaticMethod::Function(Box::new(move |lua, args| {
-                function(lua, A::from_lua_multi(args, lua)?)?.to_lua_multi(lua)
+                function(lua, A::from_lua_multi(args, lua)?)?.into_lua_multi(lua)
             })),
         ));
     }
@@ -681,13 +683,13 @@ impl<'lua, T: UserData> UserDataMethods<'lua, T> for NonStaticUserDataMethods<'l
     fn add_function_mut<A, R, F>(&mut self, name: &str, mut function: F)
     where
         A: FromLuaMulti<'lua>,
-        R: ToLuaMulti<'lua>,
+        R: IntoLuaMulti<'lua>,
         F: 'static + MaybeSend + FnMut(&'lua Lua, A) -> Result<R>,
     {
         self.methods.push((
             name.into(),
             NonStaticMethod::FunctionMut(Box::new(move |lua, args| {
-                function(lua, A::from_lua_multi(args, lua)?)?.to_lua_multi(lua)
+                function(lua, A::from_lua_multi(args, lua)?)?.into_lua_multi(lua)
             })),
         ));
     }
@@ -696,7 +698,7 @@ impl<'lua, T: UserData> UserDataMethods<'lua, T> for NonStaticUserDataMethods<'l
     fn add_async_function<A, R, F, FR>(&mut self, _name: &str, _function: F)
     where
         A: FromLuaMulti<'lua>,
-        R: ToLuaMulti<'lua>,
+        R: IntoLuaMulti<'lua>,
         F: 'static + MaybeSend + Fn(&'lua Lua, A) -> FR,
         FR: 'lua + Future<Output = Result<R>>,
     {
@@ -708,13 +710,13 @@ impl<'lua, T: UserData> UserDataMethods<'lua, T> for NonStaticUserDataMethods<'l
     fn add_meta_method<A, R, M>(&mut self, meta: impl Into<MetaMethod>, method: M)
     where
         A: FromLuaMulti<'lua>,
-        R: ToLuaMulti<'lua>,
+        R: IntoLuaMulti<'lua>,
         M: 'static + MaybeSend + Fn(&'lua Lua, &T, A) -> Result<R>,
     {
         self.meta_methods.push((
             meta.into(),
             NonStaticMethod::Method(Box::new(move |lua, ud, args| {
-                method(lua, ud, A::from_lua_multi(args, lua)?)?.to_lua_multi(lua)
+                method(lua, ud, A::from_lua_multi(args, lua)?)?.into_lua_multi(lua)
             })),
         ));
     }
@@ -722,13 +724,13 @@ impl<'lua, T: UserData> UserDataMethods<'lua, T> for NonStaticUserDataMethods<'l
     fn add_meta_method_mut<A, R, M>(&mut self, meta: impl Into<MetaMethod>, mut method: M)
     where
         A: FromLuaMulti<'lua>,
-        R: ToLuaMulti<'lua>,
+        R: IntoLuaMulti<'lua>,
         M: 'static + MaybeSend + FnMut(&'lua Lua, &mut T, A) -> Result<R>,
     {
         self.meta_methods.push((
             meta.into(),
             NonStaticMethod::MethodMut(Box::new(move |lua, ud, args| {
-                method(lua, ud, A::from_lua_multi(args, lua)?)?.to_lua_multi(lua)
+                method(lua, ud, A::from_lua_multi(args, lua)?)?.into_lua_multi(lua)
             })),
         ));
     }
@@ -738,7 +740,7 @@ impl<'lua, T: UserData> UserDataMethods<'lua, T> for NonStaticUserDataMethods<'l
     where
         T: Clone,
         A: FromLuaMulti<'lua>,
-        R: ToLuaMulti<'lua>,
+        R: IntoLuaMulti<'lua>,
         M: 'static + MaybeSend + Fn(&'lua Lua, T, A) -> MR,
         MR: 'lua + Future<Output = Result<R>>,
     {
@@ -750,13 +752,13 @@ impl<'lua, T: UserData> UserDataMethods<'lua, T> for NonStaticUserDataMethods<'l
     fn add_meta_function<A, R, F>(&mut self, meta: impl Into<MetaMethod>, function: F)
     where
         A: FromLuaMulti<'lua>,
-        R: ToLuaMulti<'lua>,
+        R: IntoLuaMulti<'lua>,
         F: 'static + MaybeSend + Fn(&'lua Lua, A) -> Result<R>,
     {
         self.meta_methods.push((
             meta.into(),
             NonStaticMethod::Function(Box::new(move |lua, args| {
-                function(lua, A::from_lua_multi(args, lua)?)?.to_lua_multi(lua)
+                function(lua, A::from_lua_multi(args, lua)?)?.into_lua_multi(lua)
             })),
         ));
     }
@@ -764,13 +766,13 @@ impl<'lua, T: UserData> UserDataMethods<'lua, T> for NonStaticUserDataMethods<'l
     fn add_meta_function_mut<A, R, F>(&mut self, meta: impl Into<MetaMethod>, mut function: F)
     where
         A: FromLuaMulti<'lua>,
-        R: ToLuaMulti<'lua>,
+        R: IntoLuaMulti<'lua>,
         F: 'static + MaybeSend + FnMut(&'lua Lua, A) -> Result<R>,
     {
         self.meta_methods.push((
             meta.into(),
             NonStaticMethod::FunctionMut(Box::new(move |lua, args| {
-                function(lua, A::from_lua_multi(args, lua)?)?.to_lua_multi(lua)
+                function(lua, A::from_lua_multi(args, lua)?)?.into_lua_multi(lua)
             })),
         ));
     }
@@ -779,7 +781,7 @@ impl<'lua, T: UserData> UserDataMethods<'lua, T> for NonStaticUserDataMethods<'l
     fn add_async_meta_function<A, R, F, FR>(&mut self, _meta: impl Into<MetaMethod>, _function: F)
     where
         A: FromLuaMulti<'lua>,
-        R: ToLuaMulti<'lua>,
+        R: IntoLuaMulti<'lua>,
         F: 'static + MaybeSend + Fn(&'lua Lua, A) -> FR,
         FR: 'lua + Future<Output = Result<R>>,
     {
@@ -809,13 +811,13 @@ impl<'lua, T: UserData> Default for NonStaticUserDataFields<'lua, T> {
 impl<'lua, T: UserData> UserDataFields<'lua, T> for NonStaticUserDataFields<'lua, T> {
     fn add_field_method_get<R, M>(&mut self, name: &str, method: M)
     where
-        R: ToLua<'lua>,
+        R: IntoLua<'lua>,
         M: 'static + MaybeSend + Fn(&'lua Lua, &T) -> Result<R>,
     {
         self.field_getters.push((
             name.into(),
             NonStaticMethod::Method(Box::new(move |lua, ud, _| {
-                method(lua, ud)?.to_lua_multi(lua)
+                method(lua, ud)?.into_lua_multi(lua)
             })),
         ));
     }
@@ -828,20 +830,20 @@ impl<'lua, T: UserData> UserDataFields<'lua, T> for NonStaticUserDataFields<'lua
         self.field_setters.push((
             name.into(),
             NonStaticMethod::MethodMut(Box::new(move |lua, ud, args| {
-                method(lua, ud, A::from_lua_multi(args, lua)?)?.to_lua_multi(lua)
+                method(lua, ud, A::from_lua_multi(args, lua)?)?.into_lua_multi(lua)
             })),
         ));
     }
 
     fn add_field_function_get<R, F>(&mut self, name: &str, function: F)
     where
-        R: ToLua<'lua>,
+        R: IntoLua<'lua>,
         F: 'static + MaybeSend + Fn(&'lua Lua, AnyUserData<'lua>) -> Result<R>,
     {
         self.field_getters.push((
             name.into(),
             NonStaticMethod::Function(Box::new(move |lua, args| {
-                function(lua, AnyUserData::from_lua_multi(args, lua)?)?.to_lua_multi(lua)
+                function(lua, AnyUserData::from_lua_multi(args, lua)?)?.into_lua_multi(lua)
             })),
         ));
     }
@@ -855,7 +857,7 @@ impl<'lua, T: UserData> UserDataFields<'lua, T> for NonStaticUserDataFields<'lua
             name.into(),
             NonStaticMethod::FunctionMut(Box::new(move |lua, args| {
                 let (ud, val) = <_>::from_lua_multi(args, lua)?;
-                function(lua, ud, val)?.to_lua_multi(lua)
+                function(lua, ud, val)?.into_lua_multi(lua)
             })),
         ));
     }
@@ -863,13 +865,13 @@ impl<'lua, T: UserData> UserDataFields<'lua, T> for NonStaticUserDataFields<'lua
     fn add_meta_field_with<R, F>(&mut self, meta: impl Into<MetaMethod>, f: F)
     where
         F: 'static + MaybeSend + Fn(&'lua Lua) -> Result<R>,
-        R: ToLua<'lua>,
+        R: IntoLua<'lua>,
     {
         let meta = meta.into();
         self.meta_fields.push((
             meta.clone(),
             Box::new(move |lua| {
-                let value = f(lua)?.to_lua(lua)?;
+                let value = f(lua)?.into_lua(lua)?;
                 if meta == MetaMethod::Index || meta == MetaMethod::NewIndex {
                     match value {
                         Value::Nil | Value::Table(_) | Value::Function(_) => {}
