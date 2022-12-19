@@ -1,7 +1,9 @@
 use std::f32;
 use std::iter::FromIterator;
 
-use mlua::{chunk, Function, Lua, MetaMethod, Result, UserData, UserDataMethods, Variadic};
+use mlua::{
+    chunk, FromLua, Function, Lua, MetaMethod, Result, UserData, UserDataMethods, Value, Variadic,
+};
 
 fn main() -> Result<()> {
     // You can create a new Lua state with `Lua::new()`. This loads the default Lua std library
@@ -150,6 +152,16 @@ fn main() -> Result<()> {
 
     #[derive(Copy, Clone)]
     struct Vec2(f32, f32);
+
+    // We can implement `FromLua` trait for our `Vec2` to return a copy
+    impl<'lua> FromLua<'lua> for Vec2 {
+        fn from_lua(value: Value<'lua>, _: &'lua Lua) -> Result<Self> {
+            match value {
+                Value::UserData(ud) => Ok(*ud.borrow::<Self>()?),
+                _ => unreachable!(),
+            }
+        }
+    }
 
     impl UserData for Vec2 {
         fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {

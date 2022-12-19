@@ -12,8 +12,8 @@ use std::{cell::RefCell, rc::Rc};
 use std::sync::atomic::{AtomicI64, Ordering};
 
 use mlua::{
-    AnyUserData, Error, ExternalError, Function, Lua, MetaMethod, Nil, Result, String, UserData,
-    UserDataFields, UserDataMethods, Value,
+    AnyUserData, Error, ExternalError, FromLua, Function, Lua, MetaMethod, Nil, Result, String,
+    UserData, UserDataFields, UserDataMethods, Value,
 };
 
 #[test]
@@ -94,6 +94,15 @@ fn test_methods() -> Result<()> {
 fn test_metamethods() -> Result<()> {
     #[derive(Copy, Clone)]
     struct MyUserData(i64);
+
+    impl<'lua> FromLua<'lua> for MyUserData {
+        fn from_lua(value: Value<'lua>, _: &'lua Lua) -> Result<Self> {
+            match value {
+                Value::UserData(ud) => Ok(ud.borrow::<Self>()?.clone()),
+                _ => unreachable!(),
+            }
+        }
+    }
 
     impl UserData for MyUserData {
         fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {

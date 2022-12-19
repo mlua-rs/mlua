@@ -194,21 +194,6 @@ impl<'lua, T: 'static + MaybeSend + UserData> IntoLua<'lua> for T {
     }
 }
 
-// TODO: Remove
-impl<'lua, T: 'static + UserData + Clone> FromLua<'lua> for T {
-    #[inline]
-    fn from_lua(value: Value<'lua>, _: &'lua Lua) -> Result<T> {
-        match value {
-            Value::UserData(ud) => Ok(ud.borrow::<T>()?.clone()),
-            _ => Err(Error::FromLuaConversionError {
-                from: value.type_name(),
-                to: "userdata",
-                message: None,
-            }),
-        }
-    }
-}
-
 impl<'lua> IntoLua<'lua> for Error {
     #[inline]
     fn into_lua(self, _: &'lua Lua) -> Result<Value<'lua>> {
