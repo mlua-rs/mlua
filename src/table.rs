@@ -11,7 +11,7 @@ use {
 use crate::error::{Error, Result};
 use crate::ffi;
 use crate::function::Function;
-use crate::types::{Integer, LuaOwnedRef, LuaRef};
+use crate::types::{Integer, LuaRef};
 use crate::util::{assert_stack, check_stack, StackGuard};
 use crate::value::{FromLua, FromLuaMulti, Nil, ToLua, ToLuaMulti, Value};
 
@@ -23,9 +23,12 @@ use {futures_core::future::LocalBoxFuture, futures_util::future};
 pub struct Table<'lua>(pub(crate) LuaRef<'lua>);
 
 /// Owned handle to an internal Lua table.
+#[cfg(feature = "unstable")]
+#[cfg_attr(docsrs, doc(cfg(feature = "unstable")))]
 #[derive(Clone, Debug)]
-pub struct OwnedTable(pub(crate) LuaOwnedRef);
+pub struct OwnedTable(pub(crate) crate::types::LuaOwnedRef);
 
+#[cfg(feature = "unstable")]
 impl OwnedTable {
     /// Get borrowed handle to the underlying Lua table.
     pub const fn to_ref(&self) -> Table {
@@ -538,6 +541,8 @@ impl<'lua> Table<'lua> {
     }
 
     /// Convert this handle to owned version.
+    #[cfg(feature = "unstable")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "unstable")))]
     #[inline]
     pub fn into_owned(self) -> OwnedTable {
         OwnedTable(self.0.into_owned())
@@ -1024,4 +1029,7 @@ mod assertions {
     use super::*;
 
     static_assertions::assert_not_impl_any!(Table: Send);
+
+    #[cfg(feature = "unstable")]
+    static_assertions::assert_not_impl_any!(OwnedTable: Send);
 }

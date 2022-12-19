@@ -39,6 +39,7 @@ async = ["futures-core", "futures-task", "futures-util"]
 send = []
 serialize = ["serde", "erased-serde"]
 macros = ["mlua_derive/macros"]
+unstable = []
 
 [dependencies]
 mlua_derive = { version = "=0.8.0", optional = true, path = "mlua_derive" }
@@ -90,7 +91,7 @@ required-features = ["async", "serialize", "macros"]
 
 [[example]]
 name = "async_http_server"
-required-features = ["async", "macros"]
+required-features = ["async", "macros", "unstable"]
 
 [[example]]
 name = "async_tcp_server"

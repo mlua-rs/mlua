@@ -26,8 +26,8 @@ use crate::string::String;
 use crate::table::Table;
 use crate::thread::Thread;
 use crate::types::{
-    Callback, CallbackUpvalue, DestructedUserdata, Integer, LightUserData, LuaOwnedRef, LuaRef,
-    MaybeSend, Number, RegistryKey,
+    Callback, CallbackUpvalue, DestructedUserdata, Integer, LightUserData, LuaRef, MaybeSend,
+    Number, RegistryKey,
 };
 use crate::userdata::{AnyUserData, UserData, UserDataCell};
 use crate::userdata_impl::{StaticUserDataFields, StaticUserDataMethods, UserDataProxy};
@@ -2469,17 +2469,16 @@ impl Lua {
         }
     }
 
-    pub(crate) fn make_owned_ref(&self, lref: LuaRef) -> LuaOwnedRef {
-        assert!(lref.drop, "Cannot make owned non-drop reference");
-        let owned_ref = LuaOwnedRef {
-            lua: Lua(self.0.clone()),
-            index: lref.index,
-        };
+    #[cfg(feature = "unstable")]
+    pub(crate) fn make_owned_ref(&self, lref: LuaRef) -> crate::types::LuaOwnedRef {
+        assert!(lref.drop, "Cannot turn non-drop reference into owned");
+        let owned_ref = crate::types::LuaOwnedRef::new(Lua(self.0.clone()), lref.index);
         mem::forget(lref);
         owned_ref
     }
 
-    pub(crate) fn adopt_owned_ref(&self, loref: LuaOwnedRef) -> LuaRef {
+    #[cfg(feature = "unstable")]
+    pub(crate) fn adopt_owned_ref(&self, loref: crate::types::LuaOwnedRef) -> LuaRef {
         assert!(
             Arc::ptr_eq(&loref.lua.0, &self.0),
             "Lua instance passed Value created from a different main Lua state"

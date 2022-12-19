@@ -11,14 +11,17 @@ use bstr::{BStr, BString};
 use num_traits::cast;
 
 use crate::error::{Error, Result};
-use crate::function::{Function, OwnedFunction};
+use crate::function::Function;
 use crate::lua::Lua;
-use crate::string::{OwnedString, String};
-use crate::table::{OwnedTable, Table};
-use crate::thread::{OwnedThread, Thread};
+use crate::string::String;
+use crate::table::Table;
+use crate::thread::Thread;
 use crate::types::{LightUserData, MaybeSend};
-use crate::userdata::{AnyUserData, OwnedAnyUserData, UserData};
+use crate::userdata::{AnyUserData, UserData};
 use crate::value::{FromLua, Nil, ToLua, Value};
+
+#[cfg(feature = "unstable")]
+use crate::{function::OwnedFunction, table::OwnedTable, userdata::OwnedAnyUserData};
 
 impl<'lua> ToLua<'lua> for Value<'lua> {
     #[inline]
@@ -54,20 +57,6 @@ impl<'lua> FromLua<'lua> for String<'lua> {
     }
 }
 
-impl<'lua> ToLua<'lua> for OwnedString {
-    #[inline]
-    fn to_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
-        Ok(Value::String(String(lua.adopt_owned_ref(self.0))))
-    }
-}
-
-impl<'lua> FromLua<'lua> for OwnedString {
-    #[inline]
-    fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> Result<OwnedString> {
-        String::from_lua(value, lua).map(|s| s.into_owned())
-    }
-}
-
 impl<'lua> ToLua<'lua> for Table<'lua> {
     #[inline]
     fn to_lua(self, _: &'lua Lua) -> Result<Value<'lua>> {
@@ -89,6 +78,7 @@ impl<'lua> FromLua<'lua> for Table<'lua> {
     }
 }
 
+#[cfg(feature = "unstable")]
 impl<'lua> ToLua<'lua> for OwnedTable {
     #[inline]
     fn to_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
@@ -96,6 +86,7 @@ impl<'lua> ToLua<'lua> for OwnedTable {
     }
 }
 
+#[cfg(feature = "unstable")]
 impl<'lua> FromLua<'lua> for OwnedTable {
     #[inline]
     fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> Result<OwnedTable> {
@@ -124,6 +115,7 @@ impl<'lua> FromLua<'lua> for Function<'lua> {
     }
 }
 
+#[cfg(feature = "unstable")]
 impl<'lua> ToLua<'lua> for OwnedFunction {
     #[inline]
     fn to_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
@@ -131,6 +123,7 @@ impl<'lua> ToLua<'lua> for OwnedFunction {
     }
 }
 
+#[cfg(feature = "unstable")]
 impl<'lua> FromLua<'lua> for OwnedFunction {
     #[inline]
     fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> Result<OwnedFunction> {
@@ -159,20 +152,6 @@ impl<'lua> FromLua<'lua> for Thread<'lua> {
     }
 }
 
-impl<'lua> ToLua<'lua> for OwnedThread {
-    #[inline]
-    fn to_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
-        Ok(Value::Thread(Thread(lua.adopt_owned_ref(self.0))))
-    }
-}
-
-impl<'lua> FromLua<'lua> for OwnedThread {
-    #[inline]
-    fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> Result<OwnedThread> {
-        Thread::from_lua(value, lua).map(|s| s.into_owned())
-    }
-}
-
 impl<'lua> ToLua<'lua> for AnyUserData<'lua> {
     #[inline]
     fn to_lua(self, _: &'lua Lua) -> Result<Value<'lua>> {
@@ -194,6 +173,7 @@ impl<'lua> FromLua<'lua> for AnyUserData<'lua> {
     }
 }
 
+#[cfg(feature = "unstable")]
 impl<'lua> ToLua<'lua> for OwnedAnyUserData {
     #[inline]
     fn to_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
@@ -201,6 +181,7 @@ impl<'lua> ToLua<'lua> for OwnedAnyUserData {
     }
 }
 
+#[cfg(feature = "unstable")]
 impl<'lua> FromLua<'lua> for OwnedAnyUserData {
     #[inline]
     fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> Result<OwnedAnyUserData> {

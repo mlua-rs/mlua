@@ -12,24 +12,13 @@ use {
 
 use crate::error::{Error, Result};
 use crate::ffi;
-use crate::types::{LuaOwnedRef, LuaRef};
+use crate::types::LuaRef;
 
 /// Handle to an internal Lua string.
 ///
 /// Unlike Rust strings, Lua strings may not be valid UTF-8.
 #[derive(Clone, Debug)]
 pub struct String<'lua>(pub(crate) LuaRef<'lua>);
-
-/// Owned handle to an internal Lua string.
-#[derive(Clone, Debug)]
-pub struct OwnedString(pub(crate) LuaOwnedRef);
-
-impl OwnedString {
-    /// Get borrowed handle to the underlying Lua string.
-    pub const fn to_ref(&self) -> String {
-        String(self.0.to_ref())
-    }
-}
 
 impl<'lua> String<'lua> {
     /// Get a `&str` slice if the Lua string is valid UTF-8.
@@ -132,12 +121,6 @@ impl<'lua> String<'lua> {
     pub fn to_pointer(&self) -> *const c_void {
         let ref_thread = self.0.lua.ref_thread();
         unsafe { ffi::lua_topointer(ref_thread, self.0.index) }
-    }
-
-    /// Convert this handle to owned version.
-    #[inline]
-    pub fn into_owned(self) -> OwnedString {
-        OwnedString(self.0.into_owned())
     }
 }
 

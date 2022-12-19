@@ -5,7 +5,7 @@ use std::slice;
 
 use crate::error::{Error, Result};
 use crate::ffi;
-use crate::types::{LuaOwnedRef, LuaRef};
+use crate::types::LuaRef;
 use crate::util::{
     assert_stack, check_stack, error_traceback, pop_error, ptr_to_cstr_bytes, StackGuard,
 };
@@ -19,9 +19,12 @@ use {futures_core::future::LocalBoxFuture, futures_util::future};
 pub struct Function<'lua>(pub(crate) LuaRef<'lua>);
 
 /// Owned handle to an internal Lua function.
+#[cfg(feature = "unstable")]
+#[cfg_attr(docsrs, doc(cfg(feature = "unstable")))]
 #[derive(Clone, Debug)]
-pub struct OwnedFunction(pub(crate) LuaOwnedRef);
+pub struct OwnedFunction(pub(crate) crate::types::LuaOwnedRef);
 
+#[cfg(feature = "unstable")]
 impl OwnedFunction {
     /// Get borrowed handle to the underlying Lua function.
     pub const fn to_ref(&self) -> Function {
@@ -391,6 +394,8 @@ impl<'lua> Function<'lua> {
     }
 
     /// Convert this handle to owned version.
+    #[cfg(feature = "unstable")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "unstable")))]
     #[inline]
     pub fn into_owned(self) -> OwnedFunction {
         OwnedFunction(self.0.into_owned())
@@ -408,4 +413,7 @@ mod assertions {
     use super::*;
 
     static_assertions::assert_not_impl_any!(Function: Send);
+
+    #[cfg(feature = "unstable")]
+    static_assertions::assert_not_impl_any!(OwnedFunction: Send);
 }

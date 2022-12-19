@@ -20,7 +20,7 @@ use crate::ffi;
 use crate::function::Function;
 use crate::lua::Lua;
 use crate::table::{Table, TablePairs};
-use crate::types::{Callback, LuaOwnedRef, LuaRef, MaybeSend};
+use crate::types::{Callback, LuaRef, MaybeSend};
 use crate::util::{check_stack, get_userdata, take_userdata, StackGuard};
 use crate::value::{FromLua, FromLuaMulti, ToLua, ToLuaMulti};
 
@@ -782,9 +782,12 @@ impl Serialize for UserDataSerializeError {
 #[derive(Clone, Debug)]
 pub struct AnyUserData<'lua>(pub(crate) LuaRef<'lua>);
 
+#[cfg(feature = "unstable")]
+#[cfg_attr(docsrs, doc(cfg(feature = "unstable")))]
 #[derive(Clone, Debug)]
-pub struct OwnedAnyUserData(pub(crate) LuaOwnedRef);
+pub struct OwnedAnyUserData(pub(crate) crate::types::LuaOwnedRef);
 
+#[cfg(feature = "unstable")]
 impl OwnedAnyUserData {
     pub const fn to_ref(&self) -> AnyUserData {
         AnyUserData(self.0.to_ref())
@@ -1067,6 +1070,8 @@ impl<'lua> AnyUserData<'lua> {
         }
     }
 
+    #[cfg(feature = "unstable")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "unstable")))]
     #[inline]
     pub fn into_owned(self) -> OwnedAnyUserData {
         OwnedAnyUserData(self.0.into_owned())
@@ -1238,4 +1243,7 @@ mod assertions {
     use super::*;
 
     static_assertions::assert_not_impl_any!(AnyUserData: Send);
+
+    #[cfg(feature = "unstable")]
+    static_assertions::assert_not_impl_any!(OwnedAnyUserData: Send);
 }

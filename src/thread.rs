@@ -3,7 +3,7 @@ use std::os::raw::c_int;
 
 use crate::error::{Error, Result};
 use crate::ffi;
-use crate::types::{LuaOwnedRef, LuaRef};
+use crate::types::LuaRef;
 use crate::util::{check_stack, error_traceback_thread, pop_error, StackGuard};
 use crate::value::{FromLuaMulti, ToLuaMulti};
 
@@ -46,17 +46,6 @@ pub enum ThreadStatus {
 /// Handle to an internal Lua thread (or coroutine).
 #[derive(Clone, Debug)]
 pub struct Thread<'lua>(pub(crate) LuaRef<'lua>);
-
-/// Owned handle to an internal Lua thread.
-#[derive(Clone, Debug)]
-pub struct OwnedThread(pub(crate) LuaOwnedRef);
-
-impl OwnedThread {
-    /// Get borrowed handle to the underlying Lua thread.
-    pub const fn to_ref(&self) -> Thread {
-        Thread(self.0.to_ref())
-    }
-}
 
 /// Thread (coroutine) representation as an async [`Future`] or [`Stream`].
 ///
@@ -345,12 +334,6 @@ impl<'lua> Thread<'lua> {
             ffi::lua_replace(thread, ffi::LUA_GLOBALSINDEX);
             protect_lua!(state, 0, 0, |_| ffi::luaL_sandboxthread(thread))
         }
-    }
-
-    /// Convert this handle to owned version.
-    #[inline]
-    pub fn into_owned(self) -> OwnedThread {
-        OwnedThread(self.0.into_owned())
     }
 }
 
