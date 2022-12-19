@@ -126,7 +126,7 @@ fn test_function_info() -> Result<()> {
         end
     "#,
     )
-    .set_name("source1")?
+    .set_name("source1")
     .exec()?;
 
     let function1 = globals.get::<_, Function>("function1")?;

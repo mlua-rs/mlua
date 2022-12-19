@@ -1348,19 +1348,14 @@ impl Lua {
     ///
     /// [`Chunk::exec`]: crate::Chunk::exec
     #[track_caller]
-    pub fn load<'lua, 'a, S>(&'lua self, chunk: &'a S) -> Chunk<'lua, 'a>
-    where
-        S: AsChunk<'lua> + ?Sized,
-    {
+    pub fn load<'lua, 'a>(&'lua self, chunk: impl AsChunk<'a>) -> Chunk<'lua, 'a> {
         let caller = Location::caller();
-        let name = chunk.name().unwrap_or_else(|| caller.to_string());
-
         Chunk {
             lua: self,
-            source: chunk.source(),
-            name: Some(name),
+            name: chunk.name().unwrap_or_else(|| caller.to_string()),
             env: chunk.env(self),
             mode: chunk.mode(),
+            source: chunk.source(),
             #[cfg(feature = "luau")]
             compiler: unsafe { (*self.extra.get()).compiler.clone() },
         }
@@ -1368,10 +1363,10 @@ impl Lua {
 
     pub(crate) fn load_chunk<'lua>(
         &'lua self,
-        source: &[u8],
         name: Option<&CStr>,
-        env: Option<Value<'lua>>,
+        env: Value<'lua>,
         mode: Option<ChunkMode>,
+        source: &[u8],
     ) -> Result<Function<'lua>> {
         let state = self.state();
         unsafe {
@@ -1392,7 +1387,7 @@ impl Lua {
                 mode_str,
             ) {
                 ffi::LUA_OK => {
-                    if let Some(env) = env {
+                    if env != Value::Nil {
                         self.push_value(env)?;
                         #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
                         ffi::lua_setupvalue(state, -2, 1);
@@ -2885,8 +2880,8 @@ impl Lua {
             "#,
         )
         .try_cache()
-        .set_name("_mlua_async_poll")?
-        .set_environment(env)?
+        .set_name("_mlua_async_poll")
+        .set_environment(env)
         .into_function()
     }
 

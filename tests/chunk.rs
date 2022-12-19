@@ -14,10 +14,10 @@ fn test_chunk_path() -> Result<()> {
         return 321
     "#,
     )?;
-    let i: i32 = lua.load(&temp_dir.path().join("module.lua")).eval()?;
+    let i: i32 = lua.load(&*temp_dir.path().join("module.lua")).eval()?;
     assert_eq!(i, 321);
 
-    match lua.load(&temp_dir.path().join("module2.lua")).exec() {
+    match lua.load(&*temp_dir.path().join("module2.lua")).exec() {
         Err(Error::ExternalError(err))
             if err.downcast_ref::<io::Error>().unwrap().kind() == io::ErrorKind::NotFound => {}
         res => panic!("expected io::Error, got {:?}", res),

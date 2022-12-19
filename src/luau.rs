@@ -106,7 +106,7 @@ fn lua_require(lua: &Lua, name: Option<StdString>) -> Result<Value> {
 
     let value = lua
         .load(&source)
-        .set_name(&format!("={}", source_name))?
+        .set_name(&format!("={}", source_name))
         .set_mode(ChunkMode::Text)
         .call::<_, Value>(())?;
 

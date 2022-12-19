@@ -1072,7 +1072,7 @@ fn test_chunk_env() -> Result<()> {
         test_var = 1
     "#,
     )
-    .set_environment(env1.clone())?
+    .set_environment(env1.clone())
     .exec()?;
 
     lua.load(
@@ -1081,18 +1081,11 @@ fn test_chunk_env() -> Result<()> {
         test_var = 2
     "#,
     )
-    .set_environment(env2.clone())?
+    .set_environment(env2.clone())
     .exec()?;
 
-    assert_eq!(
-        lua.load("test_var").set_environment(env1)?.eval::<i32>()?,
-        1
-    );
-
-    assert_eq!(
-        lua.load("test_var").set_environment(env2)?.eval::<i32>()?,
-        2
-    );
+    assert_eq!(lua.load("test_var").set_environment(env1).eval::<i32>()?, 1);
+    assert_eq!(lua.load("test_var").set_environment(env2).eval::<i32>()?, 2);
 
     Ok(())
 }
@@ -1227,7 +1220,7 @@ fn test_inspect_stack() -> Result<()> {
         assert(logline("world") == '[string "chunk"]:12 world')
     "#,
     )
-    .set_name("chunk")?
+    .set_name("chunk")
     .exec()?;
 
     Ok(())

@@ -98,36 +98,35 @@ pub fn chunk(input: TokenStream) -> TokenStream {
         use ::mlua::{AsChunk, ChunkMode, Lua, Result, Value};
         use ::std::borrow::Cow;
         use ::std::io::Result as IoResult;
-        use ::std::marker::PhantomData;
         use ::std::sync::Mutex;
 
-        fn annotate<'a, F: FnOnce(&'a Lua) -> Result<Value<'a>>>(f: F) -> F { f }
+        struct InnerChunk<F: for <'a> FnOnce(&'a Lua) -> Result<Value<'a>>>(Mutex<Option<F>>);
 
-        struct InnerChunk<'a, F: FnOnce(&'a Lua) -> Result<Value<'a>>>(Mutex<Option<F>>, PhantomData<&'a ()>);
-
-        impl<'lua, F> AsChunk<'lua> for InnerChunk<'lua, F>
+        impl<F> AsChunk<'static> for InnerChunk<F>
         where
-            F: FnOnce(&'lua Lua) -> Result<Value<'lua>>,
+            F: for <'a> FnOnce(&'a Lua) -> Result<Value<'a>>,
         {
-            fn source(&self) -> IoResult<Cow<[u8]>> {
-                Ok(Cow::Borrowed((#source).as_bytes()))
-            }
-
-            fn env(&self, lua: &'lua Lua) -> Result<Option<Value<'lua>>> {
+            fn env<'lua>(&self, lua: &'lua Lua) -> Result<Value<'lua>> {
                 if #caps_len > 0 {
                     if let Ok(mut make_env) = self.0.lock() {
                         if let Some(make_env) = make_env.take() {
-                            return make_env(lua).map(Some);
+                            return make_env(lua);
                         }
                     }
                 }
-                Ok(None)
+                Ok(Value::Nil)
             }
 
             fn mode(&self) -> Option<ChunkMode> {
                 Some(ChunkMode::Text)
             }
+
+            fn source(self) -> IoResult<Cow<'static, [u8]>> {
+                Ok(Cow::Borrowed((#source).as_bytes()))
+            }
         }
+
+        fn annotate<F: for<'a> FnOnce(&'a Lua) -> Result<Value<'a>>>(f: F) -> F { f }
 
         let make_env = annotate(move |lua: &Lua| -> Result<Value> {
             let globals = lua.globals();
@@ -143,7 +142,7 @@ pub fn chunk(input: TokenStream) -> TokenStream {
             Ok(Value::Table(env))
         });
 
-        &InnerChunk(Mutex::new(Some(make_env)), PhantomData)
+        InnerChunk(Mutex::new(Some(make_env)))
     }};
 
     wrapped_code.into()

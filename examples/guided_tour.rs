@@ -30,7 +30,7 @@ fn main() -> Result<()> {
             global = 'foo'..'bar'
         "#,
     )
-    .set_name("example code")?
+    .set_name("example code")
     .exec()?;
     assert_eq!(globals.get::<_, String>("global")?, "foobar");
 
