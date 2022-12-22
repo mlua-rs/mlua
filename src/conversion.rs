@@ -19,7 +19,14 @@ use crate::userdata::{AnyUserData, UserData};
 use crate::value::{FromLua, IntoLua, Nil, Value};
 
 #[cfg(feature = "unstable")]
-use crate::{function::OwnedFunction, table::OwnedTable, userdata::OwnedAnyUserData};
+use crate::{
+    function::{OwnedFunction, WrappedFunction},
+    table::OwnedTable,
+    userdata::OwnedAnyUserData,
+};
+
+#[cfg(all(feature = "async", feature = "unstable"))]
+use crate::function::WrappedAsyncFunction;
 
 impl<'lua> IntoLua<'lua> for Value<'lua> {
     #[inline]
@@ -126,6 +133,22 @@ impl<'lua> FromLua<'lua> for OwnedFunction {
     #[inline]
     fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> Result<OwnedFunction> {
         Function::from_lua(value, lua).map(|s| s.into_owned())
+    }
+}
+
+#[cfg(feature = "unstable")]
+impl<'lua> IntoLua<'lua> for WrappedFunction<'lua> {
+    #[inline]
+    fn into_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
+        lua.create_callback(self.0).map(Value::Function)
+    }
+}
+
+#[cfg(all(feature = "async", feature = "unstable"))]
+impl<'lua> IntoLua<'lua> for WrappedAsyncFunction<'lua> {
+    #[inline]
+    fn into_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
+        lua.create_async_callback(self.0).map(Value::Function)
     }
 }
 

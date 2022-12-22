@@ -30,6 +30,20 @@ async fn test_async_function() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "unstable")]
+#[tokio::test]
+async fn test_async_function_wrap() -> Result<()> {
+    let lua = Lua::new();
+
+    let f = Function::wrap_async(|_, s: String| async move { Ok(s) });
+    lua.globals().set("f", f)?;
+
+    let res: String = lua.load(r#"f("hello")"#).eval_async().await?;
+    assert_eq!(res, "hello");
+
+    Ok(())
+}
+
 #[tokio::test]
 async fn test_async_sleep() -> Result<()> {
     let lua = Lua::new();

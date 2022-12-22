@@ -167,3 +167,36 @@ fn test_function_info() -> Result<()> {
 
     Ok(())
 }
+
+#[cfg(feature = "unstable")]
+#[test]
+fn test_function_wrap() -> Result<()> {
+    use mlua::Error;
+
+    let lua = Lua::new();
+
+    lua.globals()
+        .set("f", Function::wrap(|_, s: String| Ok(s)))?;
+    lua.load(r#"assert(f("hello") == "hello")"#).exec().unwrap();
+
+    let mut _i = false;
+    lua.globals().set(
+        "f",
+        Function::wrap_mut(move |lua, ()| {
+            _i = true;
+            lua.globals().get::<_, Function>("f")?.call::<_, ()>(())
+        }),
+    )?;
+    match lua.globals().get::<_, Function>("f")?.call::<_, ()>(()) {
+        Err(Error::CallbackError { ref cause, .. }) => match *cause.as_ref() {
+            Error::CallbackError { ref cause, .. } => match *cause.as_ref() {
+                Error::RecursiveMutCallback { .. } => {}
+                ref other => panic!("incorrect result: {other:?}"),
+            },
+            ref other => panic!("incorrect result: {other:?}"),
+        },
+        other => panic!("incorrect result: {other:?}"),
+    };
+
+    Ok(())
+}

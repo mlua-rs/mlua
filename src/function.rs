@@ -11,8 +11,19 @@ use crate::util::{
 };
 use crate::value::{FromLuaMulti, IntoLuaMulti};
 
+#[cfg(feature = "unstable")]
+use {
+    crate::lua::Lua,
+    crate::types::{Callback, MaybeSend},
+    crate::value::IntoLua,
+    std::cell::RefCell,
+};
+
 #[cfg(feature = "async")]
 use {futures_core::future::LocalBoxFuture, futures_util::future};
+
+#[cfg(all(feature = "async", feature = "unstable"))]
+use {crate::types::AsyncCallback, futures_core::Future, futures_util::TryFutureExt};
 
 /// Handle to an internal Lua function.
 #[derive(Clone, Debug)]
@@ -405,6 +416,64 @@ impl<'lua> Function<'lua> {
 impl<'lua> PartialEq for Function<'lua> {
     fn eq(&self, other: &Self) -> bool {
         self.0 == other.0
+    }
+}
+
+#[cfg(feature = "unstable")]
+pub(crate) struct WrappedFunction<'lua>(pub(crate) Callback<'lua, 'static>);
+
+#[cfg(all(feature = "async", feature = "unstable"))]
+pub(crate) struct WrappedAsyncFunction<'lua>(pub(crate) AsyncCallback<'lua, 'static>);
+
+#[cfg(feature = "unstable")]
+#[cfg_attr(docsrs, doc(cfg(feature = "unstable")))]
+impl<'lua> Function<'lua> {
+    /// Wraps a Rust function or closure, returning an opaque type that implements [`IntoLua`] trait.
+    #[inline]
+    pub fn wrap<F, A, R>(func: F) -> impl IntoLua<'lua>
+    where
+        F: Fn(&'lua Lua, A) -> Result<R> + MaybeSend + 'static,
+        A: FromLuaMulti<'lua>,
+        R: IntoLuaMulti<'lua>,
+    {
+        WrappedFunction(Box::new(move |lua, args| {
+            func(lua, A::from_lua_multi(args, lua)?)?.into_lua_multi(lua)
+        }))
+    }
+
+    /// Wraps a Rust mutable closure, returning an opaque type that implements [`IntoLua`] trait.
+    #[inline]
+    pub fn wrap_mut<F, A, R>(func: F) -> impl IntoLua<'lua>
+    where
+        F: FnMut(&'lua Lua, A) -> Result<R> + MaybeSend + 'static,
+        A: FromLuaMulti<'lua>,
+        R: IntoLuaMulti<'lua>,
+    {
+        let func = RefCell::new(func);
+        WrappedFunction(Box::new(move |lua, args| {
+            let mut func = func
+                .try_borrow_mut()
+                .map_err(|_| Error::RecursiveMutCallback)?;
+            func(lua, A::from_lua_multi(args, lua)?)?.into_lua_multi(lua)
+        }))
+    }
+
+    #[cfg(feature = "async")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
+    pub fn wrap_async<F, A, FR, R>(func: F) -> impl IntoLua<'lua>
+    where
+        F: Fn(&'lua Lua, A) -> FR + MaybeSend + 'static,
+        A: FromLuaMulti<'lua>,
+        FR: Future<Output = Result<R>> + 'lua,
+        R: IntoLuaMulti<'lua>,
+    {
+        WrappedAsyncFunction(Box::new(move |lua, args| {
+            let args = match A::from_lua_multi(args, lua) {
+                Ok(args) => args,
+                Err(e) => return Box::pin(future::err(e)),
+            };
+            Box::pin(func(lua, args).and_then(move |ret| future::ready(ret.into_lua_multi(lua))))
+        }))
     }
 }
 
