@@ -27,7 +27,7 @@ jobs:
       - name: Build ${{ matrix.lua }} vendored
         run: |
           cargo build --features "${{ matrix.lua }},vendored"
-          cargo build --features "${{ matrix.lua }},vendored,async,send,serialize,macros,parking_lot"
+          cargo build --features "${{ matrix.lua }},vendored,async,send,serialize,macros,parking_lot,unstable"
         shell: bash
       - name: Build ${{ matrix.lua }} pkg-config
         if: ${{ matrix.os == 'ubuntu-22.04' }}
@@ -50,7 +50,7 @@ jobs:
           toolchain: stable
           target: aarch64-apple-darwin
       - name: Cross-compile
-        run: cargo build --target aarch64-apple-darwin --features "${{ matrix.lua }},vendored,async,send,serialize,macros,parking_lot"
+        run: cargo build --target aarch64-apple-darwin --features "${{ matrix.lua }},vendored,async,send,serialize,macros,parking_lot,unstable"
 
   build_aarch64_cross_ubuntu:
     name: Cross-compile to aarch64-unknown-linux-gnu
@@ -71,7 +71,7 @@ jobs:
           sudo apt-get install -y --no-install-recommends gcc-aarch64-linux-gnu libc6-dev-arm64-cross
         shell: bash
       - name: Cross-compile
-        run: cargo build --target aarch64-unknown-linux-gnu --features "${{ matrix.lua }},vendored,async,send,serialize,macros,parking_lot"
+        run: cargo build --target aarch64-unknown-linux-gnu --features "${{ matrix.lua }},vendored,async,send,serialize,macros,parking_lot,unstable"
         shell: bash
 
   build_armv7_cross_ubuntu:
@@ -93,7 +93,7 @@ jobs:
           sudo apt-get install -y --no-install-recommends gcc-arm-linux-gnueabihf libc-dev-armhf-cross
         shell: bash
       - name: Cross-compile
-        run: cargo build --target armv7-unknown-linux-gnueabihf --features "${{ matrix.lua }},vendored,async,send,serialize,macros,parking_lot"
+        run: cargo build --target armv7-unknown-linux-gnueabihf --features "${{ matrix.lua }},vendored,async,send,serialize,macros,parking_lot,unstable"
         shell: bash
 
   test:
@@ -122,13 +122,13 @@ jobs:
       - name: Run ${{ matrix.lua }} tests
         run: |
           cargo test --features "${{ matrix.lua }},vendored"
-          cargo test --features "${{ matrix.lua }},vendored,async,send,serialize,macros,parking_lot"
+          cargo test --features "${{ matrix.lua }},vendored,async,send,serialize,macros,parking_lot,unstable"
         shell: bash
       - name: Run compile tests (macos lua54)
         if: ${{ matrix.os == 'macos-latest' && matrix.lua == 'lua54' }}
         run: |
           TRYBUILD=overwrite cargo test --features "${{ matrix.lua }},vendored" -- --ignored
-          TRYBUILD=overwrite cargo test --features "${{ matrix.lua }},vendored,async,send,serialize,macros,parking_lot" -- --ignored
+          TRYBUILD=overwrite cargo test --features "${{ matrix.lua }},vendored,async,send,serialize,macros,parking_lot,unstable" -- --ignored
         shell: bash
 
   test_with_sanitizer:
@@ -153,7 +153,7 @@ jobs:
       - name: Run ${{ matrix.lua }} tests with address sanitizer
         run: |
           RUSTFLAGS="-Z sanitizer=address" \
-            cargo test --tests --features "${{ matrix.lua }},vendored,async,send,serialize,macros,parking_lot" --target x86_64-unknown-linux-gnu -- --skip test_too_many_recursions
+            cargo test --tests --features "${{ matrix.lua }},vendored,async,send,serialize,macros,parking_lot,unstable" --target x86_64-unknown-linux-gnu -- --skip test_too_many_recursions
         shell: bash
 
   test_modules:
@@ -230,4 +230,4 @@ jobs:
       - uses: actions-rs/clippy-check@v1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          args: --features "${{ matrix.lua }},vendored,async,send,serialize,macros,parking_lot"
+          args: --features "${{ matrix.lua }},vendored,async,send,serialize,macros,parking_lot,unstable"
