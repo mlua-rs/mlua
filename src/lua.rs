@@ -29,7 +29,7 @@ use crate::types::{
     Callback, CallbackUpvalue, DestructedUserdata, Integer, LightUserData, LuaRef, MaybeSend,
     Number, RegistryKey,
 };
-use crate::userdata::{AnyUserData, UserData, UserDataCell};
+use crate::userdata::{AnyUserData, MetaMethod, UserData, UserDataCell};
 use crate::userdata_impl::{StaticUserDataFields, StaticUserDataMethods, UserDataProxy};
 use crate::util::{
     self, assert_stack, callback_error, check_stack, get_destructed_userdata_metatable,
@@ -2515,16 +2515,16 @@ impl Lua {
         push_table(state, 0, metatable_nrec as c_int, true)?;
         for (k, m) in methods.meta_methods {
             self.push_value(Value::Function(self.create_callback(m)?))?;
-            rawset_field(state, -2, k.validate()?.name())?;
+            rawset_field(state, -2, MetaMethod::validate(&k)?)?;
         }
         #[cfg(feature = "async")]
         for (k, m) in methods.async_meta_methods {
             self.push_value(Value::Function(self.create_async_callback(m)?))?;
-            rawset_field(state, -2, k.validate()?.name())?;
+            rawset_field(state, -2, MetaMethod::validate(&k)?)?;
         }
         for (k, f) in fields.meta_fields {
             self.push_value(f(self)?)?;
-            rawset_field(state, -2, k.validate()?.name())?;
+            rawset_field(state, -2, MetaMethod::validate(&k)?)?;
         }
         let metatable_index = ffi::lua_absindex(state, -1);
 

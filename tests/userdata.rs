@@ -543,7 +543,7 @@ fn test_metatable() -> Result<()> {
         fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
             methods.add_function("my_type_name", |_, data: AnyUserData| {
                 let metatable = data.get_metatable()?;
-                metatable.get::<_, String>("__type_name")
+                metatable.get::<String>("__type_name")
             });
         }
     }
@@ -561,7 +561,7 @@ fn test_metatable() -> Result<()> {
     let ud: AnyUserData = globals.get("ud")?;
     let metatable = ud.get_metatable()?;
 
-    match metatable.get::<_, Value>("__gc") {
+    match metatable.get::<Value>("__gc") {
         Ok(_) => panic!("expected MetaMethodRestricted, got no error"),
         Err(Error::MetaMethodRestricted(_)) => {}
         Err(e) => panic!("expected MetaMethodRestricted, got {:?}", e),
@@ -575,11 +575,10 @@ fn test_metatable() -> Result<()> {
 
     let mut methods = metatable
         .pairs()
-        .into_iter()
         .map(|kv: Result<(_, Value)>| Ok(kv?.0))
         .collect::<Result<Vec<_>>>()?;
-    methods.sort_by_cached_key(|k| k.name().to_owned());
-    assert_eq!(methods, vec![MetaMethod::Index, "__type_name".into()]);
+    methods.sort();
+    assert_eq!(methods, vec!["__index", "__type_name"]);
 
     #[derive(Copy, Clone)]
     struct MyUserData2(i64);
