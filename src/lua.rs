@@ -103,13 +103,13 @@ pub(crate) struct ExtraData {
     ref_stack_top: c_int,
     ref_free: Vec<c_int>,
 
-    // Cache of `WrappedFailure` enums on the ref thread (as userdata)
-    wrapped_failures_cache: Vec<c_int>,
+    // Pool of `WrappedFailure` enums in the ref thread (as userdata)
+    wrapped_failure_pool: Vec<c_int>,
     // Pool of `MultiValue` containers
     multivalue_pool: Vec<MultiValue<'static>>,
-    // Cache of recycled `Thread`s (coroutines)
+    // Pool of `Thread`s (coroutines) for async execution
     #[cfg(feature = "async")]
-    recycled_thread_cache: Vec<c_int>,
+    thread_pool: Vec<c_int>,
 
     // Address of `WrappedFailure` metatable
     wrapped_failure_mt_ptr: *const c_void,
@@ -172,17 +172,17 @@ pub struct LuaOptions {
     /// [`xpcall`]: https://www.lua.org/manual/5.4/manual.html#pdf-xpcall
     pub catch_rust_panics: bool,
 
-    /// Max size of thread (coroutine) object cache used to execute asynchronous functions.
+    /// Max size of thread (coroutine) object pool used to execute asynchronous functions.
     ///
     /// It works on Lua 5.4, LuaJIT (vendored) and Luau, where [`lua_resetthread`] function
-    /// is available and allows to reuse old coroutines with reset state.
+    /// is available and allows to reuse old coroutines after resetting their state.
     ///
     /// Default: **0** (disabled)
     ///
     /// [`lua_resetthread`]: https://www.lua.org/manual/5.4/manual.html#lua_resetthread
     #[cfg(feature = "async")]
     #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
-    pub thread_cache_size: usize,
+    pub thread_pool_size: usize,
 }
 
 impl Default for LuaOptions {
@@ -197,7 +197,7 @@ impl LuaOptions {
         LuaOptions {
             catch_rust_panics: true,
             #[cfg(feature = "async")]
-            thread_cache_size: 0,
+            thread_pool_size: 0,
         }
     }
 
@@ -210,14 +210,14 @@ impl LuaOptions {
         self
     }
 
-    /// Sets [`thread_cache_size`] option.
+    /// Sets [`thread_pool_size`] option.
     ///
-    /// [`thread_cache_size`]: #structfield.thread_cache_size
+    /// [`thread_pool_size`]: #structfield.thread_pool_size
     #[cfg(feature = "async")]
     #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
     #[must_use]
-    pub const fn thread_cache_size(mut self, size: usize) -> Self {
-        self.thread_cache_size = size;
+    pub const fn thread_pool_size(mut self, size: usize) -> Self {
+        self.thread_pool_size = size;
         self
     }
 }
@@ -226,7 +226,7 @@ impl LuaOptions {
 pub(crate) static ASYNC_POLL_PENDING: u8 = 0;
 pub(crate) static EXTRA_REGISTRY_KEY: u8 = 0;
 
-const WRAPPED_FAILURES_CACHE_SIZE: usize = 32;
+const WRAPPED_FAILURE_POOL_SIZE: usize = 64;
 const MULTIVALUE_POOL_SIZE: usize = 64;
 
 /// Requires `feature = "send"`
@@ -239,9 +239,9 @@ impl Drop for LuaInner {
     fn drop(&mut self) {
         unsafe {
             let extra = &mut *self.extra.get();
-            let drain_iter = extra.wrapped_failures_cache.drain(..);
+            let drain_iter = extra.wrapped_failure_pool.drain(..);
             #[cfg(feature = "async")]
-            let drain_iter = drain_iter.chain(extra.recycled_thread_cache.drain(..));
+            let drain_iter = drain_iter.chain(extra.thread_pool.drain(..));
             for index in drain_iter {
                 ffi::lua_pushnil(extra.ref_thread);
                 ffi::lua_replace(extra.ref_thread, index);
@@ -455,13 +455,14 @@ impl Lua {
         ffi::lua_pop(state, 1);
 
         let lua = Lua::init_from_ptr(state);
-        (*lua.extra.get()).mem_info = NonNull::new(mem_info);
+        let extra = lua.extra.get();
+        (*extra).mem_info = NonNull::new(mem_info);
 
         mlua_expect!(
             load_from_std_lib(state, libs),
             "Error during loading standard libraries"
         );
-        (*lua.extra.get()).libs |= libs;
+        (*extra).libs |= libs;
 
         if !options.catch_rust_panics {
             mlua_expect!(
@@ -486,9 +487,8 @@ impl Lua {
         }
 
         #[cfg(feature = "async")]
-        if options.thread_cache_size > 0 {
-            (*lua.extra.get()).recycled_thread_cache =
-                Vec::with_capacity(options.thread_cache_size);
+        if options.thread_pool_size > 0 {
+            (*extra).thread_pool.reserve_exact(options.thread_pool_size);
         }
 
         #[cfg(feature = "luau")]
@@ -582,10 +582,10 @@ impl Lua {
             ref_stack_size: ffi::LUA_MINSTACK - 1,
             ref_stack_top,
             ref_free: Vec::new(),
-            wrapped_failures_cache: Vec::with_capacity(WRAPPED_FAILURES_CACHE_SIZE),
+            wrapped_failure_pool: Vec::with_capacity(WRAPPED_FAILURE_POOL_SIZE),
             multivalue_pool: Vec::with_capacity(MULTIVALUE_POOL_SIZE),
             #[cfg(feature = "async")]
-            recycled_thread_cache: Vec::new(),
+            thread_pool: Vec::new(),
             wrapped_failure_mt_ptr,
             #[cfg(feature = "async")]
             ref_waker_idx,
@@ -1685,9 +1685,8 @@ impl Lua {
             let _sg = StackGuard::new(state);
             check_stack(state, 1)?;
 
-            if let Some(index) = (*self.extra.get()).recycled_thread_cache.pop() {
-                let ref_thread = (*self.extra.get()).ref_thread;
-                let thread_state = ffi::lua_tothread(ref_thread, index);
+            if let Some(index) = (*self.extra.get()).thread_pool.pop() {
+                let thread_state = ffi::lua_tothread(self.ref_thread(), index);
                 self.push_ref(&func.0);
                 ffi::lua_xmove(state, thread_state, 1);
 
@@ -1704,7 +1703,7 @@ impl Lua {
         self.create_thread(func)
     }
 
-    /// Resets thread (coroutine) and returns to the cache for later use.
+    /// Resets thread (coroutine) and returns to the pool for later use.
     #[cfg(feature = "async")]
     #[cfg(any(
         feature = "lua54",
@@ -1713,7 +1712,7 @@ impl Lua {
     ))]
     pub(crate) unsafe fn recycle_thread(&self, thread: &mut Thread) -> bool {
         let extra = &mut *self.extra.get();
-        if extra.recycled_thread_cache.len() < extra.recycled_thread_cache.capacity() {
+        if extra.thread_pool.len() < extra.thread_pool.capacity() {
             let thread_state = ffi::lua_tothread(extra.ref_thread, thread.0.index);
             #[cfg(feature = "lua54")]
             let status = ffi::lua_resetthread(thread_state);
@@ -1726,7 +1725,7 @@ impl Lua {
             ffi::lua_resetthread(self.state(), thread_state);
             #[cfg(feature = "luau")]
             ffi::lua_resetthread(thread_state);
-            extra.recycled_thread_cache.push(thread.0.index);
+            extra.thread_pool.push(thread.0.index);
             thread.0.drop = false;
             return true;
         }
@@ -3058,7 +3057,7 @@ pub(crate) fn init_metatable_cache(cache: &mut FxHashMap<TypeId, u8>) {
 }
 
 // An optimized version of `callback_error` that does not allocate `WrappedFailure` userdata
-// and instead reuses unsed and cached values from previous calls (or allocates new).
+// and instead reuses unsed values from previous calls (or allocates new).
 unsafe fn callback_error_ext<F, R>(state: *mut ffi::lua_State, extra: *mut ExtraData, f: F) -> R
 where
     F: FnOnce(c_int) -> Result<R>,
@@ -3073,7 +3072,7 @@ where
     // We need 2 extra stack spaces to store userdata and error/panic metatable.
     // Luau workaround can be removed after solving https://github.com/Roblox/luau/issues/446
     // Also see #142 and #153
-    if !cfg!(feature = "luau") || (*extra).wrapped_failures_cache.is_empty() {
+    if !cfg!(feature = "luau") || (*extra).wrapped_failure_pool.is_empty() {
         let extra_stack = if nargs < 2 { 2 - nargs } else { 1 };
         ffi::luaL_checkstack(
             state,
@@ -3084,13 +3083,13 @@ where
 
     enum PreallocatedFailure {
         New(*mut WrappedFailure),
-        Cached(i32),
+        Existing(i32),
     }
 
     // We cannot shadow Rust errors with Lua ones, so we need to obtain pre-allocated memory
     // to store a wrapped failure (error or panic) *before* we proceed.
-    let prealloc_failure = match (*extra).wrapped_failures_cache.pop() {
-        Some(index) => PreallocatedFailure::Cached(index),
+    let prealloc_failure = match (*extra).wrapped_failure_pool.pop() {
+        Some(index) => PreallocatedFailure::Existing(index),
         None => {
             let ud = WrappedFailure::new_userdata(state);
             ffi::lua_rotate(state, 1, 1);
@@ -3103,7 +3102,7 @@ where
             ffi::lua_settop(state, 1);
             ud
         }
-        PreallocatedFailure::Cached(index) => {
+        PreallocatedFailure::Existing(index) => {
             ffi::lua_settop(state, 0);
             #[cfg(feature = "luau")]
             assert_stack(state, 2);
@@ -3118,28 +3117,26 @@ where
 
     match catch_unwind(AssertUnwindSafe(|| f(nargs))) {
         Ok(Ok(r)) => {
-            // Return unused WrappedFailure to the cache
+            // Return unused `WrappedFailure` to the pool
             match prealloc_failure {
-                PreallocatedFailure::New(_)
-                    if (*extra).wrapped_failures_cache.len() < WRAPPED_FAILURES_CACHE_SIZE =>
-                {
-                    ffi::lua_rotate(state, 1, -1);
-                    ffi::lua_xmove(state, ref_thread, 1);
-                    let index = ref_stack_pop(&mut *extra);
-                    (*extra).wrapped_failures_cache.push(index);
-                }
                 PreallocatedFailure::New(_) => {
-                    ffi::lua_remove(state, 1);
+                    if (*extra).wrapped_failure_pool.len() < WRAPPED_FAILURE_POOL_SIZE {
+                        ffi::lua_rotate(state, 1, -1);
+                        ffi::lua_xmove(state, ref_thread, 1);
+                        let index = ref_stack_pop(&mut *extra);
+                        (*extra).wrapped_failure_pool.push(index);
+                    } else {
+                        ffi::lua_remove(state, 1);
+                    }
                 }
-                PreallocatedFailure::Cached(index)
-                    if (*extra).wrapped_failures_cache.len() < WRAPPED_FAILURES_CACHE_SIZE =>
-                {
-                    (*extra).wrapped_failures_cache.push(index);
-                }
-                PreallocatedFailure::Cached(index) => {
-                    ffi::lua_pushnil(ref_thread);
-                    ffi::lua_replace(ref_thread, index);
-                    (*extra).ref_free.push(index);
+                PreallocatedFailure::Existing(index) => {
+                    if (*extra).wrapped_failure_pool.len() < WRAPPED_FAILURE_POOL_SIZE {
+                        (*extra).wrapped_failure_pool.push(index);
+                    } else {
+                        ffi::lua_pushnil(ref_thread);
+                        ffi::lua_replace(ref_thread, index);
+                        (*extra).ref_free.push(index);
+                    }
                 }
             }
             r

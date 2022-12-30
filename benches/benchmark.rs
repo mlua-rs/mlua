@@ -120,7 +120,7 @@ fn call_sum_callback(c: &mut Criterion) {
 }
 
 fn call_async_sum_callback(c: &mut Criterion) {
-    let options = LuaOptions::new().thread_cache_size(1024);
+    let options = LuaOptions::new().thread_pool_size(1024);
     let lua = Lua::new_with(LuaStdLib::ALL_SAFE, options).unwrap();
     let callback = lua
         .create_async_function(|_, (a, b, c): (i64, i64, i64)| async move {
@@ -272,7 +272,7 @@ fn call_async_userdata_method(c: &mut Criterion) {
         }
     }
 
-    let options = LuaOptions::new().thread_cache_size(1024);
+    let options = LuaOptions::new().thread_pool_size(1024);
     let lua = Lua::new_with(LuaStdLib::ALL_SAFE, options).unwrap();
     lua.globals().set("userdata", UserData(10)).unwrap();
 

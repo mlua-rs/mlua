@@ -277,7 +277,7 @@ async fn test_async_thread() -> Result<()> {
 
 #[tokio::test]
 async fn test_async_table() -> Result<()> {
-    let options = LuaOptions::new().thread_cache_size(4);
+    let options = LuaOptions::new().thread_pool_size(4);
     let lua = Lua::new_with(StdLib::ALL_SAFE, options)?;
 
     let table = lua.create_table()?;
@@ -325,8 +325,8 @@ async fn test_async_table() -> Result<()> {
 }
 
 #[tokio::test]
-async fn test_async_thread_cache() -> Result<()> {
-    let options = LuaOptions::new().thread_cache_size(4);
+async fn test_async_thread_pool() -> Result<()> {
+    let options = LuaOptions::new().thread_pool_size(4);
     let lua = Lua::new_with(StdLib::ALL_SAFE, options)?;
 
     let error_f = lua.create_async_function(|_, ()| async move {
