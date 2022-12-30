@@ -11,7 +11,7 @@ use crate::value::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, MultiValue, Nil
 impl<'lua, T: IntoLua<'lua>, E: IntoLua<'lua>> IntoLuaMulti<'lua> for StdResult<T, E> {
     #[inline]
     fn into_lua_multi(self, lua: &'lua Lua) -> Result<MultiValue<'lua>> {
-        let mut result = MultiValue::new_or_cached(lua);
+        let mut result = MultiValue::new_or_pooled(lua);
         match self {
             Ok(v) => result.push_front(v.into_lua(lua)?),
             Err(e) => {
@@ -26,7 +26,7 @@ impl<'lua, T: IntoLua<'lua>, E: IntoLua<'lua>> IntoLuaMulti<'lua> for StdResult<
 impl<'lua, T: IntoLua<'lua>> IntoLuaMulti<'lua> for T {
     #[inline]
     fn into_lua_multi(self, lua: &'lua Lua) -> Result<MultiValue<'lua>> {
-        let mut v = MultiValue::new_or_cached(lua);
+        let mut v = MultiValue::new_or_pooled(lua);
         v.push_front(self.into_lua(lua)?);
         Ok(v)
     }
@@ -36,7 +36,7 @@ impl<'lua, T: FromLua<'lua>> FromLuaMulti<'lua> for T {
     #[inline]
     fn from_lua_multi(mut values: MultiValue<'lua>, lua: &'lua Lua) -> Result<Self> {
         let res = T::from_lua(values.pop_front().unwrap_or(Nil), lua);
-        lua.cache_multivalue(values);
+        MultiValue::return_to_pool(values, lua);
         res
     }
 }
@@ -129,7 +129,7 @@ impl<T> DerefMut for Variadic<T> {
 impl<'lua, T: IntoLua<'lua>> IntoLuaMulti<'lua> for Variadic<T> {
     #[inline]
     fn into_lua_multi(self, lua: &'lua Lua) -> Result<MultiValue<'lua>> {
-        let mut values = MultiValue::new_or_cached(lua);
+        let mut values = MultiValue::new_or_pooled(lua);
         values.refill(self.0.into_iter().map(|e| e.into_lua(lua)))?;
         Ok(values)
     }
@@ -143,7 +143,7 @@ impl<'lua, T: FromLua<'lua>> FromLuaMulti<'lua> for Variadic<T> {
             .map(|e| T::from_lua(e, lua))
             .collect::<Result<Vec<T>>>()
             .map(Variadic);
-        lua.cache_multivalue(values);
+        MultiValue::return_to_pool(values, lua);
         res
     }
 }
@@ -153,14 +153,14 @@ macro_rules! impl_tuple {
         impl<'lua> IntoLuaMulti<'lua> for () {
             #[inline]
             fn into_lua_multi(self, lua: &'lua Lua) -> Result<MultiValue<'lua>> {
-                Ok(MultiValue::new_or_cached(lua))
+                Ok(MultiValue::new_or_pooled(lua))
             }
         }
 
         impl<'lua> FromLuaMulti<'lua> for () {
             #[inline]
             fn from_lua_multi(values: MultiValue<'lua>, lua: &'lua Lua) -> Result<Self> {
-                lua.cache_multivalue(values);
+                MultiValue::return_to_pool(values, lua);
                 Ok(())
             }
         }

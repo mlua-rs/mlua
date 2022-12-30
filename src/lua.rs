@@ -105,8 +105,8 @@ pub(crate) struct ExtraData {
 
     // Cache of `WrappedFailure` enums on the ref thread (as userdata)
     wrapped_failures_cache: Vec<c_int>,
-    // Cache of recycled `MultiValue` containers
-    multivalue_cache: Vec<MultiValue<'static>>,
+    // Pool of `MultiValue` containers
+    multivalue_pool: Vec<MultiValue<'static>>,
     // Cache of recycled `Thread`s (coroutines)
     #[cfg(feature = "async")]
     recycled_thread_cache: Vec<c_int>,
@@ -227,7 +227,7 @@ pub(crate) static ASYNC_POLL_PENDING: u8 = 0;
 pub(crate) static EXTRA_REGISTRY_KEY: u8 = 0;
 
 const WRAPPED_FAILURES_CACHE_SIZE: usize = 32;
-const MULTIVALUE_CACHE_SIZE: usize = 32;
+const MULTIVALUE_POOL_SIZE: usize = 64;
 
 /// Requires `feature = "send"`
 #[cfg(feature = "send")]
@@ -583,7 +583,7 @@ impl Lua {
             ref_stack_top,
             ref_free: Vec::new(),
             wrapped_failures_cache: Vec::with_capacity(WRAPPED_FAILURES_CACHE_SIZE),
-            multivalue_cache: Vec::with_capacity(MULTIVALUE_CACHE_SIZE),
+            multivalue_pool: Vec::with_capacity(MULTIVALUE_POOL_SIZE),
             #[cfg(feature = "async")]
             recycled_thread_cache: Vec::new(),
             wrapped_failure_mt_ptr,
@@ -2670,7 +2670,7 @@ impl Lua {
                 let lua: &Lua = mem::transmute((*extra).inner.as_ref().unwrap());
                 let _guard = StateGuard::new(&lua.0, state);
 
-                let mut args = MultiValue::new_or_cached(lua);
+                let mut args = MultiValue::new_or_pooled(lua);
                 args.reserve(nargs as usize);
                 for _ in 0..nargs {
                     args.push_front(lua.pop_value());
@@ -2684,7 +2684,7 @@ impl Lua {
                 for r in results.drain_all() {
                     lua.push_value(r)?;
                 }
-                lua.cache_multivalue(results);
+                MultiValue::return_to_pool(results, lua);
 
                 Ok(nresults)
             })
@@ -2752,7 +2752,7 @@ impl Lua {
                 let lua: &Lua = mem::transmute((*extra).inner.as_ref().unwrap());
                 let _guard = StateGuard::new(&lua.0, state);
 
-                let mut args = MultiValue::new_or_cached(lua);
+                let mut args = MultiValue::new_or_pooled(lua);
                 args.reserve(nargs as usize);
                 for _ in 0..nargs {
                     args.push_front(lua.pop_value());
@@ -2972,25 +2972,6 @@ impl Lua {
     }
 
     #[inline]
-    pub(crate) fn new_or_cached_multivalue(&self) -> MultiValue {
-        unsafe {
-            let extra = &mut *self.extra.get();
-            extra.multivalue_cache.pop().unwrap_or_default()
-        }
-    }
-
-    #[inline]
-    pub(crate) fn cache_multivalue(&self, mut multivalue: MultiValue) {
-        unsafe {
-            let extra = &mut *self.extra.get();
-            if extra.multivalue_cache.len() < MULTIVALUE_CACHE_SIZE {
-                multivalue.clear();
-                extra.multivalue_cache.push(mem::transmute(multivalue));
-            }
-        }
-    }
-
-    #[inline]
     pub(crate) unsafe fn unlikely_memory_error(&self) -> bool {
         // MemoryInfo is empty in module mode so we cannot predict memory limits
         (*self.extra.get())
@@ -3009,6 +2990,23 @@ impl LuaInner {
     #[inline(always)]
     pub(crate) fn ref_thread(&self) -> *mut ffi::lua_State {
         unsafe { (*self.extra.get()).ref_thread }
+    }
+
+    #[inline]
+    pub(crate) fn new_multivalue_from_pool(&self) -> MultiValue {
+        let extra = unsafe { &mut *self.extra.get() };
+        extra.multivalue_pool.pop().unwrap_or_default()
+    }
+
+    #[inline]
+    pub(crate) fn return_multivalue_to_pool(&self, mut multivalue: MultiValue) {
+        let extra = unsafe { &mut *self.extra.get() };
+        if extra.multivalue_pool.len() < MULTIVALUE_POOL_SIZE {
+            multivalue.clear();
+            extra
+                .multivalue_pool
+                .push(unsafe { mem::transmute(multivalue) });
+        }
     }
 }
 

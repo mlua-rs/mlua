@@ -203,8 +203,14 @@ impl<'lua> MultiValue<'lua> {
 
     /// Similar to `new` but can return previously used container with allocated capacity.
     #[inline]
-    pub(crate) fn new_or_cached(lua: &'lua Lua) -> MultiValue<'lua> {
-        lua.new_or_cached_multivalue()
+    pub(crate) fn new_or_pooled(lua: &'lua Lua) -> MultiValue<'lua> {
+        lua.new_multivalue_from_pool()
+    }
+
+    /// Clears and returns previously allocated multivalue container to the pool.
+    #[inline]
+    pub(crate) fn return_to_pool(multivalue: Self, lua: &Lua) {
+        lua.return_multivalue_to_pool(multivalue);
     }
 }
 
