@@ -153,6 +153,53 @@ fn test_table_push_pop() -> Result<()> {
 }
 
 #[test]
+fn test_table_clear() -> Result<()> {
+    let lua = Lua::new();
+
+    // Check readonly error
+    #[cfg(feature = "luau")]
+    {
+        let t = lua.create_table()?;
+        t.set_readonly(true);
+        assert!(matches!(
+            t.clear(),
+            Err(Error::RuntimeError(err)) if err.contains("attempt to modify a readonly table")
+        ));
+    }
+
+    let t = lua.create_table()?;
+    // Set array and hash parts
+    t.push("abc")?;
+    t.push("bcd")?;
+    t.set("a", "1")?;
+    t.set("b", "2")?;
+    t.clear()?;
+    assert_eq!(t.len()?, 0);
+    assert_eq!(t.pairs::<Value, Value>().count(), 0);
+
+    // Test table with metamethods
+    let t2 = lua
+        .load(
+            r#"
+        setmetatable({1, 2, 3, a = "1"}, {
+            __index = function() error("index error") end,
+            __newindex = function() error("newindex error") end,
+            __len = function() error("len error") end,
+            __pairs = function() error("pairs error") end,
+        })
+    "#,
+        )
+        .eval::<Table>()?;
+    assert_eq!(t2.raw_len(), 3);
+    t2.clear()?;
+    assert_eq!(t2.raw_len(), 0);
+    assert_eq!(t2.raw_get::<_, Value>("a")?, Value::Nil);
+    assert_ne!(t2.get_metatable(), None);
+
+    Ok(())
+}
+
+#[test]
 fn test_table_sequence_from() -> Result<()> {
     let lua = Lua::new();
 

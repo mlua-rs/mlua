@@ -414,6 +414,47 @@ impl<'lua> Table<'lua> {
         }
     }
 
+    /// Clears the table, removing all keys and values from array and hash parts,
+    /// without invoking metamethods.
+    ///
+    /// This method is useful to clear the table while keeping its capacity.
+    pub fn clear(&self) -> Result<()> {
+        #[cfg(feature = "luau")]
+        self.check_readonly_write()?;
+
+        let lua = self.0.lua;
+        unsafe {
+            #[cfg(feature = "luau")]
+            ffi::lua_cleartable(lua.ref_thread(), self.0.index);
+
+            #[cfg(not(feature = "luau"))]
+            {
+                let state = lua.state();
+                check_stack(state, 4)?;
+
+                lua.push_ref(&self.0);
+
+                // Clear array part
+                for i in 1..=ffi::lua_rawlen(state, -1) {
+                    ffi::lua_pushnil(state);
+                    ffi::lua_rawseti(state, -2, i as Integer);
+                }
+
+                // Clear hash part
+                // It must be safe as long as we don't use invalid keys
+                ffi::lua_pushnil(state);
+                while ffi::lua_next(state, -2) != 0 {
+                    ffi::lua_pop(state, 1); // pop value
+                    ffi::lua_pushvalue(state, -1); // copy key
+                    ffi::lua_pushnil(state);
+                    ffi::lua_rawset(state, -4);
+                }
+            }
+        }
+
+        Ok(())
+    }
+
     /// Returns the result of the Lua `#` operator.
     ///
     /// This might invoke the `__len` metamethod. Use the [`raw_len`] method if that is not desired.
