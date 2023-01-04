@@ -17,6 +17,8 @@
 [Benchmarks]: https://github.com/khvzak/script-bench-rs
 [FAQ]: FAQ.md
 
+> Please see the [v0.8](https://github.com/khvzak/mlua/tree/v0.8) branch for the versions of `mlua` released to crates.io.
+
 `mlua` is bindings to [Lua](https://www.lua.org) programming language for Rust with a goal to provide
 _safe_ (as far as it's possible), high level, easy to use, practical and flexible API.
 
