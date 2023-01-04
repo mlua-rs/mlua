@@ -1,3 +1,10 @@
+## v0.8.7
+
+- Minimum Luau updated to 0.555 (`LUAI_MAXCSTACK` limit increased to 100000)
+- `_VERSION` in Luau now includes version number
+- Fixed lifetime of `DebugNames` in `Debug::names()` and `DebugSource` in `Debug::source()`
+- Fixed subtraction overflow when calculating index for `MultiValue::get()`
+
 ## v0.8.6
 
 - Fixed bug when recycled Registry slot can be set to Nil
