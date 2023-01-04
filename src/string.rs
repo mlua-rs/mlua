@@ -2,7 +2,7 @@ use std::borrow::{Borrow, Cow};
 use std::hash::{Hash, Hasher};
 use std::os::raw::c_void;
 use std::string::String as StdString;
-use std::{slice, str};
+use std::{fmt, slice, str};
 
 #[cfg(feature = "serialize")]
 use {
@@ -17,7 +17,7 @@ use crate::types::LuaRef;
 /// Handle to an internal Lua string.
 ///
 /// Unlike Rust strings, Lua strings may not be valid UTF-8.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct String<'lua>(pub(crate) LuaRef<'lua>);
 
 impl<'lua> String<'lua> {
@@ -121,6 +121,35 @@ impl<'lua> String<'lua> {
     pub fn to_pointer(&self) -> *const c_void {
         let ref_thread = self.0.lua.ref_thread();
         unsafe { ffi::lua_topointer(ref_thread, self.0.index) }
+    }
+}
+
+impl<'lua> fmt::Debug for String<'lua> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let bytes = self.as_bytes();
+        // Check if the string is valid utf8
+        if let Ok(s) = str::from_utf8(bytes) {
+            return s.fmt(f);
+        }
+
+        // Format as bytes
+        write!(f, "b\"")?;
+        for &b in bytes {
+            // https://doc.rust-lang.org/reference/tokens.html#byte-escapes
+            match b {
+                b'\n' => write!(f, "\\n")?,
+                b'\r' => write!(f, "\\r")?,
+                b'\t' => write!(f, "\\t")?,
+                b'\\' | b'"' => write!(f, "\\{}", b as char)?,
+                b'\0' => write!(f, "\\0")?,
+                // ASCII printable
+                0x20..=0x7e => write!(f, "{}", b as char)?,
+                _ => write!(f, "\\x{b:02x}")?,
+            }
+        }
+        write!(f, "\"")?;
+
+        Ok(())
     }
 }
 

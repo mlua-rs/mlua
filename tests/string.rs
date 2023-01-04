@@ -83,3 +83,18 @@ fn test_string_hash() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn test_string_debug() -> Result<()> {
+    let lua = Lua::new();
+
+    // Valid utf8
+    let s = lua.create_string("hello")?;
+    assert_eq!(format!("{s:?}"), r#""hello""#);
+
+    // Invalid utf8
+    let s = lua.create_string(b"hello\0world\r\n\t\xF0\x90\x80")?;
+    assert_eq!(format!("{s:?}"), r#"b"hello\0world\r\n\t\xf0\x90\x80""#);
+
+    Ok(())
+}
