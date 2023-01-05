@@ -1,6 +1,7 @@
 #![cfg(feature = "serialize")]
 
 use std::collections::HashMap;
+use std::error::Error as StdError;
 
 use mlua::{
     DeserializeOptions, Error, Lua, LuaSerdeExt, Result as LuaResult, SerializeOptions, UserData,
@@ -9,7 +10,7 @@ use mlua::{
 use serde::{Deserialize, Serialize};
 
 #[test]
-fn test_serialize() -> Result<(), Box<dyn std::error::Error>> {
+fn test_serialize() -> Result<(), Box<dyn StdError>> {
     #[derive(Serialize)]
     struct MyUserData(i64, String);
 
@@ -115,7 +116,7 @@ fn test_serialize_in_scope() -> LuaResult<()> {
 }
 
 #[test]
-fn test_serialize_failure() -> Result<(), Box<dyn std::error::Error>> {
+fn test_serialize_failure() -> Result<(), Box<dyn StdError>> {
     #[derive(Serialize)]
     struct MyUserData(i64);
 
@@ -146,7 +147,7 @@ fn test_serialize_failure() -> Result<(), Box<dyn std::error::Error>> {
 
 #[cfg(feature = "luau")]
 #[test]
-fn test_serialize_vector() -> Result<(), Box<dyn std::error::Error>> {
+fn test_serialize_vector() -> Result<(), Box<dyn StdError>> {
     let lua = Lua::new();
 
     let globals = lua.globals();
@@ -235,7 +236,7 @@ fn test_to_value_enum() -> LuaResult<()> {
 }
 
 #[test]
-fn test_to_value_with_options() -> Result<(), Box<dyn std::error::Error>> {
+fn test_to_value_with_options() -> Result<(), Box<dyn StdError>> {
     let lua = Lua::new();
     let globals = lua.globals();
     globals.set("null", lua.null())?;
@@ -305,7 +306,7 @@ fn test_to_value_with_options() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[test]
-fn test_from_value_nested_tables() -> Result<(), Box<dyn std::error::Error>> {
+fn test_from_value_nested_tables() -> Result<(), Box<dyn StdError>> {
     let lua = Lua::new();
 
     let value = lua
@@ -335,7 +336,7 @@ fn test_from_value_nested_tables() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[test]
-fn test_from_value_struct() -> Result<(), Box<dyn std::error::Error>> {
+fn test_from_value_struct() -> Result<(), Box<dyn StdError>> {
     let lua = Lua::new();
 
     #[derive(Deserialize, PartialEq, Debug)]
@@ -376,7 +377,7 @@ fn test_from_value_struct() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[test]
-fn test_from_value_newtype_struct() -> Result<(), Box<dyn std::error::Error>> {
+fn test_from_value_newtype_struct() -> Result<(), Box<dyn StdError>> {
     let lua = Lua::new();
 
     #[derive(Deserialize, PartialEq, Debug)]
@@ -389,7 +390,7 @@ fn test_from_value_newtype_struct() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[test]
-fn test_from_value_enum() -> Result<(), Box<dyn std::error::Error>> {
+fn test_from_value_enum() -> Result<(), Box<dyn StdError>> {
     let lua = Lua::new();
 
     #[derive(Deserialize, PartialEq, Debug)]
@@ -420,7 +421,7 @@ fn test_from_value_enum() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[test]
-fn test_from_value_enum_untagged() -> Result<(), Box<dyn std::error::Error>> {
+fn test_from_value_enum_untagged() -> Result<(), Box<dyn StdError>> {
     let lua = Lua::new();
     lua.globals().set("null", lua.null())?;
 
@@ -460,7 +461,7 @@ fn test_from_value_enum_untagged() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[test]
-fn test_from_value_with_options() -> Result<(), Box<dyn std::error::Error>> {
+fn test_from_value_with_options() -> Result<(), Box<dyn StdError>> {
     let lua = Lua::new();
 
     // Deny unsupported types by default
@@ -512,6 +513,65 @@ fn test_from_value_with_options() -> Result<(), Box<dyn std::error::Error>> {
     lua.load(r#"hello = "world""#).exec()?;
     let globals: Globals = lua.from_value_with(Value::Table(lua.globals()), options)?;
     assert_eq!(globals.hello, "world");
+
+    Ok(())
+}
+
+#[test]
+fn test_from_value_userdata() -> Result<(), Box<dyn StdError>> {
+    let lua = Lua::new();
+
+    // Tuple struct
+    #[derive(Serialize, Deserialize)]
+    struct MyUserData(i64, String);
+
+    impl UserData for MyUserData {}
+
+    let ud = lua.create_ser_userdata(MyUserData(123, "test userdata".into()))?;
+
+    match lua.from_value::<MyUserData>(Value::UserData(ud)) {
+        Ok(_) => {}
+        Err(err) => panic!("expected no errors, got {err:?}"),
+    };
+
+    // Newtype struct
+    #[derive(Serialize, Deserialize)]
+    struct NewtypeUserdata(String);
+
+    impl UserData for NewtypeUserdata {}
+
+    let ud = lua.create_ser_userdata(NewtypeUserdata("newtype userdata".into()))?;
+
+    match lua.from_value::<NewtypeUserdata>(Value::UserData(ud)) {
+        Ok(_) => {}
+        Err(err) => panic!("expected no errors, got {err:?}"),
+    };
+
+    // Option
+    #[derive(Serialize, Deserialize)]
+    struct UnitUserdata;
+
+    impl UserData for UnitUserdata {}
+
+    let ud = lua.create_ser_userdata(UnitUserdata)?;
+
+    match lua.from_value::<Option<()>>(Value::UserData(ud)) {
+        Ok(Some(_)) => {}
+        Ok(_) => panic!("expected `Some`, got `None`"),
+        Err(err) => panic!("expected no errors, got {err:?}"),
+    };
+
+    // Destructed userdata with skip option
+    let ud = lua.create_ser_userdata(NewtypeUserdata("newtype userdata".into()))?;
+    let _ = ud.take::<NewtypeUserdata>()?;
+
+    match lua.from_value_with::<()>(
+        Value::UserData(ud),
+        DeserializeOptions::new().deny_unsupported_types(false),
+    ) {
+        Ok(_) => {}
+        Err(err) => panic!("expected no errors, got {err:?}"),
+    };
 
     Ok(())
 }

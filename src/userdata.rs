@@ -1029,6 +1029,27 @@ impl<'lua> AnyUserData<'lua> {
         Ok(false)
     }
 
+    /// Returns true if this `AnyUserData` is serializable (eg. was created using `create_ser_userdata`).
+    #[cfg(feature = "serialize")]
+    pub(crate) fn is_serializable(&self) -> bool {
+        let lua = self.0.lua;
+        let state = lua.state();
+        let is_serializable = || unsafe {
+            let _sg = StackGuard::new(state);
+            check_stack(state, 2)?;
+
+            // Userdata can be unregistered or destructed
+            lua.push_userdata_ref(&self.0)?;
+
+            let ud = &*get_userdata::<UserDataCell<()>>(state, -1);
+            match &*ud.0.try_borrow().map_err(|_| Error::UserDataBorrowError)? {
+                UserDataWrapped::Default(_) => Result::Ok(false),
+                UserDataWrapped::Serializable(_) => Result::Ok(true),
+            }
+        };
+        is_serializable().unwrap_or(false)
+    }
+
     fn inspect<'a, T, F, R>(&'a self, func: F) -> Result<R>
     where
         T: UserData + 'static,

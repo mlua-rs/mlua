@@ -9,6 +9,7 @@ use serde::de::{self, IntoDeserializer};
 
 use crate::error::{Error, Result};
 use crate::table::{Table, TablePairs, TableSequence};
+use crate::userdata::AnyUserData;
 use crate::value::Value;
 
 /// A struct for deserializing Lua values into Rust values.
@@ -131,6 +132,9 @@ impl<'lua, 'de> serde::Deserializer<'de> for Deserializer<'lua> {
             Value::Table(ref t) if t.raw_len() > 0 || t.is_array() => self.deserialize_seq(visitor),
             Value::Table(_) => self.deserialize_map(visitor),
             Value::LightUserData(ud) if ud.0.is_null() => visitor.visit_none(),
+            Value::UserData(ud) if ud.is_serializable() => {
+                serde_userdata(ud, |value| value.deserialize_any(visitor))
+            }
             Value::Function(_)
             | Value::Thread(_)
             | Value::UserData(_)
@@ -163,8 +167,8 @@ impl<'lua, 'de> serde::Deserializer<'de> for Deserializer<'lua> {
     #[inline]
     fn deserialize_enum<V>(
         self,
-        _name: &str,
-        _variants: &'static [&'static str],
+        name: &'static str,
+        variants: &'static [&'static str],
         visitor: V,
     ) -> Result<V::Value>
     where
@@ -198,6 +202,9 @@ impl<'lua, 'de> serde::Deserializer<'de> for Deserializer<'lua> {
                 (variant, Some(value), Some(_guard))
             }
             Value::String(variant) => (variant.to_str()?.to_owned(), None, None),
+            Value::UserData(ud) if ud.is_serializable() => {
+                return serde_userdata(ud, |value| value.deserialize_enum(name, variants, visitor));
+            }
             _ => return Err(de::Error::custom("bad enum value")),
         };
 
@@ -243,6 +250,9 @@ impl<'lua, 'de> serde::Deserializer<'de> for Deserializer<'lua> {
                         &"fewer elements in the table",
                     ))
                 }
+            }
+            Value::UserData(ud) if ud.is_serializable() => {
+                serde_userdata(ud, |value| value.deserialize_seq(visitor))
             }
             value => Err(de::Error::invalid_type(
                 de::Unexpected::Other(value.type_name()),
@@ -299,6 +309,9 @@ impl<'lua, 'de> serde::Deserializer<'de> for Deserializer<'lua> {
                     ))
                 }
             }
+            Value::UserData(ud) if ud.is_serializable() => {
+                serde_userdata(ud, |value| value.deserialize_map(visitor))
+            }
             value => Err(de::Error::invalid_type(
                 de::Unexpected::Other(value.type_name()),
                 &"table",
@@ -320,11 +333,16 @@ impl<'lua, 'de> serde::Deserializer<'de> for Deserializer<'lua> {
     }
 
     #[inline]
-    fn deserialize_newtype_struct<V>(self, _name: &'static str, visitor: V) -> Result<V::Value>
+    fn deserialize_newtype_struct<V>(self, name: &'static str, visitor: V) -> Result<V::Value>
     where
         V: de::Visitor<'de>,
     {
-        visitor.visit_newtype_struct(self)
+        match self.value {
+            Value::UserData(ud) if ud.is_serializable() => {
+                serde_userdata(ud, |value| value.deserialize_newtype_struct(name, visitor))
+            }
+            _ => visitor.visit_newtype_struct(self),
+        }
     }
 
     serde::forward_to_deserialize_any! {
@@ -590,6 +608,7 @@ fn check_value_if_skip(
                 return Ok(true); // skip
             }
         }
+        Value::UserData(ud) if ud.is_serializable() => {}
         Value::Function(_)
         | Value::Thread(_)
         | Value::UserData(_)
@@ -602,4 +621,12 @@ fn check_value_if_skip(
         _ => {}
     }
     Ok(false) // do not skip
+}
+
+fn serde_userdata<V>(
+    ud: AnyUserData,
+    f: impl FnOnce(serde_value::Value) -> std::result::Result<V, serde_value::DeserializerError>,
+) -> Result<V> {
+    let value = serde_value::to_value(ud).map_err(|err| Error::SerializeError(err.to_string()))?;
+    f(value).map_err(|err| Error::DeserializeError(err.to_string()))
 }
