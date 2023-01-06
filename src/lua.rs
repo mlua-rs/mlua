@@ -437,7 +437,7 @@ impl Lua {
         let use_rust_allocator = !(cfg!(feature = "luajit") && cfg!(not(feature = "vendored")));
 
         let (state, mem_info) = if use_rust_allocator {
-            let mut mem_info = Box::into_raw(Box::new(MemoryInfo::default()));
+            let mut mem_info: *mut MemoryInfo = Box::into_raw(Box::default());
             let mut state = ffi::lua_newstate(allocator, mem_info as *mut c_void);
             // If state is null (it's possible for LuaJIT on non-x86 arch) then switch to Lua internal allocator
             if state.is_null() {
@@ -1076,7 +1076,7 @@ impl Lua {
                     "no warning callback set in warn_proc"
                 );
                 let msg = CStr::from_ptr(msg);
-                cb(&lua, msg, tocont != 0)
+                cb(lua, msg, tocont != 0)
             });
         }
 
