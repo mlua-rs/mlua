@@ -12,7 +12,7 @@ impl UserData for BodyReader {
         methods.add_async_function("read", |lua, reader: AnyUserData| async move {
             let mut reader = reader.borrow_mut::<Self>()?;
             if let Some(bytes) = reader.0.data().await {
-                let bytes = bytes.to_lua_err()?;
+                let bytes = bytes.into_lua_err()?;
                 return Some(lua.create_string(&bytes)).transpose();
             }
             Ok(None)
@@ -26,8 +26,8 @@ async fn main() -> Result<()> {
 
     let fetch_url = lua.create_async_function(|lua, uri: String| async move {
         let client = HyperClient::new();
-        let uri = uri.parse().to_lua_err()?;
-        let resp = client.get(uri).await.to_lua_err()?;
+        let uri = uri.parse().into_lua_err()?;
+        let resp = client.get(uri).await.into_lua_err()?;
 
         let lua_resp = lua.create_table()?;
         lua_resp.set("status", resp.status().as_u16())?;
@@ -37,7 +37,7 @@ async fn main() -> Result<()> {
             headers
                 .entry(key.as_str())
                 .or_insert(Vec::new())
-                .push(value.to_str().to_lua_err()?);
+                .push(value.to_str().into_lua_err()?);
         }
 
         lua_resp.set("headers", headers)?;

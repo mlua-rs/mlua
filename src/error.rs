@@ -306,25 +306,25 @@ impl Error {
 }
 
 pub trait ExternalError {
-    fn to_lua_err(self) -> Error;
+    fn into_lua_err(self) -> Error;
 }
 
 impl<E: Into<Box<dyn StdError + Send + Sync>>> ExternalError for E {
-    fn to_lua_err(self) -> Error {
+    fn into_lua_err(self) -> Error {
         Error::external(self)
     }
 }
 
 pub trait ExternalResult<T> {
-    fn to_lua_err(self) -> Result<T>;
+    fn into_lua_err(self) -> Result<T>;
 }
 
 impl<T, E> ExternalResult<T> for StdResult<T, E>
 where
     E: ExternalError,
 {
-    fn to_lua_err(self) -> Result<T> {
-        self.map_err(|e| e.to_lua_err())
+    fn into_lua_err(self) -> Result<T> {
+        self.map_err(|e| e.into_lua_err())
     }
 }
 

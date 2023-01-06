@@ -122,7 +122,7 @@ fn test_metamethods() -> Result<()> {
                 if index.to_str()? == "inner" {
                     Ok(data.0)
                 } else {
-                    Err("no such custom index".to_lua_err())
+                    Err("no such custom index".into_lua_err())
                 }
             });
             #[cfg(any(

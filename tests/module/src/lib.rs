@@ -35,5 +35,5 @@ fn rust_module2(lua: &Lua) -> LuaResult<LuaTable> {
 
 #[mlua::lua_module]
 fn rust_module_error(_: &Lua) -> LuaResult<LuaTable> {
-    Err("custom module error".to_lua_err())
+    Err("custom module error".into_lua_err())
 }

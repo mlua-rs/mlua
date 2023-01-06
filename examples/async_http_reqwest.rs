@@ -10,8 +10,8 @@ async fn main() -> Result<()> {
         let resp = reqwest::get(&uri)
             .await
             .and_then(|resp| resp.error_for_status())
-            .to_lua_err()?;
-        let json = resp.json::<serde_json::Value>().await.to_lua_err()?;
+            .into_lua_err()?;
+        let json = resp.json::<serde_json::Value>().await.into_lua_err()?;
         lua.to_value(&json)
     })?;
 

@@ -308,7 +308,7 @@ fn test_error() -> Result<()> {
     .exec()?;
 
     let rust_error_function =
-        lua.create_function(|_, ()| -> Result<()> { Err(TestError.to_lua_err()) })?;
+        lua.create_function(|_, ()| -> Result<()> { Err(TestError.into_lua_err()) })?;
     globals.set("rust_error_function", rust_error_function)?;
 
     let no_error = globals.get::<_, Function>("no_error")?;
@@ -506,7 +506,7 @@ fn test_result_conversions() -> Result<()> {
 
     let err = lua.create_function(|_, ()| {
         Ok(Err::<String, _>(
-            "only through failure can we succeed".to_lua_err(),
+            "only through failure can we succeed".into_lua_err(),
         ))
     })?;
     let ok = lua.create_function(|_, ()| Ok(Ok::<_, Error>("!".to_owned())))?;
