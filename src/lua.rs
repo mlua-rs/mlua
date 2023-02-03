@@ -30,7 +30,7 @@ use crate::types::{
     Number, RegistryKey,
 };
 use crate::userdata::{AnyUserData, MetaMethod, UserData, UserDataCell};
-use crate::userdata_impl::{StaticUserDataFields, StaticUserDataMethods, UserDataProxy};
+use crate::userdata_impl::{UserDataProxy, UserDataRegistrar};
 use crate::util::{
     self, assert_stack, callback_error, check_stack, get_destructed_userdata_metatable,
     get_gc_metatable, get_gc_userdata, get_main_state, get_userdata, init_error_registry,
@@ -1732,18 +1732,18 @@ impl Lua {
         false
     }
 
-    /// Create a Lua userdata object from a custom userdata type.
+    /// Creates a Lua userdata object from a custom userdata type.
     ///
-    /// All userdata instances of type `T` shares the same metatable.
+    /// All userdata instances of the same type `T` shares the same metatable.
     #[inline]
     pub fn create_userdata<T>(&self, data: T) -> Result<AnyUserData>
     where
-        T: 'static + MaybeSend + UserData,
+        T: UserData + MaybeSend + 'static,
     {
         unsafe { self.make_userdata(UserDataCell::new(data)) }
     }
 
-    /// Create a Lua userdata object from a custom serializable userdata type.
+    /// Creates a Lua userdata object from a custom serializable userdata type.
     ///
     /// Requires `feature = "serialize"`
     #[cfg(feature = "serialize")]
@@ -1751,9 +1751,58 @@ impl Lua {
     #[inline]
     pub fn create_ser_userdata<T>(&self, data: T) -> Result<AnyUserData>
     where
-        T: 'static + MaybeSend + UserData + Serialize,
+        T: UserData + Serialize + MaybeSend + 'static,
     {
         unsafe { self.make_userdata(UserDataCell::new_ser(data)) }
+    }
+
+    /// Creates a Lua userdata object from a custom Rust type.
+    ///
+    /// You can register the type using [`Lua::register_userdata_type()`] to add fields or methods
+    /// _before_ calling this method.
+    /// Otherwise, the userdata object will have an empty metatable.
+    ///
+    /// All userdata instances of the same type `T` shares the same metatable.
+    pub fn create_any_userdata<T>(&self, data: T) -> Result<AnyUserData>
+    where
+        T: MaybeSend + 'static,
+    {
+        unsafe {
+            self.make_userdata_with_metatable(UserDataCell::new(data), || {
+                // Check if userdata/metatable is already registered
+                let type_id = TypeId::of::<T>();
+                if let Some(&table_id) = (*self.extra.get()).registered_userdata.get(&type_id) {
+                    return Ok(table_id as Integer);
+                }
+
+                // Create empty metatable
+                let registry = UserDataRegistrar::new();
+                self.register_userdata_metatable::<T>(registry)
+            })
+        }
+    }
+
+    /// Registers a custom Rust type in Lua to use in userdata objects.
+    ///
+    /// This methods provides a way to add fields or methods to userdata objects of a type `T`.
+    pub fn register_userdata_type<T: 'static>(
+        &self,
+        f: impl FnOnce(&mut UserDataRegistrar<T>),
+    ) -> Result<()> {
+        let mut registry = UserDataRegistrar::new();
+        f(&mut registry);
+
+        unsafe {
+            // Deregister the type if it already registered
+            let type_id = TypeId::of::<T>();
+            if let Some(&table_id) = (*self.extra.get()).registered_userdata.get(&type_id) {
+                ffi::luaL_unref(self.state(), ffi::LUA_REGISTRYINDEX, table_id);
+            }
+
+            // Register the type
+            self.register_userdata_metatable(registry)?;
+            Ok(())
+        }
     }
 
     /// Create a Lua userdata "proxy" object from a custom userdata type.
@@ -2490,38 +2539,29 @@ impl Lua {
         LuaRef::new(self, index)
     }
 
-    unsafe fn push_userdata_metatable<T: UserData + 'static>(&self) -> Result<()> {
+    unsafe fn register_userdata_metatable<'lua, T: 'static>(
+        &'lua self,
+        registry: UserDataRegistrar<'lua, T>,
+    ) -> Result<Integer> {
         let state = self.state();
-
-        let type_id = TypeId::of::<T>();
-        if let Some(&table_id) = (*self.extra.get()).registered_userdata.get(&type_id) {
-            ffi::lua_rawgeti(state, ffi::LUA_REGISTRYINDEX, table_id as Integer);
-            return Ok(());
-        }
-
-        let _sg = StackGuard::new_extra(state, 1);
+        let _sg = StackGuard::new(state);
         check_stack(state, 13)?;
 
-        let mut fields = StaticUserDataFields::default();
-        let mut methods = StaticUserDataMethods::default();
-        T::add_fields(&mut fields);
-        T::add_methods(&mut methods);
-
         // Prepare metatable, add meta methods first and then meta fields
-        let metatable_nrec = methods.meta_methods.len() + fields.meta_fields.len();
+        let metatable_nrec = registry.meta_methods.len() + registry.meta_fields.len();
         #[cfg(feature = "async")]
-        let metatable_nrec = metatable_nrec + methods.async_meta_methods.len();
+        let metatable_nrec = metatable_nrec + registry.async_meta_methods.len();
         push_table(state, 0, metatable_nrec as c_int, true)?;
-        for (k, m) in methods.meta_methods {
+        for (k, m) in registry.meta_methods {
             self.push_value(Value::Function(self.create_callback(m)?))?;
             rawset_field(state, -2, MetaMethod::validate(&k)?)?;
         }
         #[cfg(feature = "async")]
-        for (k, m) in methods.async_meta_methods {
+        for (k, m) in registry.async_meta_methods {
             self.push_value(Value::Function(self.create_async_callback(m)?))?;
             rawset_field(state, -2, MetaMethod::validate(&k)?)?;
         }
-        for (k, f) in fields.meta_fields {
+        for (k, f) in registry.meta_fields {
             self.push_value(f(self)?)?;
             rawset_field(state, -2, MetaMethod::validate(&k)?)?;
         }
@@ -2530,10 +2570,10 @@ impl Lua {
         let mut extra_tables_count = 0;
 
         let mut field_getters_index = None;
-        let field_getters_nrec = fields.field_getters.len();
+        let field_getters_nrec = registry.field_getters.len();
         if field_getters_nrec > 0 {
             push_table(state, 0, field_getters_nrec as c_int, true)?;
-            for (k, m) in fields.field_getters {
+            for (k, m) in registry.field_getters {
                 self.push_value(Value::Function(self.create_callback(m)?))?;
                 rawset_field(state, -2, &k)?;
             }
@@ -2542,10 +2582,10 @@ impl Lua {
         }
 
         let mut field_setters_index = None;
-        let field_setters_nrec = fields.field_setters.len();
+        let field_setters_nrec = registry.field_setters.len();
         if field_setters_nrec > 0 {
             push_table(state, 0, field_setters_nrec as c_int, true)?;
-            for (k, m) in fields.field_setters {
+            for (k, m) in registry.field_setters {
                 self.push_value(Value::Function(self.create_callback(m)?))?;
                 rawset_field(state, -2, &k)?;
             }
@@ -2554,17 +2594,17 @@ impl Lua {
         }
 
         let mut methods_index = None;
-        let methods_nrec = methods.methods.len();
+        let methods_nrec = registry.methods.len();
         #[cfg(feature = "async")]
-        let methods_nrec = methods_nrec + methods.async_methods.len();
+        let methods_nrec = methods_nrec + registry.async_methods.len();
         if methods_nrec > 0 {
             push_table(state, 0, methods_nrec as c_int, true)?;
-            for (k, m) in methods.methods {
+            for (k, m) in registry.methods {
                 self.push_value(Value::Function(self.create_callback(m)?))?;
                 rawset_field(state, -2, &k)?;
             }
             #[cfg(feature = "async")]
-            for (k, m) in methods.async_methods {
+            for (k, m) in registry.async_methods {
                 self.push_value(Value::Function(self.create_async_callback(m)?))?;
                 rawset_field(state, -2, &k)?;
             }
@@ -2584,21 +2624,21 @@ impl Lua {
         ffi::lua_pop(state, extra_tables_count);
 
         let mt_ptr = ffi::lua_topointer(state, -1);
-        ffi::lua_pushvalue(state, -1);
         let id = protect_lua!(state, 1, 0, |state| {
             ffi::luaL_ref(state, ffi::LUA_REGISTRYINDEX)
         })?;
 
+        let type_id = TypeId::of::<T>();
         (*self.extra.get()).registered_userdata.insert(type_id, id);
         (*self.extra.get())
             .registered_userdata_mt
             .insert(mt_ptr, Some(type_id));
 
-        Ok(())
+        Ok(id as Integer)
     }
 
     #[inline]
-    pub(crate) unsafe fn register_userdata_metatable(
+    pub(crate) unsafe fn register_raw_userdata_metatable(
         &self,
         ptr: *const c_void,
         type_id: Option<TypeId>,
@@ -2609,7 +2649,7 @@ impl Lua {
     }
 
     #[inline]
-    pub(crate) unsafe fn deregister_userdata_metatable(&self, ptr: *const c_void) {
+    pub(crate) unsafe fn deregister_raw_userdata_metatable(&self, ptr: *const c_void) {
         (*self.extra.get()).registered_userdata_mt.remove(&ptr);
     }
 
@@ -2905,13 +2945,34 @@ impl Lua {
     where
         T: UserData + 'static,
     {
+        self.make_userdata_with_metatable(data, || {
+            // Check if userdata/metatable is already registered
+            let type_id = TypeId::of::<T>();
+            if let Some(&table_id) = (*self.extra.get()).registered_userdata.get(&type_id) {
+                return Ok(table_id as Integer);
+            }
+
+            // Create new metatable from UserData definition
+            let mut registry = UserDataRegistrar::new();
+            T::add_fields(&mut registry);
+            T::add_methods(&mut registry);
+
+            self.register_userdata_metatable(registry)
+        })
+    }
+
+    unsafe fn make_userdata_with_metatable<T>(
+        &self,
+        data: UserDataCell<T>,
+        get_metatable_id: impl FnOnce() -> Result<Integer>,
+    ) -> Result<AnyUserData> {
         let state = self.state();
         let _sg = StackGuard::new(state);
         check_stack(state, 3)?;
 
         // We push metatable first to ensure having correct metatable with `__gc` method
         ffi::lua_pushnil(state);
-        self.push_userdata_metatable::<T>()?;
+        ffi::lua_rawgeti(state, ffi::LUA_REGISTRYINDEX, get_metatable_id()?);
         let protect = !self.unlikely_memory_error();
         #[cfg(not(feature = "lua54"))]
         push_userdata(state, data, protect)?;

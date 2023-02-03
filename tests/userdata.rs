@@ -1,3 +1,4 @@
+use std::string::String as StdString;
 use std::sync::Arc;
 #[cfg(not(feature = "parking_lot"))]
 use std::sync::{Mutex, RwLock};
@@ -17,7 +18,7 @@ use mlua::{
 };
 
 #[test]
-fn test_user_data() -> Result<()> {
+fn test_userdata() -> Result<()> {
     struct UserData1(i64);
     struct UserData2(Box<i64>);
 
@@ -709,4 +710,33 @@ fn test_userdata_proxy() -> Result<()> {
     "#,
     )
     .exec()
+}
+
+#[test]
+fn test_any_userdata() -> Result<()> {
+    let lua = Lua::new();
+
+    lua.register_userdata_type::<StdString>(|reg| {
+        reg.add_method("get", |_, this, ()| Ok(this.clone()));
+        reg.add_method_mut("concat", |_, this, s: String| {
+            this.push_str(&s.to_string_lossy());
+            Ok(())
+        });
+    })?;
+
+    let ud = lua.create_any_userdata("hello".to_string())?;
+    assert_eq!(&*ud.borrow::<StdString>()?, "hello");
+
+    lua.globals().set("ud", ud)?;
+    lua.load(
+        r#"
+        assert(ud:get() == "hello")
+        ud:concat(", world")
+        assert(ud:get() == "hello, world")
+    "#,
+    )
+    .exec()
+    .unwrap();
+
+    Ok(())
 }

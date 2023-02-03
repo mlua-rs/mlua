@@ -47,7 +47,6 @@ pub unsafe fn check_stack(state: *mut ffi::lua_State, amount: c_int) -> Result<(
 pub struct StackGuard {
     state: *mut ffi::lua_State,
     top: c_int,
-    extra: c_int,
 }
 
 impl StackGuard {
@@ -59,17 +58,6 @@ impl StackGuard {
         StackGuard {
             state,
             top: ffi::lua_gettop(state),
-            extra: 0,
-        }
-    }
-
-    // Similar to `new`, but checks and keeps `extra` elements from top of the stack on Drop.
-    #[inline]
-    pub unsafe fn new_extra(state: *mut ffi::lua_State, extra: c_int) -> StackGuard {
-        StackGuard {
-            state,
-            top: ffi::lua_gettop(state),
-            extra,
         }
     }
 }
@@ -78,14 +66,11 @@ impl Drop for StackGuard {
     fn drop(&mut self) {
         unsafe {
             let top = ffi::lua_gettop(self.state);
-            if top < self.top + self.extra {
+            if top < self.top {
                 mlua_panic!("{} too many stack values popped", self.top - top)
             }
-            if top > self.top + self.extra {
-                if self.extra > 0 {
-                    ffi::lua_rotate(self.state, self.top + 1, self.extra);
-                }
-                ffi::lua_settop(self.state, self.top + self.extra);
+            if top > self.top {
+                ffi::lua_settop(self.state, self.top);
             }
         }
     }

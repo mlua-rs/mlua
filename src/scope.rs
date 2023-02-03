@@ -435,7 +435,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
             std::ptr::write(ud_ptr as _, UserDataCell::new(data));
             ffi::lua_setmetatable(state, -2);
             let ud = AnyUserData(lua.pop_ref());
-            lua.register_userdata_metatable(mt_ptr, None);
+            lua.register_raw_userdata_metatable(mt_ptr, None);
 
             #[cfg(any(feature = "lua51", feature = "luajit"))]
             let newtable = lua.create_table()?;
@@ -453,7 +453,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
                 ffi::lua_getmetatable(state, -1);
                 let mt_ptr = ffi::lua_topointer(state, -1);
                 ffi::lua_pop(state, 1);
-                ud.lua.deregister_userdata_metatable(mt_ptr);
+                ud.lua.deregister_raw_userdata_metatable(mt_ptr);
 
                 // Clear associated user values
                 #[cfg(feature = "lua54")]

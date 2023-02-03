@@ -234,7 +234,7 @@ impl AsRef<str> for MetaMethod {
 /// Method registry for [`UserData`] implementors.
 ///
 /// [`UserData`]: crate::UserData
-pub trait UserDataMethods<'lua, T: UserData> {
+pub trait UserDataMethods<'lua, T> {
     /// Add a regular method which accepts a `&T` as the first parameter.
     ///
     /// Regular methods are implemented by overriding the `__index` metamethod and returning the
@@ -427,7 +427,7 @@ pub trait UserDataMethods<'lua, T: UserData> {
 /// Field registry for [`UserData`] implementors.
 ///
 /// [`UserData`]: crate::UserData
-pub trait UserDataFields<'lua, T: UserData> {
+pub trait UserDataFields<'lua, T> {
     /// Add a regular field getter as a method which accepts a `&T` as the parameter.
     ///
     /// Regular field getters are implemented by overriding the `__index` metamethod and returning the
@@ -503,8 +503,8 @@ pub trait UserDataFields<'lua, T: UserData> {
 /// Trait for custom userdata types.
 ///
 /// By implementing this trait, a struct becomes eligible for use inside Lua code.
-/// Implementation of [`IntoLua`] is automatically provided, [`FromLua`] is implemented
-/// only for `T: UserData + Clone`.
+/// Implementation of [`IntoLua`] is automatically provided, [`FromLua`] needs to be implemented
+/// manually.
 ///
 ///
 /// # Examples
@@ -725,7 +725,7 @@ impl OwnedAnyUserData {
 
 impl<'lua> AnyUserData<'lua> {
     /// Checks whether the type of this userdata is `T`.
-    pub fn is<T: UserData + 'static>(&self) -> bool {
+    pub fn is<T: 'static>(&self) -> bool {
         match self.inspect(|_: &UserDataCell<T>| Ok(())) {
             Ok(()) => true,
             Err(Error::UserDataTypeMismatch) => false,
@@ -740,7 +740,7 @@ impl<'lua> AnyUserData<'lua> {
     /// Returns a `UserDataBorrowError` if the userdata is already mutably borrowed. Returns a
     /// `UserDataTypeMismatch` if the userdata is not of type `T`.
     #[inline]
-    pub fn borrow<T: UserData + 'static>(&self) -> Result<Ref<T>> {
+    pub fn borrow<T: 'static>(&self) -> Result<Ref<T>> {
         self.inspect(|cell| cell.try_borrow())
     }
 
@@ -751,7 +751,7 @@ impl<'lua> AnyUserData<'lua> {
     /// Returns a `UserDataBorrowMutError` if the userdata cannot be mutably borrowed.
     /// Returns a `UserDataTypeMismatch` if the userdata is not of type `T`.
     #[inline]
-    pub fn borrow_mut<T: UserData + 'static>(&self) -> Result<RefMut<T>> {
+    pub fn borrow_mut<T: 'static>(&self) -> Result<RefMut<T>> {
         self.inspect(|cell| cell.try_borrow_mut())
     }
 
@@ -759,7 +759,7 @@ impl<'lua> AnyUserData<'lua> {
     /// Sets the special "destructed" metatable that prevents any further operations with this userdata.
     ///
     /// Keeps associated user values unchanged (they will be collected by Lua's GC).
-    pub fn take<T: UserData + 'static>(&self) -> Result<T> {
+    pub fn take<T: 'static>(&self) -> Result<T> {
         let lua = self.0.lua;
         let state = lua.state();
         unsafe {
@@ -980,7 +980,7 @@ impl<'lua> AnyUserData<'lua> {
     /// Returned [`UserDataMetatable`] object wraps the original metatable and
     /// provides safe access to its methods.
     ///
-    /// For `T: UserData + 'static` returned metatable is shared among all instances of type `T`.
+    /// For `T: 'static` returned metatable is shared among all instances of type `T`.
     ///
     /// [`UserDataMetatable`]: crate::UserDataMetatable
     #[inline]
@@ -1052,7 +1052,7 @@ impl<'lua> AnyUserData<'lua> {
 
     fn inspect<'a, T, F, R>(&'a self, func: F) -> Result<R>
     where
-        T: UserData + 'static,
+        T: 'static,
         F: FnOnce(&'a UserDataCell<T>) -> Result<R>,
     {
         let lua = self.0.lua;
