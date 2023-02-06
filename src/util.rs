@@ -230,7 +230,8 @@ pub unsafe fn pop_error(state: *mut ffi::lua_State, err_code: c_int) -> Error {
 // Uses 3 (or 1 if unprotected) stack spaces, does not call checkstack.
 #[inline(always)]
 pub unsafe fn push_string(state: *mut ffi::lua_State, s: &[u8], protect: bool) -> Result<()> {
-    if protect {
+    // Always use protected mode if the string is too long
+    if protect || s.len() > (1 << 30) {
         protect_lua!(state, 0, 1, |state| {
             ffi::lua_pushlstring(state, s.as_ptr() as *const c_char, s.len());
         })
