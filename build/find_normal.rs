@@ -8,7 +8,7 @@ fn get_env_var(name: &str) -> String {
     match env::var(name) {
         Ok(val) => val,
         Err(env::VarError::NotPresent) => String::new(),
-        Err(err) => panic!("cannot get {}: {}", name, err),
+        Err(err) => panic!("cannot get {name}: {err}"),
     }
 }
 
@@ -37,8 +37,8 @@ pub fn probe_lua() -> Option<PathBuf> {
             if get_env_var("LUA_LINK") == "static" {
                 link_lib = "static=";
             };
-            println!("cargo:rustc-link-search=native={}", lib_dir);
-            println!("cargo:rustc-link-lib={}{}", link_lib, lua_lib);
+            println!("cargo:rustc-link-search=native={lib_dir}");
+            println!("cargo:rustc-link-lib={link_lib}{lua_lib}");
         }
         return Some(PathBuf::from(include_dir));
     }
@@ -72,7 +72,7 @@ pub fn probe_lua() -> Option<PathBuf> {
                 .probe(alt_probe);
         }
 
-        lua.unwrap_or_else(|_| panic!("cannot find Lua {} using `pkg-config`", ver))
+        lua.unwrap_or_else(|_| panic!("cannot find Lua {ver} using `pkg-config`"))
             .include_paths
             .get(0)
             .cloned()

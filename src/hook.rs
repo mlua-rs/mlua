@@ -162,9 +162,9 @@ impl<'lua> Debug<'lua> {
 
             #[cfg(not(feature = "luau"))]
             let stack = DebugStack {
-                num_ups: (*self.ar.get()).nups as i32,
+                num_ups: (*self.ar.get()).nups as _,
                 #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
-                num_params: (*self.ar.get()).nparams as i32,
+                num_params: (*self.ar.get()).nparams as _,
                 #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
                 is_vararg: (*self.ar.get()).isvararg != 0,
             };

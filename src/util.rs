@@ -844,7 +844,7 @@ pub unsafe fn init_error_registry(state: *mut ffi::lua_State) -> Result<()> {
                     // Depending on how the API is used and what error types scripts are given, it may
                     // be possible to make this consume arbitrary amounts of memory (for example, some
                     // kind of recursive error structure?)
-                    let _ = write!(&mut (*err_buf), "{}", error);
+                    let _ = write!(&mut (*err_buf), "{error}");
                     Ok(err_buf)
                 }
                 Some(WrappedFailure::Panic(Some(ref panic))) => {
@@ -855,9 +855,9 @@ pub unsafe fn init_error_registry(state: *mut ffi::lua_State) -> Result<()> {
                     ffi::lua_pop(state, 2);
 
                     if let Some(msg) = panic.downcast_ref::<&str>() {
-                        let _ = write!(&mut (*err_buf), "{}", msg);
+                        let _ = write!(&mut (*err_buf), "{msg}");
                     } else if let Some(msg) = panic.downcast_ref::<String>() {
-                        let _ = write!(&mut (*err_buf), "{}", msg);
+                        let _ = write!(&mut (*err_buf), "{msg}");
                     } else {
                         let _ = write!(&mut (*err_buf), "<panic>");
                     };
@@ -1006,7 +1006,7 @@ pub(crate) unsafe fn to_string(state: *mut ffi::lua_State, index: c_int) -> Stri
             let v = ffi::lua_tovector(state, index);
             mlua_debug_assert!(!v.is_null(), "vector is null");
             let (x, y, z) = (*v, *v.add(1), *v.add(2));
-            format!("vector({},{},{})", x, y, z)
+            format!("vector({x},{y},{z})")
         }
         ffi::LUA_TSTRING => {
             let mut size = 0;

@@ -3382,8 +3382,7 @@ unsafe fn ref_stack_pop(extra: &mut ExtraData) -> c_int {
             // It is a user error to create enough references to exhaust the Lua max stack size for
             // the ref thread.
             panic!(
-                "cannot create a Lua reference, out of auxiliary stack space (used {} slots)",
-                top
+                "cannot create a Lua reference, out of auxiliary stack space (used {top} slots)"
             );
         }
         extra.ref_stack_size += inc;

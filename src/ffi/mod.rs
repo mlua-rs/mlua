@@ -73,17 +73,18 @@ pub const SYS_MIN_ALIGN: usize = 4;
 // by C modules in unsafe mode
 #[cfg(not(feature = "luau"))]
 pub(crate) fn keep_lua_symbols() {
-    let mut symbols: Vec<*const extern "C" fn()> = Vec::new();
-    symbols.push(lua_atpanic as _);
-    symbols.push(lua_isuserdata as _);
-    symbols.push(lua_tocfunction as _);
-    symbols.push(luaL_loadstring as _);
-    symbols.push(luaL_openlibs as _);
+    let mut _symbols: Vec<*const extern "C" fn()> = vec![
+        lua_atpanic as _,
+        lua_isuserdata as _,
+        lua_tocfunction as _,
+        luaL_loadstring as _,
+        luaL_openlibs as _,
+    ];
     #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
     {
-        symbols.push(lua_getglobal as _);
-        symbols.push(lua_setglobal as _);
-        symbols.push(luaL_setfuncs as _);
+        _symbols.push(lua_getglobal as _);
+        _symbols.push(lua_setglobal as _);
+        _symbols.push(luaL_setfuncs as _);
     }
 }
 

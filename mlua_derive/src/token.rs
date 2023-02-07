@@ -59,7 +59,7 @@ fn parse_pos(span: &Span) -> Option<(usize, usize)> {
 
     static RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"bytes\(([0-9]+)\.\.([0-9]+)\)").unwrap());
 
-    match RE.captures(&format!("{:?}", span)) {
+    match RE.captures(&format!("{span:?}")) {
         Some(caps) => match (caps.get(1), caps.get(2)) {
             (Some(start), Some(end)) => Some((
                 match start.as_str().parse() {

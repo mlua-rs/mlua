@@ -185,17 +185,17 @@ pub type Result<T> = StdResult<T, Error>;
 impl fmt::Display for Error {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            Error::SyntaxError { ref message, .. } => write!(fmt, "syntax error: {}", message),
-            Error::RuntimeError(ref msg) => write!(fmt, "runtime error: {}", msg),
+            Error::SyntaxError { ref message, .. } => write!(fmt, "syntax error: {message}"),
+            Error::RuntimeError(ref msg) => write!(fmt, "runtime error: {msg}"),
             Error::MemoryError(ref msg) => {
-                write!(fmt, "memory error: {}", msg)
+                write!(fmt, "memory error: {msg}")
             }
             #[cfg(any(feature = "lua53", feature = "lua52"))]
             Error::GarbageCollectorError(ref msg) => {
-                write!(fmt, "garbage collector error: {}", msg)
+                write!(fmt, "garbage collector error: {msg}")
             }
             Error::SafetyError(ref msg) => {
-                write!(fmt, "safety error: {}", msg)
+                write!(fmt, "safety error: {msg}")
             },
             Error::MemoryLimitNotAvailable => {
                 write!(fmt, "setting memory limit is not available")
@@ -217,17 +217,17 @@ impl fmt::Display for Error {
                 "too many arguments to Function::bind"
             ),
             Error::ToLuaConversionError { from, to, ref message } => {
-                write!(fmt, "error converting {} to Lua {}", from, to)?;
+                write!(fmt, "error converting {from} to Lua {to}")?;
                 match *message {
                     None => Ok(()),
-                    Some(ref message) => write!(fmt, " ({})", message),
+                    Some(ref message) => write!(fmt, " ({message})"),
                 }
             }
             Error::FromLuaConversionError { from, to, ref message } => {
-                write!(fmt, "error converting Lua {} to {}", from, to)?;
+                write!(fmt, "error converting Lua {from} to {to}")?;
                 match *message {
                     None => Ok(()),
-                    Some(ref message) => write!(fmt, " ({})", message),
+                    Some(ref message) => write!(fmt, " ({message})"),
                 }
             }
             Error::CoroutineInactive => write!(fmt, "cannot resume inactive coroutine"),
@@ -235,12 +235,12 @@ impl fmt::Display for Error {
             Error::UserDataDestructed => write!(fmt, "userdata has been destructed"),
             Error::UserDataBorrowError => write!(fmt, "userdata already mutably borrowed"),
             Error::UserDataBorrowMutError => write!(fmt, "userdata already borrowed"),
-            Error::MetaMethodRestricted(ref method) => write!(fmt, "metamethod {} is restricted", method),
+            Error::MetaMethodRestricted(ref method) => write!(fmt, "metamethod {method} is restricted"),
             Error::MetaMethodTypeError { ref method, type_name, ref message } => {
-                write!(fmt, "metamethod {} has unsupported type {}", method, type_name)?;
+                write!(fmt, "metamethod {method} has unsupported type {type_name}")?;
                 match *message {
                     None => Ok(()),
-                    Some(ref message) => write!(fmt, " ({})", message),
+                    Some(ref message) => write!(fmt, " ({message})"),
                 }
             }
             Error::MismatchedRegistryKey => {
@@ -267,20 +267,20 @@ impl fmt::Display for Error {
                 } else {
                     writeln!(fmt, "{}", traceback.trim_end())?;
                 }
-                write!(fmt, "caused by: {}", cause)
+                write!(fmt, "caused by: {cause}")
             }
             Error::PreviouslyResumedPanic => {
                 write!(fmt, "previously resumed panic returned again")
             }
             #[cfg(feature = "serialize")]
             Error::SerializeError(ref err) => {
-                write!(fmt, "serialize error: {}", err)
+                write!(fmt, "serialize error: {err}")
             },
             #[cfg(feature = "serialize")]
             Error::DeserializeError(ref err) => {
-                write!(fmt, "deserialize error: {}", err)
+                write!(fmt, "deserialize error: {err}")
             },
-            Error::ExternalError(ref err) => write!(fmt, "{}", err),
+            Error::ExternalError(ref err) => write!(fmt, "{err}"),
         }
     }
 }

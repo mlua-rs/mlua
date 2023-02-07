@@ -102,11 +102,11 @@ fn lua_require(lua: &Lua, name: Option<StdString>) -> Result<Value> {
             break;
         }
     }
-    let source = source.ok_or_else(|| Error::RuntimeError(format!("cannot find '{}'", name)))?;
+    let source = source.ok_or_else(|| Error::RuntimeError(format!("cannot find '{name}'")))?;
 
     let value = lua
         .load(&source)
-        .set_name(&format!("={}", source_name))
+        .set_name(&format!("={source_name}"))
         .set_mode(ChunkMode::Text)
         .call::<_, Value>(())?;
 
