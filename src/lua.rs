@@ -1763,23 +1763,12 @@ impl Lua {
     /// Otherwise, the userdata object will have an empty metatable.
     ///
     /// All userdata instances of the same type `T` shares the same metatable.
+    #[inline]
     pub fn create_any_userdata<T>(&self, data: T) -> Result<AnyUserData>
     where
         T: MaybeSend + 'static,
     {
-        unsafe {
-            self.make_userdata_with_metatable(UserDataCell::new(data), || {
-                // Check if userdata/metatable is already registered
-                let type_id = TypeId::of::<T>();
-                if let Some(&table_id) = (*self.extra.get()).registered_userdata.get(&type_id) {
-                    return Ok(table_id as Integer);
-                }
-
-                // Create empty metatable
-                let registry = UserDataRegistrar::new();
-                self.register_userdata_metatable::<T>(registry)
-            })
-        }
+        unsafe { self.make_any_userdata(UserDataCell::new(data)) }
     }
 
     /// Registers a custom Rust type in Lua to use in userdata objects.
@@ -1891,12 +1880,10 @@ impl Lua {
     /// dropped. `Function` types will error when called, and `AnyUserData` will be typeless. It
     /// would be impossible to prevent handles to scoped values from escaping anyway, since you
     /// would always be able to smuggle them through Lua state.
-    pub fn scope<'lua, 'scope, R, F>(&'lua self, f: F) -> Result<R>
-    where
-        'lua: 'scope,
-        R: 'static,
-        F: FnOnce(&Scope<'lua, 'scope>) -> Result<R>,
-    {
+    pub fn scope<'lua, 'scope, R>(
+        &'lua self,
+        f: impl FnOnce(&Scope<'lua, 'scope>) -> Result<R>,
+    ) -> Result<R> {
         f(&Scope::new(self))
     }
 
@@ -2958,6 +2945,23 @@ impl Lua {
             T::add_methods(&mut registry);
 
             self.register_userdata_metatable(registry)
+        })
+    }
+
+    pub(crate) unsafe fn make_any_userdata<T>(&self, data: UserDataCell<T>) -> Result<AnyUserData>
+    where
+        T: 'static,
+    {
+        self.make_userdata_with_metatable(data, || {
+            // Check if userdata/metatable is already registered
+            let type_id = TypeId::of::<T>();
+            if let Some(&table_id) = (*self.extra.get()).registered_userdata.get(&type_id) {
+                return Ok(table_id as Integer);
+            }
+
+            // Create empty metatable
+            let registry = UserDataRegistrar::new();
+            self.register_userdata_metatable::<T>(registry)
         })
     }
 

@@ -2,8 +2,7 @@ use std::any::Any;
 use std::cell::{Cell, RefCell};
 use std::marker::PhantomData;
 use std::mem;
-use std::os::raw::{c_int, c_void};
-use std::rc::Rc;
+use std::os::raw::c_int;
 
 #[cfg(feature = "serialize")]
 use serde::Serialize;
@@ -66,7 +65,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
     where
         A: FromLuaMulti<'callback>,
         R: IntoLuaMulti<'callback>,
-        F: 'scope + Fn(&'callback Lua, A) -> Result<R>,
+        F: Fn(&'callback Lua, A) -> Result<R> + 'scope,
     {
         // Safe, because 'scope must outlive 'callback (due to Self containing 'scope), however the
         // callback itself must be 'scope lifetime, so the function should not be able to capture
@@ -99,7 +98,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
     where
         A: FromLuaMulti<'callback>,
         R: IntoLuaMulti<'callback>,
-        F: 'scope + FnMut(&'callback Lua, A) -> Result<R>,
+        F: FnMut(&'callback Lua, A) -> Result<R> + 'scope,
     {
         let func = RefCell::new(func);
         self.create_function(move |lua, args| {
@@ -144,7 +143,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
         }
     }
 
-    /// Create a Lua userdata object from a custom userdata type.
+    /// Creates a Lua userdata object from a custom userdata type.
     ///
     /// This is a version of [`Lua::create_userdata`] that creates a userdata which expires on
     /// scope drop, and does not require that the userdata type be Send (but still requires that the
@@ -155,12 +154,18 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
     /// [`Lua::scope`]: crate::Lua::scope
     pub fn create_userdata<T>(&self, data: T) -> Result<AnyUserData<'lua>>
     where
-        T: 'static + UserData,
+        T: UserData + 'static,
     {
-        self.create_userdata_inner(UserDataCell::new(data))
+        // Safe even though T may not be Send, because the parent Lua cannot be sent to another
+        // thread while the Scope is alive (or the returned AnyUserData handle even).
+        unsafe {
+            let ud = self.lua.make_userdata(UserDataCell::new(data))?;
+            self.seal_userdata::<T>(&ud)?;
+            Ok(ud)
+        }
     }
 
-    /// Create a Lua userdata object from a custom serializable userdata type.
+    /// Creates a Lua userdata object from a custom serializable userdata type.
     ///
     /// This is a version of [`Lua::create_ser_userdata`] that creates a userdata which expires on
     /// scope drop, and does not require that the userdata type be Send (but still requires that the
@@ -175,60 +180,125 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
     #[cfg_attr(docsrs, doc(cfg(feature = "serialize")))]
     pub fn create_ser_userdata<T>(&self, data: T) -> Result<AnyUserData<'lua>>
     where
-        T: 'static + UserData + Serialize,
+        T: UserData + Serialize + 'static,
     {
-        self.create_userdata_inner(UserDataCell::new_ser(data))
-    }
-
-    fn create_userdata_inner<T>(&self, data: UserDataCell<T>) -> Result<AnyUserData<'lua>>
-    where
-        T: 'static + UserData,
-    {
-        // Safe even though T may not be Send, because the parent Lua cannot be sent to another
-        // thread while the Scope is alive (or the returned AnyUserData handle even).
         unsafe {
-            let ud = self.lua.make_userdata(data)?;
-
-            #[cfg(any(feature = "lua51", feature = "luajit"))]
-            let newtable = self.lua.create_table()?;
-            let destructor: DestructorCallback = Box::new(move |ud| {
-                let state = ud.lua.state();
-                let _sg = StackGuard::new(state);
-                assert_stack(state, 2);
-
-                // Check that userdata is not destructed (via `take()` call)
-                if ud.lua.push_userdata_ref(&ud).is_err() {
-                    return vec![];
-                }
-
-                // Clear associated user values
-                #[cfg(feature = "lua54")]
-                for i in 1..=USER_VALUE_MAXSLOT {
-                    ffi::lua_pushnil(state);
-                    ffi::lua_setiuservalue(state, -2, i as c_int);
-                }
-                #[cfg(any(feature = "lua53", feature = "lua52", feature = "luau"))]
-                {
-                    ffi::lua_pushnil(state);
-                    ffi::lua_setuservalue(state, -2);
-                }
-                #[cfg(any(feature = "lua51", feature = "luajit"))]
-                {
-                    ud.lua.push_ref(&newtable.0);
-                    ffi::lua_setuservalue(state, -2);
-                }
-
-                vec![Box::new(take_userdata::<UserDataCell<T>>(state))]
-            });
-            self.destructors
-                .borrow_mut()
-                .push((ud.0.clone(), destructor));
-
+            let ud = self.lua.make_userdata(UserDataCell::new_ser(data))?;
+            self.seal_userdata::<T>(&ud)?;
             Ok(ud)
         }
     }
 
-    /// Create a Lua userdata object from a custom userdata type.
+    /// Creates a Lua userdata object from a reference to custom userdata type.
+    ///
+    /// This is a version of [`Lua::create_userdata`] that creates a userdata which expires on
+    /// scope drop, and does not require that the userdata type be Send. This method takes non-'static
+    /// reference to the data. See [`Lua::scope`] for more details.
+    ///
+    /// Userdata created with this method will not be able to be mutated from Lua.
+    pub fn create_userdata_ref<T>(&self, data: &'scope T) -> Result<AnyUserData<'lua>>
+    where
+        T: UserData + 'static,
+    {
+        unsafe {
+            let ud = self.lua.make_userdata(UserDataCell::new_ref(data))?;
+            self.seal_userdata::<T>(&ud)?;
+            Ok(ud)
+        }
+    }
+
+    /// Creates a Lua userdata object from a mutable reference to custom userdata type.
+    ///
+    /// This is a version of [`Lua::create_userdata`] that creates a userdata which expires on
+    /// scope drop, and does not require that the userdata type be Send. This method takes non-'static
+    /// mutable reference to the data. See [`Lua::scope`] for more details.
+    pub fn create_userdata_ref_mut<T>(&self, data: &'scope mut T) -> Result<AnyUserData<'lua>>
+    where
+        T: UserData + 'static,
+    {
+        unsafe {
+            let ud = self.lua.make_userdata(UserDataCell::new_ref_mut(data))?;
+            self.seal_userdata::<T>(&ud)?;
+            Ok(ud)
+        }
+    }
+
+    /// Creates a Lua userdata object from a reference to custom Rust type.
+    ///
+    /// This is a version of [`Lua::create_any_userdata`] that creates a userdata which expires on
+    /// scope drop, and does not require that the Rust type be Send. This method takes non-'static
+    /// reference to the data. See [`Lua::scope`] for more details.
+    ///
+    /// Userdata created with this method will not be able to be mutated from Lua.
+    pub fn create_any_userdata_ref<T>(&self, data: &'scope T) -> Result<AnyUserData<'lua>>
+    where
+        T: 'static,
+    {
+        unsafe {
+            let ud = self.lua.make_any_userdata(UserDataCell::new_ref(data))?;
+            self.seal_userdata::<T>(&ud)?;
+            Ok(ud)
+        }
+    }
+
+    /// Creates a Lua userdata object from a mutable reference to custom Rust type.
+    ///
+    /// This is a version of [`Lua::create_any_userdata`] that creates a userdata which expires on
+    /// scope drop, and does not require that the Rust type be Send. This method takes non-'static
+    /// mutable reference to the data. See [`Lua::scope`] for more details.
+    pub fn create_any_userdata_ref_mut<T>(&self, data: &'scope mut T) -> Result<AnyUserData<'lua>>
+    where
+        T: 'static,
+    {
+        let lua = self.lua;
+        unsafe {
+            let ud = lua.make_any_userdata(UserDataCell::new_ref_mut(data))?;
+            self.seal_userdata::<T>(&ud)?;
+            Ok(ud)
+        }
+    }
+
+    /// Shortens the lifetime of a userdata to the lifetime of the scope.
+    unsafe fn seal_userdata<T: 'static>(&self, ud: &AnyUserData<'lua>) -> Result<()> {
+        #[cfg(any(feature = "lua51", feature = "luajit"))]
+        let newtable = self.lua.create_table()?;
+        let destructor: DestructorCallback = Box::new(move |ud| {
+            let state = ud.lua.state();
+            let _sg = StackGuard::new(state);
+            assert_stack(state, 2);
+
+            // Check that userdata is not destructed (via `take()` call)
+            if ud.lua.push_userdata_ref(&ud).is_err() {
+                return vec![];
+            }
+
+            // Clear associated user values
+            #[cfg(feature = "lua54")]
+            for i in 1..=USER_VALUE_MAXSLOT {
+                ffi::lua_pushnil(state);
+                ffi::lua_setiuservalue(state, -2, i as c_int);
+            }
+            #[cfg(any(feature = "lua53", feature = "lua52", feature = "luau"))]
+            {
+                ffi::lua_pushnil(state);
+                ffi::lua_setuservalue(state, -2);
+            }
+            #[cfg(any(feature = "lua51", feature = "luajit"))]
+            {
+                ud.lua.push_ref(&newtable.0);
+                ffi::lua_setuservalue(state, -2);
+            }
+
+            vec![Box::new(take_userdata::<UserDataCell<T>>(state))]
+        });
+        self.destructors
+            .borrow_mut()
+            .push((ud.0.clone(), destructor));
+
+        Ok(())
+    }
+
+    /// Creates a Lua userdata object from a custom userdata type.
     ///
     /// This is a version of [`Lua::create_userdata`] that creates a userdata which expires on
     /// scope drop, and does not require that the userdata type be Send or 'static. See
@@ -253,10 +323,8 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
     /// [`UserDataMethods`]: crate::UserDataMethods
     pub fn create_nonstatic_userdata<T>(&self, data: T) -> Result<AnyUserData<'lua>>
     where
-        T: 'scope + UserData,
+        T: UserData + 'scope,
     {
-        let data = Rc::new(RefCell::new(data));
-
         // 'callback outliving 'scope is a lie to make the types work out, required due to the
         // inability to work with the more correct callback type that is universally quantified over
         // 'lua. This is safe though, because `UserData::add_methods` does not get to pick the 'lua
@@ -264,8 +332,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
         // parameters.
         fn wrap_method<'scope, 'lua, 'callback: 'scope, T: 'scope>(
             scope: &Scope<'lua, 'scope>,
-            data: Rc<RefCell<T>>,
-            ud_ptr: *const c_void,
+            ud_ptr: *const UserDataCell<T>,
             method: NonStaticMethod<'callback, T>,
         ) -> Result<Function<'lua>> {
             // On methods that actually receive the userdata, we fake a type check on the passed in
@@ -275,7 +342,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
             // with a type mismatch, but here without this check would proceed as though you had
             // called the method on the original value (since we otherwise completely ignore the
             // first argument).
-            let check_ud_type = move |lua: &'callback Lua, value| {
+            let check_ud_type = move |lua: &Lua, value| -> Result<&UserDataCell<T>> {
                 if let Some(Value::UserData(ud)) = value {
                     let state = lua.state();
                     unsafe {
@@ -283,7 +350,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
                         check_stack(state, 2)?;
                         lua.push_userdata_ref(&ud.0)?;
                         if get_userdata(state, -1) as *const _ == ud_ptr {
-                            return Ok(());
+                            return Ok(&*ud_ptr);
                         }
                     }
                 };
@@ -293,8 +360,8 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
             match method {
                 NonStaticMethod::Method(method) => {
                     let f = Box::new(move |lua, mut args: MultiValue<'callback>| {
-                        check_ud_type(lua, args.pop_front())?;
-                        let data = data.try_borrow().map_err(|_| Error::UserDataBorrowError)?;
+                        let data = check_ud_type(lua, args.pop_front())?;
+                        let data = data.try_borrow()?;
                         method(lua, &*data, args)
                     });
                     unsafe { scope.create_callback(f) }
@@ -302,13 +369,11 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
                 NonStaticMethod::MethodMut(method) => {
                     let method = RefCell::new(method);
                     let f = Box::new(move |lua, mut args: MultiValue<'callback>| {
-                        check_ud_type(lua, args.pop_front())?;
+                        let data = check_ud_type(lua, args.pop_front())?;
                         let mut method = method
                             .try_borrow_mut()
                             .map_err(|_| Error::RecursiveMutCallback)?;
-                        let mut data = data
-                            .try_borrow_mut()
-                            .map_err(|_| Error::UserDataBorrowMutError)?;
+                        let mut data = data.try_borrow_mut()?;
                         (*method)(lua, &mut *data, args)
                     });
                     unsafe { scope.create_callback(f) }
@@ -342,8 +407,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
             #[cfg(not(feature = "luau"))]
             #[allow(clippy::let_and_return)]
             let ud_ptr = protect_lua!(state, 0, 1, |state| {
-                let ud =
-                    ffi::lua_newuserdata(state, mem::size_of::<UserDataCell<Rc<RefCell<T>>>>());
+                let ud = ffi::lua_newuserdata(state, mem::size_of::<UserDataCell<T>>());
 
                 // Set empty environment for Lua 5.1
                 #[cfg(any(feature = "lua51", feature = "luajit"))]
@@ -352,16 +416,12 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
                     ffi::lua_setuservalue(state, -2);
                 }
 
-                ud
+                ud as *const UserDataCell<T>
             })?;
             #[cfg(feature = "luau")]
             let ud_ptr = {
-                crate::util::push_userdata::<UserDataCell<Rc<RefCell<T>>>>(
-                    state,
-                    UserDataCell::new(data.clone()),
-                    true,
-                )?;
-                ffi::lua_touserdata(state, -1)
+                crate::util::push_userdata(state, UserDataCell::new(data), true)?;
+                ffi::lua_touserdata(state, -1) as *const UserDataCell<T>
             };
 
             // Prepare metatable, add meta methods first and then meta fields
@@ -369,8 +429,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
             push_table(state, 0, meta_methods_nrec as c_int, true)?;
 
             for (k, m) in ud_methods.meta_methods {
-                let data = data.clone();
-                lua.push_value(Value::Function(wrap_method(self, data, ud_ptr, m)?))?;
+                lua.push_value(Value::Function(wrap_method(self, ud_ptr, m)?))?;
                 rawset_field(state, -2, MetaMethod::validate(&k)?)?;
             }
             for (k, f) in ud_fields.meta_fields {
@@ -384,8 +443,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
             if field_getters_nrec > 0 {
                 push_table(state, 0, field_getters_nrec as c_int, true)?;
                 for (k, m) in ud_fields.field_getters {
-                    let data = data.clone();
-                    lua.push_value(Value::Function(wrap_method(self, data, ud_ptr, m)?))?;
+                    lua.push_value(Value::Function(wrap_method(self, ud_ptr, m)?))?;
                     rawset_field(state, -2, &k)?;
                 }
                 field_getters_index = Some(ffi::lua_absindex(state, -1));
@@ -396,8 +454,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
             if field_setters_nrec > 0 {
                 push_table(state, 0, field_setters_nrec as c_int, true)?;
                 for (k, m) in ud_fields.field_setters {
-                    let data = data.clone();
-                    lua.push_value(Value::Function(wrap_method(self, data, ud_ptr, m)?))?;
+                    lua.push_value(Value::Function(wrap_method(self, ud_ptr, m)?))?;
                     rawset_field(state, -2, &k)?;
                 }
                 field_setters_index = Some(ffi::lua_absindex(state, -1));
@@ -409,14 +466,13 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
                 // Create table used for methods lookup
                 push_table(state, 0, methods_nrec as c_int, true)?;
                 for (k, m) in ud_methods.methods {
-                    let data = data.clone();
-                    lua.push_value(Value::Function(wrap_method(self, data, ud_ptr, m)?))?;
+                    lua.push_value(Value::Function(wrap_method(self, ud_ptr, m)?))?;
                     rawset_field(state, -2, &k)?;
                 }
                 methods_index = Some(ffi::lua_absindex(state, -1));
             }
 
-            init_userdata_metatable::<UserDataCell<Rc<RefCell<T>>>>(
+            init_userdata_metatable::<UserDataCell<T>>(
                 state,
                 metatable_index,
                 field_getters_index,
@@ -478,8 +534,8 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
                     mem::transmute(f)
                 }
 
-                let ud = Box::new(seal(take_userdata::<UserDataCell<Rc<RefCell<T>>>>(state)));
-                vec![ud]
+                let ud = take_userdata::<UserDataCell<T>>(state);
+                vec![Box::new(seal(ud))]
             });
             self.destructors
                 .borrow_mut()

@@ -12,7 +12,7 @@ pub use crate::{
     TableSequence as LuaTableSequence, Thread as LuaThread, ThreadStatus as LuaThreadStatus,
     UserData as LuaUserData, UserDataFields as LuaUserDataFields,
     UserDataMetatable as LuaUserDataMetatable, UserDataMethods as LuaUserDataMethods,
-    Value as LuaValue,
+    UserDataRegistrar as LuaUserDataRegistrar, Value as LuaValue,
 };
 
 #[cfg(not(feature = "luau"))]
