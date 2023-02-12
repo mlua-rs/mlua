@@ -25,11 +25,7 @@ use crate::value::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, MultiValue, Val
 use crate::userdata::USER_VALUE_MAXSLOT;
 
 #[cfg(feature = "async")]
-use {
-    crate::types::{AsyncCallback, AsyncCallbackUpvalue, AsyncPollUpvalue},
-    futures_core::future::Future,
-    futures_util::future::{self, TryFutureExt},
-};
+use futures_core::future::Future;
 
 /// Constructed by the [`Lua::scope`] method, allows temporarily creating Lua userdata and
 /// callbacks that are not required to be Send or 'static.
@@ -106,41 +102,6 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
                 .try_borrow_mut()
                 .map_err(|_| Error::RecursiveMutCallback)?)(lua, args)
         })
-    }
-
-    /// Wraps a Rust async function or closure, creating a callable Lua function handle to it.
-    ///
-    /// This is a version of [`Lua::create_async_function`] that creates a callback which expires on
-    /// scope drop. See [`Lua::scope`] and [`Lua::async_scope`] for more details.
-    ///
-    /// Requires `feature = "async"`
-    ///
-    /// [`Lua::create_async_function`]: crate::Lua::create_async_function
-    /// [`Lua::scope`]: crate::Lua::scope
-    /// [`Lua::async_scope`]: crate::Lua::async_scope
-    #[cfg(feature = "async")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
-    pub fn create_async_function<'callback, A, R, F, FR>(
-        &'callback self,
-        func: F,
-    ) -> Result<Function<'lua>>
-    where
-        A: FromLuaMulti<'callback>,
-        R: IntoLuaMulti<'callback>,
-        F: 'scope + Fn(&'callback Lua, A) -> FR,
-        FR: 'callback + Future<Output = Result<R>>,
-    {
-        unsafe {
-            self.create_async_callback(Box::new(move |lua, args| {
-                let args = match A::from_lua_multi(args, lua) {
-                    Ok(args) => args,
-                    Err(e) => return Box::pin(future::err(e)),
-                };
-                Box::pin(
-                    func(lua, args).and_then(move |ret| future::ready(ret.into_lua_multi(lua))),
-                )
-            }))
-        }
     }
 
     /// Creates a Lua userdata object from a custom userdata type.
@@ -572,64 +533,6 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
             ffi::lua_setupvalue(state, -2, 1);
 
             vec![Box::new(ud)]
-        });
-        self.destructors
-            .borrow_mut()
-            .push((f.0.clone(), destructor));
-
-        Ok(f)
-    }
-
-    #[cfg(feature = "async")]
-    unsafe fn create_async_callback<'callback>(
-        &self,
-        f: AsyncCallback<'callback, 'scope>,
-    ) -> Result<Function<'lua>> {
-        let f = mem::transmute::<AsyncCallback<'callback, 'scope>, AsyncCallback<'lua, 'static>>(f);
-        let f = self.lua.create_async_callback(f)?;
-
-        // We need to pre-allocate strings to avoid failures in destructor.
-        let get_poll_str = self.lua.create_string("get_poll")?;
-        let poll_str = self.lua.create_string("poll")?;
-        let destructor: DestructorCallback = Box::new(move |f| {
-            let state = f.lua.state();
-            let _sg = StackGuard::new(state);
-            assert_stack(state, 5);
-
-            f.lua.push_ref(&f);
-
-            // We know the destructor has not run yet because we hold a reference to the callback.
-
-            // First, get the environment table
-            #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
-            ffi::lua_getupvalue(state, -1, 1);
-            #[cfg(any(feature = "lua51", feature = "luajit", feature = "luau"))]
-            ffi::lua_getfenv(state, -1);
-
-            // Second, get the `get_poll()` closure using the corresponding key
-            f.lua.push_ref(&get_poll_str.0);
-            ffi::lua_rawget(state, -2);
-
-            // Destroy all upvalues
-            ffi::lua_getupvalue(state, -1, 1);
-            let upvalue1 = take_userdata::<AsyncCallbackUpvalue>(state);
-            ffi::lua_pushnil(state);
-            ffi::lua_setupvalue(state, -2, 1);
-
-            ffi::lua_pop(state, 1);
-            let mut data: Vec<Box<dyn Any>> = vec![Box::new(upvalue1)];
-
-            // Finally, get polled future and destroy it
-            f.lua.push_ref(&poll_str.0);
-            if ffi::lua_rawget(state, -2) == ffi::LUA_TFUNCTION {
-                ffi::lua_getupvalue(state, -1, 1);
-                let upvalue2 = take_userdata::<AsyncPollUpvalue>(state);
-                ffi::lua_pushnil(state);
-                ffi::lua_setupvalue(state, -2, 1);
-                data.push(Box::new(upvalue2));
-            }
-
-            data
         });
         self.destructors
             .borrow_mut()

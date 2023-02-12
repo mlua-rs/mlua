@@ -1,19 +1,14 @@
 #![cfg(feature = "async")]
 
-use std::cell::Cell;
-use std::rc::Rc;
-use std::sync::{
-    atomic::{AtomicI64, AtomicU64, Ordering},
-    Arc,
-};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
 
 use futures_timer::Delay;
 use futures_util::stream::TryStreamExt;
 
 use mlua::{
-    Error, Function, Lua, LuaOptions, Result, StdLib, Table, TableExt, Thread, UserData,
-    UserDataMethods, Value,
+    Error, Function, Lua, LuaOptions, Result, StdLib, Table, TableExt, UserData, UserDataMethods,
 };
 
 #[tokio::test]
@@ -460,124 +455,6 @@ async fn test_async_thread_error() -> Result<()> {
         matches!(result, Err(Error::RuntimeError(cause)) if cause.contains("myuserdata error")),
         "improper error traceback from dead thread"
     );
-
-    Ok(())
-}
-
-#[tokio::test]
-async fn test_async_scope() -> Result<()> {
-    let ref lua = Lua::new();
-
-    let ref rc = Rc::new(Cell::new(0));
-
-    let fut = lua.async_scope(|scope| async move {
-        let f = scope.create_async_function(move |_, n: u64| {
-            let rc2 = rc.clone();
-            async move {
-                rc2.set(42);
-                Delay::new(Duration::from_millis(n)).await;
-                assert_eq!(Rc::strong_count(&rc2), 2);
-                Ok(())
-            }
-        })?;
-
-        lua.globals().set("f", f.clone())?;
-
-        assert_eq!(Rc::strong_count(rc), 1);
-        let _ = f.call_async::<u64, ()>(10).await?;
-        assert_eq!(Rc::strong_count(rc), 1);
-
-        // Create future in partialy polled state (Poll::Pending)
-        let g = lua.create_thread(f)?;
-        g.resume::<u64, ()>(10)?;
-        lua.globals().set("g", g)?;
-        assert_eq!(Rc::strong_count(rc), 2);
-
-        Ok(())
-    });
-
-    assert_eq!(Rc::strong_count(rc), 1);
-    let _ = fut.await?;
-    assert_eq!(Rc::strong_count(rc), 1);
-
-    match lua
-        .globals()
-        .get::<_, Function>("f")?
-        .call_async::<_, ()>(10)
-        .await
-    {
-        Err(Error::CallbackError { ref cause, .. }) => match cause.as_ref() {
-            Error::CallbackDestructed => {}
-            e => panic!("expected `CallbackDestructed` error cause, got {:?}", e),
-        },
-        r => panic!("improper return for destructed function: {:?}", r),
-    };
-
-    match lua.globals().get::<_, Thread>("g")?.resume::<_, Value>(()) {
-        Err(Error::CallbackError { ref cause, .. }) => match cause.as_ref() {
-            Error::CallbackDestructed => {}
-            e => panic!("expected `CallbackDestructed` error cause, got {:?}", e),
-        },
-        r => panic!("improper return for destructed function: {:?}", r),
-    };
-
-    Ok(())
-}
-
-#[tokio::test]
-async fn test_async_scope_userdata() -> Result<()> {
-    #[derive(Clone)]
-    struct MyUserData(Arc<AtomicI64>);
-
-    impl UserData for MyUserData {
-        fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
-            methods.add_async_method("get_value", |_, data, ()| async move {
-                Delay::new(Duration::from_millis(10)).await;
-                Ok(data.0.load(Ordering::Relaxed))
-            });
-
-            methods.add_async_method("set_value", |_, data, n| async move {
-                Delay::new(Duration::from_millis(10)).await;
-                data.0.store(n, Ordering::Relaxed);
-                Ok(())
-            });
-
-            methods.add_async_function("sleep", |_, n| async move {
-                Delay::new(Duration::from_millis(n)).await;
-                Ok(format!("elapsed:{}ms", n))
-            });
-        }
-    }
-
-    let ref lua = Lua::new();
-
-    let ref arc = Arc::new(AtomicI64::new(11));
-
-    lua.async_scope(|scope| async move {
-        let ud = scope.create_userdata(MyUserData(arc.clone()))?;
-        lua.globals().set("userdata", ud)?;
-        lua.load(
-            r#"
-            assert(userdata:get_value() == 11)
-            userdata:set_value(12)
-            assert(userdata.sleep(5) == "elapsed:5ms")
-            assert(userdata:get_value() == 12)
-        "#,
-        )
-        .exec_async()
-        .await
-    })
-    .await?;
-
-    assert_eq!(Arc::strong_count(arc), 1);
-
-    match lua.load("userdata:get_value()").exec_async().await {
-        Err(Error::CallbackError { ref cause, .. }) => match cause.as_ref() {
-            Error::CallbackDestructed => {}
-            e => panic!("expected `CallbackDestructed` error cause, got {:?}", e),
-        },
-        r => panic!("improper return for destructed userdata: {:?}", r),
-    };
 
     Ok(())
 }

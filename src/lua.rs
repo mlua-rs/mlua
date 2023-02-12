@@ -56,7 +56,7 @@ use crate::{chunk::Compiler, types::VmState};
 use {
     crate::types::{AsyncCallback, AsyncCallbackUpvalue, AsyncPollUpvalue},
     futures_core::{
-        future::{Future, LocalBoxFuture},
+        future::Future,
         task::{Context, Poll, Waker},
     },
     futures_task::noop_waker,
@@ -1885,27 +1885,6 @@ impl Lua {
         f: impl FnOnce(&Scope<'lua, 'scope>) -> Result<R>,
     ) -> Result<R> {
         f(&Scope::new(self))
-    }
-
-    /// An asynchronous version of [`scope`] that allows to create scoped async functions and
-    /// execute them.
-    ///
-    /// Requires `feature = "async"`
-    ///
-    /// [`scope`]: #method.scope
-    #[cfg(feature = "async")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
-    pub fn async_scope<'lua, 'scope, R, F, FR>(
-        &'lua self,
-        f: F,
-    ) -> LocalBoxFuture<'scope, Result<R>>
-    where
-        'lua: 'scope,
-        R: 'static,
-        F: FnOnce(Scope<'lua, 'scope>) -> FR,
-        FR: 'scope + Future<Output = Result<R>>,
-    {
-        Box::pin(f(Scope::new(self)))
     }
 
     /// Attempts to coerce a Lua value into a String in a manner consistent with Lua's internal
