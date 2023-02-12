@@ -1,6 +1,5 @@
 use std::any::{Any, TypeId};
 use std::cell::{Ref, RefCell, RefMut, UnsafeCell};
-use std::collections::HashMap;
 use std::ffi::{CStr, CString};
 use std::fmt;
 use std::marker::PhantomData;
@@ -90,9 +89,9 @@ pub(crate) struct ExtraData {
     registry_unref_list: Arc<Mutex<Option<Vec<c_int>>>>,
 
     #[cfg(not(feature = "send"))]
-    app_data: RefCell<HashMap<TypeId, Box<dyn Any>>>,
+    app_data: RefCell<FxHashMap<TypeId, Box<dyn Any>>>,
     #[cfg(feature = "send")]
-    app_data: RefCell<HashMap<TypeId, Box<dyn Any + Send>>>,
+    app_data: RefCell<FxHashMap<TypeId, Box<dyn Any + Send>>>,
 
     safe: bool,
     libs: StdLib,
@@ -573,7 +572,7 @@ impl Lua {
             registered_userdata: FxHashMap::default(),
             registered_userdata_mt: FxHashMap::default(),
             registry_unref_list: Arc::new(Mutex::new(Some(Vec::new()))),
-            app_data: RefCell::new(HashMap::new()),
+            app_data: RefCell::new(FxHashMap::default()),
             safe: false,
             libs: StdLib::NONE,
             mem_info: None,
@@ -2210,6 +2209,10 @@ impl Lua {
     /// Application data could be accessed at any time by using [`Lua::app_data_ref()`] or [`Lua::app_data_mut()`]
     /// methods where `T` is the data type.
     ///
+    /// # Panics
+    ///
+    /// Panics if the app data container is currently borrowed.
+    ///
     /// # Examples
     ///
     /// ```
@@ -2232,16 +2235,22 @@ impl Lua {
     /// }
     /// ```
     #[track_caller]
-    pub fn set_app_data<T: 'static + MaybeSend>(&self, data: T) {
+    pub fn set_app_data<T: 'static + MaybeSend>(&self, data: T) -> Option<T> {
         let extra = unsafe { &*self.extra.get() };
         extra
             .app_data
             .try_borrow_mut()
             .expect("cannot borrow mutably app data container")
-            .insert(TypeId::of::<T>(), Box::new(data));
+            .insert(TypeId::of::<T>(), Box::new(data))
+            .and_then(|data| data.downcast::<T>().ok().map(|data| *data))
     }
 
     /// Gets a reference to an application data object stored by [`Lua::set_app_data()`] of type `T`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the app data container is currently mutably borrowed. Multiple immutable reads can be
+    /// taken out at the same time.
     #[track_caller]
     pub fn app_data_ref<T: 'static>(&self) -> Option<Ref<T>> {
         let extra = unsafe { &*self.extra.get() };
@@ -2256,18 +2265,28 @@ impl Lua {
     }
 
     /// Gets a mutable reference to an application data object stored by [`Lua::set_app_data()`] of type `T`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the app data container is currently borrowed.
     #[track_caller]
     pub fn app_data_mut<T: 'static>(&self) -> Option<RefMut<T>> {
         let extra = unsafe { &*self.extra.get() };
-        let mut app_data = extra
+        let app_data = extra
             .app_data
             .try_borrow_mut()
             .expect("cannot mutably borrow app data container");
-        let value = app_data.get_mut(&TypeId::of::<T>())?.downcast_mut::<T>()? as *mut _;
-        Some(RefMut::map(app_data, |_| unsafe { &mut *value }))
+        RefMut::filter_map(app_data, |data| {
+            data.get_mut(&TypeId::of::<T>())?.downcast_mut::<T>()
+        })
+        .ok()
     }
 
     /// Removes an application data of type `T`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the app data container is currently borrowed.
     #[track_caller]
     pub fn remove_app_data<T: 'static>(&self) -> Option<T> {
         let extra = unsafe { &*self.extra.get() };
@@ -2276,7 +2295,7 @@ impl Lua {
             .try_borrow_mut()
             .expect("cannot mutably borrow app data container")
             .remove(&TypeId::of::<T>())
-            .and_then(|data| data.downcast().ok().map(|data: Box<T>| *data))
+            .and_then(|data| data.downcast::<T>().ok().map(|data| *data))
     }
 
     // Uses 2 stack spaces, does not call checkstack
