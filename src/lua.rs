@@ -2493,21 +2493,13 @@ impl Lua {
         }
     }
 
-    pub(crate) fn drop_ref(&self, lref: &LuaRef) {
+    pub(crate) fn drop_ref_index(&self, index: c_int) {
         unsafe {
             let ref_thread = self.ref_thread();
             ffi::lua_pushnil(ref_thread);
-            ffi::lua_replace(ref_thread, lref.index);
-            (*self.extra.get()).ref_free.push(lref.index);
+            ffi::lua_replace(ref_thread, index);
+            (*self.extra.get()).ref_free.push(index);
         }
-    }
-
-    #[cfg(feature = "unstable")]
-    pub(crate) fn make_owned_ref(&self, lref: LuaRef) -> crate::types::LuaOwnedRef {
-        assert!(lref.drop, "Cannot turn non-drop reference into owned");
-        let owned_ref = crate::types::LuaOwnedRef::new(Lua(self.0.clone()), lref.index);
-        mem::forget(lref);
-        owned_ref
     }
 
     #[cfg(feature = "unstable")]
@@ -3040,6 +3032,12 @@ impl Lua {
             .mem_info
             .map(|x| x.as_ref().memory_limit == 0)
             .unwrap_or_default()
+    }
+
+    #[cfg(feature = "unstable")]
+    #[inline]
+    pub(crate) fn clone(&self) -> Self {
+        Lua(Arc::clone(&self.0))
     }
 }
 

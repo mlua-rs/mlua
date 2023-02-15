@@ -195,7 +195,10 @@ impl<'lua> LuaRef<'lua> {
     #[cfg(feature = "unstable")]
     #[inline]
     pub(crate) fn into_owned(self) -> LuaOwnedRef {
-        self.lua.make_owned_ref(self)
+        assert!(self.drop, "Cannot turn non-drop reference into owned");
+        let owned_ref = LuaOwnedRef::new(self.lua.clone(), self.index);
+        mem::forget(self);
+        owned_ref
     }
 }
 
@@ -214,7 +217,7 @@ impl<'lua> Clone for LuaRef<'lua> {
 impl<'lua> Drop for LuaRef<'lua> {
     fn drop(&mut self) {
         if self.drop {
-            self.lua.drop_ref(self);
+            self.lua.drop_ref_index(self.index);
         }
     }
 }
@@ -250,18 +253,14 @@ impl fmt::Debug for LuaOwnedRef {
 #[cfg(feature = "unstable")]
 impl Clone for LuaOwnedRef {
     fn clone(&self) -> Self {
-        self.lua.make_owned_ref(self.to_ref().clone())
+        self.to_ref().clone().into_owned()
     }
 }
 
 #[cfg(feature = "unstable")]
 impl Drop for LuaOwnedRef {
     fn drop(&mut self) {
-        drop(LuaRef {
-            lua: &self.lua,
-            index: self.index,
-            drop: true,
-        });
+        self.lua.drop_ref_index(self.index);
     }
 }
 
