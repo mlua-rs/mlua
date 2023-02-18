@@ -8,7 +8,8 @@ use futures_timer::Delay;
 use futures_util::stream::TryStreamExt;
 
 use mlua::{
-    Error, Function, Lua, LuaOptions, Result, StdLib, Table, TableExt, UserData, UserDataMethods,
+    AnyUserDataExt, Error, Function, Lua, LuaOptions, Result, StdLib, Table, TableExt, UserData,
+    UserDataMethods,
 };
 
 #[tokio::test]
@@ -431,6 +432,14 @@ async fn test_async_userdata() -> Result<()> {
     )
     .exec_async()
     .await?;
+
+    userdata.call_async_method("set_value", 24).await?;
+    let n: u64 = userdata.call_async_method("get_value", ()).await?;
+    assert_eq!(n, 24);
+    userdata.call_async_function("sleep", 15).await?;
+
+    #[cfg(not(any(feature = "lua51", feature = "luau")))]
+    assert_eq!(userdata.call_async::<_, String>(()).await?, "elapsed:24ms");
 
     Ok(())
 }

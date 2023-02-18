@@ -98,6 +98,7 @@ mod table;
 mod thread;
 mod types;
 mod userdata;
+mod userdata_ext;
 mod userdata_impl;
 mod util;
 mod value;
@@ -121,6 +122,7 @@ pub use crate::types::{Integer, LightUserData, Number, RegistryKey};
 pub use crate::userdata::{
     AnyUserData, MetaMethod, UserData, UserDataFields, UserDataMetatable, UserDataMethods,
 };
+pub use crate::userdata_ext::AnyUserDataExt;
 pub use crate::userdata_impl::UserDataRegistrar;
 pub use crate::value::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, MultiValue, Nil, Value};
 

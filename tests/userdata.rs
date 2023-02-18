@@ -13,8 +13,8 @@ use std::{cell::RefCell, rc::Rc};
 use std::sync::atomic::{AtomicI64, Ordering};
 
 use mlua::{
-    AnyUserData, Error, ExternalError, FromLua, Function, Lua, MetaMethod, Nil, Result, String,
-    UserData, UserDataFields, UserDataMethods, Value,
+    AnyUserData, AnyUserDataExt, Error, ExternalError, FromLua, Function, Lua, MetaMethod, Nil,
+    Result, String, UserData, UserDataFields, UserDataMethods, Value,
 };
 
 #[test]
@@ -737,6 +737,53 @@ fn test_any_userdata() -> Result<()> {
     )
     .exec()
     .unwrap();
+
+    Ok(())
+}
+
+#[test]
+fn test_userdata_ext() -> Result<()> {
+    let lua = Lua::new();
+
+    #[derive(Clone, Copy)]
+    struct MyUserData(u32);
+
+    impl UserData for MyUserData {
+        fn add_fields<'lua, F: UserDataFields<'lua, Self>>(fields: &mut F) {
+            fields.add_field_method_get("n", |_, this| Ok(this.0));
+            fields.add_field_method_set("n", |_, this, val| {
+                this.0 = val;
+                Ok(())
+            });
+        }
+
+        fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
+            methods.add_meta_method(MetaMethod::Call, |_, _this, ()| Ok("called"));
+            methods.add_method_mut("add", |_, this, x: u32| {
+                this.0 += x;
+                Ok(())
+            });
+        }
+    }
+
+    let ud = lua.create_userdata(MyUserData(123))?;
+
+    assert_eq!(ud.get::<_, u32>("n")?, 123);
+    ud.set("n", 321)?;
+    assert_eq!(ud.get::<_, u32>("n")?, 321);
+    match ud.get::<_, u32>("non-existent") {
+        Err(Error::RuntimeError(_)) => {}
+        r => panic!("expected RuntimeError, got {r:?}"),
+    }
+    match ud.set::<_, u32>("non-existent", 123) {
+        Err(Error::RuntimeError(_)) => {}
+        r => panic!("expected RuntimeError, got {r:?}"),
+    }
+
+    assert_eq!(ud.call::<_, String>(())?, "called");
+
+    ud.call_method("add", 2)?;
+    assert_eq!(ud.get::<_, u32>("n")?, 323);
 
     Ok(())
 }
