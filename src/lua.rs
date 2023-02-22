@@ -2065,22 +2065,27 @@ impl Lua {
             let _sg = StackGuard::new(state);
             check_stack(state, 4)?;
 
-            let unref_list = (*self.extra.get()).registry_unref_list.clone();
             self.push_value(t)?;
 
             // Try to reuse previously allocated slot
-            let unref_list2 = unref_list.clone();
-            let mut unref_list2 = mlua_expect!(unref_list2.lock(), "unref list poisoned");
-            if let Some(registry_id) = unref_list2.as_mut().and_then(|x| x.pop()) {
+            let unref_list = (*self.extra.get()).registry_unref_list.clone();
+            let free_registry_id = mlua_expect!(unref_list.lock(), "unref list poisoned")
+                .as_mut()
+                .and_then(|x| x.pop());
+            if let Some(registry_id) = free_registry_id {
                 // It must be safe to replace the value without triggering memory error
                 ffi::lua_rawseti(state, ffi::LUA_REGISTRYINDEX, registry_id as Integer);
                 return Ok(RegistryKey::new(registry_id, unref_list));
             }
 
             // Allocate a new RegistryKey
-            let registry_id = protect_lua!(state, 1, 0, |state| {
+            let registry_id = if self.unlikely_memory_error() {
                 ffi::luaL_ref(state, ffi::LUA_REGISTRYINDEX)
-            })?;
+            } else {
+                protect_lua!(state, 1, 0, |state| {
+                    ffi::luaL_ref(state, ffi::LUA_REGISTRYINDEX)
+                })?
+            };
             Ok(RegistryKey::new(registry_id, unref_list))
         }
     }
