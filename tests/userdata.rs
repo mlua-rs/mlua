@@ -13,8 +13,8 @@ use std::{cell::RefCell, rc::Rc};
 use std::sync::atomic::{AtomicI64, Ordering};
 
 use mlua::{
-    AnyUserData, AnyUserDataExt, Error, ExternalError, FromLua, Function, Lua, MetaMethod, Nil,
-    Result, String, UserData, UserDataFields, UserDataMethods, Value,
+    AnyUserData, AnyUserDataExt, Error, ExternalError, Function, Lua, MetaMethod, Nil, Result,
+    String, UserData, UserDataFields, UserDataMethods, UserDataRef, Value,
 };
 
 #[test]
@@ -96,29 +96,25 @@ fn test_metamethods() -> Result<()> {
     #[derive(Copy, Clone)]
     struct MyUserData(i64);
 
-    impl<'lua> FromLua<'lua> for MyUserData {
-        fn from_lua(value: Value<'lua>, _: &'lua Lua) -> Result<Self> {
-            match value {
-                Value::UserData(ud) => Ok(ud.borrow::<Self>()?.clone()),
-                _ => unreachable!(),
-            }
-        }
-    }
-
     impl UserData for MyUserData {
         fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
             methods.add_method("get", |_, data, ()| Ok(data.0));
             methods.add_meta_function(
                 MetaMethod::Add,
-                |_, (lhs, rhs): (MyUserData, MyUserData)| Ok(MyUserData(lhs.0 + rhs.0)),
+                |_, (lhs, rhs): (UserDataRef<Self>, UserDataRef<Self>)| {
+                    Ok(MyUserData(lhs.0 + rhs.0))
+                },
             );
             methods.add_meta_function(
                 MetaMethod::Sub,
-                |_, (lhs, rhs): (MyUserData, MyUserData)| Ok(MyUserData(lhs.0 - rhs.0)),
+                |_, (lhs, rhs): (UserDataRef<Self>, UserDataRef<Self>)| {
+                    Ok(MyUserData(lhs.0 - rhs.0))
+                },
             );
-            methods.add_meta_function(MetaMethod::Eq, |_, (lhs, rhs): (MyUserData, MyUserData)| {
-                Ok(lhs.0 == rhs.0)
-            });
+            methods.add_meta_function(
+                MetaMethod::Eq,
+                |_, (lhs, rhs): (UserDataRef<Self>, UserDataRef<Self>)| Ok(lhs.0 == rhs.0),
+            );
             methods.add_meta_method(MetaMethod::Index, |_, data, index: String| {
                 if index.to_str()? == "inner" {
                     Ok(data.0)
@@ -134,13 +130,14 @@ fn test_metamethods() -> Result<()> {
             ))]
             methods.add_meta_method(MetaMethod::Pairs, |lua, data, ()| {
                 use std::iter::FromIterator;
-                let stateless_iter = lua.create_function(|_, (data, i): (MyUserData, i64)| {
-                    let i = i + 1;
-                    if i <= data.0 {
-                        return Ok(mlua::Variadic::from_iter(vec![i, i]));
-                    }
-                    return Ok(mlua::Variadic::new());
-                })?;
+                let stateless_iter =
+                    lua.create_function(|_, (data, i): (UserDataRef<Self>, i64)| {
+                        let i = i + 1;
+                        if i <= data.0 {
+                            return Ok(mlua::Variadic::from_iter(vec![i, i]));
+                        }
+                        return Ok(mlua::Variadic::new());
+                    })?;
                 Ok((stateless_iter, data.clone(), 0))
             });
         }
@@ -152,7 +149,9 @@ fn test_metamethods() -> Result<()> {
     globals.set("userdata2", MyUserData(3))?;
     globals.set("userdata3", MyUserData(3))?;
     assert_eq!(
-        lua.load("userdata1 + userdata2").eval::<MyUserData>()?.0,
+        lua.load("userdata1 + userdata2")
+            .eval::<UserDataRef<MyUserData>>()?
+            .0,
         10
     );
 
@@ -176,7 +175,12 @@ fn test_metamethods() -> Result<()> {
         )
         .eval::<Function>()?;
 
-    assert_eq!(lua.load("userdata1 - userdata2").eval::<MyUserData>()?.0, 4);
+    assert_eq!(
+        lua.load("userdata1 - userdata2")
+            .eval::<UserDataRef<MyUserData>>()?
+            .0,
+        4
+    );
     assert_eq!(lua.load("userdata1:get()").eval::<i64>()?, 7);
     assert_eq!(lua.load("userdata2.inner").eval::<i64>()?, 3);
     assert!(lua.load("userdata2.nonexist_field").eval::<()>().is_err());

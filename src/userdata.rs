@@ -1,7 +1,8 @@
-use std::any::TypeId;
+use std::any::{type_name, TypeId};
 use std::cell::{Ref, RefCell, RefMut};
 use std::fmt;
 use std::hash::Hash;
+use std::mem;
 use std::ops::{Deref, DerefMut};
 use std::os::raw::{c_char, c_int};
 use std::string::String as StdString;
@@ -22,7 +23,7 @@ use crate::lua::Lua;
 use crate::table::{Table, TablePairs};
 use crate::types::{Callback, LuaRef, MaybeSend};
 use crate::util::{check_stack, get_userdata, take_userdata, StackGuard};
-use crate::value::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti};
+use crate::value::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, Value};
 
 #[cfg(feature = "async")]
 use crate::types::AsyncCallback;
@@ -1215,6 +1216,67 @@ impl<'lua> Serialize for AnyUserData<'lua> {
             UserDataVariant::Serializable(ser) => ser.serialize(serializer),
             _ => UserDataSerializeError.serialize(serializer),
         }
+    }
+}
+
+/// A wrapper type for an immutably borrowed value from a `AnyUserData`.
+///
+/// It implements [`FromLua`] and can be used to receive a typed userdata from Lua.
+pub struct UserDataRef<'lua, T: 'static>(AnyUserData<'lua>, Ref<'lua, T>);
+
+impl<'lua, T: 'static> Deref for UserDataRef<'lua, T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        &self.1
+    }
+}
+
+impl<'lua, T: 'static> UserDataRef<'lua, T> {
+    pub(crate) fn from_value(value: Value<'lua>) -> Result<Self> {
+        let ud = try_value_to_userdata::<T>(value)?;
+        // It's safe to lift lifetime of `Ref<T>` to `'lua` as long as we hold AnyUserData to it.
+        let this = unsafe { mem::transmute(ud.borrow::<T>()?) };
+        Ok(UserDataRef(ud, this))
+    }
+}
+
+/// A wrapper type for a mutably borrowed value from a `AnyUserData`.
+///
+/// It implements [`FromLua`] and can be used to receive a typed userdata from Lua.
+pub struct UserDataRefMut<'lua, T: 'static>(AnyUserData<'lua>, RefMut<'lua, T>);
+
+impl<'lua, T: 'static> Deref for UserDataRefMut<'lua, T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        &self.1
+    }
+}
+
+impl<'lua, T: 'static> DerefMut for UserDataRefMut<'lua, T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.1
+    }
+}
+
+impl<'lua, T: 'static> UserDataRefMut<'lua, T> {
+    pub(crate) fn from_value(value: Value<'lua>) -> Result<Self> {
+        let ud = try_value_to_userdata::<T>(value)?;
+        // It's safe to lift lifetime of `RefMut<T>` to `'lua` as long as we hold AnyUserData to it.
+        let this = unsafe { mem::transmute(ud.borrow_mut::<T>()?) };
+        Ok(UserDataRefMut(ud, this))
+    }
+}
+
+fn try_value_to_userdata<T>(value: Value) -> Result<AnyUserData> {
+    match value {
+        Value::UserData(ud) => Ok(ud),
+        _ => Err(Error::FromLuaConversionError {
+            from: value.type_name(),
+            to: "userdata",
+            message: Some(format!("expected userdata of type {}", type_name::<T>())),
+        }),
     }
 }
 

@@ -121,6 +121,7 @@ pub use crate::thread::{Thread, ThreadStatus};
 pub use crate::types::{Integer, LightUserData, Number, RegistryKey};
 pub use crate::userdata::{
     AnyUserData, MetaMethod, UserData, UserDataFields, UserDataMetatable, UserDataMethods,
+    UserDataRef, UserDataRefMut,
 };
 pub use crate::userdata_ext::AnyUserDataExt;
 pub use crate::userdata_impl::UserDataRegistrar;

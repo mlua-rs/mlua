@@ -15,7 +15,7 @@ use crate::string::String;
 use crate::table::Table;
 use crate::thread::Thread;
 use crate::types::{LightUserData, MaybeSend};
-use crate::userdata::{AnyUserData, UserData};
+use crate::userdata::{AnyUserData, UserData, UserDataRef, UserDataRefMut};
 use crate::value::{FromLua, IntoLua, Nil, Value};
 
 #[cfg(feature = "unstable")]
@@ -214,6 +214,20 @@ impl<'lua, T: 'static + MaybeSend + UserData> IntoLua<'lua> for T {
     #[inline]
     fn into_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
         Ok(Value::UserData(lua.create_userdata(self)?))
+    }
+}
+
+impl<'lua, T: 'static> FromLua<'lua> for UserDataRef<'lua, T> {
+    #[inline]
+    fn from_lua(value: Value<'lua>, _: &'lua Lua) -> Result<Self> {
+        Self::from_value(value)
+    }
+}
+
+impl<'lua, T: 'static> FromLua<'lua> for UserDataRefMut<'lua, T> {
+    #[inline]
+    fn from_lua(value: Value<'lua>, _: &'lua Lua) -> Result<Self> {
+        Self::from_value(value)
     }
 }
 
