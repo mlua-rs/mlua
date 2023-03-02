@@ -38,8 +38,8 @@ pub struct OwnedFunction(pub(crate) crate::types::LuaOwnedRef);
 #[cfg(feature = "unstable")]
 impl OwnedFunction {
     /// Get borrowed handle to the underlying Lua function.
-    pub const fn to_ref(&self) -> Function {
-        Function(self.0.to_ref())
+    pub const fn as_ref(&self) -> Function {
+        Function(self.0.as_ref())
     }
 }
 

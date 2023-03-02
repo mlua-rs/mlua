@@ -253,7 +253,7 @@ impl fmt::Debug for LuaOwnedRef {
 #[cfg(feature = "unstable")]
 impl Clone for LuaOwnedRef {
     fn clone(&self) -> Self {
-        self.to_ref().clone().into_owned()
+        self.as_ref().clone().into_owned()
     }
 }
 
@@ -282,7 +282,7 @@ impl LuaOwnedRef {
         }
     }
 
-    pub(crate) const fn to_ref(&self) -> LuaRef {
+    pub(crate) const fn as_ref(&self) -> LuaRef {
         LuaRef {
             lua: &self.lua,
             index: self.index,
