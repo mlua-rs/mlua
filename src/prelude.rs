@@ -12,7 +12,8 @@ pub use crate::{
     TableExt as LuaTableExt, TablePairs as LuaTablePairs, TableSequence as LuaTableSequence,
     Thread as LuaThread, ThreadStatus as LuaThreadStatus, UserData as LuaUserData,
     UserDataFields as LuaUserDataFields, UserDataMetatable as LuaUserDataMetatable,
-    UserDataMethods as LuaUserDataMethods, UserDataRegistrar as LuaUserDataRegistrar,
+    UserDataMethods as LuaUserDataMethods, UserDataRef as LuaUserDataRef,
+    UserDataRefMut as LuaUserDataRefMut, UserDataRegistrar as LuaUserDataRegistrar,
     Value as LuaValue,
 };
 
@@ -33,4 +34,11 @@ pub use crate::AsyncThread as LuaAsyncThread;
 pub use crate::{
     DeserializeOptions as LuaDeserializeOptions, LuaSerdeExt,
     SerializeOptions as LuaSerializeOptions,
+};
+
+#[cfg(all(feature = "unstable", not(feature = "send")))]
+#[doc(no_inline)]
+pub use crate::{
+    OwnedAnyUserData as LuaOwnedAnyUserData, OwnedFunction as LuaOwnedFunction,
+    OwnedTable as LuaOwnedTable,
 };
