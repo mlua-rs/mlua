@@ -54,12 +54,12 @@ use crate::{chunk::Compiler, types::VmState};
 #[cfg(feature = "async")]
 use {
     crate::types::{AsyncCallback, AsyncCallbackUpvalue, AsyncPollUpvalue},
-    futures_core::{
+    futures_task::noop_waker_ref,
+    futures_util::future::{self, TryFutureExt},
+    std::{
         future::Future,
         task::{Context, Poll, Waker},
     },
-    futures_task::noop_waker,
-    futures_util::future::{self, TryFutureExt},
 };
 
 #[cfg(feature = "serialize")]
@@ -113,9 +113,9 @@ pub(crate) struct ExtraData {
     // Address of `WrappedFailure` metatable
     wrapped_failure_mt_ptr: *const c_void,
 
-    // Index of `Option<Waker>` userdata on the ref thread
+    // Waker for polling futures
     #[cfg(feature = "async")]
-    ref_waker_idx: c_int,
+    waker: NonNull<Waker>,
 
     #[cfg(not(feature = "luau"))]
     hook_callback: Option<HookCallback>,
@@ -245,13 +245,6 @@ impl Drop for LuaInner {
                 ffi::lua_pushnil(extra.ref_thread);
                 ffi::lua_replace(extra.ref_thread, index);
                 extra.ref_free.push(index);
-            }
-            #[cfg(feature = "async")]
-            {
-                // Destroy Waker slot
-                ffi::lua_pushnil(extra.ref_thread);
-                ffi::lua_replace(extra.ref_thread, extra.ref_waker_idx);
-                extra.ref_free.push(extra.ref_waker_idx);
             }
             #[cfg(feature = "luau")]
             {
@@ -555,17 +548,6 @@ impl Lua {
             ptr
         };
 
-        // Create empty Waker slot on the ref thread
-        #[cfg(feature = "async")]
-        let ref_waker_idx = {
-            mlua_expect!(
-                push_gc_userdata::<Option<Waker>>(ref_thread, None, true),
-                "Error while creating Waker slot"
-            );
-            ffi::lua_gettop(ref_thread)
-        };
-        let ref_stack_top = ffi::lua_gettop(ref_thread);
-
         // Create ExtraData
         let extra = Arc::new(UnsafeCell::new(ExtraData {
             inner: None,
@@ -579,7 +561,7 @@ impl Lua {
             ref_thread,
             // We need 1 extra stack space to move values in and out of the ref stack.
             ref_stack_size: ffi::LUA_MINSTACK - 1,
-            ref_stack_top,
+            ref_stack_top: ffi::lua_gettop(ref_thread),
             ref_free: Vec::new(),
             wrapped_failure_pool: Vec::with_capacity(WRAPPED_FAILURE_POOL_SIZE),
             multivalue_pool: Vec::with_capacity(MULTIVALUE_POOL_SIZE),
@@ -587,7 +569,7 @@ impl Lua {
             thread_pool: Vec::new(),
             wrapped_failure_mt_ptr,
             #[cfg(feature = "async")]
-            ref_waker_idx,
+            waker: NonNull::from(noop_waker_ref()),
             #[cfg(not(feature = "luau"))]
             hook_callback: None,
             #[cfg(feature = "lua54")]
@@ -2818,11 +2800,8 @@ impl Lua {
                 let lua: &Lua = mem::transmute((*extra).inner.as_ref().unwrap());
                 let _guard = StateGuard::new(&lua.0, state);
 
-                // Try to get an outer poll waker
-                let waker = lua.waker().unwrap_or_else(noop_waker);
-                let mut ctx = Context::from_waker(&waker);
-
                 let fut = &mut (*upvalue).data;
+                let mut ctx = Context::from_waker(lua.waker());
                 match fut.as_mut().poll(&mut ctx) {
                     Poll::Pending => {
                         check_stack(state, 1)?;
@@ -2907,20 +2886,14 @@ impl Lua {
 
     #[cfg(feature = "async")]
     #[inline]
-    pub(crate) unsafe fn waker(&self) -> Option<Waker> {
-        let extra = &*self.extra.get();
-        (*get_userdata::<Option<Waker>>(extra.ref_thread, extra.ref_waker_idx)).clone()
+    pub(crate) unsafe fn waker(&self) -> &Waker {
+        (*self.extra.get()).waker.as_ref()
     }
 
     #[cfg(feature = "async")]
     #[inline]
-    pub(crate) unsafe fn set_waker(&self, waker: Option<Waker>) -> Option<Waker> {
-        let extra = &*self.extra.get();
-        let waker_slot = &mut *get_userdata::<Option<Waker>>(extra.ref_thread, extra.ref_waker_idx);
-        match waker {
-            Some(waker) => waker_slot.replace(waker),
-            None => waker_slot.take(),
-        }
+    pub(crate) unsafe fn set_waker(&self, waker: NonNull<Waker>) -> NonNull<Waker> {
+        mem::replace(&mut (*self.extra.get()).waker, waker)
     }
 
     pub(crate) unsafe fn make_userdata<T>(&self, data: UserDataCell<T>) -> Result<AnyUserData>

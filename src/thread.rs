@@ -24,6 +24,7 @@ use {
     std::{
         marker::PhantomData,
         pin::Pin,
+        ptr::NonNull,
         task::{Context, Poll, Waker},
     },
 };
@@ -390,7 +391,7 @@ where
             _ => return Poll::Ready(None),
         };
 
-        let _wg = WakerGuard::new(lua, cx.waker().clone());
+        let _wg = WakerGuard::new(lua, cx.waker());
 
         // This is safe as we are not moving the whole struct
         let this = unsafe { self.get_unchecked_mut() };
@@ -424,7 +425,7 @@ where
             _ => return Poll::Ready(Err(Error::CoroutineInactive)),
         };
 
-        let _wg = WakerGuard::new(lua, cx.waker().clone());
+        let _wg = WakerGuard::new(lua, cx.waker());
 
         // This is safe as we are not moving the whole struct
         let this = unsafe { self.get_unchecked_mut() };
@@ -462,15 +463,15 @@ fn is_poll_pending(val: &MultiValue) -> bool {
 #[cfg(feature = "async")]
 struct WakerGuard<'lua> {
     lua: &'lua Lua,
-    prev: Option<Waker>,
+    prev: NonNull<Waker>,
 }
 
 #[cfg(feature = "async")]
 impl<'lua> WakerGuard<'lua> {
     #[inline]
-    pub fn new(lua: &Lua, waker: Waker) -> Result<WakerGuard> {
+    pub fn new(lua: &'lua Lua, waker: &Waker) -> Result<WakerGuard<'lua>> {
         unsafe {
-            let prev = lua.set_waker(Some(waker));
+            let prev = lua.set_waker(NonNull::from(waker));
             Ok(WakerGuard { lua, prev })
         }
     }
@@ -480,7 +481,7 @@ impl<'lua> WakerGuard<'lua> {
 impl<'lua> Drop for WakerGuard<'lua> {
     fn drop(&mut self) {
         unsafe {
-            self.lua.set_waker(self.prev.take());
+            self.lua.set_waker(self.prev);
         }
     }
 }
