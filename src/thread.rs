@@ -461,24 +461,29 @@ fn is_poll_pending(val: &MultiValue) -> bool {
 }
 
 #[cfg(feature = "async")]
-struct WakerGuard<'lua> {
+struct WakerGuard<'lua, 'a> {
     lua: &'lua Lua,
     prev: NonNull<Waker>,
+    _phantom: PhantomData<&'a ()>,
 }
 
 #[cfg(feature = "async")]
-impl<'lua> WakerGuard<'lua> {
+impl<'lua, 'a> WakerGuard<'lua, 'a> {
     #[inline]
-    pub fn new(lua: &'lua Lua, waker: &Waker) -> Result<WakerGuard<'lua>> {
+    pub fn new(lua: &'lua Lua, waker: &'a Waker) -> Result<WakerGuard<'lua, 'a>> {
         unsafe {
             let prev = lua.set_waker(NonNull::from(waker));
-            Ok(WakerGuard { lua, prev })
+            Ok(WakerGuard {
+                lua,
+                prev,
+                _phantom: PhantomData,
+            })
         }
     }
 }
 
 #[cfg(feature = "async")]
-impl<'lua> Drop for WakerGuard<'lua> {
+impl<'lua, 'a> Drop for WakerGuard<'lua, 'a> {
     fn drop(&mut self) {
         unsafe {
             self.lua.set_waker(self.prev);
