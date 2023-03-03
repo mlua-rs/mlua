@@ -1632,7 +1632,7 @@ impl Lua {
     /// Wraps a Lua function into a new thread (or coroutine).
     ///
     /// Equivalent to `coroutine.create`.
-    pub fn create_thread<'lua>(&'lua self, func: Function<'lua>) -> Result<Thread<'lua>> {
+    pub fn create_thread<'lua>(&'lua self, func: Function) -> Result<Thread<'lua>> {
         let state = self.state();
         unsafe {
             let _sg = StackGuard::new(state);
@@ -1654,7 +1654,7 @@ impl Lua {
     #[cfg(feature = "async")]
     pub(crate) fn create_recycled_thread<'lua>(
         &'lua self,
-        func: Function<'lua>,
+        func: &Function,
     ) -> Result<Thread<'lua>> {
         #[cfg(any(
             feature = "lua54",
@@ -1681,7 +1681,7 @@ impl Lua {
                 return Ok(Thread(LuaRef::new(self, index)));
             }
         };
-        self.create_thread(func)
+        self.create_thread(func.clone())
     }
 
     /// Resets thread (coroutine) and returns to the pool for later use.

@@ -178,7 +178,7 @@ impl<'lua> Function<'lua> {
         R: FromLuaMulti<'lua> + 'fut,
     {
         let lua = self.0.lua;
-        match lua.create_recycled_thread(self.clone()) {
+        match lua.create_recycled_thread(self) {
             Ok(t) => {
                 let mut t = t.into_async(args);
                 t.set_recyclable(true);
