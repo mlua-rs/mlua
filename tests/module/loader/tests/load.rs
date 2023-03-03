@@ -8,7 +8,7 @@ fn test_module() -> Result<()> {
     let lua = make_lua()?;
     lua.load(
         r#"
-        local mod = require("rust_module")
+        local mod = require("test_module")
         assert(mod.sum(2,2) == 4)
     "#,
     )
@@ -20,8 +20,8 @@ fn test_module_multi() -> Result<()> {
     let lua = make_lua()?;
     lua.load(
         r#"
-        local mod = require("rust_module")
-        local mod2 = require("rust_module.second")
+        local mod = require("test_module")
+        local mod2 = require("test_module.second")
         assert(mod.check_userdata(mod2.userdata) == 123)
     "#,
     )
@@ -33,7 +33,7 @@ fn test_module_error() -> Result<()> {
     let lua = make_lua()?;
     lua.load(
         r#"
-        local ok, err = pcall(require, "rust_module.error")
+        local ok, err = pcall(require, "test_module.error")
         assert(not ok)
         assert(string.find(tostring(err), "custom module error"))
     "#,
@@ -55,7 +55,7 @@ fn test_module_from_thread() -> Result<()> {
         local mod
 
         local co = coroutine.create(function(a, b)
-            mod = require("rust_module")
+            mod = require("test_module")
             assert(mod.sum(a, b) == a + b)
         end)
 
