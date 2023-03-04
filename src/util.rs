@@ -428,11 +428,17 @@ unsafe fn init_userdata_metatable_index(state: *mut ffi::lua_State) -> Result<()
     }
     ffi::lua_pop(state, 1);
 
-    // Create and cache `__index` helper
+    // Create and cache `__index` generator
     let code = cstr!(
         r#"
             local error, isfunction = ...
             return function (__index, field_getters, methods)
+                -- Fastpath to return methods table for index access
+                if __index == nil and field_getters == nil then
+                    return methods
+                end
+
+                -- Alternatively return a function for index access
                 return function (self, key)
                     if field_getters ~= nil then
                         local field_getter = field_getters[key]
@@ -482,7 +488,7 @@ pub unsafe fn init_userdata_metatable_newindex(state: *mut ffi::lua_State) -> Re
     }
     ffi::lua_pop(state, 1);
 
-    // Create and cache `__newindex` helper
+    // Create and cache `__newindex` generator
     let code = cstr!(
         r#"
             local error, isfunction = ...
