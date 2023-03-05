@@ -1,3 +1,8 @@
+## v0.8.8
+
+- Fix potential deadlock when trying to reuse dropped registry keys.
+- Optimize userdata methods call when __index and fields_getters are nil
+
 ## v0.8.7
 
 - Minimum Luau updated to 0.555 (`LUAI_MAXCSTACK` limit increased to 100000)
