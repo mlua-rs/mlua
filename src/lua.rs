@@ -84,6 +84,7 @@ pub(crate) struct ExtraData {
 
     registered_userdata: FxHashMap<TypeId, c_int>,
     registered_userdata_mt: FxHashMap<*const c_void, Option<TypeId>>,
+    last_checked_userdata_mt: (*const c_void, Option<TypeId>),
 
     // When Lua instance dropped, setting `None` would prevent collecting `RegistryKey`s
     registry_unref_list: Arc<Mutex<Option<Vec<c_int>>>>,
@@ -553,6 +554,7 @@ impl Lua {
             inner: None,
             registered_userdata: FxHashMap::default(),
             registered_userdata_mt: FxHashMap::default(),
+            last_checked_userdata_mt: (ptr::null(), None),
             registry_unref_list: Arc::new(Mutex::new(Some(Vec::new()))),
             app_data: RefCell::new(FxHashMap::default()),
             safe: false,
@@ -2615,6 +2617,9 @@ impl Lua {
     #[inline]
     pub(crate) unsafe fn deregister_raw_userdata_metatable(&self, ptr: *const c_void) {
         (*self.extra.get()).registered_userdata_mt.remove(&ptr);
+        if (*self.extra.get()).last_checked_userdata_mt.0 == ptr {
+            (*self.extra.get()).last_checked_userdata_mt = (ptr::null(), None);
+        }
     }
 
     // Pushes a LuaRef value onto the stack, checking that it's a registered
@@ -2630,11 +2635,20 @@ impl Lua {
         let mt_ptr = ffi::lua_topointer(state, -1);
         ffi::lua_pop(state, 1);
 
+        // Fast path to skip looking up the metatable in the map
+        let (last_mt, last_type_id) = (*self.extra.get()).last_checked_userdata_mt;
+        if last_mt == mt_ptr {
+            return Ok(last_type_id);
+        }
+
         match (*self.extra.get()).registered_userdata_mt.get(&mt_ptr) {
             Some(&type_id) if type_id == Some(TypeId::of::<DestructedUserdata>()) => {
                 Err(Error::UserDataDestructed)
             }
-            Some(&type_id) => Ok(type_id),
+            Some(&type_id) => {
+                (*self.extra.get()).last_checked_userdata_mt = (mt_ptr, type_id);
+                Ok(type_id)
+            }
             None => Err(Error::UserDataTypeMismatch),
         }
     }
