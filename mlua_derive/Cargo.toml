@@ -2,7 +2,7 @@
 name = "mlua_derive"
 version = "0.8.0"
 authors = ["Aleksandr Orlenko <zxteam@pm.me>"]
-edition = "2018"
+edition = "2021"
 description = "Procedural macros for the mlua crate."
 repository = "https://github.com/khvzak/mlua"
 keywords = ["lua", "mlua"]

@@ -2,7 +2,7 @@
 name = "module_loader"
 version = "0.0.0"
 authors = ["Aleksandr Orlenko <zxteam@pm.me>"]
-edition = "2018"
+edition = "2021"
 
 [features]
 lua54 = ["mlua/lua54"]
