@@ -69,6 +69,20 @@ pub enum Error {
     StackError,
     /// Too many arguments to `Function::bind`
     BindError,
+    /// Bad argument received from Lua (usually when calling a function).
+    ///
+    /// This error can help to identify the argument that caused the error
+    /// (which is stored in the corresponding field).
+    BadArgument {
+        /// Function that was called.
+        to: Option<StdString>,
+        /// Argument position (usually starts from 1).
+        pos: usize,
+        /// Argument name.
+        name: Option<StdString>,
+        /// Underlying error returned when converting argument to a Lua value.
+        error: Arc<Error>,
+    },
     /// A Rust value could not be converted to a Lua value.
     ToLuaConversionError {
         /// Name of the Rust type that could not be converted.
@@ -216,6 +230,17 @@ impl fmt::Display for Error {
                 fmt,
                 "too many arguments to Function::bind"
             ),
+            Error::BadArgument { ref to, pos, ref name, ref error } => {
+                if let Some(name) = name {
+                    write!(fmt, "bad argument `{name}`")?;
+                } else {
+                    write!(fmt, "bad argument #{pos}")?;
+                }
+                if let Some(to) = to {
+                    write!(fmt, " to `{to}`")?;
+                }
+                write!(fmt, ": {error}")
+            },
             Error::ToLuaConversionError { from, to, ref message } => {
                 write!(fmt, "error converting {from} to Lua {to}")?;
                 match *message {
@@ -247,13 +272,13 @@ impl fmt::Display for Error {
                 write!(fmt, "RegistryKey used from different Lua state")
             }
             Error::CallbackError { ref cause, ref traceback } => {
-                writeln!(fmt, "callback error")?;
                 // Trace errors down to the root
                 let (mut cause, mut full_traceback) = (cause, None);
                 while let Error::CallbackError { cause: ref cause2, traceback: ref traceback2 } = **cause {
                     cause = cause2;
                     full_traceback = Some(traceback2);
                 }
+                writeln!(fmt, "{cause}")?;
                 if let Some(full_traceback) = full_traceback {
                     let traceback = traceback.trim_start_matches("stack traceback:");
                     let traceback = traceback.trim_start().trim_end();
@@ -267,7 +292,7 @@ impl fmt::Display for Error {
                 } else {
                     writeln!(fmt, "{}", traceback.trim_end())?;
                 }
-                write!(fmt, "caused by: {cause}")
+                Ok(())
             }
             Error::PreviouslyResumedPanic => {
                 write!(fmt, "previously resumed panic returned again")
@@ -300,8 +325,29 @@ impl StdError for Error {
 }
 
 impl Error {
-    pub fn external<T: Into<Box<dyn StdError + Send + Sync>>>(err: T) -> Error {
+    pub fn external<T: Into<Box<dyn StdError + Send + Sync>>>(err: T) -> Self {
         Error::ExternalError(err.into().into())
+    }
+
+    pub(crate) fn bad_self_argument(to: &str, error: Error) -> Self {
+        Error::BadArgument {
+            to: Some(to.to_string()),
+            pos: 1,
+            name: Some("self".to_string()),
+            error: Arc::new(error),
+        }
+    }
+
+    pub(crate) fn from_lua_conversion<'a>(
+        from: &'static str,
+        to: &'static str,
+        message: impl Into<Option<&'a str>>,
+    ) -> Self {
+        Error::FromLuaConversionError {
+            from,
+            to,
+            message: message.into().map(|s| s.into()),
+        }
     }
 }
 

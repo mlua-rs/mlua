@@ -1,6 +1,7 @@
 use std::iter::{self, FromIterator};
 use std::ops::Index;
 use std::os::raw::c_void;
+use std::sync::Arc;
 use std::{ptr, slice, str, vec};
 
 #[cfg(feature = "serialize")]
@@ -93,7 +94,7 @@ impl<'lua> Value<'lua> {
         match (self, other.as_ref()) {
             (Value::Table(a), Value::Table(b)) => a.equals(b),
             (Value::UserData(a), Value::UserData(b)) => a.equals(b),
-            _ => Ok(self == other.as_ref()),
+            (a, b) => Ok(a == b),
         }
     }
 
@@ -162,8 +163,7 @@ impl<'lua> Serialize for Value<'lua> {
             Value::Boolean(b) => serializer.serialize_bool(*b),
             #[allow(clippy::useless_conversion)]
             Value::Integer(i) => serializer
-                .serialize_i64((*i).try_into().expect("cannot convert lua_Integer to i64")),
-            #[allow(clippy::useless_conversion)]
+                .serialize_i64((*i).try_into().expect("cannot convert Lua Integer to i64")),
             Value::Number(n) => serializer.serialize_f64(*n),
             #[cfg(feature = "luau")]
             Value::Vector(x, y, z) => (x, y, z).serialize(serializer),
@@ -188,7 +188,26 @@ pub trait IntoLua<'lua> {
 /// Trait for types convertible from `Value`.
 pub trait FromLua<'lua>: Sized {
     /// Performs the conversion.
-    fn from_lua(lua_value: Value<'lua>, lua: &'lua Lua) -> Result<Self>;
+    fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> Result<Self>;
+
+    /// Performs the conversion for an argument (eg. function argument).
+    ///
+    /// `i` is the argument index (position),
+    /// `to` is a function name that received the argument.
+    #[doc(hidden)]
+    fn from_lua_arg(
+        value: Value<'lua>,
+        i: usize,
+        to: Option<&str>,
+        lua: &'lua Lua,
+    ) -> Result<Self> {
+        Self::from_lua(value, lua).map_err(|err| Error::BadArgument {
+            to: to.map(|s| s.to_string()),
+            pos: i,
+            name: None,
+            error: Arc::new(err),
+        })
+    }
 }
 
 /// Multiple Lua values used for both argument passing and also for multiple return values.
@@ -362,6 +381,22 @@ pub trait FromLuaMulti<'lua>: Sized {
     /// assigning values. Similarly, if not enough values are given, conversions should assume that
     /// any missing values are nil.
     fn from_lua_multi(values: MultiValue<'lua>, lua: &'lua Lua) -> Result<Self>;
+
+    /// Performs the conversion for a list of arguments.
+    ///
+    /// `i` is an index (position) of the first argument,
+    /// `to` is a function name that received the arguments.
+    #[doc(hidden)]
+    #[inline]
+    fn from_lua_multi_args(
+        values: MultiValue<'lua>,
+        i: usize,
+        to: Option<&str>,
+        lua: &'lua Lua,
+    ) -> Result<Self> {
+        let _ = (i, to);
+        Self::from_lua_multi(values, lua)
+    }
 }
 
 #[cfg(test)]

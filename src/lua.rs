@@ -785,7 +785,7 @@ impl Lua {
             // We create callback rather than call `func` directly to catch errors
             // with attached stacktrace.
             let callback = lua.create_callback(Box::new(move |lua, args| {
-                func(lua, A::from_lua_multi(args, lua)?)?.into_lua_multi(lua)
+                func(lua, A::from_lua_multi_args(args, 1, None, lua)?)?.into_lua_multi(lua)
             }))?;
             callback.call(args)
         };
@@ -1538,7 +1538,7 @@ impl Lua {
         F: 'static + MaybeSend + Fn(&'lua Lua, A) -> Result<R>,
     {
         self.create_callback(Box::new(move |lua, args| {
-            func(lua, A::from_lua_multi(args, lua)?)?.into_lua_multi(lua)
+            func(lua, A::from_lua_multi_args(args, 1, None, lua)?)?.into_lua_multi(lua)
         }))
     }
 
@@ -1623,7 +1623,7 @@ impl Lua {
         FR: 'lua + Future<Output = Result<R>>,
     {
         self.create_async_callback(Box::new(move |lua, args| {
-            let args = match A::from_lua_multi(args, lua) {
+            let args = match A::from_lua_multi_args(args, 1, None, lua) {
                 Ok(args) => args,
                 Err(e) => return Box::pin(future::err(e)),
             };

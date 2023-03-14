@@ -1,6 +1,7 @@
-use std::any::TypeId;
+use std::any::{self, TypeId};
 use std::cell::{Ref, RefCell, RefMut};
 use std::marker::PhantomData;
+use std::string::String as StdString;
 use std::sync::{Arc, Mutex, RwLock};
 
 use crate::error::{Error, Result};
@@ -60,138 +61,171 @@ impl<'lua, T: 'static> UserDataRegistrar<'lua, T> {
         }
     }
 
-    fn box_method<M, A, R>(method: M) -> Callback<'lua, 'static>
+    fn box_method<M, A, R>(name: &str, method: M) -> Callback<'lua, 'static>
     where
         M: Fn(&'lua Lua, &T, A) -> Result<R> + MaybeSend + 'static,
         A: FromLuaMulti<'lua>,
         R: IntoLuaMulti<'lua>,
     {
+        let name = get_function_name::<T>(name);
+        macro_rules! try_self_arg {
+            ($res:expr) => {
+                $res.map_err(|err| Error::bad_self_argument(&name, err))?
+            };
+            ($res:expr, $err:expr) => {
+                $res.map_err(|_| Error::bad_self_argument(&name, $err))?
+            };
+        }
+
         Box::new(move |lua, mut args| {
-            if let Some(front) = args.pop_front() {
+            let front = args.pop_front();
+            let call = |ud| {
+                // Self was at index 1, so we pass 2 here
+                let args = A::from_lua_multi_args(args, 2, Some(&name), lua)?;
+                method(lua, ud, args)?.into_lua_multi(lua)
+            };
+
+            if let Some(front) = front {
                 let state = lua.state();
-                let userdata = AnyUserData::from_lua(front, lua)?;
+                let userdata = try_self_arg!(AnyUserData::from_lua(front, lua));
                 unsafe {
                     let _sg = StackGuard::new(state);
                     check_stack(state, 2)?;
 
-                    let type_id = lua.push_userdata_ref(&userdata.0)?;
+                    let type_id = try_self_arg!(lua.push_userdata_ref(&userdata.0));
                     match type_id {
                         Some(id) if id == TypeId::of::<T>() => {
-                            let ud = get_userdata_ref::<T>(state)?;
-                            method(lua, &ud, A::from_lua_multi(args, lua)?)?.into_lua_multi(lua)
+                            let ud = try_self_arg!(get_userdata_ref::<T>(state));
+                            call(&ud)
                         }
                         #[cfg(not(feature = "send"))]
                         Some(id) if id == TypeId::of::<Rc<RefCell<T>>>() => {
-                            let ud = get_userdata_ref::<Rc<RefCell<T>>>(state)?;
-                            let ud = ud.try_borrow().map_err(|_| Error::UserDataBorrowError)?;
-                            method(lua, &ud, A::from_lua_multi(args, lua)?)?.into_lua_multi(lua)
+                            let ud = try_self_arg!(get_userdata_ref::<Rc<RefCell<T>>>(state));
+                            let ud = try_self_arg!(ud.try_borrow(), Error::UserDataBorrowError);
+                            call(&ud)
                         }
                         Some(id) if id == TypeId::of::<Arc<Mutex<T>>>() => {
-                            let ud = get_userdata_ref::<Arc<Mutex<T>>>(state)?;
-                            let ud = ud.try_lock().map_err(|_| Error::UserDataBorrowError)?;
-                            method(lua, &ud, A::from_lua_multi(args, lua)?)?.into_lua_multi(lua)
+                            let ud = try_self_arg!(get_userdata_ref::<Arc<Mutex<T>>>(state));
+                            let ud = try_self_arg!(ud.try_lock(), Error::UserDataBorrowError);
+                            call(&ud)
                         }
                         #[cfg(feature = "parking_lot")]
                         Some(id) if id == TypeId::of::<Arc<parking_lot::Mutex<T>>>() => {
-                            let ud = get_userdata_ref::<Arc<parking_lot::Mutex<T>>>(state)?;
-                            let ud = ud.try_lock().ok_or(Error::UserDataBorrowError)?;
-                            method(lua, &ud, A::from_lua_multi(args, lua)?)?.into_lua_multi(lua)
+                            let ud = get_userdata_ref::<Arc<parking_lot::Mutex<T>>>(state);
+                            let ud = try_self_arg!(ud);
+                            let ud = try_self_arg!(ud.try_lock().ok_or(Error::UserDataBorrowError));
+                            call(&ud)
                         }
                         Some(id) if id == TypeId::of::<Arc<RwLock<T>>>() => {
-                            let ud = get_userdata_ref::<Arc<RwLock<T>>>(state)?;
-                            let ud = ud.try_read().map_err(|_| Error::UserDataBorrowError)?;
-                            method(lua, &ud, A::from_lua_multi(args, lua)?)?.into_lua_multi(lua)
+                            let ud = try_self_arg!(get_userdata_ref::<Arc<RwLock<T>>>(state));
+                            let ud = try_self_arg!(ud.try_read(), Error::UserDataBorrowError);
+                            call(&ud)
                         }
                         #[cfg(feature = "parking_lot")]
                         Some(id) if id == TypeId::of::<Arc<parking_lot::RwLock<T>>>() => {
-                            let ud = get_userdata_ref::<Arc<parking_lot::RwLock<T>>>(state)?;
-                            let ud = ud.try_read().ok_or(Error::UserDataBorrowError)?;
-                            method(lua, &ud, A::from_lua_multi(args, lua)?)?.into_lua_multi(lua)
+                            let ud = get_userdata_ref::<Arc<parking_lot::RwLock<T>>>(state);
+                            let ud = try_self_arg!(ud);
+                            let ud = try_self_arg!(ud.try_read().ok_or(Error::UserDataBorrowError));
+                            call(&ud)
                         }
-                        _ => Err(Error::UserDataTypeMismatch),
+                        _ => Err(Error::bad_self_argument(&name, Error::UserDataTypeMismatch)),
                     }
                 }
             } else {
-                Err(Error::FromLuaConversionError {
-                    from: "missing argument",
-                    to: "userdata",
-                    message: None,
-                })
+                let err = Error::from_lua_conversion("missing argument", "userdata", None);
+                Err(Error::bad_self_argument(&name, err))
             }
         })
     }
 
-    fn box_method_mut<M, A, R>(method: M) -> Callback<'lua, 'static>
+    fn box_method_mut<M, A, R>(name: &str, method: M) -> Callback<'lua, 'static>
     where
         M: FnMut(&'lua Lua, &mut T, A) -> Result<R> + MaybeSend + 'static,
         A: FromLuaMulti<'lua>,
         R: IntoLuaMulti<'lua>,
     {
+        let name = get_function_name::<T>(name);
+        macro_rules! try_self_arg {
+            ($res:expr) => {
+                $res.map_err(|err| Error::bad_self_argument(&name, err))?
+            };
+            ($res:expr, $err:expr) => {
+                $res.map_err(|_| Error::bad_self_argument(&name, $err))?
+            };
+        }
+
         let method = RefCell::new(method);
         Box::new(move |lua, mut args| {
-            if let Some(front) = args.pop_front() {
+            let mut method = method
+                .try_borrow_mut()
+                .map_err(|_| Error::RecursiveMutCallback)?;
+            let front = args.pop_front();
+            let call = |ud| {
+                // Self was at index 1, so we pass 2 here
+                let args = A::from_lua_multi_args(args, 2, Some(&name), lua)?;
+                method(lua, ud, args)?.into_lua_multi(lua)
+            };
+
+            if let Some(front) = front {
                 let state = lua.state();
-                let userdata = AnyUserData::from_lua(front, lua)?;
-                let mut method = method
-                    .try_borrow_mut()
-                    .map_err(|_| Error::RecursiveMutCallback)?;
+                let userdata = try_self_arg!(AnyUserData::from_lua(front, lua));
                 unsafe {
                     let _sg = StackGuard::new(state);
                     check_stack(state, 2)?;
 
-                    let type_id = lua.push_userdata_ref(&userdata.0)?;
+                    let type_id = try_self_arg!(lua.push_userdata_ref(&userdata.0));
                     match type_id {
                         Some(id) if id == TypeId::of::<T>() => {
-                            let mut ud = get_userdata_mut::<T>(state)?;
-                            method(lua, &mut ud, A::from_lua_multi(args, lua)?)?.into_lua_multi(lua)
+                            let mut ud = try_self_arg!(get_userdata_mut::<T>(state));
+                            call(&mut ud)
                         }
                         #[cfg(not(feature = "send"))]
                         Some(id) if id == TypeId::of::<Rc<RefCell<T>>>() => {
-                            let ud = get_userdata_mut::<Rc<RefCell<T>>>(state)?;
-                            let mut ud = ud
-                                .try_borrow_mut()
-                                .map_err(|_| Error::UserDataBorrowMutError)?;
-                            method(lua, &mut ud, A::from_lua_multi(args, lua)?)?.into_lua_multi(lua)
+                            let ud = try_self_arg!(get_userdata_mut::<Rc<RefCell<T>>>(state));
+                            let mut ud =
+                                try_self_arg!(ud.try_borrow_mut(), Error::UserDataBorrowMutError);
+                            call(&mut ud)
                         }
                         Some(id) if id == TypeId::of::<Arc<Mutex<T>>>() => {
-                            let ud = get_userdata_mut::<Arc<Mutex<T>>>(state)?;
+                            let ud = try_self_arg!(get_userdata_mut::<Arc<Mutex<T>>>(state));
                             let mut ud =
-                                ud.try_lock().map_err(|_| Error::UserDataBorrowMutError)?;
-                            method(lua, &mut ud, A::from_lua_multi(args, lua)?)?.into_lua_multi(lua)
+                                try_self_arg!(ud.try_lock(), Error::UserDataBorrowMutError);
+                            call(&mut ud)
                         }
                         #[cfg(feature = "parking_lot")]
                         Some(id) if id == TypeId::of::<Arc<parking_lot::Mutex<T>>>() => {
-                            let ud = get_userdata_mut::<Arc<parking_lot::Mutex<T>>>(state)?;
-                            let mut ud = ud.try_lock().ok_or(Error::UserDataBorrowMutError)?;
-                            method(lua, &mut ud, A::from_lua_multi(args, lua)?)?.into_lua_multi(lua)
+                            let ud = get_userdata_mut::<Arc<parking_lot::Mutex<T>>>(state);
+                            let ud = try_self_arg!(ud);
+                            let mut ud =
+                                try_self_arg!(ud.try_lock().ok_or(Error::UserDataBorrowMutError));
+                            call(&mut ud)
                         }
                         Some(id) if id == TypeId::of::<Arc<RwLock<T>>>() => {
-                            let ud = get_userdata_mut::<Arc<RwLock<T>>>(state)?;
+                            let ud = try_self_arg!(get_userdata_mut::<Arc<RwLock<T>>>(state));
                             let mut ud =
-                                ud.try_write().map_err(|_| Error::UserDataBorrowMutError)?;
-                            method(lua, &mut ud, A::from_lua_multi(args, lua)?)?.into_lua_multi(lua)
+                                try_self_arg!(ud.try_write(), Error::UserDataBorrowMutError);
+                            call(&mut ud)
                         }
                         #[cfg(feature = "parking_lot")]
                         Some(id) if id == TypeId::of::<Arc<parking_lot::RwLock<T>>>() => {
-                            let ud = get_userdata_mut::<Arc<parking_lot::RwLock<T>>>(state)?;
-                            let mut ud = ud.try_write().ok_or(Error::UserDataBorrowMutError)?;
-                            method(lua, &mut ud, A::from_lua_multi(args, lua)?)?.into_lua_multi(lua)
+                            let ud = get_userdata_mut::<Arc<parking_lot::RwLock<T>>>(state);
+                            let ud = try_self_arg!(ud);
+                            let mut ud =
+                                try_self_arg!(ud.try_write().ok_or(Error::UserDataBorrowMutError));
+                            call(&mut ud)
                         }
-                        _ => Err(Error::UserDataTypeMismatch),
+                        _ => Err(Error::bad_self_argument(&name, Error::UserDataTypeMismatch)),
                     }
                 }
             } else {
-                Err(Error::FromLuaConversionError {
-                    from: "missing argument",
-                    to: "userdata",
-                    message: None,
-                })
+                let err = Error::from_lua_conversion("missing argument", "userdata", None);
+                Err(Error::bad_self_argument(&name, err))
             }
         })
     }
 
     #[cfg(feature = "async")]
-    fn box_async_method<M, A, MR, R>(method: M) -> AsyncCallback<'lua, 'static>
+    fn box_async_method<M, A, MR, R>(name: &str, method: M) -> AsyncCallback<'lua, 'static>
     where
         T: Clone,
         M: Fn(&'lua Lua, T, A) -> MR + MaybeSend + 'static,
@@ -199,58 +233,76 @@ impl<'lua, T: 'static> UserDataRegistrar<'lua, T> {
         MR: Future<Output = Result<R>> + 'lua,
         R: IntoLuaMulti<'lua>,
     {
+        let name = get_function_name::<T>(name);
+        macro_rules! try_self_arg {
+            ($res:expr) => {
+                $res.map_err(|err| Error::bad_self_argument(&name, err))?
+            };
+            ($res:expr, $err:expr) => {
+                $res.map_err(|_| Error::bad_self_argument(&name, $err))?
+            };
+        }
+
         Box::new(move |lua, mut args| {
+            let front = args.pop_front();
+            let call = |ud| {
+                // Self was at index 1, so we pass 2 here
+                let args = A::from_lua_multi_args(args, 2, Some(&name), lua)?;
+                Ok(method(lua, ud, args))
+            };
+
             let fut_res = || {
-                if let Some(front) = args.pop_front() {
+                if let Some(front) = front {
                     let state = lua.state();
                     let userdata = AnyUserData::from_lua(front, lua)?;
                     unsafe {
                         let _sg = StackGuard::new(state);
                         check_stack(state, 2)?;
 
-                        let type_id = lua.push_userdata_ref(&userdata.0)?;
+                        let type_id = try_self_arg!(lua.push_userdata_ref(&userdata.0));
                         match type_id {
                             Some(id) if id == TypeId::of::<T>() => {
                                 let ud = get_userdata_ref::<T>(state)?;
-                                Ok(method(lua, ud.clone(), A::from_lua_multi(args, lua)?))
+                                call(ud.clone())
                             }
                             #[cfg(not(feature = "send"))]
                             Some(id) if id == TypeId::of::<Rc<RefCell<T>>>() => {
-                                let ud = get_userdata_ref::<Rc<RefCell<T>>>(state)?;
-                                let ud = ud.try_borrow().map_err(|_| Error::UserDataBorrowError)?;
-                                Ok(method(lua, ud.clone(), A::from_lua_multi(args, lua)?))
+                                let ud = try_self_arg!(get_userdata_ref::<Rc<RefCell<T>>>(state));
+                                let ud = try_self_arg!(ud.try_borrow(), Error::UserDataBorrowError);
+                                call(ud.clone())
                             }
                             Some(id) if id == TypeId::of::<Arc<Mutex<T>>>() => {
-                                let ud = get_userdata_ref::<Arc<Mutex<T>>>(state)?;
-                                let ud = ud.try_lock().map_err(|_| Error::UserDataBorrowError)?;
-                                Ok(method(lua, ud.clone(), A::from_lua_multi(args, lua)?))
+                                let ud = try_self_arg!(get_userdata_ref::<Arc<Mutex<T>>>(state));
+                                let ud = try_self_arg!(ud.try_lock(), Error::UserDataBorrowError);
+                                call(ud.clone())
                             }
                             #[cfg(feature = "parking_lot")]
                             Some(id) if id == TypeId::of::<Arc<parking_lot::Mutex<T>>>() => {
-                                let ud = get_userdata_ref::<Arc<parking_lot::Mutex<T>>>(state)?;
-                                let ud = ud.try_lock().ok_or(Error::UserDataBorrowError)?;
-                                Ok(method(lua, ud.clone(), A::from_lua_multi(args, lua)?))
+                                let ud = get_userdata_ref::<Arc<parking_lot::Mutex<T>>>(state);
+                                let ud = try_self_arg!(ud);
+                                let ud =
+                                    try_self_arg!(ud.try_lock().ok_or(Error::UserDataBorrowError));
+                                call(ud.clone())
                             }
                             Some(id) if id == TypeId::of::<Arc<RwLock<T>>>() => {
-                                let ud = get_userdata_ref::<Arc<RwLock<T>>>(state)?;
-                                let ud = ud.try_read().map_err(|_| Error::UserDataBorrowError)?;
-                                Ok(method(lua, ud.clone(), A::from_lua_multi(args, lua)?))
+                                let ud = try_self_arg!(get_userdata_ref::<Arc<RwLock<T>>>(state));
+                                let ud = try_self_arg!(ud.try_read(), Error::UserDataBorrowError);
+                                call(ud.clone())
                             }
                             #[cfg(feature = "parking_lot")]
                             Some(id) if id == TypeId::of::<Arc<parking_lot::RwLock<T>>>() => {
-                                let ud = get_userdata_ref::<Arc<parking_lot::RwLock<T>>>(state)?;
-                                let ud = ud.try_read().ok_or(Error::UserDataBorrowError)?;
-                                Ok(method(lua, ud.clone(), A::from_lua_multi(args, lua)?))
+                                let ud = get_userdata_ref::<Arc<parking_lot::RwLock<T>>>(state);
+                                let ud = try_self_arg!(ud);
+                                let ud =
+                                    try_self_arg!(ud.try_read().ok_or(Error::UserDataBorrowError));
+                                call(ud.clone())
                             }
-                            _ => Err(Error::UserDataTypeMismatch),
+                            _ => Err(Error::bad_self_argument(&name, Error::UserDataTypeMismatch)),
                         }
                     }
                 } else {
-                    Err(Error::FromLuaConversionError {
-                        from: "missing argument",
-                        to: "userdata",
-                        message: None,
-                    })
+                    let err = Error::from_lua_conversion("missing argument", "userdata", None);
+                    Err(Error::bad_self_argument(&name, err))
                 }
             };
             match fut_res() {
@@ -262,40 +314,45 @@ impl<'lua, T: 'static> UserDataRegistrar<'lua, T> {
         })
     }
 
-    fn box_function<F, A, R>(function: F) -> Callback<'lua, 'static>
+    fn box_function<F, A, R>(name: &str, function: F) -> Callback<'lua, 'static>
     where
         F: Fn(&'lua Lua, A) -> Result<R> + MaybeSend + 'static,
         A: FromLuaMulti<'lua>,
         R: IntoLuaMulti<'lua>,
     {
-        Box::new(move |lua, args| function(lua, A::from_lua_multi(args, lua)?)?.into_lua_multi(lua))
+        let name = get_function_name::<T>(name);
+        Box::new(move |lua, args| {
+            function(lua, A::from_lua_multi_args(args, 1, Some(&name), lua)?)?.into_lua_multi(lua)
+        })
     }
 
-    fn box_function_mut<F, A, R>(function: F) -> Callback<'lua, 'static>
+    fn box_function_mut<F, A, R>(name: &str, function: F) -> Callback<'lua, 'static>
     where
         F: FnMut(&'lua Lua, A) -> Result<R> + MaybeSend + 'static,
         A: FromLuaMulti<'lua>,
         R: IntoLuaMulti<'lua>,
     {
+        let name = get_function_name::<T>(name);
         let function = RefCell::new(function);
         Box::new(move |lua, args| {
             let function = &mut *function
                 .try_borrow_mut()
                 .map_err(|_| Error::RecursiveMutCallback)?;
-            function(lua, A::from_lua_multi(args, lua)?)?.into_lua_multi(lua)
+            function(lua, A::from_lua_multi_args(args, 1, Some(&name), lua)?)?.into_lua_multi(lua)
         })
     }
 
     #[cfg(feature = "async")]
-    fn box_async_function<F, A, FR, R>(function: F) -> AsyncCallback<'lua, 'static>
+    fn box_async_function<F, A, FR, R>(name: &str, function: F) -> AsyncCallback<'lua, 'static>
     where
         F: Fn(&'lua Lua, A) -> FR + MaybeSend + 'static,
         A: FromLuaMulti<'lua>,
         FR: Future<Output = Result<R>> + 'lua,
         R: IntoLuaMulti<'lua>,
     {
+        let name = get_function_name::<T>(name);
         Box::new(move |lua, args| {
-            let args = match A::from_lua_multi(args, lua) {
+            let args = match A::from_lua_multi_args(args, 1, Some(&name), lua) {
                 Ok(args) => args,
                 Err(e) => return Box::pin(future::err(e)),
             };
@@ -306,14 +363,21 @@ impl<'lua, T: 'static> UserDataRegistrar<'lua, T> {
     }
 }
 
+// Returns function name for the type `T`, without the module path
+fn get_function_name<T: 'static>(name: &str) -> StdString {
+    let type_name = any::type_name::<T>().rsplitn(2, "::").next().unwrap();
+    format!("{type_name}.{name}",)
+}
+
 impl<'lua, T: 'static> UserDataFields<'lua, T> for UserDataRegistrar<'lua, T> {
     fn add_field_method_get<M, R>(&mut self, name: impl AsRef<str>, method: M)
     where
         M: Fn(&'lua Lua, &T) -> Result<R> + MaybeSend + 'static,
         R: IntoLua<'lua>,
     {
-        let method = Self::box_method(move |lua, data, ()| method(lua, data));
-        self.field_getters.push((name.as_ref().into(), method));
+        let name = name.as_ref();
+        let method = Self::box_method(name, move |lua, data, ()| method(lua, data));
+        self.field_getters.push((name.into(), method));
     }
 
     fn add_field_method_set<M, A>(&mut self, name: impl AsRef<str>, method: M)
@@ -321,8 +385,9 @@ impl<'lua, T: 'static> UserDataFields<'lua, T> for UserDataRegistrar<'lua, T> {
         M: FnMut(&'lua Lua, &mut T, A) -> Result<()> + MaybeSend + 'static,
         A: FromLua<'lua>,
     {
-        let method = Self::box_method_mut(method);
-        self.field_setters.push((name.as_ref().into(), method));
+        let name = name.as_ref();
+        let method = Self::box_method_mut(name, method);
+        self.field_setters.push((name.into(), method));
     }
 
     fn add_field_function_get<F, R>(&mut self, name: impl AsRef<str>, function: F)
@@ -330,8 +395,9 @@ impl<'lua, T: 'static> UserDataFields<'lua, T> for UserDataRegistrar<'lua, T> {
         F: Fn(&'lua Lua, AnyUserData<'lua>) -> Result<R> + MaybeSend + 'static,
         R: IntoLua<'lua>,
     {
-        let func = Self::box_function(function);
-        self.field_getters.push((name.as_ref().into(), func));
+        let name = name.as_ref();
+        let func = Self::box_function(name, function);
+        self.field_getters.push((name.into(), func));
     }
 
     fn add_field_function_set<F, A>(&mut self, name: impl AsRef<str>, mut function: F)
@@ -339,8 +405,9 @@ impl<'lua, T: 'static> UserDataFields<'lua, T> for UserDataRegistrar<'lua, T> {
         F: FnMut(&'lua Lua, AnyUserData<'lua>, A) -> Result<()> + MaybeSend + 'static,
         A: FromLua<'lua>,
     {
-        let func = Self::box_function_mut(move |lua, (data, val)| function(lua, data, val));
-        self.field_setters.push((name.as_ref().into(), func));
+        let name = name.as_ref();
+        let func = Self::box_function_mut(name, move |lua, (data, val)| function(lua, data, val));
+        self.field_setters.push((name.into(), func));
     }
 
     fn add_meta_field_with<F, R>(&mut self, name: impl AsRef<str>, f: F)
@@ -358,7 +425,7 @@ impl<'lua, T: 'static> UserDataFields<'lua, T> for UserDataRegistrar<'lua, T> {
                         Value::Nil | Value::Table(_) | Value::Function(_) => {}
                         _ => {
                             return Err(Error::MetaMethodTypeError {
-                                method: name.to_string(),
+                                method: name.clone(),
                                 type_name: value.type_name(),
                                 message: Some("expected nil, table or function".to_string()),
                             })
@@ -388,8 +455,9 @@ impl<'lua, T: 'static> UserDataMethods<'lua, T> for UserDataRegistrar<'lua, T> {
         A: FromLuaMulti<'lua>,
         R: IntoLuaMulti<'lua>,
     {
+        let name = name.as_ref();
         self.methods
-            .push((name.as_ref().into(), Self::box_method(method)));
+            .push((name.into(), Self::box_method(name, method)));
     }
 
     fn add_method_mut<M, A, R>(&mut self, name: impl AsRef<str>, method: M)
@@ -398,8 +466,9 @@ impl<'lua, T: 'static> UserDataMethods<'lua, T> for UserDataRegistrar<'lua, T> {
         A: FromLuaMulti<'lua>,
         R: IntoLuaMulti<'lua>,
     {
+        let name = name.as_ref();
         self.methods
-            .push((name.as_ref().into(), Self::box_method_mut(method)));
+            .push((name.into(), Self::box_method_mut(name, method)));
     }
 
     #[cfg(feature = "async")]
@@ -411,8 +480,9 @@ impl<'lua, T: 'static> UserDataMethods<'lua, T> for UserDataRegistrar<'lua, T> {
         MR: Future<Output = Result<R>> + 'lua,
         R: IntoLuaMulti<'lua>,
     {
+        let name = name.as_ref();
         self.async_methods
-            .push((name.as_ref().into(), Self::box_async_method(method)));
+            .push((name.into(), Self::box_async_method(name, method)));
     }
 
     fn add_function<F, A, R>(&mut self, name: impl AsRef<str>, function: F)
@@ -421,8 +491,9 @@ impl<'lua, T: 'static> UserDataMethods<'lua, T> for UserDataRegistrar<'lua, T> {
         A: FromLuaMulti<'lua>,
         R: IntoLuaMulti<'lua>,
     {
+        let name = name.as_ref();
         self.methods
-            .push((name.as_ref().into(), Self::box_function(function)));
+            .push((name.into(), Self::box_function(name, function)));
     }
 
     fn add_function_mut<F, A, R>(&mut self, name: impl AsRef<str>, function: F)
@@ -431,8 +502,9 @@ impl<'lua, T: 'static> UserDataMethods<'lua, T> for UserDataRegistrar<'lua, T> {
         A: FromLuaMulti<'lua>,
         R: IntoLuaMulti<'lua>,
     {
+        let name = name.as_ref();
         self.methods
-            .push((name.as_ref().into(), Self::box_function_mut(function)));
+            .push((name.into(), Self::box_function_mut(name, function)));
     }
 
     #[cfg(feature = "async")]
@@ -443,8 +515,9 @@ impl<'lua, T: 'static> UserDataMethods<'lua, T> for UserDataRegistrar<'lua, T> {
         FR: Future<Output = Result<R>> + 'lua,
         R: IntoLuaMulti<'lua>,
     {
+        let name = name.as_ref();
         self.async_methods
-            .push((name.as_ref().into(), Self::box_async_function(function)));
+            .push((name.into(), Self::box_async_function(name, function)));
     }
 
     fn add_meta_method<M, A, R>(&mut self, name: impl AsRef<str>, method: M)
@@ -453,8 +526,9 @@ impl<'lua, T: 'static> UserDataMethods<'lua, T> for UserDataRegistrar<'lua, T> {
         A: FromLuaMulti<'lua>,
         R: IntoLuaMulti<'lua>,
     {
+        let name = name.as_ref();
         self.meta_methods
-            .push((name.as_ref().into(), Self::box_method(method)));
+            .push((name.into(), Self::box_method(name, method)));
     }
 
     fn add_meta_method_mut<M, A, R>(&mut self, name: impl AsRef<str>, method: M)
@@ -463,8 +537,9 @@ impl<'lua, T: 'static> UserDataMethods<'lua, T> for UserDataRegistrar<'lua, T> {
         A: FromLuaMulti<'lua>,
         R: IntoLuaMulti<'lua>,
     {
+        let name = name.as_ref();
         self.meta_methods
-            .push((name.as_ref().into(), Self::box_method_mut(method)));
+            .push((name.into(), Self::box_method_mut(name, method)));
     }
 
     #[cfg(all(feature = "async", not(any(feature = "lua51", feature = "luau"))))]
@@ -476,8 +551,9 @@ impl<'lua, T: 'static> UserDataMethods<'lua, T> for UserDataRegistrar<'lua, T> {
         MR: Future<Output = Result<R>> + 'lua,
         R: IntoLuaMulti<'lua>,
     {
+        let name = name.as_ref();
         self.async_meta_methods
-            .push((name.as_ref().into(), Self::box_async_method(method)));
+            .push((name.into(), Self::box_async_method(name, method)));
     }
 
     fn add_meta_function<F, A, R>(&mut self, name: impl AsRef<str>, function: F)
@@ -486,8 +562,9 @@ impl<'lua, T: 'static> UserDataMethods<'lua, T> for UserDataRegistrar<'lua, T> {
         A: FromLuaMulti<'lua>,
         R: IntoLuaMulti<'lua>,
     {
+        let name = name.as_ref();
         self.meta_methods
-            .push((name.as_ref().into(), Self::box_function(function)));
+            .push((name.into(), Self::box_function(name, function)));
     }
 
     fn add_meta_function_mut<F, A, R>(&mut self, name: impl AsRef<str>, function: F)
@@ -496,8 +573,9 @@ impl<'lua, T: 'static> UserDataMethods<'lua, T> for UserDataRegistrar<'lua, T> {
         A: FromLuaMulti<'lua>,
         R: IntoLuaMulti<'lua>,
     {
+        let name = name.as_ref();
         self.meta_methods
-            .push((name.as_ref().into(), Self::box_function_mut(function)));
+            .push((name.into(), Self::box_function_mut(name, function)));
     }
 
     #[cfg(all(feature = "async", not(any(feature = "lua51", feature = "luau"))))]
@@ -508,8 +586,9 @@ impl<'lua, T: 'static> UserDataMethods<'lua, T> for UserDataRegistrar<'lua, T> {
         FR: Future<Output = Result<R>> + 'lua,
         R: IntoLuaMulti<'lua>,
     {
+        let name = name.as_ref();
         self.async_meta_methods
-            .push((name.as_ref().into(), Self::box_async_function(function)));
+            .push((name.into(), Self::box_async_function(name, function)));
     }
 
     // Below are internal methods used in generated code

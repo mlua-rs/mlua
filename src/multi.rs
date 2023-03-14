@@ -39,6 +39,18 @@ impl<'lua, T: FromLua<'lua>> FromLuaMulti<'lua> for T {
         MultiValue::return_to_pool(values, lua);
         res
     }
+
+    #[inline]
+    fn from_lua_multi_args(
+        mut values: MultiValue<'lua>,
+        i: usize,
+        to: Option<&str>,
+        lua: &'lua Lua,
+    ) -> Result<Self> {
+        let res = T::from_lua_arg(values.pop_front().unwrap_or(Nil), i, to, lua);
+        MultiValue::return_to_pool(values, lua);
+        res
+    }
 }
 
 impl<'lua> IntoLuaMulti<'lua> for MultiValue<'lua> {
@@ -191,9 +203,21 @@ macro_rules! impl_tuple {
             #[allow(non_snake_case)]
             #[inline]
             fn from_lua_multi(mut values: MultiValue<'lua>, lua: &'lua Lua) -> Result<Self> {
-                $(let $name = values.pop_front().unwrap_or(Nil);)*
+                $(let $name = FromLua::from_lua(values.pop_front().unwrap_or(Nil), lua)?;)*
                 let $last = FromLuaMulti::from_lua_multi(values, lua)?;
-                Ok(($(FromLua::from_lua($name, lua)?,)* $last,))
+                Ok(($($name,)* $last,))
+            }
+
+            #[allow(unused_mut)]
+            #[allow(non_snake_case)]
+            #[inline]
+            fn from_lua_multi_args(mut values: MultiValue<'lua>, mut i: usize, to: Option<&str>, lua: &'lua Lua) -> Result<Self> {
+                $(
+                    let $name = FromLua::from_lua_arg(values.pop_front().unwrap_or(Nil), i, to, lua)?;
+                    i += 1;
+                )*
+                let $last = FromLuaMulti::from_lua_multi_args(values, i, to, lua)?;
+                Ok(($($name,)* $last,))
             }
         }
     );

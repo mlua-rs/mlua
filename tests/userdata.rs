@@ -791,3 +791,32 @@ fn test_userdata_ext() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn test_userdata_method_errors() -> Result<()> {
+    struct MyUserData(i64);
+
+    impl UserData for MyUserData {
+        fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
+            methods.add_method("get_value", |_, data, ()| Ok(data.0));
+        }
+    }
+
+    let lua = Lua::new();
+
+    let ud = lua.create_userdata(MyUserData(123))?;
+    let res = ud.call_function::<_, ()>("get_value", ());
+    let Err(Error::CallbackError { cause, .. }) = res else {
+        panic!("expected CallbackError, got {res:?}");
+    };
+    assert!(matches!(
+        &*cause,
+        Error::BadArgument {
+            to,
+            name,
+            ..
+        } if to.as_deref() == Some("MyUserData.get_value") && name.as_deref() == Some("self")
+    ));
+
+    Ok(())
+}
