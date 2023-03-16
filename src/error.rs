@@ -81,7 +81,7 @@ pub enum Error {
         /// Argument name.
         name: Option<StdString>,
         /// Underlying error returned when converting argument to a Lua value.
-        error: Arc<Error>,
+        cause: Arc<Error>,
     },
     /// A Rust value could not be converted to a Lua value.
     ToLuaConversionError {
@@ -230,7 +230,7 @@ impl fmt::Display for Error {
                 fmt,
                 "too many arguments to Function::bind"
             ),
-            Error::BadArgument { ref to, pos, ref name, ref error } => {
+            Error::BadArgument { ref to, pos, ref name, ref cause } => {
                 if let Some(name) = name {
                     write!(fmt, "bad argument `{name}`")?;
                 } else {
@@ -239,7 +239,7 @@ impl fmt::Display for Error {
                 if let Some(to) = to {
                     write!(fmt, " to `{to}`")?;
                 }
-                write!(fmt, ": {error}")
+                write!(fmt, ": {cause}")
             },
             Error::ToLuaConversionError { from, to, ref message } => {
                 write!(fmt, "error converting {from} to Lua {to}")?;
@@ -329,12 +329,12 @@ impl Error {
         Error::ExternalError(err.into().into())
     }
 
-    pub(crate) fn bad_self_argument(to: &str, error: Error) -> Self {
+    pub(crate) fn bad_self_argument(to: &str, cause: Error) -> Self {
         Error::BadArgument {
             to: Some(to.to_string()),
             pos: 1,
             name: Some("self".to_string()),
-            error: Arc::new(error),
+            cause: Arc::new(cause),
         }
     }
 

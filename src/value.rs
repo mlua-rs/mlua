@@ -205,7 +205,7 @@ pub trait FromLua<'lua>: Sized {
             to: to.map(|s| s.to_string()),
             pos: i,
             name: None,
-            error: Arc::new(err),
+            cause: Arc::new(err),
         })
     }
 }
