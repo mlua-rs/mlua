@@ -3,10 +3,10 @@
 #[doc(no_inline)]
 pub use crate::{
     AnyUserData as LuaAnyUserData, AnyUserDataExt as LuaAnyUserDataExt, Chunk as LuaChunk,
-    Error as LuaError, ExternalError as LuaExternalError, ExternalResult as LuaExternalResult,
-    FromLua, FromLuaMulti, Function as LuaFunction, FunctionInfo as LuaFunctionInfo,
-    GCMode as LuaGCMode, Integer as LuaInteger, IntoLua, IntoLuaMulti,
-    LightUserData as LuaLightUserData, Lua, LuaOptions, MetaMethod as LuaMetaMethod,
+    Error as LuaError, ErrorContext as LuaErrorContext, ExternalError as LuaExternalError,
+    ExternalResult as LuaExternalResult, FromLua, FromLuaMulti, Function as LuaFunction,
+    FunctionInfo as LuaFunctionInfo, GCMode as LuaGCMode, Integer as LuaInteger, IntoLua,
+    IntoLuaMulti, LightUserData as LuaLightUserData, Lua, LuaOptions, MetaMethod as LuaMetaMethod,
     MultiValue as LuaMultiValue, Nil as LuaNil, Number as LuaNumber, RegistryKey as LuaRegistryKey,
     Result as LuaResult, StdLib as LuaStdLib, String as LuaString, Table as LuaTable,
     TableExt as LuaTableExt, TablePairs as LuaTablePairs, TableSequence as LuaTableSequence,

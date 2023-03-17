@@ -7,6 +7,8 @@ use std::str::Utf8Error;
 use std::string::String as StdString;
 use std::sync::Arc;
 
+use crate::private::Sealed;
+
 /// Error type returned by `mlua` methods.
 #[derive(Debug, Clone)]
 #[non_exhaustive]
@@ -190,6 +192,11 @@ pub enum Error {
     /// error. The Rust code that originally invoked the Lua code then receives a `CallbackError`,
     /// from which the original error (and a stack traceback) can be recovered.
     ExternalError(Arc<dyn StdError + Send + Sync>),
+    /// An error with additional context.
+    WithContext {
+        context: StdString,
+        cause: Arc<Error>,
+    },
 }
 
 /// A specialized `Result` type used by `mlua`'s API.
@@ -306,6 +313,10 @@ impl fmt::Display for Error {
                 write!(fmt, "deserialize error: {err}")
             },
             Error::ExternalError(ref err) => write!(fmt, "{err}"),
+            Error::WithContext { ref context, ref cause } => {
+                writeln!(fmt, "{context}")?;
+                write!(fmt, "{cause}")
+            }
         }
     }
 }
@@ -371,6 +382,44 @@ where
 {
     fn into_lua_err(self) -> Result<T> {
         self.map_err(|e| e.into_lua_err())
+    }
+}
+
+/// Provides the `context` method for [`Error`] and `Result<T, Error>`.
+pub trait ErrorContext: Sealed {
+    fn context<C: fmt::Display>(self, context: C) -> Self;
+    fn with_context<C: fmt::Display>(self, f: impl FnOnce(&Error) -> C) -> Self;
+}
+
+impl ErrorContext for Error {
+    fn context<C: fmt::Display>(self, context: C) -> Self {
+        Error::WithContext {
+            context: context.to_string(),
+            cause: Arc::new(self),
+        }
+    }
+
+    fn with_context<C: fmt::Display>(self, f: impl FnOnce(&Error) -> C) -> Self {
+        Error::WithContext {
+            context: f(&self).to_string(),
+            cause: Arc::new(self),
+        }
+    }
+}
+
+impl<T> ErrorContext for StdResult<T, Error> {
+    fn context<C: fmt::Display>(self, context: C) -> Self {
+        self.map_err(|err| Error::WithContext {
+            context: context.to_string(),
+            cause: Arc::new(err),
+        })
+    }
+
+    fn with_context<C: fmt::Display>(self, f: impl FnOnce(&Error) -> C) -> Self {
+        self.map_err(|err| Error::WithContext {
+            context: f(&err).to_string(),
+            cause: Arc::new(err),
+        })
     }
 }
 
