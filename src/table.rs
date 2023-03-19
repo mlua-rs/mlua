@@ -11,6 +11,7 @@ use {
 use crate::error::{Error, Result};
 use crate::ffi;
 use crate::function::Function;
+use crate::private::Sealed;
 use crate::types::{Integer, LuaRef};
 use crate::util::{assert_stack, check_stack, StackGuard};
 use crate::value::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, Nil, Value};
@@ -753,7 +754,7 @@ impl<'lua> AsRef<Table<'lua>> for Table<'lua> {
 }
 
 /// An extension trait for `Table`s that provides a variety of convenient functionality.
-pub trait TableExt<'lua> {
+pub trait TableExt<'lua>: Sealed {
     /// Calls the table as function assuming it has `__call` metamethod.
     ///
     /// The metamethod is called with the table as its first argument, followed by the passed arguments.

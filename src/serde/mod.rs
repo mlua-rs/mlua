@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use crate::error::Result;
 use crate::ffi;
 use crate::lua::Lua;
+use crate::private::Sealed;
 use crate::table::Table;
 use crate::types::LightUserData;
 use crate::util::check_stack;
@@ -15,7 +16,7 @@ use crate::value::Value;
 
 /// Trait for serializing/deserializing Lua values using Serde.
 #[cfg_attr(docsrs, doc(cfg(feature = "serialize")))]
-pub trait LuaSerdeExt<'lua> {
+pub trait LuaSerdeExt<'lua>: Sealed {
     /// A special value (lightuserdata) to encode/decode optional (none) values.
     ///
     /// Requires `feature = "serialize"`

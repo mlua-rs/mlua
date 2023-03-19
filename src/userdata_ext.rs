@@ -1,4 +1,5 @@
 use crate::error::{Error, Result};
+use crate::private::Sealed;
 use crate::userdata::{AnyUserData, MetaMethod};
 use crate::value::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, Value};
 
@@ -6,7 +7,7 @@ use crate::value::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, Value};
 use {futures_core::future::LocalBoxFuture, futures_util::future};
 
 /// An extension trait for [`AnyUserData`] that provides a variety of convenient functionality.
-pub trait AnyUserDataExt<'lua> {
+pub trait AnyUserDataExt<'lua>: Sealed {
     /// Gets the value associated to `key` from the userdata, assuming it has `__index` metamethod.
     fn get<K: IntoLua<'lua>, V: FromLua<'lua>>(&self, key: K) -> Result<V>;
 
