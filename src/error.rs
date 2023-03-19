@@ -336,8 +336,20 @@ impl StdError for Error {
 }
 
 impl Error {
+    /// Wraps an external error object.
     pub fn external<T: Into<Box<dyn StdError + Send + Sync>>>(err: T) -> Self {
         Error::ExternalError(err.into().into())
+    }
+
+    /// Attempts to downcast the external error object to a concrete type by reference.
+    pub fn downcast_ref<T>(&self) -> Option<&T>
+    where
+        T: StdError + 'static,
+    {
+        match self {
+            Error::ExternalError(err) => err.downcast_ref(),
+            _ => None,
+        }
     }
 
     pub(crate) fn bad_self_argument(to: &str, cause: Error) -> Self {
@@ -423,19 +435,19 @@ impl<T> ErrorContext for StdResult<T, Error> {
     }
 }
 
-impl std::convert::From<AddrParseError> for Error {
+impl From<AddrParseError> for Error {
     fn from(err: AddrParseError) -> Self {
         Error::external(err)
     }
 }
 
-impl std::convert::From<IoError> for Error {
+impl From<IoError> for Error {
     fn from(err: IoError) -> Self {
         Error::external(err)
     }
 }
 
-impl std::convert::From<Utf8Error> for Error {
+impl From<Utf8Error> for Error {
     fn from(err: Utf8Error) -> Self {
         Error::external(err)
     }
