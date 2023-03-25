@@ -365,7 +365,7 @@ impl<'lua, T: 'static> UserDataRegistrar<'lua, T> {
 
 // Returns function name for the type `T`, without the module path
 fn get_function_name<T: 'static>(name: &str) -> StdString {
-    let type_name = any::type_name::<T>().rsplitn(2, "::").next().unwrap();
+    let type_name = any::type_name::<T>().rsplit("::").next().unwrap();
     format!("{type_name}.{name}",)
 }
 
