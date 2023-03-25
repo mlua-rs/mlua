@@ -971,7 +971,7 @@ impl Lua {
     /// # fn main() -> Result<()> {
     /// let lua = Lua::new();
     /// let count = Arc::new(AtomicU64::new(0));
-    /// lua.set_interrupt(move || {
+    /// lua.set_interrupt(move |_| {
     ///     if count.fetch_add(1, Ordering::Relaxed) % 2 == 0 {
     ///         return Ok(VmState::Yield);
     ///     }
@@ -995,7 +995,7 @@ impl Lua {
     #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
     pub fn set_interrupt<F>(&self, callback: F)
     where
-        F: 'static + MaybeSend + Fn() -> Result<VmState>,
+        F: Fn(&Lua) -> Result<VmState> + MaybeSend + 'static,
     {
         unsafe extern "C" fn interrupt_proc(state: *mut ffi::lua_State, gc: c_int) {
             if gc >= 0 {
@@ -1013,7 +1013,8 @@ impl Lua {
                 if Arc::strong_count(&interrupt_cb) > 2 {
                     return Ok(VmState::Continue); // Don't allow recursion
                 }
-                interrupt_cb()
+                let lua: &Lua = mem::transmute((*extra).inner.as_ref().unwrap());
+                interrupt_cb(lua)
             });
             match result {
                 VmState::Continue => {}
