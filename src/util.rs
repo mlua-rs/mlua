@@ -12,6 +12,7 @@ use rustc_hash::FxHashMap;
 
 use crate::error::{Error, Result};
 use crate::ffi;
+use crate::memory::MemoryState;
 
 static METATABLE_CACHE: Lazy<FxHashMap<TypeId, u8>> = Lazy::new(|| {
     let mut map = FxHashMap::with_capacity_and_hasher(32, Default::default());
@@ -89,8 +90,10 @@ pub unsafe fn protect_lua_call(
 ) -> Result<()> {
     let stack_start = ffi::lua_gettop(state) - nargs;
 
-    ffi::lua_pushcfunction(state, error_traceback);
-    ffi::lua_pushcfunction(state, f);
+    MemoryState::relax_limit_with(state, || {
+        ffi::lua_pushcfunction(state, error_traceback);
+        ffi::lua_pushcfunction(state, f);
+    });
     if nargs > 0 {
         ffi::lua_rotate(state, stack_start + 1, 2);
     }
@@ -147,8 +150,10 @@ where
 
     let stack_start = ffi::lua_gettop(state) - nargs;
 
-    ffi::lua_pushcfunction(state, error_traceback);
-    ffi::lua_pushcfunction(state, do_call::<F, R>);
+    MemoryState::relax_limit_with(state, || {
+        ffi::lua_pushcfunction(state, error_traceback);
+        ffi::lua_pushcfunction(state, do_call::<F, R>);
+    });
     if nargs > 0 {
         ffi::lua_rotate(state, stack_start + 1, 2);
     }
@@ -662,6 +667,13 @@ where
 }
 
 pub unsafe extern "C" fn error_traceback(state: *mut ffi::lua_State) -> c_int {
+    // This is a workaround for bug in Luau, when it calls error handler for memory allocation error
+    // See https://github.com/Roblox/luau/issues/880
+    #[cfg(feature = "luau")]
+    if MemoryState::limit_reached(state) {
+        return 0;
+    }
+
     if ffi::lua_checkstack(state, 2) == 0 {
         // If we don't have enough stack space to even check the error type, do
         // nothing so we don't risk shadowing a rust panic.

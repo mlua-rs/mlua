@@ -5,6 +5,7 @@ use std::slice;
 
 use crate::error::{Error, Result};
 use crate::ffi;
+use crate::memory::MemoryState;
 use crate::types::LuaRef;
 use crate::util::{
     assert_stack, check_stack, error_traceback, pop_error, ptr_to_cstr_bytes, StackGuard,
@@ -118,7 +119,7 @@ impl<'lua> Function<'lua> {
             let _sg = StackGuard::new(state);
             check_stack(state, nargs + 3)?;
 
-            ffi::lua_pushcfunction(state, error_traceback);
+            MemoryState::relax_limit_with(state, || ffi::lua_pushcfunction(state, error_traceback));
             let stack_start = ffi::lua_gettop(state);
             lua.push_ref(&self.0);
             for arg in args.drain_all() {

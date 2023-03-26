@@ -19,6 +19,7 @@ use crate::error::{Error, Result};
 use crate::ffi;
 use crate::function::Function;
 use crate::hook::Debug;
+use crate::memory::{MemoryState, ALLOCATOR};
 use crate::scope::Scope;
 use crate::stdlib::StdLib;
 use crate::string::String;
@@ -96,7 +97,7 @@ pub(crate) struct ExtraData {
 
     safe: bool,
     libs: StdLib,
-    mem_info: Option<NonNull<MemoryInfo>>,
+    mem_state: Option<NonNull<MemoryState>>,
 
     ref_thread: *mut ffi::lua_State,
     ref_stack_size: c_int,
@@ -129,12 +130,6 @@ pub(crate) struct ExtraData {
     sandboxed: bool,
     #[cfg(feature = "luau")]
     compiler: Option<Compiler>,
-}
-
-#[derive(Default)]
-struct MemoryInfo {
-    used_memory: isize,
-    memory_limit: isize,
 }
 
 /// Mode of the Lua garbage collector (GC).
@@ -269,8 +264,8 @@ impl Drop for ExtraData {
         };
 
         *mlua_expect!(self.registry_unref_list.lock(), "unref list poisoned") = None;
-        if let Some(mem_info) = self.mem_info {
-            drop(unsafe { Box::from_raw(mem_info.as_ptr()) });
+        if let Some(mem_state) = self.mem_state {
+            drop(unsafe { Box::from_raw(mem_state.as_ptr()) });
         }
     }
 }
@@ -368,77 +363,19 @@ impl Lua {
 
     /// Creates a new Lua state with required `libs` and `options`
     unsafe fn inner_new(libs: StdLib, options: LuaOptions) -> Lua {
-        unsafe extern "C" fn allocator(
-            extra_data: *mut c_void,
-            ptr: *mut c_void,
-            osize: usize,
-            nsize: usize,
-        ) -> *mut c_void {
-            use std::alloc::{self, Layout};
-
-            let mem_info = &mut *(extra_data as *mut MemoryInfo);
-
-            if nsize == 0 {
-                // Free memory
-                if !ptr.is_null() {
-                    let layout = Layout::from_size_align_unchecked(osize, ffi::SYS_MIN_ALIGN);
-                    alloc::dealloc(ptr as *mut u8, layout);
-                    mem_info.used_memory -= osize as isize;
-                }
-                return ptr::null_mut();
-            }
-
-            // Do not allocate more than isize::MAX
-            if nsize > isize::MAX as usize {
-                return ptr::null_mut();
-            }
-
-            // Are we fit to the memory limits?
-            let mut mem_diff = nsize as isize;
-            if !ptr.is_null() {
-                mem_diff -= osize as isize;
-            }
-            let new_used_memory = mem_info.used_memory + mem_diff;
-            if mem_info.memory_limit > 0 && new_used_memory > mem_info.memory_limit {
-                return ptr::null_mut();
-            }
-            mem_info.used_memory += mem_diff;
-
-            if ptr.is_null() {
-                // Allocate new memory
-                let new_layout = match Layout::from_size_align(nsize, ffi::SYS_MIN_ALIGN) {
-                    Ok(layout) => layout,
-                    Err(_) => return ptr::null_mut(),
-                };
-                let new_ptr = alloc::alloc(new_layout) as *mut c_void;
-                if new_ptr.is_null() {
-                    alloc::handle_alloc_error(new_layout);
-                }
-                return new_ptr;
-            }
-
-            // Reallocate memory
-            let old_layout = Layout::from_size_align_unchecked(osize, ffi::SYS_MIN_ALIGN);
-            let new_ptr = alloc::realloc(ptr as *mut u8, old_layout, nsize) as *mut c_void;
-            if new_ptr.is_null() {
-                alloc::handle_alloc_error(old_layout);
-            }
-            new_ptr
-        }
-
         // Skip Rust allocator for non-vendored LuaJIT (see https://github.com/khvzak/mlua/issues/176)
         let use_rust_allocator = !(cfg!(feature = "luajit") && cfg!(not(feature = "vendored")));
 
-        let (state, mem_info) = if use_rust_allocator {
-            let mut mem_info: *mut MemoryInfo = Box::into_raw(Box::default());
-            let mut state = ffi::lua_newstate(allocator, mem_info as *mut c_void);
+        let (state, mem_state) = if use_rust_allocator {
+            let mut mem_state: *mut MemoryState = Box::into_raw(Box::default());
+            let mut state = ffi::lua_newstate(ALLOCATOR, mem_state as *mut c_void);
             // If state is null (it's possible for LuaJIT on non-x86 arch) then switch to Lua internal allocator
             if state.is_null() {
-                drop(Box::from_raw(mem_info));
-                mem_info = ptr::null_mut();
+                drop(Box::from_raw(mem_state));
+                mem_state = ptr::null_mut();
                 state = ffi::luaL_newstate();
             }
-            (state, mem_info)
+            (state, mem_state)
         } else {
             (ffi::luaL_newstate(), ptr::null_mut())
         };
@@ -449,7 +386,7 @@ impl Lua {
 
         let lua = Lua::init_from_ptr(state);
         let extra = lua.extra.get();
-        (*extra).mem_info = NonNull::new(mem_info);
+        (*extra).mem_state = NonNull::new(mem_state);
 
         mlua_expect!(
             load_from_std_lib(state, libs),
@@ -559,7 +496,7 @@ impl Lua {
             app_data: RefCell::new(FxHashMap::default()),
             safe: false,
             libs: StdLib::NONE,
-            mem_info: None,
+            mem_state: None,
             ref_thread,
             // We need 1 extra stack space to move values in and out of the ref stack.
             ref_stack_size: ffi::LUA_MINSTACK - 1,
@@ -1124,8 +1061,8 @@ impl Lua {
     /// Returns the amount of memory (in bytes) currently used inside this Lua state.
     pub fn used_memory(&self) -> usize {
         unsafe {
-            match (*self.extra.get()).mem_info.map(|x| x.as_ref()) {
-                Some(mem_info) => mem_info.used_memory as usize,
+            match (*self.extra.get()).mem_state.map(|x| x.as_ref()) {
+                Some(mem_state) => mem_state.used_memory(),
                 None => {
                     // Get data from the Lua GC
                     let used_kbytes = ffi::lua_gc(self.main_state, ffi::LUA_GCCOUNT, 0);
@@ -1143,17 +1080,10 @@ impl Lua {
     /// Returns previous limit (zero means no limit).
     ///
     /// Does not work on module mode where Lua state is managed externally.
-    ///
-    /// Requires `feature = "lua54/lua53/lua52"`
-    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
-    pub fn set_memory_limit(&self, memory_limit: usize) -> Result<usize> {
+    pub fn set_memory_limit(&self, limit: usize) -> Result<usize> {
         unsafe {
-            match (*self.extra.get()).mem_info.map(|mut x| x.as_mut()) {
-                Some(mem_info) => {
-                    let prev_limit = mem_info.memory_limit as usize;
-                    mem_info.memory_limit = memory_limit as isize;
-                    Ok(prev_limit)
-                }
+            match (*self.extra.get()).mem_state.map(|mut x| x.as_mut()) {
+                Some(mem_state) => Ok(mem_state.set_memory_limit(limit)),
                 None => Err(Error::MemoryLimitNotAvailable),
             }
         }
@@ -3022,8 +2952,8 @@ impl Lua {
     pub(crate) unsafe fn unlikely_memory_error(&self) -> bool {
         // MemoryInfo is empty in module mode so we cannot predict memory limits
         (*self.extra.get())
-            .mem_info
-            .map(|x| x.as_ref().memory_limit == 0)
+            .mem_state
+            .map(|x| x.as_ref().memory_limit() == 0)
             .unwrap_or_default()
     }
 
@@ -3060,6 +2990,14 @@ impl LuaInner {
                 .multivalue_pool
                 .push(unsafe { mem::transmute(multivalue) });
         }
+    }
+}
+
+impl ExtraData {
+    #[cfg(feature = "luau")]
+    #[inline]
+    pub(crate) fn mem_state(&self) -> NonNull<MemoryState> {
+        self.mem_state.unwrap()
     }
 }
 

@@ -1,11 +1,7 @@
 use std::sync::Arc;
 
-use mlua::{GCMode, Lua, Result, UserData};
+use mlua::{Error, GCMode, Lua, Result, UserData};
 
-#[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
-use mlua::Error;
-
-#[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
 #[test]
 fn test_memory_limit() -> Result<()> {
     let lua = Lua::new();
@@ -20,6 +16,15 @@ fn test_memory_limit() -> Result<()> {
         .load("local t = {}; for i = 1,10000 do t[i] = i end")
         .into_function()?;
     f.call::<_, ()>(()).expect("should trigger no memory limit");
+
+    if cfg!(feature = "luajit") && cfg!(not(feature = "vendored")) {
+        // we don't support setting memory limit for non-vendored luajit
+        assert!(matches!(
+            lua.set_memory_limit(0),
+            Err(Error::MemoryLimitNotAvailable)
+        ));
+        return Ok(());
+    }
 
     lua.set_memory_limit(initial_memory + 10000)?;
     match f.call::<_, ()>(()) {

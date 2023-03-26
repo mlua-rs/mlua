@@ -90,6 +90,7 @@ mod hook;
 mod lua;
 #[cfg(feature = "luau")]
 mod luau;
+mod memory;
 mod multi;
 mod scope;
 mod stdlib;
