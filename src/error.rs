@@ -156,8 +156,11 @@ pub enum Error {
     ///
     /// [`MetaMethod`]: crate::MetaMethod
     MetaMethodTypeError {
+        /// Name of the metamethod.
         method: StdString,
+        /// Passed value type.
         type_name: &'static str,
+        /// A string containing more detailed error information.
         message: Option<StdString>,
     },
     /// A [`RegistryKey`] produced from a different Lua state was used.
@@ -194,7 +197,9 @@ pub enum Error {
     ExternalError(Arc<dyn StdError + Send + Sync>),
     /// An error with additional context.
     WithContext {
+        /// A string containing additional context.
         context: StdString,
+        /// Underlying error.
         cause: Arc<Error>,
     },
 }
@@ -399,7 +404,11 @@ where
 
 /// Provides the `context` method for [`Error`] and `Result<T, Error>`.
 pub trait ErrorContext: Sealed {
+    /// Wraps the error value with additional context.
     fn context<C: fmt::Display>(self, context: C) -> Self;
+
+    /// Wrap the error value with additional context that is evaluated lazily
+    /// only once an error does occur.
     fn with_context<C: fmt::Display>(self, f: impl FnOnce(&Error) -> C) -> Self;
 }
 
