@@ -230,6 +230,17 @@ pub use mlua_derive::chunk;
 ///
 /// Internally in the code above the compiler defines C function `luaopen_my_module`.
 ///
+/// You can also pass options to the attribute:
+///
+/// name - name of the module, defaults to the name of the function
+///
+/// ```ignore
+/// #[mlua::lua_module(name = "alt_module")]
+/// fn my_module(lua: &Lua) -> Result<Table> {
+///     ...
+/// }
+/// ```
+///
 #[cfg(any(feature = "module", docsrs))]
 #[cfg_attr(docsrs, doc(cfg(feature = "module")))]
 pub use mlua_derive::lua_module;

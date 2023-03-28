@@ -18,7 +18,14 @@ struct ModuleAttributes {
 impl ModuleAttributes {
     fn parse(&mut self, meta: ParseNestedMeta) -> Result<()> {
         if meta.path.is_ident("name") {
-            self.name = Some(meta.value()?.parse::<LitStr>()?.parse()?);
+            match meta.value() {
+                Ok(value) => {
+                    self.name = Some(value.parse::<LitStr>()?.parse()?);
+                }
+                Err(_) => {
+                    return Err(meta.error(format!("`name` attribute must have a value")));
+                }
+            }
         } else {
             return Err(meta.error("unsupported module attribute"));
         }
