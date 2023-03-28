@@ -23,7 +23,7 @@ impl ModuleAttributes {
                     self.name = Some(value.parse::<LitStr>()?.parse()?);
                 }
                 Err(_) => {
-                    return Err(meta.error(format!("`name` attribute must have a value")));
+                    return Err(meta.error("`name` attribute must have a value"));
                 }
             }
         } else {
