@@ -1,7 +1,8 @@
 use proc_macro::TokenStream;
 use proc_macro2::{Ident, Span};
 use quote::quote;
-use syn::{parse_macro_input, AttributeArgs, Error, ItemFn, Lit, Meta, NestedMeta, Result};
+use syn::meta::ParseNestedMeta;
+use syn::{parse_macro_input, ItemFn, LitStr, Result};
 
 #[cfg(feature = "macros")]
 use {
@@ -10,49 +11,30 @@ use {
 };
 
 #[derive(Default)]
-struct ModuleArgs {
+struct ModuleAttributes {
     name: Option<Ident>,
 }
 
-impl ModuleArgs {
-    fn parse(args: AttributeArgs) -> Result<Self> {
-        let mut ret = Self::default();
-
-        for arg in args {
-            match arg {
-                NestedMeta::Meta(Meta::NameValue(meta)) => {
-                    if meta.path.is_ident("name") {
-                        match meta.lit {
-                            Lit::Str(val) => {
-                                ret.name = Some(val.parse()?);
-                            }
-                            _ => {
-                                return Err(Error::new_spanned(meta.lit, "expected string literal"))
-                            }
-                        }
-                    } else {
-                        return Err(Error::new_spanned(meta.path, "expected `name`"));
-                    }
-                }
-                _ => {
-                    return Err(Error::new_spanned(arg, "invalid argument"));
-                }
-            }
+impl ModuleAttributes {
+    fn parse(&mut self, meta: ParseNestedMeta) -> Result<()> {
+        if meta.path.is_ident("name") {
+            self.name = Some(meta.value()?.parse::<LitStr>()?.parse()?);
+        } else {
+            return Err(meta.error("unsupported module attribute"));
         }
-
-        Ok(ret)
+        Ok(())
     }
 }
 
 #[proc_macro_attribute]
 pub fn lua_module(attr: TokenStream, item: TokenStream) -> TokenStream {
-    let args = parse_macro_input!(attr as AttributeArgs);
-    let args = match ModuleArgs::parse(args) {
-        Ok(args) => args,
-        Err(err) => return err.to_compile_error().into(),
-    };
-    let func = parse_macro_input!(item as ItemFn);
+    let mut args = ModuleAttributes::default();
+    if !attr.is_empty() {
+        let args_parser = syn::meta::parser(|meta| args.parse(meta));
+        parse_macro_input!(attr with args_parser);
+    }
 
+    let func = parse_macro_input!(item as ItemFn);
     let func_name = func.sig.ident.clone();
     let module_name = args.name.unwrap_or_else(|| func_name.clone());
     let ext_entrypoint_name = Ident::new(&format!("luaopen_{module_name}"), Span::call_site());
