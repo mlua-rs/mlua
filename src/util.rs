@@ -667,7 +667,7 @@ where
 }
 
 pub unsafe extern "C" fn error_traceback(state: *mut ffi::lua_State) -> c_int {
-    // This is a workaround for bug in Luau, when it calls error handler for memory allocation error
+    // Luau calls error handler for memory allocation errors, skip it
     // See https://github.com/Roblox/luau/issues/880
     #[cfg(feature = "luau")]
     if MemoryState::limit_reached(state) {

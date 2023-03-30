@@ -39,6 +39,29 @@ fn test_memory_limit() -> Result<()> {
 }
 
 #[test]
+fn test_memory_limit_thread() -> Result<()> {
+    let lua = Lua::new();
+
+    let f = lua
+        .load("local t = {}; for i = 1,10000 do t[i] = i end")
+        .into_function()?;
+
+    if cfg!(feature = "luajit") && cfg!(not(feature = "vendored")) {
+        // we don't support setting memory limit for non-vendored luajit
+        return Ok(());
+    }
+
+    lua.set_memory_limit(lua.used_memory() + 10000)?;
+    let thread = lua.create_thread(f)?;
+    match thread.resume::<_, ()>(()) {
+        Err(Error::MemoryError(_)) => {}
+        something_else => panic!("did not trigger memory error: {:?}", something_else),
+    };
+
+    Ok(())
+}
+
+#[test]
 fn test_gc_control() -> Result<()> {
     let lua = Lua::new();
     let globals = lua.globals();

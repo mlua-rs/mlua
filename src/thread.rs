@@ -136,6 +136,10 @@ impl<'lua> Thread<'lua> {
 
             let ret = ffi::lua_resume(thread_state, state, nargs, &mut nresults as *mut c_int);
             if ret != ffi::LUA_OK && ret != ffi::LUA_YIELD {
+                if ret == ffi::LUA_ERRMEM {
+                    // Don't call error handler for memory errors
+                    return Err(pop_error(thread_state, ret));
+                }
                 check_stack(state, 3)?;
                 protect_lua!(state, 0, 1, |state| error_traceback_thread(
                     state,
