@@ -32,8 +32,8 @@ pub struct OwnedTable(pub(crate) crate::types::LuaOwnedRef);
 #[cfg(feature = "unstable")]
 impl OwnedTable {
     /// Get borrowed handle to the underlying Lua table.
-    pub const fn as_ref(&self) -> Table {
-        Table(self.0.as_ref())
+    pub const fn to_ref(&self) -> Table {
+        Table(self.0.to_ref())
     }
 }
 

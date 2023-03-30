@@ -747,8 +747,8 @@ pub struct OwnedAnyUserData(pub(crate) crate::types::LuaOwnedRef);
 
 #[cfg(feature = "unstable")]
 impl OwnedAnyUserData {
-    pub const fn as_ref(&self) -> AnyUserData {
-        AnyUserData(self.0.as_ref())
+    pub const fn to_ref(&self) -> AnyUserData {
+        AnyUserData(self.0.to_ref())
     }
 }
 
