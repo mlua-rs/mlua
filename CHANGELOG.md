@@ -1,3 +1,35 @@
+## v0.9.0-beta.1
+
+New features:
+- Owned Lua types (unstable feature flag)
+- New functions `Function::wrap`/`Function::wrap_mut`/`Function::wrap_async`
+- `Lua::register_userdata_type()` to register a custom userdata types (without requiring `UserData` trait)
+- `Lua::create_any_userdata()`
+- Added `create_userdata_ref`/`create_userdata_ref_mut` for scopes
+- Added `AnyUserDataExt` trait with auxiliary functions for `AnyUserData`
+- Added `UserDataRef` and `UserDataRefMut` type wrapped that implement `FromLua`
+- Improved error handling:
+  * Improved error reporting when calling Rust functions from Lua.
+  * Added `Error::BadArgument` to help identify bad argument position or name
+  * Added `ErrorContext` extension trait to attach additional context to `Error`
+
+Breaking changes:
+- Refactored `AsChunk` trait
+- `ToLua`/`ToLuaMulti` renamed to `IntoLua`/`IntoLuaMulti`
+- Renamed `to_lua_err` to `into_lua_err`
+- Removed `FromLua` impl for `T: UserData+Clone`
+- Removed `Lua::async_scope`
+- Added `&Lua` arg to Luau interrupt callback
+
+Other:
+- Better Debug for String
+- Allow deserializing values from serializable UserData using `Lua::from_value()` method
+- Added `Table::clear()` method
+- Added `Error::downcast_ref()` method
+- Support setting memory limit for Lua 5.1/JIT/Luau
+- Support setting module name in `#[lua_module(name = "...")]` macro
+- Minor fixes and improvements
+
 ## v0.8.8
 
 - Fix potential deadlock when trying to reuse dropped registry keys.
