@@ -5,7 +5,7 @@ use rustyline::Editor;
 
 fn main() {
     let lua = Lua::new();
-    let mut editor = Editor::<()>::new().expect("Failed to make rustyline editor");
+    let mut editor = Editor::<(), _>::new().expect("Failed to make rustyline editor");
 
     loop {
         let mut prompt = "> ";
@@ -19,7 +19,7 @@ fn main() {
 
             match lua.load(&line).eval::<MultiValue>() {
                 Ok(values) => {
-                    editor.add_history_entry(line);
+                    editor.add_history_entry(line).unwrap();
                     println!(
                         "{}",
                         values
