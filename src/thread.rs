@@ -56,6 +56,7 @@ pub struct Thread<'lua>(pub(crate) LuaRef<'lua>);
 /// [`Stream`]: futures_core::stream::Stream
 #[cfg(feature = "async")]
 #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
+#[must_use = "futures do nothing unless you `.await` or poll them"]
 pub struct AsyncThread<'lua, R> {
     thread: Thread<'lua>,
     args0: Option<Result<MultiValue<'lua>>>,
