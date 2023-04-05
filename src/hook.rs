@@ -266,48 +266,59 @@ pub struct HookTriggers {
 
 #[cfg(not(feature = "luau"))]
 impl HookTriggers {
-    /// Returns a new instance of `HookTriggers` with [`on_calls`] trigger set.
+    /// An instance of `HookTriggers` with `on_calls` trigger set.
+    pub const ON_CALLS: Self = HookTriggers::new().on_calls();
+
+    /// An instance of `HookTriggers` with `on_returns` trigger set.
+    pub const ON_RETURNS: Self = HookTriggers::new().on_returns();
+
+    /// An instance of `HookTriggers` with `every_line` trigger set.
+    pub const EVERY_LINE: Self = HookTriggers::new().every_line();
+
+    /// Returns a new instance of `HookTriggers` with all triggers disabled.
+    pub const fn new() -> Self {
+        HookTriggers {
+            on_calls: false,
+            on_returns: false,
+            every_line: false,
+            every_nth_instruction: None,
+        }
+    }
+
+    /// Returns an instance of `HookTriggers` with [`on_calls`] trigger set.
     ///
     /// [`on_calls`]: #structfield.on_calls
-    pub fn on_calls() -> Self {
-        HookTriggers {
-            on_calls: true,
-            ..Default::default()
-        }
+    pub const fn on_calls(mut self) -> Self {
+        self.on_calls = true;
+        self
     }
 
-    /// Returns a new instance of `HookTriggers` with [`on_returns`] trigger set.
+    /// Returns an instance of `HookTriggers` with [`on_returns`] trigger set.
     ///
     /// [`on_returns`]: #structfield.on_returns
-    pub fn on_returns() -> Self {
-        HookTriggers {
-            on_returns: true,
-            ..Default::default()
-        }
+    pub const fn on_returns(mut self) -> Self {
+        self.on_returns = true;
+        self
     }
 
-    /// Returns a new instance of `HookTriggers` with [`every_line`] trigger set.
+    /// Returns an instance of `HookTriggers` with [`every_line`] trigger set.
     ///
     /// [`every_line`]: #structfield.every_line
-    pub fn every_line() -> Self {
-        HookTriggers {
-            every_line: true,
-            ..Default::default()
-        }
+    pub const fn every_line(mut self) -> Self {
+        self.every_line = true;
+        self
     }
 
-    /// Returns a new instance of `HookTriggers` with [`every_nth_instruction`] trigger set.
+    /// Returns an instance of `HookTriggers` with [`every_nth_instruction`] trigger set.
     ///
     /// [`every_nth_instruction`]: #structfield.every_nth_instruction
-    pub fn every_nth_instruction(n: u32) -> Self {
-        HookTriggers {
-            every_nth_instruction: Some(n),
-            ..Default::default()
-        }
+    pub const fn every_nth_instruction(mut self, n: u32) -> Self {
+        self.every_nth_instruction = Some(n);
+        self
     }
 
     // Compute the mask to pass to `lua_sethook`.
-    pub(crate) fn mask(&self) -> c_int {
+    pub(crate) const fn mask(&self) -> c_int {
         let mut mask: c_int = 0;
         if self.on_calls {
             mask |= ffi::LUA_MASKCALL
@@ -326,8 +337,9 @@ impl HookTriggers {
 
     // Returns the `count` parameter to pass to `lua_sethook`, if applicable. Otherwise, zero is
     // returned.
-    pub(crate) fn count(&self) -> c_int {
-        self.every_nth_instruction.unwrap_or(0) as c_int
+    pub(crate) const fn count(&self) -> c_int {
+        let Some(n) = self.every_nth_instruction else { return 0 };
+        n as c_int
     }
 }
 
