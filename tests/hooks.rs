@@ -9,12 +9,9 @@ use std::sync::{Arc, Mutex};
 use mlua::{DebugEvent, Error, HookTriggers, Lua, Result, Value};
 
 #[test]
-fn test_hook_triggers_bitor() {
-    let trigger = HookTriggers::new()
-        .on_calls()
-        .on_returns()
-        .every_line()
-        .every_nth_instruction(5);
+fn test_hook_triggers() {
+    let trigger = HookTriggers::new().on_calls().on_returns()
+        | HookTriggers::new().every_line().every_nth_instruction(5);
 
     assert!(trigger.on_calls);
     assert!(trigger.on_returns);
@@ -236,4 +233,40 @@ fn test_hook_swap_within_hook() -> Result<()> {
         assert_eq!(lua.globals().get::<_, i64>("ok")?, 2);
         Ok(())
     })
+}
+
+#[test]
+fn test_hook_threads() -> Result<()> {
+    let lua = Lua::new();
+
+    let func = lua
+        .load(
+            r#"
+            local x = 2 + 3
+            local y = x * 63
+            local z = string.len(x..", "..y)
+        "#,
+        )
+        .into_function()?;
+    let co = lua.create_thread(func)?;
+
+    let output = Arc::new(Mutex::new(Vec::new()));
+    let hook_output = output.clone();
+    co.set_hook(HookTriggers::EVERY_LINE, move |_lua, debug| {
+        assert_eq!(debug.event(), DebugEvent::Line);
+        hook_output.lock().unwrap().push(debug.curr_line());
+        Ok(())
+    });
+
+    co.resume(())?;
+    lua.remove_hook();
+
+    let output = output.lock().unwrap();
+    if cfg!(feature = "luajit") && lua.load("jit.version_num").eval::<i64>()? >= 20100 {
+        assert_eq!(*output, vec![2, 3, 4, 0, 4]);
+    } else {
+        assert_eq!(*output, vec![2, 3, 4]);
+    }
+
+    Ok(())
 }

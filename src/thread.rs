@@ -3,6 +3,8 @@ use std::os::raw::c_int;
 
 use crate::error::{Error, Result};
 use crate::ffi;
+#[allow(unused)]
+use crate::lua::Lua;
 use crate::types::LuaRef;
 use crate::util::{check_stack, error_traceback_thread, pop_error, StackGuard};
 use crate::value::{FromLuaMulti, IntoLuaMulti};
@@ -14,10 +16,16 @@ use crate::value::{FromLuaMulti, IntoLuaMulti};
 ))]
 use crate::function::Function;
 
+#[cfg(not(feature = "luau"))]
+use crate::{
+    hook::{Debug, HookTriggers},
+    types::MaybeSend,
+};
+
 #[cfg(feature = "async")]
 use {
     crate::{
-        lua::{Lua, ASYNC_POLL_PENDING},
+        lua::ASYNC_POLL_PENDING,
         value::{MultiValue, Value},
     },
     futures_core::{future::Future, stream::Stream},
@@ -175,6 +183,23 @@ impl<'lua> Thread<'lua> {
             } else {
                 ThreadStatus::Unresumable
             }
+        }
+    }
+
+    /// Sets a 'hook' function that will periodically be called as Lua code executes.
+    ///
+    /// This function is similar or [`Lua::set_hook()`] except that it sets for the thread.
+    /// To remove a hook call [`Lua::remove_hook()`].
+    #[cfg(not(feature = "luau"))]
+    #[cfg_attr(docsrs, doc(cfg(not(feature = "luau"))))]
+    pub fn set_hook<F>(&self, triggers: HookTriggers, callback: F)
+    where
+        F: Fn(&Lua, Debug) -> Result<()> + MaybeSend + 'static,
+    {
+        let lua = self.0.lua;
+        unsafe {
+            let thread_state = ffi::lua_tothread(lua.ref_thread(), self.0.index);
+            lua.set_thread_hook(thread_state, triggers, callback);
         }
     }
 
