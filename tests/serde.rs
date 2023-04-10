@@ -392,30 +392,43 @@ fn test_from_value_newtype_struct() -> Result<(), Box<dyn StdError>> {
 #[test]
 fn test_from_value_enum() -> Result<(), Box<dyn StdError>> {
     let lua = Lua::new();
+    lua.globals().set("null", lua.null())?;
 
     #[derive(Deserialize, PartialEq, Debug)]
-    enum E {
+    struct UnitStruct;
+
+    #[derive(Deserialize, PartialEq, Debug)]
+    enum E<T = ()> {
         Unit,
         Integer(u32),
         Tuple(u32, u32),
         Struct { a: u32 },
+        Wrap(T),
     }
 
     let value = lua.load(r#""Unit""#).eval()?;
-    let got = lua.from_value(value)?;
+    let got: E = lua.from_value(value)?;
     assert_eq!(E::Unit, got);
 
     let value = lua.load(r#"{Integer = 1}"#).eval()?;
-    let got = lua.from_value(value)?;
+    let got: E = lua.from_value(value)?;
     assert_eq!(E::Integer(1), got);
 
     let value = lua.load(r#"{Tuple = {1, 2}}"#).eval()?;
-    let got = lua.from_value(value)?;
+    let got: E = lua.from_value(value)?;
     assert_eq!(E::Tuple(1, 2), got);
 
     let value = lua.load(r#"{Struct = {a = 3}}"#).eval()?;
-    let got = lua.from_value(value)?;
+    let got: E = lua.from_value(value)?;
     assert_eq!(E::Struct { a: 3 }, got);
+
+    let value = lua.load(r#"{Wrap = null}"#).eval()?;
+    let got = lua.from_value(value)?;
+    assert_eq!(E::Wrap(UnitStruct), got);
+
+    let value = lua.load(r#"{Wrap = null}"#).eval()?;
+    let got = lua.from_value(value)?;
+    assert_eq!(E::Wrap(()), got);
 
     Ok(())
 }
