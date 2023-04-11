@@ -1,8 +1,10 @@
+use std::cmp::Ordering;
+use std::collections::HashSet;
 use std::iter::{self, FromIterator};
 use std::ops::Index;
 use std::os::raw::c_void;
 use std::sync::Arc;
-use std::{ptr, slice, str, vec};
+use std::{fmt, ptr, slice, str, vec};
 
 #[cfg(feature = "serialize")]
 use {
@@ -24,7 +26,7 @@ use crate::userdata::AnyUserData;
 /// A dynamically typed Lua value. The `String`, `Table`, `Function`, `Thread`, and `UserData`
 /// variants contain handle types into the internal Lua state. It is a logic error to mix handle
 /// types between separate `Lua` instances, and doing so will result in a panic.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub enum Value<'lua> {
     /// The Lua value `nil`.
     Nil,
@@ -119,6 +121,99 @@ impl<'lua> Value<'lua> {
                 }
                 _ => ptr::null(),
             }
+        }
+    }
+
+    // Compares two values.
+    // Used to sort values for Debug printing.
+    pub(crate) fn cmp(&self, other: &Self) -> Ordering {
+        fn cmp_num(a: Number, b: Number) -> Ordering {
+            match (a, b) {
+                _ if a < b => Ordering::Less,
+                _ if a > b => Ordering::Greater,
+                _ => Ordering::Equal,
+            }
+        }
+
+        match (self, other) {
+            // Nil
+            (Value::Nil, Value::Nil) => Ordering::Equal,
+            (Value::Nil, _) => Ordering::Less,
+            (_, Value::Nil) => Ordering::Greater,
+            // Null (a special case)
+            (Value::LightUserData(ud1), Value::LightUserData(ud2)) if ud1 == ud2 => Ordering::Equal,
+            (Value::LightUserData(ud1), _) if ud1.0.is_null() => Ordering::Less,
+            (_, Value::LightUserData(ud2)) if ud2.0.is_null() => Ordering::Greater,
+            // Boolean
+            (Value::Boolean(a), Value::Boolean(b)) => a.cmp(b),
+            (Value::Boolean(_), _) => Ordering::Less,
+            (_, Value::Boolean(_)) => Ordering::Greater,
+            // Integer && Number
+            (Value::Integer(a), Value::Integer(b)) => a.cmp(b),
+            (&Value::Integer(a), &Value::Number(b)) => cmp_num(a as Number, b),
+            (&Value::Number(a), &Value::Integer(b)) => cmp_num(a, b as Number),
+            (&Value::Number(a), &Value::Number(b)) => cmp_num(a, b),
+            (Value::Integer(_) | Value::Number(_), _) => Ordering::Less,
+            (_, Value::Integer(_) | Value::Number(_)) => Ordering::Greater,
+            // String
+            (Value::String(a), Value::String(b)) => a.as_bytes().cmp(b.as_bytes()),
+            (Value::String(_), _) => Ordering::Less,
+            (_, Value::String(_)) => Ordering::Greater,
+            // Other variants can be randomly ordered
+            (a, b) => a.to_pointer().cmp(&b.to_pointer()),
+        }
+    }
+
+    pub(crate) fn fmt_pretty(
+        &self,
+        fmt: &mut fmt::Formatter,
+        recursive: bool,
+        ident: usize,
+        visited: &mut HashSet<*const c_void>,
+    ) -> fmt::Result {
+        match self {
+            Value::Nil => write!(fmt, "nil"),
+            Value::Boolean(b) => write!(fmt, "{b}"),
+            Value::LightUserData(ud) if ud.0.is_null() => write!(fmt, "null"),
+            Value::LightUserData(ud) => write!(fmt, "<lightuserdata {:?}>", ud.0),
+            Value::Integer(i) => write!(fmt, "{i}"),
+            Value::Number(n) => write!(fmt, "{n}"),
+            #[cfg(feature = "luau")]
+            Value::Vector(x, y, z) => write!(fmt, "vector({x}, {y}, {z})"),
+            Value::String(s) => write!(fmt, "{s:?}"),
+            Value::Table(t) if recursive && !visited.contains(&t.to_pointer()) => {
+                t.fmt_pretty(fmt, ident, visited)
+            }
+            t @ Value::Table(_) => write!(fmt, "<table {:?}>", t.to_pointer()),
+            f @ Value::Function(_) => write!(fmt, "<function {:?}>", f.to_pointer()),
+            t @ Value::Thread(_) => write!(fmt, "<thread {:?}>", t.to_pointer()),
+            // TODO: Show type name for registered userdata
+            u @ Value::UserData(_) => write!(fmt, "<userdata {:?}>", u.to_pointer()),
+            Value::Error(e) if recursive => write!(fmt, "{e:?}"),
+            Value::Error(_) => write!(fmt, "<error>"),
+        }
+    }
+}
+
+impl fmt::Debug for Value<'_> {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        if fmt.alternate() {
+            return self.fmt_pretty(fmt, true, 0, &mut HashSet::new());
+        }
+        match self {
+            Value::Nil => write!(fmt, "Nil"),
+            Value::Boolean(b) => write!(fmt, "Boolean({b})"),
+            Value::LightUserData(ud) => write!(fmt, "{ud:?}"),
+            Value::Integer(i) => write!(fmt, "Integer({i})"),
+            Value::Number(n) => write!(fmt, "Number({n})"),
+            #[cfg(feature = "luau")]
+            Value::Vector(x, y, z) => write!(fmt, "Vector({x}, {y}, {z})"),
+            Value::String(s) => write!(fmt, "String({s:?})"),
+            Value::Table(t) => write!(fmt, "{t:?}"),
+            Value::Function(f) => write!(fmt, "{f:?}"),
+            Value::Thread(t) => write!(fmt, "{t:?}"),
+            Value::UserData(ud) => write!(fmt, "{ud:?}"),
+            Value::Error(e) => write!(fmt, "Error({e:?})"),
         }
     }
 }

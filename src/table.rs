@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+use std::fmt;
 use std::marker::PhantomData;
 use std::os::raw::c_void;
 
@@ -20,7 +22,7 @@ use crate::value::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, Nil, Value};
 use {futures_core::future::LocalBoxFuture, futures_util::future};
 
 /// Handle to an internal Lua table.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct Table<'lua>(pub(crate) LuaRef<'lua>);
 
 /// Owned handle to an internal Lua table.
@@ -737,6 +739,42 @@ impl<'lua> Table<'lua> {
             return Err(Error::RuntimeError(err));
         }
         Ok(())
+    }
+
+    pub(crate) fn fmt_pretty(
+        &self,
+        fmt: &mut fmt::Formatter,
+        ident: usize,
+        visited: &mut HashSet<*const c_void>,
+    ) -> fmt::Result {
+        visited.insert(self.to_pointer());
+
+        let t = self.clone();
+        // Collect key/value pairs into a vector so we can sort them
+        let mut pairs = t.pairs::<Value, Value>().flatten().collect::<Vec<_>>();
+        // Sort keys
+        pairs.sort_by(|(a, _), (b, _)| a.cmp(b));
+        if pairs.is_empty() {
+            return write!(fmt, "{{}}");
+        }
+        writeln!(fmt, "{{")?;
+        for (key, value) in pairs {
+            write!(fmt, "{}[", " ".repeat(ident + 2))?;
+            key.fmt_pretty(fmt, false, ident + 2, visited)?;
+            write!(fmt, "] = ")?;
+            value.fmt_pretty(fmt, true, ident + 2, visited)?;
+            writeln!(fmt, ",")?;
+        }
+        write!(fmt, "{}}}", " ".repeat(ident))
+    }
+}
+
+impl fmt::Debug for Table<'_> {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        if fmt.alternate() {
+            return self.fmt_pretty(fmt, 0, &mut HashSet::new());
+        }
+        fmt.write_fmt(format_args!("Table({:?})", self.0))
     }
 }
 
