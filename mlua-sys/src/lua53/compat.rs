@@ -1,4 +1,4 @@
-//! MLua compatibility layer for Lua 5.2
+//! MLua compatibility layer for Lua 5.3
 
 use std::os::raw::c_int;
 

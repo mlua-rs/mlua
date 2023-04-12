@@ -359,7 +359,24 @@ impl Lua {
     /// [`StdLib`]: crate::StdLib
     pub unsafe fn unsafe_new_with(libs: StdLib, options: LuaOptions) -> Lua {
         #[cfg(not(feature = "luau"))]
-        ffi::keep_lua_symbols();
+        {
+            // Workaround to avoid stripping a few unused Lua symbols that could be imported
+            // by C modules in unsafe mode
+            let mut _symbols: Vec<*const extern "C" fn()> = vec![
+                ffi::lua_atpanic as _,
+                ffi::lua_isuserdata as _,
+                ffi::lua_tocfunction as _,
+                ffi::luaL_loadstring as _,
+                ffi::luaL_openlibs as _,
+            ];
+            #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+            {
+                _symbols.push(ffi::lua_getglobal as _);
+                _symbols.push(ffi::lua_setglobal as _);
+                _symbols.push(ffi::luaL_setfuncs as _);
+            }
+        }
+
         Self::inner_new(libs, options)
     }
 

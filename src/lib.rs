@@ -84,7 +84,6 @@ mod macros;
 mod chunk;
 mod conversion;
 mod error;
-mod ffi;
 mod function;
 mod hook;
 mod lua;
@@ -106,7 +105,8 @@ mod value;
 
 pub mod prelude;
 
-pub use crate::{ffi::lua_CFunction, ffi::lua_State};
+pub(crate) use ffi;
+pub use ffi::{lua_CFunction, lua_State};
 
 pub use crate::chunk::{AsChunk, Chunk, ChunkMode};
 pub use crate::error::{Error, ErrorContext, ExternalError, ExternalResult, Result};

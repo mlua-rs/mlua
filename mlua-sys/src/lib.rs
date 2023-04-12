@@ -1,38 +1,43 @@
-//! Low level bindings to Lua 5.4/5.3/5.2/5.1 including LuaJIT.
+//! Low level bindings to Lua 5.4/5.3/5.2/5.1 (including LuaJIT) and Roblox Luau.
 
 #![allow(non_camel_case_types, non_snake_case, dead_code)]
 
 use std::os::raw::c_int;
 
-#[cfg(feature = "lua54")]
+#[cfg(any(feature = "lua54", doc))]
 pub use lua54::*;
 
-#[cfg(feature = "lua53")]
+#[cfg(any(feature = "lua53", doc))]
 pub use lua53::*;
 
-#[cfg(feature = "lua52")]
+#[cfg(any(feature = "lua52", doc))]
 pub use lua52::*;
 
-#[cfg(any(feature = "lua51", feature = "luajit"))]
+#[cfg(any(feature = "lua51", feature = "luajit", doc))]
 pub use lua51::*;
 
-#[cfg(feature = "luau")]
+#[cfg(any(feature = "luau", doc))]
 pub use luau::*;
 
 #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+#[doc(hidden)]
 pub const LUA_MAX_UPVALUES: c_int = 255;
 
 #[cfg(any(feature = "lua51", all(feature = "luajit", not(feature = "vendored"))))]
+#[doc(hidden)]
 pub const LUA_MAX_UPVALUES: c_int = 60;
 
 #[cfg(all(feature = "luajit", feature = "vendored"))]
+#[doc(hidden)]
 pub const LUA_MAX_UPVALUES: c_int = 120;
 
 #[cfg(feature = "luau")]
+#[doc(hidden)]
 pub const LUA_MAX_UPVALUES: c_int = 200;
 
 // I believe `luaL_traceback` < 5.4 requires this much free stack to not error.
 // 5.4 uses `luaL_Buffer`
+#[doc(hidden)]
 pub const LUA_TRACEBACK_STACK: c_int = 11;
 
 // The minimum alignment guaranteed by the architecture. This value is used to
@@ -51,6 +56,7 @@ pub const LUA_TRACEBACK_STACK: c_int = 11;
     all(target_arch = "riscv32", not(target_os = "espidf")),
     all(target_arch = "xtensa", not(target_os = "espidf")),
 )))]
+#[doc(hidden)]
 pub const SYS_MIN_ALIGN: usize = 8;
 #[cfg(all(any(
     target_arch = "x86_64",
@@ -61,44 +67,35 @@ pub const SYS_MIN_ALIGN: usize = 8;
     target_arch = "riscv64",
     target_arch = "wasm64",
 )))]
+#[doc(hidden)]
 pub const SYS_MIN_ALIGN: usize = 16;
 // The allocator on the esp-idf platform guarentees 4 byte alignment.
 #[cfg(all(any(
     all(target_arch = "riscv32", target_os = "espidf"),
     all(target_arch = "xtensa", target_os = "espidf"),
 )))]
+#[doc(hidden)]
 pub const SYS_MIN_ALIGN: usize = 4;
 
-// Hack to avoid stripping a few unused Lua symbols that could be imported
-// by C modules in unsafe mode
-#[cfg(not(feature = "luau"))]
-pub(crate) fn keep_lua_symbols() {
-    let mut _symbols: Vec<*const extern "C" fn()> = vec![
-        lua_atpanic as _,
-        lua_isuserdata as _,
-        lua_tocfunction as _,
-        luaL_loadstring as _,
-        luaL_openlibs as _,
-    ];
-    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
-    {
-        _symbols.push(lua_getglobal as _);
-        _symbols.push(lua_setglobal as _);
-        _symbols.push(luaL_setfuncs as _);
-    }
-}
+#[macro_use]
+mod macros;
 
-#[cfg(feature = "lua54")]
+#[cfg(any(feature = "lua54", doc))]
+#[cfg_attr(docsrs, doc(cfg(feature = "lua54")))]
 pub mod lua54;
 
-#[cfg(feature = "lua53")]
+#[cfg(any(feature = "lua53", doc))]
+#[cfg_attr(docsrs, doc(cfg(feature = "lua53")))]
 pub mod lua53;
 
-#[cfg(feature = "lua52")]
+#[cfg(any(feature = "lua52", doc))]
+#[cfg_attr(docsrs, doc(cfg(feature = "lua52")))]
 pub mod lua52;
 
-#[cfg(any(feature = "lua51", feature = "luajit"))]
+#[cfg(any(feature = "lua51", feature = "luajit", doc))]
+#[cfg_attr(docsrs, doc(cfg(any(feature = "lua51", feature = "luajit"))))]
 pub mod lua51;
 
-#[cfg(feature = "luau")]
+#[cfg(any(feature = "luau", doc))]
+#[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
 pub mod luau;
