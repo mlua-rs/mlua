@@ -4,6 +4,7 @@ version = "0.1.0"
 authors = ["Aleksandr Orlenko <zxteam@pm.me>"]
 edition = "2021"
 repository = "https://github.com/khvzak/mlua"
+documentation = "https://docs.rs/mlua-sys"
 readme = "README.md"
 categories = ["external-ffi-bindings"]
 license = "MIT"
