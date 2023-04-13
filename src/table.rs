@@ -11,7 +11,6 @@ use {
 };
 
 use crate::error::{Error, Result};
-use crate::ffi;
 use crate::function::Function;
 use crate::private::Sealed;
 use crate::types::{Integer, LuaRef};

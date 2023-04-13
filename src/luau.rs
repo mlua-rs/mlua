@@ -4,7 +4,6 @@ use std::string::String as StdString;
 
 use crate::chunk::ChunkMode;
 use crate::error::{Error, Result};
-use crate::ffi;
 use crate::lua::Lua;
 use crate::table::Table;
 use crate::util::{check_stack, StackGuard};

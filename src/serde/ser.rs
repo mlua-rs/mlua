@@ -4,7 +4,6 @@ use serde::{ser, Serialize};
 
 use super::LuaSerdeExt;
 use crate::error::{Error, Result};
-use crate::ffi;
 use crate::lua::Lua;
 use crate::string::String;
 use crate::table::Table;

@@ -16,7 +16,6 @@ use rustc_hash::FxHashMap;
 
 use crate::chunk::{AsChunk, Chunk, ChunkMode};
 use crate::error::{Error, Result};
-use crate::ffi;
 use crate::function::Function;
 use crate::hook::Debug;
 use crate::memory::{MemoryState, ALLOCATOR};

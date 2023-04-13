@@ -5,7 +5,6 @@ use std::ptr;
 use std::slice;
 
 use crate::error::{Error, Result};
-use crate::ffi;
 use crate::lua::Lua;
 use crate::memory::MemoryState;
 use crate::types::{Callback, LuaRef, MaybeSend};

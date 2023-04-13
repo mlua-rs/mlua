@@ -17,7 +17,6 @@ use {
 };
 
 use crate::error::{Error, Result};
-use crate::ffi;
 use crate::function::Function;
 use crate::lua::Lua;
 use crate::table::{Table, TablePairs};

@@ -103,7 +103,6 @@ mod value;
 
 pub mod prelude;
 
-pub(crate) use ffi;
 pub use ffi::{lua_CFunction, lua_State};
 
 pub use crate::chunk::{AsChunk, Chunk, ChunkMode};

@@ -11,7 +11,6 @@ use {
 };
 
 use crate::error::{Error, Result};
-use crate::ffi;
 use crate::types::LuaRef;
 
 /// Handle to an internal Lua string.

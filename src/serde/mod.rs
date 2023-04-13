@@ -6,7 +6,6 @@ use std::ptr;
 use serde::{Deserialize, Serialize};
 
 use crate::error::Result;
-use crate::ffi;
 use crate::lua::Lua;
 use crate::private::Sealed;
 use crate::table::Table;

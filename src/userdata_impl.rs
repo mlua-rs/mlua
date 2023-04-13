@@ -5,7 +5,6 @@ use std::string::String as StdString;
 use std::sync::{Arc, Mutex, RwLock};
 
 use crate::error::{Error, Result};
-use crate::ffi;
 use crate::lua::Lua;
 use crate::types::{Callback, MaybeSend};
 use crate::userdata::{

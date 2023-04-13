@@ -2,7 +2,6 @@ use std::alloc::{self, Layout};
 use std::os::raw::c_void;
 use std::ptr;
 
-use crate::ffi;
 #[cfg(feature = "luau")]
 use crate::lua::ExtraData;
 

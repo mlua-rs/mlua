@@ -8,7 +8,6 @@ use std::os::raw::c_int;
 use serde::Serialize;
 
 use crate::error::{Error, Result};
-use crate::ffi;
 use crate::function::Function;
 use crate::lua::Lua;
 use crate::types::{Callback, CallbackUpvalue, LuaRef, MaybeSend};

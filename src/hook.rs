@@ -3,7 +3,8 @@ use std::cell::UnsafeCell;
 use std::ops::{BitOr, BitOrAssign};
 use std::os::raw::c_int;
 
-use crate::ffi::{self, lua_Debug};
+use ffi::lua_Debug;
+
 use crate::lua::Lua;
 use crate::util::ptr_to_cstr_bytes;
 

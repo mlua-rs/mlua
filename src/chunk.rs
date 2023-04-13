@@ -6,7 +6,6 @@ use std::path::{Path, PathBuf};
 use std::string::String as StdString;
 
 use crate::error::{Error, Result};
-use crate::ffi;
 use crate::function::Function;
 use crate::lua::Lua;
 use crate::value::{FromLuaMulti, IntoLua, IntoLuaMulti, Value};

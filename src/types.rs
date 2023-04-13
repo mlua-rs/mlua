@@ -12,7 +12,6 @@ use std::ffi::CStr;
 use futures_core::future::LocalBoxFuture;
 
 use crate::error::Result;
-use crate::ffi;
 #[cfg(not(feature = "luau"))]
 use crate::hook::Debug;
 use crate::lua::{ExtraData, Lua};

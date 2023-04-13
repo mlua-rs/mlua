@@ -2,7 +2,6 @@ use std::cmp;
 use std::os::raw::c_int;
 
 use crate::error::{Error, Result};
-use crate::ffi;
 #[allow(unused)]
 use crate::lua::Lua;
 use crate::types::LuaRef;
