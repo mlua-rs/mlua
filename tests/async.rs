@@ -26,7 +26,6 @@ async fn test_async_function() -> Result<()> {
     Ok(())
 }
 
-#[cfg(feature = "unstable")]
 #[tokio::test]
 async fn test_async_function_wrap() -> Result<()> {
     let lua = Lua::new();

@@ -168,7 +168,6 @@ fn test_function_info() -> Result<()> {
     Ok(())
 }
 
-#[cfg(feature = "unstable")]
 #[test]
 fn test_function_wrap() -> Result<()> {
     use mlua::Error;
