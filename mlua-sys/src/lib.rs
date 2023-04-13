@@ -1,6 +1,8 @@
 //! Low level bindings to Lua 5.4/5.3/5.2/5.1 (including LuaJIT) and Roblox Luau.
 
 #![allow(non_camel_case_types, non_snake_case, dead_code)]
+#![doc(test(attr(deny(warnings))))]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 
 use std::os::raw::c_int;
 
