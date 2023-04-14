@@ -746,6 +746,8 @@ pub struct OwnedAnyUserData(pub(crate) crate::types::LuaOwnedRef);
 
 #[cfg(feature = "unstable")]
 impl OwnedAnyUserData {
+    /// Get borrowed handle to the underlying Lua userdata.
+    #[cfg_attr(feature = "send", allow(unused))]
     pub const fn to_ref(&self) -> AnyUserData {
         AnyUserData(self.0.to_ref())
     }
@@ -1029,8 +1031,8 @@ impl<'lua> AnyUserData<'lua> {
         }
     }
 
-    #[cfg(feature = "unstable")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "unstable")))]
+    #[cfg(all(feature = "unstable", any(not(feature = "send"), doc)))]
+    #[cfg_attr(docsrs, doc(cfg(all(feature = "unstable", not(feature = "send")))))]
     #[inline]
     pub fn into_owned(self) -> OwnedAnyUserData {
         OwnedAnyUserData(self.0.into_owned())
@@ -1285,6 +1287,6 @@ mod assertions {
 
     static_assertions::assert_not_impl_any!(AnyUserData: Send);
 
-    #[cfg(feature = "unstable")]
+    #[cfg(all(feature = "unstable", not(feature = "send")))]
     static_assertions::assert_not_impl_any!(OwnedAnyUserData: Send);
 }

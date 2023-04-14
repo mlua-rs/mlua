@@ -18,7 +18,7 @@ use crate::types::{LightUserData, MaybeSend};
 use crate::userdata::{AnyUserData, UserData, UserDataRef, UserDataRefMut};
 use crate::value::{FromLua, IntoLua, Nil, Value};
 
-#[cfg(feature = "unstable")]
+#[cfg(all(feature = "unstable", any(not(feature = "send"), doc)))]
 use crate::{function::OwnedFunction, table::OwnedTable, userdata::OwnedAnyUserData};
 
 #[cfg(feature = "async")]
@@ -79,7 +79,8 @@ impl<'lua> FromLua<'lua> for Table<'lua> {
     }
 }
 
-#[cfg(feature = "unstable")]
+#[cfg(all(feature = "unstable", any(not(feature = "send"), doc)))]
+#[cfg_attr(docsrs, doc(cfg(all(feature = "unstable", not(feature = "send")))))]
 impl<'lua> IntoLua<'lua> for OwnedTable {
     #[inline]
     fn into_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
@@ -87,7 +88,8 @@ impl<'lua> IntoLua<'lua> for OwnedTable {
     }
 }
 
-#[cfg(feature = "unstable")]
+#[cfg(all(feature = "unstable", any(not(feature = "send"), doc)))]
+#[cfg_attr(docsrs, doc(cfg(all(feature = "unstable", not(feature = "send")))))]
 impl<'lua> FromLua<'lua> for OwnedTable {
     #[inline]
     fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> Result<OwnedTable> {
@@ -116,7 +118,8 @@ impl<'lua> FromLua<'lua> for Function<'lua> {
     }
 }
 
-#[cfg(feature = "unstable")]
+#[cfg(all(feature = "unstable", any(not(feature = "send"), doc)))]
+#[cfg_attr(docsrs, doc(cfg(all(feature = "unstable", not(feature = "send")))))]
 impl<'lua> IntoLua<'lua> for OwnedFunction {
     #[inline]
     fn into_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
@@ -124,7 +127,8 @@ impl<'lua> IntoLua<'lua> for OwnedFunction {
     }
 }
 
-#[cfg(feature = "unstable")]
+#[cfg(all(feature = "unstable", any(not(feature = "send"), doc)))]
+#[cfg_attr(docsrs, doc(cfg(all(feature = "unstable", not(feature = "send")))))]
 impl<'lua> FromLua<'lua> for OwnedFunction {
     #[inline]
     fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> Result<OwnedFunction> {
@@ -189,7 +193,8 @@ impl<'lua> FromLua<'lua> for AnyUserData<'lua> {
     }
 }
 
-#[cfg(feature = "unstable")]
+#[cfg(all(feature = "unstable", any(not(feature = "send"), doc)))]
+#[cfg_attr(docsrs, doc(cfg(all(feature = "unstable", not(feature = "send")))))]
 impl<'lua> IntoLua<'lua> for OwnedAnyUserData {
     #[inline]
     fn into_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
@@ -197,7 +202,8 @@ impl<'lua> IntoLua<'lua> for OwnedAnyUserData {
     }
 }
 
-#[cfg(feature = "unstable")]
+#[cfg(all(feature = "unstable", any(not(feature = "send"), doc)))]
+#[cfg_attr(docsrs, doc(cfg(all(feature = "unstable", not(feature = "send")))))]
 impl<'lua> FromLua<'lua> for OwnedAnyUserData {
     #[inline]
     fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> Result<OwnedAnyUserData> {

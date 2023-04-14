@@ -33,6 +33,7 @@ pub struct OwnedTable(pub(crate) crate::types::LuaOwnedRef);
 #[cfg(feature = "unstable")]
 impl OwnedTable {
     /// Get borrowed handle to the underlying Lua table.
+    #[cfg_attr(feature = "send", allow(unused))]
     pub const fn to_ref(&self) -> Table {
         Table(self.0.to_ref())
     }
@@ -584,8 +585,8 @@ impl<'lua> Table<'lua> {
     }
 
     /// Convert this handle to owned version.
-    #[cfg(feature = "unstable")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "unstable")))]
+    #[cfg(all(feature = "unstable", any(not(feature = "send"), doc)))]
+    #[cfg_attr(docsrs, doc(cfg(all(feature = "unstable", not(feature = "send")))))]
     #[inline]
     pub fn into_owned(self) -> OwnedTable {
         OwnedTable(self.0.into_owned())

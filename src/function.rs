@@ -33,6 +33,7 @@ pub struct OwnedFunction(pub(crate) crate::types::LuaOwnedRef);
 #[cfg(feature = "unstable")]
 impl OwnedFunction {
     /// Get borrowed handle to the underlying Lua function.
+    #[cfg_attr(feature = "send", allow(unused))]
     pub const fn to_ref(&self) -> Function {
         Function(self.0.to_ref())
     }
@@ -400,8 +401,8 @@ impl<'lua> Function<'lua> {
     }
 
     /// Convert this handle to owned version.
-    #[cfg(feature = "unstable")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "unstable")))]
+    #[cfg(all(feature = "unstable", any(not(feature = "send"), doc)))]
+    #[cfg_attr(docsrs, doc(cfg(all(feature = "unstable", not(feature = "send")))))]
     #[inline]
     pub fn into_owned(self) -> OwnedFunction {
         OwnedFunction(self.0.into_owned())
@@ -476,6 +477,6 @@ mod assertions {
 
     static_assertions::assert_not_impl_any!(Function: Send);
 
-    #[cfg(feature = "unstable")]
+    #[cfg(all(feature = "unstable", not(feature = "send")))]
     static_assertions::assert_not_impl_any!(OwnedFunction: Send);
 }

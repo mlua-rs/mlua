@@ -151,7 +151,7 @@ pub mod serde;
 extern crate mlua_derive;
 
 // Unstable features
-#[cfg(all(feature = "unstable", not(feature = "send")))]
+#[cfg(feature = "unstable")]
 pub use crate::{function::OwnedFunction, table::OwnedTable, userdata::OwnedAnyUserData};
 
 /// Create a type that implements [`AsChunk`] and can capture Rust variables.

@@ -2472,7 +2472,7 @@ impl Lua {
         }
     }
 
-    #[cfg(feature = "unstable")]
+    #[cfg(all(feature = "unstable", not(feature = "send")))]
     pub(crate) fn adopt_owned_ref(&self, loref: crate::types::LuaOwnedRef) -> LuaRef {
         assert!(
             Arc::ptr_eq(&loref.lua.0, &self.0),
