@@ -739,6 +739,7 @@ impl Serialize for UserDataSerializeError {
 #[derive(Clone, Debug)]
 pub struct AnyUserData<'lua>(pub(crate) LuaRef<'lua>);
 
+/// Owned handle to an internal Lua userdata.
 #[cfg(feature = "unstable")]
 #[cfg_attr(docsrs, doc(cfg(feature = "unstable")))]
 #[derive(Clone, Debug)]
@@ -1031,6 +1032,7 @@ impl<'lua> AnyUserData<'lua> {
         }
     }
 
+    /// Convert this handle to owned version.
     #[cfg(all(feature = "unstable", any(not(feature = "send"), doc)))]
     #[cfg_attr(docsrs, doc(cfg(all(feature = "unstable", not(feature = "send")))))]
     #[inline]
