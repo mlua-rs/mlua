@@ -2,7 +2,6 @@
 
 #![allow(non_camel_case_types, non_snake_case, dead_code)]
 #![allow(clippy::missing_safety_doc)]
-
 #![doc(test(attr(deny(warnings))))]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
