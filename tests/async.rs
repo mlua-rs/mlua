@@ -9,7 +9,7 @@ use futures_util::stream::TryStreamExt;
 
 use mlua::{
     AnyUserDataExt, Error, Function, Lua, LuaOptions, Result, StdLib, Table, TableExt, UserData,
-    UserDataMethods,
+    UserDataMethods, Value,
 };
 
 #[tokio::test]
@@ -266,6 +266,28 @@ async fn test_async_thread() -> Result<()> {
     assert_eq!(Arc::strong_count(&cnt), 2);
     lua.gc_collect()?; // thread_s is non-resumable and subject to garbage collection
     assert_eq!(Arc::strong_count(&cnt), 1);
+
+    Ok(())
+}
+
+#[test]
+fn test_async_thread_leak() -> Result<()> {
+    let lua = Lua::new();
+
+    let f = lua.create_async_function(move |_lua, v: Value| async move {
+        tokio::task::yield_now().await;
+        drop(v);
+        Ok(())
+    })?;
+
+    let thread = lua.create_thread(f)?;
+    // After first resume, `v: Value` is captured in the coroutine
+    thread.resume::<_, ()>("abc").unwrap();
+    drop(thread);
+
+    // Without running garbage collection, the captured `v` would trigger "reference leak detected" error
+    // with `cfg(mlua_test)`
+    lua.gc_collect()?;
 
     Ok(())
 }

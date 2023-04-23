@@ -247,6 +247,8 @@ impl Drop for LuaInner {
             {
                 (*ffi::lua_callbacks(self.state())).userdata = ptr::null_mut();
             }
+            // This is an internal assertion used in integration tests
+            #[cfg(mlua_test)]
             mlua_debug_assert!(
                 ffi::lua_gettop(extra.ref_thread) == extra.ref_stack_top
                     && extra.ref_stack_top as usize == extra.ref_free.len(),

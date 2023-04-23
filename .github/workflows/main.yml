@@ -118,12 +118,14 @@ jobs:
         with:
           toolchain: ${{ matrix.rust }}
           target: ${{ matrix.target }}
-      - uses: Swatinem/rust-cache@v1
+      - uses: Swatinem/rust-cache@v2
       - name: Run ${{ matrix.lua }} tests
         run: |
           cargo test --features "${{ matrix.lua }},vendored"
           cargo test --features "${{ matrix.lua }},vendored,async,send,serialize,macros,parking_lot,unstable"
         shell: bash
+        env:
+          RUSTFLAGS: --cfg mlua_test
       - name: Run compile tests (macos lua54)
         if: ${{ matrix.os == 'macos-latest' && matrix.lua == 'lua54' }}
         run: |
@@ -149,12 +151,13 @@ jobs:
         with:
           toolchain: ${{ matrix.rust }}
           target: ${{ matrix.target }}
-      - uses: Swatinem/rust-cache@v1
+      - uses: Swatinem/rust-cache@v2
       - name: Run ${{ matrix.lua }} tests with address sanitizer
         run: |
-          RUSTFLAGS="-Z sanitizer=address" \
             cargo test --tests --features "${{ matrix.lua }},vendored,async,send,serialize,macros,parking_lot,unstable" --target x86_64-unknown-linux-gnu -- --skip test_too_many_recursions
         shell: bash
+        env:
+          RUSTFLAGS: --cfg mlua_test -Z sanitizer=address
 
   test_modules:
     name: Test modules
@@ -176,7 +179,7 @@ jobs:
         with:
           toolchain: ${{ matrix.rust }}
           target: ${{ matrix.target }}
-      - uses: Swatinem/rust-cache@v1
+      - uses: Swatinem/rust-cache@v2
       - name: Run ${{ matrix.lua }} module tests
         run: |
           (cd tests/module && cargo build --release --features "${{ matrix.lua }}")
