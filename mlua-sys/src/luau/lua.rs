@@ -74,6 +74,7 @@ pub type lua_Continuation = unsafe extern "C" fn(L: *mut lua_State, status: c_in
 
 /// Type for userdata destructor functions.
 pub type lua_Udestructor = unsafe extern "C" fn(*mut c_void);
+pub type lua_Destructor = unsafe extern "C" fn(L: *mut lua_State, *mut c_void);
 
 /// Type for memory-allocation functions.
 pub type lua_Alloc = unsafe extern "C" fn(
@@ -265,11 +266,8 @@ extern "C" {
     // TODO: lua_encodepointer
     pub fn lua_clock() -> c_double;
     pub fn lua_setuserdatatag(L: *mut lua_State, idx: c_int, tag: c_int);
-    pub fn lua_setuserdatadtor(
-        L: *mut lua_State,
-        tag: c_int,
-        dtor: Option<unsafe extern "C" fn(*mut lua_State, *mut c_void)>,
-    );
+    pub fn lua_setuserdatadtor(L: *mut lua_State, tag: c_int, dtor: Option<lua_Destructor>);
+    pub fn lua_getuserdatadtor(L: *mut lua_State, tag: c_int) -> Option<lua_Destructor>;
     pub fn lua_clonefunction(L: *mut lua_State, idx: c_int);
     pub fn lua_cleartable(L: *mut lua_State, idx: c_int);
 }
