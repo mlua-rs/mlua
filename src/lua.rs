@@ -3,7 +3,7 @@ use std::cell::{Ref, RefCell, RefMut, UnsafeCell};
 use std::ffi::{CStr, CString};
 use std::fmt;
 use std::marker::PhantomData;
-use std::mem::ManuallyDrop;
+use std::mem::MaybeUninit;
 use std::ops::Deref;
 use std::os::raw::{c_char, c_int, c_void};
 use std::panic::{catch_unwind, resume_unwind, AssertUnwindSafe, Location};
@@ -80,7 +80,7 @@ pub struct LuaInner {
 // Data associated with the Lua.
 pub(crate) struct ExtraData {
     // Same layout as `Lua`
-    inner: Option<ManuallyDrop<Arc<LuaInner>>>,
+    inner: MaybeUninit<Arc<LuaInner>>,
 
     registered_userdata: FxHashMap<TypeId, c_int>,
     registered_userdata_mt: FxHashMap<*const c_void, Option<TypeId>>,
@@ -263,8 +263,8 @@ impl Drop for ExtraData {
     fn drop(&mut self) {
         #[cfg(feature = "module")]
         unsafe {
-            ManuallyDrop::drop(&mut self.inner.take().unwrap())
-        };
+            self.inner.assume_init_drop();
+        }
 
         *mlua_expect!(self.registry_unref_list.lock(), "unref list poisoned") = None;
         if let Some(mem_state) = self.mem_state {
@@ -508,7 +508,7 @@ impl Lua {
 
         // Create ExtraData
         let extra = Arc::new(UnsafeCell::new(ExtraData {
-            inner: None,
+            inner: MaybeUninit::uninit(),
             registered_userdata: FxHashMap::default(),
             registered_userdata_mt: FxHashMap::default(),
             last_checked_userdata_mt: (ptr::null(), None),
@@ -583,7 +583,7 @@ impl Lua {
             extra: Arc::clone(&extra),
         });
 
-        (*extra.get()).inner = Some(ManuallyDrop::new(Arc::clone(&inner)));
+        (*extra.get()).inner.write(Arc::clone(&inner));
         #[cfg(not(feature = "module"))]
         Arc::decrement_strong_count(Arc::as_ptr(&inner));
 
@@ -904,7 +904,7 @@ impl Lua {
                 if Arc::strong_count(&hook_cb) > 2 {
                     return Ok(()); // Don't allow recursion
                 }
-                let lua: &Lua = mem::transmute((*extra).inner.as_ref().unwrap());
+                let lua: &Lua = mem::transmute((*extra).inner.assume_init_ref());
                 let _guard = StateGuard::new(&lua.0, state);
                 let debug = Debug::new(lua, ar);
                 hook_cb(lua, debug)
@@ -1001,7 +1001,7 @@ impl Lua {
                 if Arc::strong_count(&interrupt_cb) > 2 {
                     return Ok(VmState::Continue); // Don't allow recursion
                 }
-                let lua: &Lua = mem::transmute((*extra).inner.as_ref().unwrap());
+                let lua: &Lua = mem::transmute((*extra).inner.assume_init_ref());
                 let _guard = StateGuard::new(&lua.0, state);
                 interrupt_cb(lua)
             });
@@ -1042,7 +1042,7 @@ impl Lua {
     {
         unsafe extern "C" fn warn_proc(ud: *mut c_void, msg: *const c_char, tocont: c_int) {
             let extra = ud as *mut ExtraData;
-            let lua: &Lua = mem::transmute((*extra).inner.as_ref().unwrap());
+            let lua: &Lua = mem::transmute((*extra).inner.assume_init_ref());
             callback_error_ext(lua.state(), extra, |_| {
                 let cb = mlua_expect!(
                     (*extra).warn_callback.as_ref(),
@@ -2667,7 +2667,7 @@ impl Lua {
                     check_stack(state, ffi::LUA_MINSTACK - nargs)?;
                 }
 
-                let lua: &Lua = mem::transmute((*extra).inner.as_ref().unwrap());
+                let lua: &Lua = mem::transmute((*extra).inner.assume_init_ref());
                 let _guard = StateGuard::new(&lua.0, state);
 
                 let mut args = MultiValue::new_or_pooled(lua);
@@ -2749,7 +2749,7 @@ impl Lua {
                     check_stack(state, ffi::LUA_MINSTACK - nargs)?;
                 }
 
-                let lua: &Lua = mem::transmute((*extra).inner.as_ref().unwrap());
+                let lua: &Lua = mem::transmute((*extra).inner.assume_init_ref());
                 let _guard = StateGuard::new(&lua.0, state);
 
                 let mut args = MultiValue::new_or_pooled(lua);
@@ -2794,7 +2794,7 @@ impl Lua {
                     check_stack(state, ffi::LUA_MINSTACK - nargs)?;
                 }
 
-                let lua: &Lua = mem::transmute((*extra).inner.as_ref().unwrap());
+                let lua: &Lua = mem::transmute((*extra).inner.assume_init_ref());
                 let _guard = StateGuard::new(&lua.0, state);
 
                 let fut = &mut (*upvalue).data;
@@ -2997,7 +2997,7 @@ impl Lua {
         if extra.is_null() {
             return None;
         }
-        (*extra).inner.as_ref().map(|lua| Lua(Arc::clone(lua)))
+        Some(Lua(Arc::clone((*extra).inner.assume_init_ref())))
     }
 
     #[inline]
