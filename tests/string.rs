@@ -98,3 +98,22 @@ fn test_string_debug() -> Result<()> {
 
     Ok(())
 }
+
+#[cfg(all(feature = "unstable", not(feature = "send")))]
+#[test]
+fn test_owned_string() -> Result<()> {
+    let lua = Lua::new();
+
+    let s = lua.create_string("hello, world!")?.into_owned();
+    drop(lua);
+
+    // Shortcuts
+    assert_eq!(s.as_bytes(), b"hello, world!");
+    assert_eq!(s.to_str()?, "hello, world!");
+    assert_eq!(format!("{s:?}"), "\"hello, world!\"");
+
+    // Access via reference
+    assert_eq!(s.to_ref().to_string_lossy(), "hello, world!");
+
+    Ok(())
+}

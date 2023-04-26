@@ -19,6 +19,27 @@ use crate::types::LuaRef;
 #[derive(Clone)]
 pub struct String<'lua>(pub(crate) LuaRef<'lua>);
 
+/// Owned handle to an internal Lua string.
+///
+/// The owned handle holds a *strong* reference to the current Lua instance.
+/// Be warned, if you place it into a Lua type (eg. [`UserData`] or a Rust callback), it is *very easy*
+/// to accidentally cause reference cycles that would prevent destroying Lua instance.
+///
+/// [`UserData`]: crate::UserData
+#[cfg(feature = "unstable")]
+#[cfg_attr(docsrs, doc(cfg(feature = "unstable")))]
+#[derive(Clone)]
+pub struct OwnedString(pub(crate) crate::types::LuaOwnedRef);
+
+#[cfg(feature = "unstable")]
+impl OwnedString {
+    /// Get borrowed handle to the underlying Lua string.
+    #[cfg_attr(feature = "send", allow(unused))]
+    pub const fn to_ref(&self) -> String {
+        String(self.0.to_ref())
+    }
+}
+
 impl<'lua> String<'lua> {
     /// Get a `&str` slice if the Lua string is valid UTF-8.
     ///
@@ -121,6 +142,14 @@ impl<'lua> String<'lua> {
         let ref_thread = self.0.lua.ref_thread();
         unsafe { ffi::lua_topointer(ref_thread, self.0.index) }
     }
+
+    /// Convert this handle to owned version.
+    #[cfg(all(feature = "unstable", any(not(feature = "send"), doc)))]
+    #[cfg_attr(docsrs, doc(cfg(all(feature = "unstable", not(feature = "send")))))]
+    #[inline]
+    pub fn into_owned(self) -> OwnedString {
+        OwnedString(self.0.into_owned())
+    }
 }
 
 impl<'lua> fmt::Debug for String<'lua> {
@@ -199,6 +228,37 @@ impl<'lua> Serialize for String<'lua> {
             Ok(s) => serializer.serialize_str(s),
             Err(_) => serializer.serialize_bytes(self.as_bytes()),
         }
+    }
+}
+
+// Additional shortcuts
+#[cfg(feature = "unstable")]
+impl OwnedString {
+    /// Get a `&str` slice if the Lua string is valid UTF-8.
+    ///
+    /// This is a shortcut for [`String::to_str()`].
+    #[inline]
+    pub fn to_str(&self) -> Result<&str> {
+        let s = self.to_ref();
+        // Reattach lifetime to &self
+        unsafe { std::mem::transmute(s.to_str()) }
+    }
+
+    /// Get the bytes that make up this string.
+    ///
+    /// This is a shortcut for [`String::as_bytes()`].
+    #[inline]
+    pub fn as_bytes(&self) -> &[u8] {
+        let s = self.to_ref();
+        // Reattach lifetime to &self
+        unsafe { std::mem::transmute(s.as_bytes()) }
+    }
+}
+
+#[cfg(feature = "unstable")]
+impl fmt::Debug for OwnedString {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        self.to_ref().fmt(f)
     }
 }
 

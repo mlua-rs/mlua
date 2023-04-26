@@ -36,9 +36,9 @@ pub use crate::{
     SerializeOptions as LuaSerializeOptions,
 };
 
-#[cfg(all(feature = "unstable", not(feature = "send")))]
+#[cfg(feature = "unstable")]
 #[doc(no_inline)]
 pub use crate::{
     OwnedAnyUserData as LuaOwnedAnyUserData, OwnedFunction as LuaOwnedFunction,
-    OwnedTable as LuaOwnedTable,
+    OwnedString as LuaOwnedString, OwnedTable as LuaOwnedTable,
 };
