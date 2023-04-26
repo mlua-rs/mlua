@@ -740,6 +740,10 @@ impl Serialize for UserDataSerializeError {
 pub struct AnyUserData<'lua>(pub(crate) LuaRef<'lua>);
 
 /// Owned handle to an internal Lua userdata.
+///
+/// The owned handle holds a *strong* reference to the current Lua instance.
+/// Be warned, if you place it into a Lua type (eg. [`UserData`] or a Rust callback), it is *very easy*
+/// to accidentally cause reference cycles that would prevent destroying Lua instance.
 #[cfg(feature = "unstable")]
 #[cfg_attr(docsrs, doc(cfg(feature = "unstable")))]
 #[derive(Clone, Debug)]
@@ -1122,6 +1126,32 @@ unsafe fn getuservalue_table(state: *mut ffi::lua_State, idx: c_int) -> c_int {
     return ffi::lua_getiuservalue(state, idx, USER_VALUE_MAXSLOT as c_int);
     #[cfg(not(feature = "lua54"))]
     return ffi::lua_getuservalue(state, idx);
+}
+
+// Additional shortcuts
+#[cfg(feature = "unstable")]
+impl OwnedAnyUserData {
+    /// Borrow this userdata immutably if it is of type `T`.
+    ///
+    /// This is a shortcut for [`AnyUserData::borrow()`]
+    #[inline]
+    pub fn borrow<T: 'static>(&self) -> Result<Ref<T>> {
+        let ud = self.to_ref();
+        let t = ud.borrow::<T>()?;
+        // Reattach lifetime to &self
+        Ok(unsafe { mem::transmute::<Ref<T>, Ref<T>>(t) })
+    }
+
+    /// Borrow this userdata mutably if it is of type `T`.
+    ///
+    /// This is a shortcut for [`AnyUserData::borrow_mut()`]
+    #[inline]
+    pub fn borrow_mut<T: 'static>(&self) -> Result<RefMut<T>> {
+        let ud = self.to_ref();
+        let t = ud.borrow_mut::<T>()?;
+        // Reattach lifetime to &self
+        Ok(unsafe { mem::transmute::<RefMut<T>, RefMut<T>>(t) })
+    }
 }
 
 /// Handle to a `UserData` metatable.

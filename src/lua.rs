@@ -231,29 +231,20 @@ const MULTIVALUE_POOL_SIZE: usize = 64;
 unsafe impl Send for Lua {}
 
 #[cfg(not(feature = "module"))]
+impl Drop for Lua {
+    fn drop(&mut self) {
+        let _ = self.gc_collect();
+    }
+}
+
+#[cfg(not(feature = "module"))]
 impl Drop for LuaInner {
     fn drop(&mut self) {
         unsafe {
-            let extra = &mut *self.extra.get();
-            let drain_iter = extra.wrapped_failure_pool.drain(..);
-            #[cfg(feature = "async")]
-            let drain_iter = drain_iter.chain(extra.thread_pool.drain(..));
-            for index in drain_iter {
-                ffi::lua_pushnil(extra.ref_thread);
-                ffi::lua_replace(extra.ref_thread, index);
-                extra.ref_free.push(index);
-            }
             #[cfg(feature = "luau")]
             {
                 (*ffi::lua_callbacks(self.state())).userdata = ptr::null_mut();
             }
-            // This is an internal assertion used in integration tests
-            #[cfg(mlua_test)]
-            mlua_debug_assert!(
-                ffi::lua_gettop(extra.ref_thread) == extra.ref_stack_top
-                    && extra.ref_stack_top as usize == extra.ref_free.len(),
-                "reference leak detected"
-            );
             ffi::lua_close(self.main_state);
         }
     }
@@ -2477,12 +2468,12 @@ impl Lua {
     #[cfg(all(feature = "unstable", not(feature = "send")))]
     pub(crate) fn adopt_owned_ref(&self, loref: crate::types::LuaOwnedRef) -> LuaRef {
         assert!(
-            Arc::ptr_eq(&loref.lua.0, &self.0),
+            Arc::ptr_eq(&loref.inner, &self.0),
             "Lua instance passed Value created from a different main Lua state"
         );
         let index = loref.index;
         unsafe {
-            ptr::read(&loref.lua);
+            ptr::read(&loref.inner);
             mem::forget(loref);
         }
         LuaRef::new(self, index)
@@ -3011,8 +3002,8 @@ impl Lua {
 
     #[cfg(feature = "unstable")]
     #[inline]
-    pub(crate) fn clone(&self) -> Self {
-        Lua(Arc::clone(&self.0))
+    pub(crate) fn clone(&self) -> Arc<LuaInner> {
+        Arc::clone(&self.0)
     }
 }
 

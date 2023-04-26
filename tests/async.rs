@@ -271,7 +271,7 @@ async fn test_async_thread() -> Result<()> {
 }
 
 #[test]
-fn test_async_thread_leak() -> Result<()> {
+fn test_async_thread_capture() -> Result<()> {
     let lua = Lua::new();
 
     let f = lua.create_async_function(move |_lua, v: Value| async move {
@@ -284,10 +284,6 @@ fn test_async_thread_leak() -> Result<()> {
     // After first resume, `v: Value` is captured in the coroutine
     thread.resume::<_, ()>("abc").unwrap();
     drop(thread);
-
-    // Without running garbage collection, the captured `v` would trigger "reference leak detected" error
-    // with `cfg(mlua_test)`
-    lua.gc_collect()?;
 
     Ok(())
 }
@@ -485,6 +481,24 @@ async fn test_async_thread_error() -> Result<()> {
         matches!(result, Err(Error::RuntimeError(cause)) if cause.contains("myuserdata error")),
         "improper error traceback from dead thread"
     );
+
+    Ok(())
+}
+
+#[cfg(all(feature = "unstable", not(feature = "send")))]
+#[tokio::test]
+async fn test_owned_async_call() -> Result<()> {
+    let lua = Lua::new();
+
+    let hello = lua
+        .create_async_function(|_, name: String| async move {
+            Delay::new(Duration::from_millis(10)).await;
+            Ok(format!("hello, {}!", name))
+        })?
+        .into_owned();
+    drop(lua);
+
+    assert_eq!(hello.call_async::<_, String>("alex").await?, "hello, alex!");
 
     Ok(())
 }

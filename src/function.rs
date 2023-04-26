@@ -25,6 +25,12 @@ use {
 pub struct Function<'lua>(pub(crate) LuaRef<'lua>);
 
 /// Owned handle to an internal Lua function.
+///
+/// The owned handle holds a *strong* reference to the current Lua instance.
+/// Be warned, if you place it into a Lua type (eg. [`UserData`] or a Rust callback), it is *very easy*
+/// to accidentally cause reference cycles that would prevent destroying Lua instance.
+///
+/// [`UserData`]: crate::UserData
 #[cfg(feature = "unstable")]
 #[cfg_attr(docsrs, doc(cfg(feature = "unstable")))]
 #[derive(Clone, Debug)]
@@ -412,6 +418,37 @@ impl<'lua> Function<'lua> {
 impl<'lua> PartialEq for Function<'lua> {
     fn eq(&self, other: &Self) -> bool {
         self.0 == other.0
+    }
+}
+
+// Additional shortcuts
+#[cfg(feature = "unstable")]
+impl OwnedFunction {
+    /// Calls the function, passing `args` as function arguments.
+    ///
+    /// This is a shortcut for [`Function::call()`].
+    #[inline]
+    pub fn call<'lua, A, R>(&'lua self, args: A) -> Result<R>
+    where
+        A: IntoLuaMulti<'lua>,
+        R: FromLuaMulti<'lua>,
+    {
+        self.to_ref().call(args)
+    }
+
+    /// Returns a future that, when polled, calls `self`, passing `args` as function arguments,
+    /// and drives the execution.
+    ///
+    /// This is a shortcut for [`Function::call_async()`].
+    #[cfg(feature = "async")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
+    #[inline]
+    pub fn call_async<'lua, A, R>(&'lua self, args: A) -> LocalBoxFuture<'lua, Result<R>>
+    where
+        A: IntoLuaMulti<'lua>,
+        R: FromLuaMulti<'lua> + 'lua,
+    {
+        self.to_ref().call_async(args)
     }
 }
 

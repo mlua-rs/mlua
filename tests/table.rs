@@ -392,3 +392,17 @@ fn test_table_call() -> Result<()> {
 
     Ok(())
 }
+
+#[cfg(all(feature = "unstable", not(feature = "send")))]
+#[test]
+fn test_owned_table() -> Result<()> {
+    let lua = Lua::new();
+
+    let table = lua.create_table()?.into_owned();
+    drop(lua);
+
+    table.to_ref().set("abc", 123)?;
+    assert_eq!(table.to_ref().get::<_, i64>("abc")?, 123);
+
+    Ok(())
+}

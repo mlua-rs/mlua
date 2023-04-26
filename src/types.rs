@@ -18,6 +18,9 @@ use crate::lua::{ExtraData, Lua};
 use crate::util::{assert_stack, StackGuard};
 use crate::value::MultiValue;
 
+#[cfg(feature = "unstable")]
+use {crate::lua::LuaInner, std::marker::PhantomData};
+
 /// Type of Lua integer numbers.
 pub type Integer = ffi::lua_Integer;
 /// Type of Lua floating point numbers.
@@ -237,9 +240,9 @@ impl<'lua> PartialEq for LuaRef<'lua> {
 
 #[cfg(feature = "unstable")]
 pub(crate) struct LuaOwnedRef {
-    pub(crate) lua: Lua,
+    pub(crate) inner: Arc<LuaInner>,
     pub(crate) index: c_int,
-    _non_send: std::marker::PhantomData<*const ()>,
+    _non_send: PhantomData<*const ()>,
 }
 
 #[cfg(feature = "unstable")]
@@ -259,31 +262,24 @@ impl Clone for LuaOwnedRef {
 #[cfg(feature = "unstable")]
 impl Drop for LuaOwnedRef {
     fn drop(&mut self) {
-        self.lua.drop_ref_index(self.index);
+        let lua: &Lua = unsafe { mem::transmute(&self.inner) };
+        lua.drop_ref_index(self.index);
     }
 }
 
 #[cfg(feature = "unstable")]
 impl LuaOwnedRef {
-    pub(crate) const fn new(lua: Lua, index: c_int) -> Self {
-        #[cfg(feature = "send")]
-        {
-            let _lua = lua;
-            let _index = index;
-            panic!("mlua must be compiled without \"send\" feature to use Owned types");
-        }
-
-        #[cfg(not(feature = "send"))]
+    pub(crate) const fn new(inner: Arc<LuaInner>, index: c_int) -> Self {
         LuaOwnedRef {
-            lua,
+            inner,
             index,
-            _non_send: std::marker::PhantomData,
+            _non_send: PhantomData,
         }
     }
 
     pub(crate) const fn to_ref(&self) -> LuaRef {
         LuaRef {
-            lua: &self.lua,
+            lua: unsafe { mem::transmute(&self.inner) },
             index: self.index,
             drop: false,
         }

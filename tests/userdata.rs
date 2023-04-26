@@ -820,3 +820,22 @@ fn test_userdata_method_errors() -> Result<()> {
 
     Ok(())
 }
+
+#[cfg(all(feature = "unstable", not(feature = "send")))]
+#[test]
+fn test_owned_userdata() -> Result<()> {
+    let lua = Lua::new();
+
+    let ud = lua.create_any_userdata("abc")?.into_owned();
+    drop(lua);
+
+    assert_eq!(*ud.borrow::<&str>()?, "abc");
+    *ud.borrow_mut()? = "cba";
+    assert_eq!(*ud.to_ref().borrow::<&str>()?, "cba");
+    assert!(matches!(
+        ud.borrow::<i64>(),
+        Err(Error::UserDataTypeMismatch)
+    ));
+
+    Ok(())
+}

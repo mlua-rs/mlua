@@ -122,10 +122,9 @@ jobs:
       - name: Run ${{ matrix.lua }} tests
         run: |
           cargo test --features "${{ matrix.lua }},vendored"
-          cargo test --features "${{ matrix.lua }},vendored,async,send,serialize,macros,parking_lot,unstable"
+          cargo test --features "${{ matrix.lua }},vendored,async,send,serialize,macros,parking_lot"
+          cargo test --features "${{ matrix.lua }},vendored,async,serialize,macros,parking_lot,unstable"
         shell: bash
-        env:
-          RUSTFLAGS: --cfg mlua_test
       - name: Run compile tests (macos lua54)
         if: ${{ matrix.os == 'macos-latest' && matrix.lua == 'lua54' }}
         run: |
@@ -157,7 +156,7 @@ jobs:
             cargo test --tests --features "${{ matrix.lua }},vendored,async,send,serialize,macros,parking_lot,unstable" --target x86_64-unknown-linux-gnu -- --skip test_too_many_recursions
         shell: bash
         env:
-          RUSTFLAGS: --cfg mlua_test -Z sanitizer=address
+          RUSTFLAGS: -Z sanitizer=address
 
   test_modules:
     name: Test modules

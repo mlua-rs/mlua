@@ -25,6 +25,12 @@ use {futures_core::future::LocalBoxFuture, futures_util::future};
 pub struct Table<'lua>(pub(crate) LuaRef<'lua>);
 
 /// Owned handle to an internal Lua table.
+///
+/// The owned handle holds a *strong* reference to the current Lua instance.
+/// Be warned, if you place it into a Lua type (eg. [`UserData`] or a Rust callback), it is *very easy*
+/// to accidentally cause reference cycles that would prevent destroying Lua instance.
+///
+/// [`UserData`]: crate::UserData
 #[cfg(feature = "unstable")]
 #[cfg_attr(docsrs, doc(cfg(feature = "unstable")))]
 #[derive(Clone, Debug)]
