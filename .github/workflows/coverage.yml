@@ -14,7 +14,7 @@ jobs:
 
       - name: Generate coverage report
         run: |
-          cargo tarpaulin --out xml --tests --exclude-files benches/*
+          cargo tarpaulin --out xml --tests --exclude-files benches/* --exclude-files mlua-sys/src/*/*
 
       - name: Upload report to codecov.io
         uses: codecov/codecov-action@v3
