@@ -1,3 +1,14 @@
+## v0.9.0-beta.2
+
+New features:
+- Added `Thread::set_hook()` function to set hook on threads
+- Added pretty print to the Debug formatting to Lua `Value` and `Table`
+- ffi layer moved to `mlua-sys` crate
+- Added OwnedString (unstable)
+
+Breaking changes:
+- Refactor `HookTriggers` (make it const)
+
 ## v0.9.0-beta.1
 
 New features:
