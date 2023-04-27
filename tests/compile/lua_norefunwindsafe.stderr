@@ -1,22 +1,28 @@
-error[E0277]: the type `UnsafeCell<mlua::lua::LuaInner>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
-   --> tests/compile/lua_norefunwindsafe.rs:7:5
-    |
-7   |     catch_unwind(|| lua.create_table().unwrap());
-    |     ^^^^^^^^^^^^ `UnsafeCell<mlua::lua::LuaInner>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
-    |
-    = help: within `Lua`, the trait `RefUnwindSafe` is not implemented for `UnsafeCell<mlua::lua::LuaInner>`
-    = note: required because it appears within the type `alloc::sync::ArcInner<UnsafeCell<mlua::lua::LuaInner>>`
-    = note: required because it appears within the type `PhantomData<alloc::sync::ArcInner<UnsafeCell<mlua::lua::LuaInner>>>`
-    = note: required because it appears within the type `Arc<UnsafeCell<mlua::lua::LuaInner>>`
-    = note: required because it appears within the type `Lua`
-    = note: required because of the requirements on the impl of `UnwindSafe` for `&Lua`
+error[E0277]: the type `UnsafeCell<mlua::lua::ExtraData>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+ --> tests/compile/lua_norefunwindsafe.rs:7:18
+  |
+7 |     catch_unwind(|| lua.create_table().unwrap());
+  |     ------------ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `UnsafeCell<mlua::lua::ExtraData>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+  |     |
+  |     required by a bound introduced by this call
+  |
+  = help: within `Lua`, the trait `RefUnwindSafe` is not implemented for `UnsafeCell<mlua::lua::ExtraData>`
+  = note: required because it appears within the type `ArcInner<UnsafeCell<ExtraData>>`
+  = note: required because it appears within the type `PhantomData<ArcInner<UnsafeCell<ExtraData>>>`
+  = note: required because it appears within the type `Arc<UnsafeCell<ExtraData>>`
+  = note: required because it appears within the type `LuaInner`
+  = note: required because it appears within the type `ArcInner<LuaInner>`
+  = note: required because it appears within the type `PhantomData<ArcInner<LuaInner>>`
+  = note: required because it appears within the type `Arc<LuaInner>`
+  = note: required because it appears within the type `Lua`
+  = note: required for `&Lua` to implement `UnwindSafe`
 note: required because it's used within this closure
-   --> tests/compile/lua_norefunwindsafe.rs:7:18
-    |
-7   |     catch_unwind(|| lua.create_table().unwrap());
-    |                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ --> tests/compile/lua_norefunwindsafe.rs:7:18
+  |
+7 |     catch_unwind(|| lua.create_table().unwrap());
+  |                  ^^
 note: required by a bound in `catch_unwind`
-   --> $RUST/std/src/panic.rs
-    |
-    | pub fn catch_unwind<F: FnOnce() -> R + UnwindSafe, R>(f: F) -> Result<R> {
-    |                                        ^^^^^^^^^^ required by this bound in `catch_unwind`
+ --> $RUST/std/src/panic.rs
+  |
+  | pub fn catch_unwind<F: FnOnce() -> R + UnwindSafe, R>(f: F) -> Result<R> {
+  |                                        ^^^^^^^^^^ required by this bound in `catch_unwind`
