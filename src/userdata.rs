@@ -1152,6 +1152,14 @@ impl OwnedAnyUserData {
         // Reattach lifetime to &self
         Ok(unsafe { mem::transmute::<RefMut<T>, RefMut<T>>(t) })
     }
+
+    /// Takes the value out of this userdata.
+    ///
+    /// This is a shortcut for [`AnyUserData::take()`]
+    #[inline]
+    pub fn take<T: 'static>(&self) -> Result<T> {
+        self.to_ref().take()
+    }
 }
 
 /// Handle to a `UserData` metatable.

@@ -831,11 +831,11 @@ fn test_owned_userdata() -> Result<()> {
 
     assert_eq!(*ud.borrow::<&str>()?, "abc");
     *ud.borrow_mut()? = "cba";
-    assert_eq!(*ud.to_ref().borrow::<&str>()?, "cba");
     assert!(matches!(
         ud.borrow::<i64>(),
         Err(Error::UserDataTypeMismatch)
     ));
+    assert_eq!(ud.take::<&str>()?, "cba");
 
     Ok(())
 }
