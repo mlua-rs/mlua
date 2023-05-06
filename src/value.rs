@@ -63,6 +63,12 @@ pub enum Value<'lua> {
 pub use self::Value::Nil;
 
 impl<'lua> Value<'lua> {
+    /// A special value (lightuserdata) to represent null value.
+    ///
+    /// It can be used in Lua tables without downsides of `nil`.
+    pub const NULL: Value<'static> = Value::LightUserData(LightUserData(ptr::null_mut()));
+
+    /// Returns type name of this value.
     pub const fn type_name(&self) -> &'static str {
         match *self {
             Value::Nil => "nil",

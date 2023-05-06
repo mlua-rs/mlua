@@ -1,7 +1,6 @@
 //! (De)Serialization support using serde.
 
 use std::os::raw::c_void;
-use std::ptr;
 
 use serde::{Deserialize, Serialize};
 
@@ -9,7 +8,6 @@ use crate::error::Result;
 use crate::lua::Lua;
 use crate::private::Sealed;
 use crate::table::Table;
-use crate::types::LightUserData;
 use crate::util::check_stack;
 use crate::value::Value;
 
@@ -200,7 +198,7 @@ pub trait LuaSerdeExt<'lua>: Sealed {
 
 impl<'lua> LuaSerdeExt<'lua> for Lua {
     fn null(&'lua self) -> Value<'lua> {
-        Value::LightUserData(LightUserData(ptr::null_mut()))
+        Value::NULL
     }
 
     fn array_metatable(&'lua self) -> Table<'lua> {

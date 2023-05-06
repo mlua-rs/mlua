@@ -28,6 +28,7 @@ fn test_value_eq() -> Result<()> {
     "#,
     )
     .exec()?;
+    globals.set("null", Value::NULL)?;
 
     let table1: Value = globals.get("table1")?;
     let table2: Value = globals.get("table2")?;
@@ -41,6 +42,7 @@ fn test_value_eq() -> Result<()> {
     let func3: Value = globals.get("func3")?;
     let thread1: Value = globals.get("thread1")?;
     let thread2: Value = globals.get("thread2")?;
+    let null: Value = globals.get("null")?;
 
     assert!(table1 != table2);
     assert!(table1.equals(&table2)?);
@@ -54,6 +56,7 @@ fn test_value_eq() -> Result<()> {
     assert!(!func1.equals(&func3)?);
     assert!(thread1 == thread2);
     assert!(thread1.equals(&thread2)?);
+    assert!(null == Value::NULL);
 
     assert!(!table1.to_pointer().is_null());
     assert!(!ptr::eq(table1.to_pointer(), table2.to_pointer()));
