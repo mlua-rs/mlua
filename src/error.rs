@@ -335,6 +335,10 @@ impl StdError for Error {
             // Given that we include source to fmt::Display implementation for `CallbackError`, this call returns nothing.
             Error::CallbackError { .. } => None,
             Error::ExternalError(ref err) => err.source(),
+            Error::WithContext { ref cause, .. } => match cause.as_ref() {
+                Error::ExternalError(err) => err.source(),
+                _ => None,
+            },
             _ => None,
         }
     }
@@ -353,6 +357,10 @@ impl Error {
     {
         match self {
             Error::ExternalError(err) => err.downcast_ref(),
+            Error::WithContext { cause, .. } => match cause.as_ref() {
+                Error::ExternalError(err) => err.downcast_ref(),
+                _ => None,
+            },
             _ => None,
         }
     }
@@ -414,33 +422,35 @@ pub trait ErrorContext: Sealed {
 
 impl ErrorContext for Error {
     fn context<C: fmt::Display>(self, context: C) -> Self {
-        Error::WithContext {
-            context: context.to_string(),
-            cause: Arc::new(self),
+        let context = context.to_string();
+        match self {
+            Error::WithContext { cause, .. } => Error::WithContext { context, cause },
+            _ => Error::WithContext {
+                context,
+                cause: Arc::new(self),
+            },
         }
     }
 
     fn with_context<C: fmt::Display>(self, f: impl FnOnce(&Error) -> C) -> Self {
-        Error::WithContext {
-            context: f(&self).to_string(),
-            cause: Arc::new(self),
+        let context = f(&self).to_string();
+        match self {
+            Error::WithContext { cause, .. } => Error::WithContext { context, cause },
+            _ => Error::WithContext {
+                context,
+                cause: Arc::new(self),
+            },
         }
     }
 }
 
 impl<T> ErrorContext for StdResult<T, Error> {
     fn context<C: fmt::Display>(self, context: C) -> Self {
-        self.map_err(|err| Error::WithContext {
-            context: context.to_string(),
-            cause: Arc::new(err),
-        })
+        self.map_err(|err| err.context(context))
     }
 
     fn with_context<C: fmt::Display>(self, f: impl FnOnce(&Error) -> C) -> Self {
-        self.map_err(|err| Error::WithContext {
-            context: f(&err).to_string(),
-            cause: Arc::new(err),
-        })
+        self.map_err(|err| err.with_context(f))
     }
 }
 

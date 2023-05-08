@@ -1,3 +1,5 @@
+use std::io;
+
 use mlua::{Error, ErrorContext, Lua, Result};
 
 #[test]
@@ -28,6 +30,21 @@ fn test_error_context() -> Result<()> {
     assert!(msg2.contains("failed to find global"));
     println!("{msg2}");
     assert!(msg2.contains("error converting Lua nil to String"));
+
+    // Rewrite context message and test `downcast_ref`
+    let func3 = lua.create_function(|_, ()| {
+        Err::<(), _>(Error::external(io::Error::new(
+            io::ErrorKind::Other,
+            "other",
+        )))
+        .context("some context")
+        .context("some new context")
+    })?;
+    let res = func3.call::<_, ()>(()).err().unwrap();
+    let Error::CallbackError { cause, .. } = &res else { unreachable!() };
+    assert!(!res.to_string().contains("some context"));
+    assert!(res.to_string().contains("some new context"));
+    assert!(cause.downcast_ref::<io::Error>().is_some());
 
     Ok(())
 }
