@@ -1,3 +1,9 @@
+## v0.8.9
+
+- Update minimal (vendored) Lua 5.4 to 5.4.6
+- Use `lua_closethread` instead of `lua_resetthread` in vendored mode (Lua 5.4.6)
+- Allow deserializing Lua null into unit (`()`) or unit struct.
+
 ## v0.8.8
 
 - Fix potential deadlock when trying to reuse dropped registry keys.
