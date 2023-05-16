@@ -991,7 +991,7 @@ fn test_ref_stack_exhaustion() {
     match catch_unwind(AssertUnwindSafe(|| -> Result<()> {
         let lua = Lua::new();
         let mut vals = Vec::new();
-        for _ in 0..1000000 {
+        for _ in 0..10000000 {
             vals.push(lua.create_table()?);
         }
         Ok(())
