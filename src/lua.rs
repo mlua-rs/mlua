@@ -1671,8 +1671,10 @@ impl Lua {
         let extra = &mut *self.extra.get();
         if extra.thread_pool.len() < extra.thread_pool.capacity() {
             let thread_state = ffi::lua_tothread(extra.ref_thread, thread.0.index);
-            #[cfg(feature = "lua54")]
+            #[cfg(all(feature = "lua54", not(feature = "vendored")))]
             let status = ffi::lua_resetthread(thread_state);
+            #[cfg(all(feature = "lua54", feature = "vendored"))]
+            let status = ffi::lua_closethread(thread_state, self.state());
             #[cfg(feature = "lua54")]
             if status != ffi::LUA_OK {
                 // Error object is on top, drop it

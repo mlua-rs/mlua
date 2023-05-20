@@ -232,8 +232,10 @@ impl<'lua> Thread<'lua> {
             lua.push_ref(&self.0);
             let thread_state = ffi::lua_tothread(state, -1);
 
-            #[cfg(feature = "lua54")]
+            #[cfg(all(feature = "lua54", not(feature = "vendored")))]
             let status = ffi::lua_resetthread(thread_state);
+            #[cfg(all(feature = "lua54", feature = "vendored"))]
+            let status = ffi::lua_closethread(thread_state, state);
             #[cfg(feature = "lua54")]
             if status != ffi::LUA_OK {
                 return Err(pop_error(thread_state, status));

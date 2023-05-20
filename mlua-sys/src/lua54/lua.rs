@@ -112,7 +112,10 @@ extern "C" {
     pub fn lua_newstate(f: lua_Alloc, ud: *mut c_void) -> *mut lua_State;
     pub fn lua_close(L: *mut lua_State);
     pub fn lua_newthread(L: *mut lua_State) -> *mut lua_State;
+    // Deprecated in Lua 5.4.6
     pub fn lua_resetthread(L: *mut lua_State) -> c_int;
+    #[cfg(feature = "vendored")]
+    pub fn lua_closethread(L: *mut lua_State, from: *mut lua_State) -> c_int;
 
     pub fn lua_atpanic(L: *mut lua_State, panicf: lua_CFunction) -> lua_CFunction;
 
