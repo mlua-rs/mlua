@@ -1927,6 +1927,41 @@ impl Lua {
         })
     }
 
+    /// An analog of Lua `tostring() function.
+    pub fn to_string(&self, val: Value<'_>) -> Result<std::string::String> {
+        match val {
+            Nil => Ok(std::string::String::from("nil")),
+            Value::Boolean(val) => Ok(val.to_string()),
+            Value::Number(val) => Ok(val.to_string()),
+            Value::Integer(val) => Ok(val.to_string()),
+            Value::String(val) => val.to_str().map(ToString::to_string),
+            Value::Table(_)
+            | Value::UserData(_)
+            | Value::LightUserData(_)
+            | Value::Function(_)
+            | Value::Thread(_)
+            | Value::Error(_) => {
+                let state = self.state();
+                unsafe {
+                    self.push_value(val)?;
+
+                    let tt = ffi::luaL_getmetafield(state, -1, cstr!("__name"));
+                    let kind = if tt == ffi::LUA_TSTRING {
+                        ffi::lua_tostring(state, -1)
+                    } else {
+                        ffi::luaL_typename(state, -1)
+                    };
+
+                    let ptr = ffi::lua_topointer(state, -1);
+
+                    ffi::lua_pushfstring(state, cstr!("%s: %p"), kind, ptr);
+
+                    String(self.pop_ref()).to_str().map(ToString::to_string)
+                }
+            }
+        }
+    }
+
     /// Converts a value that implements `IntoLua` into a `Value` instance.
     pub fn pack<'lua, T: IntoLua<'lua>>(&'lua self, t: T) -> Result<Value<'lua>> {
         t.into_lua(self)
