@@ -460,6 +460,11 @@ unsafe fn init_userdata_metatable_index(state: *mut ffi::lua_State) -> Result<()
         ffi::lua_pushcfunction(state, lua_isfunction_impl);
         ffi::lua_call(state, 2, 1);
 
+        #[cfg(feature = "luau-jit")]
+        if ffi::luau_codegen_supported() != 0 {
+            ffi::luau_codegen_compile(state, -1);
+        }
+
         // Store in the registry
         ffi::lua_pushvalue(state, -1);
         ffi::lua_rawsetp(state, ffi::LUA_REGISTRYINDEX, index_key);
@@ -507,6 +512,11 @@ pub unsafe fn init_userdata_metatable_newindex(state: *mut ffi::lua_State) -> Re
         ffi::lua_pushcfunction(state, lua_error_impl);
         ffi::lua_pushcfunction(state, lua_isfunction_impl);
         ffi::lua_call(state, 2, 1);
+
+        #[cfg(feature = "luau-jit")]
+        if ffi::luau_codegen_supported() != 0 {
+            ffi::luau_codegen_compile(state, -1);
+        }
 
         // Store in the registry
         ffi::lua_pushvalue(state, -1);

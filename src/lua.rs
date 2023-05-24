@@ -131,6 +131,8 @@ pub(crate) struct ExtraData {
     sandboxed: bool,
     #[cfg(feature = "luau")]
     compiler: Option<Compiler>,
+    #[cfg(feature = "luau-jit")]
+    enable_jit: bool,
 }
 
 /// Mode of the Lua garbage collector (GC).
@@ -395,6 +397,12 @@ impl Lua {
         ffi::luaL_requiref(state, cstr!("_G"), ffi::luaopen_base, 1);
         ffi::lua_pop(state, 1);
 
+        // Init Luau code generator (jit)
+        #[cfg(feature = "luau-jit")]
+        if ffi::luau_codegen_supported() != 0 {
+            ffi::luau_codegen_create(state);
+        }
+
         let lua = Lua::init_from_ptr(state);
         let extra = lua.extra.get();
         (*extra).mem_state = NonNull::new(mem_state);
@@ -532,6 +540,8 @@ impl Lua {
             sandboxed: false,
             #[cfg(feature = "luau")]
             compiler: None,
+            #[cfg(feature = "luau-jit")]
+            enable_jit: true,
         }));
 
         // Store it in the registry
@@ -1297,6 +1307,16 @@ impl Lua {
         unsafe { (*self.extra.get()).compiler = Some(compiler) };
     }
 
+    /// Toggles JIT compilation mode for new chunks of code.
+    ///
+    /// By default JIT is enabled. Changing this option does not have any effect on
+    /// already loaded functions.
+    #[cfg(any(feature = "luau-jit", docsrs))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "luau-jit")))]
+    pub fn enable_jit(&self, enable: bool) {
+        unsafe { (*self.extra.get()).enable_jit = enable };
+    }
+
     /// Returns Lua source code as a `Chunk` builder type.
     ///
     /// In order to actually compile or run the resulting code, you must call [`Chunk::exec`] or
@@ -1351,6 +1371,12 @@ impl Lua {
                         #[cfg(any(feature = "lua51", feature = "luajit", feature = "luau"))]
                         ffi::lua_setfenv(state, -2);
                     }
+
+                    #[cfg(feature = "luau-jit")]
+                    if (*self.extra.get()).enable_jit && ffi::luau_codegen_supported() != 0 {
+                        ffi::luau_codegen_compile(state, -1);
+                    }
+
                     Ok(Function(self.pop_ref()))
                 }
                 err => Err(pop_error(state, err)),

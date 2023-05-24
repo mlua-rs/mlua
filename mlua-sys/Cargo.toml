@@ -26,6 +26,7 @@ lua51 = []
 luajit = []
 luajit52 = ["luajit"]
 luau = ["luau0-src"]
+luau-codegen = []
 vendored = ["lua-src", "luajit-src"]
 module = []
 
@@ -37,4 +38,4 @@ cfg-if = "1.0"
 pkg-config = "0.3.17"
 lua-src = { version = ">= 546.0.0, < 550.0.0", optional = true }
 luajit-src = { version = ">= 210.4.0, < 220.0.0", optional = true }
-luau0-src = { version = "0.5.6", optional = true }
+luau0-src = { version = "0.5.8", optional = true }

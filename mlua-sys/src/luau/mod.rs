@@ -4,10 +4,12 @@ pub use compat::*;
 pub use lauxlib::*;
 pub use lua::*;
 pub use luacode::*;
+pub use luacodegen::*;
 pub use lualib::*;
 
 pub mod compat;
 pub mod lauxlib;
 pub mod lua;
 pub mod luacode;
+pub mod luacodegen;
 pub mod lualib;

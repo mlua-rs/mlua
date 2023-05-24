@@ -9,7 +9,7 @@ jobs:
       matrix:
         os: [ubuntu-22.04, macos-latest, windows-latest]
         rust: [stable]
-        lua: [lua54, lua53, lua52, lua51, luajit, luau]
+        lua: [lua54, lua53, lua52, lua51, luajit, luau, luau-jit]
         include:
           - os: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
@@ -104,7 +104,7 @@ jobs:
       matrix:
         os: [ubuntu-22.04, macos-latest, windows-latest]
         rust: [stable, nightly]
-        lua: [lua54, lua53, lua52, lua51, luajit, luajit52, luau]
+        lua: [lua54, lua53, lua52, lua51, luajit, luajit52, luau, luau-jit]
         include:
           - os: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
@@ -140,7 +140,7 @@ jobs:
       matrix:
         os: [ubuntu-22.04]
         rust: [nightly]
-        lua: [lua54, lua53, lua52, lua51, luajit, luau]
+        lua: [lua54, lua53, lua52, lua51, luajit, luau, luau-jit]
         include:
           - os: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
@@ -222,7 +222,7 @@ jobs:
     runs-on: ubuntu-22.04
     strategy:
       matrix:
-        lua: [lua54, lua53, lua52, lua51, luajit, luau]
+        lua: [lua54, lua53, lua52, lua51, luajit, luau, luau-jit]
     steps:
       - uses: actions/checkout@v3
       - uses: dtolnay/rust-toolchain@stable
