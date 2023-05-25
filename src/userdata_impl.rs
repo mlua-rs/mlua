@@ -1,4 +1,4 @@
-use std::any::{self, TypeId};
+use std::any::TypeId;
 use std::cell::{Ref, RefCell, RefMut};
 use std::marker::PhantomData;
 use std::string::String as StdString;
@@ -10,7 +10,7 @@ use crate::types::{Callback, MaybeSend};
 use crate::userdata::{
     AnyUserData, MetaMethod, UserData, UserDataCell, UserDataFields, UserDataMethods,
 };
-use crate::util::{check_stack, get_userdata, StackGuard};
+use crate::util::{check_stack, get_userdata, short_type_name, StackGuard};
 use crate::value::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, Value};
 
 #[cfg(not(feature = "send"))]
@@ -363,9 +363,8 @@ impl<'lua, T: 'static> UserDataRegistrar<'lua, T> {
 }
 
 // Returns function name for the type `T`, without the module path
-fn get_function_name<T: 'static>(name: &str) -> StdString {
-    let type_name = any::type_name::<T>().rsplit("::").next().unwrap();
-    format!("{type_name}.{name}",)
+fn get_function_name<T>(name: &str) -> StdString {
+    format!("{}.{name}", short_type_name::<T>())
 }
 
 impl<'lua, T: 'static> UserDataFields<'lua, T> for UserDataRegistrar<'lua, T> {

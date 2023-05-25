@@ -13,6 +13,8 @@ use rustc_hash::FxHashMap;
 use crate::error::{Error, Result};
 use crate::memory::MemoryState;
 
+pub(crate) use short_names::short_type_name;
+
 static METATABLE_CACHE: Lazy<FxHashMap<TypeId, u8>> = Lazy::new(|| {
     let mut map = FxHashMap::with_capacity_and_hasher(32, Default::default());
     crate::lua::init_metatable_cache(&mut map);
@@ -1066,3 +1068,5 @@ static DESTRUCTED_USERDATA_METATABLE: u8 = 0;
 static ERROR_PRINT_BUFFER_KEY: u8 = 0;
 static USERDATA_METATABLE_INDEX: u8 = 0;
 static USERDATA_METATABLE_NEWINDEX: u8 = 0;
+
+mod short_names;
