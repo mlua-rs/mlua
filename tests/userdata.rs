@@ -538,30 +538,22 @@ fn test_fields() -> Result<()> {
 #[test]
 fn test_metatable() -> Result<()> {
     #[derive(Copy, Clone)]
-    struct MyUserData(i64);
+    struct MyUserData;
 
     impl UserData for MyUserData {
-        fn add_fields<'lua, F: UserDataFields<'lua, Self>>(fields: &mut F) {
-            fields.add_meta_field_with("__type_name", |_| Ok("MyUserData"));
-        }
-
         fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
             methods.add_function("my_type_name", |_, data: AnyUserData| {
                 let metatable = data.get_metatable()?;
-                metatable.get::<String>("__type_name")
+                metatable.get::<String>("__name")
             });
         }
     }
 
     let lua = Lua::new();
     let globals = lua.globals();
-    globals.set("ud", MyUserData(7))?;
-    lua.load(
-        r#"
-        assert(ud:my_type_name() == "MyUserData")
-    "#,
-    )
-    .exec()?;
+    globals.set("ud", MyUserData)?;
+    lua.load(r#"assert(ud:my_type_name() == "MyUserData")"#)
+        .exec()?;
 
     let ud: AnyUserData = globals.get("ud")?;
     let metatable = ud.get_metatable()?;
@@ -583,10 +575,10 @@ fn test_metatable() -> Result<()> {
         .map(|kv: Result<(_, Value)>| Ok(kv?.0))
         .collect::<Result<Vec<_>>>()?;
     methods.sort();
-    assert_eq!(methods, vec!["__index", "__type_name"]);
+    assert_eq!(methods, vec!["__index", "__name"]);
 
     #[derive(Copy, Clone)]
-    struct MyUserData2(i64);
+    struct MyUserData2;
 
     impl UserData for MyUserData2 {
         fn add_fields<'lua, F: UserDataFields<'lua, Self>>(fields: &mut F) {
@@ -594,11 +586,24 @@ fn test_metatable() -> Result<()> {
         }
     }
 
-    match lua.create_userdata(MyUserData2(1)) {
+    match lua.create_userdata(MyUserData2) {
         Ok(_) => panic!("expected MetaMethodTypeError, got no error"),
         Err(Error::MetaMethodTypeError { .. }) => {}
         Err(e) => panic!("expected MetaMethodTypeError, got {:?}", e),
     }
+
+    #[derive(Copy, Clone)]
+    struct MyUserData3;
+
+    impl UserData for MyUserData3 {
+        fn add_fields<'lua, F: UserDataFields<'lua, Self>>(fields: &mut F) {
+            fields.add_meta_field_with("__name", |_| Ok("CustomName"));
+        }
+    }
+
+    let ud = lua.create_userdata(MyUserData3)?;
+    let metatable = ud.get_metatable()?;
+    assert_eq!(metatable.get::<String>("__name")?.to_str()?, "CustomName");
 
     Ok(())
 }

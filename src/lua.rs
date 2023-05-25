@@ -34,7 +34,7 @@ use crate::util::{
     self, assert_stack, callback_error, check_stack, get_destructed_userdata_metatable,
     get_gc_metatable, get_gc_userdata, get_main_state, get_userdata, init_error_registry,
     init_gc_metatable, init_userdata_metatable, pop_error, push_gc_userdata, push_string,
-    push_table, rawset_field, safe_pcall, safe_xpcall, StackGuard, WrappedFailure,
+    push_table, rawset_field, safe_pcall, safe_xpcall, short_type_name, StackGuard, WrappedFailure,
 };
 use crate::value::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, MultiValue, Nil, Value};
 
@@ -2529,9 +2529,17 @@ impl Lua {
             self.push_value(Value::Function(self.create_async_callback(m)?))?;
             rawset_field(state, -2, MetaMethod::validate(&k)?)?;
         }
+        let mut has_name = false;
         for (k, f) in registry.meta_fields {
+            has_name = has_name || k == "__name";
             self.push_value(f(self)?)?;
             rawset_field(state, -2, MetaMethod::validate(&k)?)?;
+        }
+        // Set `__name` if not provided
+        if !has_name {
+            let type_name = short_type_name::<T>();
+            push_string(state, type_name.as_bytes(), !self.unlikely_memory_error())?;
+            rawset_field(state, -2, "__name")?;
         }
         let metatable_index = ffi::lua_absindex(state, -1);
 
