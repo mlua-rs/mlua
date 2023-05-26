@@ -436,10 +436,10 @@ pub unsafe fn luaL_traceback(
     lua_concat(L, lua_gettop(L) - top);
 }
 
-pub unsafe fn luaL_tolstring(L: *mut lua_State, idx: c_int, len: *mut usize) -> *const c_char {
+pub unsafe fn luaL_tolstring(L: *mut lua_State, mut idx: c_int, len: *mut usize) -> *const c_char {
+    idx = lua_absindex(L, idx);
     if luaL_callmeta(L, idx, cstr!("__tostring")) == 0 {
-        let t = lua_type(L, idx);
-        match t {
+        match lua_type(L, idx) {
             LUA_TNIL => {
                 lua_pushliteral(L, "nil");
             }
@@ -453,7 +453,7 @@ pub unsafe fn luaL_tolstring(L: *mut lua_State, idx: c_int, len: *mut usize) -> 
                     lua_pushliteral(L, "true");
                 }
             }
-            _ => {
+            t => {
                 let tt = luaL_getmetafield(L, idx, cstr!("__name"));
                 let name = if tt == LUA_TSTRING {
                     lua_tostring(L, -1)
@@ -462,7 +462,7 @@ pub unsafe fn luaL_tolstring(L: *mut lua_State, idx: c_int, len: *mut usize) -> 
                 };
                 lua_pushfstring(L, cstr!("%s: %p"), name, lua_topointer(L, idx));
                 if tt != LUA_TNIL {
-                    lua_replace(L, -2);
+                    lua_replace(L, -2); // remove '__name'
                 }
             }
         };

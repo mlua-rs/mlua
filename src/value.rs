@@ -3,6 +3,7 @@ use std::collections::HashSet;
 use std::iter::{self, FromIterator};
 use std::ops::Index;
 use std::os::raw::c_void;
+use std::string::String as StdString;
 use std::sync::Arc;
 use std::{fmt, ptr, slice, str, vec};
 
@@ -21,6 +22,7 @@ use crate::table::Table;
 use crate::thread::Thread;
 use crate::types::{Integer, LightUserData, Number};
 use crate::userdata::AnyUserData;
+use crate::util::{check_stack, StackGuard};
 
 /// A dynamically typed Lua value. The `String`, `Table`, `Function`, `Thread`, and `UserData`
 /// variants contain handle types into the internal Lua state. It is a logic error to mix handle
@@ -126,6 +128,38 @@ impl<'lua> Value<'lua> {
                 }
                 _ => ptr::null(),
             }
+        }
+    }
+
+    /// Converts the value to a string.
+    ///
+    /// If the value has a metatable with a `__tostring` method, then it will be called to get the result.
+    pub fn to_string(&self) -> Result<StdString> {
+        match self {
+            Value::Nil => Ok("nil".to_string()),
+            Value::Boolean(b) => Ok(b.to_string()),
+            Value::LightUserData(ud) if ud.0.is_null() => Ok("null".to_string()),
+            Value::LightUserData(ud) => Ok(format!("lightuserdata: {:p}", ud.0)),
+            Value::Integer(i) => Ok(i.to_string()),
+            Value::Number(n) => Ok(n.to_string()),
+            #[cfg(feature = "luau")]
+            Value::Vector(x, y, z) => Ok(format!("vector({x}, {y}, {z})")),
+            Value::String(s) => Ok(s.to_str()?.to_string()),
+            Value::Table(Table(r))
+            | Value::Function(Function(r))
+            | Value::Thread(Thread(r))
+            | Value::UserData(AnyUserData(r)) => unsafe {
+                let state = r.lua.state();
+                let _guard = StackGuard::new(state);
+                check_stack(state, 3)?;
+
+                r.lua.push_ref(r);
+                protect_lua!(state, 1, 1, fn(state) {
+                    ffi::luaL_tolstring(state, -1, ptr::null_mut());
+                })?;
+                Ok(String(r.lua.pop_ref()).to_str()?.to_string())
+            },
+            Value::Error(err) => Ok(err.to_string()),
         }
     }
 

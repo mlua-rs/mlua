@@ -25,7 +25,8 @@ extern "C" {
 
     pub fn luaL_getmetafield(L: *mut lua_State, obj: c_int, e: *const c_char) -> c_int;
     pub fn luaL_callmeta(L: *mut lua_State, obj: c_int, e: *const c_char) -> c_int;
-    pub fn luaL_tolstring(L: *mut lua_State, idx: c_int, len: *mut usize) -> *const c_char;
+    #[link_name = "luaL_tolstring"]
+    pub fn luaL_tolstring_(L: *mut lua_State, idx: c_int, len: *mut usize) -> *const c_char;
     pub fn luaL_argerror(L: *mut lua_State, arg: c_int, extramsg: *const c_char) -> c_int;
     pub fn luaL_checklstring(L: *mut lua_State, arg: c_int, l: *mut usize) -> *const c_char;
     pub fn luaL_optlstring(
@@ -165,6 +166,11 @@ pub unsafe fn luaL_dostring(L: *mut lua_State, s: *const c_char) -> c_int {
 #[inline(always)]
 pub unsafe fn luaL_getmetatable(L: *mut lua_State, n: *const c_char) {
     lua::lua_getfield(L, lua::LUA_REGISTRYINDEX, n);
+}
+
+#[inline(always)]
+pub unsafe fn luaL_tolstring(L: *mut lua_State, idx: c_int, len: *mut usize) -> *const c_char {
+    luaL_tolstring_(L, lua::lua_absindex(L, idx), len)
 }
 
 // luaL_opt would be implemented here but it is undocumented, so it's omitted

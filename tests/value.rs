@@ -1,6 +1,8 @@
+use std::os::raw::c_void;
 use std::ptr;
+use std::string::String as StdString;
 
-use mlua::{Lua, MultiValue, Result, Value};
+use mlua::{Error, LightUserData, Lua, MultiValue, Result, UserData, UserDataMethods, Value};
 
 #[test]
 fn test_value_eq() -> Result<()> {
@@ -83,4 +85,57 @@ fn test_multi_value() {
 
     multi_value.clear();
     assert!(multi_value.is_empty());
+}
+
+#[test]
+fn test_value_to_string() -> Result<()> {
+    let lua = Lua::new();
+
+    assert_eq!(Value::Nil.to_string()?, "nil");
+    assert_eq!(Value::Boolean(true).to_string()?, "true");
+    assert_eq!(Value::NULL.to_string()?, "null");
+    assert_eq!(
+        Value::LightUserData(LightUserData(0x1 as *const c_void as *mut _)).to_string()?,
+        "lightuserdata: 0x1"
+    );
+    assert_eq!(Value::Integer(1).to_string()?, "1");
+    assert_eq!(Value::Number(34.59).to_string()?, "34.59");
+    #[cfg(feature = "luau")]
+    assert_eq!(
+        Value::Vector(10.0, 11.1, 12.2).to_string()?,
+        "vector(10, 11.1, 12.2)"
+    );
+    assert_eq!(
+        Value::String(lua.create_string("hello")?).to_string()?,
+        "hello"
+    );
+
+    let table: Value = lua.load("{}").eval()?;
+    assert!(table.to_string()?.starts_with("table:"));
+    let table: Value = lua
+        .load("setmetatable({}, {__tostring = function() return 'test table' end})")
+        .eval()?;
+    assert_eq!(table.to_string()?, "test table");
+
+    let func: Value = lua.load("function() end").eval()?;
+    assert!(func.to_string()?.starts_with("function:"));
+
+    let thread: Value = lua.load("coroutine.create(function() end)").eval()?;
+    assert!(thread.to_string()?.starts_with("thread:"));
+
+    lua.register_userdata_type::<StdString>(|reg| {
+        reg.add_meta_method("__tostring", |_, this, ()| Ok(this.clone()));
+    })?;
+    let ud: Value = Value::UserData(lua.create_any_userdata(String::from("string userdata"))?);
+    assert_eq!(ud.to_string()?, "string userdata");
+
+    struct MyUserData;
+    impl UserData for MyUserData {}
+    let ud: Value = Value::UserData(lua.create_userdata(MyUserData)?);
+    assert!(ud.to_string()?.starts_with("MyUserData:"));
+
+    let err = Value::Error(Error::RuntimeError("test error".to_string()));
+    assert_eq!(err.to_string()?, "runtime error: test error");
+
+    Ok(())
 }
