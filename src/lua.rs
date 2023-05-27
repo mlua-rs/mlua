@@ -147,7 +147,7 @@ pub(crate) struct ExtraData {
 pub enum GCMode {
     Incremental,
     /// Requires `feature = "lua54"`
-    #[cfg(any(feature = "lua54"))]
+    #[cfg(feature = "lua54")]
     #[cfg_attr(docsrs, doc(cfg(feature = "lua54")))]
     Generational,
 }
@@ -1280,7 +1280,7 @@ impl Lua {
     /// Requires `feature = "lua54"`
     ///
     /// [lua_doc]: https://www.lua.org/manual/5.4/manual.html#2.5.2
-    #[cfg(any(feature = "lua54"))]
+    #[cfg(feature = "lua54")]
     #[cfg_attr(docsrs, doc(cfg(feature = "lua54")))]
     pub fn gc_gen(&self, minor_multiplier: c_int, major_multiplier: c_int) -> GCMode {
         let state = self.main_state;

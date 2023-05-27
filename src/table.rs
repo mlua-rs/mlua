@@ -705,7 +705,7 @@ impl<'lua> Table<'lua> {
         }
     }
 
-    #[cfg(any(feature = "serialize"))]
+    #[cfg(feature = "serialize")]
     pub(crate) fn raw_sequence_values_by_len<V: FromLua<'lua>>(
         self,
         len: Option<Integer>,

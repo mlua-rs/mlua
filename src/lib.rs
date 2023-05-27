@@ -145,7 +145,7 @@ pub use crate::serde::{
 #[cfg_attr(docsrs, doc(cfg(feature = "serialize")))]
 pub mod serde;
 
-#[cfg(any(feature = "mlua_derive"))]
+#[cfg(feature = "mlua_derive")]
 #[allow(unused_imports)]
 #[macro_use]
 extern crate mlua_derive;
@@ -208,7 +208,7 @@ pub use crate::{
 /// [`AsChunk`]: crate::AsChunk
 /// [`UserData`]: crate::UserData
 /// [`IntoLua`]: crate::IntoLua
-#[cfg(any(feature = "macros"))]
+#[cfg(feature = "macros")]
 #[cfg_attr(docsrs, doc(cfg(feature = "macros")))]
 pub use mlua_derive::chunk;
 

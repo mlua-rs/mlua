@@ -139,7 +139,8 @@ pub enum MetaMethod {
     /// Requires `feature = "lua54"`
     ///
     /// [lua_doc]: https://www.lua.org/manual/5.4/manual.html#3.3.8
-    #[cfg(any(feature = "lua54"))]
+    #[cfg(feature = "lua54")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "lua54")))]
     Close,
 }
 
