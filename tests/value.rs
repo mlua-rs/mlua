@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::os::raw::c_void;
 use std::ptr;
 use std::string::String as StdString;
@@ -136,6 +137,19 @@ fn test_value_to_string() -> Result<()> {
 
     let err = Value::Error(Error::RuntimeError("test error".to_string()));
     assert_eq!(err.to_string()?, "runtime error: test error");
+
+    Ok(())
+}
+
+#[test]
+fn test_debug_format() -> Result<()> {
+    let lua = Lua::new();
+
+    lua.register_userdata_type::<HashMap<i32, StdString>>(|_| {})?;
+    let ud = lua
+        .create_any_userdata::<HashMap<i32, StdString>>(HashMap::new())
+        .map(Value::UserData)?;
+    assert!(format!("{ud:#?}").starts_with("HashMap<i32, String>:"));
 
     Ok(())
 }

@@ -214,7 +214,7 @@ impl<'lua> Value<'lua> {
             Value::Nil => write!(fmt, "nil"),
             Value::Boolean(b) => write!(fmt, "{b}"),
             Value::LightUserData(ud) if ud.0.is_null() => write!(fmt, "null"),
-            Value::LightUserData(ud) => write!(fmt, "<lightuserdata {:?}>", ud.0),
+            Value::LightUserData(ud) => write!(fmt, "lightuserdata: {:?}", ud.0),
             Value::Integer(i) => write!(fmt, "{i}"),
             Value::Number(n) => write!(fmt, "{n}"),
             #[cfg(feature = "luau")]
@@ -223,13 +223,16 @@ impl<'lua> Value<'lua> {
             Value::Table(t) if recursive && !visited.contains(&t.to_pointer()) => {
                 t.fmt_pretty(fmt, ident, visited)
             }
-            t @ Value::Table(_) => write!(fmt, "<table {:?}>", t.to_pointer()),
-            f @ Value::Function(_) => write!(fmt, "<function {:?}>", f.to_pointer()),
-            t @ Value::Thread(_) => write!(fmt, "<thread {:?}>", t.to_pointer()),
-            // TODO: Show type name for registered userdata
-            u @ Value::UserData(_) => write!(fmt, "<userdata {:?}>", u.to_pointer()),
+            t @ Value::Table(_) => write!(fmt, "table: {:?}", t.to_pointer()),
+            f @ Value::Function(_) => write!(fmt, "function: {:?}", f.to_pointer()),
+            t @ Value::Thread(_) => write!(fmt, "thread: {:?}", t.to_pointer()),
+            u @ Value::UserData(ud) => {
+                let name = ud.type_name().ok().flatten();
+                let name = name.unwrap_or_else(|| "userdata".to_string());
+                write!(fmt, "{name}: {:?}", u.to_pointer())
+            }
             Value::Error(e) if recursive => write!(fmt, "{e:?}"),
-            Value::Error(_) => write!(fmt, "<error>"),
+            Value::Error(_) => write!(fmt, "error"),
         }
     }
 }

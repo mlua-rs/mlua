@@ -19,6 +19,7 @@ use {
 use crate::error::{Error, Result};
 use crate::function::Function;
 use crate::lua::Lua;
+use crate::string::String;
 use crate::table::{Table, TablePairs};
 use crate::types::{Callback, LuaRef, MaybeSend};
 use crate::util::{check_stack, get_userdata, take_userdata, StackGuard};
@@ -150,7 +151,7 @@ impl PartialEq<MetaMethod> for &str {
     }
 }
 
-impl PartialEq<MetaMethod> for String {
+impl PartialEq<MetaMethod> for StdString {
     fn eq(&self, other: &MetaMethod) -> bool {
         self == other.name()
     }
@@ -411,18 +412,23 @@ pub trait UserDataMethods<'lua, T> {
     //
 
     #[doc(hidden)]
-    fn add_callback(&mut self, _name: String, _callback: Callback<'lua, 'static>) {}
+    fn add_callback(&mut self, _name: StdString, _callback: Callback<'lua, 'static>) {}
 
     #[doc(hidden)]
     #[cfg(feature = "async")]
-    fn add_async_callback(&mut self, _name: String, _callback: AsyncCallback<'lua, 'static>) {}
+    fn add_async_callback(&mut self, _name: StdString, _callback: AsyncCallback<'lua, 'static>) {}
 
     #[doc(hidden)]
-    fn add_meta_callback(&mut self, _name: String, _callback: Callback<'lua, 'static>) {}
+    fn add_meta_callback(&mut self, _name: StdString, _callback: Callback<'lua, 'static>) {}
 
     #[doc(hidden)]
     #[cfg(feature = "async")]
-    fn add_async_meta_callback(&mut self, _name: String, _callback: AsyncCallback<'lua, 'static>) {}
+    fn add_async_meta_callback(
+        &mut self,
+        _name: StdString,
+        _callback: AsyncCallback<'lua, 'static>,
+    ) {
+    }
 }
 
 /// Field registry for [`UserData`] implementors.
@@ -495,10 +501,10 @@ pub trait UserDataFields<'lua, T> {
     //
 
     #[doc(hidden)]
-    fn add_field_getter(&mut self, _name: String, _callback: Callback<'lua, 'static>) {}
+    fn add_field_getter(&mut self, _name: StdString, _callback: Callback<'lua, 'static>) {}
 
     #[doc(hidden)]
-    fn add_field_setter(&mut self, _name: String, _callback: Callback<'lua, 'static>) {}
+    fn add_field_setter(&mut self, _name: StdString, _callback: Callback<'lua, 'static>) {}
 }
 
 /// Trait for custom userdata types.
@@ -1045,6 +1051,30 @@ impl<'lua> AnyUserData<'lua> {
         OwnedAnyUserData(self.0.into_owned())
     }
 
+    /// Returns a type name of this `UserData` (from `__name` metatable field).
+    pub(crate) fn type_name(&self) -> Result<Option<StdString>> {
+        let lua = self.0.lua;
+        let state = lua.state();
+        unsafe {
+            let _sg = StackGuard::new(state);
+            check_stack(state, 3)?;
+
+            lua.push_userdata_ref(&self.0)?;
+            let protect = !lua.unlikely_memory_error();
+            let name_type = if protect {
+                protect_lua!(state, 1, 1, |state| {
+                    ffi::luaL_getmetafield(state, -1, cstr!("__name"))
+                })?
+            } else {
+                ffi::luaL_getmetafield(state, -1, cstr!("__name"))
+            };
+            match name_type {
+                ffi::LUA_TSTRING => Ok(Some(String(lua.pop_ref()).to_str()?.to_owned())),
+                _ => Ok(None),
+            }
+        }
+    }
+
     pub(crate) fn equals<T: AsRef<Self>>(&self, other: T) -> Result<bool> {
         let other = other.as_ref();
         // Uses lua_rawequal() under the hood
@@ -1220,7 +1250,7 @@ impl<'lua, V> Iterator for UserDataMetatablePairs<'lua, V>
 where
     V: FromLua<'lua>,
 {
-    type Item = Result<(String, V)>;
+    type Item = Result<(StdString, V)>;
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
