@@ -16,8 +16,7 @@ use crate::value::{FromLuaMulti, IntoLua, IntoLuaMulti};
 #[cfg(feature = "async")]
 use {
     crate::types::AsyncCallback,
-    futures_core::future::{Future, LocalBoxFuture},
-    futures_util::{future, TryFutureExt},
+    futures_util::future::{self, Future, LocalBoxFuture, TryFutureExt},
 };
 
 /// Handle to an internal Lua function.

@@ -27,8 +27,9 @@ use {
         lua::ASYNC_POLL_PENDING,
         value::{MultiValue, Value},
     },
-    futures_core::{future::Future, stream::Stream},
+    futures_util::stream::Stream,
     std::{
+        future::Future,
         marker::PhantomData,
         pin::Pin,
         ptr::NonNull,

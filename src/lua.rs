@@ -54,12 +54,8 @@ use crate::{chunk::Compiler, types::VmState};
 #[cfg(feature = "async")]
 use {
     crate::types::{AsyncCallback, AsyncCallbackUpvalue, AsyncPollUpvalue},
-    futures_task::noop_waker_ref,
-    futures_util::future::{self, TryFutureExt},
-    std::{
-        future::Future,
-        task::{Context, Poll, Waker},
-    },
+    futures_util::future::{self, Future, TryFutureExt},
+    futures_util::task::{noop_waker_ref, Context, Poll, Waker},
 };
 
 #[cfg(feature = "serialize")]

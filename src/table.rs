@@ -18,7 +18,7 @@ use crate::util::{assert_stack, check_stack, StackGuard};
 use crate::value::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, Nil, Value};
 
 #[cfg(feature = "async")]
-use {futures_core::future::LocalBoxFuture, futures_util::future};
+use futures_util::future::{self, LocalBoxFuture};
 
 /// Handle to an internal Lua table.
 #[derive(Clone)]

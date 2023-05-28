@@ -24,7 +24,7 @@ use crate::value::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, MultiValue, Val
 use crate::userdata::USER_VALUE_MAXSLOT;
 
 #[cfg(feature = "async")]
-use futures_core::future::Future;
+use std::future::Future;
 
 /// Constructed by the [`Lua::scope`] method, allows temporarily creating Lua userdata and
 /// callbacks that are not required to be Send or 'static.

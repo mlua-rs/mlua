@@ -11,7 +11,7 @@ use crate::lua::Lua;
 use crate::value::{FromLuaMulti, IntoLua, IntoLuaMulti, Value};
 
 #[cfg(feature = "async")]
-use {futures_core::future::LocalBoxFuture, futures_util::future};
+use futures_util::future::{self, LocalBoxFuture};
 
 /// Trait for types [loadable by Lua] and convertible to a [`Chunk`]
 ///

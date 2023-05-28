@@ -9,7 +9,7 @@ use std::{fmt, mem, ptr};
 use std::ffi::CStr;
 
 #[cfg(feature = "async")]
-use futures_core::future::LocalBoxFuture;
+use futures_util::future::LocalBoxFuture;
 
 use crate::error::Result;
 #[cfg(not(feature = "luau"))]

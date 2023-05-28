@@ -4,7 +4,7 @@ use crate::userdata::{AnyUserData, MetaMethod};
 use crate::value::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, Value};
 
 #[cfg(feature = "async")]
-use {futures_core::future::LocalBoxFuture, futures_util::future};
+use futures_util::future::{self, LocalBoxFuture};
 
 /// An extension trait for [`AnyUserData`] that provides a variety of convenient functionality.
 pub trait AnyUserDataExt<'lua>: Sealed {
