@@ -399,7 +399,10 @@ impl<'lua, R> Drop for AsyncThread<'lua, R> {
                     #[cfg(feature = "lua54")]
                     if self.thread.status() == ThreadStatus::Error {
                         let thread_state = ffi::lua_tothread(lua.ref_thread(), self.thread.0.index);
+                        #[cfg(not(feature = "vendored"))]
                         ffi::lua_resetthread(thread_state);
+                        #[cfg(feature = "vendored")]
+                        ffi::lua_closethread(thread_state, lua.state());
                     }
                 }
             }
