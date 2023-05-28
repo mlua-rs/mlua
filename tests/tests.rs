@@ -887,19 +887,47 @@ fn test_application_data() -> Result<()> {
     lua.set_app_data("test1");
     lua.set_app_data(vec!["test2"]);
 
+    // Borrow &str immutably and Vec<&str> mutably
+    let s = lua.app_data_ref::<&str>().unwrap();
+    let mut v = lua.app_data_mut::<Vec<&str>>().unwrap();
+    v.push("test3");
+
+    // Insert of new data or removal should fail now
+    assert!(lua.try_set_app_data::<i32>(123).is_err());
+    match catch_unwind(AssertUnwindSafe(|| lua.set_app_data::<i32>(123))) {
+        Ok(_) => panic!("expected panic"),
+        Err(_) => {}
+    }
+    match catch_unwind(AssertUnwindSafe(|| lua.remove_app_data::<i32>())) {
+        Ok(_) => panic!("expected panic"),
+        Err(_) => {}
+    }
+
+    // Check display and debug impls
+    assert_eq!(format!("{s}"), "test1");
+    assert_eq!(format!("{s:?}"), "\"test1\"");
+
+    // Borrowing immutably and mutably of the same type is not allowed
+    match catch_unwind(AssertUnwindSafe(|| lua.app_data_mut::<&str>().unwrap())) {
+        Ok(_) => panic!("expected panic"),
+        Err(_) => {}
+    }
+    drop((s, v));
+
+    // Test that application data is accessible from anywhere
     let f = lua.create_function(|lua, ()| {
-        {
-            let data1 = lua.app_data_ref::<&str>().unwrap();
-            assert_eq!(*data1, "test1");
-        }
-        let mut data2 = lua.app_data_mut::<Vec<&str>>().unwrap();
-        assert_eq!(*data2, vec!["test2"]);
-        data2.push("test3");
+        let mut data1 = lua.app_data_mut::<&str>().unwrap();
+        assert_eq!(*data1, "test1");
+        *data1 = "test4";
+
+        let data2 = lua.app_data_ref::<Vec<&str>>().unwrap();
+        assert_eq!(*data2, vec!["test2", "test3"]);
+
         Ok(())
     })?;
     f.call(())?;
 
-    assert_eq!(*lua.app_data_ref::<&str>().unwrap(), "test1");
+    assert_eq!(*lua.app_data_ref::<&str>().unwrap(), "test4");
     assert_eq!(
         *lua.app_data_ref::<Vec<&str>>().unwrap(),
         vec!["test2", "test3"]

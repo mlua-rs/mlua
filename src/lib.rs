@@ -116,7 +116,7 @@ pub use crate::stdlib::StdLib;
 pub use crate::string::String;
 pub use crate::table::{Table, TableExt, TablePairs, TableSequence};
 pub use crate::thread::{Thread, ThreadStatus};
-pub use crate::types::{Integer, LightUserData, Number, RegistryKey};
+pub use crate::types::{AppDataRef, AppDataRefMut, Integer, LightUserData, Number, RegistryKey};
 pub use crate::userdata::{
     AnyUserData, MetaMethod, UserData, UserDataFields, UserDataMetatable, UserDataMethods,
     UserDataRef, UserDataRefMut,

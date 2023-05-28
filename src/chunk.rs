@@ -454,7 +454,7 @@ impl<'lua, 'a> Chunk<'lua, 'a> {
                     } else {
                         let mut cache = ChunksCache(HashMap::new());
                         cache.0.insert(text_source, binary_source.as_ref().to_vec());
-                        self.lua.set_app_data(cache);
+                        let _ = self.lua.try_set_app_data(cache);
                     }
                 }
             }
