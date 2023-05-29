@@ -44,15 +44,30 @@ impl OwnedFunction {
     }
 }
 
+/// Contains information about a function.
+///
+/// Please refer to the [`Lua Debug Interface`] for more information.
+///
+/// [`Lua Debug Interface`]: https://www.lua.org/manual/5.4/manual.html#4.7
 #[derive(Clone, Debug)]
 pub struct FunctionInfo {
-    pub name: Option<Vec<u8>>,
-    pub name_what: Option<Vec<u8>>,
-    pub what: Option<Vec<u8>>,
+    /// A (reasonable) name of the function.
+    pub name: Option<String>,
+    /// Explains the `name` field ("global", "local", "method", "field", "upvalue", or "").
+    ///
+    /// Always `None` for Luau.
+    pub name_what: Option<String>,
+    /// A string "Lua" if the function is a Lua function, "C" if it is a C function, "main" if it is the main part of a chunk.
+    pub what: Option<String>,
+    /// The source of the chunk that created the function.
     pub source: Option<Vec<u8>>,
+    /// A "printable" version of source, to be used in error messages.
     pub short_src: Option<Vec<u8>>,
+    /// The line number where the definition of the function starts.
     pub line_defined: i32,
-    #[cfg(not(feature = "luau"))]
+    /// The line number where the definition of the function ends.
+    ///
+    /// Always `-1` for Luau.
     pub last_line_defined: i32,
 }
 
@@ -295,12 +310,13 @@ impl<'lua> Function<'lua> {
             mlua_assert!(res != 0, "lua_getinfo failed with `>Sn`");
 
             FunctionInfo {
-                name: ptr_to_cstr_bytes(ar.name).map(|s| s.to_vec()),
+                name: ptr_to_cstr_bytes(ar.name).map(|s| String::from_utf8_lossy(s).into_owned()),
                 #[cfg(not(feature = "luau"))]
-                name_what: ptr_to_cstr_bytes(ar.namewhat).map(|s| s.to_vec()),
+                name_what: ptr_to_cstr_bytes(ar.namewhat)
+                    .map(|s| String::from_utf8_lossy(s).into_owned()),
                 #[cfg(feature = "luau")]
                 name_what: None,
-                what: ptr_to_cstr_bytes(ar.what).map(|s| s.to_vec()),
+                what: ptr_to_cstr_bytes(ar.what).map(|s| String::from_utf8_lossy(s).into_owned()),
                 source: ptr_to_cstr_bytes(ar.source).map(|s| s.to_vec()),
                 #[cfg(not(feature = "luau"))]
                 short_src: ptr_to_cstr_bytes(ar.short_src.as_ptr()).map(|s| s.to_vec()),
@@ -309,6 +325,8 @@ impl<'lua> Function<'lua> {
                 line_defined: ar.linedefined,
                 #[cfg(not(feature = "luau"))]
                 last_line_defined: ar.lastlinedefined,
+                #[cfg(feature = "luau")]
+                last_line_defined: -1,
             }
         }
     }
