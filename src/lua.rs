@@ -32,10 +32,10 @@ use crate::types::{
 use crate::userdata::{AnyUserData, MetaMethod, UserData, UserDataCell};
 use crate::userdata_impl::{UserDataProxy, UserDataRegistrar};
 use crate::util::{
-    self, assert_stack, callback_error, check_stack, get_destructed_userdata_metatable,
-    get_gc_metatable, get_gc_userdata, get_main_state, get_userdata, init_error_registry,
-    init_gc_metatable, init_userdata_metatable, pop_error, push_gc_userdata, push_string,
-    push_table, rawset_field, safe_pcall, safe_xpcall, short_type_name, StackGuard, WrappedFailure,
+    self, assert_stack, check_stack, get_destructed_userdata_metatable, get_gc_metatable,
+    get_gc_userdata, get_main_state, get_userdata, init_error_registry, init_gc_metatable,
+    init_userdata_metatable, pop_error, push_gc_userdata, push_string, push_table, rawset_field,
+    safe_pcall, safe_xpcall, short_type_name, StackGuard, WrappedFailure,
 };
 use crate::value::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, MultiValue, Nil, Value};
 
@@ -886,9 +886,6 @@ impl Lua {
     {
         unsafe extern "C" fn hook_proc(state: *mut ffi::lua_State, ar: *mut ffi::lua_Debug) {
             let extra = extra_data(state);
-            if extra.is_null() {
-                return;
-            }
             if (*extra).hook_thread != state {
                 // Hook was destined for a different thread, ignore
                 ffi::lua_sethook(state, None, 0, 0);
@@ -987,9 +984,6 @@ impl Lua {
                 return;
             }
             let extra = extra_data(state);
-            if extra.is_null() {
-                return;
-            }
             let result = callback_error_ext(state, extra, move |_| {
                 let interrupt_cb = (*extra).interrupt_callback.clone();
                 let interrupt_cb =
@@ -2660,19 +2654,19 @@ impl Lua {
         func: Callback<'lua, 'static>,
     ) -> Result<Function<'lua>> {
         unsafe extern "C" fn call_callback(state: *mut ffi::lua_State) -> c_int {
-            let extra = match ffi::lua_type(state, ffi::lua_upvalueindex(1)) {
+            // Normal functions can be scoped and therefore destroyed,
+            // so we need to check that the first upvalue is valid
+            let (upvalue, extra) = match ffi::lua_type(state, ffi::lua_upvalueindex(1)) {
                 ffi::LUA_TUSERDATA => {
                     let upvalue = get_userdata::<CallbackUpvalue>(state, ffi::lua_upvalueindex(1));
-                    (*upvalue).extra.get()
+                    (upvalue, (*upvalue).extra.get())
                 }
-                _ => ptr::null_mut(),
+                _ => (ptr::null_mut(), ptr::null_mut()),
             };
             callback_error_ext(state, extra, |nargs| {
-                let upvalue_idx = ffi::lua_upvalueindex(1);
-                if ffi::lua_type(state, upvalue_idx) == ffi::LUA_TNIL {
+                if upvalue.is_null() {
                     return Err(Error::CallbackDestructed);
                 }
-                let upvalue = get_userdata::<CallbackUpvalue>(state, upvalue_idx);
 
                 if nargs < ffi::LUA_MINSTACK {
                     check_stack(state, ffi::LUA_MINSTACK - nargs)?;
@@ -2741,21 +2735,11 @@ impl Lua {
         }
 
         unsafe extern "C" fn call_callback(state: *mut ffi::lua_State) -> c_int {
-            let extra = match ffi::lua_type(state, ffi::lua_upvalueindex(1)) {
-                ffi::LUA_TUSERDATA => {
-                    let upvalue =
-                        get_userdata::<AsyncCallbackUpvalue>(state, ffi::lua_upvalueindex(1));
-                    (*upvalue).extra.get()
-                }
-                _ => ptr::null_mut(),
-            };
+            // Async functions cannot be scoped and therefore destroyed,
+            // so the first upvalue is always valid
+            let upvalue = get_userdata::<AsyncCallbackUpvalue>(state, ffi::lua_upvalueindex(1));
+            let extra = (*upvalue).extra.get();
             callback_error_ext(state, extra, |nargs| {
-                let upvalue_idx = ffi::lua_upvalueindex(1);
-                if ffi::lua_type(state, upvalue_idx) == ffi::LUA_TNIL {
-                    return Err(Error::CallbackDestructed);
-                }
-                let upvalue = get_userdata::<AsyncCallbackUpvalue>(state, upvalue_idx);
-
                 if nargs < ffi::LUA_MINSTACK {
                     check_stack(state, ffi::LUA_MINSTACK - nargs)?;
                 }
@@ -2787,20 +2771,9 @@ impl Lua {
         }
 
         unsafe extern "C" fn poll_future(state: *mut ffi::lua_State) -> c_int {
-            let extra = match ffi::lua_type(state, ffi::lua_upvalueindex(1)) {
-                ffi::LUA_TUSERDATA => {
-                    let upvalue = get_userdata::<AsyncPollUpvalue>(state, ffi::lua_upvalueindex(1));
-                    (*upvalue).extra.get()
-                }
-                _ => ptr::null_mut(),
-            };
+            let upvalue = get_userdata::<AsyncPollUpvalue>(state, ffi::lua_upvalueindex(1));
+            let extra = (*upvalue).extra.get();
             callback_error_ext(state, extra, |nargs| {
-                let upvalue_idx = ffi::lua_upvalueindex(1);
-                if ffi::lua_type(state, upvalue_idx) == ffi::LUA_TNIL {
-                    return Err(Error::CallbackDestructed);
-                }
-                let upvalue = get_userdata::<AsyncPollUpvalue>(state, upvalue_idx);
-
                 if nargs < ffi::LUA_MINSTACK {
                     check_stack(state, ffi::LUA_MINSTACK - nargs)?;
                 }
@@ -3088,6 +3061,8 @@ unsafe fn extra_data(state: *mut ffi::lua_State) -> *mut ExtraData {
 unsafe fn extra_data(state: *mut ffi::lua_State) -> *mut ExtraData {
     let extra_key = &EXTRA_REGISTRY_KEY as *const u8 as *const c_void;
     if ffi::lua_rawgetp(state, ffi::LUA_REGISTRYINDEX, extra_key) != ffi::LUA_TUSERDATA {
+        // `ExtraData` can be null only when Lua state is foreign.
+        // This case in used in `Lua::try_from_ptr()`.
         ffi::lua_pop(state, 1);
         return ptr::null_mut();
     }
@@ -3113,12 +3088,12 @@ pub(crate) fn init_metatable_cache(cache: &mut FxHashMap<TypeId, u8>) {
 
 // An optimized version of `callback_error` that does not allocate `WrappedFailure` userdata
 // and instead reuses unsed values from previous calls (or allocates new).
-unsafe fn callback_error_ext<F, R>(state: *mut ffi::lua_State, extra: *mut ExtraData, f: F) -> R
+unsafe fn callback_error_ext<F, R>(state: *mut ffi::lua_State, mut extra: *mut ExtraData, f: F) -> R
 where
     F: FnOnce(c_int) -> Result<R>,
 {
     if extra.is_null() {
-        return callback_error(state, f);
+        extra = extra_data(state);
     }
 
     let nargs = ffi::lua_gettop(state);
