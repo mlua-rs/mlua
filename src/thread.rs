@@ -251,8 +251,8 @@ impl<'lua> Thread<'lua> {
 
             #[cfg(feature = "luau")]
             {
-                // Inherit `LUA_GLOBALSINDEX` from the caller
-                ffi::lua_xpush(state, thread_state, ffi::LUA_GLOBALSINDEX);
+                // Inherit `LUA_GLOBALSINDEX` from the main thread
+                ffi::lua_xpush(lua.main_state(), thread_state, ffi::LUA_GLOBALSINDEX);
                 ffi::lua_replace(thread_state, ffi::LUA_GLOBALSINDEX);
             }
 
@@ -360,11 +360,8 @@ impl<'lua> Thread<'lua> {
         let state = lua.state();
         unsafe {
             let thread = ffi::lua_tothread(lua.ref_thread(), self.0.index);
-            check_stack(thread, 1)?;
+            check_stack(thread, 3)?;
             check_stack(state, 3)?;
-            // Inherit `LUA_GLOBALSINDEX` from the caller
-            ffi::lua_xpush(state, thread, ffi::LUA_GLOBALSINDEX);
-            ffi::lua_replace(thread, ffi::LUA_GLOBALSINDEX);
             protect_lua!(state, 0, 0, |_| ffi::luaL_sandboxthread(thread))
         }
     }

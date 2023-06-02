@@ -3006,6 +3006,12 @@ impl LuaInner {
         self.state.load(Ordering::Relaxed)
     }
 
+    #[cfg(feature = "luau")]
+    #[inline(always)]
+    pub(crate) fn main_state(&self) -> *mut ffi::lua_State {
+        self.main_state
+    }
+
     #[inline(always)]
     pub(crate) fn ref_thread(&self) -> *mut ffi::lua_State {
         unsafe { (*self.extra.get()).ref_thread }
