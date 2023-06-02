@@ -1319,7 +1319,7 @@ impl Lua {
         Chunk {
             lua: self,
             name: chunk.name().unwrap_or_else(|| caller.to_string()),
-            env: chunk.env(self),
+            env: chunk.environment(self),
             mode: chunk.mode(),
             source: chunk.source(),
             #[cfg(feature = "luau")]
@@ -1330,7 +1330,7 @@ impl Lua {
     pub(crate) fn load_chunk<'lua>(
         &'lua self,
         name: Option<&CStr>,
-        env: Value<'lua>,
+        env: Option<Table>,
         mode: Option<ChunkMode>,
         source: &[u8],
     ) -> Result<Function<'lua>> {
@@ -1353,8 +1353,8 @@ impl Lua {
                 mode_str,
             ) {
                 ffi::LUA_OK => {
-                    if env != Value::Nil {
-                        self.push_value(env)?;
+                    if let Some(env) = env {
+                        self.push_ref(&env.0);
                         #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
                         ffi::lua_setupvalue(state, -2, 1);
                         #[cfg(any(feature = "lua51", feature = "luajit", feature = "luau"))]

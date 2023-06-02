@@ -84,26 +84,26 @@ pub fn chunk(input: TokenStream) -> TokenStream {
     });
 
     let wrapped_code = quote! {{
-        use ::mlua::{AsChunk, ChunkMode, Lua, Result, Value};
+        use ::mlua::{AsChunk, ChunkMode, Lua, Result, Table};
         use ::std::borrow::Cow;
         use ::std::io::Result as IoResult;
         use ::std::sync::Mutex;
 
-        struct InnerChunk<F: for <'a> FnOnce(&'a Lua) -> Result<Value<'a>>>(Mutex<Option<F>>);
+        struct InnerChunk<F: for <'a> FnOnce(&'a Lua) -> Result<Table<'a>>>(Mutex<Option<F>>);
 
         impl<F> AsChunk<'static> for InnerChunk<F>
         where
-            F: for <'a> FnOnce(&'a Lua) -> Result<Value<'a>>,
+            F: for <'a> FnOnce(&'a Lua) -> Result<Table<'a>>,
         {
-            fn env<'lua>(&self, lua: &'lua Lua) -> Result<Value<'lua>> {
+            fn environment<'lua>(&self, lua: &'lua Lua) -> Result<Option<Table<'lua>>> {
                 if #caps_len > 0 {
                     if let Ok(mut make_env) = self.0.lock() {
                         if let Some(make_env) = make_env.take() {
-                            return make_env(lua);
+                            return make_env(lua).map(Some);
                         }
                     }
                 }
-                Ok(Value::Nil)
+                Ok(None)
             }
 
             fn mode(&self) -> Option<ChunkMode> {
@@ -115,9 +115,9 @@ pub fn chunk(input: TokenStream) -> TokenStream {
             }
         }
 
-        fn annotate<F: for<'a> FnOnce(&'a Lua) -> Result<Value<'a>>>(f: F) -> F { f }
+        fn annotate<F: for<'a> FnOnce(&'a Lua) -> Result<Table<'a>>>(f: F) -> F { f }
 
-        let make_env = annotate(move |lua: &Lua| -> Result<Value> {
+        let make_env = annotate(move |lua: &Lua| -> Result<Table> {
             let globals = lua.globals();
             let env = lua.create_table()?;
             let meta = lua.create_table()?;
@@ -128,7 +128,7 @@ pub fn chunk(input: TokenStream) -> TokenStream {
             #(#caps)*
 
             env.set_metatable(Some(meta));
-            Ok(Value::Table(env))
+            Ok(env)
         });
 
         InnerChunk(Mutex::new(Some(make_env)))

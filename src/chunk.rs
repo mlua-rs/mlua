@@ -5,10 +5,11 @@ use std::io::Result as IoResult;
 use std::path::{Path, PathBuf};
 use std::string::String as StdString;
 
-use crate::error::{Error, Result};
+use crate::error::{Error, ErrorContext, Result};
 use crate::function::Function;
 use crate::lua::Lua;
-use crate::value::{FromLuaMulti, IntoLua, IntoLuaMulti, Value};
+use crate::table::Table;
+use crate::value::{FromLuaMulti, IntoLua, IntoLuaMulti};
 
 #[cfg(feature = "async")]
 use futures_util::future::{self, LocalBoxFuture};
@@ -26,9 +27,9 @@ pub trait AsChunk<'a> {
     /// Returns optional chunk [environment]
     ///
     /// [environment]: https://www.lua.org/manual/5.4/manual.html#2.2
-    fn env<'lua>(&self, lua: &'lua Lua) -> Result<Value<'lua>> {
+    fn environment<'lua>(&self, lua: &'lua Lua) -> Result<Option<Table<'lua>>> {
         let _lua = lua; // suppress warning
-        Ok(Value::Nil)
+        Ok(None)
     }
 
     /// Returns optional chunk mode (text or binary)
@@ -103,7 +104,7 @@ impl AsChunk<'static> for PathBuf {
 pub struct Chunk<'lua, 'a> {
     pub(crate) lua: &'lua Lua,
     pub(crate) name: StdString,
-    pub(crate) env: Result<Value<'lua>>,
+    pub(crate) env: Result<Option<Table<'lua>>>,
     pub(crate) mode: Option<ChunkMode>,
     pub(crate) source: IoResult<Cow<'a, [u8]>>,
     #[cfg(feature = "luau")]
@@ -254,9 +255,9 @@ impl<'lua, 'a> Chunk<'lua, 'a> {
         self
     }
 
-    /// Sets the first upvalue (`_ENV`) of the loaded chunk to the given value.
+    /// Sets the environment of the loaded chunk to the given value.
     ///
-    /// Lua main chunks always have exactly one upvalue, and this upvalue is used as the `_ENV`
+    /// In Lua >=5.2 main chunks always have exactly one upvalue, and this upvalue is used as the `_ENV`
     /// variable inside the chunk. By default this value is set to the global environment.
     ///
     /// Calling this method changes the `_ENV` upvalue to the value provided, and variables inside
@@ -266,7 +267,10 @@ impl<'lua, 'a> Chunk<'lua, 'a> {
     /// necessary to populate the environment in order for scripts using custom environments to be
     /// useful.
     pub fn set_environment<V: IntoLua<'lua>>(mut self, env: V) -> Self {
-        self.env = env.into_lua(self.lua);
+        self.env = env
+            .into_lua(self.lua)
+            .and_then(|val| self.lua.unpack(val))
+            .context("bad environment value");
         self
     }
 
@@ -414,7 +418,7 @@ impl<'lua, 'a> Chunk<'lua, 'a> {
                     self.mode = Some(ChunkMode::Binary);
                 }
                 #[cfg(not(feature = "luau"))]
-                if let Ok(func) = self.lua.load_chunk(None, Value::Nil, None, source.as_ref()) {
+                if let Ok(func) = self.lua.load_chunk(None, None, None, source.as_ref()) {
                     let data = func.dump(false);
                     self.source = Ok(Cow::Owned(data));
                     self.mode = Some(ChunkMode::Binary);
