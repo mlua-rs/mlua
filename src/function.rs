@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use std::ffi::CStr;
 use std::mem;
 use std::os::raw::{c_int, c_void};
 use std::ptr;
@@ -7,6 +8,7 @@ use std::slice;
 use crate::error::{Error, Result};
 use crate::lua::Lua;
 use crate::memory::MemoryState;
+use crate::table::Table;
 use crate::types::{Callback, LuaRef, MaybeSend};
 use crate::util::{
     assert_stack, check_stack, error_traceback, pop_error, ptr_to_cstr_bytes, StackGuard,
@@ -287,6 +289,109 @@ impl<'lua> Function<'lua> {
         .try_cache()
         .set_name("__mlua_bind")
         .call((self.clone(), args_wrapper))
+    }
+
+    /// Returns the environment of the Lua function.
+    ///
+    /// By default Lua functions shares a global environment.
+    ///
+    /// This function always returns `None` for Rust/C functions.
+    pub fn environment(&self) -> Option<Table> {
+        let lua = self.0.lua;
+        let state = lua.state();
+        unsafe {
+            let _sg = StackGuard::new(state);
+            assert_stack(state, 1);
+
+            lua.push_ref(&self.0);
+
+            let mut ar: ffi::lua_Debug = mem::zeroed();
+            #[cfg(not(feature = "luau"))]
+            {
+                ffi::lua_pushvalue(state, -1);
+                ffi::lua_getinfo(state, cstr!(">S"), &mut ar);
+            }
+            #[cfg(feature = "luau")]
+            ffi::lua_getinfo(state, -1, cstr!("s"), &mut ar);
+
+            if ptr_to_cstr_bytes(ar.what) == Some(b"C") {
+                return None;
+            }
+
+            #[cfg(any(feature = "lua51", feature = "luajit", feature = "luau"))]
+            ffi::lua_getfenv(state, -1);
+            #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+            for i in 1..=255 {
+                // Traverse upvalues until we find the _ENV one
+                match ffi::lua_getupvalue(state, -1, i) {
+                    s if s.is_null() => break,
+                    s if CStr::from_ptr(s as _).to_bytes() == b"_ENV" => break,
+                    _ => ffi::lua_pop(state, 1),
+                }
+            }
+
+            if ffi::lua_type(state, -1) != ffi::LUA_TTABLE {
+                return None;
+            }
+            Some(Table(lua.pop_ref()))
+        }
+    }
+
+    /// Sets the environment of the Lua function.
+    ///
+    /// The environment is a table that is used as the global environment for the function.
+    /// Returns `true` if environment successfully changed, `false` otherwise.
+    ///
+    /// This function does nothing for Rust/C functions.
+    pub fn set_environment(&self, env: Table) -> Result<bool> {
+        let lua = self.0.lua;
+        let state = lua.state();
+        unsafe {
+            let _sg = StackGuard::new(state);
+            check_stack(state, 2)?;
+
+            lua.push_ref(&self.0);
+
+            let mut ar: ffi::lua_Debug = mem::zeroed();
+            #[cfg(not(feature = "luau"))]
+            {
+                ffi::lua_pushvalue(state, -1);
+                ffi::lua_getinfo(state, cstr!(">S"), &mut ar);
+            }
+            #[cfg(feature = "luau")]
+            ffi::lua_getinfo(state, -1, cstr!("s"), &mut ar);
+
+            if ptr_to_cstr_bytes(ar.what) == Some(b"C") {
+                return Ok(false);
+            }
+
+            #[cfg(any(feature = "lua51", feature = "luajit", feature = "luau"))]
+            {
+                lua.push_ref(&env.0);
+                ffi::lua_setfenv(state, -2);
+            }
+            #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+            for i in 1..=255 {
+                match ffi::lua_getupvalue(state, -1, i) {
+                    s if s.is_null() => return Ok(false),
+                    s if CStr::from_ptr(s as _).to_bytes() == b"_ENV" => {
+                        ffi::lua_pop(state, 1);
+                        // Create an anonymous function with the new environment
+                        let f_with_env = lua
+                            .load("return _ENV")
+                            .set_environment(env)
+                            .try_cache()
+                            .into_function()?;
+                        lua.push_ref(&f_with_env.0);
+                        ffi::lua_upvaluejoin(state, -2, i, -1, 1);
+                        break;
+                    }
+                    _ => ffi::lua_pop(state, 1),
+                }
+            }
+
+            Ok(true)
+        }
     }
 
     /// Returns information about the function.

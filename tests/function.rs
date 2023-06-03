@@ -1,4 +1,4 @@
-use mlua::{Function, Lua, Result, String};
+use mlua::{Function, Lua, Result, String, Table};
 
 #[test]
 fn test_function() -> Result<()> {
@@ -110,6 +110,66 @@ fn test_dump() -> Result<()> {
     let concat = lua.load(&concat_lua.dump(false)).into_function()?;
 
     assert_eq!(concat.call::<_, String>(("foo", "bar"))?, "foobar");
+
+    Ok(())
+}
+
+#[test]
+fn test_function_environment() -> Result<()> {
+    let lua = Lua::new();
+
+    // We must not get or set environment for C functions
+    let rust_func = lua.create_function(|_, ()| Ok("hello"))?;
+    assert_eq!(rust_func.environment(), None);
+    assert_eq!(rust_func.set_environment(lua.globals()).ok(), Some(false));
+
+    // Test getting Lua function environment
+    lua.globals().set("hello", "global")?;
+    let lua_func = lua
+        .load(
+            r#"
+        local t = ""
+        return function()
+            -- two upvalues
+            return t .. hello
+        end
+    "#,
+        )
+        .eval::<Function>()?;
+    let lua_func2 = lua.load("return hello").into_function()?;
+    assert_eq!(lua_func.call::<_, String>(())?, "global");
+    assert_eq!(lua_func.environment(), Some(lua.globals()));
+
+    // Test changing the environment
+    let env = lua.create_table_from([("hello", "local")])?;
+    assert!(lua_func.set_environment(env.clone())?);
+    assert_eq!(lua_func.call::<_, String>(())?, "local");
+    assert_eq!(lua_func2.call::<_, String>(())?, "global");
+
+    // More complex case
+    lua.load(
+        r#"
+        local number = 15
+        function lucky() return tostring("number is "..number) end
+        new_env = {
+            tostring = function() return tostring(number) end,
+        }
+    "#,
+    )
+    .exec()?;
+    let lucky = lua.globals().get::<_, Function>("lucky")?;
+    assert_eq!(lucky.call::<_, String>(())?, "number is 15");
+    let new_env = lua.globals().get::<_, Table>("new_env")?;
+    lucky.set_environment(new_env)?;
+    assert_eq!(lucky.call::<_, String>(())?, "15");
+
+    // Test inheritance
+    let lua_func2 = lua
+        .load(r#"return function() return (function() return hello end)() end"#)
+        .eval::<Function>()?;
+    assert!(lua_func2.set_environment(env.clone())?);
+    lua.gc_collect()?;
+    assert_eq!(lua_func2.call::<_, String>(())?, "local");
 
     Ok(())
 }
