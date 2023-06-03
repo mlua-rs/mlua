@@ -1,5 +1,4 @@
 use std::cell::RefCell;
-use std::ffi::CStr;
 use std::mem;
 use std::os::raw::{c_int, c_void};
 use std::ptr;
@@ -325,7 +324,7 @@ impl<'lua> Function<'lua> {
                 // Traverse upvalues until we find the _ENV one
                 match ffi::lua_getupvalue(state, -1, i) {
                     s if s.is_null() => break,
-                    s if CStr::from_ptr(s as _).to_bytes() == b"_ENV" => break,
+                    s if std::ffi::CStr::from_ptr(s as _).to_bytes() == b"_ENV" => break,
                     _ => ffi::lua_pop(state, 1),
                 }
             }
@@ -374,7 +373,7 @@ impl<'lua> Function<'lua> {
             for i in 1..=255 {
                 match ffi::lua_getupvalue(state, -1, i) {
                     s if s.is_null() => return Ok(false),
-                    s if CStr::from_ptr(s as _).to_bytes() == b"_ENV" => {
+                    s if std::ffi::CStr::from_ptr(s as _).to_bytes() == b"_ENV" => {
                         ffi::lua_pop(state, 1);
                         // Create an anonymous function with the new environment
                         let f_with_env = lua
