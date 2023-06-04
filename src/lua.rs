@@ -2845,11 +2845,10 @@ impl Lua {
             LightUserData(&ASYNC_POLL_PENDING as *const u8 as *mut c_void)
         })?;
 
-        // We set `poll` variable in the env table to be able to destroy upvalues
         self.load(
             r#"
-            poll = get_poll(...)
-            local poll, pending, yield, unpack = poll, pending, yield, unpack
+            local poll = get_poll(...)
+            local pending, yield, unpack = pending, yield, unpack
             while true do
                 local ready, res, nres = poll()
                 if ready then

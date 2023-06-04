@@ -1,7 +1,7 @@
 #![cfg(feature = "async")]
 
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use futures_timer::Delay;
@@ -499,6 +499,28 @@ async fn test_owned_async_call() -> Result<()> {
     drop(lua);
 
     assert_eq!(hello.call_async::<_, String>("alex").await?, "hello, alex!");
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_async_terminate() -> Result<()> {
+    let lua = Lua::new();
+
+    let mutex = Arc::new(Mutex::new(0u32));
+    let mutex2 = mutex.clone();
+    let func = lua.create_async_function(move |_, ()| {
+        let mutex = mutex2.clone();
+        async move {
+            let _guard = mutex.lock();
+            Delay::new(Duration::from_millis(100)).await;
+            Ok(())
+        }
+    })?;
+
+    let _ = tokio::time::timeout(Duration::from_millis(30), func.call_async::<_, ()>(())).await;
+    lua.gc_collect()?;
+    assert!(mutex.try_lock().is_ok());
 
     Ok(())
 }
