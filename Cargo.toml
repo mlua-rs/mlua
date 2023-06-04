@@ -57,7 +57,7 @@ ffi = { package = "mlua-sys", version = "0.1.0", path = "mlua-sys" }
 
 [dev-dependencies]
 rustyline = "11.0"
-criterion = { version = "0.4", features = ["html_reports", "async_tokio"] }
+criterion = { version = "0.5", features = ["async_tokio"] }
 trybuild = "1.0"
 futures = "0.3.5"
 hyper = { version = "0.14", features = ["client", "server"] }
