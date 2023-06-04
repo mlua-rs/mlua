@@ -2773,31 +2773,33 @@ impl Lua {
         unsafe extern "C" fn poll_future(state: *mut ffi::lua_State) -> c_int {
             let upvalue = get_userdata::<AsyncPollUpvalue>(state, ffi::lua_upvalueindex(1));
             let extra = (*upvalue).extra.get();
-            callback_error_ext(state, extra, |nargs| {
-                if nargs < ffi::LUA_MINSTACK {
-                    check_stack(state, ffi::LUA_MINSTACK - nargs)?;
-                }
-
+            callback_error_ext(state, extra, |_| {
                 let lua: &Lua = mem::transmute((*extra).inner.assume_init_ref());
                 let _guard = StateGuard::new(&lua.0, state);
 
                 let fut = &mut (*upvalue).data;
                 let mut ctx = Context::from_waker(lua.waker());
                 match fut.as_mut().poll(&mut ctx) {
-                    Poll::Pending => {
-                        check_stack(state, 1)?;
-                        ffi::lua_pushboolean(state, 0);
-                        Ok(1)
-                    }
+                    Poll::Pending => Ok(0),
                     Poll::Ready(results) => {
-                        let results = results?;
-                        let nresults = results.len() as Integer;
-                        let results = lua.create_sequence_from(results)?;
-                        check_stack(state, 3)?;
-                        ffi::lua_pushboolean(state, 1);
-                        lua.push_value(Value::Table(results))?;
-                        lua.push_value(Value::Integer(nresults))?;
-                        Ok(3)
+                        let mut results = results?;
+                        let nresults = results.len();
+                        lua.push_value(Value::Integer(nresults as _))?;
+                        match nresults {
+                            0 => Ok(1),
+                            1 | 2 => {
+                                // Fast path for 1 or 2 results without creating a table
+                                for r in results.drain_all() {
+                                    lua.push_value(r)?;
+                                }
+                                MultiValue::return_to_pool(results, lua);
+                                Ok(nresults as c_int + 1)
+                            }
+                            _ => {
+                                lua.push_value(Value::Table(lua.create_sequence_from(results)?))?;
+                                Ok(2)
+                            }
+                        }
                     }
                 }
             })
@@ -2850,9 +2852,17 @@ impl Lua {
             local poll = get_poll(...)
             local pending, yield, unpack = pending, yield, unpack
             while true do
-                local ready, res, nres = poll()
-                if ready then
-                    return unpack(res, nres)
+                local nres, res, res2 = poll()
+                if nres ~= nil then
+                    if nres == 0 then
+                        return
+                    elseif nres == 1 then
+                        return res
+                    elseif nres == 2 then
+                        return res, res2
+                    else
+                        return unpack(res, nres)
+                    end
                 end
                 yield(pending)
             end
