@@ -2664,12 +2664,9 @@ impl Lua {
                 _ => (ptr::null_mut(), ptr::null_mut()),
             };
             callback_error_ext(state, extra, |nargs| {
+                // Lua ensures that `LUA_MINSTACK` stack spaces are available (after pushing arguments)
                 if upvalue.is_null() {
                     return Err(Error::CallbackDestructed);
-                }
-
-                if nargs < ffi::LUA_MINSTACK {
-                    check_stack(state, ffi::LUA_MINSTACK - nargs)?;
                 }
 
                 let lua: &Lua = mem::transmute((*extra).inner.assume_init_ref());
@@ -2740,10 +2737,7 @@ impl Lua {
             let upvalue = get_userdata::<AsyncCallbackUpvalue>(state, ffi::lua_upvalueindex(1));
             let extra = (*upvalue).extra.get();
             callback_error_ext(state, extra, |nargs| {
-                if nargs < ffi::LUA_MINSTACK {
-                    check_stack(state, ffi::LUA_MINSTACK - nargs)?;
-                }
-
+                // Lua ensures that `LUA_MINSTACK` stack spaces are available (after pushing arguments)
                 let lua: &Lua = mem::transmute((*extra).inner.assume_init_ref());
                 let _guard = StateGuard::new(&lua.0, state);
 
@@ -3113,18 +3107,6 @@ where
 
     let nargs = ffi::lua_gettop(state);
 
-    // We need 2 extra stack spaces to store userdata and error/panic metatable.
-    // Luau workaround can be removed after solving https://github.com/Roblox/luau/issues/446
-    // Also see #142 and #153
-    if !cfg!(feature = "luau") || (*extra).wrapped_failure_pool.is_empty() {
-        let extra_stack = if nargs < 2 { 2 - nargs } else { 1 };
-        ffi::luaL_checkstack(
-            state,
-            extra_stack,
-            cstr!("not enough stack space for callback error handling"),
-        );
-    }
-
     enum PreallocatedFailure {
         New(*mut WrappedFailure),
         Existing(i32),
@@ -3135,6 +3117,10 @@ where
             match (*extra).wrapped_failure_pool.pop() {
                 Some(index) => PreallocatedFailure::Existing(index),
                 None => {
+                    // We need to check stack for Luau in case when callback is called from interrupt
+                    // See https://github.com/Roblox/luau/issues/446 and mlua #142 and #153
+                    #[cfg(feature = "luau")]
+                    ffi::lua_rawcheckstack(state, 2);
                     // Place it to the beginning of the stack
                     let ud = WrappedFailure::new_userdata(state);
                     ffi::lua_insert(state, 1);
@@ -3157,7 +3143,7 @@ where
                 PreallocatedFailure::Existing(index) => {
                     ffi::lua_settop(state, 0);
                     #[cfg(feature = "luau")]
-                    assert_stack(state, 2);
+                    ffi::lua_rawcheckstack(state, 2);
                     ffi::lua_pushvalue(ref_thread, index);
                     ffi::lua_xmove(ref_thread, state, 1);
                     ffi::lua_pushnil(ref_thread);
