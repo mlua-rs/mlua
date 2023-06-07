@@ -24,7 +24,7 @@ impl Lua {
 
         // Set `_VERSION` global to include version number
         // The environment variable `LUAU_VERSION` set by the build script
-        if let Some(version) = option_env!("LUAU_VERSION") {
+        if let Some(version) = ffi::luau_version() {
             globals.raw_set("_VERSION", format!("Luau {version}"))?;
         }
 

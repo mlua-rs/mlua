@@ -10,6 +10,16 @@ use std::sync::Arc;
 use mlua::{Compiler, CoverageInfo, Error, Lua, Result, Table, ThreadStatus, Value, VmState};
 
 #[test]
+fn test_version() -> Result<()> {
+    let lua = Lua::new();
+    assert!(lua
+        .globals()
+        .get::<_, String>("_VERSION")?
+        .starts_with("Luau 0."));
+    Ok(())
+}
+
+#[test]
 fn test_require() -> Result<()> {
     let lua = Lua::new();
 

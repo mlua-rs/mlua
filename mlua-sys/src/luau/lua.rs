@@ -84,6 +84,11 @@ pub type lua_Alloc = unsafe extern "C" fn(
     nsize: usize,
 ) -> *mut c_void;
 
+/// Returns Luau release version (eg. `0.xxx`).
+pub const fn luau_version() -> Option<&'static str> {
+    option_env!("LUAU_VERSION")
+}
+
 extern "C" {
     //
     // State manipulation
