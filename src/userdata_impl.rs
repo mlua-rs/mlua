@@ -11,7 +11,7 @@ use crate::userdata::{
     AnyUserData, MetaMethod, UserData, UserDataCell, UserDataFields, UserDataMethods,
 };
 use crate::util::{check_stack, get_userdata, short_type_name, StackGuard};
-use crate::value::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, Value};
+use crate::value::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, MultiValue, Value};
 
 #[cfg(not(feature = "send"))]
 use std::rc::Rc;
@@ -25,13 +25,10 @@ use {
 
 pub struct UserDataRegistrar<'lua, T: 'static> {
     // Fields
+    pub(crate) fields: Vec<(String, Callback<'lua, 'static>)>,
     pub(crate) field_getters: Vec<(String, Callback<'lua, 'static>)>,
     pub(crate) field_setters: Vec<(String, Callback<'lua, 'static>)>,
-    #[allow(clippy::type_complexity)]
-    pub(crate) meta_fields: Vec<(
-        String,
-        Box<dyn Fn(&'lua Lua) -> Result<Value<'lua>> + 'static>,
-    )>,
+    pub(crate) meta_fields: Vec<(String, Callback<'lua, 'static>)>,
 
     // Methods
     pub(crate) methods: Vec<(String, Callback<'lua, 'static>)>,
@@ -47,6 +44,7 @@ pub struct UserDataRegistrar<'lua, T: 'static> {
 impl<'lua, T: 'static> UserDataRegistrar<'lua, T> {
     pub(crate) const fn new() -> Self {
         UserDataRegistrar {
+            fields: Vec::new(),
             field_getters: Vec::new(),
             field_setters: Vec::new(),
             meta_fields: Vec::new(),
@@ -360,6 +358,30 @@ impl<'lua, T: 'static> UserDataRegistrar<'lua, T> {
             )
         })
     }
+
+    pub(crate) fn check_meta_field<V>(
+        lua: &'lua Lua,
+        name: &str,
+        value: V,
+    ) -> Result<MultiValue<'lua>>
+    where
+        V: IntoLua<'lua>,
+    {
+        let value = value.into_lua(lua)?;
+        if name == MetaMethod::Index || name == MetaMethod::NewIndex {
+            match value {
+                Value::Nil | Value::Table(_) | Value::Function(_) => {}
+                _ => {
+                    return Err(Error::MetaMethodTypeError {
+                        method: name.to_string(),
+                        type_name: value.type_name(),
+                        message: Some("expected nil, table or function".to_string()),
+                    })
+                }
+            }
+        }
+        value.into_lua_multi(lua)
+    }
 }
 
 // Returns function name for the type `T`, without the module path
@@ -368,6 +390,17 @@ fn get_function_name<T>(name: &str) -> StdString {
 }
 
 impl<'lua, T: 'static> UserDataFields<'lua, T> for UserDataRegistrar<'lua, T> {
+    fn add_field<V>(&mut self, name: impl AsRef<str>, value: V)
+    where
+        V: IntoLua<'lua> + Clone + 'static,
+    {
+        let name = name.as_ref().to_string();
+        self.fields.push((
+            name,
+            Box::new(move |lua, _| value.clone().into_lua_multi(lua)),
+        ));
+    }
+
     fn add_field_method_get<M, R>(&mut self, name: impl AsRef<str>, method: M)
     where
         M: Fn(&'lua Lua, &T) -> Result<R> + MaybeSend + 'static,
@@ -408,41 +441,38 @@ impl<'lua, T: 'static> UserDataFields<'lua, T> for UserDataRegistrar<'lua, T> {
         self.field_setters.push((name.into(), func));
     }
 
+    fn add_meta_field<V>(&mut self, name: impl AsRef<str>, value: V)
+    where
+        V: IntoLua<'lua> + Clone + 'static,
+    {
+        let name = name.as_ref().to_string();
+        let name2 = name.clone();
+        self.meta_fields.push((
+            name,
+            Box::new(move |lua, _| Self::check_meta_field(lua, &name2, value.clone())),
+        ));
+    }
+
     fn add_meta_field_with<F, R>(&mut self, name: impl AsRef<str>, f: F)
     where
         F: Fn(&'lua Lua) -> Result<R> + MaybeSend + 'static,
         R: IntoLua<'lua>,
     {
         let name = name.as_ref().to_string();
+        let name2 = name.clone();
         self.meta_fields.push((
-            name.clone(),
-            Box::new(move |lua| {
-                let value = f(lua)?.into_lua(lua)?;
-                if name == MetaMethod::Index || name == MetaMethod::NewIndex {
-                    match value {
-                        Value::Nil | Value::Table(_) | Value::Function(_) => {}
-                        _ => {
-                            return Err(Error::MetaMethodTypeError {
-                                method: name.clone(),
-                                type_name: value.type_name(),
-                                message: Some("expected nil, table or function".to_string()),
-                            })
-                        }
-                    }
-                }
-                Ok(value)
-            }),
+            name,
+            Box::new(move |lua, _| Self::check_meta_field(lua, &name2, f(lua)?)),
         ));
     }
 
     // Below are internal methods
 
-    fn add_field_getter(&mut self, name: String, callback: Callback<'lua, 'static>) {
-        self.field_getters.push((name, callback));
-    }
-
-    fn add_field_setter(&mut self, name: String, callback: Callback<'lua, 'static>) {
-        self.field_setters.push((name, callback));
+    fn append_fields_from<S>(&mut self, other: UserDataRegistrar<'lua, S>) {
+        self.fields.extend(other.fields);
+        self.field_getters.extend(other.field_getters);
+        self.field_setters.extend(other.field_setters);
+        self.meta_fields.extend(other.meta_fields);
     }
 }
 
@@ -591,22 +621,13 @@ impl<'lua, T: 'static> UserDataMethods<'lua, T> for UserDataRegistrar<'lua, T> {
 
     // Below are internal methods used in generated code
 
-    fn add_callback(&mut self, name: String, callback: Callback<'lua, 'static>) {
-        self.methods.push((name, callback));
-    }
-
-    #[cfg(feature = "async")]
-    fn add_async_callback(&mut self, name: String, callback: AsyncCallback<'lua, 'static>) {
-        self.async_methods.push((name, callback));
-    }
-
-    fn add_meta_callback(&mut self, name: String, callback: Callback<'lua, 'static>) {
-        self.meta_methods.push((name, callback));
-    }
-
-    #[cfg(feature = "async")]
-    fn add_async_meta_callback(&mut self, meta: String, callback: AsyncCallback<'lua, 'static>) {
-        self.async_meta_methods.push((meta, callback))
+    fn append_methods_from<S>(&mut self, other: UserDataRegistrar<'lua, S>) {
+        self.methods.extend(other.methods);
+        #[cfg(feature = "async")]
+        self.async_methods.extend(other.async_methods);
+        self.meta_methods.extend(other.meta_methods);
+        #[cfg(feature = "async")]
+        self.async_meta_methods.extend(other.async_meta_methods);
     }
 }
 
@@ -626,31 +647,13 @@ macro_rules! lua_userdata_impl {
             fn add_fields<'lua, F: UserDataFields<'lua, Self>>(fields: &mut F) {
                 let mut orig_fields = UserDataRegistrar::new();
                 T::add_fields(&mut orig_fields);
-                for (name, callback) in orig_fields.field_getters {
-                    fields.add_field_getter(name, callback);
-                }
-                for (name, callback) in orig_fields.field_setters {
-                    fields.add_field_setter(name, callback);
-                }
+                fields.append_fields_from(orig_fields);
             }
 
             fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
                 let mut orig_methods = UserDataRegistrar::new();
                 T::add_methods(&mut orig_methods);
-                for (name, callback) in orig_methods.methods {
-                    methods.add_callback(name, callback);
-                }
-                #[cfg(feature = "async")]
-                for (name, callback) in orig_methods.async_methods {
-                    methods.add_async_callback(name, callback);
-                }
-                for (meta, callback) in orig_methods.meta_methods {
-                    methods.add_meta_callback(meta, callback);
-                }
-                #[cfg(feature = "async")]
-                for (meta, callback) in orig_methods.async_meta_methods {
-                    methods.add_async_meta_callback(meta, callback);
-                }
+                methods.append_methods_from(orig_methods);
             }
         }
     };

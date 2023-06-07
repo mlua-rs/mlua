@@ -21,12 +21,10 @@ use crate::function::Function;
 use crate::lua::Lua;
 use crate::string::String;
 use crate::table::{Table, TablePairs};
-use crate::types::{Callback, LuaRef, MaybeSend};
+use crate::types::{LuaRef, MaybeSend};
 use crate::util::{check_stack, get_userdata, take_userdata, StackGuard};
 use crate::value::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, Value};
-
-#[cfg(feature = "async")]
-use crate::types::AsyncCallback;
+use crate::UserDataRegistrar;
 
 #[cfg(feature = "lua54")]
 pub(crate) const USER_VALUE_MAXSLOT: usize = 8;
@@ -412,29 +410,26 @@ pub trait UserDataMethods<'lua, T> {
     //
 
     #[doc(hidden)]
-    fn add_callback(&mut self, _name: StdString, _callback: Callback<'lua, 'static>) {}
-
-    #[doc(hidden)]
-    #[cfg(feature = "async")]
-    fn add_async_callback(&mut self, _name: StdString, _callback: AsyncCallback<'lua, 'static>) {}
-
-    #[doc(hidden)]
-    fn add_meta_callback(&mut self, _name: StdString, _callback: Callback<'lua, 'static>) {}
-
-    #[doc(hidden)]
-    #[cfg(feature = "async")]
-    fn add_async_meta_callback(
-        &mut self,
-        _name: StdString,
-        _callback: AsyncCallback<'lua, 'static>,
-    ) {
-    }
+    fn append_methods_from<S>(&mut self, _other: UserDataRegistrar<'lua, S>) {}
 }
 
 /// Field registry for [`UserData`] implementors.
 ///
 /// [`UserData`]: crate::UserData
 pub trait UserDataFields<'lua, T> {
+    /// Add a static field to the `UserData`.
+    ///
+    /// Static fields are implemented by updating the `__index` metamethod and returning the
+    /// accessed field. This allows them to be used with the expected `userdata.field` syntax.
+    ///
+    /// Static fields are usually shared between all instances of the `UserData` of the same type.
+    ///
+    /// If `add_meta_method` is used to set the `__index` metamethod, it will
+    /// be used as a fall-back if no regular field or method are found.
+    fn add_field<V>(&mut self, name: impl AsRef<str>, value: V)
+    where
+        V: IntoLua<'lua> + Clone + 'static;
+
     /// Add a regular field getter as a method which accepts a `&T` as the parameter.
     ///
     /// Regular field getters are implemented by overriding the `__index` metamethod and returning the
@@ -483,9 +478,21 @@ pub trait UserDataFields<'lua, T> {
         F: FnMut(&'lua Lua, AnyUserData<'lua>, A) -> Result<()> + MaybeSend + 'static,
         A: FromLua<'lua>;
 
-    /// Add a metamethod value computed from `f`.
+    /// Add a metatable field.
     ///
-    /// This will initialize the metamethod value from `f` on `UserData` creation.
+    /// This will initialize the metatable field with `value` on `UserData` creation.
+    ///
+    /// # Note
+    ///
+    /// `mlua` will trigger an error on an attempt to define a protected metamethod,
+    /// like `__gc` or `__metatable`.
+    fn add_meta_field<V>(&mut self, name: impl AsRef<str>, value: V)
+    where
+        V: IntoLua<'lua> + Clone + 'static;
+
+    /// Add a metatable field computed from `f`.
+    ///
+    /// This will initialize the metatable field from `f` on `UserData` creation.
     ///
     /// # Note
     ///
@@ -501,10 +508,7 @@ pub trait UserDataFields<'lua, T> {
     //
 
     #[doc(hidden)]
-    fn add_field_getter(&mut self, _name: StdString, _callback: Callback<'lua, 'static>) {}
-
-    #[doc(hidden)]
-    fn add_field_setter(&mut self, _name: StdString, _callback: Callback<'lua, 'static>) {}
+    fn append_fields_from<S>(&mut self, _other: UserDataRegistrar<'lua, S>) {}
 }
 
 /// Trait for custom userdata types.

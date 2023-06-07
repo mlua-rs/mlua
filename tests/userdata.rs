@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::string::String as StdString;
 use std::sync::Arc;
 #[cfg(not(feature = "parking_lot"))]
@@ -486,6 +487,7 @@ fn test_fields() -> Result<()> {
 
     impl UserData for MyUserData {
         fn add_fields<'lua, F: UserDataFields<'lua, Self>>(fields: &mut F) {
+            fields.add_field("static", "constant");
             fields.add_field_method_get("val", |_, data| Ok(data.0));
             fields.add_field_method_set("val", |_, data, val| {
                 data.0 = val;
@@ -497,11 +499,7 @@ fn test_fields() -> Result<()> {
             fields
                 .add_field_function_set("uval", |_, ud, s| ud.set_user_value::<Option<String>>(s));
 
-            fields.add_meta_field_with(MetaMethod::Index, |lua| {
-                let index = lua.create_table()?;
-                index.set("f", 321)?;
-                Ok(index)
-            });
+            fields.add_meta_field(MetaMethod::Index, HashMap::from([("f", 321)]));
             fields.add_meta_field_with(MetaMethod::NewIndex, |lua| {
                 lua.create_function(|lua, (_, field, val): (AnyUserData, String, Value)| {
                     lua.globals().set(field, val)?;
@@ -516,6 +514,7 @@ fn test_fields() -> Result<()> {
     globals.set("ud", MyUserData(7))?;
     lua.load(
         r#"
+        assert(ud.static == "constant")
         assert(ud.val == 7)
         ud.val = 10
         assert(ud.val == 10)
@@ -614,6 +613,7 @@ fn test_userdata_wrapped() -> Result<()> {
 
     impl UserData for MyUserData {
         fn add_fields<'lua, F: UserDataFields<'lua, Self>>(fields: &mut F) {
+            fields.add_field("static", "constant");
             fields.add_field_method_get("data", |_, this| Ok(this.0));
             fields.add_field_method_set("data", |_, this, val| {
                 this.0 = val;
@@ -631,6 +631,7 @@ fn test_userdata_wrapped() -> Result<()> {
         globals.set("rc_refcell_ud", ud1.clone())?;
         lua.load(
             r#"
+            assert(rc_refcell_ud.static == "constant")
             rc_refcell_ud.data = rc_refcell_ud.data + 1
             assert(rc_refcell_ud.data == 2)
         "#,
@@ -646,6 +647,7 @@ fn test_userdata_wrapped() -> Result<()> {
     globals.set("arc_mutex_ud", ud2.clone())?;
     lua.load(
         r#"
+        assert(arc_mutex_ud.static == "constant")
         arc_mutex_ud.data = arc_mutex_ud.data + 1
         assert(arc_mutex_ud.data == 3)
     "#,
@@ -660,6 +662,7 @@ fn test_userdata_wrapped() -> Result<()> {
     globals.set("arc_rwlock_ud", ud3.clone())?;
     lua.load(
         r#"
+        assert(arc_rwlock_ud.static == "constant")
         arc_rwlock_ud.data = arc_rwlock_ud.data + 1
         assert(arc_rwlock_ud.data == 4)
     "#,
@@ -686,7 +689,7 @@ fn test_userdata_proxy() -> Result<()> {
 
     impl UserData for MyUserData {
         fn add_fields<'lua, F: UserDataFields<'lua, Self>>(fields: &mut F) {
-            fields.add_field_function_get("static_field", |_, _| Ok(123));
+            fields.add_field("static_field", 123);
             fields.add_field_method_get("n", |_, this| Ok(this.0));
         }
 
@@ -780,10 +783,7 @@ fn test_userdata_ext() -> Result<()> {
     assert_eq!(ud.get::<_, u32>("n")?, 123);
     ud.set("n", 321)?;
     assert_eq!(ud.get::<_, u32>("n")?, 321);
-    match ud.get::<_, u32>("non-existent") {
-        Err(Error::RuntimeError(_)) => {}
-        r => panic!("expected RuntimeError, got {r:?}"),
-    }
+    assert_eq!(ud.get::<_, Option<u32>>("non-existent")?, None);
     match ud.set::<_, u32>("non-existent", 123) {
         Err(Error::RuntimeError(_)) => {}
         r => panic!("expected RuntimeError, got {r:?}"),

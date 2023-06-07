@@ -1857,7 +1857,10 @@ impl Lua {
     pub fn scope<'lua, 'scope, R>(
         &'lua self,
         f: impl FnOnce(&Scope<'lua, 'scope>) -> Result<R>,
-    ) -> Result<R> {
+    ) -> Result<R>
+    where
+        'lua: 'scope,
+    {
         f(&Scope::new(self))
     }
 
@@ -2487,7 +2490,7 @@ impl Lua {
 
     unsafe fn register_userdata_metatable<'lua, T: 'static>(
         &'lua self,
-        registry: UserDataRegistrar<'lua, T>,
+        mut registry: UserDataRegistrar<'lua, T>,
     ) -> Result<Integer> {
         let state = self.state();
         let _sg = StackGuard::new(state);
@@ -2510,7 +2513,7 @@ impl Lua {
         let mut has_name = false;
         for (k, f) in registry.meta_fields {
             has_name = has_name || k == "__name";
-            self.push_value(f(self)?)?;
+            self.push_value(f(self, MultiValue::new())?.pop_front().unwrap())?;
             rawset_field(state, -2, MetaMethod::validate(&k)?)?;
         }
         // Set `__name` if not provided
@@ -2522,6 +2525,32 @@ impl Lua {
         let metatable_index = ffi::lua_absindex(state, -1);
 
         let mut extra_tables_count = 0;
+
+        let fields_nrec = registry.fields.len();
+        if fields_nrec > 0 {
+            // If __index is a table then update it inplace
+            let index_type = ffi::lua_getfield(state, metatable_index, cstr!("__index"));
+            match index_type {
+                ffi::LUA_TNIL | ffi::LUA_TTABLE => {
+                    if index_type == ffi::LUA_TNIL {
+                        // Create a new table
+                        ffi::lua_pop(state, 1);
+                        push_table(state, 0, fields_nrec as c_int, true)?;
+                    }
+                    for (k, f) in registry.fields {
+                        self.push_value(f(self, MultiValue::new())?.pop_front().unwrap())?;
+                        rawset_field(state, -2, &k)?;
+                    }
+                    rawset_field(state, metatable_index, "__index")?;
+                }
+                _ => {
+                    // Propagate fields to the field getters
+                    for (k, f) in registry.fields {
+                        registry.field_getters.push((k, f))
+                    }
+                }
+            }
+        }
 
         let mut field_getters_index = None;
         let field_getters_nrec = registry.field_getters.len();
@@ -2552,7 +2581,16 @@ impl Lua {
         #[cfg(feature = "async")]
         let methods_nrec = methods_nrec + registry.async_methods.len();
         if methods_nrec > 0 {
-            push_table(state, 0, methods_nrec as c_int, true)?;
+            // If __index is a table then update it inplace
+            let index_type = ffi::lua_getfield(state, metatable_index, cstr!("__index"));
+            match index_type {
+                ffi::LUA_TTABLE => {} // Update the existing table
+                _ => {
+                    // Create a new table
+                    ffi::lua_pop(state, 1);
+                    push_table(state, 0, methods_nrec as c_int, true)?;
+                }
+            }
             for (k, m) in registry.methods {
                 self.push_value(Value::Function(self.create_callback(m)?))?;
                 rawset_field(state, -2, &k)?;
@@ -2562,8 +2600,18 @@ impl Lua {
                 self.push_value(Value::Function(self.create_async_callback(m)?))?;
                 rawset_field(state, -2, &k)?;
             }
-            methods_index = Some(ffi::lua_absindex(state, -1));
-            extra_tables_count += 1;
+            match index_type {
+                ffi::LUA_TTABLE => {
+                    ffi::lua_pop(state, 1); // All done
+                }
+                ffi::LUA_TNIL => {
+                    rawset_field(state, metatable_index, "__index")?; // Set the new table as __index
+                }
+                _ => {
+                    methods_index = Some(ffi::lua_absindex(state, -1));
+                    extra_tables_count += 1;
+                }
+            }
         }
 
         init_userdata_metatable::<UserDataCell<T>>(

@@ -402,9 +402,12 @@ unsafe extern "C" fn lua_error_impl(state: *mut ffi::lua_State) -> c_int {
 }
 
 unsafe extern "C" fn lua_isfunction_impl(state: *mut ffi::lua_State) -> c_int {
-    let t = ffi::lua_type(state, -1);
-    ffi::lua_pop(state, 1);
-    ffi::lua_pushboolean(state, (t == ffi::LUA_TFUNCTION) as c_int);
+    ffi::lua_pushboolean(state, ffi::lua_isfunction(state, -1));
+    1
+}
+
+unsafe extern "C" fn lua_istable_impl(state: *mut ffi::lua_State) -> c_int {
+    ffi::lua_pushboolean(state, ffi::lua_istable(state, -1));
     1
 }
 
@@ -418,14 +421,19 @@ unsafe fn init_userdata_metatable_index(state: *mut ffi::lua_State) -> Result<()
     // Create and cache `__index` generator
     let code = cstr!(
         r#"
-            local error, isfunction = ...
+            local error, isfunction, istable = ...
             return function (__index, field_getters, methods)
-                -- Fastpath to return methods table for index access
-                if __index == nil and field_getters == nil then
-                    return methods
+                -- Common case: has field getters and index is a table
+                if field_getters ~= nil and methods == nil and istable(__index) then
+                    return function (self, key)
+                        local field_getter = field_getters[key]
+                        if field_getter ~= nil then
+                            return field_getter(self)
+                        end
+                        return __index[key]
+                    end
                 end
 
-                -- Alternatively return a function for index access
                 return function (self, key)
                     if field_getters ~= nil then
                         local field_getter = field_getters[key]
@@ -460,7 +468,8 @@ unsafe fn init_userdata_metatable_index(state: *mut ffi::lua_State) -> Result<()
         }
         ffi::lua_pushcfunction(state, lua_error_impl);
         ffi::lua_pushcfunction(state, lua_isfunction_impl);
-        ffi::lua_call(state, 2, 1);
+        ffi::lua_pushcfunction(state, lua_istable_impl);
+        ffi::lua_call(state, 3, 1);
 
         #[cfg(feature = "luau-jit")]
         if ffi::luau_codegen_supported() != 0 {

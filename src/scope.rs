@@ -14,6 +14,7 @@ use crate::types::{Callback, CallbackUpvalue, LuaRef, MaybeSend};
 use crate::userdata::{
     AnyUserData, MetaMethod, UserData, UserDataCell, UserDataFields, UserDataMethods,
 };
+use crate::userdata_impl::UserDataRegistrar;
 use crate::util::{
     assert_stack, check_stack, get_userdata, init_userdata_metatable, push_table, rawset_field,
     take_userdata, StackGuard,
@@ -32,7 +33,10 @@ use std::future::Future;
 /// See [`Lua::scope`] for more details.
 ///
 /// [`Lua::scope`]: crate::Lua.html::scope
-pub struct Scope<'lua, 'scope> {
+pub struct Scope<'lua, 'scope>
+where
+    'lua: 'scope,
+{
     lua: &'lua Lua,
     destructors: RefCell<Vec<(LuaRef<'lua>, DestructorCallback<'lua>)>>,
     _scope_invariant: PhantomData<Cell<&'scope ()>>,
@@ -393,7 +397,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
                 rawset_field(state, -2, MetaMethod::validate(&k)?)?;
             }
             for (k, f) in ud_fields.meta_fields {
-                lua.push_value(f(mem::transmute(lua))?)?;
+                lua.push_value(f(lua, MultiValue::new())?.pop_front().unwrap())?;
                 rawset_field(state, -2, MetaMethod::validate(&k)?)?;
             }
             let metatable_index = ffi::lua_absindex(state, -1);
@@ -734,15 +738,16 @@ impl<'lua, T: UserData> UserDataMethods<'lua, T> for NonStaticUserDataMethods<'l
 }
 
 struct NonStaticUserDataFields<'lua, T: UserData> {
+    fields: Vec<(String, Callback<'lua, 'static>)>,
     field_getters: Vec<(String, NonStaticMethod<'lua, T>)>,
     field_setters: Vec<(String, NonStaticMethod<'lua, T>)>,
-    #[allow(clippy::type_complexity)]
-    meta_fields: Vec<(String, Box<dyn Fn(&'lua Lua) -> Result<Value<'lua>>>)>,
+    meta_fields: Vec<(String, Callback<'lua, 'static>)>,
 }
 
 impl<'lua, T: UserData> Default for NonStaticUserDataFields<'lua, T> {
     fn default() -> NonStaticUserDataFields<'lua, T> {
         NonStaticUserDataFields {
+            fields: Vec::new(),
             field_getters: Vec::new(),
             field_setters: Vec::new(),
             meta_fields: Vec::new(),
@@ -751,6 +756,17 @@ impl<'lua, T: UserData> Default for NonStaticUserDataFields<'lua, T> {
 }
 
 impl<'lua, T: UserData> UserDataFields<'lua, T> for NonStaticUserDataFields<'lua, T> {
+    fn add_field<V>(&mut self, name: impl AsRef<str>, value: V)
+    where
+        V: IntoLua<'lua> + Clone + 'static,
+    {
+        let name = name.as_ref().to_string();
+        self.fields.push((
+            name,
+            Box::new(move |lua, _| value.clone().into_lua_multi(lua)),
+        ));
+    }
+
     fn add_field_method_get<M, R>(&mut self, name: impl AsRef<str>, method: M)
     where
         M: Fn(&'lua Lua, &T) -> Result<R> + MaybeSend + 'static,
@@ -796,30 +812,30 @@ impl<'lua, T: UserData> UserDataFields<'lua, T> for NonStaticUserDataFields<'lua
         self.field_setters.push((name.as_ref().into(), func));
     }
 
+    fn add_meta_field<V>(&mut self, name: impl AsRef<str>, value: V)
+    where
+        V: IntoLua<'lua> + Clone + 'static,
+    {
+        let name = name.as_ref().to_string();
+        let name2 = name.clone();
+        self.meta_fields.push((
+            name,
+            Box::new(move |lua, _| {
+                UserDataRegistrar::<()>::check_meta_field(lua, &name2, value.clone())
+            }),
+        ));
+    }
+
     fn add_meta_field_with<F, R>(&mut self, name: impl AsRef<str>, f: F)
     where
         F: Fn(&'lua Lua) -> Result<R> + MaybeSend + 'static,
         R: IntoLua<'lua>,
     {
         let name = name.as_ref().to_string();
+        let name2 = name.clone();
         self.meta_fields.push((
-            name.clone(),
-            Box::new(move |lua| {
-                let value = f(lua)?.into_lua(lua)?;
-                if name == MetaMethod::Index || name == MetaMethod::NewIndex {
-                    match value {
-                        Value::Nil | Value::Table(_) | Value::Function(_) => {}
-                        _ => {
-                            return Err(Error::MetaMethodTypeError {
-                                method: name.clone(),
-                                type_name: value.type_name(),
-                                message: Some("expected nil, table or function".to_string()),
-                            })
-                        }
-                    }
-                }
-                Ok(value)
-            }),
+            name,
+            Box::new(move |lua, _| UserDataRegistrar::<()>::check_meta_field(lua, &name2, f(lua)?)),
         ));
     }
 }
