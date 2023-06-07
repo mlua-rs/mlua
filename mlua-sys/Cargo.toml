@@ -26,7 +26,7 @@ lua51 = []
 luajit = []
 luajit52 = ["luajit"]
 luau = ["luau0-src"]
-luau-codegen = []
+luau-codegen = ["luau"]
 vendored = ["lua-src", "luajit-src"]
 module = []
 
