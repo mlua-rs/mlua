@@ -1,3 +1,21 @@
+## v0.9.0-beta.3
+
+- Added `OwnedAnyUserData::take()`
+- Switch to `DeserializeOwned`
+- Overwrite error context when called multiple times
+- New feature flag `luau-jit` to enable (experimental) Luau codegen backend
+- Set `__name` field in userdata metatable
+- Added `Value::to_string()` method similar to `luaL_tolstring`
+- Lua 5.4.6
+- Application data container now allows to mutably and immutably borrow different types at the same time
+- Performance optimizations
+- Support getting and setting environment for Lua functions.
+- Added `UserDataFields::add_field()` method to add static fields to UserData
+
+Breaking changes:
+- Require environment to be a `Table` instead of `Value` in Chunks.
+- `AsChunk::env()` renamed to `AsChunk::environment()`
+
 ## v0.9.0-beta.2
 
 New features:
