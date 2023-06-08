@@ -303,17 +303,7 @@ impl<'lua> Function<'lua> {
             assert_stack(state, 1);
 
             lua.push_ref(&self.0);
-
-            let mut ar: ffi::lua_Debug = mem::zeroed();
-            #[cfg(not(feature = "luau"))]
-            {
-                ffi::lua_pushvalue(state, -1);
-                ffi::lua_getinfo(state, cstr!(">S"), &mut ar);
-            }
-            #[cfg(feature = "luau")]
-            ffi::lua_getinfo(state, -1, cstr!("s"), &mut ar);
-
-            if ptr_to_cstr_bytes(ar.what) == Some(b"C") {
+            if ffi::lua_iscfunction(state, -1) != 0 {
                 return None;
             }
 
@@ -350,17 +340,7 @@ impl<'lua> Function<'lua> {
             check_stack(state, 2)?;
 
             lua.push_ref(&self.0);
-
-            let mut ar: ffi::lua_Debug = mem::zeroed();
-            #[cfg(not(feature = "luau"))]
-            {
-                ffi::lua_pushvalue(state, -1);
-                ffi::lua_getinfo(state, cstr!(">S"), &mut ar);
-            }
-            #[cfg(feature = "luau")]
-            ffi::lua_getinfo(state, -1, cstr!("s"), &mut ar);
-
-            if ptr_to_cstr_bytes(ar.what) == Some(b"C") {
+            if ffi::lua_iscfunction(state, -1) != 0 {
                 return Ok(false);
             }
 
