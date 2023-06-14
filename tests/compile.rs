@@ -15,7 +15,11 @@ fn test_compilation() {
     t.compile_fail("tests/compile/static_callback_args.rs");
 
     #[cfg(feature = "async")]
-    t.compile_fail("tests/compile/async_nonstatic_userdata.rs");
+    {
+        t.compile_fail("tests/compile/async_any_userdata_method.rs");
+        t.compile_fail("tests/compile/async_nonstatic_userdata.rs");
+        t.compile_fail("tests/compile/async_userdata_method.rs");
+    }
 
     #[cfg(feature = "send")]
     t.compile_fail("tests/compile/non_send.rs");

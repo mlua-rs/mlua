@@ -2658,18 +2658,17 @@ impl Lua {
         }
     }
 
-    // Pushes a LuaRef value onto the stack, checking that it's a registered
+    // Returns `TypeId` for the LuaRef, checking that it's a registered
     // and not destructed UserData.
-    // Uses 2 stack spaces, does not call checkstack.
-    pub(crate) unsafe fn push_userdata_ref(&self, lref: &LuaRef) -> Result<Option<TypeId>> {
-        let state = self.state();
-        self.push_ref(lref);
-        if ffi::lua_getmetatable(state, -1) == 0 {
-            ffi::lua_pop(state, 1);
+    //
+    // Returns `None` if the userdata is registered but non-static.
+    pub(crate) unsafe fn get_userdata_type_id(&self, lref: &LuaRef) -> Result<Option<TypeId>> {
+        let ref_thread = self.ref_thread();
+        if ffi::lua_getmetatable(ref_thread, lref.index) == 0 {
             return Err(Error::UserDataTypeMismatch);
         }
-        let mt_ptr = ffi::lua_topointer(state, -1);
-        ffi::lua_pop(state, 1);
+        let mt_ptr = ffi::lua_topointer(ref_thread, -1);
+        ffi::lua_pop(ref_thread, 1);
 
         // Fast path to skip looking up the metatable in the map
         let (last_mt, last_type_id) = (*self.extra.get()).last_checked_userdata_mt;
@@ -2687,6 +2686,14 @@ impl Lua {
             }
             None => Err(Error::UserDataTypeMismatch),
         }
+    }
+
+    // Pushes a LuaRef (userdata) value onto the stack, returning their `TypeId`.
+    // Uses 1 stack space, does not call checkstack.
+    pub(crate) unsafe fn push_userdata_ref(&self, lref: &LuaRef) -> Result<Option<TypeId>> {
+        let type_id = self.get_userdata_type_id(lref)?;
+        self.push_ref(lref);
+        Ok(type_id)
     }
 
     // Creates a Function out of a Callback containing a 'static Fn. This is safe ONLY because the

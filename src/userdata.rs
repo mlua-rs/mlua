@@ -259,8 +259,7 @@ pub trait UserDataMethods<'lua, T> {
         A: FromLuaMulti<'lua>,
         R: IntoLuaMulti<'lua>;
 
-    /// Add an async method which accepts a `T` as the first parameter and returns Future.
-    /// The passed `T` is cloned from the original value.
+    /// Add an async method which accepts a `&T` as the first parameter and returns Future.
     ///
     /// Refer to [`add_method`] for more information about the implementation.
     ///
@@ -269,12 +268,31 @@ pub trait UserDataMethods<'lua, T> {
     /// [`add_method`]: #method.add_method
     #[cfg(feature = "async")]
     #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
-    fn add_async_method<M, A, MR, R>(&mut self, name: impl AsRef<str>, method: M)
+    fn add_async_method<'s, M, A, MR, R>(&mut self, name: impl AsRef<str>, method: M)
     where
-        T: Clone,
-        M: Fn(&'lua Lua, T, A) -> MR + MaybeSend + 'static,
+        'lua: 's,
+        T: 'static,
+        M: Fn(&'lua Lua, &'s T, A) -> MR + MaybeSend + 'static,
         A: FromLuaMulti<'lua>,
-        MR: Future<Output = Result<R>> + 'lua,
+        MR: Future<Output = Result<R>> + 's,
+        R: IntoLuaMulti<'lua>;
+
+    /// Add an async method which accepts a `&mut T` as the first parameter and returns Future.
+    ///
+    /// Refer to [`add_method`] for more information about the implementation.
+    ///
+    /// Requires `feature = "async"`
+    ///
+    /// [`add_method`]: #method.add_method
+    #[cfg(feature = "async")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
+    fn add_async_method_mut<'s, M, A, MR, R>(&mut self, name: impl AsRef<str>, method: M)
+    where
+        'lua: 's,
+        T: 'static,
+        M: Fn(&'lua Lua, &'s mut T, A) -> MR + MaybeSend + 'static,
+        A: FromLuaMulti<'lua>,
+        MR: Future<Output = Result<R>> + 's,
         R: IntoLuaMulti<'lua>;
 
     /// Add a regular method as a function which accepts generic arguments, the first argument will
@@ -349,8 +367,7 @@ pub trait UserDataMethods<'lua, T> {
         A: FromLuaMulti<'lua>,
         R: IntoLuaMulti<'lua>;
 
-    /// Add an async metamethod which accepts a `T` as the first parameter and returns Future.
-    /// The passed `T` is cloned from the original value.
+    /// Add an async metamethod which accepts a `&T` as the first parameter and returns Future.
     ///
     /// This is an async version of [`add_meta_method`].
     ///
@@ -359,12 +376,31 @@ pub trait UserDataMethods<'lua, T> {
     /// [`add_meta_method`]: #method.add_meta_method
     #[cfg(all(feature = "async", not(any(feature = "lua51", feature = "luau"))))]
     #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
-    fn add_async_meta_method<M, A, MR, R>(&mut self, name: impl AsRef<str>, method: M)
+    fn add_async_meta_method<'s, M, A, MR, R>(&mut self, name: impl AsRef<str>, method: M)
     where
-        T: Clone,
-        M: Fn(&'lua Lua, T, A) -> MR + MaybeSend + 'static,
+        'lua: 's,
+        T: 'static,
+        M: Fn(&'lua Lua, &'s T, A) -> MR + MaybeSend + 'static,
         A: FromLuaMulti<'lua>,
-        MR: Future<Output = Result<R>> + 'lua,
+        MR: Future<Output = Result<R>> + 's,
+        R: IntoLuaMulti<'lua>;
+
+    /// Add an async metamethod which accepts a `&mut T` as the first parameter and returns Future.
+    ///
+    /// This is an async version of [`add_meta_method_mut`].
+    ///
+    /// Requires `feature = "async"`
+    ///
+    /// [`add_meta_method_mut`]: #method.add_meta_method_mut
+    #[cfg(all(feature = "async", not(any(feature = "lua51", feature = "luau"))))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
+    fn add_async_meta_method_mut<'s, M, A, MR, R>(&mut self, name: impl AsRef<str>, method: M)
+    where
+        'lua: 's,
+        T: 'static,
+        M: Fn(&'lua Lua, &'s mut T, A) -> MR + MaybeSend + 'static,
+        A: FromLuaMulti<'lua>,
+        MR: Future<Output = Result<R>> + 's,
         R: IntoLuaMulti<'lua>;
 
     /// Add a metamethod which accepts generic arguments.
@@ -1053,6 +1089,11 @@ impl<'lua> AnyUserData<'lua> {
     #[inline]
     pub fn into_owned(self) -> OwnedAnyUserData {
         OwnedAnyUserData(self.0.into_owned())
+    }
+
+    #[inline(always)]
+    pub(crate) fn type_id(&self) -> Result<Option<TypeId>> {
+        unsafe { self.0.lua.get_userdata_type_id(&self.0) }
     }
 
     /// Returns a type name of this `UserData` (from `__name` metatable field).

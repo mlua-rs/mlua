@@ -3,14 +3,13 @@ use std::collections::HashMap;
 use hyper::body::{Body as HyperBody, HttpBody as _};
 use hyper::Client as HyperClient;
 
-use mlua::{chunk, AnyUserData, ExternalResult, Lua, Result, UserData, UserDataMethods};
+use mlua::{chunk, ExternalResult, Lua, Result, UserData, UserDataMethods};
 
 struct BodyReader(HyperBody);
 
 impl UserData for BodyReader {
     fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
-        methods.add_async_function("read", |lua, reader: AnyUserData| async move {
-            let mut reader = reader.borrow_mut::<Self>()?;
+        methods.add_async_method_mut("read", |lua, reader, ()| async move {
             if let Some(bytes) = reader.0.data().await {
                 let bytes = bytes.into_lua_err()?;
                 return Some(lua.create_string(&bytes)).transpose();

@@ -1,6 +1,5 @@
 #![cfg(feature = "async")]
 
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -361,19 +360,18 @@ async fn test_async_thread_pool() -> Result<()> {
 
 #[tokio::test]
 async fn test_async_userdata() -> Result<()> {
-    #[derive(Clone)]
-    struct MyUserData(Arc<AtomicU64>);
+    struct MyUserData(u64);
 
     impl UserData for MyUserData {
         fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
             methods.add_async_method("get_value", |_, data, ()| async move {
                 Delay::new(Duration::from_millis(10)).await;
-                Ok(data.0.load(Ordering::Relaxed))
+                Ok(data.0)
             });
 
-            methods.add_async_method("set_value", |_, data, n| async move {
+            methods.add_async_method_mut("set_value", |_, data, n| async move {
                 Delay::new(Duration::from_millis(10)).await;
-                data.0.store(n, Ordering::Relaxed);
+                data.0 = n;
                 Ok(())
             });
 
@@ -384,7 +382,7 @@ async fn test_async_userdata() -> Result<()> {
 
             #[cfg(not(any(feature = "lua51", feature = "luau")))]
             methods.add_async_meta_method(mlua::MetaMethod::Call, |_, data, ()| async move {
-                let n = data.0.load(Ordering::Relaxed);
+                let n = data.0;
                 Delay::new(Duration::from_millis(n)).await;
                 Ok(format!("elapsed:{}ms", n))
             });
@@ -395,23 +393,24 @@ async fn test_async_userdata() -> Result<()> {
                 |_, data, key: String| async move {
                     Delay::new(Duration::from_millis(10)).await;
                     match key.as_str() {
-                        "ms" => Ok(Some(data.0.load(Ordering::Relaxed) as f64)),
-                        "s" => Ok(Some((data.0.load(Ordering::Relaxed) as f64) / 1000.0)),
+                        "ms" => Ok(Some(data.0 as f64)),
+                        "s" => Ok(Some((data.0 as f64) / 1000.0)),
                         _ => Ok(None),
                     }
                 },
             );
 
             #[cfg(not(any(feature = "lua51", feature = "luau")))]
-            methods.add_async_meta_method(
+            methods.add_async_meta_method_mut(
                 mlua::MetaMethod::NewIndex,
                 |_, data, (key, value): (String, f64)| async move {
                     Delay::new(Duration::from_millis(10)).await;
                     match key.as_str() {
-                        "ms" => Ok(data.0.store(value as u64, Ordering::Relaxed)),
-                        "s" => Ok(data.0.store((value * 1000.0) as u64, Ordering::Relaxed)),
-                        _ => Err(Error::external(format!("key '{}' not found", key))),
+                        "ms" => data.0 = value as u64,
+                        "s" => data.0 = (value * 1000.0) as u64,
+                        _ => return Err(Error::external(format!("key '{}' not found", key))),
                     }
+                    Ok(())
                 },
             );
         }
@@ -420,7 +419,7 @@ async fn test_async_userdata() -> Result<()> {
     let lua = Lua::new();
     let globals = lua.globals();
 
-    let userdata = lua.create_userdata(MyUserData(Arc::new(AtomicU64::new(11))))?;
+    let userdata = lua.create_userdata(MyUserData(11))?;
     globals.set("userdata", userdata.clone())?;
 
     lua.load(

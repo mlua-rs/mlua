@@ -1,0 +1,17 @@
+warning: unused variable: `this`
+ --> tests/compile/async_userdata_method.rs:7:48
+  |
+7 |         methods.add_async_method("method", |_, this: &'static Self, ()| async {
+  |                                                ^^^^ help: if this is intentional, prefix it with an underscore: `_this`
+  |
+  = note: `#[warn(unused_variables)]` on by default
+
+error: lifetime may not live long enough
+ --> tests/compile/async_userdata_method.rs:7:9
+  |
+6 |       fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
+  |                      ---- lifetime `'lua` defined here
+7 | /         methods.add_async_method("method", |_, this: &'static Self, ()| async {
+8 | |             Ok(())
+9 | |         });
+  | |__________^ argument requires that `'lua` must outlive `'static`

@@ -611,12 +611,28 @@ impl<'lua, T: UserData> UserDataMethods<'lua, T> for NonStaticUserDataMethods<'l
     }
 
     #[cfg(feature = "async")]
-    fn add_async_method<M, A, MR, R>(&mut self, _name: impl AsRef<str>, _method: M)
+    fn add_async_method<'s, M, A, MR, R>(&mut self, _name: impl AsRef<str>, _method: M)
     where
-        T: Clone,
-        M: Fn(&'lua Lua, T, A) -> MR + MaybeSend + 'static,
+        'lua: 's,
+        T: 'static,
+        M: Fn(&'lua Lua, &'s T, A) -> MR + MaybeSend + 'static,
         A: FromLuaMulti<'lua>,
-        MR: Future<Output = Result<R>> + 'lua,
+        MR: Future<Output = Result<R>> + 's,
+        R: IntoLuaMulti<'lua>,
+    {
+        // The panic should never happen as async non-static code wouldn't compile
+        // Non-static lifetime must be bounded to 'lua lifetime
+        panic!("asynchronous methods are not supported for non-static userdata")
+    }
+
+    #[cfg(feature = "async")]
+    fn add_async_method_mut<'s, M, A, MR, R>(&mut self, _name: impl AsRef<str>, _method: M)
+    where
+        'lua: 's,
+        T: 'static,
+        M: Fn(&'lua Lua, &'s mut T, A) -> MR + MaybeSend + 'static,
+        A: FromLuaMulti<'lua>,
+        MR: Future<Output = Result<R>> + 's,
         R: IntoLuaMulti<'lua>,
     {
         // The panic should never happen as async non-static code wouldn't compile
@@ -686,12 +702,28 @@ impl<'lua, T: UserData> UserDataMethods<'lua, T> for NonStaticUserDataMethods<'l
     }
 
     #[cfg(all(feature = "async", not(any(feature = "lua51", feature = "luau"))))]
-    fn add_async_meta_method<M, A, MR, R>(&mut self, _name: impl AsRef<str>, _method: M)
+    fn add_async_meta_method<'s, M, A, MR, R>(&mut self, _name: impl AsRef<str>, _method: M)
     where
-        T: Clone,
-        M: Fn(&'lua Lua, T, A) -> MR + MaybeSend + 'static,
+        'lua: 's,
+        T: 'static,
+        M: Fn(&'lua Lua, &'s T, A) -> MR + MaybeSend + 'static,
         A: FromLuaMulti<'lua>,
-        MR: Future<Output = Result<R>> + 'lua,
+        MR: Future<Output = Result<R>> + 's,
+        R: IntoLuaMulti<'lua>,
+    {
+        // The panic should never happen as async non-static code wouldn't compile
+        // Non-static lifetime must be bounded to 'lua lifetime
+        panic!("asynchronous meta methods are not supported for non-static userdata")
+    }
+
+    #[cfg(all(feature = "async", not(any(feature = "lua51", feature = "luau"))))]
+    fn add_async_meta_method_mut<'s, M, A, MR, R>(&mut self, _name: impl AsRef<str>, _method: M)
+    where
+        'lua: 's,
+        T: 'static,
+        M: Fn(&'lua Lua, &'s mut T, A) -> MR + MaybeSend + 'static,
+        A: FromLuaMulti<'lua>,
+        MR: Future<Output = Result<R>> + 's,
         R: IntoLuaMulti<'lua>,
     {
         // The panic should never happen as async non-static code wouldn't compile

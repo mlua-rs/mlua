@@ -6,9 +6,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::task;
 
-use mlua::{
-    chunk, AnyUserData, Function, Lua, RegistryKey, String as LuaString, UserData, UserDataMethods,
-};
+use mlua::{chunk, Function, Lua, RegistryKey, String as LuaString, UserData, UserDataMethods};
 
 struct LuaTcpStream(TcpStream);
 
@@ -18,28 +16,19 @@ impl UserData for LuaTcpStream {
             Ok(this.0.peer_addr()?.to_string())
         });
 
-        methods.add_async_function(
-            "read",
-            |lua, (this, size): (AnyUserData, usize)| async move {
-                let mut this = this.borrow_mut::<Self>()?;
-                let mut buf = vec![0; size];
-                let n = this.0.read(&mut buf).await?;
-                buf.truncate(n);
-                lua.create_string(&buf)
-            },
-        );
+        methods.add_async_method_mut("read", |lua, this, size| async move {
+            let mut buf = vec![0; size];
+            let n = this.0.read(&mut buf).await?;
+            buf.truncate(n);
+            lua.create_string(&buf)
+        });
 
-        methods.add_async_function(
-            "write",
-            |_, (this, data): (AnyUserData, LuaString)| async move {
-                let mut this = this.borrow_mut::<Self>()?;
-                let n = this.0.write(&data.as_bytes()).await?;
-                Ok(n)
-            },
-        );
+        methods.add_async_method_mut("write", |_, this, data: LuaString| async move {
+            let n = this.0.write(&data.as_bytes()).await?;
+            Ok(n)
+        });
 
-        methods.add_async_function("close", |_, this: AnyUserData| async move {
-            let mut this = this.borrow_mut::<Self>()?;
+        methods.add_async_method_mut("close", |_, this, ()| async move {
             this.0.shutdown().await?;
             Ok(())
         });
