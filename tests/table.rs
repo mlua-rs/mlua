@@ -57,6 +57,7 @@ fn test_table() -> Result<()> {
             .collect::<Result<Vec<i64>>>()?,
         vec![1, 2, 3, 4, 5]
     );
+    assert_eq!(table1, [1, 2, 3, 4, 5]);
 
     assert_eq!(table2.len()?, 0);
     assert_eq!(
@@ -66,12 +67,10 @@ fn test_table() -> Result<()> {
             .collect::<Result<Vec<(i64, i64)>>>()?,
         vec![]
     );
-    assert_eq!(
-        table2.sequence_values().collect::<Result<Vec<i64>>>()?,
-        vec![]
-    );
+    assert_eq!(table2, [0; 0]);
 
     // sequence_values should only iterate until the first border
+    assert_eq!(table3, [1, 2]);
     assert_eq!(
         table3.sequence_values().collect::<Result<Vec<i64>>>()?,
         vec![1, 2]
@@ -116,17 +115,12 @@ fn test_table_push_pop() -> Result<()> {
     // Test raw access
     let table1 = lua.create_sequence_from(vec![123])?;
     table1.raw_push(321)?;
-    assert_eq!(
-        table1
-            .clone()
-            .raw_sequence_values::<i64>()
-            .collect::<Result<Vec<_>>>()?,
-        vec![123, 321]
-    );
+    assert_eq!(table1, [123, 321]);
     assert_eq!(table1.raw_pop::<i64>()?, 321);
     assert_eq!(table1.raw_pop::<i64>()?, 123);
     assert_eq!(table1.raw_pop::<Value>()?, Value::Nil); // An extra pop should do nothing
     assert_eq!(table1.raw_len(), 0);
+    assert_eq!(table1, [0; 0]);
 
     // Test access through metamethods
     let table2 = lua
@@ -144,6 +138,13 @@ fn test_table_push_pop() -> Result<()> {
         .eval::<Table>()?;
     table2.push(345)?;
     assert_eq!(table2.len()?, 2);
+    assert_eq!(
+        table2
+            .clone()
+            .raw_sequence_values::<i64>()
+            .collect::<Result<Vec<_>>>()?,
+        vec![]
+    );
     assert_eq!(table2.pop::<i64>()?, 345);
     assert_eq!(table2.pop::<i64>()?, 234);
     assert_eq!(table2.pop::<Value>()?, Value::Nil);
@@ -205,29 +206,9 @@ fn test_table_sequence_from() -> Result<()> {
 
     let get_table = lua.create_function(|_, t: Table| Ok(t))?;
 
-    assert_eq!(
-        get_table
-            .call::<_, Table>(vec![1, 2, 3])?
-            .sequence_values()
-            .collect::<Result<Vec<i64>>>()?,
-        vec![1, 2, 3]
-    );
-
-    assert_eq!(
-        get_table
-            .call::<_, Table>([1, 2, 3].as_ref())?
-            .sequence_values()
-            .collect::<Result<Vec<i64>>>()?,
-        vec![1, 2, 3]
-    );
-
-    assert_eq!(
-        get_table
-            .call::<_, Table>([1, 2, 3])?
-            .sequence_values()
-            .collect::<Result<Vec<i64>>>()?,
-        vec![1, 2, 3]
-    );
+    assert_eq!(get_table.call::<_, Table>(vec![1, 2, 3])?, [1, 2, 3]);
+    assert_eq!(get_table.call::<_, Table>([4, 5, 6])?, [4, 5, 6]);
+    assert_eq!(get_table.call::<_, Table>([7, 8, 9].as_slice())?, [7, 8, 9]);
 
     Ok(())
 }

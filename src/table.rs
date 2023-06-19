@@ -797,6 +797,56 @@ impl<'lua> AsRef<Table<'lua>> for Table<'lua> {
     }
 }
 
+impl<'lua, T> PartialEq<[T]> for Table<'lua>
+where
+    T: IntoLua<'lua> + Clone,
+{
+    fn eq(&self, other: &[T]) -> bool {
+        let lua = self.0.lua;
+        let state = lua.state();
+        unsafe {
+            let _sg = StackGuard::new(state);
+            assert_stack(state, 4);
+
+            lua.push_ref(&self.0);
+
+            let len = ffi::lua_rawlen(state, -1) as usize;
+            for i in 0..len {
+                ffi::lua_rawgeti(state, -1, (i + 1) as _);
+                let val = lua.pop_value();
+                if val == Nil {
+                    return i == other.len();
+                }
+                match other.get(i).map(|v| v.clone().into_lua(lua)) {
+                    Some(Ok(other_val)) if val == other_val => continue,
+                    _ => return false,
+                }
+            }
+        }
+        true
+    }
+}
+
+impl<'lua, T> PartialEq<&[T]> for Table<'lua>
+where
+    T: IntoLua<'lua> + Clone,
+{
+    #[inline]
+    fn eq(&self, other: &&[T]) -> bool {
+        self == *other
+    }
+}
+
+impl<'lua, T, const N: usize> PartialEq<[T; N]> for Table<'lua>
+where
+    T: IntoLua<'lua> + Clone,
+{
+    #[inline]
+    fn eq(&self, other: &[T; N]) -> bool {
+        self == &other[..]
+    }
+}
+
 /// An extension trait for `Table`s that provides a variety of convenient functionality.
 pub trait TableExt<'lua>: Sealed {
     /// Calls the table as function assuming it has `__call` metamethod.
