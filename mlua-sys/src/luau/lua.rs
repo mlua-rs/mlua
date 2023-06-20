@@ -156,7 +156,10 @@ extern "C" {
     pub fn lua_pushnumber(L: *mut lua_State, n: lua_Number);
     pub fn lua_pushinteger(L: *mut lua_State, n: lua_Integer);
     pub fn lua_pushunsigned(L: *mut lua_State, n: lua_Unsigned);
+    #[cfg(not(feature = "luau-vector4"))]
     pub fn lua_pushvector(L: *mut lua_State, x: c_float, y: c_float, z: c_float);
+    #[cfg(feature = "luau-vector4")]
+    pub fn lua_pushvector(L: *mut lua_State, x: c_float, y: c_float, z: c_float, w: c_float);
     #[link_name = "lua_pushlstring"]
     pub fn lua_pushlstring_(L: *mut lua_State, s: *const c_char, l: usize);
     #[link_name = "lua_pushstring"]

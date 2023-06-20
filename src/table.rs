@@ -720,6 +720,32 @@ impl<'lua> Table<'lua> {
         }
     }
 
+    /// Sets element value at position `idx` without invoking metamethods.
+    #[allow(dead_code)]
+    pub(crate) fn raw_seti<V: IntoLua<'lua>>(&self, idx: usize, value: V) -> Result<()> {
+        #[cfg(feature = "luau")]
+        self.check_readonly_write()?;
+
+        let lua = self.0.lua;
+        let state = lua.state();
+        let value = value.into_lua(lua)?;
+
+        unsafe {
+            let _sg = StackGuard::new(state);
+            check_stack(state, 5)?;
+
+            lua.push_ref(&self.0);
+            lua.push_value(value)?;
+
+            if lua.unlikely_memory_error() {
+                ffi::lua_rawseti(state, -2, idx as _);
+            } else {
+                protect_lua!(state, 2, 0, |state| ffi::lua_rawseti(state, -2, idx as _))?;
+            }
+            Ok(())
+        }
+    }
+
     #[cfg(feature = "serialize")]
     pub(crate) fn is_array(&self) -> bool {
         let lua = self.0.lua;
@@ -810,7 +836,7 @@ where
 
             lua.push_ref(&self.0);
 
-            let len = ffi::lua_rawlen(state, -1) as usize;
+            let len = ffi::lua_rawlen(state, -1);
             for i in 0..len {
                 ffi::lua_rawgeti(state, -1, (i + 1) as _);
                 let val = lua.pop_value();

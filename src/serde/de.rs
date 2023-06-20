@@ -124,7 +124,7 @@ impl<'lua, 'de> serde::Deserializer<'de> for Deserializer<'lua> {
             #[allow(clippy::useless_conversion)]
             Value::Number(n) => visitor.visit_f64(n.into()),
             #[cfg(feature = "luau")]
-            Value::Vector(_, _, _) => self.deserialize_seq(visitor),
+            Value::Vector(_) => self.deserialize_seq(visitor),
             Value::String(s) => match s.to_str() {
                 Ok(s) => visitor.visit_str(s),
                 Err(_) => visitor.visit_bytes(s.as_bytes()),
@@ -223,9 +223,9 @@ impl<'lua, 'de> serde::Deserializer<'de> for Deserializer<'lua> {
     {
         match self.value {
             #[cfg(feature = "luau")]
-            Value::Vector(x, y, z) => {
+            Value::Vector(vec) => {
                 let mut deserializer = VecDeserializer {
-                    vec: [x, y, z],
+                    vec,
                     next: 0,
                     options: self.options,
                     visited: self.visited,
@@ -412,7 +412,7 @@ impl<'lua, 'de> de::SeqAccess<'de> for SeqDeserializer<'lua> {
 
 #[cfg(feature = "luau")]
 struct VecDeserializer {
-    vec: [f32; 3],
+    vec: crate::types::Vector,
     next: usize,
     options: Options,
     visited: Rc<RefCell<FxHashSet<*const c_void>>>,
@@ -426,7 +426,7 @@ impl<'de> de::SeqAccess<'de> for VecDeserializer {
     where
         T: de::DeserializeSeed<'de>,
     {
-        match self.vec.get(self.next) {
+        match self.vec.0.get(self.next) {
             Some(&n) => {
                 self.next += 1;
                 let visited = Rc::clone(&self.visited);
@@ -439,7 +439,7 @@ impl<'de> de::SeqAccess<'de> for VecDeserializer {
     }
 
     fn size_hint(&self) -> Option<usize> {
-        Some(3)
+        Some(crate::types::Vector::SIZE)
     }
 }
 

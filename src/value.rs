@@ -44,7 +44,7 @@ pub enum Value<'lua> {
     /// A Luau vector.
     #[cfg(any(feature = "luau", doc))]
     #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
-    Vector(f32, f32, f32),
+    Vector(crate::types::Vector),
     /// An interned string, managed by Lua.
     ///
     /// Unlike Rust strings, Lua strings may not be valid UTF-8.
@@ -79,7 +79,7 @@ impl<'lua> Value<'lua> {
             Value::Integer(_) => "integer",
             Value::Number(_) => "number",
             #[cfg(feature = "luau")]
-            Value::Vector(_, _, _) => "vector",
+            Value::Vector(_) => "vector",
             Value::String(_) => "string",
             Value::Table(_) => "table",
             Value::Function(_) => "function",
@@ -143,7 +143,7 @@ impl<'lua> Value<'lua> {
             Value::Integer(i) => Ok(i.to_string()),
             Value::Number(n) => Ok(n.to_string()),
             #[cfg(feature = "luau")]
-            Value::Vector(x, y, z) => Ok(format!("vector({x}, {y}, {z})")),
+            Value::Vector(v) => Ok(v.to_string()),
             Value::String(s) => Ok(s.to_str()?.to_string()),
             Value::Table(Table(r))
             | Value::Function(Function(r))
@@ -218,7 +218,7 @@ impl<'lua> Value<'lua> {
             Value::Integer(i) => write!(fmt, "{i}"),
             Value::Number(n) => write!(fmt, "{n}"),
             #[cfg(feature = "luau")]
-            Value::Vector(x, y, z) => write!(fmt, "vector({x}, {y}, {z})"),
+            Value::Vector(v) => write!(fmt, "{v}"),
             Value::String(s) => write!(fmt, "{s:?}"),
             Value::Table(t) if recursive && !visited.contains(&t.to_pointer()) => {
                 t.fmt_pretty(fmt, ident, visited)
@@ -249,7 +249,7 @@ impl fmt::Debug for Value<'_> {
             Value::Integer(i) => write!(fmt, "Integer({i})"),
             Value::Number(n) => write!(fmt, "Number({n})"),
             #[cfg(feature = "luau")]
-            Value::Vector(x, y, z) => write!(fmt, "Vector({x}, {y}, {z})"),
+            Value::Vector(v) => write!(fmt, "{v:?}"),
             Value::String(s) => write!(fmt, "String({s:?})"),
             Value::Table(t) => write!(fmt, "{t:?}"),
             Value::Function(f) => write!(fmt, "{f:?}"),
@@ -271,7 +271,7 @@ impl<'lua> PartialEq for Value<'lua> {
             (Value::Number(a), Value::Integer(b)) => *a == *b as Number,
             (Value::Number(a), Value::Number(b)) => *a == *b,
             #[cfg(feature = "luau")]
-            (Value::Vector(x1, y1, z1), Value::Vector(x2, y2, z2)) => (x1, y1, z1) == (x2, y2, z2),
+            (Value::Vector(v1), Value::Vector(v2)) => v1 == v2,
             (Value::String(a), Value::String(b)) => a == b,
             (Value::Table(a), Value::Table(b)) => a == b,
             (Value::Function(a), Value::Function(b)) => a == b,
@@ -303,7 +303,7 @@ impl<'lua> Serialize for Value<'lua> {
                 .serialize_i64((*i).try_into().expect("cannot convert Lua Integer to i64")),
             Value::Number(n) => serializer.serialize_f64(*n),
             #[cfg(feature = "luau")]
-            Value::Vector(x, y, z) => (x, y, z).serialize(serializer),
+            Value::Vector(v) => v.serialize(serializer),
             Value::String(s) => s.serialize(serializer),
             Value::Table(t) => t.serialize(serializer),
             Value::UserData(ud) => ud.serialize(serializer),

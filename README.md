@@ -46,6 +46,7 @@ Below is a list of the available feature flags. By default `mlua` does not enabl
 * `luajit52`: activate [LuaJIT] support with partial compatibility with Lua 5.2
 * `luau`: activate [Luau] support (auto vendored mode)
 * `luau-jit`: activate [Luau] support with experimental jit backend. This is unstable feature and not recommended to use.
+* `luau-vector4`: activate [Luau] support with 4-dimensional vector.
 * `vendored`: build static Lua(JIT) library from sources during `mlua` compilation using [lua-src] or [luajit-src] crates
 * `module`: enable module mode (building loadable `cdylib` library for Lua)
 * `async`: enable async/await support (any executor can be used, eg. [tokio] or [async-std])

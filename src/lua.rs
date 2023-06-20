@@ -50,7 +50,10 @@ use crate::{hook::HookTriggers, types::HookCallback};
 #[cfg(feature = "luau")]
 use crate::types::InterruptCallback;
 #[cfg(any(feature = "luau", doc))]
-use crate::{chunk::Compiler, types::VmState};
+use crate::{
+    chunk::Compiler,
+    types::{Vector, VmState},
+};
 
 #[cfg(feature = "async")]
 use {
@@ -2295,8 +2298,11 @@ impl Lua {
             }
 
             #[cfg(feature = "luau")]
-            Value::Vector(x, y, z) => {
-                ffi::lua_pushvector(state, x, y, z);
+            Value::Vector(v) => {
+                #[cfg(not(feature = "luau-vector4"))]
+                ffi::lua_pushvector(state, v.x(), v.y(), v.z());
+                #[cfg(feature = "luau-vector4")]
+                ffi::lua_pushvector(state, v.x(), v.y(), v.z(), v.w());
             }
 
             Value::String(s) => {
@@ -2379,7 +2385,10 @@ impl Lua {
             ffi::LUA_TVECTOR => {
                 let v = ffi::lua_tovector(state, -1);
                 mlua_debug_assert!(!v.is_null(), "vector is null");
-                let vec = Value::Vector(*v, *v.add(1), *v.add(2));
+                #[cfg(not(feature = "luau-vector4"))]
+                let vec = Value::Vector(Vector([*v, *v.add(1), *v.add(2)]));
+                #[cfg(feature = "luau-vector4")]
+                let vec = Value::Vector(Vector([*v, *v.add(1), *v.add(2), *v.add(3)]));
                 ffi::lua_pop(state, 1);
                 vec
             }

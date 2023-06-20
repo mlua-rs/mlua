@@ -145,7 +145,7 @@ fn test_serialize_failure() -> Result<(), Box<dyn StdError>> {
     Ok(())
 }
 
-#[cfg(feature = "luau")]
+#[cfg(all(feature = "luau", not(feature = "luau-vector4")))]
 #[test]
 fn test_serialize_vector() -> Result<(), Box<dyn StdError>> {
     let lua = Lua::new();
@@ -153,12 +153,35 @@ fn test_serialize_vector() -> Result<(), Box<dyn StdError>> {
     let globals = lua.globals();
     globals.set(
         "vector",
-        lua.create_function(|_, (x, y, z)| Ok(Value::Vector(x, y, z)))?,
+        lua.create_function(|_, (x, y, z)| Ok(mlua::Vector::new(x, y, z)))?,
     )?;
 
     let val = lua.load("{_vector = vector(1, 2, 3)}").eval::<Value>()?;
     let json = serde_json::json!({
         "_vector": [1.0, 2.0, 3.0],
+    });
+    assert_eq!(serde_json::to_value(&val)?, json);
+
+    let expected_json = lua.from_value::<serde_json::Value>(val)?;
+    assert_eq!(expected_json, json);
+
+    Ok(())
+}
+
+#[cfg(feature = "luau-vector4")]
+#[test]
+fn test_serialize_vector() -> Result<(), Box<dyn StdError>> {
+    let lua = Lua::new();
+
+    let globals = lua.globals();
+    globals.set(
+        "vector",
+        lua.create_function(|_, (x, y, z, w)| Ok(mlua::Vector::new(x, y, z, w)))?,
+    )?;
+
+    let val = lua.load("{_vector = vector(1, 2, 3, 4)}").eval::<Value>()?;
+    let json = serde_json::json!({
+        "_vector": [1.0, 2.0, 3.0, 4.0],
     });
     assert_eq!(serde_json::to_value(&val)?, json);
 

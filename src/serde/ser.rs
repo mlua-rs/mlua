@@ -7,8 +7,6 @@ use crate::error::{Error, Result};
 use crate::lua::Lua;
 use crate::string::String;
 use crate::table::Table;
-use crate::types::Integer;
-use crate::util::{check_stack, StackGuard};
 use crate::value::{IntoLua, Value};
 
 /// A struct for serializing Rust values into Lua values.
@@ -120,9 +118,9 @@ impl<'lua> ser::Serializer for Serializer<'lua> {
 
     // Associated types for keeping track of additional state while serializing
     // compound data structures like sequences and maps.
-    type SerializeSeq = SerializeVec<'lua>;
-    type SerializeTuple = SerializeVec<'lua>;
-    type SerializeTupleStruct = SerializeVec<'lua>;
+    type SerializeSeq = SerializeSeq<'lua>;
+    type SerializeTuple = SerializeSeq<'lua>;
+    type SerializeTupleStruct = SerializeSeq<'lua>;
     type SerializeTupleVariant = SerializeTupleVariant<'lua>;
     type SerializeMap = SerializeMap<'lua>;
     type SerializeStruct = SerializeMap<'lua>;
@@ -240,8 +238,7 @@ impl<'lua> ser::Serializer for Serializer<'lua> {
         if self.options.set_array_metatable {
             table.set_metatable(Some(self.lua.array_metatable()));
         }
-        let options = self.options;
-        Ok(SerializeVec { table, options })
+        Ok(SerializeSeq::new(table, self.options))
     }
 
     #[inline]
@@ -252,9 +249,14 @@ impl<'lua> ser::Serializer for Serializer<'lua> {
     #[inline]
     fn serialize_tuple_struct(
         self,
-        _name: &'static str,
+        name: &'static str,
         len: usize,
     ) -> Result<Self::SerializeTupleStruct> {
+        #[cfg(feature = "luau")]
+        if name == "Vector" && len == crate::types::Vector::SIZE {
+            return Ok(SerializeSeq::new_vector(self.lua, self.options));
+        }
+        _ = name;
         self.serialize_seq(Some(len))
     }
 
@@ -305,12 +307,40 @@ impl<'lua> ser::Serializer for Serializer<'lua> {
 }
 
 #[doc(hidden)]
-pub struct SerializeVec<'lua> {
-    table: Table<'lua>,
+pub struct SerializeSeq<'lua> {
+    lua: &'lua Lua,
+    #[cfg(feature = "luau")]
+    vector: Option<crate::types::Vector>,
+    table: Option<Table<'lua>>,
+    next: usize,
     options: Options,
 }
 
-impl<'lua> ser::SerializeSeq for SerializeVec<'lua> {
+impl<'lua> SerializeSeq<'lua> {
+    const fn new(table: Table<'lua>, options: Options) -> Self {
+        Self {
+            lua: table.0.lua,
+            #[cfg(feature = "luau")]
+            vector: None,
+            table: Some(table),
+            next: 0,
+            options,
+        }
+    }
+
+    #[cfg(feature = "luau")]
+    const fn new_vector(lua: &'lua Lua, options: Options) -> Self {
+        Self {
+            lua,
+            vector: Some(crate::types::Vector::zero()),
+            table: None,
+            next: 0,
+            options,
+        }
+    }
+}
+
+impl<'lua> ser::SerializeSeq for SerializeSeq<'lua> {
     type Ok = Value<'lua>;
     type Error = Error;
 
@@ -318,35 +348,19 @@ impl<'lua> ser::SerializeSeq for SerializeVec<'lua> {
     where
         T: Serialize + ?Sized,
     {
-        let lua = self.table.0.lua;
-        let state = lua.state();
-        let value = lua.to_value_with(value, self.options)?;
-        unsafe {
-            let _sg = StackGuard::new(state);
-            check_stack(state, 4)?;
-
-            lua.push_ref(&self.table.0);
-            lua.push_value(value)?;
-            if lua.unlikely_memory_error() {
-                let len = ffi::lua_rawlen(state, -2) as Integer;
-                ffi::lua_rawseti(state, -2, len + 1);
-                ffi::lua_pop(state, 1);
-                Ok(())
-            } else {
-                protect_lua!(state, 2, 0, fn(state) {
-                    let len = ffi::lua_rawlen(state, -2) as Integer;
-                    ffi::lua_rawseti(state, -2, len + 1);
-                })
-            }
-        }
+        let value = self.lua.to_value_with(value, self.options)?;
+        let table = self.table.as_ref().unwrap();
+        table.raw_seti(self.next + 1, value)?;
+        self.next += 1;
+        Ok(())
     }
 
     fn end(self) -> Result<Value<'lua>> {
-        Ok(Value::Table(self.table))
+        Ok(Value::Table(self.table.unwrap()))
     }
 }
 
-impl<'lua> ser::SerializeTuple for SerializeVec<'lua> {
+impl<'lua> ser::SerializeTuple for SerializeSeq<'lua> {
     type Ok = Value<'lua>;
     type Error = Error;
 
@@ -362,7 +376,7 @@ impl<'lua> ser::SerializeTuple for SerializeVec<'lua> {
     }
 }
 
-impl<'lua> ser::SerializeTupleStruct for SerializeVec<'lua> {
+impl<'lua> ser::SerializeTupleStruct for SerializeSeq<'lua> {
     type Ok = Value<'lua>;
     type Error = Error;
 
@@ -370,10 +384,22 @@ impl<'lua> ser::SerializeTupleStruct for SerializeVec<'lua> {
     where
         T: Serialize + ?Sized,
     {
+        #[cfg(feature = "luau")]
+        if let Some(vector) = self.vector.as_mut() {
+            let value = self.lua.to_value_with(value, self.options)?;
+            let value = self.lua.unpack(value)?;
+            vector.0[self.next] = value;
+            self.next += 1;
+            return Ok(());
+        }
         ser::SerializeSeq::serialize_element(self, value)
     }
 
     fn end(self) -> Result<Value<'lua>> {
+        #[cfg(feature = "luau")]
+        if let Some(vector) = self.vector {
+            return Ok(Value::Vector(vector));
+        }
         ser::SerializeSeq::end(self)
     }
 }
@@ -394,9 +420,7 @@ impl<'lua> ser::SerializeTupleVariant for SerializeTupleVariant<'lua> {
         T: Serialize + ?Sized,
     {
         let lua = self.table.0.lua;
-        let idx = self.table.raw_len() + 1;
-        self.table
-            .raw_insert(idx, lua.to_value_with(value, self.options)?)
+        self.table.raw_push(lua.to_value_with(value, self.options)?)
     }
 
     fn end(self) -> Result<Value<'lua>> {

@@ -126,6 +126,12 @@ unsafe extern "C" fn lua_vector(state: *mut ffi::lua_State) -> c_int {
     let x = ffi::luaL_checknumber(state, 1) as c_float;
     let y = ffi::luaL_checknumber(state, 2) as c_float;
     let z = ffi::luaL_checknumber(state, 3) as c_float;
+    #[cfg(feature = "luau-vector4")]
+    let w = ffi::luaL_checknumber(state, 4) as c_float;
+
+    #[cfg(not(feature = "luau-vector4"))]
     ffi::lua_pushvector(state, x, y, z);
+    #[cfg(feature = "luau-vector4")]
+    ffi::lua_pushvector(state, x, y, z, w);
     1
 }

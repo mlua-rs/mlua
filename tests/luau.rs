@@ -7,7 +7,9 @@ use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
-use mlua::{Compiler, CoverageInfo, Error, Lua, Result, Table, ThreadStatus, Value, VmState};
+use mlua::{
+    Compiler, CoverageInfo, Error, Lua, Result, Table, ThreadStatus, Value, Vector, VmState,
+};
 
 #[test]
 fn test_version() -> Result<()> {
@@ -50,12 +52,17 @@ fn test_require() -> Result<()> {
     .exec()
 }
 
+#[cfg(not(feature = "luau-vector4"))]
 #[test]
 fn test_vectors() -> Result<()> {
     let lua = Lua::new();
 
-    let v: [f32; 3] = lua.load("vector(1, 2, 3) + vector(3, 2, 1)").eval()?;
+    let v: Vector = lua.load("vector(1, 2, 3) + vector(3, 2, 1)").eval()?;
     assert_eq!(v, [4.0, 4.0, 4.0]);
+
+    // Test conversion into Rust array
+    let v: [f64; 3] = lua.load("vector(1, 2, 3)").eval()?;
+    assert!(v == [1.0, 2.0, 3.0]);
 
     // Test vector methods
     lua.load(
@@ -75,6 +82,46 @@ fn test_vectors() -> Result<()> {
         assert(v.x == 1)
         assert(v.y == 2)
         assert(v.z == 3)
+    "#,
+    )
+    .set_compiler(Compiler::new().set_vector_ctor(Some("vector".to_string())))
+    .exec()?;
+
+    Ok(())
+}
+
+#[cfg(feature = "luau-vector4")]
+#[test]
+fn test_vectors() -> Result<()> {
+    let lua = Lua::new();
+
+    let v: Vector = lua.load("vector(1, 2, 3, 4) + vector(4, 3, 2, 1)").eval()?;
+    assert_eq!(v, [5.0, 5.0, 5.0, 5.0]);
+
+    // Test conversion into Rust array
+    let v: [f64; 4] = lua.load("vector(1, 2, 3, 4)").eval()?;
+    assert!(v == [1.0, 2.0, 3.0, 4.0]);
+
+    // Test vector methods
+    lua.load(
+        r#"
+        local v = vector(1, 2, 3, 4)
+        assert(v.x == 1)
+        assert(v.y == 2)
+        assert(v.z == 3)
+        assert(v.w == 4)
+    "#,
+    )
+    .exec()?;
+
+    // Test vector methods (fastcall)
+    lua.load(
+        r#"
+        local v = vector(1, 2, 3, 4)
+        assert(v.x == 1)
+        assert(v.y == 2)
+        assert(v.z == 3)
+        assert(v.w == 4)
     "#,
     )
     .set_compiler(Compiler::new().set_vector_ctor(Some("vector".to_string())))
@@ -254,8 +301,8 @@ fn test_coverage() -> Result<()> {
 
     let f = lua
         .load(
-            r#"local v = vector(1, 2, 3)
-        assert(v.x == 1 and v.y == 2 and v.z == 3)
+            r#"local s = "abc"
+        assert(#s == 3)
 
         function abc(i)
             if i < 5 then

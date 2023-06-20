@@ -23,6 +23,7 @@ pub fn probe_lua() -> Option<PathBuf> {
     #[cfg(feature = "luau")]
     let artifacts = luau0_src::Build::new()
         .enable_codegen(cfg!(feature = "luau-codegen"))
+        .set_vector_size(if cfg!(feature = "luau-vector4") { 4 } else { 3 })
         .build();
 
     artifacts.print_cargo_metadata();

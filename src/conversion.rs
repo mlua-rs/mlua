@@ -292,6 +292,29 @@ impl<'lua> FromLua<'lua> for LightUserData {
     }
 }
 
+#[cfg(feature = "luau")]
+impl<'lua> IntoLua<'lua> for crate::types::Vector {
+    #[inline]
+    fn into_lua(self, _: &'lua Lua) -> Result<Value<'lua>> {
+        Ok(Value::Vector(self))
+    }
+}
+
+#[cfg(feature = "luau")]
+impl<'lua> FromLua<'lua> for crate::types::Vector {
+    #[inline]
+    fn from_lua(value: Value<'lua>, _: &'lua Lua) -> Result<Self> {
+        match value {
+            Value::Vector(v) => Ok(v),
+            _ => Err(Error::FromLuaConversionError {
+                from: value.type_name(),
+                to: "vector",
+                message: None,
+            }),
+        }
+    }
+}
+
 impl<'lua> IntoLua<'lua> for StdString {
     #[inline]
     fn into_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
@@ -561,16 +584,17 @@ where
     fn from_lua(value: Value<'lua>, _lua: &'lua Lua) -> Result<Self> {
         match value {
             #[cfg(feature = "luau")]
-            Value::Vector(x, y, z) if N == 3 => Ok(mlua_expect!(
-                vec![
-                    T::from_lua(Value::Number(x as _), _lua)?,
-                    T::from_lua(Value::Number(y as _), _lua)?,
-                    T::from_lua(Value::Number(z as _), _lua)?,
-                ]
-                .try_into()
-                .map_err(|_| ()),
-                "cannot convert vector to array"
-            )),
+            #[rustfmt::skip]
+            Value::Vector(v) if N == crate::types::Vector::SIZE => unsafe {
+                use std::{mem, ptr};
+                let mut arr: [mem::MaybeUninit<T>; N] = mem::MaybeUninit::uninit().assume_init();
+                ptr::write(arr[0].as_mut_ptr() , T::from_lua(Value::Number(v.x() as _), _lua)?);
+                ptr::write(arr[1].as_mut_ptr(), T::from_lua(Value::Number(v.y() as _), _lua)?);
+                ptr::write(arr[2].as_mut_ptr(), T::from_lua(Value::Number(v.z() as _), _lua)?);
+                #[cfg(feature = "luau-vector4")]
+                ptr::write(arr[3].as_mut_ptr(), T::from_lua(Value::Number(v.w() as _), _lua)?);
+                Ok(mem::transmute_copy(&arr))
+            },
             Value::Table(table) => {
                 let vec = table.sequence_values().collect::<Result<Vec<_>>>()?;
                 vec.try_into()
@@ -614,12 +638,6 @@ impl<'lua, T: FromLua<'lua>> FromLua<'lua> for Vec<T> {
     #[inline]
     fn from_lua(value: Value<'lua>, _lua: &'lua Lua) -> Result<Self> {
         match value {
-            #[cfg(feature = "luau")]
-            Value::Vector(x, y, z) => Ok(vec![
-                T::from_lua(Value::Number(x as _), _lua)?,
-                T::from_lua(Value::Number(y as _), _lua)?,
-                T::from_lua(Value::Number(z as _), _lua)?,
-            ]),
             Value::Table(table) => table.sequence_values().collect(),
             _ => Err(Error::FromLuaConversionError {
                 from: value.type_name(),

@@ -101,10 +101,15 @@ fn test_value_to_string() -> Result<()> {
     );
     assert_eq!(Value::Integer(1).to_string()?, "1");
     assert_eq!(Value::Number(34.59).to_string()?, "34.59");
-    #[cfg(feature = "luau")]
+    #[cfg(all(feature = "luau", not(feature = "luau-vector4")))]
     assert_eq!(
-        Value::Vector(10.0, 11.1, 12.2).to_string()?,
+        Value::Vector(mlua::Vector::new(10.0, 11.1, 12.2)).to_string()?,
         "vector(10, 11.1, 12.2)"
+    );
+    #[cfg(feature = "luau-vector4")]
+    assert_eq!(
+        Value::Vector(mlua::Vector::new(10.0, 11.1, 12.2, 13.3)).to_string()?,
+        "vector(10, 11.1, 12.2, 13.3)"
     );
     assert_eq!(
         Value::String(lua.create_string("hello")?).to_string()?,
