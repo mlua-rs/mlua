@@ -1628,6 +1628,13 @@ impl Lua {
     ///
     /// Equivalent to `coroutine.create`.
     pub fn create_thread<'lua>(&'lua self, func: Function) -> Result<Thread<'lua>> {
+        self.create_thread_inner(&func)
+    }
+
+    /// Wraps a Lua function into a new thread (or coroutine).
+    ///
+    /// Takes function by reference.
+    fn create_thread_inner<'lua>(&'lua self, func: &Function) -> Result<Thread<'lua>> {
         let state = self.state();
         unsafe {
             let _sg = StackGuard::new(state);
@@ -1676,7 +1683,7 @@ impl Lua {
                 return Ok(Thread(LuaRef::new(self, index)));
             }
         };
-        self.create_thread(func.clone())
+        self.create_thread_inner(func)
     }
 
     /// Resets thread (coroutine) and returns to the pool for later use.
