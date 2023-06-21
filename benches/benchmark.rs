@@ -264,17 +264,19 @@ fn call_userdata_method(c: &mut Criterion) {
 }
 
 fn call_async_userdata_method(c: &mut Criterion) {
-    #[derive(Clone, Copy)]
-    struct UserData(i64);
+    struct UserData(String);
+
     impl LuaUserData for UserData {
         fn add_methods<'lua, M: LuaUserDataMethods<'lua, Self>>(methods: &mut M) {
-            methods.add_async_method("method", |_, this, ()| async move { Ok(this.0) });
+            methods.add_async_method("method", |_, this, ()| async move { Ok(this.0.clone()) });
         }
     }
 
     let options = LuaOptions::new().thread_pool_size(1024);
     let lua = Lua::new_with(LuaStdLib::ALL_SAFE, options).unwrap();
-    lua.globals().set("userdata", UserData(10)).unwrap();
+    lua.globals()
+        .set("userdata", UserData("hello".to_string()))
+        .unwrap();
 
     c.bench_function("call async [userdata method] 10", |b| {
         let rt = Runtime::new().unwrap();
