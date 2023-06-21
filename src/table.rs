@@ -888,11 +888,10 @@ pub trait TableExt<'lua>: Sealed {
     /// The metamethod is called with the table as its first argument, followed by the passed arguments.
     #[cfg(feature = "async")]
     #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
-    fn call_async<'fut, A, R>(&self, args: A) -> LocalBoxFuture<'fut, Result<R>>
+    fn call_async<A, R>(&self, args: A) -> LocalBoxFuture<'lua, Result<R>>
     where
-        'lua: 'fut,
         A: IntoLuaMulti<'lua>,
-        R: FromLuaMulti<'lua> + 'fut;
+        R: FromLuaMulti<'lua> + 'lua;
 
     /// Gets the function associated to `key` from the table and executes it,
     /// passing the table itself along with `args` as function arguments.
@@ -928,12 +927,11 @@ pub trait TableExt<'lua>: Sealed {
     /// This might invoke the `__index` metamethod.
     #[cfg(feature = "async")]
     #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
-    fn call_async_method<'fut, K, A, R>(&self, key: K, args: A) -> LocalBoxFuture<'fut, Result<R>>
+    fn call_async_method<K, A, R>(&self, key: K, args: A) -> LocalBoxFuture<'lua, Result<R>>
     where
-        'lua: 'fut,
         K: IntoLua<'lua>,
         A: IntoLuaMulti<'lua>,
-        R: FromLuaMulti<'lua> + 'fut;
+        R: FromLuaMulti<'lua> + 'lua;
 
     /// Gets the function associated to `key` from the table and asynchronously executes it,
     /// passing `args` as function arguments and returning Future.
@@ -943,16 +941,11 @@ pub trait TableExt<'lua>: Sealed {
     /// This might invoke the `__index` metamethod.
     #[cfg(feature = "async")]
     #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
-    fn call_async_function<'fut, K, A, R>(
-        &self,
-        key: K,
-        args: A,
-    ) -> LocalBoxFuture<'fut, Result<R>>
+    fn call_async_function<K, A, R>(&self, key: K, args: A) -> LocalBoxFuture<'lua, Result<R>>
     where
-        'lua: 'fut,
         K: IntoLua<'lua>,
         A: IntoLuaMulti<'lua>,
-        R: FromLuaMulti<'lua> + 'fut;
+        R: FromLuaMulti<'lua> + 'lua;
 }
 
 impl<'lua> TableExt<'lua> for Table<'lua> {
@@ -966,13 +959,17 @@ impl<'lua> TableExt<'lua> for Table<'lua> {
     }
 
     #[cfg(feature = "async")]
-    fn call_async<'fut, A, R>(&self, args: A) -> LocalBoxFuture<'fut, Result<R>>
+    fn call_async<A, R>(&self, args: A) -> LocalBoxFuture<'lua, Result<R>>
     where
-        'lua: 'fut,
         A: IntoLuaMulti<'lua>,
-        R: FromLuaMulti<'lua> + 'fut,
+        R: FromLuaMulti<'lua> + 'lua,
     {
-        Function(self.0.clone()).call_async(args)
+        let args = match args.into_lua_multi(self.0.lua) {
+            Ok(args) => args,
+            Err(e) => return Box::pin(future::err(e)),
+        };
+        let func = Function(self.0.clone());
+        Box::pin(async move { func.call_async(args).await })
     }
 
     fn call_method<K, A, R>(&self, key: K, args: A) -> Result<R>
@@ -997,12 +994,11 @@ impl<'lua> TableExt<'lua> for Table<'lua> {
     }
 
     #[cfg(feature = "async")]
-    fn call_async_method<'fut, K, A, R>(&self, key: K, args: A) -> LocalBoxFuture<'fut, Result<R>>
+    fn call_async_method<K, A, R>(&self, key: K, args: A) -> LocalBoxFuture<'lua, Result<R>>
     where
-        'lua: 'fut,
         K: IntoLua<'lua>,
         A: IntoLuaMulti<'lua>,
-        R: FromLuaMulti<'lua> + 'fut,
+        R: FromLuaMulti<'lua> + 'lua,
     {
         let lua = self.0.lua;
         let mut args = match args.into_lua_multi(lua) {
@@ -1014,15 +1010,19 @@ impl<'lua> TableExt<'lua> for Table<'lua> {
     }
 
     #[cfg(feature = "async")]
-    fn call_async_function<'fut, K, A, R>(&self, key: K, args: A) -> LocalBoxFuture<'fut, Result<R>>
+    fn call_async_function<K, A, R>(&self, key: K, args: A) -> LocalBoxFuture<'lua, Result<R>>
     where
-        'lua: 'fut,
         K: IntoLua<'lua>,
         A: IntoLuaMulti<'lua>,
-        R: FromLuaMulti<'lua> + 'fut,
+        R: FromLuaMulti<'lua> + 'lua,
     {
+        let lua = self.0.lua;
+        let args = match args.into_lua_multi(lua) {
+            Ok(args) => args,
+            Err(e) => return Box::pin(future::err(e)),
+        };
         match self.get::<_, Function>(key) {
-            Ok(func) => func.call_async(args),
+            Ok(func) => Box::pin(async move { func.call_async(args).await }),
             Err(e) => Box::pin(future::err(e)),
         }
     }

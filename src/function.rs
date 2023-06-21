@@ -17,7 +17,7 @@ use crate::value::{FromLuaMulti, IntoLua, IntoLuaMulti};
 #[cfg(feature = "async")]
 use {
     crate::types::AsyncCallback,
-    futures_util::future::{self, Future, LocalBoxFuture, TryFutureExt},
+    futures_util::future::{self, Future},
 };
 
 /// Handle to an internal Lua function.
@@ -77,7 +77,7 @@ pub struct FunctionInfo {
 #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CoverageInfo {
-    pub function: Option<std::string::String>,
+    pub function: Option<String>,
     pub line_defined: i32,
     pub depth: i32,
     pub hits: Vec<i32>,
@@ -188,21 +188,18 @@ impl<'lua> Function<'lua> {
     /// [`AsyncThread`]: crate::AsyncThread
     #[cfg(feature = "async")]
     #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
-    pub fn call_async<'fut, A, R>(&self, args: A) -> LocalBoxFuture<'fut, Result<R>>
+    pub fn call_async<A, R>(&self, args: A) -> impl Future<Output = Result<R>> + 'lua
     where
-        'lua: 'fut,
         A: IntoLuaMulti<'lua>,
-        R: FromLuaMulti<'lua> + 'fut,
+        R: FromLuaMulti<'lua> + 'lua,
     {
         let lua = self.0.lua;
-        match lua.create_recycled_thread(self) {
-            Ok(t) => {
-                let mut t = t.into_async(args);
-                t.set_recyclable(true);
-                Box::pin(t)
-            }
-            Err(e) => Box::pin(future::err(e)),
-        }
+        let thread_res = lua.create_recycled_thread(self).map(|th| {
+            let mut th = th.into_async(args);
+            th.set_recyclable(true);
+            th
+        });
+        async move { thread_res?.await }
     }
 
     /// Returns a function that, when called, calls `self`, passing `args` as the first set of
@@ -544,12 +541,12 @@ impl OwnedFunction {
     #[cfg(feature = "async")]
     #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
     #[inline]
-    pub fn call_async<'lua, A, R>(&'lua self, args: A) -> LocalBoxFuture<'lua, Result<R>>
+    pub async fn call_async<'lua, A, R>(&'lua self, args: A) -> Result<R>
     where
         A: IntoLuaMulti<'lua>,
         R: FromLuaMulti<'lua> + 'lua,
     {
-        self.to_ref().call_async(args)
+        self.to_ref().call_async(args).await
     }
 }
 
@@ -604,7 +601,8 @@ impl<'lua> Function<'lua> {
                 Ok(args) => args,
                 Err(e) => return Box::pin(future::err(e)),
             };
-            Box::pin(func(lua, args).and_then(move |ret| future::ready(ret.into_lua_multi(lua))))
+            let fut = func(lua, args);
+            Box::pin(async move { fut.await?.into_lua_multi(lua) })
         }))
     }
 }

@@ -11,9 +11,6 @@ use crate::lua::Lua;
 use crate::table::Table;
 use crate::value::{FromLuaMulti, IntoLua, IntoLuaMulti};
 
-#[cfg(feature = "async")]
-use futures_util::future::{self, LocalBoxFuture};
-
 /// Trait for types [loadable by Lua] and convertible to a [`Chunk`]
 ///
 /// [loadable by Lua]: https://www.lua.org/manual/5.4/manual.html#3.3.2
@@ -312,8 +309,8 @@ impl<'lua, 'a> Chunk<'lua, 'a> {
     /// [`exec`]: #method.exec
     #[cfg(feature = "async")]
     #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
-    pub fn exec_async(self) -> LocalBoxFuture<'lua, Result<()>> {
-        self.call_async(())
+    pub async fn exec_async(self) -> Result<()> {
+        self.call_async(()).await
     }
 
     /// Evaluate the chunk as either an expression or block.
@@ -344,17 +341,16 @@ impl<'lua, 'a> Chunk<'lua, 'a> {
     /// [`eval`]: #method.eval
     #[cfg(feature = "async")]
     #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
-    pub fn eval_async<'fut, R>(self) -> LocalBoxFuture<'fut, Result<R>>
+    pub async fn eval_async<R>(self) -> Result<R>
     where
-        'lua: 'fut,
-        R: FromLuaMulti<'lua> + 'fut,
+        R: FromLuaMulti<'lua> + 'lua,
     {
         if self.detect_mode() == ChunkMode::Binary {
-            self.call_async(())
+            self.call_async(()).await
         } else if let Ok(function) = self.to_expression() {
-            function.call_async(())
+            function.call_async(()).await
         } else {
-            self.call_async(())
+            self.call_async(()).await
         }
     }
 
@@ -374,16 +370,12 @@ impl<'lua, 'a> Chunk<'lua, 'a> {
     /// [`call`]: #method.call
     #[cfg(feature = "async")]
     #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
-    pub fn call_async<'fut, A, R>(self, args: A) -> LocalBoxFuture<'fut, Result<R>>
+    pub async fn call_async<A, R>(self, args: A) -> Result<R>
     where
-        'lua: 'fut,
         A: IntoLuaMulti<'lua>,
-        R: FromLuaMulti<'lua> + 'fut,
+        R: FromLuaMulti<'lua> + 'lua,
     {
-        match self.into_function() {
-            Ok(func) => func.call_async(args),
-            Err(e) => Box::pin(future::err(e)),
-        }
+        self.into_function()?.call_async(args).await
     }
 
     /// Load this chunk into a regular `Function`.

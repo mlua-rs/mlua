@@ -58,7 +58,7 @@ use crate::{
 #[cfg(feature = "async")]
 use {
     crate::types::{AsyncCallback, AsyncCallbackUpvalue, AsyncPollUpvalue},
-    futures_util::future::{self, Future, TryFutureExt},
+    futures_util::future::{self, Future},
     futures_util::task::{noop_waker_ref, Context, Poll, Waker},
 };
 
@@ -1619,7 +1619,8 @@ impl Lua {
                 Ok(args) => args,
                 Err(e) => return Box::pin(future::err(e)),
             };
-            Box::pin(func(lua, args).and_then(move |ret| future::ready(ret.into_lua_multi(lua))))
+            let fut = func(lua, args);
+            Box::pin(async move { fut.await?.into_lua_multi(lua) })
         }))
     }
 
