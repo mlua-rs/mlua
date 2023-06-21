@@ -130,7 +130,7 @@ pub enum Error {
     ///
     /// [`AnyUserData`]: crate::AnyUserData
     UserDataDestructed,
-    /// An [`AnyUserData`] immutable borrow failed because it is already borrowed mutably.
+    /// An [`AnyUserData`] immutable borrow failed.
     ///
     /// This error can occur when a method on a [`UserData`] type calls back into Lua, which then
     /// tries to call a method on the same [`UserData`] type. Consider restructuring your API to
@@ -139,7 +139,7 @@ pub enum Error {
     /// [`AnyUserData`]: crate::AnyUserData
     /// [`UserData`]: crate::UserData
     UserDataBorrowError,
-    /// An [`AnyUserData`] mutable borrow failed because it is already borrowed.
+    /// An [`AnyUserData`] mutable borrow failed.
     ///
     /// This error can occur when a method on a [`UserData`] type calls back into Lua, which then
     /// tries to call a method on the same [`UserData`] type. Consider restructuring your API to
@@ -270,8 +270,8 @@ impl fmt::Display for Error {
             Error::CoroutineInactive => write!(fmt, "cannot resume inactive coroutine"),
             Error::UserDataTypeMismatch => write!(fmt, "userdata is not expected type"),
             Error::UserDataDestructed => write!(fmt, "userdata has been destructed"),
-            Error::UserDataBorrowError => write!(fmt, "userdata already mutably borrowed"),
-            Error::UserDataBorrowMutError => write!(fmt, "userdata already borrowed"),
+            Error::UserDataBorrowError => write!(fmt, "error borrowing userdata"),
+            Error::UserDataBorrowMutError => write!(fmt, "error mutably borrowing userdata"),
             Error::MetaMethodRestricted(ref method) => write!(fmt, "metamethod {method} is restricted"),
             Error::MetaMethodTypeError { ref method, type_name, ref message } => {
                 write!(fmt, "metamethod {method} has unsupported type {type_name}")?;

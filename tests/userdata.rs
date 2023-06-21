@@ -625,10 +625,33 @@ fn test_userdata_wrapped() -> Result<()> {
     let lua = Lua::new();
     let globals = lua.globals();
 
+    // Rc<T>
     #[cfg(not(feature = "send"))]
     {
-        let ud1 = Rc::new(RefCell::new(MyUserData(1)));
-        globals.set("rc_refcell_ud", ud1.clone())?;
+        let ud = Rc::new(MyUserData(1));
+        globals.set("rc_ud", ud.clone())?;
+        lua.load(
+            r#"
+            assert(rc_ud.static == "constant")
+            local ok, err = pcall(function() rc_ud.data = 2 end)
+            assert(
+                tostring(err):sub(1, 32) == "error mutably borrowing userdata",
+                "expected error mutably borrowing userdata, got " .. tostring(err)
+            )
+            assert(rc_ud.data == 1)
+        "#,
+        )
+        .exec()?;
+        globals.set("rc_ud", Nil)?;
+        lua.gc_collect()?;
+        assert_eq!(Rc::strong_count(&ud), 1);
+    }
+
+    // Rc<RefCell<T>>
+    #[cfg(not(feature = "send"))]
+    {
+        let ud = Rc::new(RefCell::new(MyUserData(1)));
+        globals.set("rc_refcell_ud", ud.clone())?;
         lua.load(
             r#"
             assert(rc_refcell_ud.static == "constant")
@@ -637,12 +660,32 @@ fn test_userdata_wrapped() -> Result<()> {
         "#,
         )
         .exec()?;
-        assert_eq!(ud1.borrow().0, 2);
+        assert_eq!(ud.borrow().0, 2);
         globals.set("rc_refcell_ud", Nil)?;
         lua.gc_collect()?;
-        assert_eq!(Rc::strong_count(&ud1), 1);
+        assert_eq!(Rc::strong_count(&ud), 1);
     }
 
+    // Arc<T>
+    let ud1 = Arc::new(MyUserData(2));
+    globals.set("arc_ud", ud1.clone())?;
+    lua.load(
+        r#"
+        assert(arc_ud.static == "constant")
+        local ok, err = pcall(function() arc_ud.data = 3 end)
+        assert(
+            tostring(err):sub(1, 32) == "error mutably borrowing userdata",
+            "expected error mutably borrowing userdata, got " .. tostring(err)
+        )
+        assert(arc_ud.data == 2)
+    "#,
+    )
+    .exec()?;
+    globals.set("arc_ud", Nil)?;
+    lua.gc_collect()?;
+    assert_eq!(Arc::strong_count(&ud1), 1);
+
+    // Arc<Mutex<T>>
     let ud2 = Arc::new(Mutex::new(MyUserData(2)));
     globals.set("arc_mutex_ud", ud2.clone())?;
     lua.load(
@@ -657,7 +700,11 @@ fn test_userdata_wrapped() -> Result<()> {
     assert_eq!(ud2.lock().unwrap().0, 3);
     #[cfg(feature = "parking_lot")]
     assert_eq!(ud2.lock().0, 3);
+    globals.set("arc_mutex_ud", Nil)?;
+    lua.gc_collect()?;
+    assert_eq!(Arc::strong_count(&ud2), 1);
 
+    // Arc<RwLock<T>>
     let ud3 = Arc::new(RwLock::new(MyUserData(3)));
     globals.set("arc_rwlock_ud", ud3.clone())?;
     lua.load(
@@ -672,12 +719,8 @@ fn test_userdata_wrapped() -> Result<()> {
     assert_eq!(ud3.read().unwrap().0, 4);
     #[cfg(feature = "parking_lot")]
     assert_eq!(ud3.read().0, 4);
-
-    // Test drop
-    globals.set("arc_mutex_ud", Nil)?;
     globals.set("arc_rwlock_ud", Nil)?;
     lua.gc_collect()?;
-    assert_eq!(Arc::strong_count(&ud2), 1);
     assert_eq!(Arc::strong_count(&ud3), 1);
 
     Ok(())
