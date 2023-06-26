@@ -641,12 +641,9 @@ impl<'lua> Table<'lua> {
 
     /// Consume this table and return an iterator over all values in the sequence part of the table.
     ///
-    /// The iterator will yield all values `t[1]`, `t[2]`, and so on, until a `nil` value is
-    /// encountered. This mirrors the behavior of Lua's `ipairs` function and will invoke the
-    /// `__index` metamethod according to the usual rules. However, the deprecated `__ipairs`
-    /// metatable will not be called.
-    ///
-    /// Just like [`pairs`], the values are wrapped in a [`Result`].
+    /// The iterator will yield all values `t[1]`, `t[2]` and so on, until a `nil` value is
+    /// encountered. This mirrors the behavior of Lua's `ipairs` function but does not invoke
+    /// any metamethods.
     ///
     /// # Note
     ///
@@ -685,28 +682,12 @@ impl<'lua> Table<'lua> {
             table: self.0,
             index: Some(1),
             len: None,
-            raw: false,
-            _phantom: PhantomData,
-        }
-    }
-
-    /// Consume this table and return an iterator over all values in the sequence part of the table.
-    ///
-    /// Unlike the `sequence_values`, does not invoke `__index` metamethod when iterating.
-    ///
-    /// [`sequence_values`]: #method.sequence_values
-    pub fn raw_sequence_values<V: FromLua<'lua>>(self) -> TableSequence<'lua, V> {
-        TableSequence {
-            table: self.0,
-            index: Some(1),
-            len: None,
-            raw: true,
             _phantom: PhantomData,
         }
     }
 
     #[cfg(feature = "serialize")]
-    pub(crate) fn raw_sequence_values_by_len<V: FromLua<'lua>>(
+    pub(crate) fn sequence_values_by_len<V: FromLua<'lua>>(
         self,
         len: Option<Integer>,
     ) -> TableSequence<'lua, V> {
@@ -715,7 +696,6 @@ impl<'lua> Table<'lua> {
             table: self.0,
             index: Some(1),
             len: Some(len),
-            raw: true,
             _phantom: PhantomData,
         }
     }
@@ -1051,7 +1031,7 @@ impl<'lua> Serialize for Table<'lua> {
             let len = self.raw_len() as usize;
             if len > 0 || self.is_array() {
                 let mut seq = serializer.serialize_seq(Some(len))?;
-                for v in self.clone().raw_sequence_values_by_len::<Value>(None) {
+                for v in self.clone().sequence_values_by_len::<Value>(None) {
                     let v = v.map_err(serde::ser::Error::custom)?;
                     seq.serialize_element(&v)?;
                 }
@@ -1141,7 +1121,6 @@ pub struct TableSequence<'lua, V> {
     table: LuaRef<'lua>,
     index: Option<Integer>,
     len: Option<Integer>,
-    raw: bool,
     _phantom: PhantomData<V>,
 }
 
@@ -1158,15 +1137,10 @@ where
 
             let res = (|| unsafe {
                 let _sg = StackGuard::new(state);
-                check_stack(state, 1 + if self.raw { 0 } else { 3 })?;
+                check_stack(state, 1)?;
 
                 lua.push_ref(&self.table);
-                let res = if self.raw {
-                    ffi::lua_rawgeti(state, -1, index)
-                } else {
-                    protect_lua!(state, 1, 1, |state| ffi::lua_geti(state, -1, index))?
-                };
-                match res {
+                match ffi::lua_rawgeti(state, -1, index) {
                     ffi::LUA_TNIL if index > self.len.unwrap_or(0) => Ok(None),
                     _ => Ok(Some((index, lua.pop_value()))),
                 }

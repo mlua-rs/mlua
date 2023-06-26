@@ -709,7 +709,7 @@ impl<'lua, T: Eq + Hash + FromLua<'lua>, S: BuildHasher + Default> FromLua<'lua>
     #[inline]
     fn from_lua(value: Value<'lua>, _: &'lua Lua) -> Result<Self> {
         match value {
-            Value::Table(table) if table.len()? > 0 => table.sequence_values().collect(),
+            Value::Table(table) if table.raw_len() > 0 => table.sequence_values().collect(),
             Value::Table(table) => table
                 .pairs::<T, Value<'lua>>()
                 .map(|res| res.map(|(k, _)| k))
@@ -736,7 +736,7 @@ impl<'lua, T: Ord + FromLua<'lua>> FromLua<'lua> for BTreeSet<T> {
     #[inline]
     fn from_lua(value: Value<'lua>, _: &'lua Lua) -> Result<Self> {
         match value {
-            Value::Table(table) if table.len()? > 0 => table.sequence_values().collect(),
+            Value::Table(table) if table.raw_len() > 0 => table.sequence_values().collect(),
             Value::Table(table) => table
                 .pairs::<T, Value<'lua>>()
                 .map(|res| res.map(|(k, _)| k))

@@ -141,7 +141,7 @@ fn test_table_push_pop() -> Result<()> {
     assert_eq!(
         table2
             .clone()
-            .raw_sequence_values::<i64>()
+            .sequence_values::<i64>()
             .collect::<Result<Vec<_>>>()?,
         vec![]
     );
