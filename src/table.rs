@@ -45,7 +45,6 @@ impl OwnedTable {
     }
 }
 
-#[allow(clippy::len_without_is_empty)]
 impl<'lua> Table<'lua> {
     /// Sets a key-value pair in the table.
     ///
@@ -150,11 +149,15 @@ impl<'lua> Table<'lua> {
     }
 
     /// Checks whether the table contains a non-nil value for `key`.
+    ///
+    /// This might invoke the `__index` metamethod.
     pub fn contains_key<K: IntoLua<'lua>>(&self, key: K) -> Result<bool> {
         Ok(self.get::<_, Value>(key)? != Value::Nil)
     }
 
     /// Appends a value to the back of the table.
+    ///
+    /// This might invoke the `__len` and `__newindex` metamethods.
     pub fn push<V: IntoLua<'lua>>(&self, value: V) -> Result<()> {
         // Fast track
         if !self.has_metatable() {
@@ -179,6 +182,8 @@ impl<'lua> Table<'lua> {
     }
 
     /// Removes the last element from the table and returns it.
+    ///
+    /// This might invoke the `__len` and `__newindex` metamethods.
     pub fn pop<V: FromLua<'lua>>(&self) -> Result<V> {
         // Fast track
         if !self.has_metatable() {
@@ -492,6 +497,32 @@ impl<'lua> Table<'lua> {
         unsafe { ffi::lua_rawlen(ref_thread, self.0.index) as Integer }
     }
 
+    /// Returns `true` if the table is empty, without invoking metamethods.
+    ///
+    /// It checks both the array part and the hash part.
+    pub fn is_empty(&self) -> bool {
+        // Check array part
+        if self.raw_len() != 0 {
+            return false;
+        }
+
+        // Check hash part
+        let lua = self.0.lua;
+        let state = lua.state();
+        unsafe {
+            let _sg = StackGuard::new(state);
+            assert_stack(state, 4);
+
+            lua.push_ref(&self.0);
+            ffi::lua_pushnil(state);
+            if ffi::lua_next(state, -2) != 0 {
+                return false;
+            }
+        }
+
+        true
+    }
+
     /// Returns a reference to the metatable of this table, or `None` if no metatable is set.
     ///
     /// Unlike the `getmetatable` Lua function, this method ignores the `__metatable` field.
@@ -717,10 +748,11 @@ impl<'lua> Table<'lua> {
             lua.push_ref(&self.0);
             lua.push_value(value)?;
 
+            let idx = idx.try_into().unwrap();
             if lua.unlikely_memory_error() {
-                ffi::lua_rawseti(state, -2, idx as _);
+                ffi::lua_rawseti(state, -2, idx);
             } else {
-                protect_lua!(state, 2, 0, |state| ffi::lua_rawseti(state, -2, idx as _))?;
+                protect_lua!(state, 2, 0, |state| ffi::lua_rawseti(state, -2, idx))?;
             }
             Ok(())
         }

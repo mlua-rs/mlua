@@ -1,7 +1,7 @@
 use mlua::{Error, Lua, Nil, Result, Table, TableExt, Value};
 
 #[test]
-fn test_set_get() -> Result<()> {
+fn test_globals_set_get() -> Result<()> {
     let lua = Lua::new();
 
     let globals = lua.globals();
@@ -43,6 +43,7 @@ fn test_table() -> Result<()> {
     let table3 = globals.get::<_, Table>("table3")?;
 
     assert_eq!(table1.len()?, 5);
+    assert!(!table1.is_empty());
     assert_eq!(
         table1
             .clone()
@@ -60,6 +61,7 @@ fn test_table() -> Result<()> {
     assert_eq!(table1, [1, 2, 3, 4, 5]);
 
     assert_eq!(table2.len()?, 0);
+    assert!(table2.is_empty());
     assert_eq!(
         table2
             .clone()
@@ -192,8 +194,10 @@ fn test_table_clear() -> Result<()> {
         )
         .eval::<Table>()?;
     assert_eq!(t2.raw_len(), 3);
+    assert!(!t2.is_empty());
     t2.clear()?;
     assert_eq!(t2.raw_len(), 0);
+    assert!(t2.is_empty());
     assert_eq!(t2.raw_get::<_, Value>("a")?, Value::Nil);
     assert_ne!(t2.get_metatable(), None);
 
