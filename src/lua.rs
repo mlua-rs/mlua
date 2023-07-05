@@ -448,7 +448,7 @@ impl Lua {
     ///
     /// Once called, a returned Lua state is cached in the registry and can be retrieved
     /// by calling this function again.
-    #[allow(clippy::missing_safety_doc)]
+    #[allow(clippy::missing_safety_doc, clippy::arc_with_non_send_sync)]
     pub unsafe fn init_from_ptr(state: *mut ffi::lua_State) -> Lua {
         assert!(!state.is_null(), "Lua state is NULL");
         if let Some(lua) = Lua::try_from_ptr(state) {
