@@ -10,7 +10,8 @@ use crate::memory::MemoryState;
 use crate::table::Table;
 use crate::types::{Callback, LuaRef, MaybeSend};
 use crate::util::{
-    assert_stack, check_stack, error_traceback, pop_error, ptr_to_cstr_bytes, StackGuard,
+    assert_stack, check_stack, error_traceback, linenumber_to_usize, pop_error, ptr_to_lossy_str,
+    ptr_to_str, StackGuard,
 };
 use crate::value::{FromLuaMulti, IntoLua, IntoLuaMulti};
 
@@ -52,24 +53,22 @@ impl OwnedFunction {
 /// [`Lua Debug Interface`]: https://www.lua.org/manual/5.4/manual.html#4.7
 #[derive(Clone, Debug)]
 pub struct FunctionInfo {
-    /// A (reasonable) name of the function.
+    /// A (reasonable) name of the function (`None` if the name cannot be found).
     pub name: Option<String>,
-    /// Explains the `name` field ("global", "local", "method", "field", "upvalue", or "").
+    /// Explains the `name` field (can be `global`/`local`/`method`/`field`/`upvalue`/etc).
     ///
     /// Always `None` for Luau.
-    pub name_what: Option<String>,
-    /// A string "Lua" if the function is a Lua function, "C" if it is a C function, "main" if it is the main part of a chunk.
-    pub what: Option<String>,
-    /// The source of the chunk that created the function.
-    pub source: Option<Vec<u8>>,
-    /// A "printable" version of source, to be used in error messages.
-    pub short_src: Option<Vec<u8>>,
+    pub name_what: Option<&'static str>,
+    /// A string `Lua` if the function is a Lua function, `C` if it is a C function, `main` if it is the main part of a chunk.
+    pub what: &'static str,
+    /// Source of the chunk that created the function.
+    pub source: Option<String>,
+    /// A "printable" version of `source`, to be used in error messages.
+    pub short_src: Option<String>,
     /// The line number where the definition of the function starts.
-    pub line_defined: i32,
-    /// The line number where the definition of the function ends.
-    ///
-    /// Always `-1` for Luau.
-    pub last_line_defined: i32,
+    pub line_defined: Option<usize>,
+    /// The line number where the definition of the function ends (not set by Luau).
+    pub last_line_defined: Option<usize>,
 }
 
 /// Luau function coverage snapshot.
@@ -391,23 +390,25 @@ impl<'lua> Function<'lua> {
             mlua_assert!(res != 0, "lua_getinfo failed with `>Sn`");
 
             FunctionInfo {
-                name: ptr_to_cstr_bytes(ar.name).map(|s| String::from_utf8_lossy(s).into_owned()),
+                name: ptr_to_lossy_str(ar.name).map(|s| s.into_owned()),
                 #[cfg(not(feature = "luau"))]
-                name_what: ptr_to_cstr_bytes(ar.namewhat)
-                    .map(|s| String::from_utf8_lossy(s).into_owned()),
+                name_what: match ptr_to_str(ar.namewhat) {
+                    Some("") => None,
+                    val => val,
+                },
                 #[cfg(feature = "luau")]
                 name_what: None,
-                what: ptr_to_cstr_bytes(ar.what).map(|s| String::from_utf8_lossy(s).into_owned()),
-                source: ptr_to_cstr_bytes(ar.source).map(|s| s.to_vec()),
+                what: ptr_to_str(ar.what).unwrap_or("main"),
+                source: ptr_to_lossy_str(ar.source).map(|s| s.into_owned()),
                 #[cfg(not(feature = "luau"))]
-                short_src: ptr_to_cstr_bytes(ar.short_src.as_ptr()).map(|s| s.to_vec()),
+                short_src: ptr_to_lossy_str(ar.short_src.as_ptr()).map(|s| s.into_owned()),
                 #[cfg(feature = "luau")]
-                short_src: ptr_to_cstr_bytes(ar.short_src).map(|s| s.to_vec()),
-                line_defined: ar.linedefined,
+                short_src: ptr_to_lossy_str(ar.short_src).map(|s| s.into_owned()),
+                line_defined: linenumber_to_usize(ar.linedefined),
                 #[cfg(not(feature = "luau"))]
-                last_line_defined: ar.lastlinedefined,
+                last_line_defined: linenumber_to_usize(ar.lastlinedefined),
                 #[cfg(feature = "luau")]
-                last_line_defined: -1,
+                last_line_defined: None,
             }
         }
     }

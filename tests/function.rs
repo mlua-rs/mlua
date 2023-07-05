@@ -196,37 +196,37 @@ fn test_function_info() -> Result<()> {
     let function1_info = function1.info();
     #[cfg(feature = "luau")]
     assert_eq!(function1_info.name.as_deref(), Some("function1"));
-    assert_eq!(function1_info.source.as_deref(), Some(b"source1".as_ref()));
-    assert_eq!(function1_info.line_defined, 2);
+    assert_eq!(function1_info.source.as_deref(), Some("source1"));
+    assert_eq!(function1_info.line_defined, Some(2));
     #[cfg(not(feature = "luau"))]
-    assert_eq!(function1_info.last_line_defined, 4);
+    assert_eq!(function1_info.last_line_defined, Some(4));
     #[cfg(feature = "luau")]
-    assert_eq!(function1_info.last_line_defined, -1);
-    assert_eq!(function1_info.what.as_deref(), Some("Lua"));
+    assert_eq!(function1_info.last_line_defined, None);
+    assert_eq!(function1_info.what, "Lua");
 
     let function2_info = function2.info();
     assert_eq!(function2_info.name, None);
-    assert_eq!(function2_info.source.as_deref(), Some(b"source1".as_ref()));
-    assert_eq!(function2_info.line_defined, 3);
+    assert_eq!(function2_info.source.as_deref(), Some("source1"));
+    assert_eq!(function2_info.line_defined, Some(3));
     #[cfg(not(feature = "luau"))]
-    assert_eq!(function2_info.last_line_defined, 3);
+    assert_eq!(function2_info.last_line_defined, Some(3));
     #[cfg(feature = "luau")]
-    assert_eq!(function2_info.last_line_defined, -1);
-    assert_eq!(function2_info.what.as_deref(), Some("Lua"));
+    assert_eq!(function2_info.last_line_defined, None);
+    assert_eq!(function2_info.what, "Lua");
 
     let function3_info = function3.info();
     assert_eq!(function3_info.name, None);
-    assert_eq!(function3_info.source.as_deref(), Some(b"=[C]".as_ref()));
-    assert_eq!(function3_info.line_defined, -1);
-    assert_eq!(function3_info.last_line_defined, -1);
-    assert_eq!(function3_info.what.as_deref(), Some("C"));
+    assert_eq!(function3_info.source.as_deref(), Some("=[C]"));
+    assert_eq!(function3_info.line_defined, None);
+    assert_eq!(function3_info.last_line_defined, None);
+    assert_eq!(function3_info.what, "C");
 
     let print_info = globals.get::<_, Function>("print")?.info();
     #[cfg(feature = "luau")]
     assert_eq!(print_info.name.as_deref(), Some("print"));
-    assert_eq!(print_info.source.as_deref(), Some(b"=[C]".as_ref()));
-    assert_eq!(print_info.what.as_deref(), Some("C"));
-    assert_eq!(print_info.line_defined, -1);
+    assert_eq!(print_info.source.as_deref(), Some("=[C]"));
+    assert_eq!(print_info.what, "C");
+    assert_eq!(print_info.line_defined, None);
 
     Ok(())
 }

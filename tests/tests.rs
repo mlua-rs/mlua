@@ -1226,8 +1226,8 @@ fn test_inspect_stack() -> Result<()> {
 
     let logline = lua.create_function(|lua, msg: StdString| {
         let debug = lua.inspect_stack(1).unwrap(); // caller
-        let source = debug.source().short_src.map(core::str::from_utf8);
-        let source = source.transpose().unwrap().unwrap_or("?");
+        let source = debug.source().short_src;
+        let source = source.as_deref().unwrap_or("?");
         let line = debug.curr_line();
         Ok(format!("{}:{} {}", source, line, msg))
     })?;

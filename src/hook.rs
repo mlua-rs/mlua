@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::cell::UnsafeCell;
 #[cfg(not(feature = "luau"))]
 use std::ops::{BitOr, BitOrAssign};
@@ -6,7 +7,7 @@ use std::os::raw::c_int;
 use ffi::lua_Debug;
 
 use crate::lua::Lua;
-use crate::util::ptr_to_cstr_bytes;
+use crate::util::{linenumber_to_usize, ptr_to_lossy_str, ptr_to_str};
 
 /// Contains information about currently executing Lua code.
 ///
@@ -78,9 +79,12 @@ impl<'lua> Debug<'lua> {
             );
 
             DebugNames {
-                name: ptr_to_cstr_bytes((*self.ar.get()).name),
+                name: ptr_to_lossy_str((*self.ar.get()).name),
                 #[cfg(not(feature = "luau"))]
-                name_what: ptr_to_cstr_bytes((*self.ar.get()).namewhat),
+                name_what: match ptr_to_str((*self.ar.get()).namewhat) {
+                    Some("") => None,
+                    val => val,
+                },
                 #[cfg(feature = "luau")]
                 name_what: None,
             }
@@ -102,15 +106,17 @@ impl<'lua> Debug<'lua> {
             );
 
             DebugSource {
-                source: ptr_to_cstr_bytes((*self.ar.get()).source),
+                source: ptr_to_lossy_str((*self.ar.get()).source),
                 #[cfg(not(feature = "luau"))]
-                short_src: ptr_to_cstr_bytes((*self.ar.get()).short_src.as_ptr()),
+                short_src: ptr_to_lossy_str((*self.ar.get()).short_src.as_ptr()),
                 #[cfg(feature = "luau")]
-                short_src: ptr_to_cstr_bytes((*self.ar.get()).short_src),
-                line_defined: (*self.ar.get()).linedefined,
+                short_src: ptr_to_lossy_str((*self.ar.get()).short_src),
+                line_defined: linenumber_to_usize((*self.ar.get()).linedefined),
                 #[cfg(not(feature = "luau"))]
-                last_line_defined: (*self.ar.get()).lastlinedefined,
-                what: ptr_to_cstr_bytes((*self.ar.get()).what),
+                last_line_defined: linenumber_to_usize((*self.ar.get()).lastlinedefined),
+                #[cfg(feature = "luau")]
+                last_line_defined: None,
+                what: ptr_to_str((*self.ar.get()).what).unwrap_or("main"),
             }
         }
     }
@@ -210,18 +216,26 @@ pub enum DebugEvent {
 
 #[derive(Clone, Debug)]
 pub struct DebugNames<'a> {
-    pub name: Option<&'a [u8]>,
-    pub name_what: Option<&'a [u8]>,
+    /// A (reasonable) name of the function (`None` if the name cannot be found).
+    pub name: Option<Cow<'a, str>>,
+    /// Explains the `name` field (can be `global`/`local`/`method`/`field`/`upvalue`/etc).
+    ///
+    /// Always `None` for Luau.
+    pub name_what: Option<&'static str>,
 }
 
 #[derive(Clone, Debug)]
 pub struct DebugSource<'a> {
-    pub source: Option<&'a [u8]>,
-    pub short_src: Option<&'a [u8]>,
-    pub line_defined: i32,
-    #[cfg(not(feature = "luau"))]
-    pub last_line_defined: i32,
-    pub what: Option<&'a [u8]>,
+    /// Source of the chunk that created the function.
+    pub source: Option<Cow<'a, str>>,
+    /// A "printable" version of `source`, to be used in error messages.
+    pub short_src: Option<Cow<'a, str>>,
+    /// The line number where the definition of the function starts.
+    pub line_defined: Option<usize>,
+    /// The line number where the definition of the function ends (not set by Luau).
+    pub last_line_defined: Option<usize>,
+    /// A string `Lua` if the function is a Lua function, `C` if it is a C function, `main` if it is the main part of a chunk.
+    pub what: &'static str,
 }
 
 #[derive(Copy, Clone, Debug)]

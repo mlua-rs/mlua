@@ -2,7 +2,6 @@
 
 use std::cell::RefCell;
 use std::ops::Deref;
-use std::str;
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::{Arc, Mutex};
 
@@ -61,9 +60,8 @@ fn test_function_calls() -> Result<()> {
         assert_eq!(debug.event(), DebugEvent::Call);
         let names = debug.names();
         let source = debug.source();
-        let name = names.name.map(|s| str::from_utf8(s).unwrap().to_owned());
-        let what = source.what.map(|s| str::from_utf8(s).unwrap().to_owned());
-        hook_output.lock().unwrap().push((name, what));
+        let name = names.name.map(|s| s.into_owned());
+        hook_output.lock().unwrap().push((name, source.what));
         Ok(())
     })?;
 
@@ -80,18 +78,12 @@ fn test_function_calls() -> Result<()> {
     if cfg!(feature = "luajit") && lua.load("jit.version_num").eval::<i64>()? >= 20100 {
         assert_eq!(
             *output,
-            vec![
-                (None, Some("main".to_string())),
-                (Some("len".to_string()), Some("Lua".to_string()))
-            ]
+            vec![(None, "main"), (Some("len".to_string()), "Lua")]
         );
     } else {
         assert_eq!(
             *output,
-            vec![
-                (None, Some("main".to_string())),
-                (Some("len".to_string()), Some("C".to_string()))
-            ]
+            vec![(None, "main"), (Some("len".to_string()), "C")]
         );
     }
 

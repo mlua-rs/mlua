@@ -1,11 +1,12 @@
 use std::any::{Any, TypeId};
+use std::borrow::Cow;
 use std::ffi::CStr;
 use std::fmt::Write;
 use std::mem::MaybeUninit;
 use std::os::raw::{c_char, c_int, c_void};
 use std::panic::{catch_unwind, resume_unwind, AssertUnwindSafe};
 use std::sync::Arc;
-use std::{mem, ptr, slice};
+use std::{mem, ptr, slice, str};
 
 use once_cell::sync::Lazy;
 use rustc_hash::FxHashMap;
@@ -1066,11 +1067,25 @@ pub(crate) unsafe fn get_destructed_userdata_metatable(state: *mut ffi::lua_Stat
     ffi::lua_rawgetp(state, ffi::LUA_REGISTRYINDEX, key);
 }
 
-pub(crate) unsafe fn ptr_to_cstr_bytes<'a>(input: *const c_char) -> Option<&'a [u8]> {
+pub(crate) unsafe fn ptr_to_str<'a>(input: *const c_char) -> Option<&'a str> {
     if input.is_null() {
         return None;
     }
-    Some(CStr::from_ptr(input).to_bytes())
+    str::from_utf8(CStr::from_ptr(input).to_bytes()).ok()
+}
+
+pub(crate) unsafe fn ptr_to_lossy_str<'a>(input: *const c_char) -> Option<Cow<'a, str>> {
+    if input.is_null() {
+        return None;
+    }
+    Some(String::from_utf8_lossy(CStr::from_ptr(input).to_bytes()))
+}
+
+pub(crate) fn linenumber_to_usize(n: c_int) -> Option<usize> {
+    match n {
+        n if n < 0 => None,
+        n => Some(n as usize),
+    }
 }
 
 static DESTRUCTED_USERDATA_METATABLE: u8 = 0;
