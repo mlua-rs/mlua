@@ -16,8 +16,8 @@ use crate::userdata::{
 };
 use crate::userdata_impl::UserDataRegistrar;
 use crate::util::{
-    assert_stack, check_stack, get_userdata, init_userdata_metatable, push_table, rawset_field,
-    take_userdata, StackGuard,
+    self, assert_stack, check_stack, get_userdata, init_userdata_metatable, push_table,
+    rawset_field, take_userdata, StackGuard,
 };
 use crate::value::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, MultiValue, Value};
 
@@ -384,7 +384,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
             })?;
             #[cfg(feature = "luau")]
             let ud_ptr = {
-                crate::util::push_userdata(state, UserDataCell::new(data), true)?;
+                util::push_userdata(state, UserDataCell::new(data), true)?;
                 ffi::lua_touserdata(state, -1) as *const UserDataCell<T>
             };
 
@@ -436,12 +436,21 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
                 methods_index = Some(ffi::lua_absindex(state, -1));
             }
 
-            init_userdata_metatable::<UserDataCell<T>>(
+            #[cfg(feature = "luau")]
+            let extra_init = None;
+            #[cfg(not(feature = "luau"))]
+            let extra_init: Option<&dyn Fn(*mut ffi::lua_State) -> Result<()>> = Some(&|state| {
+                ffi::lua_pushcfunction(state, util::userdata_destructor::<UserDataCell<T>>);
+                rawset_field(state, -2, "__gc")
+            });
+
+            init_userdata_metatable(
                 state,
                 metatable_index,
                 field_getters_index,
                 field_setters_index,
                 methods_index,
+                extra_init,
             )?;
 
             let count = field_getters_index.map(|_| 1).unwrap_or(0)

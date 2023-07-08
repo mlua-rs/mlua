@@ -544,12 +544,13 @@ pub unsafe fn init_userdata_metatable_newindex(state: *mut ffi::lua_State) -> Re
 // captured `__index` if no matches found.
 // The same is also applicable for `__newindex` metamethod and `field_setters` table.
 // Internally uses 9 stack spaces and does not call checkstack.
-pub unsafe fn init_userdata_metatable<T>(
+pub unsafe fn init_userdata_metatable(
     state: *mut ffi::lua_State,
     metatable: c_int,
     field_getters: Option<c_int>,
     field_setters: Option<c_int>,
     methods: Option<c_int>,
+    extra_init: Option<&dyn Fn(*mut ffi::lua_State) -> Result<()>>,
 ) -> Result<()> {
     ffi::lua_pushvalue(state, metatable);
 
@@ -596,10 +597,9 @@ pub unsafe fn init_userdata_metatable<T>(
         rawset_field(state, -2, "__newindex")?;
     }
 
-    #[cfg(not(feature = "luau"))]
-    {
-        ffi::lua_pushcfunction(state, userdata_destructor::<T>);
-        rawset_field(state, -2, "__gc")?;
+    // Additional initialization
+    if let Some(extra_init) = extra_init {
+        extra_init(state)?;
     }
 
     ffi::lua_pushboolean(state, 0);

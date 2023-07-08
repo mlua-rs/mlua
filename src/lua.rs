@@ -2631,12 +2631,21 @@ impl Lua {
             }
         }
 
-        init_userdata_metatable::<UserDataCell<T>>(
+        #[cfg(feature = "luau")]
+        let extra_init = None;
+        #[cfg(not(feature = "luau"))]
+        let extra_init: Option<&dyn Fn(*mut ffi::lua_State) -> Result<()>> = Some(&|state| {
+            ffi::lua_pushcfunction(state, util::userdata_destructor::<UserDataCell<T>>);
+            rawset_field(state, -2, "__gc")
+        });
+
+        init_userdata_metatable(
             state,
             metatable_index,
             field_getters_index,
             field_setters_index,
             methods_index,
+            extra_init,
         )?;
 
         // Pop extra tables to get metatable on top of the stack
