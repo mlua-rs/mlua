@@ -20,7 +20,6 @@ use crate::error::Result;
 #[cfg(not(feature = "luau"))]
 use crate::hook::Debug;
 use crate::lua::{ExtraData, Lua};
-use crate::util::{assert_stack, StackGuard};
 use crate::value::MultiValue;
 
 #[cfg(feature = "unstable")]
@@ -288,6 +287,11 @@ impl<'lua> LuaRef<'lua> {
         }
     }
 
+    #[inline]
+    pub(crate) fn to_pointer(&self) -> *const c_void {
+        unsafe { ffi::lua_topointer(self.lua.ref_thread(), self.index) }
+    }
+
     #[cfg(feature = "unstable")]
     #[inline]
     pub(crate) fn into_owned(self) -> LuaOwnedRef {
@@ -300,7 +304,7 @@ impl<'lua> LuaRef<'lua> {
 
 impl<'lua> fmt::Debug for LuaRef<'lua> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Ref({})", self.index)
+        write!(f, "Ref({:p})", self.to_pointer())
     }
 }
 
@@ -320,15 +324,12 @@ impl<'lua> Drop for LuaRef<'lua> {
 
 impl<'lua> PartialEq for LuaRef<'lua> {
     fn eq(&self, other: &Self) -> bool {
-        let lua = self.lua;
-        let state = lua.state();
-        unsafe {
-            let _sg = StackGuard::new(state);
-            assert_stack(state, 2);
-            lua.push_ref(self);
-            lua.push_ref(other);
-            ffi::lua_rawequal(state, -1, -2) == 1
-        }
+        let ref_thread = self.lua.ref_thread();
+        assert!(
+            ref_thread == other.lua.ref_thread(),
+            "Lua instance passed Value created from a different main Lua state"
+        );
+        unsafe { ffi::lua_rawequal(ref_thread, self.index, other.index) == 1 }
     }
 }
 
@@ -342,7 +343,7 @@ pub(crate) struct LuaOwnedRef {
 #[cfg(feature = "unstable")]
 impl fmt::Debug for LuaOwnedRef {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "OwnedRef({})", self.index)
+        write!(f, "OwnedRef({:p})", self.to_ref().to_pointer())
     }
 }
 

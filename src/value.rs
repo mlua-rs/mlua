@@ -116,18 +116,14 @@ impl<'lua> Value<'lua> {
     /// Typically this function is used only for hashing and debug information.
     #[inline]
     pub fn to_pointer(&self) -> *const c_void {
-        unsafe {
-            match self {
-                Value::LightUserData(ud) => ud.0,
-                Value::Table(t) => t.to_pointer(),
-                Value::String(s) => s.to_pointer(),
-                Value::Function(Function(r))
-                | Value::Thread(Thread(r))
-                | Value::UserData(AnyUserData(r)) => {
-                    ffi::lua_topointer(r.lua.ref_thread(), r.index)
-                }
-                _ => ptr::null(),
-            }
+        match self {
+            Value::LightUserData(ud) => ud.0,
+            Value::String(String(r))
+            | Value::Table(Table(r))
+            | Value::Function(Function(r))
+            | Value::Thread(Thread(r))
+            | Value::UserData(AnyUserData(r)) => r.to_pointer(),
+            _ => ptr::null(),
         }
     }
 

@@ -139,8 +139,7 @@ impl<'lua> String<'lua> {
     /// Typically this function is used only for hashing and debug information.
     #[inline]
     pub fn to_pointer(&self) -> *const c_void {
-        let ref_thread = self.0.lua.ref_thread();
-        unsafe { ffi::lua_topointer(ref_thread, self.0.index) }
+        self.0.to_pointer()
     }
 
     /// Convert this handle to owned version.
