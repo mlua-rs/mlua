@@ -314,22 +314,16 @@ async fn test_async_table() -> Result<()> {
     table.set("sleep", sleep)?;
 
     assert_eq!(
-        table
-            .call_async_method::<_, _, i64>("get_value", ())
-            .await?,
+        table.call_async_method::<_, i64>("get_value", ()).await?,
         10
     );
     table.call_async_method("set_value", 15).await?;
     assert_eq!(
-        table
-            .call_async_method::<_, _, i64>("get_value", ())
-            .await?,
+        table.call_async_method::<_, i64>("get_value", ()).await?,
         15
     );
     assert_eq!(
-        table
-            .call_async_function::<_, _, String>("sleep", 7)
-            .await?,
+        table.call_async_function::<_, String>("sleep", 7).await?,
         "elapsed:7ms"
     );
 

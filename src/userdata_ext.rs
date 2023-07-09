@@ -34,7 +34,7 @@ pub trait AnyUserDataExt<'lua>: Sealed {
 
     /// Calls the userdata method, assuming it has `__index` metamethod
     /// and a function associated to `name`.
-    fn call_method<A, R>(&self, name: impl AsRef<str>, args: A) -> Result<R>
+    fn call_method<A, R>(&self, name: &str, args: A) -> Result<R>
     where
         A: IntoLuaMulti<'lua>,
         R: FromLuaMulti<'lua>;
@@ -47,11 +47,7 @@ pub trait AnyUserDataExt<'lua>: Sealed {
     /// This might invoke the `__index` metamethod.
     #[cfg(feature = "async")]
     #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
-    fn call_async_method<A, R>(
-        &self,
-        name: impl AsRef<str>,
-        args: A,
-    ) -> LocalBoxFuture<'lua, Result<R>>
+    fn call_async_method<A, R>(&self, name: &str, args: A) -> LocalBoxFuture<'lua, Result<R>>
     where
         A: IntoLuaMulti<'lua>,
         R: FromLuaMulti<'lua> + 'lua;
@@ -63,7 +59,7 @@ pub trait AnyUserDataExt<'lua>: Sealed {
     /// `table.get::<_, Function>(key)?.call(args)`
     ///
     /// This might invoke the `__index` metamethod.
-    fn call_function<A, R>(&self, name: impl AsRef<str>, args: A) -> Result<R>
+    fn call_function<A, R>(&self, name: &str, args: A) -> Result<R>
     where
         A: IntoLuaMulti<'lua>,
         R: FromLuaMulti<'lua>;
@@ -76,11 +72,7 @@ pub trait AnyUserDataExt<'lua>: Sealed {
     /// This might invoke the `__index` metamethod.
     #[cfg(feature = "async")]
     #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
-    fn call_async_function<A, R>(
-        &self,
-        name: impl AsRef<str>,
-        args: A,
-    ) -> LocalBoxFuture<'lua, Result<R>>
+    fn call_async_function<A, R>(&self, name: &str, args: A) -> LocalBoxFuture<'lua, Result<R>>
     where
         A: IntoLuaMulti<'lua>,
         R: FromLuaMulti<'lua> + 'lua;
@@ -149,7 +141,7 @@ impl<'lua> AnyUserDataExt<'lua> for AnyUserData<'lua> {
         }
     }
 
-    fn call_method<A, R>(&self, name: impl AsRef<str>, args: A) -> Result<R>
+    fn call_method<A, R>(&self, name: &str, args: A) -> Result<R>
     where
         A: IntoLuaMulti<'lua>,
         R: FromLuaMulti<'lua>,
@@ -158,11 +150,7 @@ impl<'lua> AnyUserDataExt<'lua> for AnyUserData<'lua> {
     }
 
     #[cfg(feature = "async")]
-    fn call_async_method<A, R>(
-        &self,
-        name: impl AsRef<str>,
-        args: A,
-    ) -> LocalBoxFuture<'lua, Result<R>>
+    fn call_async_method<A, R>(&self, name: &str, args: A) -> LocalBoxFuture<'lua, Result<R>>
     where
         A: IntoLuaMulti<'lua>,
         R: FromLuaMulti<'lua> + 'lua,
@@ -170,12 +158,12 @@ impl<'lua> AnyUserDataExt<'lua> for AnyUserData<'lua> {
         self.call_async_function(name, (self.clone(), args))
     }
 
-    fn call_function<A, R>(&self, name: impl AsRef<str>, args: A) -> Result<R>
+    fn call_function<A, R>(&self, name: &str, args: A) -> Result<R>
     where
         A: IntoLuaMulti<'lua>,
         R: FromLuaMulti<'lua>,
     {
-        match self.get(name.as_ref())? {
+        match self.get(name)? {
             Value::Function(func) => func.call(args),
             val => Err(Error::RuntimeError(format!(
                 "attempt to call a {} value",
@@ -185,16 +173,12 @@ impl<'lua> AnyUserDataExt<'lua> for AnyUserData<'lua> {
     }
 
     #[cfg(feature = "async")]
-    fn call_async_function<A, R>(
-        &self,
-        name: impl AsRef<str>,
-        args: A,
-    ) -> LocalBoxFuture<'lua, Result<R>>
+    fn call_async_function<A, R>(&self, name: &str, args: A) -> LocalBoxFuture<'lua, Result<R>>
     where
         A: IntoLuaMulti<'lua>,
         R: FromLuaMulti<'lua> + 'lua,
     {
-        match self.get(name.as_ref()) {
+        match self.get(name) {
             Ok(Value::Function(func)) => {
                 let args = match args.into_lua_multi(self.0.lua) {
                     Ok(args) => args,

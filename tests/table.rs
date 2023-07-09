@@ -362,11 +362,8 @@ fn test_table_call() -> Result<()> {
     let table: Table = lua.globals().get("table")?;
 
     assert_eq!(table.call::<_, String>("b")?, "call_2");
-    assert_eq!(table.call_function::<_, _, String>("func", "a")?, "func_a");
-    assert_eq!(
-        table.call_method::<_, _, String>("method", "a")?,
-        "method_1"
-    );
+    assert_eq!(table.call_function::<_, String>("func", "a")?, "func_a");
+    assert_eq!(table.call_method::<_, String>("method", "a")?, "method_1");
 
     // Test calling non-callable table
     let table2 = lua.create_table()?;
