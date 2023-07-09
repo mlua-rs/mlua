@@ -2,7 +2,6 @@ use std::any::Any;
 use std::cell::{Cell, RefCell};
 use std::marker::PhantomData;
 use std::mem;
-use std::os::raw::c_int;
 
 #[cfg(feature = "serialize")]
 use serde::Serialize;
@@ -240,7 +239,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
             #[cfg(feature = "lua54")]
             for i in 1..=USER_VALUE_MAXSLOT {
                 ffi::lua_pushnil(state);
-                ffi::lua_setiuservalue(state, -2, i as c_int);
+                ffi::lua_setiuservalue(state, -2, i as _);
             }
             #[cfg(any(feature = "lua53", feature = "lua52", feature = "luau"))]
             {
@@ -390,7 +389,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
 
             // Prepare metatable, add meta methods first and then meta fields
             let meta_methods_nrec = ud_methods.meta_methods.len() + ud_fields.meta_fields.len() + 1;
-            push_table(state, 0, meta_methods_nrec as c_int, true)?;
+            push_table(state, 0, meta_methods_nrec, true)?;
 
             for (k, m) in ud_methods.meta_methods {
                 lua.push_value(Value::Function(wrap_method(self, ud_ptr, m)?))?;
@@ -405,7 +404,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
             let mut field_getters_index = None;
             let field_getters_nrec = ud_fields.field_getters.len();
             if field_getters_nrec > 0 {
-                push_table(state, 0, field_getters_nrec as c_int, true)?;
+                push_table(state, 0, field_getters_nrec, true)?;
                 for (k, m) in ud_fields.field_getters {
                     lua.push_value(Value::Function(wrap_method(self, ud_ptr, m)?))?;
                     rawset_field(state, -2, &k)?;
@@ -416,7 +415,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
             let mut field_setters_index = None;
             let field_setters_nrec = ud_fields.field_setters.len();
             if field_setters_nrec > 0 {
-                push_table(state, 0, field_setters_nrec as c_int, true)?;
+                push_table(state, 0, field_setters_nrec, true)?;
                 for (k, m) in ud_fields.field_setters {
                     lua.push_value(Value::Function(wrap_method(self, ud_ptr, m)?))?;
                     rawset_field(state, -2, &k)?;
@@ -428,7 +427,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
             let methods_nrec = ud_methods.methods.len();
             if methods_nrec > 0 {
                 // Create table used for methods lookup
-                push_table(state, 0, methods_nrec as c_int, true)?;
+                push_table(state, 0, methods_nrec, true)?;
                 for (k, m) in ud_methods.methods {
                     lua.push_value(Value::Function(wrap_method(self, ud_ptr, m)?))?;
                     rawset_field(state, -2, &k)?;
@@ -488,7 +487,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
                 #[cfg(feature = "lua54")]
                 for i in 1..=USER_VALUE_MAXSLOT {
                     ffi::lua_pushnil(state);
-                    ffi::lua_setiuservalue(state, -2, i as c_int);
+                    ffi::lua_setiuservalue(state, -2, i as _);
                 }
                 #[cfg(any(feature = "lua53", feature = "lua52", feature = "luau"))]
                 {

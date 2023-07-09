@@ -1409,7 +1409,7 @@ impl Lua {
     /// `narr` is a hint for how many elements the table will have as a sequence;
     /// `nrec` is a hint for how many other elements the table will have.
     /// Lua may use these hints to preallocate memory for the new table.
-    pub fn create_table_with_capacity(&self, narr: c_int, nrec: c_int) -> Result<Table> {
+    pub fn create_table_with_capacity(&self, narr: usize, nrec: usize) -> Result<Table> {
         let state = self.state();
         unsafe {
             if self.unlikely_memory_error() {
@@ -1439,7 +1439,7 @@ impl Lua {
             let iter = iter.into_iter();
             let lower_bound = iter.size_hint().0;
             let protect = !self.unlikely_memory_error();
-            push_table(state, 0, lower_bound as c_int, protect)?;
+            push_table(state, 0, lower_bound, protect)?;
             for (k, v) in iter {
                 self.push_value(k.into_lua(self)?)?;
                 self.push_value(v.into_lua(self)?)?;
@@ -1468,7 +1468,7 @@ impl Lua {
             let iter = iter.into_iter();
             let lower_bound = iter.size_hint().0;
             let protect = !self.unlikely_memory_error();
-            push_table(state, lower_bound as c_int, 0, protect)?;
+            push_table(state, lower_bound, 0, protect)?;
             for (i, v) in iter.enumerate() {
                 self.push_value(v.into_lua(self)?)?;
                 if protect {
@@ -2523,7 +2523,7 @@ impl Lua {
         let metatable_nrec = registry.meta_methods.len() + registry.meta_fields.len();
         #[cfg(feature = "async")]
         let metatable_nrec = metatable_nrec + registry.async_meta_methods.len();
-        push_table(state, 0, metatable_nrec as c_int, true)?;
+        push_table(state, 0, metatable_nrec, true)?;
         for (k, m) in registry.meta_methods {
             self.push_value(Value::Function(self.create_callback(m)?))?;
             rawset_field(state, -2, MetaMethod::validate(&k)?)?;
@@ -2558,7 +2558,7 @@ impl Lua {
                     if index_type == ffi::LUA_TNIL {
                         // Create a new table
                         ffi::lua_pop(state, 1);
-                        push_table(state, 0, fields_nrec as c_int, true)?;
+                        push_table(state, 0, fields_nrec, true)?;
                     }
                     for (k, f) in registry.fields {
                         self.push_value(f(self, MultiValue::new())?.pop_front().unwrap())?;
@@ -2578,7 +2578,7 @@ impl Lua {
         let mut field_getters_index = None;
         let field_getters_nrec = registry.field_getters.len();
         if field_getters_nrec > 0 {
-            push_table(state, 0, field_getters_nrec as c_int, true)?;
+            push_table(state, 0, field_getters_nrec, true)?;
             for (k, m) in registry.field_getters {
                 self.push_value(Value::Function(self.create_callback(m)?))?;
                 rawset_field(state, -2, &k)?;
@@ -2590,7 +2590,7 @@ impl Lua {
         let mut field_setters_index = None;
         let field_setters_nrec = registry.field_setters.len();
         if field_setters_nrec > 0 {
-            push_table(state, 0, field_setters_nrec as c_int, true)?;
+            push_table(state, 0, field_setters_nrec, true)?;
             for (k, m) in registry.field_setters {
                 self.push_value(Value::Function(self.create_callback(m)?))?;
                 rawset_field(state, -2, &k)?;
@@ -2611,7 +2611,7 @@ impl Lua {
                 _ => {
                     // Create a new table
                     ffi::lua_pop(state, 1);
-                    push_table(state, 0, methods_nrec as c_int, true)?;
+                    push_table(state, 0, methods_nrec, true)?;
                 }
             }
             for (k, m) in registry.methods {

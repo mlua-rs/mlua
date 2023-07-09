@@ -252,10 +252,12 @@ pub unsafe fn push_string(state: *mut ffi::lua_State, s: &[u8], protect: bool) -
 #[inline]
 pub unsafe fn push_table(
     state: *mut ffi::lua_State,
-    narr: c_int,
-    nrec: c_int,
+    narr: usize,
+    nrec: usize,
     protect: bool,
 ) -> Result<()> {
+    let narr: c_int = narr.try_into().unwrap_or(c_int::MAX);
+    let nrec: c_int = nrec.try_into().unwrap_or(c_int::MAX);
     if protect {
         protect_lua!(state, 0, 1, |state| ffi::lua_createtable(state, narr, nrec))
     } else {

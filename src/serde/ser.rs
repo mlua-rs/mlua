@@ -1,5 +1,3 @@
-use std::os::raw::c_int;
-
 use serde::{ser, Serialize};
 
 use super::LuaSerdeExt;
@@ -233,8 +231,7 @@ impl<'lua> ser::Serializer for Serializer<'lua> {
 
     #[inline]
     fn serialize_seq(self, len: Option<usize>) -> Result<Self::SerializeSeq> {
-        let len = len.unwrap_or(0) as c_int;
-        let table = self.lua.create_table_with_capacity(len, 0)?;
+        let table = self.lua.create_table_with_capacity(len.unwrap_or(0), 0)?;
         if self.options.set_array_metatable {
             table.set_metatable(Some(self.lua.array_metatable()));
         }
@@ -277,10 +274,9 @@ impl<'lua> ser::Serializer for Serializer<'lua> {
 
     #[inline]
     fn serialize_map(self, len: Option<usize>) -> Result<Self::SerializeMap> {
-        let len = len.unwrap_or(0) as c_int;
         Ok(SerializeMap {
             key: None,
-            table: self.lua.create_table_with_capacity(0, len)?,
+            table: self.lua.create_table_with_capacity(0, len.unwrap_or(0))?,
             options: self.options,
         })
     }
@@ -300,7 +296,7 @@ impl<'lua> ser::Serializer for Serializer<'lua> {
     ) -> Result<Self::SerializeStructVariant> {
         Ok(SerializeStructVariant {
             name: self.lua.create_string(variant)?,
-            table: self.lua.create_table_with_capacity(0, len as c_int)?,
+            table: self.lua.create_table_with_capacity(0, len)?,
             options: self.options,
         })
     }
