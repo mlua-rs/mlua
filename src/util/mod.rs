@@ -1043,7 +1043,10 @@ pub(crate) unsafe fn to_string(state: *mut ffi::lua_State, index: c_int) -> Stri
             let v = ffi::lua_tovector(state, index);
             mlua_debug_assert!(!v.is_null(), "vector is null");
             let (x, y, z) = (*v, *v.add(1), *v.add(2));
-            format!("vector({x},{y},{z})")
+            #[cfg(not(feature = "luau-vector4"))]
+            return format!("vector({x}, {y}, {z})");
+            #[cfg(feature = "luau-vector4")]
+            return format!("vector({x}, {y}, {z}, {w})", w = *v.add(3));
         }
         ffi::LUA_TSTRING => {
             let mut size = 0;
