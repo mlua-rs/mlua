@@ -103,7 +103,7 @@ mod value;
 
 pub mod prelude;
 
-pub use ffi::{lua_CFunction, lua_State};
+pub use ffi::{self, lua_CFunction, lua_State};
 
 pub use crate::chunk::{AsChunk, Chunk, ChunkMode};
 pub use crate::error::{Error, ErrorContext, ExternalError, ExternalResult, Result};
