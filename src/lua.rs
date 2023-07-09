@@ -95,6 +95,8 @@ pub(crate) struct ExtraData {
     safe: bool,
     libs: StdLib,
     mem_state: Option<NonNull<MemoryState>>,
+    #[cfg(feature = "module")]
+    skip_memory_check: bool,
 
     // Auxiliary thread to store references
     ref_thread: *mut ffi::lua_State,
@@ -515,6 +517,8 @@ impl Lua {
             safe: false,
             libs: StdLib::NONE,
             mem_state: None,
+            #[cfg(feature = "module")]
+            skip_memory_check: false,
             ref_thread,
             // We need 1 extra stack space to move values in and out of the ref stack.
             ref_stack_size: ffi::LUA_MINSTACK - 1,
@@ -771,6 +775,13 @@ impl Lua {
         F: Fn(&'lua Lua) -> Result<R> + MaybeSend + 'static,
     {
         self.entrypoint(move |lua, _: ()| func(lua))
+    }
+
+    /// Skips memory checks for some operations.
+    #[doc(hidden)]
+    #[cfg(feature = "module")]
+    pub fn skip_memory_check(&self, skip: bool) {
+        unsafe { (*self.extra.get()).skip_memory_check = skip };
     }
 
     /// Enables (or disables) sandbox mode on this Lua instance.
@@ -3079,7 +3090,13 @@ impl Lua {
         (*self.extra.get())
             .mem_state
             .map(|x| x.as_ref().memory_limit() == 0)
-            .unwrap_or_default()
+            .unwrap_or_else(|| {
+                // Alternatively, check the special flag (only for module mode)
+                #[cfg(feature = "module")]
+                return (*self.extra.get()).skip_memory_check;
+                #[cfg(not(feature = "module"))]
+                return false;
+            })
     }
 
     #[cfg(feature = "unstable")]

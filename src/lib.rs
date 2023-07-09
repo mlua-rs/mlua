@@ -235,10 +235,24 @@ pub use mlua_derive::chunk;
 ///
 /// You can also pass options to the attribute:
 ///
-/// name - name of the module, defaults to the name of the function
+/// * name - name of the module, defaults to the name of the function
 ///
 /// ```ignore
 /// #[mlua::lua_module(name = "alt_module")]
+/// fn my_module(lua: &Lua) -> Result<Table> {
+///     ...
+/// }
+/// ```
+///
+/// * skip_memory_check - skip memory allocation checks for some operations.
+///
+/// In module mode, mlua runs in unknown environment and cannot say are there any memory
+/// limits or not. As result, some operations that require memory allocation runs in
+/// protected mode. Setting this mode will improve performance of such operations
+/// with risk of having uncaught exceptions and memory leaks.
+///
+/// ```ignore
+/// #[mlua::lua_module(skip_memory_check)]
 /// fn my_module(lua: &Lua) -> Result<Table> {
 ///     ...
 /// }

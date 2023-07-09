@@ -26,7 +26,7 @@ struct MyUserData(i32);
 
 impl LuaUserData for MyUserData {}
 
-#[mlua::lua_module(name = "test_module_second")]
+#[mlua::lua_module(name = "test_module_second", skip_memory_check)]
 fn test_module2(lua: &Lua) -> LuaResult<LuaTable> {
     let exports = lua.create_table()?;
     exports.set("userdata", MyUserData(123))?;
