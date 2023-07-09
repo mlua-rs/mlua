@@ -411,21 +411,21 @@ fn test_user_values() -> Result<()> {
     ud.set_nth_user_value(1, "hello")?;
     ud.set_nth_user_value(2, "world")?;
     ud.set_nth_user_value(65535, 321)?;
-    assert_eq!(ud.get_nth_user_value::<String>(1)?, "hello");
-    assert_eq!(ud.get_nth_user_value::<String>(2)?, "world");
-    assert_eq!(ud.get_nth_user_value::<Value>(3)?, Value::Nil);
-    assert_eq!(ud.get_nth_user_value::<i32>(65535)?, 321);
+    assert_eq!(ud.nth_user_value::<String>(1)?, "hello");
+    assert_eq!(ud.nth_user_value::<String>(2)?, "world");
+    assert_eq!(ud.nth_user_value::<Value>(3)?, Value::Nil);
+    assert_eq!(ud.nth_user_value::<i32>(65535)?, 321);
 
-    assert!(ud.get_nth_user_value::<Value>(0).is_err());
-    assert!(ud.get_nth_user_value::<Value>(65536).is_err());
+    assert!(ud.nth_user_value::<Value>(0).is_err());
+    assert!(ud.nth_user_value::<Value>(65536).is_err());
 
     // Named user values
     ud.set_named_user_value("name", "alex")?;
     ud.set_named_user_value("age", 10)?;
 
-    assert_eq!(ud.get_named_user_value::<String>("name")?, "alex");
-    assert_eq!(ud.get_named_user_value::<i32>("age")?, 10);
-    assert_eq!(ud.get_named_user_value::<Value>("nonexist")?, Value::Nil);
+    assert_eq!(ud.named_user_value::<String>("name")?, "alex");
+    assert_eq!(ud.named_user_value::<i32>("age")?, 10);
+    assert_eq!(ud.named_user_value::<Value>("nonexist")?, Value::Nil);
 
     Ok(())
 }
@@ -495,7 +495,7 @@ fn test_fields() -> Result<()> {
             });
 
             // Use userdata "uservalue" storage
-            fields.add_field_function_get("uval", |_, ud| ud.get_user_value::<Option<String>>());
+            fields.add_field_function_get("uval", |_, ud| ud.user_value::<Option<String>>());
             fields
                 .add_field_function_set("uval", |_, ud, s| ud.set_user_value::<Option<String>>(s));
 

@@ -862,11 +862,11 @@ impl<'lua> AnyUserData<'lua> {
 
     /// Sets an associated value to this `AnyUserData`.
     ///
-    /// The value may be any Lua value whatsoever, and can be retrieved with [`get_user_value`].
+    /// The value may be any Lua value whatsoever, and can be retrieved with [`user_value`].
     ///
     /// This is the same as calling [`set_nth_user_value`] with `n` set to 1.
     ///
-    /// [`get_user_value`]: #method.get_user_value
+    /// [`user_value`]: #method.user_value
     /// [`set_nth_user_value`]: #method.set_nth_user_value
     #[inline]
     pub fn set_user_value<V: IntoLua<'lua>>(&self, v: V) -> Result<()> {
@@ -875,25 +875,31 @@ impl<'lua> AnyUserData<'lua> {
 
     /// Returns an associated value set by [`set_user_value`].
     ///
-    /// This is the same as calling [`get_nth_user_value`] with `n` set to 1.
+    /// This is the same as calling [`nth_user_value`] with `n` set to 1.
     ///
     /// [`set_user_value`]: #method.set_user_value
-    /// [`get_nth_user_value`]: #method.get_nth_user_value
+    /// [`nth_user_value`]: #method.nth_user_value
     #[inline]
+    pub fn user_value<V: FromLua<'lua>>(&self) -> Result<V> {
+        self.nth_user_value(1)
+    }
+
+    #[doc(hidden)]
+    #[deprecated(since = "0.9.0", note = "please use `user_value` instead")]
     pub fn get_user_value<V: FromLua<'lua>>(&self) -> Result<V> {
-        self.get_nth_user_value(1)
+        self.nth_user_value(1)
     }
 
     /// Sets an associated `n`th value to this `AnyUserData`.
     ///
-    /// The value may be any Lua value whatsoever, and can be retrieved with [`get_nth_user_value`].
+    /// The value may be any Lua value whatsoever, and can be retrieved with [`nth_user_value`].
     /// `n` starts from 1 and can be up to 65535.
     ///
     /// This is supported for all Lua versions.
     /// In Lua 5.4 first 7 elements are stored in a most efficient way.
     /// For other Lua versions this functionality is provided using a wrapping table.
     ///
-    /// [`get_nth_user_value`]: #method.get_nth_user_value
+    /// [`nth_user_value`]: #method.nth_user_value
     pub fn set_nth_user_value<V: IntoLua<'lua>>(&self, n: usize, v: V) -> Result<()> {
         if n < 1 || n > u16::MAX as usize {
             return Err(Error::RuntimeError(
@@ -949,7 +955,7 @@ impl<'lua> AnyUserData<'lua> {
     /// For other Lua versions this functionality is provided using a wrapping table.
     ///
     /// [`set_nth_user_value`]: #method.set_nth_user_value
-    pub fn get_nth_user_value<V: FromLua<'lua>>(&self, n: usize) -> Result<V> {
+    pub fn nth_user_value<V: FromLua<'lua>>(&self, n: usize) -> Result<V> {
         if n < 1 || n > u16::MAX as usize {
             return Err(Error::RuntimeError(
                 "user value index out of bounds".to_string(),
@@ -986,18 +992,20 @@ impl<'lua> AnyUserData<'lua> {
         }
     }
 
+    #[doc(hidden)]
+    #[deprecated(since = "0.9.0", note = "please use `nth_user_value` instead")]
+    pub fn get_nth_user_value<V: FromLua<'lua>>(&self, n: usize) -> Result<V> {
+        self.nth_user_value(n)
+    }
+
     /// Sets an associated value to this `AnyUserData` by name.
     ///
-    /// The value can be retrieved with [`get_named_user_value`].
+    /// The value can be retrieved with [`named_user_value`].
     ///
-    /// [`get_named_user_value`]: #method.get_named_user_value
-    pub fn set_named_user_value<V>(&self, name: impl AsRef<str>, v: V) -> Result<()>
-    where
-        V: IntoLua<'lua>,
-    {
+    /// [`named_user_value`]: #method.named_user_value
+    pub fn set_named_user_value<V: IntoLua<'lua>>(&self, name: &str, v: V) -> Result<()> {
         let lua = self.0.lua;
         let state = lua.state();
-        let name = name.as_ref();
         unsafe {
             let _sg = StackGuard::new(state);
             check_stack(state, 5)?;
@@ -1030,13 +1038,9 @@ impl<'lua> AnyUserData<'lua> {
     /// Returns an associated value by name set by [`set_named_user_value`].
     ///
     /// [`set_named_user_value`]: #method.set_named_user_value
-    pub fn get_named_user_value<V>(&self, name: impl AsRef<str>) -> Result<V>
-    where
-        V: FromLua<'lua>,
-    {
+    pub fn named_user_value<V: FromLua<'lua>>(&self, name: &str) -> Result<V> {
         let lua = self.0.lua;
         let state = lua.state();
-        let name = name.as_ref();
         unsafe {
             let _sg = StackGuard::new(state);
             check_stack(state, 4)?;
@@ -1055,6 +1059,12 @@ impl<'lua> AnyUserData<'lua> {
 
             V::from_lua(lua.pop_value(), lua)
         }
+    }
+
+    #[doc(hidden)]
+    #[deprecated(since = "0.9.0", note = "please use `named_user_value` instead")]
+    pub fn get_named_user_value<V: FromLua<'lua>>(&self, name: &str) -> Result<V> {
+        self.named_user_value(name)
     }
 
     /// Returns a metatable of this `UserData`.

@@ -187,14 +187,14 @@ pub(crate) struct DestructedUserdata;
 /// Be warned, If you place this into Lua via a [`UserData`] type or a rust callback, it is *very
 /// easy* to accidentally cause reference cycles that the Lua garbage collector cannot resolve.
 /// Instead of placing a [`RegistryKey`] into a [`UserData`] type, prefer instead to use
-/// [`AnyUserData::set_user_value`] / [`AnyUserData::get_user_value`].
+/// [`AnyUserData::set_user_value`] / [`AnyUserData::user_value`].
 ///
 /// [`UserData`]: crate::UserData
 /// [`RegistryKey`]: crate::RegistryKey
 /// [`Lua::remove_registry_value`]: crate::Lua::remove_registry_value
 /// [`Lua::expire_registry_values`]: crate::Lua::expire_registry_values
 /// [`AnyUserData::set_user_value`]: crate::AnyUserData::set_user_value
-/// [`AnyUserData::get_user_value`]: crate::AnyUserData::get_user_value
+/// [`AnyUserData::user_value`]: crate::AnyUserData::user_value
 pub struct RegistryKey {
     pub(crate) registry_id: c_int,
     pub(crate) is_nil: AtomicBool,
