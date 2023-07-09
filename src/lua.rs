@@ -836,8 +836,8 @@ impl Lua {
     /// limited form of execution limits by setting [`HookTriggers.every_nth_instruction`] and
     /// erroring once an instruction limit has been reached.
     ///
-    /// This method sets a hook function for the main thread (if available) of this Lua instance.
-    /// If you want to set a hook function for a thread (coroutine), use [`Thread::set_hook()`] instead.
+    /// This method sets a hook function for the current thread of this Lua instance.
+    /// If you want to set a hook function for another thread (coroutine), use [`Thread::set_hook()`] instead.
     ///
     /// Please note you cannot have more than one hook function set at a time for this Lua instance.
     ///
@@ -852,7 +852,7 @@ impl Lua {
     /// lua.set_hook(HookTriggers::EVERY_LINE, |_lua, debug| {
     ///     println!("line {}", debug.curr_line());
     ///     Ok(())
-    /// })?;
+    /// });
     ///
     /// lua.load(r#"
     ///     local x = 2 + 3
@@ -866,15 +866,11 @@ impl Lua {
     /// [`HookTriggers.every_nth_instruction`]: crate::HookTriggers::every_nth_instruction
     #[cfg(not(feature = "luau"))]
     #[cfg_attr(docsrs, doc(cfg(not(feature = "luau"))))]
-    pub fn set_hook<F>(&self, triggers: HookTriggers, callback: F) -> Result<()>
+    pub fn set_hook<F>(&self, triggers: HookTriggers, callback: F)
     where
         F: Fn(&Lua, Debug) -> Result<()> + MaybeSend + 'static,
     {
-        unsafe {
-            let state = get_main_state(self.main_state).ok_or(Error::MainThreadNotAvailable)?;
-            self.set_thread_hook(state, triggers, callback);
-        }
-        Ok(())
+        unsafe { self.set_thread_hook(self.state(), triggers, callback) };
     }
 
     /// Sets a 'hook' function for a thread (coroutine).

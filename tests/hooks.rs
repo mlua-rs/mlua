@@ -28,7 +28,7 @@ fn test_line_counts() -> Result<()> {
         assert_eq!(debug.event(), DebugEvent::Line);
         hook_output.lock().unwrap().push(debug.curr_line());
         Ok(())
-    })?;
+    });
     lua.load(
         r#"
             local x = 2 + 3
@@ -63,7 +63,7 @@ fn test_function_calls() -> Result<()> {
         let name = names.name.map(|s| s.into_owned());
         hook_output.lock().unwrap().push((name, source.what));
         Ok(())
-    })?;
+    });
 
     lua.load(
         r#"
@@ -98,7 +98,7 @@ fn test_error_within_hook() -> Result<()> {
         Err(Error::RuntimeError(
             "Something happened in there!".to_string(),
         ))
-    })?;
+    });
 
     let err = lua
         .load("x = 1")
@@ -135,7 +135,7 @@ fn test_limit_execution_instructions() -> Result<()> {
                 Ok(())
             }
         },
-    )?;
+    );
 
     lua.globals().set("x", Value::Integer(0))?;
     let _ = lua
@@ -163,7 +163,7 @@ fn test_hook_removal() -> Result<()> {
                 "this hook should've been removed by this time".to_string(),
             ))
         },
-    )?;
+    );
 
     assert!(lua.load("local x = 1").exec().is_err());
     lua.remove_hook();
@@ -207,9 +207,10 @@ fn test_hook_swap_within_hook() -> Result<()> {
                             Ok(())
                         },
                     )
-                })
+                });
+                Ok(())
             })
-    })?;
+    });
 
     TL_LUA.with(|tl| {
         let tl = tl.borrow();
