@@ -21,5 +21,5 @@ note: required because it's used within this closure
 note: required by a bound in `Lua::create_function`
   --> src/lua.rs
    |
-   |         F: 'static + MaybeSend + Fn(&'lua Lua, A) -> Result<R>,
-   |                      ^^^^^^^^^ required by this bound in `Lua::create_function`
+   |         F: Fn(&'lua Lua, A) -> Result<R> + MaybeSend + 'static,
+   |                                            ^^^^^^^^^ required by this bound in `Lua::create_function`
