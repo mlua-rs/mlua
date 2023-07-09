@@ -754,19 +754,6 @@ impl<T> Deref for UserDataVariant<T> {
     }
 }
 
-#[cfg(feature = "serialize")]
-struct UserDataSerializeError;
-
-#[cfg(feature = "serialize")]
-impl Serialize for UserDataSerializeError {
-    fn serialize<S>(&self, _serializer: S) -> StdResult<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        Err(ser::Error::custom("cannot serialize <userdata>"))
-    }
-}
-
 /// Handle to an internal Lua userdata for any type that implements [`UserData`].
 ///
 /// Similar to `std::any::Any`, this provides an interface for dynamic type checking via the [`is`]
@@ -1155,15 +1142,11 @@ impl<'lua> AnyUserData<'lua> {
     #[cfg(feature = "serialize")]
     pub(crate) fn is_serializable(&self) -> bool {
         let lua = self.0.lua;
-        let state = lua.state();
         let is_serializable = || unsafe {
-            let _sg = StackGuard::new(state);
-            check_stack(state, 2)?;
-
             // Userdata can be unregistered or destructed
-            lua.push_userdata_ref(&self.0)?;
+            let _ = lua.get_userdata_type_id(&self.0)?;
 
-            let ud = &*get_userdata::<UserDataCell<()>>(state, -1);
+            let ud = &*get_userdata::<UserDataCell<()>>(lua.ref_thread(), self.0.index);
             match &*ud.0.try_borrow().map_err(|_| Error::UserDataBorrowError)? {
                 UserDataVariant::Serializable(_) => Result::Ok(true),
                 _ => Result::Ok(false),
@@ -1178,15 +1161,12 @@ impl<'lua> AnyUserData<'lua> {
         F: FnOnce(&'a UserDataCell<T>) -> Result<R>,
     {
         let lua = self.0.lua;
-        let state = lua.state();
         unsafe {
-            let _sg = StackGuard::new(state);
-            check_stack(state, 2)?;
-
-            let type_id = lua.push_userdata_ref(&self.0)?;
+            let type_id = lua.get_userdata_type_id(&self.0)?;
             match type_id {
                 Some(type_id) if type_id == TypeId::of::<T>() => {
-                    func(&*get_userdata::<UserDataCell<T>>(state, -1))
+                    let ref_thread = lua.ref_thread();
+                    func(&*get_userdata::<UserDataCell<T>>(ref_thread, self.0.index))
                 }
                 _ => Err(Error::UserDataTypeMismatch),
             }
@@ -1329,19 +1309,17 @@ impl<'lua> Serialize for AnyUserData<'lua> {
         S: Serializer,
     {
         let lua = self.0.lua;
-        let state = lua.state();
         let data = unsafe {
-            let _sg = StackGuard::new(state);
-            check_stack(state, 3).map_err(ser::Error::custom)?;
-
-            lua.push_userdata_ref(&self.0).map_err(ser::Error::custom)?;
-            let ud = &*get_userdata::<UserDataCell<()>>(state, -1);
+            let _ = lua
+                .get_userdata_type_id(&self.0)
+                .map_err(ser::Error::custom)?;
+            let ud = &*get_userdata::<UserDataCell<()>>(lua.ref_thread(), self.0.index);
             ud.0.try_borrow()
                 .map_err(|_| ser::Error::custom(Error::UserDataBorrowError))?
         };
         match &*data {
             UserDataVariant::Serializable(ser) => ser.serialize(serializer),
-            _ => UserDataSerializeError.serialize(serializer),
+            _ => Err(ser::Error::custom("cannot serialize <userdata>")),
         }
     }
 }
@@ -1396,6 +1374,7 @@ impl<'lua, T: 'static> UserDataRefMut<'lua, T> {
     }
 }
 
+#[inline]
 fn try_value_to_userdata<T>(value: Value) -> Result<AnyUserData> {
     match value {
         Value::UserData(ud) => Ok(ud),
