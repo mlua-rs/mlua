@@ -552,7 +552,7 @@ pub unsafe fn init_userdata_metatable(
     field_getters: Option<c_int>,
     field_setters: Option<c_int>,
     methods: Option<c_int>,
-    extra_init: Option<&dyn Fn(*mut ffi::lua_State) -> Result<()>>,
+    extra_init: Option<fn(*mut ffi::lua_State) -> Result<()>>,
 ) -> Result<()> {
     ffi::lua_pushvalue(state, metatable);
 

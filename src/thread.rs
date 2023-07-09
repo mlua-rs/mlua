@@ -8,13 +8,6 @@ use crate::types::LuaRef;
 use crate::util::{check_stack, error_traceback_thread, pop_error, StackGuard};
 use crate::value::{FromLuaMulti, IntoLuaMulti};
 
-#[cfg(any(
-    feature = "lua54",
-    all(feature = "luajit", feature = "vendored"),
-    feature = "luau",
-))]
-use crate::function::Function;
-
 #[cfg(not(feature = "luau"))]
 use crate::{
     hook::{Debug, HookTriggers},
@@ -60,14 +53,14 @@ pub struct Thread<'lua>(pub(crate) LuaRef<'lua>);
 ///
 /// Requires `feature = "async"`
 ///
-/// [`Future`]: futures_core::future::Future
-/// [`Stream`]: futures_core::stream::Stream
+/// [`Future`]: std::future::Future
+/// [`Stream`]: futures_util::stream::Stream
 #[cfg(feature = "async")]
 #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
 #[must_use = "futures do nothing unless you `.await` or poll them"]
 pub struct AsyncThread<'lua, R> {
     thread: Thread<'lua>,
-    args0: Option<Result<MultiValue<'lua>>>,
+    init_args: Option<Result<MultiValue<'lua>>>,
     ret: PhantomData<R>,
     recycle: bool,
 }
@@ -223,7 +216,7 @@ impl<'lua> Thread<'lua> {
         all(feature = "luajit", feature = "vendored"),
         feature = "luau",
     ))]
-    pub fn reset(&self, func: Function<'lua>) -> Result<()> {
+    pub fn reset(&self, func: crate::function::Function<'lua>) -> Result<()> {
         let lua = self.0.lua;
         let state = lua.state();
         unsafe {
@@ -272,8 +265,8 @@ impl<'lua> Thread<'lua> {
     ///
     /// Requires `feature = "async"`
     ///
-    /// [`Future`]: futures_core::future::Future
-    /// [`Stream`]: futures_core::stream::Stream
+    /// [`Future`]: std::future::Future
+    /// [`Stream`]: futures_util::stream::Stream
     /// [`resume()`]: https://www.lua.org/manual/5.4/manual.html#lua_resume
     ///
     /// # Examples
@@ -315,7 +308,7 @@ impl<'lua> Thread<'lua> {
         let args = args.into_lua_multi(self.0.lua);
         AsyncThread {
             thread: self,
-            args0: Some(args),
+            init_args: Some(args),
             ret: PhantomData,
             recycle: false,
         }
@@ -427,7 +420,7 @@ where
 
         // This is safe as we are not moving the whole struct
         let this = unsafe { self.get_unchecked_mut() };
-        let ret: MultiValue = if let Some(args) = this.args0.take() {
+        let ret: MultiValue = if let Some(args) = this.init_args.take() {
             this.thread.resume(args?)?
         } else {
             this.thread.resume(())?
@@ -461,7 +454,7 @@ where
 
         // This is safe as we are not moving the whole struct
         let this = unsafe { self.get_unchecked_mut() };
-        let ret: MultiValue = if let Some(args) = this.args0.take() {
+        let ret: MultiValue = if let Some(args) = this.init_args.take() {
             this.thread.resume(args?)?
         } else {
             this.thread.resume(())?

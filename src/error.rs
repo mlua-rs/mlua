@@ -64,7 +64,7 @@ pub enum Error {
     /// called with a huge number of arguments, or a rust callback returns a huge number of return
     /// values.
     StackError,
-    /// Too many arguments to `Function::bind`
+    /// Too many arguments to `Function::bind`.
     BindError,
     /// Bad argument received from Lua (usually when calling a function).
     ///

@@ -462,7 +462,7 @@ impl<'lua> Function<'lua> {
     /// Requires `feature = "luau"`
     ///
     /// [`Compiler::set_coverage_level`]: crate::chunk::Compiler::set_coverage_level
-    #[cfg(any(feature = "luau", docsrs))]
+    #[cfg(any(feature = "luau", doc))]
     #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
     pub fn coverage<F>(&self, mut func: F)
     where

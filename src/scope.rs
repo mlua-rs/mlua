@@ -438,7 +438,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
             #[cfg(feature = "luau")]
             let extra_init = None;
             #[cfg(not(feature = "luau"))]
-            let extra_init: Option<&dyn Fn(*mut ffi::lua_State) -> Result<()>> = Some(&|state| {
+            let extra_init: Option<fn(*mut ffi::lua_State) -> Result<()>> = Some(|state| {
                 ffi::lua_pushcfunction(state, util::userdata_destructor::<UserDataCell<T>>);
                 rawset_field(state, -2, "__gc")
             });

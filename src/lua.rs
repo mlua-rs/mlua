@@ -96,6 +96,7 @@ pub(crate) struct ExtraData {
     libs: StdLib,
     mem_state: Option<NonNull<MemoryState>>,
 
+    // Auxiliary thread to store references
     ref_thread: *mut ffi::lua_State,
     ref_stack_size: c_int,
     ref_stack_top: c_int,
@@ -697,8 +698,6 @@ impl Lua {
     ///
     /// This function is useful when the `Lua` object is supposed to live for the remainder
     /// of the program's life.
-    /// In particular in asynchronous context this will allow to spawn Lua tasks to execute
-    /// in background.
     ///
     /// Dropping the returned reference will cause a memory leak. If this is not acceptable,
     /// the reference should first be wrapped with the [`Lua::from_static`] function producing a `Lua`.
@@ -727,7 +726,7 @@ impl Lua {
     where
         A: FromLuaMulti<'lua>,
         R: IntoLua<'lua>,
-        F: 'static + MaybeSend + Fn(&'lua Lua, A) -> Result<R>,
+        F: Fn(&'lua Lua, A) -> Result<R> + MaybeSend + 'static,
     {
         let entrypoint_inner = |lua: &'lua Lua, func: F| {
             let state = lua.state();
@@ -769,7 +768,7 @@ impl Lua {
     pub unsafe fn entrypoint1<'lua, R, F>(self, func: F) -> Result<c_int>
     where
         R: IntoLua<'lua>,
-        F: 'static + MaybeSend + Fn(&'lua Lua) -> Result<R>,
+        F: Fn(&'lua Lua) -> Result<R> + MaybeSend + 'static,
     {
         self.entrypoint(move |lua, _: ()| func(lua))
     }
@@ -1130,7 +1129,7 @@ impl Lua {
     /// a `Error::MemoryError` is generated instead.
     /// Returns previous limit (zero means no limit).
     ///
-    /// Does not work on module mode where Lua state is managed externally.
+    /// Does not work in module mode where Lua state is managed externally.
     pub fn set_memory_limit(&self, limit: usize) -> Result<usize> {
         unsafe {
             match (*self.extra.get()).mem_state.map(|mut x| x.as_mut()) {
@@ -1533,7 +1532,7 @@ impl Lua {
     where
         A: FromLuaMulti<'lua>,
         R: IntoLuaMulti<'lua>,
-        F: 'static + MaybeSend + Fn(&'lua Lua, A) -> Result<R>,
+        F: Fn(&'lua Lua, A) -> Result<R> + MaybeSend + 'static,
     {
         self.create_callback(Box::new(move |lua, args| {
             func(lua, A::from_lua_multi_args(args, 1, None, lua)?)?.into_lua_multi(lua)
@@ -1550,7 +1549,7 @@ impl Lua {
     where
         A: FromLuaMulti<'lua>,
         R: IntoLuaMulti<'lua>,
-        F: 'static + MaybeSend + FnMut(&'lua Lua, A) -> Result<R>,
+        F: FnMut(&'lua Lua, A) -> Result<R> + MaybeSend + 'static,
     {
         let func = RefCell::new(func);
         self.create_function(move |lua, args| {
@@ -1617,8 +1616,8 @@ impl Lua {
     where
         A: FromLuaMulti<'lua>,
         R: IntoLuaMulti<'lua>,
-        F: 'static + MaybeSend + Fn(&'lua Lua, A) -> FR,
-        FR: 'lua + Future<Output = Result<R>>,
+        F: Fn(&'lua Lua, A) -> FR + MaybeSend + 'static,
+        FR: Future<Output = Result<R>> + 'lua,
     {
         self.create_async_callback(Box::new(move |lua, args| {
             let args = match A::from_lua_multi_args(args, 1, None, lua) {
@@ -1820,7 +1819,7 @@ impl Lua {
     #[inline]
     pub fn create_proxy<T>(&self) -> Result<AnyUserData>
     where
-        T: 'static + UserData,
+        T: UserData + 'static,
     {
         unsafe { self.make_userdata(UserDataCell::new(UserDataProxy::<T>(PhantomData))) }
     }
@@ -2640,7 +2639,7 @@ impl Lua {
         #[cfg(feature = "luau")]
         let extra_init = None;
         #[cfg(not(feature = "luau"))]
-        let extra_init: Option<&dyn Fn(*mut ffi::lua_State) -> Result<()>> = Some(&|state| {
+        let extra_init: Option<fn(*mut ffi::lua_State) -> Result<()>> = Some(|state| {
             ffi::lua_pushcfunction(state, util::userdata_destructor::<UserDataCell<T>>);
             rawset_field(state, -2, "__gc")
         });

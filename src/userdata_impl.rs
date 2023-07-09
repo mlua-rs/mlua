@@ -26,6 +26,7 @@ use {
     std::future::Future,
 };
 
+/// Handle to registry for userdata methods and metamethods.
 pub struct UserDataRegistrar<'lua, T: 'static> {
     // Fields
     pub(crate) fields: Vec<(String, Callback<'lua, 'static>)>,

@@ -52,7 +52,7 @@ impl<'lua> FromLua<'lua> for String<'lua> {
         lua.coerce_string(value)?
             .ok_or_else(|| Error::FromLuaConversionError {
                 from: ty,
-                to: "String",
+                to: "string",
                 message: Some("expected string or number".to_string()),
             })
     }
@@ -211,7 +211,7 @@ impl<'lua> FromLua<'lua> for OwnedAnyUserData {
     }
 }
 
-impl<'lua, T: 'static + MaybeSend + UserData> IntoLua<'lua> for T {
+impl<'lua, T: UserData + MaybeSend + 'static> IntoLua<'lua> for T {
     #[inline]
     fn into_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
         Ok(Value::UserData(lua.create_userdata(self)?))
@@ -435,7 +435,7 @@ impl<'lua> FromLua<'lua> for BString {
             lua.coerce_string(value)?
                 .ok_or_else(|| Error::FromLuaConversionError {
                     from: ty,
-                    to: "String",
+                    to: "BString",
                     message: Some("expected string or number".to_string()),
                 })?
                 .as_bytes()
@@ -556,7 +556,7 @@ lua_convert_float!(f64);
 
 impl<'lua, T> IntoLua<'lua> for &[T]
 where
-    T: Clone + IntoLua<'lua>,
+    T: IntoLua<'lua> + Clone,
 {
     #[inline]
     fn into_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
@@ -599,7 +599,7 @@ where
                 let vec = table.sequence_values().collect::<Result<Vec<_>>>()?;
                 vec.try_into()
                     .map_err(|vec: Vec<T>| Error::FromLuaConversionError {
-                        from: "Table",
+                        from: "table",
                         to: "Array",
                         message: Some(format!("expected table of length {}, got {}", N, vec.len())),
                     })
