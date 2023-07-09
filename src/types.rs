@@ -8,9 +8,6 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::{fmt, mem, ptr};
 
-#[cfg(feature = "lua54")]
-use std::ffi::CStr;
-
 use rustc_hash::FxHashMap;
 
 #[cfg(feature = "async")]
@@ -78,10 +75,10 @@ pub(crate) type InterruptCallback = Arc<dyn Fn(&Lua) -> Result<VmState> + Send>;
 pub(crate) type InterruptCallback = Arc<dyn Fn(&Lua) -> Result<VmState>>;
 
 #[cfg(all(feature = "send", feature = "lua54"))]
-pub(crate) type WarnCallback = Box<dyn Fn(&Lua, &CStr, bool) -> Result<()> + Send>;
+pub(crate) type WarnCallback = Box<dyn Fn(&Lua, &str, bool) -> Result<()> + Send>;
 
 #[cfg(all(not(feature = "send"), feature = "lua54"))]
-pub(crate) type WarnCallback = Box<dyn Fn(&Lua, &CStr, bool) -> Result<()>>;
+pub(crate) type WarnCallback = Box<dyn Fn(&Lua, &str, bool) -> Result<()>>;
 
 #[cfg(feature = "send")]
 pub trait MaybeSend: Send {}

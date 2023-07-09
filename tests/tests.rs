@@ -1278,20 +1278,20 @@ fn test_warnings() -> Result<()> {
     let lua = Lua::new();
     lua.set_app_data::<Vec<(StdString, bool)>>(Vec::new());
 
-    lua.set_warning_function(|lua, msg, tocont| {
-        let msg = msg.to_string_lossy().to_string();
+    lua.set_warning_function(|lua, msg, incomplete| {
         lua.app_data_mut::<Vec<(StdString, bool)>>()
             .unwrap()
-            .push((msg, tocont));
+            .push((msg.to_string(), incomplete));
         Ok(())
     });
 
-    lua.warning("native warning ...", true)?;
-    lua.warning("finish", false)?;
+    lua.warning("native warning ...", true);
+    lua.warning("finish", false);
+    lua.warning("\0", false);
     lua.load(r#"warn("lua warning", "continue")"#).exec()?;
 
     lua.remove_warning_function();
-    lua.warning("one more warning", false)?;
+    lua.warning("one more warning", false);
 
     let messages = lua.app_data_ref::<Vec<(StdString, bool)>>().unwrap();
     assert_eq!(
@@ -1299,6 +1299,7 @@ fn test_warnings() -> Result<()> {
         vec![
             ("native warning ...".to_string(), true),
             ("finish".to_string(), false),
+            ("".to_string(), false),
             ("lua warning".to_string(), true),
             ("continue".to_string(), false),
         ]

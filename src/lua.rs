@@ -1027,7 +1027,7 @@ impl Lua {
     #[cfg_attr(docsrs, doc(cfg(feature = "lua54")))]
     pub fn set_warning_function<F>(&self, callback: F)
     where
-        F: 'static + MaybeSend + Fn(&Lua, &CStr, bool) -> Result<()>,
+        F: Fn(&Lua, &str, bool) -> Result<()> + MaybeSend + 'static,
     {
         unsafe extern "C" fn warn_proc(ud: *mut c_void, msg: *const c_char, tocont: c_int) {
             let extra = ud as *mut ExtraData;
@@ -1037,8 +1037,8 @@ impl Lua {
                     (*extra).warn_callback.as_ref(),
                     "no warning callback set in warn_proc"
                 );
-                let msg = CStr::from_ptr(msg);
-                cb(lua, msg, tocont != 0)
+                let msg = std::string::String::from_utf8_lossy(CStr::from_ptr(msg).to_bytes());
+                cb(lua, &msg, tocont != 0)
             });
         }
 
@@ -1065,15 +1065,25 @@ impl Lua {
 
     /// Emits a warning with the given message.
     ///
-    /// A message in a call with `tocont` set to `true` should be continued in another call to this function.
+    /// A message in a call with `incomplete` set to `true` should be continued in
+    /// another call to this function.
     ///
     /// Requires `feature = "lua54"`
     #[cfg(feature = "lua54")]
     #[cfg_attr(docsrs, doc(cfg(feature = "lua54")))]
-    pub fn warning<S: Into<Vec<u8>>>(&self, msg: S, tocont: bool) -> Result<()> {
-        let msg = CString::new(msg).map_err(|err| Error::RuntimeError(err.to_string()))?;
-        unsafe { ffi::lua_warning(self.state(), msg.as_ptr(), tocont as c_int) };
-        Ok(())
+    pub fn warning(&self, msg: impl AsRef<str>, incomplete: bool) {
+        let msg = msg.as_ref();
+        let mut bytes = vec![0; msg.len() + 1];
+        bytes[..msg.len()].copy_from_slice(msg.as_bytes());
+        let real_len = bytes.iter().position(|&c| c == 0).unwrap();
+        bytes.truncate(real_len);
+        unsafe {
+            ffi::lua_warning(
+                self.state(),
+                bytes.as_ptr() as *const c_char,
+                incomplete as c_int,
+            );
+        }
     }
 
     /// Gets information about the interpreter runtime stack.
