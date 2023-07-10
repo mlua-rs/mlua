@@ -319,7 +319,7 @@ impl<'lua> Table<'lua> {
 
         let size = self.raw_len();
         if idx < 1 || idx > size + 1 {
-            return Err(Error::RuntimeError("index out of bounds".to_string()));
+            return Err(Error::runtime("index out of bounds"));
         }
 
         let value = value.into_lua(lua)?;
@@ -407,7 +407,7 @@ impl<'lua> Table<'lua> {
             Value::Integer(idx) => {
                 let size = self.raw_len();
                 if idx < 1 || idx > size {
-                    return Err(Error::RuntimeError("index out of bounds".to_string()));
+                    return Err(Error::runtime("index out of bounds"));
                 }
                 unsafe {
                     let _sg = StackGuard::new(state);
@@ -778,8 +778,7 @@ impl<'lua> Table<'lua> {
     #[inline(always)]
     pub(crate) fn check_readonly_write(&self) -> Result<()> {
         if self.is_readonly() {
-            let err = "attempt to modify a readonly table".to_string();
-            return Err(Error::RuntimeError(err));
+            return Err(Error::runtime("attempt to modify a readonly table"));
         }
         Ok(())
     }

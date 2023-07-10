@@ -84,9 +84,7 @@ impl<'lua> AnyUserDataExt<'lua> for AnyUserData<'lua> {
         match metatable.get::<Value>(MetaMethod::Index)? {
             Value::Table(table) => table.raw_get(key),
             Value::Function(func) => func.call((self.clone(), key)),
-            _ => Err(Error::RuntimeError(
-                "attempt to index a userdata value".to_string(),
-            )),
+            _ => Err(Error::runtime("attempt to index a userdata value")),
         }
     }
 
@@ -95,9 +93,7 @@ impl<'lua> AnyUserDataExt<'lua> for AnyUserData<'lua> {
         match metatable.get::<Value>(MetaMethod::NewIndex)? {
             Value::Table(table) => table.raw_set(key, value),
             Value::Function(func) => func.call((self.clone(), key, value)),
-            _ => Err(Error::RuntimeError(
-                "attempt to index a userdata value".to_string(),
-            )),
+            _ => Err(Error::runtime("attempt to index a userdata value")),
         }
     }
 
@@ -109,9 +105,7 @@ impl<'lua> AnyUserDataExt<'lua> for AnyUserData<'lua> {
         let metatable = self.get_metatable()?;
         match metatable.get::<Value>(MetaMethod::Call)? {
             Value::Function(func) => func.call((self.clone(), args)),
-            _ => Err(Error::RuntimeError(
-                "attempt to call a userdata value".to_string(),
-            )),
+            _ => Err(Error::runtime("attempt to call a userdata value")),
         }
     }
 
@@ -134,8 +128,8 @@ impl<'lua> AnyUserDataExt<'lua> for AnyUserData<'lua> {
                 args.push_front(Value::UserData(self.clone()));
                 Box::pin(async move { func.call_async(args).await })
             }
-            Ok(_) => Box::pin(future::err(Error::RuntimeError(
-                "attempt to call a userdata value".to_string(),
+            Ok(_) => Box::pin(future::err(Error::runtime(
+                "attempt to call a userdata value",
             ))),
             Err(err) => Box::pin(future::err(err)),
         }
@@ -165,10 +159,10 @@ impl<'lua> AnyUserDataExt<'lua> for AnyUserData<'lua> {
     {
         match self.get(name)? {
             Value::Function(func) => func.call(args),
-            val => Err(Error::RuntimeError(format!(
-                "attempt to call a {} value",
-                val.type_name()
-            ))),
+            val => {
+                let msg = format!("attempt to call a {} value", val.type_name());
+                Err(Error::runtime(msg))
+            }
         }
     }
 
@@ -187,9 +181,8 @@ impl<'lua> AnyUserDataExt<'lua> for AnyUserData<'lua> {
                 Box::pin(async move { func.call_async(args).await })
             }
             Ok(val) => {
-                let type_name = val.type_name();
-                let msg = format!("attempt to call a {type_name} value");
-                Box::pin(future::err(Error::RuntimeError(msg)))
+                let msg = format!("attempt to call a {} value", val.type_name());
+                Box::pin(future::err(Error::runtime(msg)))
             }
             Err(err) => Box::pin(future::err(err)),
         }

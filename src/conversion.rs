@@ -244,7 +244,7 @@ impl<'lua> FromLua<'lua> for Error {
     fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> Result<Error> {
         match value {
             Value::Error(err) => Ok(err),
-            val => Ok(Error::RuntimeError(
+            val => Ok(Error::runtime(
                 lua.coerce_string(val)?
                     .and_then(|s| Some(s.to_str().ok()?.to_owned()))
                     .unwrap_or_else(|| "<unprintable error>".to_owned()),

@@ -95,9 +95,7 @@ fn test_error_within_hook() -> Result<()> {
     let lua = Lua::new();
 
     lua.set_hook(HookTriggers::EVERY_LINE, |_lua, _debug| {
-        Err(Error::RuntimeError(
-            "Something happened in there!".to_string(),
-        ))
+        Err(Error::runtime("Something happened in there!"))
     });
 
     let err = lua
@@ -130,7 +128,7 @@ fn test_limit_execution_instructions() -> Result<()> {
         move |_lua, debug| {
             assert_eq!(debug.event(), DebugEvent::Count);
             if max_instructions.fetch_sub(30, Ordering::Relaxed) <= 30 {
-                Err(Error::RuntimeError("time's up".to_string()))
+                Err(Error::runtime("time's up"))
             } else {
                 Ok(())
             }
@@ -159,8 +157,8 @@ fn test_hook_removal() -> Result<()> {
     lua.set_hook(
         HookTriggers::new().every_nth_instruction(1),
         |_lua, _debug| {
-            Err(Error::RuntimeError(
-                "this hook should've been removed by this time".to_string(),
+            Err(Error::runtime(
+                "this hook should've been removed by this time",
             ))
         },
     );

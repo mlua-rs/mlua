@@ -340,7 +340,7 @@ async fn test_async_thread_pool() -> Result<()> {
 
     let error_f = lua.create_async_function(|_, ()| async move {
         sleep_ms(10).await;
-        Err::<(), _>(Error::RuntimeError("test".to_string()))
+        Err::<(), _>(Error::runtime("test"))
     })?;
 
     let sleep = lua.create_async_function(|_, n| async move {

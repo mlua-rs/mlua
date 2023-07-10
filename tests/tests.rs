@@ -1306,7 +1306,7 @@ fn test_warnings() -> Result<()> {
     );
 
     // Trigger error inside warning
-    lua.set_warning_function(|_, _, _| Err(Error::RuntimeError("warning error".to_string())));
+    lua.set_warning_function(|_, _, _| Err(Error::runtime("warning error")));
     assert!(matches!(
         lua.load(r#"warn("test")"#).exec(),
         Err(Error::CallbackError { cause, .. })

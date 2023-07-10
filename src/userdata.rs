@@ -889,9 +889,7 @@ impl<'lua> AnyUserData<'lua> {
     /// [`nth_user_value`]: #method.nth_user_value
     pub fn set_nth_user_value<V: IntoLua<'lua>>(&self, n: usize, v: V) -> Result<()> {
         if n < 1 || n > u16::MAX as usize {
-            return Err(Error::RuntimeError(
-                "user value index out of bounds".to_string(),
-            ));
+            return Err(Error::runtime("user value index out of bounds"));
         }
 
         let lua = self.0.lua;
@@ -944,9 +942,7 @@ impl<'lua> AnyUserData<'lua> {
     /// [`set_nth_user_value`]: #method.set_nth_user_value
     pub fn nth_user_value<V: FromLua<'lua>>(&self, n: usize) -> Result<V> {
         if n < 1 || n > u16::MAX as usize {
-            return Err(Error::RuntimeError(
-                "user value index out of bounds".to_string(),
-            ));
+            return Err(Error::runtime("user value index out of bounds"));
         }
 
         let lua = self.0.lua;

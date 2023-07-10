@@ -337,7 +337,14 @@ impl StdError for Error {
 }
 
 impl Error {
+    /// Creates a new `RuntimeError` with the given message.
+    #[inline]
+    pub fn runtime<S: fmt::Display>(message: S) -> Self {
+        Error::RuntimeError(message.to_string())
+    }
+
     /// Wraps an external error object.
+    #[inline]
     pub fn external<T: Into<Box<dyn StdError + Send + Sync>>>(err: T) -> Self {
         Error::ExternalError(err.into().into())
     }

@@ -468,7 +468,7 @@ impl<'lua, 'a> Chunk<'lua, 'a> {
     fn to_expression(&self) -> Result<Function<'lua>> {
         // We assume that mode is Text
         let source = self.source.as_ref();
-        let source = source.map_err(|err| Error::RuntimeError(err.to_string()))?;
+        let source = source.map_err(Error::runtime)?;
         let source = Self::expression_source(source);
         // We don't need to compile source if no compiler options set
         #[cfg(feature = "luau")]
@@ -502,7 +502,7 @@ impl<'lua, 'a> Chunk<'lua, 'a> {
     }
 
     fn convert_name(name: String) -> Result<CString> {
-        CString::new(name).map_err(|err| Error::RuntimeError(format!("invalid name: {err}")))
+        CString::new(name).map_err(|err| Error::runtime(format!("invalid name: {err}")))
     }
 
     fn expression_source(source: &[u8]) -> Vec<u8> {

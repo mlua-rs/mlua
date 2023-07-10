@@ -7,7 +7,7 @@ fn test_error_context() -> Result<()> {
     let lua = Lua::new();
 
     let func = lua.create_function(|_, ()| {
-        Err::<(), _>(Error::RuntimeError("runtime error".into())).context("some context")
+        Err::<(), _>(Error::runtime("runtime error")).context("some context")
     })?;
     lua.globals().set("func", func)?;
 

@@ -70,7 +70,7 @@ unsafe extern "C" fn lua_collectgarbage(state: *mut ffi::lua_State) -> c_int {
 }
 
 fn lua_require(lua: &Lua, name: Option<StdString>) -> Result<Value> {
-    let name = name.ok_or_else(|| Error::RuntimeError("invalid module name".into()))?;
+    let name = name.ok_or_else(|| Error::runtime("invalid module name"))?;
 
     // Find module in the cache
     let state = lua.state();
@@ -101,7 +101,7 @@ fn lua_require(lua: &Lua, name: Option<StdString>) -> Result<Value> {
             break;
         }
     }
-    let source = source.ok_or_else(|| Error::RuntimeError(format!("cannot find '{name}'")))?;
+    let source = source.ok_or_else(|| Error::runtime(format!("cannot find '{name}'")))?;
 
     let value = lua
         .load(&source)

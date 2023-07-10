@@ -2160,8 +2160,7 @@ impl Lua {
             return Ok(());
         } else if t != Value::Nil && key.registry_id == ffi::LUA_REFNIL {
             // We cannot update `LUA_REFNIL` slot
-            let err = "cannot replace nil value with non-nil".to_string();
-            return Err(Error::RuntimeError(err));
+            return Err(Error::runtime("cannot replace nil value with non-nil"));
         }
 
         let state = self.state();

@@ -279,7 +279,7 @@ fn test_interrupts() -> Result<()> {
     //
     // Test errors in interrupts
     //
-    lua.set_interrupt(|_| Err(Error::RuntimeError("error from interrupt".into())));
+    lua.set_interrupt(|_| Err(Error::runtime("error from interrupt")));
     match f.call::<_, ()>(()) {
         Err(Error::CallbackError { cause, .. }) => match *cause {
             Error::RuntimeError(ref m) if m == "error from interrupt" => {}
