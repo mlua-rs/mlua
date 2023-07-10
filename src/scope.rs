@@ -368,7 +368,6 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
             check_stack(state, 13)?;
 
             #[cfg(not(feature = "luau"))]
-            #[allow(clippy::let_and_return)]
             let ud_ptr = protect_lua!(state, 0, 1, |state| {
                 let ud = ffi::lua_newuserdata(state, mem::size_of::<UserDataCell<T>>());
 
