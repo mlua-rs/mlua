@@ -57,7 +57,7 @@ parking_lot = { version = "0.12", optional = true }
 ffi = { package = "mlua-sys", version = "0.2.0", path = "mlua-sys" }
 
 [dev-dependencies]
-rustyline = "11.0"
+rustyline = "12.0"
 criterion = { version = "0.5", features = ["async_tokio"] }
 trybuild = "1.0"
 futures = "0.3.5"

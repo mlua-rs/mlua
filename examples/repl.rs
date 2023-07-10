@@ -1,11 +1,11 @@
 //! This example shows a simple read-evaluate-print-loop (REPL).
 
 use mlua::{Error, Lua, MultiValue};
-use rustyline::Editor;
+use rustyline::DefaultEditor;
 
 fn main() {
     let lua = Lua::new();
-    let mut editor = Editor::<(), _>::new().expect("Failed to make rustyline editor");
+    let mut editor = DefaultEditor::new().expect("Failed to create editor");
 
     loop {
         let mut prompt = "> ";
