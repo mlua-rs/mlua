@@ -1319,7 +1319,7 @@ impl Lua {
     ///
     /// By default JIT is enabled. Changing this option does not have any effect on
     /// already loaded functions.
-    #[cfg(any(feature = "luau-jit", docsrs))]
+    #[cfg(any(feature = "luau-jit", doc))]
     #[cfg_attr(docsrs, doc(cfg(feature = "luau-jit")))]
     pub fn enable_jit(&self, enable: bool) {
         unsafe { (*self.extra.get()).enable_jit = enable };

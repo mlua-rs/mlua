@@ -99,7 +99,7 @@ impl<T> MaybeSend for T {}
 #[derive(Debug, Default, Clone, Copy, PartialEq)]
 pub struct Vector(pub(crate) [f32; Self::SIZE]);
 
-#[cfg(feature = "luau")]
+#[cfg(any(feature = "luau", doc))]
 impl fmt::Display for Vector {
     #[rustfmt::skip]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -110,7 +110,7 @@ impl fmt::Display for Vector {
     }
 }
 
-#[cfg(feature = "luau")]
+#[cfg(any(feature = "luau", doc))]
 impl Vector {
     pub(crate) const SIZE: usize = if cfg!(feature = "luau-vector4") { 4 } else { 3 };
 
@@ -168,7 +168,7 @@ impl Serialize for Vector {
     }
 }
 
-#[cfg(feature = "luau")]
+#[cfg(any(feature = "luau", doc))]
 impl PartialEq<[f32; Self::SIZE]> for Vector {
     #[inline]
     fn eq(&self, other: &[f32; Self::SIZE]) -> bool {

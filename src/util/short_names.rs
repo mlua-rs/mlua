@@ -1,5 +1,6 @@
-//! Mostly copied from bevy_utils
-//! https://github.com/bevyengine/bevy/blob/main/crates/bevy_utils/src/short_names.rs
+//! Mostly copied from [bevy_utils]
+//!
+//! [bevy_utils]: https://github.com/bevyengine/bevy/blob/main/crates/bevy_utils/src/short_names.rs
 
 use std::any::type_name;
 
