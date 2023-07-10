@@ -37,7 +37,8 @@ luau-vector4 = ["luau", "ffi/luau-vector4"]
 vendored = ["ffi/vendored"]
 module = ["mlua_derive", "ffi/module"]
 async = ["futures-util"]
-send = []
+send = ["error-send"]
+error-send = []
 serialize = ["serde", "erased-serde", "serde-value"]
 macros = ["mlua_derive/macros"]
 unstable = []
@@ -85,7 +86,7 @@ required-features = ["async", "serialize", "macros"]
 
 [[example]]
 name = "async_http_server"
-required-features = ["async", "macros"]
+required-features = ["async", "macros", "error-send"]
 
 [[example]]
 name = "async_tcp_server"
