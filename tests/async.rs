@@ -3,13 +3,16 @@
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use futures_timer::Delay;
 use futures_util::stream::TryStreamExt;
 
 use mlua::{
     AnyUserDataExt, Error, Function, Lua, LuaOptions, Result, StdLib, Table, TableExt, UserData,
     UserDataMethods, Value,
 };
+
+async fn sleep_ms(ms: u64) {
+    tokio::time::sleep(Duration::from_millis(ms)).await;
+}
 
 #[tokio::test]
 async fn test_async_function() -> Result<()> {
@@ -43,7 +46,7 @@ async fn test_async_sleep() -> Result<()> {
     let lua = Lua::new();
 
     let sleep = lua.create_async_function(move |_lua, n: u64| async move {
-        Delay::new(Duration::from_millis(n)).await;
+        sleep_ms(n).await;
         Ok(format!("elapsed:{}ms", n))
     })?;
     lua.globals().set("sleep", sleep)?;
@@ -59,7 +62,7 @@ async fn test_async_call() -> Result<()> {
     let lua = Lua::new();
 
     let hello = lua.create_async_function(|_lua, name: String| async move {
-        Delay::new(Duration::from_millis(10)).await;
+        sleep_ms(10).await;
         Ok(format!("hello, {}!", name))
     })?;
 
@@ -102,7 +105,7 @@ async fn test_async_handle_yield() -> Result<()> {
     let lua = Lua::new();
 
     let sum = lua.create_async_function(|_lua, (a, b): (i64, i64)| async move {
-        Delay::new(Duration::from_millis(10)).await;
+        sleep_ms(10).await;
         Ok(a + b)
     })?;
 
@@ -160,10 +163,10 @@ async fn test_async_return_async_closure() -> Result<()> {
     let lua = Lua::new();
 
     let f = lua.create_async_function(|lua, a: i64| async move {
-        Delay::new(Duration::from_millis(10)).await;
+        sleep_ms(10).await;
 
         let g = lua.create_async_function(move |_, b: i64| async move {
-            Delay::new(Duration::from_millis(10)).await;
+            sleep_ms(10).await;
             return Ok(a + b);
         })?;
 
@@ -253,7 +256,7 @@ async fn test_async_thread() -> Result<()> {
     let f = lua.create_async_function(move |_lua, ()| {
         let cnt3 = cnt2.clone();
         async move {
-            Delay::new(Duration::from_millis(*cnt3.as_ref())).await;
+            sleep_ms(*cnt3.as_ref()).await;
             Ok("done")
         }
     })?;
@@ -296,19 +299,19 @@ async fn test_async_table() -> Result<()> {
     table.set("val", 10)?;
 
     let get_value = lua.create_async_function(|_, table: Table| async move {
-        Delay::new(Duration::from_millis(10)).await;
+        sleep_ms(10).await;
         table.get::<_, i64>("val")
     })?;
     table.set("get_value", get_value)?;
 
     let set_value = lua.create_async_function(|_, (table, n): (Table, i64)| async move {
-        Delay::new(Duration::from_millis(10)).await;
+        sleep_ms(10).await;
         table.set("val", n)
     })?;
     table.set("set_value", set_value)?;
 
     let sleep = lua.create_async_function(|_, n| async move {
-        Delay::new(Duration::from_millis(n)).await;
+        sleep_ms(n).await;
         Ok(format!("elapsed:{}ms", n))
     })?;
     table.set("sleep", sleep)?;
@@ -336,12 +339,12 @@ async fn test_async_thread_pool() -> Result<()> {
     let lua = Lua::new_with(StdLib::ALL_SAFE, options)?;
 
     let error_f = lua.create_async_function(|_, ()| async move {
-        Delay::new(Duration::from_millis(10)).await;
+        sleep_ms(10).await;
         Err::<(), _>(Error::RuntimeError("test".to_string()))
     })?;
 
     let sleep = lua.create_async_function(|_, n| async move {
-        Delay::new(Duration::from_millis(n)).await;
+        sleep_ms(n).await;
         Ok(format!("elapsed:{}ms", n))
     })?;
 
@@ -359,25 +362,25 @@ async fn test_async_userdata() -> Result<()> {
     impl UserData for MyUserData {
         fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
             methods.add_async_method("get_value", |_, data, ()| async move {
-                Delay::new(Duration::from_millis(10)).await;
+                sleep_ms(10).await;
                 Ok(data.0)
             });
 
             methods.add_async_method_mut("set_value", |_, data, n| async move {
-                Delay::new(Duration::from_millis(10)).await;
+                sleep_ms(10).await;
                 data.0 = n;
                 Ok(())
             });
 
             methods.add_async_function("sleep", |_, n| async move {
-                Delay::new(Duration::from_millis(n)).await;
+                sleep_ms(n).await;
                 Ok(format!("elapsed:{}ms", n))
             });
 
             #[cfg(not(any(feature = "lua51", feature = "luau")))]
             methods.add_async_meta_method(mlua::MetaMethod::Call, |_, data, ()| async move {
                 let n = data.0;
-                Delay::new(Duration::from_millis(n)).await;
+                sleep_ms(n).await;
                 Ok(format!("elapsed:{}ms", n))
             });
 
@@ -385,7 +388,7 @@ async fn test_async_userdata() -> Result<()> {
             methods.add_async_meta_method(
                 mlua::MetaMethod::Index,
                 |_, data, key: String| async move {
-                    Delay::new(Duration::from_millis(10)).await;
+                    sleep_ms(10).await;
                     match key.as_str() {
                         "ms" => Ok(Some(data.0 as f64)),
                         "s" => Ok(Some((data.0 as f64) / 1000.0)),
@@ -398,7 +401,7 @@ async fn test_async_userdata() -> Result<()> {
             methods.add_async_meta_method_mut(
                 mlua::MetaMethod::NewIndex,
                 |_, data, (key, value): (String, f64)| async move {
-                    Delay::new(Duration::from_millis(10)).await;
+                    sleep_ms(10).await;
                     match key.as_str() {
                         "ms" => data.0 = value as u64,
                         "s" => data.0 = (value * 1000.0) as u64,
@@ -485,7 +488,7 @@ async fn test_owned_async_call() -> Result<()> {
 
     let hello = lua
         .create_async_function(|_, name: String| async move {
-            Delay::new(Duration::from_millis(10)).await;
+            sleep_ms(10).await;
             Ok(format!("hello, {}!", name))
         })?
         .into_owned();
@@ -506,7 +509,7 @@ async fn test_async_terminate() -> Result<()> {
         let mutex = mutex2.clone();
         async move {
             let _guard = mutex.lock();
-            Delay::new(Duration::from_millis(100)).await;
+            sleep_ms(100).await;
             Ok(())
         }
     })?;

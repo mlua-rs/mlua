@@ -167,14 +167,13 @@ impl<'lua> Function<'lua> {
     ///
     /// ```
     /// use std::time::Duration;
-    /// use futures_timer::Delay;
     /// # use mlua::{Lua, Result};
     /// # #[tokio::main]
     /// # async fn main() -> Result<()> {
     /// # let lua = Lua::new();
     ///
     /// let sleep = lua.create_async_function(move |_lua, n: u64| async move {
-    ///     Delay::new(Duration::from_millis(n)).await;
+    ///     tokio::time::sleep(Duration::from_millis(n)).await;
     ///     Ok(())
     /// })?;
     ///

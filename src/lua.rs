@@ -1601,11 +1601,10 @@ impl Lua {
     ///
     /// ```
     /// use std::time::Duration;
-    /// use futures_timer::Delay;
     /// use mlua::{Lua, Result};
     ///
     /// async fn sleep(_lua: &Lua, n: u64) -> Result<&'static str> {
-    ///     Delay::new(Duration::from_millis(n)).await;
+    ///     tokio::time::sleep(Duration::from_millis(n)).await;
     ///     Ok("done")
     /// }
     ///
