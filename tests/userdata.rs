@@ -797,6 +797,27 @@ fn test_any_userdata() -> Result<()> {
 }
 
 #[test]
+fn test_any_userdata_wrap() -> Result<()> {
+    let lua = Lua::new();
+
+    lua.register_userdata_type::<StdString>(|reg| {
+        reg.add_method("get", |_, this, ()| Ok(this.clone()));
+    })?;
+
+    lua.globals()
+        .set("s", AnyUserData::wrap("hello".to_string()))?;
+    lua.load(
+        r#"
+        assert(s:get() == "hello")
+    "#,
+    )
+    .exec()
+    .unwrap();
+
+    Ok(())
+}
+
+#[test]
 fn test_userdata_ext() -> Result<()> {
     let lua = Lua::new();
 

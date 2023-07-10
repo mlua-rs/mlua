@@ -1374,6 +1374,26 @@ impl<'lua, T: 'static> UserDataRefMut<'lua, T> {
     }
 }
 
+pub(crate) struct WrappedUserdata<F: for<'lua> FnOnce(&'lua Lua) -> Result<AnyUserData<'lua>>>(F);
+
+impl<'lua> AnyUserData<'lua> {
+    /// Wraps any Rust type, returning an opaque type that implements [`IntoLua`] trait.
+    ///
+    /// This function uses [`Lua::create_any_userdata()`] under the hood.
+    pub fn wrap<T: MaybeSend + 'static>(data: T) -> impl IntoLua<'lua> {
+        WrappedUserdata(move |lua| lua.create_any_userdata(data))
+    }
+}
+
+impl<'lua, F> IntoLua<'lua> for WrappedUserdata<F>
+where
+    F: for<'l> FnOnce(&'l Lua) -> Result<AnyUserData<'l>>,
+{
+    fn into_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
+        (self.0)(lua).map(Value::UserData)
+    }
+}
+
 #[inline]
 fn try_value_to_userdata<T>(value: Value) -> Result<AnyUserData> {
     match value {
