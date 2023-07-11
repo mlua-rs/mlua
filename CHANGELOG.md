@@ -3,7 +3,7 @@
 - `UserDataMethods::add_async_method()` takes `&T` instead of cloning `T`
 - Implemented `PartialEq<[T]>` for tables
 - Added Luau 4-dimensional vectors support (`luau-vector4` feature)
-- `Table::sequence_values()` iterator no longer uses any metamethods (`Table::raw_sequence_values()` is removed)
+- `Table::sequence_values()` iterator no longer uses any metamethods (`Table::raw_sequence_values()` is deprecated)
 - Added `Table:is_empty()` function that checks both hash and array parts
 - Refactored Debug interface
 - Re-exported `ffi` (`mlua-sys`) crate for easier writing of unsafe code
@@ -11,7 +11,6 @@
 - Take `&str` as function name in `TableExt` and `AnyUserDataExt` traits
 - Added module attribule `skip_memory_check` to improve performance
 - Added `AnyUserData::wrap()` to provide more easy way of creating _any_ userdata in Lua
-- Errors in non-send mode are no longer have `Send` requirement (but can be re-enabled back using `error-send` feature)
 
 ## v0.9.0-beta.3
 
