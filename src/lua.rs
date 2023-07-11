@@ -2295,8 +2295,11 @@ impl Lua {
         extra.app_data.remove()
     }
 
-    // Uses 2 stack spaces, does not call checkstack
-    pub(crate) unsafe fn push_value(&self, value: Value) -> Result<()> {
+    /// Pushes a value onto the Lua stack.
+    ///
+    /// Uses 2 stack spaces, does not call checkstack.
+    #[doc(hidden)]
+    pub unsafe fn push_value(&self, value: Value) -> Result<()> {
         let state = self.state();
         match value {
             Value::Nil => {
@@ -2356,8 +2359,11 @@ impl Lua {
         Ok(())
     }
 
-    // Uses 2 stack spaces, does not call checkstack
-    pub(crate) unsafe fn pop_value(&self) -> Value {
+    /// Pops a value from the Lua stack.
+    ///
+    /// Uses 2 stack spaces, does not call checkstack.
+    #[doc(hidden)]
+    pub unsafe fn pop_value(&self) -> Value {
         let state = self.state();
         match ffi::lua_type(state, -1) {
             ffi::LUA_TNIL => {
