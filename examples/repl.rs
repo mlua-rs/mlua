@@ -24,7 +24,7 @@ fn main() {
                         "{}",
                         values
                             .iter()
-                            .map(|value| format!("{:?}", value))
+                            .map(|value| format!("{:#?}", value))
                             .collect::<Vec<_>>()
                             .join("\t")
                     );
