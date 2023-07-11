@@ -716,6 +716,12 @@ impl<'lua> Table<'lua> {
         }
     }
 
+    #[doc(hidden)]
+    #[deprecated(since = "0.9.0", note = "use `sequence_values` instead")]
+    pub fn raw_sequence_values<V: FromLua<'lua>>(self) -> TableSequence<'lua, V> {
+        self.sequence_values()
+    }
+
     #[cfg(feature = "serialize")]
     pub(crate) fn sequence_values_by_len<V: FromLua<'lua>>(
         self,
