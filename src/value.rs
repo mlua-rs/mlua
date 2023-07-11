@@ -223,9 +223,13 @@ impl<'lua> Value<'lua> {
             f @ Value::Function(_) => write!(fmt, "function: {:?}", f.to_pointer()),
             t @ Value::Thread(_) => write!(fmt, "thread: {:?}", t.to_pointer()),
             u @ Value::UserData(ud) => {
+                // Try `__name` first then `__tostring`
                 let name = ud.type_name().ok().flatten();
-                let name = name.unwrap_or_else(|| "userdata".to_string());
-                write!(fmt, "{name}: {:?}", u.to_pointer())
+                let s = name
+                    .map(|name| format!("{name}: {:?}", u.to_pointer()))
+                    .or_else(|| u.to_string().ok())
+                    .unwrap_or_else(|| format!("userdata: {:?}", u.to_pointer()));
+                write!(fmt, "{s}")
             }
             Value::Error(e) if recursive => write!(fmt, "{e:?}"),
             Value::Error(_) => write!(fmt, "error"),
