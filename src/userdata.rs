@@ -24,7 +24,7 @@ use crate::table::{Table, TablePairs};
 use crate::types::{LuaRef, MaybeSend};
 use crate::util::{check_stack, get_userdata, take_userdata, StackGuard};
 use crate::value::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, Value};
-use crate::UserDataRegistrar;
+use crate::UserDataRegistry;
 
 #[cfg(feature = "lua54")]
 pub(crate) const USER_VALUE_MAXSLOT: usize = 8;
@@ -446,7 +446,7 @@ pub trait UserDataMethods<'lua, T> {
     //
 
     #[doc(hidden)]
-    fn append_methods_from<S>(&mut self, _other: UserDataRegistrar<'lua, S>) {}
+    fn append_methods_from<S>(&mut self, _other: UserDataRegistry<'lua, S>) {}
 }
 
 /// Field registry for [`UserData`] implementors.
@@ -544,7 +544,7 @@ pub trait UserDataFields<'lua, T> {
     //
 
     #[doc(hidden)]
-    fn append_fields_from<S>(&mut self, _other: UserDataRegistrar<'lua, S>) {}
+    fn append_fields_from<S>(&mut self, _other: UserDataRegistry<'lua, S>) {}
 }
 
 /// Trait for custom userdata types.

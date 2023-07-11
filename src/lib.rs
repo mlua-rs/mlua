@@ -122,7 +122,7 @@ pub use crate::userdata::{
     UserDataRef, UserDataRefMut,
 };
 pub use crate::userdata_ext::AnyUserDataExt;
-pub use crate::userdata_impl::UserDataRegistrar;
+pub use crate::userdata_impl::UserDataRegistry;
 pub use crate::value::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, MultiValue, Nil, Value};
 
 #[cfg(not(feature = "luau"))]

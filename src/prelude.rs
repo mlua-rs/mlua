@@ -13,7 +13,7 @@ pub use crate::{
     Thread as LuaThread, ThreadStatus as LuaThreadStatus, UserData as LuaUserData,
     UserDataFields as LuaUserDataFields, UserDataMetatable as LuaUserDataMetatable,
     UserDataMethods as LuaUserDataMethods, UserDataRef as LuaUserDataRef,
-    UserDataRefMut as LuaUserDataRefMut, UserDataRegistrar as LuaUserDataRegistrar,
+    UserDataRefMut as LuaUserDataRefMut, UserDataRegistry as LuaUserDataRegistry,
     Value as LuaValue,
 };
 

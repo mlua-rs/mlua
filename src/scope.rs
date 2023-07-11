@@ -13,7 +13,7 @@ use crate::types::{Callback, CallbackUpvalue, LuaRef, MaybeSend};
 use crate::userdata::{
     AnyUserData, MetaMethod, UserData, UserDataCell, UserDataFields, UserDataMethods,
 };
-use crate::userdata_impl::UserDataRegistrar;
+use crate::userdata_impl::UserDataRegistry;
 use crate::util::{
     self, assert_stack, check_stack, get_userdata, init_userdata_metatable, push_table,
     rawset_field, take_userdata, StackGuard,
@@ -860,7 +860,7 @@ impl<'lua, T: UserData> UserDataFields<'lua, T> for NonStaticUserDataFields<'lua
         self.meta_fields.push((
             name,
             Box::new(move |lua, _| {
-                UserDataRegistrar::<()>::check_meta_field(lua, &name2, value.clone())
+                UserDataRegistry::<()>::check_meta_field(lua, &name2, value.clone())
             }),
         ));
     }
@@ -874,7 +874,7 @@ impl<'lua, T: UserData> UserDataFields<'lua, T> for NonStaticUserDataFields<'lua
         let name2 = name.clone();
         self.meta_fields.push((
             name,
-            Box::new(move |lua, _| UserDataRegistrar::<()>::check_meta_field(lua, &name2, f(lua)?)),
+            Box::new(move |lua, _| UserDataRegistry::<()>::check_meta_field(lua, &name2, f(lua)?)),
         ));
     }
 }

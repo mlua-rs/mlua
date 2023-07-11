@@ -30,7 +30,7 @@ use crate::types::{
     LightUserData, LuaRef, MaybeSend, Number, RegistryKey,
 };
 use crate::userdata::{AnyUserData, MetaMethod, UserData, UserDataCell};
-use crate::userdata_impl::{UserDataProxy, UserDataRegistrar};
+use crate::userdata_impl::{UserDataProxy, UserDataRegistry};
 use crate::util::{
     self, assert_stack, check_stack, get_destructed_userdata_metatable, get_gc_metatable,
     get_gc_userdata, get_main_state, get_userdata, init_error_registry, init_gc_metatable,
@@ -1776,9 +1776,9 @@ impl Lua {
     /// This methods provides a way to add fields or methods to userdata objects of a type `T`.
     pub fn register_userdata_type<T: 'static>(
         &self,
-        f: impl FnOnce(&mut UserDataRegistrar<T>),
+        f: impl FnOnce(&mut UserDataRegistry<T>),
     ) -> Result<()> {
-        let mut registry = UserDataRegistrar::new();
+        let mut registry = UserDataRegistry::new();
         f(&mut registry);
 
         unsafe {
@@ -2527,7 +2527,7 @@ impl Lua {
 
     unsafe fn register_userdata_metatable<'lua, T: 'static>(
         &'lua self,
-        mut registry: UserDataRegistrar<'lua, T>,
+        mut registry: UserDataRegistry<'lua, T>,
     ) -> Result<Integer> {
         let state = self.state();
         let _sg = StackGuard::new(state);
@@ -2993,7 +2993,7 @@ impl Lua {
             }
 
             // Create new metatable from UserData definition
-            let mut registry = UserDataRegistrar::new();
+            let mut registry = UserDataRegistry::new();
             T::add_fields(&mut registry);
             T::add_methods(&mut registry);
 
@@ -3013,7 +3013,7 @@ impl Lua {
             }
 
             // Create empty metatable
-            let registry = UserDataRegistrar::new();
+            let registry = UserDataRegistry::new();
             self.register_userdata_metatable::<T>(registry)
         })
     }

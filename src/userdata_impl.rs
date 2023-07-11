@@ -27,7 +27,7 @@ use {
 };
 
 /// Handle to registry for userdata methods and metamethods.
-pub struct UserDataRegistrar<'lua, T: 'static> {
+pub struct UserDataRegistry<'lua, T: 'static> {
     // Fields
     pub(crate) fields: Vec<(String, Callback<'lua, 'static>)>,
     pub(crate) field_getters: Vec<(String, Callback<'lua, 'static>)>,
@@ -45,9 +45,9 @@ pub struct UserDataRegistrar<'lua, T: 'static> {
     _type: PhantomData<T>,
 }
 
-impl<'lua, T: 'static> UserDataRegistrar<'lua, T> {
+impl<'lua, T: 'static> UserDataRegistry<'lua, T> {
     pub(crate) const fn new() -> Self {
-        UserDataRegistrar {
+        UserDataRegistry {
             fields: Vec::new(),
             field_getters: Vec::new(),
             field_setters: Vec::new(),
@@ -494,7 +494,7 @@ fn get_function_name<T>(name: &str) -> StdString {
     format!("{}.{name}", short_type_name::<T>())
 }
 
-impl<'lua, T: 'static> UserDataFields<'lua, T> for UserDataRegistrar<'lua, T> {
+impl<'lua, T: 'static> UserDataFields<'lua, T> for UserDataRegistry<'lua, T> {
     fn add_field<V>(&mut self, name: impl AsRef<str>, value: V)
     where
         V: IntoLua<'lua> + Clone + 'static,
@@ -573,7 +573,7 @@ impl<'lua, T: 'static> UserDataFields<'lua, T> for UserDataRegistrar<'lua, T> {
 
     // Below are internal methods
 
-    fn append_fields_from<S>(&mut self, other: UserDataRegistrar<'lua, S>) {
+    fn append_fields_from<S>(&mut self, other: UserDataRegistry<'lua, S>) {
         self.fields.extend(other.fields);
         self.field_getters.extend(other.field_getters);
         self.field_setters.extend(other.field_setters);
@@ -581,7 +581,7 @@ impl<'lua, T: 'static> UserDataFields<'lua, T> for UserDataRegistrar<'lua, T> {
     }
 }
 
-impl<'lua, T: 'static> UserDataMethods<'lua, T> for UserDataRegistrar<'lua, T> {
+impl<'lua, T: 'static> UserDataMethods<'lua, T> for UserDataRegistry<'lua, T> {
     fn add_method<M, A, R>(&mut self, name: impl AsRef<str>, method: M)
     where
         M: Fn(&'lua Lua, &T, A) -> Result<R> + MaybeSend + 'static,
@@ -758,7 +758,7 @@ impl<'lua, T: 'static> UserDataMethods<'lua, T> for UserDataRegistrar<'lua, T> {
 
     // Below are internal methods used in generated code
 
-    fn append_methods_from<S>(&mut self, other: UserDataRegistrar<'lua, S>) {
+    fn append_methods_from<S>(&mut self, other: UserDataRegistry<'lua, S>) {
         self.methods.extend(other.methods);
         #[cfg(feature = "async")]
         self.async_methods.extend(other.async_methods);
@@ -785,13 +785,13 @@ macro_rules! lua_userdata_impl {
     ($type:ty) => {
         impl<T: UserData + 'static> UserData for $type {
             fn add_fields<'lua, F: UserDataFields<'lua, Self>>(fields: &mut F) {
-                let mut orig_fields = UserDataRegistrar::new();
+                let mut orig_fields = UserDataRegistry::new();
                 T::add_fields(&mut orig_fields);
                 fields.append_fields_from(orig_fields);
             }
 
             fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
-                let mut orig_methods = UserDataRegistrar::new();
+                let mut orig_methods = UserDataRegistry::new();
                 T::add_methods(&mut orig_methods);
                 methods.append_methods_from(orig_methods);
             }

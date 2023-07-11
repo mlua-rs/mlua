@@ -44,7 +44,7 @@ error[E0521]: borrowed data escapes outside of closure
    |                                             ---
    |                                             |
    |                                             `reg` is a reference that is only valid in the closure body
-   |                                             has type `&mut LuaUserDataRegistrar<'1, std::string::String>`
+   |                                             has type `&mut LuaUserDataRegistry<'1, std::string::String>`
 ...
 9  | /         reg.add_async_method("t", |_, this: &String, ()| async {
 10 | |             s = this;
@@ -55,7 +55,7 @@ error[E0521]: borrowed data escapes outside of closure
    | |__________`reg` escapes the closure body here
    |            argument requires that `'1` must outlive `'static`
    |
-   = note: requirement occurs because of a mutable reference to `LuaUserDataRegistrar<'_, std::string::String>`
+   = note: requirement occurs because of a mutable reference to `LuaUserDataRegistry<'_, std::string::String>`
    = note: mutable references are invariant over their type parameter
    = help: see <https://doc.rust-lang.org/nomicon/subtyping.html> for more information about variance
 
