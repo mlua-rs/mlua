@@ -908,3 +908,39 @@ fn test_owned_userdata() -> Result<()> {
 
     Ok(())
 }
+
+#[cfg(feature = "macros")]
+#[test]
+fn test_userdata_derive() -> Result<()> {
+    let lua = Lua::new();
+
+    // Simple struct
+
+    #[derive(Clone, Copy, mlua::FromLua)]
+    struct MyUserData(i32);
+
+    lua.register_userdata_type::<MyUserData>(|reg| {
+        reg.add_function("val", |_, this: MyUserData| Ok(this.0));
+    })?;
+
+    lua.globals()
+        .set("ud", AnyUserData::wrap(MyUserData(123)))?;
+    lua.load("assert(ud:val() == 123)").exec()?;
+
+    // More complex struct where generics and where clause
+
+    #[derive(Clone, Copy, mlua::FromLua)]
+    struct MyUserData2<'a, T>(&'a T)
+    where
+        T: ?Sized;
+
+    lua.register_userdata_type::<MyUserData2<'static, i32>>(|reg| {
+        reg.add_function("val", |_, this: MyUserData2<'static, i32>| Ok(*this.0));
+    })?;
+
+    lua.globals()
+        .set("ud", AnyUserData::wrap(MyUserData2(&321)))?;
+    lua.load("assert(ud:val() == 321)").exec()?;
+
+    Ok(())
+}

@@ -216,6 +216,14 @@ pub use crate::{
 #[cfg_attr(docsrs, doc(cfg(feature = "macros")))]
 pub use mlua_derive::chunk;
 
+/// Derive [`FromLua`] for a Rust type.
+///
+/// Current implementation generate code that takes [`UserData`] value, borrow it (of the Rust type)
+/// and clone.
+#[cfg(feature = "macros")]
+#[cfg_attr(docsrs, doc(cfg(feature = "macros")))]
+pub use mlua_derive::FromLua;
+
 /// Registers Lua module entrypoint.
 ///
 /// You can register multiple entrypoints as required.
