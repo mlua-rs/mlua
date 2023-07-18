@@ -89,6 +89,10 @@ pub type lua_Alloc = unsafe extern "C" fn(
     nsize: usize,
 ) -> *mut c_void;
 
+#[cfg_attr(
+    all(windows, feature = "module", feature = "vendored"),
+    link(name = "lua51", kind = "raw-dylib")
+)]
 extern "C" {
     //
     // State manipulation
@@ -221,6 +225,10 @@ pub const LUA_GCSTEP: c_int = 5;
 pub const LUA_GCSETPAUSE: c_int = 6;
 pub const LUA_GCSETSTEPMUL: c_int = 7;
 
+#[cfg_attr(
+    all(windows, feature = "module", feature = "vendored"),
+    link(name = "lua51", kind = "raw-dylib")
+)]
 extern "C" {
     pub fn lua_gc(L: *mut lua_State, what: c_int, data: c_int) -> c_int;
 }
@@ -228,6 +236,10 @@ extern "C" {
 //
 // Miscellaneous functions
 //
+#[cfg_attr(
+    all(windows, feature = "module", feature = "vendored"),
+    link(name = "lua51", kind = "raw-dylib")
+)]
 extern "C" {
     pub fn lua_error(L: *mut lua_State) -> !;
     pub fn lua_next(L: *mut lua_State, idx: c_int) -> c_int;
@@ -353,6 +365,10 @@ pub const LUA_MASKCOUNT: c_int = 1 << (LUA_HOOKCOUNT as usize);
 /// Type for functions to be called on debug events.
 pub type lua_Hook = unsafe extern "C" fn(L: *mut lua_State, ar: *mut lua_Debug);
 
+#[cfg_attr(
+    all(windows, feature = "module", feature = "vendored"),
+    link(name = "lua51", kind = "raw-dylib")
+)]
 extern "C" {
     pub fn lua_getstack(L: *mut lua_State, level: c_int, ar: *mut lua_Debug) -> c_int;
     pub fn lua_getinfo(L: *mut lua_State, what: *const c_char, ar: *mut lua_Debug) -> c_int;

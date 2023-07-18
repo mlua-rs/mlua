@@ -14,6 +14,10 @@ pub struct luaL_Reg {
     pub func: lua_CFunction,
 }
 
+#[cfg_attr(
+    all(windows, feature = "module", feature = "vendored"),
+    link(name = "lua51", kind = "raw-dylib")
+)]
 extern "C" {
     pub fn luaL_register(L: *mut lua_State, libname: *const c_char, l: *const luaL_Reg);
     #[link_name = "luaL_getmetafield"]
@@ -56,6 +60,10 @@ extern "C" {
 pub const LUA_NOREF: c_int = -2;
 pub const LUA_REFNIL: c_int = -1;
 
+#[cfg_attr(
+    all(windows, feature = "module", feature = "vendored"),
+    link(name = "lua51", kind = "raw-dylib")
+)]
 extern "C" {
     pub fn luaL_ref(L: *mut lua_State, t: c_int) -> c_int;
     pub fn luaL_unref(L: *mut lua_State, t: c_int, r#ref: c_int);

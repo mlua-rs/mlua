@@ -20,6 +20,10 @@ pub const LUA_JITLIBNAME: &str = "jit";
 #[cfg(feature = "luajit")]
 pub const LUA_FFILIBNAME: &str = "ffi";
 
+#[cfg_attr(
+    all(windows, feature = "module", feature = "vendored"),
+    link(name = "lua51", kind = "raw-dylib")
+)]
 extern "C" {
     pub fn luaopen_base(L: *mut lua_State) -> c_int;
     pub fn luaopen_table(L: *mut lua_State) -> c_int;
