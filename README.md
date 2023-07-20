@@ -9,7 +9,7 @@
 [docs.rs]: https://docs.rs/mlua
 [Coverage Status]: https://codecov.io/gh/khvzak/mlua/branch/master/graph/badge.svg?token=99339FS1CG
 [codecov.io]: https://codecov.io/gh/khvzak/mlua
-[MSRV]: https://img.shields.io/badge/rust-1.63+-brightgreen.svg?&logo=rust
+[MSRV]: https://img.shields.io/badge/rust-1.71+-brightgreen.svg?&logo=rust
 
 [Guided Tour] | [Benchmarks] | [FAQ]
 
@@ -117,7 +117,7 @@ Add to `Cargo.toml` :
 
 ``` toml
 [dependencies]
-mlua = { version = "0.8", features = ["lua54", "vendored"] }
+mlua = { version = "0.9.0-rc.2", features = ["lua54", "vendored"] }
 ```
 
 `main.rs`
@@ -152,7 +152,7 @@ Add to `Cargo.toml` :
 crate-type = ["cdylib"]
 
 [dependencies]
-mlua = { version = "0.8", features = ["lua54", "vendored", "module"] }
+mlua = { version = "0.9.0-rc.2", features = ["lua54", "vendored", "module"] }
 ```
 
 `lib.rs` :
@@ -197,13 +197,11 @@ rustflags = [
 ]
 ```
 On Linux you can build modules normally with `cargo build --release`.
-Vendored and non-vendored builds are supported for these OS.
 
-On Windows `vendored` mode for modules is not supported since you need to link to a Lua dll.
-Easiest way is to use either MinGW64 (as part of [MSYS2](https://github.com/msys2/msys2) package) with `pkg-config` or
-MSVC with `LUA_INC` / `LUA_LIB` / `LUA_LIB_NAME` environment variables.
+Vendored and non-vendored builds are supported for Linux, macOS and Windows.
 
-More details about compiling and linking Lua modules can be found on the [Building Modules](http://lua-users.org/wiki/BuildingModules) page.
+On Windows when using `vendored` mode, the target module will be linked with `lua5x.dll` library (depending on your feature flags).
+Your main application should provide this library.
 
 ### Publishing to luarocks.org
 
