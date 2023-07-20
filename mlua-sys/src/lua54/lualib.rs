@@ -14,10 +14,7 @@ pub const LUA_MATHLIBNAME: &str = "math";
 pub const LUA_DBLIBNAME: &str = "debug";
 pub const LUA_LOADLIBNAME: &str = "package";
 
-#[cfg_attr(
-    all(windows, feature = "module", feature = "vendored"),
-    link(name = "lua54", kind = "raw-dylib")
-)]
+#[cfg_attr(all(windows, raw_dylib), link(name = "lua54", kind = "raw-dylib"))]
 extern "C" {
     pub fn luaopen_base(L: *mut lua_State) -> c_int;
     pub fn luaopen_coroutine(L: *mut lua_State) -> c_int;

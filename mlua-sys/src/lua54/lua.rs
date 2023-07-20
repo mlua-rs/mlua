@@ -105,10 +105,7 @@ pub type lua_Alloc = unsafe extern "C" fn(
 pub type lua_WarnFunction =
     unsafe extern "C" fn(ud: *mut c_void, msg: *const c_char, tocont: c_int);
 
-#[cfg_attr(
-    all(windows, feature = "module", feature = "vendored"),
-    link(name = "lua54", kind = "raw-dylib")
-)]
+#[cfg_attr(all(windows, raw_dylib), link(name = "lua54", kind = "raw-dylib"))]
 extern "C" {
     //
     // State manipulation
@@ -182,20 +179,14 @@ pub const LUA_OPEQ: c_int = 0;
 pub const LUA_OPLT: c_int = 1;
 pub const LUA_OPLE: c_int = 2;
 
-#[cfg_attr(
-    all(windows, feature = "module", feature = "vendored"),
-    link(name = "lua54", kind = "raw-dylib")
-)]
+#[cfg_attr(all(windows, raw_dylib), link(name = "lua54", kind = "raw-dylib"))]
 extern "C" {
     pub fn lua_arith(L: *mut lua_State, op: c_int);
     pub fn lua_rawequal(L: *mut lua_State, idx1: c_int, idx2: c_int) -> c_int;
     pub fn lua_compare(L: *mut lua_State, idx1: c_int, idx2: c_int, op: c_int) -> c_int;
 }
 
-#[cfg_attr(
-    all(windows, feature = "module", feature = "vendored"),
-    link(name = "lua54", kind = "raw-dylib")
-)]
+#[cfg_attr(all(windows, raw_dylib), link(name = "lua54", kind = "raw-dylib"))]
 extern "C" {
     //
     // Push functions (C -> stack)
@@ -286,10 +277,7 @@ pub unsafe fn lua_pcall(L: *mut lua_State, n: c_int, r: c_int, f: c_int) -> c_in
     lua_pcallk(L, n, r, f, 0, None)
 }
 
-#[cfg_attr(
-    all(windows, feature = "module", feature = "vendored"),
-    link(name = "lua54", kind = "raw-dylib")
-)]
+#[cfg_attr(all(windows, raw_dylib), link(name = "lua54", kind = "raw-dylib"))]
 extern "C" {
     //
     // Coroutine functions
@@ -318,10 +306,7 @@ pub unsafe fn lua_yield(L: *mut lua_State, n: c_int) -> c_int {
 //
 // Warning-related functions
 //
-#[cfg_attr(
-    all(windows, feature = "module", feature = "vendored"),
-    link(name = "lua54", kind = "raw-dylib")
-)]
+#[cfg_attr(all(windows, raw_dylib), link(name = "lua54", kind = "raw-dylib"))]
 extern "C" {
     pub fn lua_setwarnf(L: *mut lua_State, f: Option<lua_WarnFunction>, ud: *mut c_void);
     pub fn lua_warning(L: *mut lua_State, msg: *const c_char, tocont: c_int);
@@ -342,18 +327,12 @@ pub const LUA_GCISRUNNING: c_int = 9;
 pub const LUA_GCGEN: c_int = 10;
 pub const LUA_GCINC: c_int = 11;
 
-#[cfg_attr(
-    all(windows, feature = "module", feature = "vendored"),
-    link(name = "lua54", kind = "raw-dylib")
-)]
+#[cfg_attr(all(windows, raw_dylib), link(name = "lua54", kind = "raw-dylib"))]
 extern "C" {
     pub fn lua_gc(L: *mut lua_State, what: c_int, ...) -> c_int;
 }
 
-#[cfg_attr(
-    all(windows, feature = "module", feature = "vendored"),
-    link(name = "lua54", kind = "raw-dylib")
-)]
+#[cfg_attr(all(windows, raw_dylib), link(name = "lua54", kind = "raw-dylib"))]
 extern "C" {
     //
     // Miscellaneous functions
@@ -527,10 +506,7 @@ pub const LUA_MASKCOUNT: c_int = 1 << (LUA_HOOKCOUNT as usize);
 /// Type for functions to be called on debug events.
 pub type lua_Hook = unsafe extern "C" fn(L: *mut lua_State, ar: *mut lua_Debug);
 
-#[cfg_attr(
-    all(windows, feature = "module", feature = "vendored"),
-    link(name = "lua54", kind = "raw-dylib")
-)]
+#[cfg_attr(all(windows, raw_dylib), link(name = "lua54", kind = "raw-dylib"))]
 extern "C" {
     pub fn lua_getstack(L: *mut lua_State, level: c_int, ar: *mut lua_Debug) -> c_int;
     pub fn lua_getinfo(L: *mut lua_State, what: *const c_char, ar: *mut lua_Debug) -> c_int;

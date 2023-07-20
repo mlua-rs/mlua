@@ -36,10 +36,11 @@ pub fn probe_lua() {
     #[cfg(feature = "luajit")]
     let (incl_bound, excl_bound, alt_probe, ver) = ("2.0.4", "2.2", None, "JIT");
 
+    #[rustfmt::skip]
     let mut lua = pkg_config::Config::new()
         .range_version((Bound::Included(incl_bound), Bound::Excluded(excl_bound)))
         .cargo_metadata(true)
-        .probe("lua");
+        .probe(if cfg!(feature = "luajit") { "luajit" } else { "lua" });
 
     if lua.is_err() && alt_probe.is_some() {
         lua = pkg_config::Config::new()
