@@ -98,12 +98,12 @@ You have to enable one of the features: `lua54`, `lua53`, `lua52`, `lua51`, `lua
 
 By default `mlua` uses `pkg-config` tool to find lua includes and libraries for the chosen Lua version.
 In most cases it works as desired, although sometimes could be more preferable to use a custom lua library.
-To achieve this, mlua supports `LUA_INC`, `LUA_LIB`, `LUA_LIB_NAME` and `LUA_LINK` environment variables.
+To achieve this, mlua supports `LUA_LIB`, `LUA_LIB_NAME` and `LUA_LINK` environment variables.
 `LUA_LINK` is optional and may be `dylib` (a dynamic library) or `static` (a static library, `.a` archive).
 
 An example how to use them:
 ``` sh
-my_project $ LUA_INC=$HOME/tmp/lua-5.2.4/src LUA_LIB=$HOME/tmp/lua-5.2.4/src LUA_LIB_NAME=lua LUA_LINK=static cargo build
+my_project $ LUA_LIB=$HOME/tmp/lua-5.2.4/src LUA_LIB_NAME=lua LUA_LINK=static cargo build
 ```
 
 `mlua` also supports vendored lua/luajit using the auxiliary crates [lua-src](https://crates.io/crates/lua-src) and
@@ -198,10 +198,10 @@ rustflags = [
 ```
 On Linux you can build modules normally with `cargo build --release`.
 
-Vendored and non-vendored builds are supported for Linux, macOS and Windows.
-
-On Windows when using `vendored` mode, the target module will be linked with `lua5x.dll` library (depending on your feature flags).
+On Windows the target module will be linked with `lua5x.dll` library (depending on your feature flags).
 Your main application should provide this library.
+
+Module builds don't require Lua lib or headers to be installed on the system.
 
 ### Publishing to luarocks.org
 

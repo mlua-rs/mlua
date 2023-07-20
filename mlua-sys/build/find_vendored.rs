@@ -1,8 +1,6 @@
 #![allow(dead_code)]
 
-use std::path::PathBuf;
-
-pub fn probe_lua() -> Option<PathBuf> {
+pub fn probe_lua() {
     #[cfg(feature = "lua54")]
     let artifacts = lua_src::Build::new().build(lua_src::Lua54);
 
@@ -27,6 +25,4 @@ pub fn probe_lua() -> Option<PathBuf> {
         .build();
 
     artifacts.print_cargo_metadata();
-
-    Some(artifacts.include_dir().to_owned())
 }

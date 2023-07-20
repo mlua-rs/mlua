@@ -205,10 +205,6 @@ jobs:
         run: |
           (cd tests/module && cargo build --release --features "${{ matrix.lua }}")
           (cd tests/module/loader && cargo test --release --features "${{ matrix.lua }}")
-      - name: Run ${{ matrix.lua }} module tests (vendored)
-        run: |
-          (cd tests/module && cargo build --release --features "${{ matrix.lua }},vendored")
-          (cd tests/module/loader && cargo test --release --features "${{ matrix.lua }}")
 
   rustfmt:
     name: Rustfmt
