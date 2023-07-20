@@ -173,7 +173,7 @@ pub struct LuaOptions {
 
     /// Max size of thread (coroutine) object pool used to execute asynchronous functions.
     ///
-    /// It works on Lua 5.4, LuaJIT (vendored) and Luau, where [`lua_resetthread`] function
+    /// It works on Lua 5.4 and Luau, where [`lua_resetthread`] function
     /// is available and allows to reuse old coroutines after resetting their state.
     ///
     /// Default: **0** (disabled)
@@ -377,22 +377,14 @@ impl Lua {
 
     /// Creates a new Lua state with required `libs` and `options`
     unsafe fn inner_new(libs: StdLib, options: LuaOptions) -> Lua {
-        // Skip Rust allocator for non-vendored LuaJIT (see https://github.com/khvzak/mlua/issues/176)
-        let use_rust_allocator = !(cfg!(feature = "luajit") && cfg!(not(feature = "vendored")));
-
-        let (state, mem_state) = if use_rust_allocator {
-            let mut mem_state: *mut MemoryState = Box::into_raw(Box::default());
-            let mut state = ffi::lua_newstate(ALLOCATOR, mem_state as *mut c_void);
-            // If state is null (it's possible for LuaJIT on non-x86 arch) then switch to Lua internal allocator
-            if state.is_null() {
-                drop(Box::from_raw(mem_state));
-                mem_state = ptr::null_mut();
-                state = ffi::luaL_newstate();
-            }
-            (state, mem_state)
-        } else {
-            (ffi::luaL_newstate(), ptr::null_mut())
-        };
+        let mut mem_state: *mut MemoryState = Box::into_raw(Box::default());
+        let mut state = ffi::lua_newstate(ALLOCATOR, mem_state as *mut c_void);
+        // If state is null then switch to Lua internal allocator
+        if state.is_null() {
+            drop(Box::from_raw(mem_state));
+            mem_state = ptr::null_mut();
+            state = ffi::luaL_newstate();
+        }
         assert!(!state.is_null(), "Failed to instantiate Lua VM");
 
         ffi::luaL_requiref(state, cstr!("_G"), ffi::luaopen_base, 1);
@@ -1673,11 +1665,7 @@ impl Lua {
         &'lua self,
         func: &Function,
     ) -> Result<Thread<'lua>> {
-        #[cfg(any(
-            feature = "lua54",
-            all(feature = "luajit", feature = "vendored"),
-            feature = "luau",
-        ))]
+        #[cfg(any(feature = "lua54", feature = "luau"))]
         unsafe {
             let state = self.state();
             let _sg = StackGuard::new(state);
@@ -1703,11 +1691,7 @@ impl Lua {
 
     /// Resets thread (coroutine) and returns to the pool for later use.
     #[cfg(feature = "async")]
-    #[cfg(any(
-        feature = "lua54",
-        all(feature = "luajit", feature = "vendored"),
-        feature = "luau",
-    ))]
+    #[cfg(any(feature = "lua54", feature = "luau"))]
     pub(crate) unsafe fn recycle_thread(&self, thread: &mut Thread) -> bool {
         let extra = &mut *self.extra.get();
         if extra.thread_pool.len() < extra.thread_pool.capacity() {
@@ -1721,8 +1705,6 @@ impl Lua {
                 // Error object is on top, drop it
                 ffi::lua_settop(thread_state, 0);
             }
-            #[cfg(all(feature = "luajit", feature = "vendored"))]
-            ffi::lua_resetthread(self.state(), thread_state);
             #[cfg(feature = "luau")]
             ffi::lua_resetthread(thread_state);
             extra.thread_pool.push(thread.0.index);

@@ -202,20 +202,16 @@ impl<'lua> Thread<'lua> {
     /// Returns a error in case of either the original error that stopped the thread or errors
     /// in closing methods.
     ///
-    /// In [LuaJIT] and Luau: resets to the initial state of a newly created Lua thread.
+    /// In Luau: resets to the initial state of a newly created Lua thread.
     /// Lua threads in arbitrary states (like yielded or errored) can be reset properly.
     ///
     /// Sets a Lua function for the thread afterwards.
     ///
-    /// Requires `feature = "lua54"` OR `feature = "luajit,vendored"` OR `feature = "luau"`
+    /// Requires `feature = "lua54"` OR `feature = "luau"`.
     ///
-    /// [Lua 5.4]: https://www.lua.org/manual/5.4/manual.html#lua_resetthread
-    /// [LuaJIT]: https://github.com/openresty/luajit2#lua_resetthread
-    #[cfg(any(
-        feature = "lua54",
-        all(feature = "luajit", feature = "vendored"),
-        feature = "luau",
-    ))]
+    /// [Lua 5.4]: https://www.lua.org/manual/5.4/manual.html#lua_closethread
+    #[cfg(any(feature = "lua54", feature = "luau"))]
+    #[cfg_attr(docsrs, doc(cfg(not(feature = "luau"))))]
     pub fn reset(&self, func: crate::function::Function<'lua>) -> Result<()> {
         let lua = self.0.lua;
         let state = lua.state();
@@ -234,8 +230,6 @@ impl<'lua> Thread<'lua> {
             if status != ffi::LUA_OK {
                 return Err(pop_error(thread_state, status));
             }
-            #[cfg(all(feature = "luajit", feature = "vendored"))]
-            ffi::lua_resetthread(state, thread_state);
             #[cfg(feature = "luau")]
             ffi::lua_resetthread(thread_state);
 
@@ -375,11 +369,7 @@ impl<'lua, R> AsyncThread<'lua, R> {
 }
 
 #[cfg(feature = "async")]
-#[cfg(any(
-    feature = "lua54",
-    all(feature = "luajit", feature = "vendored"),
-    feature = "luau",
-))]
+#[cfg(any(feature = "lua54", feature = "luau"))]
 impl<'lua, R> Drop for AsyncThread<'lua, R> {
     fn drop(&mut self) {
         if self.recycle {

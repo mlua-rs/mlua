@@ -26,13 +26,9 @@ pub use luau::*;
 #[doc(hidden)]
 pub const LUA_MAX_UPVALUES: c_int = 255;
 
-#[cfg(any(feature = "lua51", all(feature = "luajit", not(feature = "vendored"))))]
+#[cfg(any(feature = "lua51", feature = "luajit"))]
 #[doc(hidden)]
 pub const LUA_MAX_UPVALUES: c_int = 60;
-
-#[cfg(all(feature = "luajit", feature = "vendored"))]
-#[doc(hidden)]
-pub const LUA_MAX_UPVALUES: c_int = 120;
 
 #[cfg(feature = "luau")]
 #[doc(hidden)]

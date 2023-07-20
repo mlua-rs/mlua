@@ -101,9 +101,6 @@ extern "C" {
     pub fn lua_close(L: *mut lua_State);
     pub fn lua_newthread(L: *mut lua_State) -> *mut lua_State;
 
-    #[cfg(all(feature = "luajit", feature = "vendored"))]
-    pub fn lua_resetthread(L: *mut lua_State, th: *mut lua_State);
-
     pub fn lua_atpanic(L: *mut lua_State, panicf: lua_CFunction) -> lua_CFunction;
 
     //
