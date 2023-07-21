@@ -218,7 +218,7 @@ jobs:
       - run: cargo fmt -- --check
 
   clippy:
-    name: Clippy check
+    name: Clippy
     runs-on: ubuntu-22.04
     strategy:
       matrix:
@@ -229,7 +229,7 @@ jobs:
         with:
           toolchain: nightly
           components: clippy
-      - uses: actions-rs/clippy-check@v1
+      - uses: giraffate/clippy-action@v1
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          args: --features "${{ matrix.lua }},vendored,async,send,serialize,macros,parking_lot,unstable"
+          reporter: 'github-pr-review'
+          clippy_flags: --features "${{ matrix.lua }},vendored,async,send,serialize,macros,parking_lot,unstable"
