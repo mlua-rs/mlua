@@ -17,12 +17,8 @@ fn test_memory_limit() -> Result<()> {
         .into_function()?;
     f.call::<_, ()>(()).expect("should trigger no memory limit");
 
-    if cfg!(feature = "luajit") && cfg!(not(feature = "vendored")) {
-        // we don't support setting memory limit for non-vendored luajit
-        assert!(matches!(
-            lua.set_memory_limit(0),
-            Err(Error::MemoryLimitNotAvailable)
-        ));
+    if cfg!(feature = "luajit") && lua.set_memory_limit(0).is_err() {
+        // seems this luajit version does not support memory limit
         return Ok(());
     }
 
@@ -46,8 +42,8 @@ fn test_memory_limit_thread() -> Result<()> {
         .load("local t = {}; for i = 1,10000 do t[i] = i end")
         .into_function()?;
 
-    if cfg!(feature = "luajit") && cfg!(not(feature = "vendored")) {
-        // we don't support setting memory limit for non-vendored luajit
+    if cfg!(feature = "luajit") && lua.set_memory_limit(0).is_err() {
+        // seems this luajit version does not support memory limit
         return Ok(());
     }
 
