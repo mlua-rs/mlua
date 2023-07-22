@@ -13,7 +13,7 @@ pub struct lua_CompileOptions {
     pub mutableGlobals: *mut *const c_char,
 }
 
-extern "C" {
+extern "C-unwind" {
     #[link_name = "luau_compile"]
     pub fn luau_compile_(
         source: *const c_char,
@@ -21,7 +21,9 @@ extern "C" {
         options: *mut lua_CompileOptions,
         outsize: *mut usize,
     ) -> *mut c_char;
+}
 
+extern "C" {
     fn free(p: *mut c_void);
 }
 

@@ -357,7 +357,7 @@ impl Lua {
         {
             // Workaround to avoid stripping a few unused Lua symbols that could be imported
             // by C modules in unsafe mode
-            let mut _symbols: Vec<*const extern "C" fn()> = vec![
+            let mut _symbols: Vec<*const extern "C-unwind" fn()> = vec![
                 ffi::lua_atpanic as _,
                 ffi::lua_isuserdata as _,
                 ffi::lua_tocfunction as _,
@@ -885,7 +885,7 @@ impl Lua {
     ) where
         F: Fn(&Lua, Debug) -> Result<()> + MaybeSend + 'static,
     {
-        unsafe extern "C" fn hook_proc(state: *mut ffi::lua_State, ar: *mut ffi::lua_Debug) {
+        unsafe extern "C-unwind" fn hook_proc(state: *mut ffi::lua_State, ar: *mut ffi::lua_Debug) {
             let extra = extra_data(state);
             if (*extra).hook_thread != state {
                 // Hook was destined for a different thread, ignore
@@ -979,7 +979,7 @@ impl Lua {
     where
         F: Fn(&Lua) -> Result<VmState> + MaybeSend + 'static,
     {
-        unsafe extern "C" fn interrupt_proc(state: *mut ffi::lua_State, gc: c_int) {
+        unsafe extern "C-unwind" fn interrupt_proc(state: *mut ffi::lua_State, gc: c_int) {
             if gc >= 0 {
                 // We don't support GC interrupts since they cannot survive Lua exceptions
                 return;
@@ -1031,7 +1031,7 @@ impl Lua {
     where
         F: Fn(&Lua, &str, bool) -> Result<()> + MaybeSend + 'static,
     {
-        unsafe extern "C" fn warn_proc(ud: *mut c_void, msg: *const c_char, tocont: c_int) {
+        unsafe extern "C-unwind" fn warn_proc(ud: *mut c_void, msg: *const c_char, tocont: c_int) {
             let extra = ud as *mut ExtraData;
             let lua: &Lua = mem::transmute((*extra).inner.assume_init_ref());
             callback_error_ext(lua.state(), extra, |_| {
@@ -2736,7 +2736,7 @@ impl Lua {
         &'lua self,
         func: Callback<'lua, 'static>,
     ) -> Result<Function<'lua>> {
-        unsafe extern "C" fn call_callback(state: *mut ffi::lua_State) -> c_int {
+        unsafe extern "C-unwind" fn call_callback(state: *mut ffi::lua_State) -> c_int {
             // Normal functions can be scoped and therefore destroyed,
             // so we need to check that the first upvalue is valid
             let (upvalue, extra) = match ffi::lua_type(state, ffi::lua_upvalueindex(1)) {
@@ -2814,7 +2814,7 @@ impl Lua {
             }
         }
 
-        unsafe extern "C" fn call_callback(state: *mut ffi::lua_State) -> c_int {
+        unsafe extern "C-unwind" fn call_callback(state: *mut ffi::lua_State) -> c_int {
             // Async functions cannot be scoped and therefore destroyed,
             // so the first upvalue is always valid
             let upvalue = get_userdata::<AsyncCallbackUpvalue>(state, ffi::lua_upvalueindex(1));
@@ -2847,7 +2847,7 @@ impl Lua {
             })
         }
 
-        unsafe extern "C" fn poll_future(state: *mut ffi::lua_State) -> c_int {
+        unsafe extern "C-unwind" fn poll_future(state: *mut ffi::lua_State) -> c_int {
             let upvalue = get_userdata::<AsyncPollUpvalue>(state, ffi::lua_upvalueindex(1));
             let extra = (*upvalue).extra.get();
             callback_error_ext(state, extra, |_| {
@@ -2903,7 +2903,7 @@ impl Lua {
             Function(self.pop_ref())
         };
 
-        unsafe extern "C" fn unpack(state: *mut ffi::lua_State) -> c_int {
+        unsafe extern "C-unwind" fn unpack(state: *mut ffi::lua_State) -> c_int {
             let len = ffi::lua_tointeger(state, 2);
             ffi::luaL_checkstack(state, len as c_int, ptr::null());
             for i in 1..=len {

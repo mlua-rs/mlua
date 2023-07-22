@@ -32,7 +32,7 @@ impl Lua {
     }
 }
 
-unsafe extern "C" fn lua_collectgarbage(state: *mut ffi::lua_State) -> c_int {
+unsafe extern "C-unwind" fn lua_collectgarbage(state: *mut ffi::lua_State) -> c_int {
     let option = ffi::luaL_optstring(state, 1, cstr!("collect"));
     let option = CStr::from_ptr(option);
     let arg = ffi::luaL_optinteger(state, 2, 0);
@@ -122,7 +122,7 @@ fn lua_require(lua: &Lua, name: Option<StdString>) -> Result<Value> {
 }
 
 // Luau vector datatype constructor
-unsafe extern "C" fn lua_vector(state: *mut ffi::lua_State) -> c_int {
+unsafe extern "C-unwind" fn lua_vector(state: *mut ffi::lua_State) -> c_int {
     let x = ffi::luaL_checknumber(state, 1) as c_float;
     let y = ffi::luaL_checknumber(state, 2) as c_float;
     let z = ffi::luaL_checknumber(state, 3) as c_float;

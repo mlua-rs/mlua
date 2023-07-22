@@ -13,7 +13,7 @@ pub struct luaL_Reg {
     pub func: lua_CFunction,
 }
 
-extern "C" {
+extern "C-unwind" {
     pub fn luaL_register(L: *mut lua_State, libname: *const c_char, l: *const luaL_Reg);
     #[link_name = "luaL_getmetafield"]
     pub fn luaL_getmetafield_(L: *mut lua_State, obj: c_int, e: *const c_char) -> c_int;

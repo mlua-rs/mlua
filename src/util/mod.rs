@@ -88,7 +88,7 @@ impl Drop for StackGuard {
 pub unsafe fn protect_lua_call(
     state: *mut ffi::lua_State,
     nargs: c_int,
-    f: unsafe extern "C" fn(*mut ffi::lua_State) -> c_int,
+    f: unsafe extern "C-unwind" fn(*mut ffi::lua_State) -> c_int,
 ) -> Result<()> {
     let stack_start = ffi::lua_gettop(state) - nargs;
 
@@ -133,7 +133,7 @@ where
         nresults: c_int,
     }
 
-    unsafe extern "C" fn do_call<F, R>(state: *mut ffi::lua_State) -> c_int
+    unsafe extern "C-unwind" fn do_call<F, R>(state: *mut ffi::lua_State) -> c_int
     where
         F: Fn(*mut ffi::lua_State) -> R,
         R: Copy,
@@ -295,7 +295,7 @@ pub unsafe fn push_userdata<T>(state: *mut ffi::lua_State, t: T, protect: bool) 
 #[cfg(feature = "luau")]
 #[inline]
 pub unsafe fn push_userdata<T>(state: *mut ffi::lua_State, t: T, protect: bool) -> Result<()> {
-    unsafe extern "C" fn destructor<T>(ud: *mut c_void) {
+    unsafe extern "C-unwind" fn destructor<T>(ud: *mut c_void) {
         ptr::drop_in_place(ud as *mut T);
     }
 
@@ -400,16 +400,16 @@ pub unsafe fn get_gc_userdata<T: Any>(
     ud
 }
 
-unsafe extern "C" fn lua_error_impl(state: *mut ffi::lua_State) -> c_int {
+unsafe extern "C-unwind" fn lua_error_impl(state: *mut ffi::lua_State) -> c_int {
     ffi::lua_error(state);
 }
 
-unsafe extern "C" fn lua_isfunction_impl(state: *mut ffi::lua_State) -> c_int {
+unsafe extern "C-unwind" fn lua_isfunction_impl(state: *mut ffi::lua_State) -> c_int {
     ffi::lua_pushboolean(state, ffi::lua_isfunction(state, -1));
     1
 }
 
-unsafe extern "C" fn lua_istable_impl(state: *mut ffi::lua_State) -> c_int {
+unsafe extern "C-unwind" fn lua_istable_impl(state: *mut ffi::lua_State) -> c_int {
     ffi::lua_pushboolean(state, ffi::lua_istable(state, -1));
     1
 }
@@ -613,7 +613,7 @@ pub unsafe fn init_userdata_metatable(
 }
 
 #[cfg(not(feature = "luau"))]
-pub unsafe extern "C" fn userdata_destructor<T>(state: *mut ffi::lua_State) -> c_int {
+pub unsafe extern "C-unwind" fn userdata_destructor<T>(state: *mut ffi::lua_State) -> c_int {
     // It's probably NOT a good idea to catch Rust panics in finalizer
     // Lua 5.4 ignores it, other versions generates `LUA_ERRGCMM` without calling message handler
     take_userdata::<T>(state);
@@ -685,7 +685,7 @@ where
     }
 }
 
-pub unsafe extern "C" fn error_traceback(state: *mut ffi::lua_State) -> c_int {
+pub unsafe extern "C-unwind" fn error_traceback(state: *mut ffi::lua_State) -> c_int {
     // Luau calls error handler for memory allocation errors, skip it
     // See https://github.com/Roblox/luau/issues/880
     #[cfg(feature = "luau")]
@@ -725,7 +725,7 @@ pub unsafe fn error_traceback_thread(state: *mut ffi::lua_State, thread: *mut ff
 }
 
 // A variant of `pcall` that does not allow Lua to catch Rust panics from `callback_error`.
-pub unsafe extern "C" fn safe_pcall(state: *mut ffi::lua_State) -> c_int {
+pub unsafe extern "C-unwind" fn safe_pcall(state: *mut ffi::lua_State) -> c_int {
     ffi::luaL_checkstack(state, 2, ptr::null());
 
     let top = ffi::lua_gettop(state);
@@ -751,8 +751,8 @@ pub unsafe extern "C" fn safe_pcall(state: *mut ffi::lua_State) -> c_int {
 }
 
 // A variant of `xpcall` that does not allow Lua to catch Rust panics from `callback_error`.
-pub unsafe extern "C" fn safe_xpcall(state: *mut ffi::lua_State) -> c_int {
-    unsafe extern "C" fn xpcall_msgh(state: *mut ffi::lua_State) -> c_int {
+pub unsafe extern "C-unwind" fn safe_xpcall(state: *mut ffi::lua_State) -> c_int {
+    unsafe extern "C-unwind" fn xpcall_msgh(state: *mut ffi::lua_State) -> c_int {
         ffi::luaL_checkstack(state, 2, ptr::null());
 
         if let Some(WrappedFailure::Panic(_)) =
@@ -866,7 +866,7 @@ pub unsafe fn init_error_registry(state: *mut ffi::lua_State) -> Result<()> {
 
     // Create error and panic metatables
 
-    unsafe extern "C" fn error_tostring(state: *mut ffi::lua_State) -> c_int {
+    unsafe extern "C-unwind" fn error_tostring(state: *mut ffi::lua_State) -> c_int {
         callback_error(state, |_| {
             check_stack(state, 3)?;
 
@@ -924,7 +924,7 @@ pub unsafe fn init_error_registry(state: *mut ffi::lua_State) -> Result<()> {
 
     // Create destructed userdata metatable
 
-    unsafe extern "C" fn destructed_error(state: *mut ffi::lua_State) -> c_int {
+    unsafe extern "C-unwind" fn destructed_error(state: *mut ffi::lua_State) -> c_int {
         callback_error(state, |_| Err(Error::CallbackDestructed))
     }
 
@@ -1007,7 +1007,7 @@ impl WrappedFailure {
         let size = mem::size_of::<WrappedFailure>();
         #[cfg(feature = "luau")]
         let ud = {
-            unsafe extern "C" fn destructor(p: *mut c_void) {
+            unsafe extern "C-unwind" fn destructor(p: *mut c_void) {
                 ptr::drop_in_place(p as *mut WrappedFailure);
             }
             ffi::lua_newuserdatadtor(state, size, destructor) as *mut Self

@@ -82,28 +82,27 @@ pub type lua_Unsigned = u64;
 pub type lua_KContext = isize;
 
 /// Type for native C functions that can be passed to Lua
-pub type lua_CFunction = unsafe extern "C" fn(L: *mut lua_State) -> c_int;
+pub type lua_CFunction = unsafe extern "C-unwind" fn(L: *mut lua_State) -> c_int;
 
 /// Type for continuation functions
 pub type lua_KFunction =
-    unsafe extern "C" fn(L: *mut lua_State, status: c_int, ctx: lua_KContext) -> c_int;
+    unsafe extern "C-unwind" fn(L: *mut lua_State, status: c_int, ctx: lua_KContext) -> c_int;
 
 // Type for functions that read/write blocks when loading/dumping Lua chunks
+#[rustfmt::skip]
 pub type lua_Reader =
-    unsafe extern "C" fn(L: *mut lua_State, ud: *mut c_void, sz: *mut usize) -> *const c_char;
+    unsafe extern "C-unwind" fn(L: *mut lua_State, ud: *mut c_void, sz: *mut usize) -> *const c_char;
+#[rustfmt::skip]
 pub type lua_Writer =
-    unsafe extern "C" fn(L: *mut lua_State, p: *const c_void, sz: usize, ud: *mut c_void) -> c_int;
+    unsafe extern "C-unwind" fn(L: *mut lua_State, p: *const c_void, sz: usize, ud: *mut c_void) -> c_int;
 
 /// Type for memory-allocation functions
-pub type lua_Alloc = unsafe extern "C" fn(
-    ud: *mut c_void,
-    ptr: *mut c_void,
-    osize: usize,
-    nsize: usize,
-) -> *mut c_void;
+#[rustfmt::skip]
+pub type lua_Alloc =
+    unsafe extern "C-unwind" fn(ud: *mut c_void, ptr: *mut c_void, osize: usize, nsize: usize) -> *mut c_void;
 
 #[cfg_attr(all(windows, raw_dylib), link(name = "lua53", kind = "raw-dylib"))]
-extern "C" {
+extern "C-unwind" {
     //
     // State manipulation
     //
@@ -173,14 +172,14 @@ pub const LUA_OPLT: c_int = 1;
 pub const LUA_OPLE: c_int = 2;
 
 #[cfg_attr(all(windows, raw_dylib), link(name = "lua53", kind = "raw-dylib"))]
-extern "C" {
+extern "C-unwind" {
     pub fn lua_arith(L: *mut lua_State, op: c_int);
     pub fn lua_rawequal(L: *mut lua_State, idx1: c_int, idx2: c_int) -> c_int;
     pub fn lua_compare(L: *mut lua_State, idx1: c_int, idx2: c_int, op: c_int) -> c_int;
 }
 
 #[cfg_attr(all(windows, raw_dylib), link(name = "lua53", kind = "raw-dylib"))]
-extern "C" {
+extern "C-unwind" {
     //
     // Push functions (C -> stack)
     //
@@ -271,7 +270,7 @@ pub unsafe fn lua_pcall(L: *mut lua_State, n: c_int, r: c_int, f: c_int) -> c_in
 }
 
 #[cfg_attr(all(windows, raw_dylib), link(name = "lua53", kind = "raw-dylib"))]
-extern "C" {
+extern "C-unwind" {
     //
     // Coroutine functions
     //
@@ -306,12 +305,12 @@ pub const LUA_GCSETSTEPMUL: c_int = 7;
 pub const LUA_GCISRUNNING: c_int = 9;
 
 #[cfg_attr(all(windows, raw_dylib), link(name = "lua53", kind = "raw-dylib"))]
-extern "C" {
+extern "C-unwind" {
     pub fn lua_gc(L: *mut lua_State, what: c_int, data: c_int) -> c_int;
 }
 
 #[cfg_attr(all(windows, raw_dylib), link(name = "lua53", kind = "raw-dylib"))]
-extern "C" {
+extern "C-unwind" {
     //
     // Miscellaneous functions
     //
@@ -464,10 +463,10 @@ pub const LUA_MASKLINE: c_int = 1 << (LUA_HOOKLINE as usize);
 pub const LUA_MASKCOUNT: c_int = 1 << (LUA_HOOKCOUNT as usize);
 
 /// Type for functions to be called on debug events.
-pub type lua_Hook = unsafe extern "C" fn(L: *mut lua_State, ar: *mut lua_Debug);
+pub type lua_Hook = unsafe extern "C-unwind" fn(L: *mut lua_State, ar: *mut lua_Debug);
 
 #[cfg_attr(all(windows, raw_dylib), link(name = "lua53", kind = "raw-dylib"))]
-extern "C" {
+extern "C-unwind" {
     pub fn lua_getstack(L: *mut lua_State, level: c_int, ar: *mut lua_Debug) -> c_int;
     pub fn lua_getinfo(L: *mut lua_State, what: *const c_char, ar: *mut lua_Debug) -> c_int;
     pub fn lua_getlocal(L: *mut lua_State, ar: *const lua_Debug, n: c_int) -> *const c_char;

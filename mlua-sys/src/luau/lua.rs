@@ -69,15 +69,15 @@ pub type lua_Integer = c_int;
 pub type lua_Unsigned = c_uint;
 
 /// Type for native C functions that can be passed to Lua.
-pub type lua_CFunction = unsafe extern "C" fn(L: *mut lua_State) -> c_int;
-pub type lua_Continuation = unsafe extern "C" fn(L: *mut lua_State, status: c_int) -> c_int;
+pub type lua_CFunction = unsafe extern "C-unwind" fn(L: *mut lua_State) -> c_int;
+pub type lua_Continuation = unsafe extern "C-unwind" fn(L: *mut lua_State, status: c_int) -> c_int;
 
 /// Type for userdata destructor functions.
-pub type lua_Udestructor = unsafe extern "C" fn(*mut c_void);
-pub type lua_Destructor = unsafe extern "C" fn(L: *mut lua_State, *mut c_void);
+pub type lua_Udestructor = unsafe extern "C-unwind" fn(*mut c_void);
+pub type lua_Destructor = unsafe extern "C-unwind" fn(L: *mut lua_State, *mut c_void);
 
 /// Type for memory-allocation functions.
-pub type lua_Alloc = unsafe extern "C" fn(
+pub type lua_Alloc = unsafe extern "C-unwind" fn(
     ud: *mut c_void,
     ptr: *mut c_void,
     osize: usize,
@@ -89,7 +89,7 @@ pub const fn luau_version() -> Option<&'static str> {
     option_env!("LUAU_VERSION")
 }
 
-extern "C" {
+extern "C-unwind" {
     //
     // State manipulation
     //
@@ -251,14 +251,14 @@ pub const LUA_GCSETGOAL: c_int = 7;
 pub const LUA_GCSETSTEPMUL: c_int = 8;
 pub const LUA_GCSETSTEPSIZE: c_int = 9;
 
-extern "C" {
+extern "C-unwind" {
     pub fn lua_gc(L: *mut lua_State, what: c_int, data: c_int) -> c_int;
 }
 
 //
 // Memory statistics
 //
-extern "C" {
+extern "C-unwind" {
     pub fn lua_setmemcat(L: *mut lua_State, category: c_int);
     pub fn lua_totalbytes(L: *mut lua_State, category: c_int) -> usize;
 }
@@ -266,7 +266,7 @@ extern "C" {
 //
 // Miscellaneous functions
 //
-extern "C" {
+extern "C-unwind" {
     pub fn lua_error(L: *mut lua_State) -> !;
     pub fn lua_next(L: *mut lua_State, idx: c_int) -> c_int;
     pub fn lua_rawiter(L: *mut lua_State, idx: c_int, iter: c_int) -> c_int;
@@ -286,7 +286,7 @@ extern "C" {
 pub const LUA_NOREF: c_int = -1;
 pub const LUA_REFNIL: c_int = 0;
 
-extern "C" {
+extern "C-unwind" {
     pub fn lua_ref(L: *mut lua_State, idx: c_int) -> c_int;
     pub fn lua_unref(L: *mut lua_State, r#ref: c_int);
 }
@@ -423,9 +423,9 @@ pub unsafe fn lua_tostring(L: *mut lua_State, i: c_int) -> *const c_char {
 const LUA_IDSIZE: usize = 256;
 
 /// Type for functions to be called on debug events.
-pub type lua_Hook = unsafe extern "C" fn(L: *mut lua_State, ar: *mut lua_Debug);
+pub type lua_Hook = unsafe extern "C-unwind" fn(L: *mut lua_State, ar: *mut lua_Debug);
 
-pub type lua_Coverage = unsafe extern "C" fn(
+pub type lua_Coverage = unsafe extern "C-unwind" fn(
     context: *mut c_void,
     function: *const c_char,
     linedefined: c_int,
@@ -434,7 +434,7 @@ pub type lua_Coverage = unsafe extern "C" fn(
     size: usize,
 );
 
-extern "C" {
+extern "C-unwind" {
     pub fn lua_stackdepth(L: *mut lua_State) -> c_int;
     pub fn lua_getinfo(
         L: *mut lua_State,
@@ -492,23 +492,23 @@ pub struct lua_Callbacks {
     pub userdata: *mut c_void,
 
     /// gets called at safepoints (loop back edges, call/ret, gc) if set
-    pub interrupt: Option<unsafe extern "C" fn(L: *mut lua_State, gc: c_int)>,
+    pub interrupt: Option<unsafe extern "C-unwind" fn(L: *mut lua_State, gc: c_int)>,
     /// gets called when an unprotected error is raised (if longjmp is used)
-    pub panic: Option<unsafe extern "C" fn(L: *mut lua_State, errcode: c_int)>,
+    pub panic: Option<unsafe extern "C-unwind" fn(L: *mut lua_State, errcode: c_int)>,
 
     /// gets called when L is created (LP == parent) or destroyed (LP == NULL)
-    pub userthread: Option<unsafe extern "C" fn(LP: *mut lua_State, L: *mut lua_State)>,
+    pub userthread: Option<unsafe extern "C-unwind" fn(LP: *mut lua_State, L: *mut lua_State)>,
     /// gets called when a string is created; returned atom can be retrieved via tostringatom
-    pub useratom: Option<unsafe extern "C" fn(s: *const c_char, l: usize) -> i16>,
+    pub useratom: Option<unsafe extern "C-unwind" fn(s: *const c_char, l: usize) -> i16>,
 
     /// gets called when BREAK instruction is encountered
-    pub debugbreak: Option<unsafe extern "C" fn(L: *mut lua_State, ar: *mut lua_Debug)>,
+    pub debugbreak: Option<unsafe extern "C-unwind" fn(L: *mut lua_State, ar: *mut lua_Debug)>,
     /// gets called after each instruction in single step mode
-    pub debugstep: Option<unsafe extern "C" fn(L: *mut lua_State, ar: *mut lua_Debug)>,
+    pub debugstep: Option<unsafe extern "C-unwind" fn(L: *mut lua_State, ar: *mut lua_Debug)>,
     /// gets called when thread execution is interrupted by break in another thread
-    pub debuginterrupt: Option<unsafe extern "C" fn(L: *mut lua_State, ar: *mut lua_Debug)>,
+    pub debuginterrupt: Option<unsafe extern "C-unwind" fn(L: *mut lua_State, ar: *mut lua_Debug)>,
     /// gets called when protected call results in an error
-    pub debugprotectederror: Option<unsafe extern "C" fn(L: *mut lua_State)>,
+    pub debugprotectederror: Option<unsafe extern "C-unwind" fn(L: *mut lua_State)>,
 }
 
 extern "C" {

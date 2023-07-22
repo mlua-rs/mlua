@@ -228,7 +228,7 @@ impl<'lua> Function<'lua> {
     /// # }
     /// ```
     pub fn bind<A: IntoLuaMulti<'lua>>(&self, args: A) -> Result<Function<'lua>> {
-        unsafe extern "C" fn args_wrapper_impl(state: *mut ffi::lua_State) -> c_int {
+        unsafe extern "C-unwind" fn args_wrapper_impl(state: *mut ffi::lua_State) -> c_int {
             let nargs = ffi::lua_gettop(state);
             let nbinds = ffi::lua_tointeger(state, ffi::lua_upvalueindex(1)) as c_int;
             ffi::luaL_checkstack(state, nbinds, ptr::null());
@@ -423,7 +423,7 @@ impl<'lua> Function<'lua> {
     #[cfg(not(feature = "luau"))]
     #[cfg_attr(docsrs, doc(cfg(not(feature = "luau"))))]
     pub fn dump(&self, strip: bool) -> Vec<u8> {
-        unsafe extern "C" fn writer(
+        unsafe extern "C-unwind" fn writer(
             _state: *mut ffi::lua_State,
             buf: *const c_void,
             buf_len: usize,
@@ -470,7 +470,7 @@ impl<'lua> Function<'lua> {
         use std::ffi::CStr;
         use std::os::raw::c_char;
 
-        unsafe extern "C" fn callback<F: FnMut(CoverageInfo)>(
+        unsafe extern "C-unwind" fn callback<F: FnMut(CoverageInfo)>(
             data: *mut c_void,
             function: *const c_char,
             line_defined: c_int,
