@@ -69,7 +69,7 @@ fn test_safety() -> Result<()> {
 fn test_load() -> Result<()> {
     let lua = Lua::new();
 
-    let func = lua.load("return 1+2").into_function()?;
+    let func = lua.load("\treturn 1+2").into_function()?;
     let result: i32 = func.call(())?;
     assert_eq!(result, 3);
 
