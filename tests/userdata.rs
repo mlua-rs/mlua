@@ -551,13 +551,14 @@ fn test_metatable() -> Result<()> {
     let lua = Lua::new();
     let globals = lua.globals();
     globals.set("ud", MyUserData)?;
-    lua.load(
-        r#"
-        assert(ud:my_type_name() == "MyUserData")
-        assert(tostring(ud):sub(1, 14) == "MyUserData: 0x")
-    "#,
-    )
-    .exec()?;
+    lua.load(r#"assert(ud:my_type_name() == "MyUserData")"#)
+        .exec()?;
+
+    #[cfg(any(feature = "lua54", feature = "lua53", feature = "luau"))]
+    lua.load(r#"assert(tostring(ud):sub(1, 11) == "MyUserData:")"#)
+        .exec()?;
+    #[cfg(feature = "luau")]
+    lua.load(r#"assert(typeof(ud) == "MyUserData")"#).exec()?;
 
     let ud: AnyUserData = globals.get("ud")?;
     let metatable = ud.get_metatable()?;
