@@ -543,7 +543,7 @@ fn test_metatable() -> Result<()> {
         fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
             methods.add_function("my_type_name", |_, data: AnyUserData| {
                 let metatable = data.get_metatable()?;
-                metatable.get::<String>("__name")
+                metatable.get::<String>(MetaMethod::Type)
             });
         }
     }
@@ -551,8 +551,13 @@ fn test_metatable() -> Result<()> {
     let lua = Lua::new();
     let globals = lua.globals();
     globals.set("ud", MyUserData)?;
-    lua.load(r#"assert(ud:my_type_name() == "MyUserData")"#)
-        .exec()?;
+    lua.load(
+        r#"
+        assert(ud:my_type_name() == "MyUserData")
+        assert(tostring(ud):sub(1, 14) == "MyUserData: 0x")
+    "#,
+    )
+    .exec()?;
 
     let ud: AnyUserData = globals.get("ud")?;
     let metatable = ud.get_metatable()?;
@@ -574,7 +579,7 @@ fn test_metatable() -> Result<()> {
         .map(|kv: Result<(_, Value)>| Ok(kv?.0))
         .collect::<Result<Vec<_>>>()?;
     methods.sort();
-    assert_eq!(methods, vec!["__index", "__name"]);
+    assert_eq!(methods, vec!["__index", MetaMethod::Type.name()]);
 
     #[derive(Copy, Clone)]
     struct MyUserData2;
@@ -596,13 +601,16 @@ fn test_metatable() -> Result<()> {
 
     impl UserData for MyUserData3 {
         fn add_fields<'lua, F: UserDataFields<'lua, Self>>(fields: &mut F) {
-            fields.add_meta_field_with("__name", |_| Ok("CustomName"));
+            fields.add_meta_field_with(MetaMethod::Type, |_| Ok("CustomName"));
         }
     }
 
     let ud = lua.create_userdata(MyUserData3)?;
     let metatable = ud.get_metatable()?;
-    assert_eq!(metatable.get::<String>("__name")?.to_str()?, "CustomName");
+    assert_eq!(
+        metatable.get::<String>(MetaMethod::Type)?.to_str()?,
+        "CustomName"
+    );
 
     Ok(())
 }

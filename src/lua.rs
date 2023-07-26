@@ -2531,15 +2531,15 @@ impl Lua {
         }
         let mut has_name = false;
         for (k, f) in registry.meta_fields {
-            has_name = has_name || k == "__name";
+            has_name = has_name || k == MetaMethod::Type;
             self.push_value(f(self, MultiValue::new())?.pop_front().unwrap())?;
             rawset_field(state, -2, MetaMethod::validate(&k)?)?;
         }
-        // Set `__name` if not provided
+        // Set `__name/__type` if not provided
         if !has_name {
             let type_name = short_type_name::<T>();
             push_string(state, type_name.as_bytes(), !self.unlikely_memory_error())?;
-            rawset_field(state, -2, "__name")?;
+            rawset_field(state, -2, MetaMethod::Type.name())?;
         }
         let metatable_index = ffi::lua_absindex(state, -1);
 

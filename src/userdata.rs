@@ -1,5 +1,6 @@
 use std::any::{type_name, TypeId};
 use std::cell::{Ref, RefCell, RefMut};
+use std::ffi::CStr;
 use std::fmt;
 use std::hash::Hash;
 use std::mem;
@@ -36,6 +37,7 @@ pub(crate) const USER_VALUE_MAXSLOT: usize = 8;
 ///
 /// [`UserData`]: crate::UserData
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 pub enum MetaMethod {
     /// The `+` operator.
     Add,
@@ -141,6 +143,11 @@ pub enum MetaMethod {
     #[cfg(feature = "lua54")]
     #[cfg_attr(docsrs, doc(cfg(feature = "lua54")))]
     Close,
+    /// The `__name`/`__type` metafield.
+    ///
+    /// This is not a function, but it's value can be used by `tostring` and `typeof` built-in functions.
+    #[doc(hidden)]
+    Type,
 }
 
 impl PartialEq<MetaMethod> for &str {
@@ -212,6 +219,19 @@ impl MetaMethod {
 
             #[cfg(feature = "lua54")]
             MetaMethod::Close => "__close",
+
+            #[rustfmt::skip]
+            MetaMethod::Type => if cfg!(feature = "luau") { "__type" } else { "__name" },
+        }
+    }
+
+    pub(crate) const fn as_cstr(self) -> &'static CStr {
+        match self {
+            #[rustfmt::skip]
+            MetaMethod::Type => unsafe {
+                CStr::from_bytes_with_nul_unchecked(if cfg!(feature = "luau") { b"__type\0" } else { b"__name\0" })
+            },
+            _ => unreachable!(),
         }
     }
 
@@ -1089,7 +1109,7 @@ impl<'lua> AnyUserData<'lua> {
         unsafe { self.0.lua.get_userdata_type_id(&self.0) }
     }
 
-    /// Returns a type name of this `UserData` (from `__name` metatable field).
+    /// Returns a type name of this `UserData` (from a metatable field).
     pub(crate) fn type_name(&self) -> Result<Option<StdString>> {
         let lua = self.0.lua;
         let state = lua.state();
@@ -1101,10 +1121,10 @@ impl<'lua> AnyUserData<'lua> {
             let protect = !lua.unlikely_memory_error();
             let name_type = if protect {
                 protect_lua!(state, 1, 1, |state| {
-                    ffi::luaL_getmetafield(state, -1, cstr!("__name"))
+                    ffi::luaL_getmetafield(state, -1, MetaMethod::Type.as_cstr().as_ptr())
                 })?
             } else {
-                ffi::luaL_getmetafield(state, -1, cstr!("__name"))
+                ffi::luaL_getmetafield(state, -1, MetaMethod::Type.as_cstr().as_ptr())
             };
             match name_type {
                 ffi::LUA_TSTRING => Ok(Some(String(lua.pop_ref()).to_str()?.to_owned())),

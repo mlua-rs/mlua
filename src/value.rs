@@ -223,7 +223,7 @@ impl<'lua> Value<'lua> {
             f @ Value::Function(_) => write!(fmt, "function: {:?}", f.to_pointer()),
             t @ Value::Thread(_) => write!(fmt, "thread: {:?}", t.to_pointer()),
             u @ Value::UserData(ud) => {
-                // Try `__name` first then `__tostring`
+                // Try `__name/__type` first then `__tostring`
                 let name = ud.type_name().ok().flatten();
                 let s = name
                     .map(|name| format!("{name}: {:?}", u.to_pointer()))

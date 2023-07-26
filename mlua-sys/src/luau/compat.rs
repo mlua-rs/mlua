@@ -323,7 +323,7 @@ pub unsafe fn luaL_getmetafield(L: *mut lua_State, obj: c_int, e: *const c_char)
 pub unsafe fn luaL_newmetatable(L: *mut lua_State, tname: *const c_char) -> c_int {
     if luaL_newmetatable_(L, tname) != 0 {
         lua_pushstring(L, tname);
-        lua_setfield(L, -2, cstr!("__name"));
+        lua_setfield(L, -2, cstr!("__type"));
         1
     } else {
         0
@@ -454,7 +454,7 @@ pub unsafe fn luaL_tolstring(L: *mut lua_State, mut idx: c_int, len: *mut usize)
                 }
             }
             t => {
-                let tt = luaL_getmetafield(L, idx, cstr!("__name"));
+                let tt = luaL_getmetafield(L, idx, cstr!("__type"));
                 let name = if tt == LUA_TSTRING {
                     lua_tostring(L, -1)
                 } else {
@@ -462,7 +462,7 @@ pub unsafe fn luaL_tolstring(L: *mut lua_State, mut idx: c_int, len: *mut usize)
                 };
                 lua_pushfstring(L, cstr!("%s: %p"), name, lua_topointer(L, idx));
                 if tt != LUA_TNIL {
-                    lua_replace(L, -2); // remove '__name'
+                    lua_replace(L, -2); // remove '__type'
                 }
             }
         };
