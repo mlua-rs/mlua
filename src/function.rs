@@ -13,7 +13,7 @@ use crate::util::{
     assert_stack, check_stack, error_traceback, linenumber_to_usize, pop_error, ptr_to_lossy_str,
     ptr_to_str, StackGuard,
 };
-use crate::value::{FromLuaMulti, IntoLua, IntoLuaMulti};
+use crate::value::{FromLuaMulti, IntoLua, IntoLuaMulti, Value};
 
 #[cfg(feature = "async")]
 use {
@@ -604,6 +604,21 @@ impl<'lua> Function<'lua> {
             let fut = func(lua, args);
             Box::pin(async move { fut.await?.into_lua_multi(lua) })
         }))
+    }
+}
+
+impl<'lua> IntoLua<'lua> for WrappedFunction<'lua> {
+    #[inline]
+    fn into_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
+        lua.create_callback(self.0).map(Value::Function)
+    }
+}
+
+#[cfg(feature = "async")]
+impl<'lua> IntoLua<'lua> for WrappedAsyncFunction<'lua> {
+    #[inline]
+    fn into_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
+        lua.create_async_callback(self.0).map(Value::Function)
     }
 }
 
