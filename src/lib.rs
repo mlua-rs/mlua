@@ -256,7 +256,7 @@ pub use mlua_derive::FromLua;
 ///
 /// In module mode, mlua runs in unknown environment and cannot say are there any memory
 /// limits or not. As result, some operations that require memory allocation runs in
-/// protected mode. Setting this mode will improve performance of such operations
+/// protected mode. Setting this attribute will improve performance of such operations
 /// with risk of having uncaught exceptions and memory leaks.
 ///
 /// ```ignore

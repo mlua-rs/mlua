@@ -1,3 +1,11 @@
+## v0.9.0-rc.2
+
+- Added `#[derive(FromLua)]` macro to opt-in into `FromLua<T> where T: 'static + Clone` (userdata type).
+- Support vendored module mode for windows (raw-dylib linking, Rust 1.71+)
+- `module` and `vendored` features are now mutually exclusive
+- Use `C-unwind` ABI (Rust 1.71+)
+- Changed `AsChunk` trait to support capturing wrapped Lua types
+
 ## v0.9.0-rc.1
 
 - `UserDataMethods::add_async_method()` takes `&T` instead of cloning `T`
