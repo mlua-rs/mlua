@@ -97,21 +97,20 @@ pub fn chunk(input: TokenStream) -> TokenStream {
     let wrapped_code = quote! {{
         use ::mlua::{AsChunk, ChunkMode, Lua, Result, Table};
         use ::std::borrow::Cow;
+        use ::std::cell::Cell;
         use ::std::io::Result as IoResult;
-        use ::std::sync::Mutex;
+        use ::std::marker::PhantomData;
 
-        struct InnerChunk<F: for <'a> FnOnce(&'a Lua) -> Result<Table<'a>>>(Mutex<Option<F>>);
+        struct InnerChunk<'lua, F: FnOnce(&'lua Lua) -> Result<Table<'lua>>>(Cell<Option<F>>, PhantomData<&'lua ()>);
 
-        impl<F> AsChunk<'static> for InnerChunk<F>
+        impl<'lua, F> AsChunk<'lua, 'static> for InnerChunk<'lua, F>
         where
-            F: for <'a> FnOnce(&'a Lua) -> Result<Table<'a>>,
+            F: FnOnce(&'lua Lua) -> Result<Table<'lua>>,
         {
-            fn environment<'lua>(&self, lua: &'lua Lua) -> Result<Option<Table<'lua>>> {
+            fn environment(&self, lua: &'lua Lua) -> Result<Option<Table<'lua>>> {
                 if #caps_len > 0 {
-                    if let Ok(mut make_env) = self.0.lock() {
-                        if let Some(make_env) = make_env.take() {
-                            return make_env(lua).map(Some);
-                        }
+                    if let Some(make_env) = self.0.take() {
+                        return make_env(lua).map(Some);
                     }
                 }
                 Ok(None)
@@ -126,7 +125,7 @@ pub fn chunk(input: TokenStream) -> TokenStream {
             }
         }
 
-        fn annotate<F: for<'a> FnOnce(&'a Lua) -> Result<Table<'a>>>(f: F) -> F { f }
+        fn annotate<'a, F: FnOnce(&'a Lua) -> Result<Table<'a>>>(f: F) -> F { f }
 
         let make_env = annotate(move |lua: &Lua| -> Result<Table> {
             let globals = lua.globals();
@@ -142,7 +141,7 @@ pub fn chunk(input: TokenStream) -> TokenStream {
             Ok(env)
         });
 
-        InnerChunk(Mutex::new(Some(make_env)))
+        InnerChunk(Cell::new(Some(make_env)), PhantomData)
     }};
 
     wrapped_code.into()

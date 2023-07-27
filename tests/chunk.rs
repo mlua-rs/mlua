@@ -1,7 +1,7 @@
 use std::fs;
 use std::io;
 
-use mlua::{Lua, Result};
+use mlua::{AnyUserData, Function, Lua, Result};
 
 #[test]
 fn test_chunk_path() -> Result<()> {
@@ -36,12 +36,24 @@ fn test_chunk_macro() -> Result<()> {
     let data = lua.create_table()?;
     data.raw_set("num", 1)?;
 
+    let ud = AnyUserData::wrap("hello");
+    let f = Function::wrap(|_lua, ()| Ok(()));
+
     lua.globals().set("g", 123)?;
+
+    let string = String::new();
+    let str = string.as_str();
 
     lua.load(mlua::chunk! {
         assert($name == "Rustacean")
+        assert(type($table) == "table")
         assert($table[1] == 1)
+        assert(type($data) == "table")
         assert($data.num == 1)
+        assert(type($ud) == "userdata")
+        assert(type($f) == "function")
+        assert(type($str) == "string")
+        assert($str == "")
         assert(g == 123)
         s = 321
     })

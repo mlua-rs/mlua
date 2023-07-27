@@ -15,7 +15,7 @@ use crate::value::{FromLuaMulti, IntoLua, IntoLuaMulti};
 ///
 /// [loadable by Lua]: https://www.lua.org/manual/5.4/manual.html#3.3.2
 /// [`Chunk`]: crate::Chunk
-pub trait AsChunk<'a> {
+pub trait AsChunk<'lua, 'a> {
     /// Returns optional chunk name
     fn name(&self) -> Option<StdString> {
         None
@@ -24,7 +24,7 @@ pub trait AsChunk<'a> {
     /// Returns optional chunk [environment]
     ///
     /// [environment]: https://www.lua.org/manual/5.4/manual.html#2.2
-    fn environment<'lua>(&self, lua: &'lua Lua) -> Result<Option<Table<'lua>>> {
+    fn environment(&self, lua: &'lua Lua) -> Result<Option<Table<'lua>>> {
         let _lua = lua; // suppress warning
         Ok(None)
     }
@@ -38,43 +38,43 @@ pub trait AsChunk<'a> {
     fn source(self) -> IoResult<Cow<'a, [u8]>>;
 }
 
-impl<'a> AsChunk<'a> for &'a str {
+impl<'a> AsChunk<'_, 'a> for &'a str {
     fn source(self) -> IoResult<Cow<'a, [u8]>> {
         Ok(Cow::Borrowed(self.as_ref()))
     }
 }
 
-impl AsChunk<'static> for StdString {
+impl AsChunk<'_, 'static> for StdString {
     fn source(self) -> IoResult<Cow<'static, [u8]>> {
         Ok(Cow::Owned(self.into_bytes()))
     }
 }
 
-impl<'a> AsChunk<'a> for &'a StdString {
+impl<'a> AsChunk<'_, 'a> for &'a StdString {
     fn source(self) -> IoResult<Cow<'a, [u8]>> {
         Ok(Cow::Borrowed(self.as_bytes()))
     }
 }
 
-impl<'a> AsChunk<'a> for &'a [u8] {
+impl<'a> AsChunk<'_, 'a> for &'a [u8] {
     fn source(self) -> IoResult<Cow<'a, [u8]>> {
         Ok(Cow::Borrowed(self))
     }
 }
 
-impl AsChunk<'static> for Vec<u8> {
+impl AsChunk<'_, 'static> for Vec<u8> {
     fn source(self) -> IoResult<Cow<'static, [u8]>> {
         Ok(Cow::Owned(self))
     }
 }
 
-impl<'a> AsChunk<'a> for &'a Vec<u8> {
+impl<'a> AsChunk<'_, 'a> for &'a Vec<u8> {
     fn source(self) -> IoResult<Cow<'a, [u8]>> {
         Ok(Cow::Borrowed(self.as_ref()))
     }
 }
 
-impl AsChunk<'static> for &Path {
+impl AsChunk<'_, 'static> for &Path {
     fn name(&self) -> Option<StdString> {
         Some(format!("@{}", self.display()))
     }
@@ -84,7 +84,7 @@ impl AsChunk<'static> for &Path {
     }
 }
 
-impl AsChunk<'static> for PathBuf {
+impl AsChunk<'_, 'static> for PathBuf {
     fn name(&self) -> Option<StdString> {
         Some(format!("@{}", self.display()))
     }

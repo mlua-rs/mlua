@@ -1325,7 +1325,7 @@ impl Lua {
     ///
     /// [`Chunk::exec`]: crate::Chunk::exec
     #[track_caller]
-    pub fn load<'lua, 'a>(&'lua self, chunk: impl AsChunk<'a>) -> Chunk<'lua, 'a> {
+    pub fn load<'lua, 'a>(&'lua self, chunk: impl AsChunk<'lua, 'a>) -> Chunk<'lua, 'a> {
         let caller = Location::caller();
         Chunk {
             lua: self,
