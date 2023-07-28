@@ -1,3 +1,7 @@
+## v0.9.0-rc.3
+
+- Minimal Luau updated to 0.588
+
 ## v0.9.0-rc.2
 
 - Added `#[derive(FromLua)]` macro to opt-in into `FromLua<T> where T: 'static + Clone` (userdata type).
