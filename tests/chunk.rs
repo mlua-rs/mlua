@@ -1,7 +1,7 @@
 use std::fs;
 use std::io;
 
-use mlua::{AnyUserData, Function, Lua, Result};
+use mlua::{Lua, Result};
 
 #[test]
 fn test_chunk_path() -> Result<()> {
@@ -36,8 +36,8 @@ fn test_chunk_macro() -> Result<()> {
     let data = lua.create_table()?;
     data.raw_set("num", 1)?;
 
-    let ud = AnyUserData::wrap("hello");
-    let f = Function::wrap(|_lua, ()| Ok(()));
+    let ud = mlua::AnyUserData::wrap("hello");
+    let f = mlua::Function::wrap(|_lua, ()| Ok(()));
 
     lua.globals().set("g", 123)?;
 
