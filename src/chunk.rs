@@ -125,6 +125,7 @@ pub struct Compiler {
     coverage_level: u8,
     vector_lib: Option<String>,
     vector_ctor: Option<String>,
+    vector_type: Option<String>,
     mutable_globals: Vec<String>,
 }
 
@@ -146,6 +147,7 @@ impl Compiler {
             coverage_level: 0,
             vector_lib: None,
             vector_ctor: None,
+            vector_type: None,
             mutable_globals: Vec::new(),
         }
     }
@@ -188,15 +190,22 @@ impl Compiler {
 
     #[doc(hidden)]
     #[must_use]
-    pub fn set_vector_lib(mut self, lib: Option<String>) -> Self {
-        self.vector_lib = lib;
+    pub fn set_vector_lib(mut self, lib: impl Into<String>) -> Self {
+        self.vector_lib = Some(lib.into());
         self
     }
 
     #[doc(hidden)]
     #[must_use]
-    pub fn set_vector_ctor(mut self, ctor: Option<String>) -> Self {
-        self.vector_ctor = ctor;
+    pub fn set_vector_ctor(mut self, ctor: impl Into<String>) -> Self {
+        self.vector_ctor = Some(ctor.into());
+        self
+    }
+
+    #[doc(hidden)]
+    #[must_use]
+    pub fn set_vector_type(mut self, r#type: impl Into<String>) -> Self {
+        self.vector_type = Some(r#type.into());
         self
     }
 
@@ -220,6 +229,9 @@ impl Compiler {
         let vector_ctor = self.vector_ctor.clone();
         let vector_ctor = vector_ctor.and_then(|ctor| CString::new(ctor).ok());
         let vector_ctor = vector_ctor.as_ref();
+        let vector_type = self.vector_type.clone();
+        let vector_type = vector_type.and_then(|t| CString::new(t).ok());
+        let vector_type = vector_type.as_ref();
 
         let mutable_globals = self
             .mutable_globals
@@ -244,7 +256,7 @@ impl Compiler {
                 coverageLevel: self.coverage_level as c_int,
                 vectorLib: vector_lib.map_or(ptr::null(), |s| s.as_ptr()),
                 vectorCtor: vector_ctor.map_or(ptr::null(), |s| s.as_ptr()),
-                vectorType: ptr::null(),
+                vectorType: vector_type.map_or(ptr::null(), |s| s.as_ptr()),
                 mutableGlobals: mutable_globals_ptr,
             };
             ffi::luau_compile(source.as_ref(), options)

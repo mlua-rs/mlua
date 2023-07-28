@@ -84,7 +84,7 @@ fn test_vectors() -> Result<()> {
         assert(v.z == 3)
     "#,
     )
-    .set_compiler(Compiler::new().set_vector_ctor(Some("vector".to_string())))
+    .set_compiler(Compiler::new().set_vector_ctor("vector"))
     .exec()?;
 
     Ok(())
@@ -124,7 +124,7 @@ fn test_vectors() -> Result<()> {
         assert(v.w == 4)
     "#,
     )
-    .set_compiler(Compiler::new().set_vector_ctor(Some("vector".to_string())))
+    .set_compiler(Compiler::new().set_vector_ctor("vector"))
     .exec()?;
 
     Ok(())
