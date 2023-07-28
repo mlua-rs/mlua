@@ -1,6 +1,6 @@
 [package]
 name = "mlua-sys"
-version = "0.3.0"
+version = "0.3.1"
 authors = ["Aleksandr Orlenko <zxteam@pm.me>"]
 edition = "2021"
 repository = "https://github.com/khvzak/mlua"
