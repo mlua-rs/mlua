@@ -21,7 +21,7 @@
 >
 > Please see the [v0.8](https://github.com/khvzak/mlua/tree/v0.8) branch for the stable versions of `mlua` released to crates.io.
 >
-> v0.9 release notes can be found [here](docs/release_notes/v0.9.md).
+> v0.9 release notes can be found [here](https://github.com/khvzak/mlua/blob/master/docs/release_notes/v0.9.md).
 
 `mlua` is bindings to [Lua](https://www.lua.org) programming language for Rust with a goal to provide
 _safe_ (as far as it's possible), high level, easy to use, practical and flexible API.
