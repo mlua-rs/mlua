@@ -1104,6 +1104,7 @@ impl<'lua> AnyUserData<'lua> {
         OwnedAnyUserData(self.0.into_owned())
     }
 
+    #[cfg(feature = "async")]
     #[inline(always)]
     pub(crate) fn type_id(&self) -> Result<Option<TypeId>> {
         unsafe { self.0.lua.get_userdata_type_id(&self.0) }

@@ -75,8 +75,9 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
         // to make sure callbacks can't capture handles with lifetime outside the scope, inside the
         // scope, and owned inside the callback itself.
         unsafe {
-            self.create_callback(Box::new(move |lua, args| {
-                func(lua, A::from_lua_multi(args, lua)?)?.into_lua_multi(lua)
+            self.create_callback(Box::new(move |lua, nargs| {
+                let args = A::from_stack_args(nargs, 1, None, lua)?;
+                func(lua, args)?.push_into_stack_multi(lua)
             }))
         }
     }
@@ -293,7 +294,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
         // 'lua. This is safe though, because `UserData::add_methods` does not get to pick the 'lua
         // lifetime, so none of the static methods UserData types can add can possibly capture
         // parameters.
-        fn wrap_method<'scope, 'lua, 'callback: 'scope, T: 'scope>(
+        unsafe fn wrap_method<'scope, 'lua, 'callback: 'scope, T: 'scope>(
             scope: &Scope<'lua, 'scope>,
             ud_ptr: *const UserDataCell<T>,
             method: NonStaticMethod<'callback, T>,
@@ -307,14 +308,8 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
             // first argument).
             let check_ud_type = move |lua: &Lua, value| -> Result<&UserDataCell<T>> {
                 if let Some(Value::UserData(ud)) = value {
-                    let state = lua.state();
-                    unsafe {
-                        let _sg = StackGuard::new(state);
-                        check_stack(state, 2)?;
-                        lua.push_userdata_ref(&ud.0)?;
-                        if get_userdata(state, -1) as *const _ == ud_ptr {
-                            return Ok(&*ud_ptr);
-                        }
+                    if get_userdata(lua.ref_thread(), ud.0.index) as *const _ == ud_ptr {
+                        return Ok(&*ud_ptr);
                     }
                 };
                 Err(Error::UserDataTypeMismatch)
@@ -322,37 +317,44 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
 
             match method {
                 NonStaticMethod::Method(method) => {
-                    let f = Box::new(move |lua, mut args: MultiValue<'callback>| {
+                    let f = Box::new(move |lua, nargs| {
+                        let mut args = MultiValue::from_stack_args(nargs, 1, None, lua)?;
                         let data = check_ud_type(lua, args.pop_front())?;
                         let data = data.try_borrow()?;
-                        method(lua, &*data, args)
+                        method(lua, &*data, args)?.push_into_stack_multi(lua)
                     });
-                    unsafe { scope.create_callback(f) }
+                    scope.create_callback(f)
                 }
                 NonStaticMethod::MethodMut(method) => {
                     let method = RefCell::new(method);
-                    let f = Box::new(move |lua, mut args: MultiValue<'callback>| {
+                    let f = Box::new(move |lua, nargs| {
+                        let mut args = MultiValue::from_stack_args(nargs, 1, None, lua)?;
                         let data = check_ud_type(lua, args.pop_front())?;
                         let mut method = method
                             .try_borrow_mut()
                             .map_err(|_| Error::RecursiveMutCallback)?;
                         let mut data = data.try_borrow_mut()?;
-                        (*method)(lua, &mut *data, args)
+                        (*method)(lua, &mut *data, args)?.push_into_stack_multi(lua)
                     });
-                    unsafe { scope.create_callback(f) }
+                    scope.create_callback(f)
                 }
-                NonStaticMethod::Function(function) => unsafe { scope.create_callback(function) },
-                NonStaticMethod::FunctionMut(function) => {
+                NonStaticMethod::Function(function) => unsafe {
+                    scope.create_callback(Box::new(move |lua, nargs| {
+                        let args = MultiValue::from_stack_args(nargs, 1, None, lua)?;
+                        function(lua, args)?.push_into_stack_multi(lua)
+                    }))
+                },
+                NonStaticMethod::FunctionMut(function) => unsafe {
                     let function = RefCell::new(function);
-                    let f = Box::new(move |lua, args| {
-                        (*function
+                    let f = Box::new(move |lua, nargs| {
+                        let mut func = function
                             .try_borrow_mut()
-                            .map_err(|_| Error::RecursiveMutCallback)?)(
-                            lua, args
-                        )
+                            .map_err(|_| Error::RecursiveMutCallback)?;
+                        let args = MultiValue::from_stack_args(nargs, 1, None, lua)?;
+                        func(lua, args)?.push_into_stack_multi(lua)
                     });
-                    unsafe { scope.create_callback(f) }
-                }
+                    scope.create_callback(f)
+                },
             }
         }
 
@@ -395,7 +397,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
                 rawset_field(state, -2, MetaMethod::validate(&k)?)?;
             }
             for (k, f) in ud_fields.meta_fields {
-                lua.push_value(f(lua, MultiValue::new())?.pop_front().unwrap())?;
+                mlua_assert!(f(lua, 0)? == 1, "field function must return one value");
                 rawset_field(state, -2, MetaMethod::validate(&k)?)?;
             }
             let metatable_index = ffi::lua_absindex(state, -1);
@@ -802,7 +804,7 @@ impl<'lua, T: UserData> UserDataFields<'lua, T> for NonStaticUserDataFields<'lua
         let name = name.as_ref().to_string();
         self.fields.push((
             name,
-            Box::new(move |lua, _| value.clone().into_lua_multi(lua)),
+            Box::new(move |lua, _| unsafe { value.clone().push_into_stack_multi(lua) }),
         ));
     }
 
@@ -859,8 +861,9 @@ impl<'lua, T: UserData> UserDataFields<'lua, T> for NonStaticUserDataFields<'lua
         let name2 = name.clone();
         self.meta_fields.push((
             name,
-            Box::new(move |lua, _| {
-                UserDataRegistry::<()>::check_meta_field(lua, &name2, value.clone())
+            Box::new(move |lua, _| unsafe {
+                UserDataRegistry::<()>::check_meta_field(lua, &name2, value.clone())?
+                    .push_into_stack_multi(lua)
             }),
         ));
     }
@@ -874,7 +877,10 @@ impl<'lua, T: UserData> UserDataFields<'lua, T> for NonStaticUserDataFields<'lua
         let name2 = name.clone();
         self.meta_fields.push((
             name,
-            Box::new(move |lua, _| UserDataRegistry::<()>::check_meta_field(lua, &name2, f(lua)?)),
+            Box::new(move |lua, _| unsafe {
+                UserDataRegistry::<()>::check_meta_field(lua, &name2, f(lua)?)?
+                    .push_into_stack_multi(lua)
+            }),
         ));
     }
 }

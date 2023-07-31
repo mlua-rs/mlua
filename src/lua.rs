@@ -730,16 +730,8 @@ impl Lua {
 
         callback_error_ext(state, extra, move |nargs| {
             let lua: &Lua = mem::transmute((*extra).inner.assume_init_ref());
-            let _guard = StateGuard::new(&lua.0, state);
-
-            let mut args = MultiValue::new_or_pooled(lua);
-            args.reserve(nargs as usize);
-            for _ in 0..nargs {
-                args.push_front(lua.pop_value());
-            }
-
-            let result = func(lua, A::from_lua_multi(args, lua)?)?.into_lua(lua)?;
-            lua.push_value(result)?;
+            let args = A::from_stack_args(nargs, 1, None, lua)?;
+            func(lua, args)?.push_into_stack(lua)?;
             Ok(1)
         })
     }
@@ -1523,8 +1515,9 @@ impl Lua {
         R: IntoLuaMulti<'lua>,
         F: Fn(&'lua Lua, A) -> Result<R> + MaybeSend + 'static,
     {
-        self.create_callback(Box::new(move |lua, args| {
-            func(lua, A::from_lua_multi_args(args, 1, None, lua)?)?.into_lua_multi(lua)
+        self.create_callback(Box::new(move |lua, nargs| unsafe {
+            let args = A::from_stack_args(nargs, 1, None, lua)?;
+            func(lua, args)?.push_into_stack_multi(lua)
         }))
     }
 
@@ -1608,7 +1601,7 @@ impl Lua {
         FR: Future<Output = Result<R>> + 'lua,
     {
         self.create_async_callback(Box::new(move |lua, args| {
-            let args = match A::from_lua_multi_args(args, 1, None, lua) {
+            let args = match A::from_lua_args(args, 1, None, lua) {
                 Ok(args) => args,
                 Err(e) => return Box::pin(future::err(e)),
             };
@@ -2432,6 +2425,104 @@ impl Lua {
         }
     }
 
+    /// Returns value at given stack index without popping it.
+    ///
+    /// Uses 2 stack spaces, does not call checkstack.
+    pub(crate) unsafe fn stack_value(&self, idx: c_int) -> Value {
+        let state = self.state();
+        match ffi::lua_type(state, idx) {
+            ffi::LUA_TNIL => Nil,
+
+            ffi::LUA_TBOOLEAN => Value::Boolean(ffi::lua_toboolean(state, idx) != 0),
+
+            ffi::LUA_TLIGHTUSERDATA => {
+                Value::LightUserData(LightUserData(ffi::lua_touserdata(state, idx)))
+            }
+
+            #[cfg(any(feature = "lua54", feature = "lua53"))]
+            ffi::LUA_TNUMBER => {
+                if ffi::lua_isinteger(state, idx) != 0 {
+                    Value::Integer(ffi::lua_tointeger(state, idx))
+                } else {
+                    Value::Number(ffi::lua_tonumber(state, idx))
+                }
+            }
+
+            #[cfg(any(
+                feature = "lua52",
+                feature = "lua51",
+                feature = "luajit",
+                feature = "luau"
+            ))]
+            ffi::LUA_TNUMBER => {
+                let n = ffi::lua_tonumber(state, idx);
+                match num_traits::cast(n) {
+                    Some(i) if (n - (i as Number)).abs() < Number::EPSILON => Value::Integer(i),
+                    _ => Value::Number(n),
+                }
+            }
+
+            #[cfg(feature = "luau")]
+            ffi::LUA_TVECTOR => {
+                let v = ffi::lua_tovector(state, idx);
+                mlua_debug_assert!(!v.is_null(), "vector is null");
+                #[cfg(not(feature = "luau-vector4"))]
+                return Value::Vector(Vector([*v, *v.add(1), *v.add(2)]));
+                #[cfg(feature = "luau-vector4")]
+                return Value::Vector(Vector([*v, *v.add(1), *v.add(2), *v.add(3)]));
+            }
+
+            ffi::LUA_TSTRING => {
+                ffi::lua_xpush(state, self.ref_thread(), idx);
+                Value::String(String(self.pop_ref_thread()))
+            }
+
+            ffi::LUA_TTABLE => {
+                ffi::lua_xpush(state, self.ref_thread(), idx);
+                Value::Table(Table(self.pop_ref_thread()))
+            }
+
+            ffi::LUA_TFUNCTION => {
+                ffi::lua_xpush(state, self.ref_thread(), idx);
+                Value::Function(Function(self.pop_ref_thread()))
+            }
+
+            ffi::LUA_TUSERDATA => {
+                let wrapped_failure_mt_ptr = (*self.extra.get()).wrapped_failure_mt_ptr;
+                // We must prevent interaction with userdata types other than UserData OR a WrappedError.
+                // WrappedPanics are automatically resumed.
+                match get_gc_userdata::<WrappedFailure>(state, idx, wrapped_failure_mt_ptr).as_mut()
+                {
+                    Some(WrappedFailure::Error(err)) => Value::Error(err.clone()),
+                    Some(WrappedFailure::Panic(panic)) => {
+                        if let Some(panic) = panic.take() {
+                            resume_unwind(panic);
+                        }
+                        // Previously resumed panic?
+                        Value::Nil
+                    }
+                    _ => {
+                        ffi::lua_xpush(state, self.ref_thread(), idx);
+                        Value::UserData(AnyUserData(self.pop_ref_thread()))
+                    }
+                }
+            }
+
+            ffi::LUA_TTHREAD => {
+                ffi::lua_xpush(state, self.ref_thread(), idx);
+                Value::Thread(Thread(self.pop_ref_thread()))
+            }
+
+            #[cfg(feature = "luajit")]
+            ffi::LUA_TCDATA => {
+                // TODO: Fix this in a next major release
+                panic!("cdata objects cannot be handled by mlua yet");
+            }
+
+            _ => mlua_panic!("LUA_TNONE in pop_value"),
+        }
+    }
+
     // Pushes a LuaRef value onto the stack, uses 1 stack space, does not call checkstack
     pub(crate) unsafe fn push_ref(&self, lref: &LuaRef) {
         assert!(
@@ -2518,7 +2609,7 @@ impl Lua {
         let mut has_name = false;
         for (k, f) in registry.meta_fields {
             has_name = has_name || k == MetaMethod::Type;
-            self.push_value(f(self, MultiValue::new())?.pop_front().unwrap())?;
+            mlua_assert!(f(self, 0)? == 1, "field function must return one value");
             rawset_field(state, -2, MetaMethod::validate(&k)?)?;
         }
         // Set `__name/__type` if not provided
@@ -2543,7 +2634,7 @@ impl Lua {
                         push_table(state, 0, fields_nrec, true)?;
                     }
                     for (k, f) in registry.fields {
-                        self.push_value(f(self, MultiValue::new())?.pop_front().unwrap())?;
+                        mlua_assert!(f(self, 0)? == 1, "field function must return one value");
                         rawset_field(state, -2, &k)?;
                     }
                     rawset_field(state, metatable_index, "__index")?;
@@ -2677,12 +2768,24 @@ impl Lua {
     //
     // Returns `None` if the userdata is registered but non-static.
     pub(crate) unsafe fn get_userdata_type_id(&self, lref: &LuaRef) -> Result<Option<TypeId>> {
-        let ref_thread = self.ref_thread();
-        if ffi::lua_getmetatable(ref_thread, lref.index) == 0 {
+        self.get_userdata_type_id_inner(self.ref_thread(), lref.index)
+    }
+
+    // Same as `get_userdata_type_id` but assumes the value is already on the current stack
+    pub(crate) unsafe fn get_userdata_type_id_stack(&self, idx: c_int) -> Result<Option<TypeId>> {
+        self.get_userdata_type_id_inner(self.state(), idx)
+    }
+
+    unsafe fn get_userdata_type_id_inner(
+        &self,
+        state: *mut ffi::lua_State,
+        idx: c_int,
+    ) -> Result<Option<TypeId>> {
+        if ffi::lua_getmetatable(state, idx) == 0 {
             return Err(Error::UserDataTypeMismatch);
         }
-        let mt_ptr = ffi::lua_topointer(ref_thread, -1);
-        ffi::lua_pop(ref_thread, 1);
+        let mt_ptr = ffi::lua_topointer(state, -1);
+        ffi::lua_pop(state, 1);
 
         // Fast path to skip looking up the metatable in the map
         let (last_mt, last_type_id) = (*self.extra.get()).last_checked_userdata_mt;
@@ -2740,24 +2843,9 @@ impl Lua {
 
                 let lua: &Lua = mem::transmute((*extra).inner.assume_init_ref());
                 let _guard = StateGuard::new(&lua.0, state);
-
-                let mut args = MultiValue::new_or_pooled(lua);
-                args.reserve(nargs as usize);
-                for _ in 0..nargs {
-                    args.push_front(lua.pop_value());
-                }
-
                 let func = &*(*upvalue).data;
-                let mut results = func(lua, args)?;
-                let nresults = results.len() as c_int;
 
-                check_stack(state, nresults)?;
-                for r in results.drain_all() {
-                    lua.push_value(r)?;
-                }
-                MultiValue::return_to_pool(results, lua);
-
-                Ok(nresults)
+                func(lua, nargs)
             })
         }
 

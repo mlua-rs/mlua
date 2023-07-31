@@ -14,7 +14,7 @@ use crate::userdata::{
     AnyUserData, MetaMethod, UserData, UserDataCell, UserDataFields, UserDataMethods,
 };
 use crate::util::{get_userdata, short_type_name};
-use crate::value::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, MultiValue, Value};
+use crate::value::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, Value};
 
 #[cfg(not(feature = "send"))]
 use std::rc::Rc;
@@ -78,63 +78,65 @@ impl<'lua, T: 'static> UserDataRegistry<'lua, T> {
             };
         }
 
-        Box::new(move |lua, mut args| {
-            let front = args
-                .pop_front()
-                .ok_or_else(|| Error::from_lua_conversion("missing argument", "userdata", None));
-            let front = try_self_arg!(front);
+        Box::new(move |lua, nargs| unsafe {
+            if nargs == 0 {
+                try_self_arg!(Err(Error::from_lua_conversion(
+                    "missing argument",
+                    "userdata",
+                    None,
+                )));
+            }
             let call = |ud| {
                 // Self was at index 1, so we pass 2 here
-                let args = A::from_lua_multi_args(args, 2, Some(&name), lua)?;
-                method(lua, ud, args)?.into_lua_multi(lua)
+                let args = A::from_stack_args(nargs - 1, 2, Some(&name), lua)?;
+                method(lua, ud, args)?.push_into_stack_multi(lua)
             };
 
-            let userdata = try_self_arg!(AnyUserData::from_lua(front, lua));
-            let (ref_thread, index) = (lua.ref_thread(), userdata.0.index);
-            match try_self_arg!(userdata.type_id()) {
-                Some(id) if id == TypeId::of::<T>() => unsafe {
-                    let ud = try_self_arg!(get_userdata_ref::<T>(ref_thread, index));
+            let (state, index) = (lua.state(), -nargs);
+            match try_self_arg!(lua.get_userdata_type_id_stack(index)) {
+                Some(id) if id == TypeId::of::<T>() => {
+                    let ud = try_self_arg!(get_userdata_ref::<T>(state, index));
                     call(&ud)
-                },
+                }
                 #[cfg(not(feature = "send"))]
-                Some(id) if id == TypeId::of::<Rc<T>>() => unsafe {
-                    let ud = try_self_arg!(get_userdata_ref::<Rc<T>>(ref_thread, index));
+                Some(id) if id == TypeId::of::<Rc<T>>() => {
+                    let ud = try_self_arg!(get_userdata_ref::<Rc<T>>(state, index));
                     call(&ud)
-                },
+                }
                 #[cfg(not(feature = "send"))]
-                Some(id) if id == TypeId::of::<Rc<RefCell<T>>>() => unsafe {
-                    let ud = try_self_arg!(get_userdata_ref::<Rc<RefCell<T>>>(ref_thread, index));
+                Some(id) if id == TypeId::of::<Rc<RefCell<T>>>() => {
+                    let ud = try_self_arg!(get_userdata_ref::<Rc<RefCell<T>>>(state, index));
                     let ud = try_self_arg!(ud.try_borrow(), Error::UserDataBorrowError);
                     call(&ud)
-                },
-                Some(id) if id == TypeId::of::<Arc<T>>() => unsafe {
-                    let ud = try_self_arg!(get_userdata_ref::<Arc<T>>(ref_thread, index));
+                }
+                Some(id) if id == TypeId::of::<Arc<T>>() => {
+                    let ud = try_self_arg!(get_userdata_ref::<Arc<T>>(state, index));
                     call(&ud)
-                },
-                Some(id) if id == TypeId::of::<Arc<Mutex<T>>>() => unsafe {
-                    let ud = try_self_arg!(get_userdata_ref::<Arc<Mutex<T>>>(ref_thread, index));
+                }
+                Some(id) if id == TypeId::of::<Arc<Mutex<T>>>() => {
+                    let ud = try_self_arg!(get_userdata_ref::<Arc<Mutex<T>>>(state, index));
                     let ud = try_self_arg!(ud.try_lock(), Error::UserDataBorrowError);
                     call(&ud)
-                },
+                }
                 #[cfg(feature = "parking_lot")]
-                Some(id) if id == TypeId::of::<Arc<parking_lot::Mutex<T>>>() => unsafe {
-                    let ud = get_userdata_ref::<Arc<parking_lot::Mutex<T>>>(ref_thread, index);
+                Some(id) if id == TypeId::of::<Arc<parking_lot::Mutex<T>>>() => {
+                    let ud = get_userdata_ref::<Arc<parking_lot::Mutex<T>>>(state, index);
                     let ud = try_self_arg!(ud);
                     let ud = try_self_arg!(ud.try_lock().ok_or(Error::UserDataBorrowError));
                     call(&ud)
-                },
-                Some(id) if id == TypeId::of::<Arc<RwLock<T>>>() => unsafe {
-                    let ud = try_self_arg!(get_userdata_ref::<Arc<RwLock<T>>>(ref_thread, index));
+                }
+                Some(id) if id == TypeId::of::<Arc<RwLock<T>>>() => {
+                    let ud = try_self_arg!(get_userdata_ref::<Arc<RwLock<T>>>(state, index));
                     let ud = try_self_arg!(ud.try_read(), Error::UserDataBorrowError);
                     call(&ud)
-                },
+                }
                 #[cfg(feature = "parking_lot")]
-                Some(id) if id == TypeId::of::<Arc<parking_lot::RwLock<T>>>() => unsafe {
-                    let ud = get_userdata_ref::<Arc<parking_lot::RwLock<T>>>(ref_thread, index);
+                Some(id) if id == TypeId::of::<Arc<parking_lot::RwLock<T>>>() => {
+                    let ud = get_userdata_ref::<Arc<parking_lot::RwLock<T>>>(state, index);
                     let ud = try_self_arg!(ud);
                     let ud = try_self_arg!(ud.try_read().ok_or(Error::UserDataBorrowError));
                     call(&ud)
-                },
+                }
                 _ => Err(Error::bad_self_argument(&name, Error::UserDataTypeMismatch)),
             }
         })
@@ -157,60 +159,62 @@ impl<'lua, T: 'static> UserDataRegistry<'lua, T> {
         }
 
         let method = RefCell::new(method);
-        Box::new(move |lua, mut args| {
+        Box::new(move |lua, nargs| unsafe {
             let mut method = method
                 .try_borrow_mut()
                 .map_err(|_| Error::RecursiveMutCallback)?;
-            let front = args
-                .pop_front()
-                .ok_or_else(|| Error::from_lua_conversion("missing argument", "userdata", None));
-            let front = try_self_arg!(front);
-            let call = |ud| {
+            if nargs == 0 {
+                try_self_arg!(Err(Error::from_lua_conversion(
+                    "missing argument",
+                    "userdata",
+                    None,
+                )));
+            }
+            let mut call = |ud| {
                 // Self was at index 1, so we pass 2 here
-                let args = A::from_lua_multi_args(args, 2, Some(&name), lua)?;
-                method(lua, ud, args)?.into_lua_multi(lua)
+                let args = A::from_stack_args(nargs - 1, 2, Some(&name), lua)?;
+                method(lua, ud, args)?.push_into_stack_multi(lua)
             };
 
-            let userdata = try_self_arg!(AnyUserData::from_lua(front, lua));
-            let (ref_thread, index) = (lua.ref_thread(), userdata.0.index);
-            match try_self_arg!(userdata.type_id()) {
-                Some(id) if id == TypeId::of::<T>() => unsafe {
-                    let mut ud = try_self_arg!(get_userdata_mut::<T>(ref_thread, index));
+            let (state, index) = (lua.state(), -nargs);
+            match try_self_arg!(lua.get_userdata_type_id_stack(index)) {
+                Some(id) if id == TypeId::of::<T>() => {
+                    let mut ud = try_self_arg!(get_userdata_mut::<T>(state, index));
                     call(&mut ud)
-                },
+                }
                 #[cfg(not(feature = "send"))]
                 Some(id) if id == TypeId::of::<Rc<T>>() => Err(Error::UserDataBorrowMutError),
                 #[cfg(not(feature = "send"))]
-                Some(id) if id == TypeId::of::<Rc<RefCell<T>>>() => unsafe {
-                    let ud = try_self_arg!(get_userdata_mut::<Rc<RefCell<T>>>(ref_thread, index));
+                Some(id) if id == TypeId::of::<Rc<RefCell<T>>>() => {
+                    let ud = try_self_arg!(get_userdata_mut::<Rc<RefCell<T>>>(state, index));
                     let mut ud = try_self_arg!(ud.try_borrow_mut(), Error::UserDataBorrowMutError);
                     call(&mut ud)
-                },
+                }
                 Some(id) if id == TypeId::of::<Arc<T>>() => Err(Error::UserDataBorrowMutError),
-                Some(id) if id == TypeId::of::<Arc<Mutex<T>>>() => unsafe {
-                    let ud = try_self_arg!(get_userdata_mut::<Arc<Mutex<T>>>(ref_thread, index));
+                Some(id) if id == TypeId::of::<Arc<Mutex<T>>>() => {
+                    let ud = try_self_arg!(get_userdata_mut::<Arc<Mutex<T>>>(state, index));
                     let mut ud = try_self_arg!(ud.try_lock(), Error::UserDataBorrowMutError);
                     call(&mut ud)
-                },
+                }
                 #[cfg(feature = "parking_lot")]
-                Some(id) if id == TypeId::of::<Arc<parking_lot::Mutex<T>>>() => unsafe {
-                    let ud = get_userdata_mut::<Arc<parking_lot::Mutex<T>>>(ref_thread, index);
+                Some(id) if id == TypeId::of::<Arc<parking_lot::Mutex<T>>>() => {
+                    let ud = get_userdata_mut::<Arc<parking_lot::Mutex<T>>>(state, index);
                     let ud = try_self_arg!(ud);
                     let mut ud = try_self_arg!(ud.try_lock().ok_or(Error::UserDataBorrowMutError));
                     call(&mut ud)
-                },
-                Some(id) if id == TypeId::of::<Arc<RwLock<T>>>() => unsafe {
-                    let ud = try_self_arg!(get_userdata_mut::<Arc<RwLock<T>>>(ref_thread, index));
+                }
+                Some(id) if id == TypeId::of::<Arc<RwLock<T>>>() => {
+                    let ud = try_self_arg!(get_userdata_mut::<Arc<RwLock<T>>>(state, index));
                     let mut ud = try_self_arg!(ud.try_write(), Error::UserDataBorrowMutError);
                     call(&mut ud)
-                },
+                }
                 #[cfg(feature = "parking_lot")]
-                Some(id) if id == TypeId::of::<Arc<parking_lot::RwLock<T>>>() => unsafe {
-                    let ud = get_userdata_mut::<Arc<parking_lot::RwLock<T>>>(ref_thread, index);
+                Some(id) if id == TypeId::of::<Arc<parking_lot::RwLock<T>>>() => {
+                    let ud = get_userdata_mut::<Arc<parking_lot::RwLock<T>>>(state, index);
                     let ud = try_self_arg!(ud);
                     let mut ud = try_self_arg!(ud.try_write().ok_or(Error::UserDataBorrowMutError));
                     call(&mut ud)
-                },
+                }
                 _ => Err(Error::bad_self_argument(&name, Error::UserDataTypeMismatch)),
             }
         })
@@ -253,14 +257,14 @@ impl<'lua, T: 'static> UserDataRegistry<'lua, T> {
                         let ud = try_self_arg!(get_userdata_ref::<T>(ref_thread, index));
                         let ud = std::mem::transmute::<&T, &T>(&ud);
                         // Self was at index 1, so we pass 2 here
-                        let args = A::from_lua_multi_args(args, 2, Some(&name), lua)?;
+                        let args = A::from_lua_args(args, 2, Some(&name), lua)?;
                         method(lua, ud, args).await?.into_lua_multi(lua)
                     },
                     #[cfg(not(feature = "send"))]
                     Some(id) if id == TypeId::of::<Rc<T>>() => unsafe {
                         let ud = try_self_arg!(get_userdata_ref::<Rc<T>>(ref_thread, index));
                         let ud = std::mem::transmute::<&T, &T>(&ud);
-                        let args = A::from_lua_multi_args(args, 2, Some(&name), lua)?;
+                        let args = A::from_lua_args(args, 2, Some(&name), lua)?;
                         method(lua, ud, args).await?.into_lua_multi(lua)
                     },
                     #[cfg(not(feature = "send"))]
@@ -269,13 +273,13 @@ impl<'lua, T: 'static> UserDataRegistry<'lua, T> {
                             try_self_arg!(get_userdata_ref::<Rc<RefCell<T>>>(ref_thread, index));
                         let ud = try_self_arg!(ud.try_borrow(), Error::UserDataBorrowError);
                         let ud = std::mem::transmute::<&T, &T>(&ud);
-                        let args = A::from_lua_multi_args(args, 2, Some(&name), lua)?;
+                        let args = A::from_lua_args(args, 2, Some(&name), lua)?;
                         method(lua, ud, args).await?.into_lua_multi(lua)
                     },
                     Some(id) if id == TypeId::of::<Arc<T>>() => unsafe {
                         let ud = try_self_arg!(get_userdata_ref::<Arc<T>>(ref_thread, index));
                         let ud = std::mem::transmute::<&T, &T>(&ud);
-                        let args = A::from_lua_multi_args(args, 2, Some(&name), lua)?;
+                        let args = A::from_lua_args(args, 2, Some(&name), lua)?;
                         method(lua, ud, args).await?.into_lua_multi(lua)
                     },
                     Some(id) if id == TypeId::of::<Arc<Mutex<T>>>() => unsafe {
@@ -283,7 +287,7 @@ impl<'lua, T: 'static> UserDataRegistry<'lua, T> {
                             try_self_arg!(get_userdata_ref::<Arc<Mutex<T>>>(ref_thread, index));
                         let ud = try_self_arg!(ud.try_lock(), Error::UserDataBorrowError);
                         let ud = std::mem::transmute::<&T, &T>(&ud);
-                        let args = A::from_lua_multi_args(args, 2, Some(&name), lua)?;
+                        let args = A::from_lua_args(args, 2, Some(&name), lua)?;
                         method(lua, ud, args).await?.into_lua_multi(lua)
                     },
                     #[cfg(feature = "parking_lot")]
@@ -292,7 +296,7 @@ impl<'lua, T: 'static> UserDataRegistry<'lua, T> {
                         let ud = try_self_arg!(ud);
                         let ud = try_self_arg!(ud.try_lock().ok_or(Error::UserDataBorrowError));
                         let ud = std::mem::transmute::<&T, &T>(&ud);
-                        let args = A::from_lua_multi_args(args, 2, Some(&name), lua)?;
+                        let args = A::from_lua_args(args, 2, Some(&name), lua)?;
                         method(lua, ud, args).await?.into_lua_multi(lua)
                     },
                     Some(id) if id == TypeId::of::<Arc<RwLock<T>>>() => unsafe {
@@ -300,7 +304,7 @@ impl<'lua, T: 'static> UserDataRegistry<'lua, T> {
                             try_self_arg!(get_userdata_ref::<Arc<RwLock<T>>>(ref_thread, index));
                         let ud = try_self_arg!(ud.try_read(), Error::UserDataBorrowError);
                         let ud = std::mem::transmute::<&T, &T>(&ud);
-                        let args = A::from_lua_multi_args(args, 2, Some(&name), lua)?;
+                        let args = A::from_lua_args(args, 2, Some(&name), lua)?;
                         method(lua, ud, args).await?.into_lua_multi(lua)
                     },
                     #[cfg(feature = "parking_lot")]
@@ -309,7 +313,7 @@ impl<'lua, T: 'static> UserDataRegistry<'lua, T> {
                         let ud = try_self_arg!(ud);
                         let ud = try_self_arg!(ud.try_read().ok_or(Error::UserDataBorrowError));
                         let ud = std::mem::transmute::<&T, &T>(&ud);
-                        let args = A::from_lua_multi_args(args, 2, Some(&name), lua)?;
+                        let args = A::from_lua_args(args, 2, Some(&name), lua)?;
                         method(lua, ud, args).await?.into_lua_multi(lua)
                     },
                     _ => Err(Error::bad_self_argument(&name, Error::UserDataTypeMismatch)),
@@ -355,7 +359,7 @@ impl<'lua, T: 'static> UserDataRegistry<'lua, T> {
                         let mut ud = try_self_arg!(get_userdata_mut::<T>(ref_thread, index));
                         let ud = std::mem::transmute::<&mut T, &mut T>(&mut ud);
                         // Self was at index 1, so we pass 2 here
-                        let args = A::from_lua_multi_args(args, 2, Some(&name), lua)?;
+                        let args = A::from_lua_args(args, 2, Some(&name), lua)?;
                         method(lua, ud, args).await?.into_lua_multi(lua)
                     },
                     #[cfg(not(feature = "send"))]
@@ -369,7 +373,7 @@ impl<'lua, T: 'static> UserDataRegistry<'lua, T> {
                         let mut ud =
                             try_self_arg!(ud.try_borrow_mut(), Error::UserDataBorrowMutError);
                         let ud = std::mem::transmute::<&mut T, &mut T>(&mut ud);
-                        let args = A::from_lua_multi_args(args, 2, Some(&name), lua)?;
+                        let args = A::from_lua_args(args, 2, Some(&name), lua)?;
                         method(lua, ud, args).await?.into_lua_multi(lua)
                     },
                     #[cfg(not(feature = "send"))]
@@ -379,7 +383,7 @@ impl<'lua, T: 'static> UserDataRegistry<'lua, T> {
                             try_self_arg!(get_userdata_mut::<Arc<Mutex<T>>>(ref_thread, index));
                         let mut ud = try_self_arg!(ud.try_lock(), Error::UserDataBorrowMutError);
                         let ud = std::mem::transmute::<&mut T, &mut T>(&mut ud);
-                        let args = A::from_lua_multi_args(args, 2, Some(&name), lua)?;
+                        let args = A::from_lua_args(args, 2, Some(&name), lua)?;
                         method(lua, ud, args).await?.into_lua_multi(lua)
                     },
                     #[cfg(feature = "parking_lot")]
@@ -389,7 +393,7 @@ impl<'lua, T: 'static> UserDataRegistry<'lua, T> {
                         let mut ud =
                             try_self_arg!(ud.try_lock().ok_or(Error::UserDataBorrowMutError));
                         let ud = std::mem::transmute::<&mut T, &mut T>(&mut ud);
-                        let args = A::from_lua_multi_args(args, 2, Some(&name), lua)?;
+                        let args = A::from_lua_args(args, 2, Some(&name), lua)?;
                         method(lua, ud, args).await?.into_lua_multi(lua)
                     },
                     Some(id) if id == TypeId::of::<Arc<RwLock<T>>>() => unsafe {
@@ -397,7 +401,7 @@ impl<'lua, T: 'static> UserDataRegistry<'lua, T> {
                             try_self_arg!(get_userdata_mut::<Arc<RwLock<T>>>(ref_thread, index));
                         let mut ud = try_self_arg!(ud.try_write(), Error::UserDataBorrowMutError);
                         let ud = std::mem::transmute::<&mut T, &mut T>(&mut ud);
-                        let args = A::from_lua_multi_args(args, 2, Some(&name), lua)?;
+                        let args = A::from_lua_args(args, 2, Some(&name), lua)?;
                         method(lua, ud, args).await?.into_lua_multi(lua)
                     },
                     #[cfg(feature = "parking_lot")]
@@ -407,7 +411,7 @@ impl<'lua, T: 'static> UserDataRegistry<'lua, T> {
                         let mut ud =
                             try_self_arg!(ud.try_write().ok_or(Error::UserDataBorrowMutError));
                         let ud = std::mem::transmute::<&mut T, &mut T>(&mut ud);
-                        let args = A::from_lua_multi_args(args, 2, Some(&name), lua)?;
+                        let args = A::from_lua_args(args, 2, Some(&name), lua)?;
                         method(lua, ud, args).await?.into_lua_multi(lua)
                     },
                     _ => Err(Error::bad_self_argument(&name, Error::UserDataTypeMismatch)),
@@ -423,8 +427,9 @@ impl<'lua, T: 'static> UserDataRegistry<'lua, T> {
         R: IntoLuaMulti<'lua>,
     {
         let name = get_function_name::<T>(name);
-        Box::new(move |lua, args| {
-            function(lua, A::from_lua_multi_args(args, 1, Some(&name), lua)?)?.into_lua_multi(lua)
+        Box::new(move |lua, nargs| unsafe {
+            let args = A::from_stack_args(nargs, 1, Some(&name), lua)?;
+            function(lua, args)?.push_into_stack_multi(lua)
         })
     }
 
@@ -436,11 +441,12 @@ impl<'lua, T: 'static> UserDataRegistry<'lua, T> {
     {
         let name = get_function_name::<T>(name);
         let function = RefCell::new(function);
-        Box::new(move |lua, args| {
+        Box::new(move |lua, nargs| unsafe {
             let function = &mut *function
                 .try_borrow_mut()
                 .map_err(|_| Error::RecursiveMutCallback)?;
-            function(lua, A::from_lua_multi_args(args, 1, Some(&name), lua)?)?.into_lua_multi(lua)
+            let args = A::from_stack_args(nargs, 1, Some(&name), lua)?;
+            function(lua, args)?.push_into_stack_multi(lua)
         })
     }
 
@@ -454,7 +460,7 @@ impl<'lua, T: 'static> UserDataRegistry<'lua, T> {
     {
         let name = get_function_name::<T>(name);
         Box::new(move |lua, args| {
-            let args = match A::from_lua_multi_args(args, 1, Some(&name), lua) {
+            let args = match A::from_lua_args(args, 1, Some(&name), lua) {
                 Ok(args) => args,
                 Err(e) => return Box::pin(future::err(e)),
             };
@@ -464,11 +470,7 @@ impl<'lua, T: 'static> UserDataRegistry<'lua, T> {
         })
     }
 
-    pub(crate) fn check_meta_field<V>(
-        lua: &'lua Lua,
-        name: &str,
-        value: V,
-    ) -> Result<MultiValue<'lua>>
+    pub(crate) fn check_meta_field<V>(lua: &'lua Lua, name: &str, value: V) -> Result<Value<'lua>>
     where
         V: IntoLua<'lua>,
     {
@@ -485,7 +487,7 @@ impl<'lua, T: 'static> UserDataRegistry<'lua, T> {
                 }
             }
         }
-        value.into_lua_multi(lua)
+        value.into_lua(lua)
     }
 }
 
@@ -502,7 +504,7 @@ impl<'lua, T: 'static> UserDataFields<'lua, T> for UserDataRegistry<'lua, T> {
         let name = name.as_ref().to_string();
         self.fields.push((
             name,
-            Box::new(move |lua, _| value.clone().into_lua_multi(lua)),
+            Box::new(move |lua, _| unsafe { value.clone().push_into_stack_multi(lua) }),
         ));
     }
 
@@ -554,7 +556,9 @@ impl<'lua, T: 'static> UserDataFields<'lua, T> for UserDataRegistry<'lua, T> {
         let name2 = name.clone();
         self.meta_fields.push((
             name,
-            Box::new(move |lua, _| Self::check_meta_field(lua, &name2, value.clone())),
+            Box::new(move |lua, _| unsafe {
+                Self::check_meta_field(lua, &name2, value.clone())?.push_into_stack_multi(lua)
+            }),
         ));
     }
 
@@ -567,7 +571,9 @@ impl<'lua, T: 'static> UserDataFields<'lua, T> for UserDataRegistry<'lua, T> {
         let name2 = name.clone();
         self.meta_fields.push((
             name,
-            Box::new(move |lua, _| Self::check_meta_field(lua, &name2, f(lua)?)),
+            Box::new(move |lua, _| unsafe {
+                Self::check_meta_field(lua, &name2, f(lua)?)?.push_into_stack_multi(lua)
+            }),
         ));
     }
 

@@ -564,8 +564,9 @@ impl<'lua> Function<'lua> {
         R: IntoLuaMulti<'lua>,
         F: Fn(&'lua Lua, A) -> Result<R> + MaybeSend + 'static,
     {
-        WrappedFunction(Box::new(move |lua, args| {
-            func(lua, A::from_lua_multi(args, lua)?)?.into_lua_multi(lua)
+        WrappedFunction(Box::new(move |lua, nargs| unsafe {
+            let args = A::from_stack_args(nargs, 1, None, lua)?;
+            func(lua, args)?.push_into_stack_multi(lua)
         }))
     }
 
@@ -578,11 +579,12 @@ impl<'lua> Function<'lua> {
         F: FnMut(&'lua Lua, A) -> Result<R> + MaybeSend + 'static,
     {
         let func = RefCell::new(func);
-        WrappedFunction(Box::new(move |lua, args| {
+        WrappedFunction(Box::new(move |lua, nargs| unsafe {
             let mut func = func
                 .try_borrow_mut()
                 .map_err(|_| Error::RecursiveMutCallback)?;
-            func(lua, A::from_lua_multi(args, lua)?)?.into_lua_multi(lua)
+            let args = A::from_stack_args(nargs, 1, None, lua)?;
+            func(lua, args)?.push_into_stack_multi(lua)
         }))
     }
 

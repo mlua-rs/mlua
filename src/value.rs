@@ -2,7 +2,7 @@ use std::cmp::Ordering;
 use std::collections::HashSet;
 use std::iter::{self, FromIterator};
 use std::ops::Index;
-use std::os::raw::c_void;
+use std::os::raw::{c_int, c_void};
 use std::string::String as StdString;
 use std::sync::Arc;
 use std::{fmt, ptr, slice, str, vec};
@@ -317,9 +317,19 @@ impl<'lua> Serialize for Value<'lua> {
 }
 
 /// Trait for types convertible to `Value`.
-pub trait IntoLua<'lua> {
+pub trait IntoLua<'lua>: Sized {
     /// Performs the conversion.
     fn into_lua(self, lua: &'lua Lua) -> Result<Value<'lua>>;
+
+    /// Pushes the value into the Lua stack.
+    ///
+    /// # Safety
+    /// This method does not check Lua stack space.
+    #[doc(hidden)]
+    #[inline]
+    unsafe fn push_into_stack(self, lua: &'lua Lua) -> Result<()> {
+        lua.push_value(self.into_lua(lua)?)
+    }
 }
 
 /// Trait for types convertible from `Value`.
@@ -332,13 +342,33 @@ pub trait FromLua<'lua>: Sized {
     /// `i` is the argument index (position),
     /// `to` is a function name that received the argument.
     #[doc(hidden)]
-    fn from_lua_arg(
-        value: Value<'lua>,
+    #[inline]
+    fn from_lua_arg(arg: Value<'lua>, i: usize, to: Option<&str>, lua: &'lua Lua) -> Result<Self> {
+        Self::from_lua(arg, lua).map_err(|err| Error::BadArgument {
+            to: to.map(|s| s.to_string()),
+            pos: i,
+            name: None,
+            cause: Arc::new(err),
+        })
+    }
+
+    /// Performs the conversion for a value in the Lua stack at index `idx`.
+    #[doc(hidden)]
+    #[inline]
+    unsafe fn from_stack(idx: c_int, lua: &'lua Lua) -> Result<Self> {
+        Self::from_lua(lua.stack_value(idx), lua)
+    }
+
+    /// Same as `from_lua_arg` but for a value in the Lua stack at index `idx`.
+    #[doc(hidden)]
+    #[inline]
+    unsafe fn from_stack_arg(
+        idx: c_int,
         i: usize,
         to: Option<&str>,
         lua: &'lua Lua,
     ) -> Result<Self> {
-        Self::from_lua(value, lua).map_err(|err| Error::BadArgument {
+        Self::from_stack(idx, lua).map_err(|err| Error::BadArgument {
             to: to.map(|s| s.to_string()),
             pos: i,
             name: None,
@@ -501,9 +531,29 @@ impl<'lua> MultiValue<'lua> {
 ///
 /// This is a generalization of `IntoLua`, allowing any number of resulting Lua values instead of just
 /// one. Any type that implements `IntoLua` will automatically implement this trait.
-pub trait IntoLuaMulti<'lua> {
+pub trait IntoLuaMulti<'lua>: Sized {
     /// Performs the conversion.
     fn into_lua_multi(self, lua: &'lua Lua) -> Result<MultiValue<'lua>>;
+
+    /// Pushes the values into the Lua stack.
+    ///
+    /// Returns number of pushed values.
+    #[doc(hidden)]
+    #[inline]
+    unsafe fn push_into_stack_multi(self, lua: &'lua Lua) -> Result<c_int> {
+        let mut values = self.into_lua_multi(lua)?;
+        let len: c_int = values.len().try_into().unwrap();
+
+        unsafe {
+            check_stack(lua.state(), len + 1)?;
+            for v in values.drain_all() {
+                lua.push_value(v)?;
+            }
+        }
+        MultiValue::return_to_pool(values, lua);
+
+        Ok(len)
+    }
 }
 
 /// Trait for types that can be created from an arbitrary number of Lua values.
@@ -525,14 +575,43 @@ pub trait FromLuaMulti<'lua>: Sized {
     /// `to` is a function name that received the arguments.
     #[doc(hidden)]
     #[inline]
-    fn from_lua_multi_args(
-        values: MultiValue<'lua>,
+    fn from_lua_args(
+        args: MultiValue<'lua>,
         i: usize,
         to: Option<&str>,
         lua: &'lua Lua,
     ) -> Result<Self> {
         let _ = (i, to);
+        Self::from_lua_multi(args, lua)
+    }
+
+    /// Performs the conversion for a number of values in the Lua stack.
+    #[doc(hidden)]
+    #[inline]
+    unsafe fn from_stack_multi(nvals: c_int, lua: &'lua Lua) -> Result<Self> {
+        let mut values = MultiValue::new_or_pooled(lua);
+        values.reserve(nvals as usize);
+        for idx in 1..=nvals {
+            values.push_front(lua.stack_value(-idx));
+        }
+        if nvals > 0 {
+            // It's safe to clear the stack as all references moved to ref thread
+            ffi::lua_pop(lua.state(), nvals);
+        }
         Self::from_lua_multi(values, lua)
+    }
+
+    /// Same as `from_lua_args` but for a number of values in the Lua stack.
+    #[doc(hidden)]
+    #[inline]
+    unsafe fn from_stack_args(
+        nargs: c_int,
+        i: usize,
+        to: Option<&str>,
+        lua: &'lua Lua,
+    ) -> Result<Self> {
+        let _ = (i, to);
+        Self::from_stack_multi(nargs, lua)
     }
 }
 

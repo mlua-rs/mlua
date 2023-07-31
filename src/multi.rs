@@ -1,9 +1,11 @@
 use std::iter::FromIterator;
 use std::ops::{Deref, DerefMut};
+use std::os::raw::c_int;
 use std::result::Result as StdResult;
 
 use crate::error::Result;
 use crate::lua::Lua;
+use crate::util::check_stack;
 use crate::value::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, MultiValue, Nil};
 
 /// Result is convertible to `MultiValue` following the common Lua idiom of returning the result
@@ -30,6 +32,12 @@ impl<'lua, T: IntoLua<'lua>> IntoLuaMulti<'lua> for T {
         v.push_front(self.into_lua(lua)?);
         Ok(v)
     }
+
+    #[inline]
+    unsafe fn push_into_stack_multi(self, lua: &'lua Lua) -> Result<c_int> {
+        self.push_into_stack(lua)?;
+        Ok(1)
+    }
 }
 
 impl<'lua, T: FromLua<'lua>> FromLuaMulti<'lua> for T {
@@ -41,15 +49,36 @@ impl<'lua, T: FromLua<'lua>> FromLuaMulti<'lua> for T {
     }
 
     #[inline]
-    fn from_lua_multi_args(
-        mut values: MultiValue<'lua>,
+    fn from_lua_args(
+        mut args: MultiValue<'lua>,
         i: usize,
         to: Option<&str>,
         lua: &'lua Lua,
     ) -> Result<Self> {
-        let res = T::from_lua_arg(values.pop_front().unwrap_or(Nil), i, to, lua);
-        MultiValue::return_to_pool(values, lua);
+        let res = T::from_lua_arg(args.pop_front().unwrap_or(Nil), i, to, lua);
+        MultiValue::return_to_pool(args, lua);
         res
+    }
+
+    #[inline]
+    unsafe fn from_stack_multi(nvals: c_int, lua: &'lua Lua) -> Result<Self> {
+        if nvals == 0 {
+            return T::from_lua(Nil, lua);
+        }
+        T::from_stack(-nvals, lua)
+    }
+
+    #[inline]
+    unsafe fn from_stack_args(
+        nargs: c_int,
+        i: usize,
+        to: Option<&str>,
+        lua: &'lua Lua,
+    ) -> Result<Self> {
+        if nargs == 0 {
+            return T::from_lua_arg(Nil, i, to, lua);
+        }
+        T::from_stack_arg(-nargs, i, to, lua)
     }
 }
 
@@ -167,12 +196,25 @@ macro_rules! impl_tuple {
             fn into_lua_multi(self, lua: &'lua Lua) -> Result<MultiValue<'lua>> {
                 Ok(MultiValue::new_or_pooled(lua))
             }
+
+            #[inline]
+            unsafe fn push_into_stack_multi(self, _lua: &'lua Lua) -> Result<c_int> {
+                Ok(0)
+            }
         }
 
         impl<'lua> FromLuaMulti<'lua> for () {
             #[inline]
             fn from_lua_multi(values: MultiValue<'lua>, lua: &'lua Lua) -> Result<Self> {
                 MultiValue::return_to_pool(values, lua);
+                Ok(())
+            }
+
+            #[inline]
+            unsafe fn from_stack_multi(nvals: c_int, lua: &'lua Lua) -> Result<Self> {
+                if nvals > 0 {
+                    ffi::lua_pop(lua.state(), nvals);
+                }
                 Ok(())
             }
         }
@@ -183,8 +225,7 @@ macro_rules! impl_tuple {
             where $($name: IntoLua<'lua>,)*
                   $last: IntoLuaMulti<'lua>
         {
-            #[allow(unused_mut)]
-            #[allow(non_snake_case)]
+            #[allow(unused_mut, non_snake_case)]
             #[inline]
             fn into_lua_multi(self, lua: &'lua Lua) -> Result<MultiValue<'lua>> {
                 let ($($name,)* $last,) = self;
@@ -193,14 +234,30 @@ macro_rules! impl_tuple {
                 push_reverse!(results, $($name.into_lua(lua)?,)*);
                 Ok(results)
             }
+
+            #[allow(non_snake_case)]
+            #[inline]
+            unsafe fn push_into_stack_multi(self, lua: &'lua Lua) -> Result<c_int> {
+                let ($($name,)* $last,) = self;
+                let mut nresults = 0;
+                $(
+                    _ = $name;
+                    nresults += 1;
+                )*
+                check_stack(lua.state(), nresults + 1)?;
+                $(
+                    $name.push_into_stack(lua)?;
+                )*
+                nresults += $last.push_into_stack_multi(lua)?;
+                Ok(nresults)
+            }
         }
 
         impl<'lua, $($name,)* $last> FromLuaMulti<'lua> for ($($name,)* $last,)
             where $($name: FromLua<'lua>,)*
                   $last: FromLuaMulti<'lua>
         {
-            #[allow(unused_mut)]
-            #[allow(non_snake_case)]
+            #[allow(unused_mut, non_snake_case)]
             #[inline]
             fn from_lua_multi(mut values: MultiValue<'lua>, lua: &'lua Lua) -> Result<Self> {
                 $(let $name = FromLua::from_lua(values.pop_front().unwrap_or(Nil), lua)?;)*
@@ -208,15 +265,45 @@ macro_rules! impl_tuple {
                 Ok(($($name,)* $last,))
             }
 
-            #[allow(unused_mut)]
-            #[allow(non_snake_case)]
+            #[allow(unused_mut, non_snake_case)]
             #[inline]
-            fn from_lua_multi_args(mut values: MultiValue<'lua>, mut i: usize, to: Option<&str>, lua: &'lua Lua) -> Result<Self> {
+            fn from_lua_args(mut args: MultiValue<'lua>, mut i: usize, to: Option<&str>, lua: &'lua Lua) -> Result<Self> {
                 $(
-                    let $name = FromLua::from_lua_arg(values.pop_front().unwrap_or(Nil), i, to, lua)?;
+                    let $name = FromLua::from_lua_arg(args.pop_front().unwrap_or(Nil), i, to, lua)?;
                     i += 1;
                 )*
-                let $last = FromLuaMulti::from_lua_multi_args(values, i, to, lua)?;
+                let $last = FromLuaMulti::from_lua_args(args, i, to, lua)?;
+                Ok(($($name,)* $last,))
+            }
+
+            #[allow(unused_mut, non_snake_case)]
+            #[inline]
+            unsafe fn from_stack_multi(mut nvals: c_int, lua: &'lua Lua) -> Result<Self> {
+                $(
+                    let $name = if nvals > 0 {
+                        nvals -= 1;
+                        FromLua::from_stack(-(nvals + 1), lua)
+                    } else {
+                        FromLua::from_lua(Nil, lua)
+                    }?;
+                )*
+                let $last = FromLuaMulti::from_stack_multi(nvals, lua)?;
+                Ok(($($name,)* $last,))
+            }
+
+            #[allow(unused_mut, non_snake_case)]
+            #[inline]
+            unsafe fn from_stack_args(mut nargs: c_int, mut i: usize, to: Option<&str>, lua: &'lua Lua) -> Result<Self> {
+                $(
+                    let $name = if nargs > 0 {
+                        nargs -= 1;
+                        FromLua::from_stack_arg(-(nargs + 1), i, to, lua)
+                    } else {
+                        FromLua::from_lua_arg(Nil, i, to, lua)
+                    }?;
+                    i += 1;
+                )*
+                let $last = FromLuaMulti::from_stack_args(nargs, i, to, lua)?;
                 Ok(($($name,)* $last,))
             }
         }

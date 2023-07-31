@@ -17,6 +17,8 @@ use crate::error::Result;
 #[cfg(not(feature = "luau"))]
 use crate::hook::Debug;
 use crate::lua::{ExtraData, Lua};
+
+#[cfg(feature = "async")]
 use crate::value::MultiValue;
 
 #[cfg(feature = "unstable")]
@@ -34,8 +36,7 @@ pub type Number = ffi::lua_Number;
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub struct LightUserData(pub *mut c_void);
 
-pub(crate) type Callback<'lua, 'a> =
-    Box<dyn Fn(&'lua Lua, MultiValue<'lua>) -> Result<MultiValue<'lua>> + 'a>;
+pub(crate) type Callback<'lua, 'a> = Box<dyn Fn(&'lua Lua, c_int) -> Result<c_int> + 'a>;
 
 pub(crate) struct Upvalue<T> {
     pub(crate) data: T,
