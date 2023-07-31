@@ -718,50 +718,36 @@ impl Lua {
     // The returned value then pushed onto the stack.
     #[doc(hidden)]
     #[cfg(not(tarpaulin_include))]
-    pub unsafe fn entrypoint<'lua, A, R, F>(self, func: F) -> Result<c_int>
+    pub unsafe fn entrypoint<'lua, A, R, F>(self, func: F) -> c_int
     where
         A: FromLuaMulti<'lua>,
         R: IntoLua<'lua>,
         F: Fn(&'lua Lua, A) -> Result<R> + MaybeSend + 'static,
     {
-        let entrypoint_inner = |lua: &'lua Lua, func: F| {
-            let state = lua.state();
-            let nargs = ffi::lua_gettop(state);
-            check_stack(state, 3)?;
+        let (state, extra) = (self.state(), self.extra.get());
+        // It must be safe to drop `self` as in the module mode we keep strong reference to `Lua` in the registry
+        drop(self);
 
-            let mut args = MultiValue::new();
+        callback_error_ext(state, extra, move |nargs| {
+            let lua: &Lua = mem::transmute((*extra).inner.assume_init_ref());
+            let _guard = StateGuard::new(&lua.0, state);
+
+            let mut args = MultiValue::new_or_pooled(lua);
             args.reserve(nargs as usize);
             for _ in 0..nargs {
                 args.push_front(lua.pop_value());
             }
 
-            // We create callback rather than call `func` directly to catch errors
-            // with attached stacktrace.
-            let callback = lua.create_callback(Box::new(move |lua, args| {
-                func(lua, A::from_lua_multi_args(args, 1, None, lua)?)?.into_lua_multi(lua)
-            }))?;
-            callback.call(args)
-        };
-
-        match entrypoint_inner(mem::transmute(&self), func) {
-            Ok(res) => {
-                self.push_value(res)?;
-                Ok(1)
-            }
-            Err(err) => {
-                self.push_value(Value::Error(err))?;
-                let state = self.state();
-                // Lua (self) must be dropped before triggering longjmp
-                drop(self);
-                ffi::lua_error(state)
-            }
-        }
+            let result = func(lua, A::from_lua_multi(args, lua)?)?.into_lua(lua)?;
+            lua.push_value(result)?;
+            Ok(1)
+        })
     }
 
     // A simple module entrypoint without arguments
     #[doc(hidden)]
     #[cfg(not(tarpaulin_include))]
-    pub unsafe fn entrypoint1<'lua, R, F>(self, func: F) -> Result<c_int>
+    pub unsafe fn entrypoint1<'lua, R, F>(self, func: F) -> c_int
     where
         R: IntoLua<'lua>,
         F: Fn(&'lua Lua) -> Result<R> + MaybeSend + 'static,

@@ -61,12 +61,8 @@ pub fn lua_module(attr: TokenStream, item: TokenStream) -> TokenStream {
         #[no_mangle]
         unsafe extern "C-unwind" fn #ext_entrypoint_name(state: *mut ::mlua::lua_State) -> ::std::os::raw::c_int {
             let lua = ::mlua::Lua::init_from_ptr(state);
-            if #skip_memory_check {
-                lua.skip_memory_check(true);
-            }
-            lua
-                .entrypoint1(#func_name)
-                .expect("cannot initialize module")
+            lua.skip_memory_check(#skip_memory_check);
+            lua.entrypoint1(#func_name)
         }
     };
 
