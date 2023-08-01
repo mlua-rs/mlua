@@ -107,7 +107,7 @@ pub(crate) struct ExtraData {
     // Pool of `WrappedFailure` enums in the ref thread (as userdata)
     wrapped_failure_pool: Vec<c_int>,
     // Pool of `MultiValue` containers
-    multivalue_pool: Vec<MultiValue<'static>>,
+    multivalue_pool: Vec<Vec<Value<'static>>>,
     // Pool of `Thread`s (coroutines) for async execution
     #[cfg(feature = "async")]
     thread_pool: Vec<c_int>,
@@ -2898,8 +2898,7 @@ impl Lua {
                 let lua: &Lua = mem::transmute((*extra).inner.assume_init_ref());
                 let _guard = StateGuard::new(&lua.0, state);
 
-                let mut args = MultiValue::new_or_pooled(lua);
-                args.reserve(nargs as usize);
+                let mut args = MultiValue::with_lua_and_capacity(lua, nargs as usize);
                 for _ in 0..nargs {
                     args.push_front(lua.pop_value());
                 }
@@ -2943,7 +2942,6 @@ impl Lua {
                                 for r in results.drain_all() {
                                     lua.push_value(r)?;
                                 }
-                                MultiValue::return_to_pool(results, lua);
                                 Ok(nresults as c_int + 1)
                             }
                             _ => {
@@ -3184,13 +3182,13 @@ impl LuaInner {
     }
 
     #[inline]
-    pub(crate) fn new_multivalue_from_pool(&self) -> MultiValue {
+    pub(crate) fn pop_multivalue_from_pool(&self) -> Option<Vec<Value>> {
         let extra = unsafe { &mut *self.extra.get() };
-        extra.multivalue_pool.pop().unwrap_or_default()
+        extra.multivalue_pool.pop()
     }
 
     #[inline]
-    pub(crate) fn return_multivalue_to_pool(&self, mut multivalue: MultiValue) {
+    pub(crate) fn push_multivalue_to_pool(&self, mut multivalue: Vec<Value>) {
         let extra = unsafe { &mut *self.extra.get() };
         if extra.multivalue_pool.len() < MULTIVALUE_POOL_SIZE {
             multivalue.clear();

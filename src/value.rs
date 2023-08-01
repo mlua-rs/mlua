@@ -5,7 +5,7 @@ use std::ops::Index;
 use std::os::raw::{c_int, c_void};
 use std::string::String as StdString;
 use std::sync::Arc;
-use std::{fmt, ptr, slice, str, vec};
+use std::{fmt, mem, ptr, slice, str, vec};
 
 #[cfg(feature = "serialize")]
 use {
@@ -379,24 +379,43 @@ pub trait FromLua<'lua>: Sized {
 
 /// Multiple Lua values used for both argument passing and also for multiple return values.
 #[derive(Debug, Clone)]
-pub struct MultiValue<'lua>(Vec<Value<'lua>>);
+pub struct MultiValue<'lua> {
+    vec: Vec<Value<'lua>>,
+    lua: Option<&'lua Lua>,
+}
+
+impl Drop for MultiValue<'_> {
+    fn drop(&mut self) {
+        if let Some(lua) = self.lua {
+            let vec = mem::replace(&mut self.vec, Vec::new());
+            lua.push_multivalue_to_pool(vec);
+        }
+    }
+}
 
 impl<'lua> MultiValue<'lua> {
     /// Creates an empty `MultiValue` containing no values.
     pub const fn new() -> MultiValue<'lua> {
-        MultiValue(Vec::new())
+        MultiValue {
+            vec: Vec::new(),
+            lua: None,
+        }
     }
 
-    /// Similar to `new` but can return previously used container with allocated capacity.
+    /// Similar to `new` but can reuse previously used container with allocated capacity.
     #[inline]
-    pub(crate) fn new_or_pooled(lua: &'lua Lua) -> MultiValue<'lua> {
-        lua.new_multivalue_from_pool()
-    }
-
-    /// Clears and returns previously allocated multivalue container to the pool.
-    #[inline]
-    pub(crate) fn return_to_pool(multivalue: Self, lua: &Lua) {
-        lua.return_multivalue_to_pool(multivalue);
+    pub(crate) fn with_lua_and_capacity(lua: &'lua Lua, capacity: usize) -> MultiValue<'lua> {
+        let vec = lua
+            .pop_multivalue_from_pool()
+            .map(|mut vec| {
+                vec.reserve(capacity);
+                vec
+            })
+            .unwrap_or_else(|| Vec::with_capacity(capacity));
+        MultiValue {
+            vec,
+            lua: Some(lua),
+        }
     }
 }
 
@@ -419,8 +438,10 @@ impl<'lua> IntoIterator for MultiValue<'lua> {
     type IntoIter = iter::Rev<vec::IntoIter<Value<'lua>>>;
 
     #[inline]
-    fn into_iter(self) -> Self::IntoIter {
-        self.0.into_iter().rev()
+    fn into_iter(mut self) -> Self::IntoIter {
+        let vec = mem::replace(&mut self.vec, Vec::new());
+        mem::forget(self);
+        vec.into_iter().rev()
     }
 }
 
@@ -430,7 +451,7 @@ impl<'a, 'lua> IntoIterator for &'a MultiValue<'lua> {
 
     #[inline]
     fn into_iter(self) -> Self::IntoIter {
-        self.0.iter().rev()
+        self.vec.iter().rev()
     }
 }
 
@@ -453,64 +474,60 @@ impl<'lua> Index<usize> for MultiValue<'lua> {
 
 impl<'lua> MultiValue<'lua> {
     #[inline]
-    pub fn from_vec(mut v: Vec<Value<'lua>>) -> MultiValue<'lua> {
-        v.reverse();
-        MultiValue(v)
+    pub fn from_vec(mut vec: Vec<Value<'lua>>) -> MultiValue<'lua> {
+        vec.reverse();
+        MultiValue { vec, lua: None }
     }
 
     #[inline]
-    pub fn into_vec(self) -> Vec<Value<'lua>> {
-        let mut v = self.0;
-        v.reverse();
-        v
+    pub fn into_vec(mut self) -> Vec<Value<'lua>> {
+        let mut vec = mem::replace(&mut self.vec, Vec::new());
+        mem::forget(self);
+        vec.reverse();
+        vec
     }
 
     #[inline]
     pub fn get(&self, index: usize) -> Option<&Value<'lua>> {
-        if index < self.0.len() {
-            return self.0.get(self.0.len() - index - 1);
+        if index < self.vec.len() {
+            return self.vec.get(self.vec.len() - index - 1);
         }
         None
     }
 
     #[inline]
-    pub(crate) fn reserve(&mut self, size: usize) {
-        self.0.reserve(size);
-    }
-
-    #[inline]
     pub fn pop_front(&mut self) -> Option<Value<'lua>> {
-        self.0.pop()
+        self.vec.pop()
     }
 
     #[inline]
     pub fn push_front(&mut self, value: Value<'lua>) {
-        self.0.push(value);
+        self.vec.push(value);
     }
 
     #[inline]
     pub fn clear(&mut self) {
-        self.0.clear();
+        self.vec.clear();
     }
 
     #[inline]
     pub fn len(&self) -> usize {
-        self.0.len()
+        self.vec.len()
     }
 
     #[inline]
     pub fn is_empty(&self) -> bool {
-        self.0.is_empty()
+        self.vec.is_empty()
     }
 
     #[inline]
     pub fn iter(&self) -> iter::Rev<slice::Iter<Value<'lua>>> {
-        self.0.iter().rev()
+        self.vec.iter().rev()
     }
 
     #[inline]
     pub(crate) fn drain_all(&mut self) -> iter::Rev<vec::Drain<Value<'lua>>> {
-        self.0.drain(..).rev()
+        self.vec.drain(..).rev()
     }
 
     #[inline]
@@ -518,11 +535,11 @@ impl<'lua> MultiValue<'lua> {
         &mut self,
         iter: impl IntoIterator<Item = Result<Value<'lua>>>,
     ) -> Result<()> {
-        self.0.clear();
+        self.vec.clear();
         for value in iter {
-            self.0.push(value?);
+            self.vec.push(value?);
         }
-        self.0.reverse();
+        self.vec.reverse();
         Ok(())
     }
 }
@@ -543,15 +560,12 @@ pub trait IntoLuaMulti<'lua>: Sized {
     unsafe fn push_into_stack_multi(self, lua: &'lua Lua) -> Result<c_int> {
         let mut values = self.into_lua_multi(lua)?;
         let len: c_int = values.len().try_into().unwrap();
-
         unsafe {
             check_stack(lua.state(), len + 1)?;
             for v in values.drain_all() {
                 lua.push_value(v)?;
             }
         }
-        MultiValue::return_to_pool(values, lua);
-
         Ok(len)
     }
 }
@@ -589,8 +603,7 @@ pub trait FromLuaMulti<'lua>: Sized {
     #[doc(hidden)]
     #[inline]
     unsafe fn from_stack_multi(nvals: c_int, lua: &'lua Lua) -> Result<Self> {
-        let mut values = MultiValue::new_or_pooled(lua);
-        values.reserve(nvals as usize);
+        let mut values = MultiValue::with_lua_and_capacity(lua, nvals as usize);
         for idx in 1..=nvals {
             values.push_front(lua.stack_value(-idx));
         }

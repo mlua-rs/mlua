@@ -13,7 +13,7 @@ use crate::value::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, MultiValue, Nil
 impl<'lua, T: IntoLua<'lua>, E: IntoLua<'lua>> IntoLuaMulti<'lua> for StdResult<T, E> {
     #[inline]
     fn into_lua_multi(self, lua: &'lua Lua) -> Result<MultiValue<'lua>> {
-        let mut result = MultiValue::new_or_pooled(lua);
+        let mut result = MultiValue::with_lua_and_capacity(lua, 2);
         match self {
             Ok(v) => result.push_front(v.into_lua(lua)?),
             Err(e) => {
@@ -28,7 +28,7 @@ impl<'lua, T: IntoLua<'lua>, E: IntoLua<'lua>> IntoLuaMulti<'lua> for StdResult<
 impl<'lua, T: IntoLua<'lua>> IntoLuaMulti<'lua> for T {
     #[inline]
     fn into_lua_multi(self, lua: &'lua Lua) -> Result<MultiValue<'lua>> {
-        let mut v = MultiValue::new_or_pooled(lua);
+        let mut v = MultiValue::with_lua_and_capacity(lua, 1);
         v.push_front(self.into_lua(lua)?);
         Ok(v)
     }
@@ -43,9 +43,7 @@ impl<'lua, T: IntoLua<'lua>> IntoLuaMulti<'lua> for T {
 impl<'lua, T: FromLua<'lua>> FromLuaMulti<'lua> for T {
     #[inline]
     fn from_lua_multi(mut values: MultiValue<'lua>, lua: &'lua Lua) -> Result<Self> {
-        let res = T::from_lua(values.pop_front().unwrap_or(Nil), lua);
-        MultiValue::return_to_pool(values, lua);
-        res
+        T::from_lua(values.pop_front().unwrap_or(Nil), lua)
     }
 
     #[inline]
@@ -55,9 +53,7 @@ impl<'lua, T: FromLua<'lua>> FromLuaMulti<'lua> for T {
         to: Option<&str>,
         lua: &'lua Lua,
     ) -> Result<Self> {
-        let res = T::from_lua_arg(args.pop_front().unwrap_or(Nil), i, to, lua);
-        MultiValue::return_to_pool(args, lua);
-        res
+        T::from_lua_arg(args.pop_front().unwrap_or(Nil), i, to, lua)
     }
 
     #[inline]
@@ -170,7 +166,7 @@ impl<T> DerefMut for Variadic<T> {
 impl<'lua, T: IntoLua<'lua>> IntoLuaMulti<'lua> for Variadic<T> {
     #[inline]
     fn into_lua_multi(self, lua: &'lua Lua) -> Result<MultiValue<'lua>> {
-        let mut values = MultiValue::new_or_pooled(lua);
+        let mut values = MultiValue::with_lua_and_capacity(lua, self.0.len());
         values.refill(self.0.into_iter().map(|e| e.into_lua(lua)))?;
         Ok(values)
     }
@@ -179,13 +175,11 @@ impl<'lua, T: IntoLua<'lua>> IntoLuaMulti<'lua> for Variadic<T> {
 impl<'lua, T: FromLua<'lua>> FromLuaMulti<'lua> for Variadic<T> {
     #[inline]
     fn from_lua_multi(mut values: MultiValue<'lua>, lua: &'lua Lua) -> Result<Self> {
-        let res = values
+        values
             .drain_all()
             .map(|e| T::from_lua(e, lua))
             .collect::<Result<Vec<T>>>()
-            .map(Variadic);
-        MultiValue::return_to_pool(values, lua);
-        res
+            .map(Variadic)
     }
 }
 
@@ -194,7 +188,7 @@ macro_rules! impl_tuple {
         impl<'lua> IntoLuaMulti<'lua> for () {
             #[inline]
             fn into_lua_multi(self, lua: &'lua Lua) -> Result<MultiValue<'lua>> {
-                Ok(MultiValue::new_or_pooled(lua))
+                Ok(MultiValue::with_lua_and_capacity(lua, 0))
             }
 
             #[inline]
@@ -205,8 +199,7 @@ macro_rules! impl_tuple {
 
         impl<'lua> FromLuaMulti<'lua> for () {
             #[inline]
-            fn from_lua_multi(values: MultiValue<'lua>, lua: &'lua Lua) -> Result<Self> {
-                MultiValue::return_to_pool(values, lua);
+            fn from_lua_multi(_values: MultiValue<'lua>, _lua: &'lua Lua) -> Result<Self> {
                 Ok(())
             }
 
