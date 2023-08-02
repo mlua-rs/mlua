@@ -63,6 +63,11 @@ impl StackGuard {
             top: ffi::lua_gettop(state),
         }
     }
+
+    // Same as `new()`, but allows specifying the expected stack size at the end of the scope.
+    pub const fn with_top(state: *mut ffi::lua_State, top: c_int) -> StackGuard {
+        StackGuard { state, top }
+    }
 }
 
 impl Drop for StackGuard {

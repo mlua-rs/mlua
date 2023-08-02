@@ -121,7 +121,7 @@ impl<'lua> Value<'lua> {
             Value::String(String(r))
             | Value::Table(Table(r))
             | Value::Function(Function(r))
-            | Value::Thread(Thread(r))
+            | Value::Thread(Thread(r, ..))
             | Value::UserData(AnyUserData(r)) => r.to_pointer(),
             _ => ptr::null(),
         }
@@ -143,7 +143,7 @@ impl<'lua> Value<'lua> {
             Value::String(s) => Ok(s.to_str()?.to_string()),
             Value::Table(Table(r))
             | Value::Function(Function(r))
-            | Value::Thread(Thread(r))
+            | Value::Thread(Thread(r, ..))
             | Value::UserData(AnyUserData(r)) => unsafe {
                 let state = r.lua.state();
                 let _guard = StackGuard::new(state);
@@ -387,7 +387,7 @@ pub struct MultiValue<'lua> {
 impl Drop for MultiValue<'_> {
     fn drop(&mut self) {
         if let Some(lua) = self.lua {
-            let vec = mem::replace(&mut self.vec, Vec::new());
+            let vec = mem::take(&mut self.vec);
             lua.push_multivalue_to_pool(vec);
         }
     }
@@ -439,7 +439,7 @@ impl<'lua> IntoIterator for MultiValue<'lua> {
 
     #[inline]
     fn into_iter(mut self) -> Self::IntoIter {
-        let vec = mem::replace(&mut self.vec, Vec::new());
+        let vec = mem::take(&mut self.vec);
         mem::forget(self);
         vec.into_iter().rev()
     }
@@ -481,7 +481,7 @@ impl<'lua> MultiValue<'lua> {
 
     #[inline]
     pub fn into_vec(mut self) -> Vec<Value<'lua>> {
-        let mut vec = mem::replace(&mut self.vec, Vec::new());
+        let mut vec = mem::take(&mut self.vec);
         mem::forget(self);
         vec.reverse();
         vec

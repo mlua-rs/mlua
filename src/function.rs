@@ -598,13 +598,13 @@ impl<'lua> Function<'lua> {
         F: Fn(&'lua Lua, A) -> FR + MaybeSend + 'static,
         FR: Future<Output = Result<R>> + 'lua,
     {
-        WrappedAsyncFunction(Box::new(move |lua, args| {
-            let args = match A::from_lua_multi(args, lua) {
+        WrappedAsyncFunction(Box::new(move |lua, args| unsafe {
+            let args = match A::from_lua_args(args, 1, None, lua) {
                 Ok(args) => args,
                 Err(e) => return Box::pin(future::err(e)),
             };
             let fut = func(lua, args);
-            Box::pin(async move { fut.await?.into_lua_multi(lua) })
+            Box::pin(async move { fut.await?.push_into_stack_multi(lua) })
         }))
     }
 }

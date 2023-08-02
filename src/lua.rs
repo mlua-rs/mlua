@@ -1600,13 +1600,13 @@ impl Lua {
         F: Fn(&'lua Lua, A) -> FR + MaybeSend + 'static,
         FR: Future<Output = Result<R>> + 'lua,
     {
-        self.create_async_callback(Box::new(move |lua, args| {
+        self.create_async_callback(Box::new(move |lua, args| unsafe {
             let args = match A::from_lua_args(args, 1, None, lua) {
                 Ok(args) => args,
                 Err(e) => return Box::pin(future::err(e)),
             };
             let fut = func(lua, args);
-            Box::pin(async move { fut.await?.into_lua_multi(lua) })
+            Box::pin(async move { fut.await?.push_into_stack_multi(lua) })
         }))
     }
 
@@ -1634,7 +1634,7 @@ impl Lua {
             self.push_ref(&func.0);
             ffi::lua_xmove(state, thread_state, 1);
 
-            Ok(Thread(self.pop_ref()))
+            Ok(Thread::new(self.pop_ref()))
         }
     }
 
@@ -1662,7 +1662,7 @@ impl Lua {
                     ffi::lua_replace(thread_state, ffi::LUA_GLOBALSINDEX);
                 }
 
-                return Ok(Thread(LuaRef::new(self, index)));
+                return Ok(Thread::new(LuaRef::new(self, index)));
             }
         };
         self.create_thread_inner(func)
@@ -1817,7 +1817,7 @@ impl Lua {
             let _sg = StackGuard::new(state);
             assert_stack(state, 1);
             ffi::lua_pushthread(state);
-            Thread(self.pop_ref())
+            Thread::new(self.pop_ref())
         }
     }
 
@@ -2412,7 +2412,7 @@ impl Lua {
                 }
             }
 
-            ffi::LUA_TTHREAD => Value::Thread(Thread(self.pop_ref())),
+            ffi::LUA_TTHREAD => Value::Thread(Thread::new(self.pop_ref())),
 
             #[cfg(feature = "luajit")]
             ffi::LUA_TCDATA => {
@@ -2510,7 +2510,7 @@ impl Lua {
 
             ffi::LUA_TTHREAD => {
                 ffi::lua_xpush(state, self.ref_thread(), idx);
-                Value::Thread(Thread(self.pop_ref_thread()))
+                Value::Thread(Thread::new(self.pop_ref_thread()))
             }
 
             #[cfg(feature = "luajit")]
@@ -2763,16 +2763,15 @@ impl Lua {
         }
     }
 
-    // Returns `TypeId` for the LuaRef, checking that it's a registered
-    // and not destructed UserData.
+    // Returns `TypeId` for the `lref` userdata, checking that it's registered and not destructed.
     //
     // Returns `None` if the userdata is registered but non-static.
-    pub(crate) unsafe fn get_userdata_type_id(&self, lref: &LuaRef) -> Result<Option<TypeId>> {
+    pub(crate) unsafe fn get_userdata_ref_type_id(&self, lref: &LuaRef) -> Result<Option<TypeId>> {
         self.get_userdata_type_id_inner(self.ref_thread(), lref.index)
     }
 
-    // Same as `get_userdata_type_id` but assumes the value is already on the current stack
-    pub(crate) unsafe fn get_userdata_type_id_stack(&self, idx: c_int) -> Result<Option<TypeId>> {
+    // Same as `get_userdata_ref_type_id` but assumes the userdata is already on the stack.
+    pub(crate) unsafe fn get_userdata_type_id(&self, idx: c_int) -> Result<Option<TypeId>> {
         self.get_userdata_type_id_inner(self.state(), idx)
     }
 
@@ -2808,7 +2807,7 @@ impl Lua {
     // Pushes a LuaRef (userdata) value onto the stack, returning their `TypeId`.
     // Uses 1 stack space, does not call checkstack.
     pub(crate) unsafe fn push_userdata_ref(&self, lref: &LuaRef) -> Result<Option<TypeId>> {
-        let type_id = self.get_userdata_type_id(lref)?;
+        let type_id = self.get_userdata_type_id_inner(self.ref_thread(), lref.index)?;
         self.push_ref(lref);
         Ok(type_id)
     }
@@ -2898,11 +2897,7 @@ impl Lua {
                 let lua: &Lua = mem::transmute((*extra).inner.assume_init_ref());
                 let _guard = StateGuard::new(&lua.0, state);
 
-                let mut args = MultiValue::with_lua_and_capacity(lua, nargs as usize);
-                for _ in 0..nargs {
-                    args.push_front(lua.pop_value());
-                }
-
+                let args = MultiValue::from_stack_multi(nargs, lua)?;
                 let func = &*(*upvalue).data;
                 let fut = func(lua, args);
                 let extra = Arc::clone(&(*upvalue).extra);
@@ -2924,6 +2919,7 @@ impl Lua {
             let upvalue = get_userdata::<AsyncPollUpvalue>(state, ffi::lua_upvalueindex(1));
             let extra = (*upvalue).extra.get();
             callback_error_ext(state, extra, |_| {
+                // Lua ensures that `LUA_MINSTACK` stack spaces are available (after pushing arguments)
                 let lua: &Lua = mem::transmute((*extra).inner.assume_init_ref());
                 let _guard = StateGuard::new(&lua.0, state);
 
@@ -2931,20 +2927,20 @@ impl Lua {
                 let mut ctx = Context::from_waker(lua.waker());
                 match fut.as_mut().poll(&mut ctx) {
                     Poll::Pending => Ok(0),
-                    Poll::Ready(results) => {
-                        let mut results = results?;
-                        let nresults = results.len();
-                        lua.push_value(Value::Integer(nresults as _))?;
+                    Poll::Ready(nresults) => {
+                        let nresults = nresults?;
                         match nresults {
-                            0 => Ok(1),
-                            1 | 2 => {
-                                // Fast path for 1 or 2 results without creating a table
-                                for r in results.drain_all() {
-                                    lua.push_value(r)?;
+                            0..=2 => {
+                                // Fast path for up to 2 results without creating a table
+                                ffi::lua_pushinteger(state, nresults as _);
+                                if nresults > 0 {
+                                    ffi::lua_insert(state, -nresults - 1);
                                 }
-                                Ok(nresults as c_int + 1)
+                                Ok(nresults + 1)
                             }
                             _ => {
+                                let results = MultiValue::from_stack_multi(nresults, lua)?;
+                                ffi::lua_pushinteger(state, nresults as _);
                                 lua.push_value(Value::Table(lua.create_sequence_from(results)?))?;
                                 Ok(2)
                             }

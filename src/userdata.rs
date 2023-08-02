@@ -1105,9 +1105,9 @@ impl<'lua> AnyUserData<'lua> {
     }
 
     #[cfg(feature = "async")]
-    #[inline(always)]
+    #[inline]
     pub(crate) fn type_id(&self) -> Result<Option<TypeId>> {
-        unsafe { self.0.lua.get_userdata_type_id(&self.0) }
+        unsafe { self.0.lua.get_userdata_ref_type_id(&self.0) }
     }
 
     /// Returns a type name of this `UserData` (from a metatable field).
@@ -1161,7 +1161,7 @@ impl<'lua> AnyUserData<'lua> {
         let lua = self.0.lua;
         let is_serializable = || unsafe {
             // Userdata can be unregistered or destructed
-            let _ = lua.get_userdata_type_id(&self.0)?;
+            let _ = lua.get_userdata_ref_type_id(&self.0)?;
 
             let ud = &*get_userdata::<UserDataCell<()>>(lua.ref_thread(), self.0.index);
             match &*ud.0.try_borrow().map_err(|_| Error::UserDataBorrowError)? {
@@ -1179,7 +1179,7 @@ impl<'lua> AnyUserData<'lua> {
     {
         let lua = self.0.lua;
         unsafe {
-            let type_id = lua.get_userdata_type_id(&self.0)?;
+            let type_id = lua.get_userdata_ref_type_id(&self.0)?;
             match type_id {
                 Some(type_id) if type_id == TypeId::of::<T>() => {
                     let ref_thread = lua.ref_thread();
@@ -1328,7 +1328,7 @@ impl<'lua> Serialize for AnyUserData<'lua> {
         let lua = self.0.lua;
         let data = unsafe {
             let _ = lua
-                .get_userdata_type_id(&self.0)
+                .get_userdata_ref_type_id(&self.0)
                 .map_err(ser::Error::custom)?;
             let ud = &*get_userdata::<UserDataCell<()>>(lua.ref_thread(), self.0.index);
             ud.0.try_borrow()

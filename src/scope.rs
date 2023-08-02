@@ -338,13 +338,13 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
                     });
                     scope.create_callback(f)
                 }
-                NonStaticMethod::Function(function) => unsafe {
+                NonStaticMethod::Function(function) => {
                     scope.create_callback(Box::new(move |lua, nargs| {
                         let args = MultiValue::from_stack_args(nargs, 1, None, lua)?;
                         function(lua, args)?.push_into_stack_multi(lua)
                     }))
-                },
-                NonStaticMethod::FunctionMut(function) => unsafe {
+                }
+                NonStaticMethod::FunctionMut(function) => {
                     let function = RefCell::new(function);
                     let f = Box::new(move |lua, nargs| {
                         let mut func = function
@@ -354,7 +354,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
                         func(lua, args)?.push_into_stack_multi(lua)
                     });
                     scope.create_callback(f)
-                },
+                }
             }
         }
 

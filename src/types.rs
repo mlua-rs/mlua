@@ -10,16 +10,13 @@ use std::{fmt, mem, ptr};
 
 use rustc_hash::FxHashMap;
 
-#[cfg(feature = "async")]
-use futures_util::future::LocalBoxFuture;
-
 use crate::error::Result;
 #[cfg(not(feature = "luau"))]
 use crate::hook::Debug;
 use crate::lua::{ExtraData, Lua};
 
 #[cfg(feature = "async")]
-use crate::value::MultiValue;
+use {crate::value::MultiValue, futures_util::future::LocalBoxFuture};
 
 #[cfg(feature = "unstable")]
 use {crate::lua::LuaInner, std::marker::PhantomData};
@@ -47,13 +44,13 @@ pub(crate) type CallbackUpvalue = Upvalue<Callback<'static, 'static>>;
 
 #[cfg(feature = "async")]
 pub(crate) type AsyncCallback<'lua, 'a> =
-    Box<dyn Fn(&'lua Lua, MultiValue<'lua>) -> LocalBoxFuture<'lua, Result<MultiValue<'lua>>> + 'a>;
+    Box<dyn Fn(&'lua Lua, MultiValue<'lua>) -> LocalBoxFuture<'lua, Result<c_int>> + 'a>;
 
 #[cfg(feature = "async")]
 pub(crate) type AsyncCallbackUpvalue = Upvalue<AsyncCallback<'static, 'static>>;
 
 #[cfg(feature = "async")]
-pub(crate) type AsyncPollUpvalue = Upvalue<LocalBoxFuture<'static, Result<MultiValue<'static>>>>;
+pub(crate) type AsyncPollUpvalue = Upvalue<LocalBoxFuture<'static, Result<c_int>>>;
 
 /// Type to set next Luau VM action after executing interrupt function.
 #[cfg(any(feature = "luau", doc))]

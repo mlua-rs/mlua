@@ -6,8 +6,8 @@ use std::time::Duration;
 use futures_util::stream::TryStreamExt;
 
 use mlua::{
-    AnyUserDataExt, Error, Function, Lua, LuaOptions, Result, StdLib, Table, TableExt, UserData,
-    UserDataMethods, Value,
+    AnyUserDataExt, Error, Function, Lua, LuaOptions, MultiValue, Result, StdLib, Table, TableExt,
+    UserData, UserDataMethods, Value,
 };
 
 async fn sleep_ms(ms: u64) {
@@ -78,6 +78,25 @@ async fn test_async_call() -> Result<()> {
     // Executing non-async functions using async call is allowed
     let sum = lua.create_function(|_lua, (a, b): (i64, i64)| return Ok(a + b))?;
     assert_eq!(sum.call_async::<_, i64>((5, 1)).await?, 6);
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_async_call_many_returns() -> Result<()> {
+    let lua = Lua::new();
+
+    let hello = lua.create_async_function(|_lua, ()| async move {
+        sleep_ms(10).await;
+        Ok(("a", "b", "c", 1))
+    })?;
+
+    let vals = hello.call_async::<_, MultiValue>(()).await?;
+    assert_eq!(vals.len(), 4);
+    assert_eq!(vals[0].to_string()?, "a");
+    assert_eq!(vals[1].to_string()?, "b");
+    assert_eq!(vals[2].to_string()?, "c");
+    assert_eq!(vals[3], Value::Integer(1));
 
     Ok(())
 }
