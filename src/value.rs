@@ -233,7 +233,10 @@ impl<'lua> Value<'lua> {
     /// Cast the value to i64.
     ///
     /// If the value is an Integer, try to convert it to i64. Returns None otherwise.
-    #[cfg(any(feature = "luau", all(any(feature = "lua51", feature = "lua52"), target_pointer_width = "32")))]
+    #[cfg(any(
+        feature = "luau",
+        all(any(feature = "lua51", feature = "lua52"), target_pointer_width = "32")
+    ))]
     pub fn as_i64(&self) -> Option<i64> {
         self.as_integer().and_then(|i| i64::try_from(i).ok())
     }
@@ -241,7 +244,10 @@ impl<'lua> Value<'lua> {
     /// Cast the value to i64.
     ///
     /// If the value is an Integer, try to convert it to i64. Returns None otherwise.
-    #[cfg(not(any(feature = "luau", all(any(feature = "lua51", feature = "lua52"), target_pointer_width = "32"))))]
+    #[cfg(not(any(
+        feature = "luau",
+        all(any(feature = "lua51", feature = "lua52"), target_pointer_width = "32")
+    )))]
     pub fn as_i64(&self) -> Option<i64> {
         self.as_integer()
     }
