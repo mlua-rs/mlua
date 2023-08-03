@@ -235,7 +235,7 @@ impl<'lua, 'de> serde::Deserializer<'de> for Deserializer<'lua> {
             Value::Table(t) => {
                 let _guard = RecursionGuard::new(&t, &self.visited);
 
-                let len = t.raw_len() as usize;
+                let len = t.raw_len();
                 let mut deserializer = SeqDeserializer {
                     seq: t.sequence_values(),
                     options: self.options,

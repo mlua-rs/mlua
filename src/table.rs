@@ -300,7 +300,7 @@ impl<'lua> Table<'lua> {
     /// Inserts element value at position `idx` to the table, shifting up the elements from `table[idx]`.
     /// The worst case complexity is O(n), where n is the table length.
     pub fn raw_insert<V: IntoLua<'lua>>(&self, idx: Integer, value: V) -> Result<()> {
-        let size = self.raw_len();
+        let size = self.raw_len() as Integer;
         if idx < 1 || idx > size + 1 {
             return Err(Error::runtime("index out of bounds"));
         }
@@ -387,7 +387,7 @@ impl<'lua> Table<'lua> {
         let key = key.into_lua(lua)?;
         match key {
             Value::Integer(idx) => {
-                let size = self.raw_len();
+                let size = self.raw_len() as Integer;
                 if idx < 1 || idx > size {
                     return Err(Error::runtime("index out of bounds"));
                 }
@@ -459,7 +459,7 @@ impl<'lua> Table<'lua> {
     pub fn len(&self) -> Result<Integer> {
         // Fast track
         if !self.has_metatable() {
-            return Ok(self.raw_len());
+            return Ok(self.raw_len() as Integer);
         }
 
         let lua = self.0.lua;
@@ -474,9 +474,9 @@ impl<'lua> Table<'lua> {
     }
 
     /// Returns the result of the Lua `#` operator, without invoking the `__len` metamethod.
-    pub fn raw_len(&self) -> Integer {
+    pub fn raw_len(&self) -> usize {
         let ref_thread = self.0.lua.ref_thread();
-        unsafe { ffi::lua_rawlen(ref_thread, self.0.index) as Integer }
+        unsafe { ffi::lua_rawlen(ref_thread, self.0.index) }
     }
 
     /// Returns `true` if the table is empty, without invoking metamethods.
@@ -707,9 +707,9 @@ impl<'lua> Table<'lua> {
     #[cfg(feature = "serialize")]
     pub(crate) fn sequence_values_by_len<V: FromLua<'lua>>(
         self,
-        len: Option<Integer>,
+        len: Option<usize>,
     ) -> TableSequence<'lua, V> {
-        let len = len.unwrap_or_else(|| self.raw_len());
+        let len = len.unwrap_or_else(|| self.raw_len()) as Integer;
         TableSequence {
             table: self.0,
             index: Some(1),
@@ -1036,7 +1036,7 @@ impl<'lua> Serialize for Table<'lua> {
                 visited.insert(ptr);
             }
 
-            let len = self.raw_len() as usize;
+            let len = self.raw_len();
             if len > 0 || self.is_array() {
                 let mut seq = serializer.serialize_seq(Some(len))?;
                 for v in self.clone().sequence_values_by_len::<Value>(None) {
