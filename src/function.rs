@@ -126,34 +126,25 @@ impl<'lua> Function<'lua> {
     pub fn call<A: IntoLuaMulti<'lua>, R: FromLuaMulti<'lua>>(&self, args: A) -> Result<R> {
         let lua = self.0.lua;
         let state = lua.state();
-
-        let mut args = args.into_lua_multi(lua)?;
-        let nargs = args.len() as c_int;
-
-        let results = unsafe {
+        unsafe {
             let _sg = StackGuard::new(state);
-            check_stack(state, nargs + 3)?;
+            check_stack(state, 2)?;
 
+            // Push error handler
             MemoryState::relax_limit_with(state, || ffi::lua_pushcfunction(state, error_traceback));
             let stack_start = ffi::lua_gettop(state);
+            // Push function and the arguments
             lua.push_ref(&self.0);
-            for arg in args.drain_all() {
-                lua.push_value(arg)?;
-            }
+            let nargs = args.push_into_stack_multi(lua)?;
+            // Call the function
             let ret = ffi::lua_pcall(state, nargs, ffi::LUA_MULTRET, stack_start);
             if ret != ffi::LUA_OK {
                 return Err(pop_error(state, ret));
             }
+            // Get the results
             let nresults = ffi::lua_gettop(state) - stack_start;
-            let mut results = args; // Reuse MultiValue container
-            assert_stack(state, 2);
-            for _ in 0..nresults {
-                results.push_front(lua.pop_value());
-            }
-            ffi::lua_pop(state, 1);
-            results
-        };
-        R::from_lua_multi(results, lua)
+            R::from_stack_multi(nresults, lua)
+        }
     }
 
     /// Returns a future that, when polled, calls `self`, passing `args` as function arguments,
