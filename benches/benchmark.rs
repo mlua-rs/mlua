@@ -59,6 +59,31 @@ fn create_string_table(c: &mut Criterion) {
     });
 }
 
+fn table_get_set(c: &mut Criterion) {
+    let lua = Lua::new();
+
+    let table = lua.create_table().unwrap();
+
+    c.bench_function("table raw_get and raw_set [10]", |b| {
+        b.iter_batched(
+            || {
+                collect_gc_twice(&lua);
+                table.clear().unwrap();
+            },
+            |_| {
+                for (i, &s) in ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"]
+                    .iter()
+                    .enumerate()
+                {
+                    table.raw_set(s, i).unwrap();
+                    assert_eq!(table.raw_get::<_, usize>(s).unwrap(), i);
+                }
+            },
+            BatchSize::SmallInput,
+        );
+    });
+}
+
 fn create_function(c: &mut Criterion) {
     let lua = Lua::new();
 
@@ -305,6 +330,7 @@ criterion_group! {
         create_table,
         create_array,
         create_string_table,
+        table_get_set,
         create_function,
         call_lua_function,
         call_sum_callback,
