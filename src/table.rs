@@ -86,17 +86,14 @@ impl<'lua> Table<'lua> {
         }
 
         let lua = self.0.lua;
-        let key = key.into_lua(lua)?;
-        let value = value.into_lua(lua)?;
-
         let state = lua.state();
         unsafe {
             let _sg = StackGuard::new(state);
             check_stack(state, 5)?;
 
             lua.push_ref(&self.0);
-            lua.push_value(key)?;
-            lua.push_value(value)?;
+            key.push_into_stack(lua)?;
+            value.push_into_stack(lua)?;
             protect_lua!(state, 3, 0, fn(state) ffi::lua_settable(state, -3))
         }
     }
@@ -133,19 +130,16 @@ impl<'lua> Table<'lua> {
 
         let lua = self.0.lua;
         let state = lua.state();
-        let key = key.into_lua(lua)?;
-
-        let value = unsafe {
+        unsafe {
             let _sg = StackGuard::new(state);
             check_stack(state, 4)?;
 
             lua.push_ref(&self.0);
-            lua.push_value(key)?;
+            key.push_into_stack(lua)?;
             protect_lua!(state, 2, 1, fn(state) ffi::lua_gettable(state, -2))?;
 
-            lua.pop_value()
-        };
-        V::from_lua(value, lua)
+            V::from_stack(-1, lua)
+        }
     }
 
     /// Checks whether the table contains a non-nil value for `key`.
@@ -166,13 +160,12 @@ impl<'lua> Table<'lua> {
 
         let lua = self.0.lua;
         let state = lua.state();
-        let value = value.into_lua(lua)?;
         unsafe {
             let _sg = StackGuard::new(state);
             check_stack(state, 4)?;
 
             lua.push_ref(&self.0);
-            lua.push_value(value)?;
+            value.push_into_stack(lua)?;
             protect_lua!(state, 2, 0, fn(state) {
                 let len = ffi::luaL_len(state, -2) as Integer;
                 ffi::lua_seti(state, -2, len + 1);
@@ -192,7 +185,7 @@ impl<'lua> Table<'lua> {
 
         let lua = self.0.lua;
         let state = lua.state();
-        let value = unsafe {
+        unsafe {
             let _sg = StackGuard::new(state);
             check_stack(state, 4)?;
 
@@ -203,9 +196,8 @@ impl<'lua> Table<'lua> {
                 ffi::lua_pushnil(state);
                 ffi::lua_seti(state, -3, len);
             })?;
-            lua.pop_value()
-        };
-        V::from_lua(value, lua)
+            V::from_stack(-1, lua)
+        }
     }
 
     /// Compares two tables for equality.
@@ -271,16 +263,13 @@ impl<'lua> Table<'lua> {
 
         let lua = self.0.lua;
         let state = lua.state();
-        let key = key.into_lua(lua)?;
-        let value = value.into_lua(lua)?;
-
         unsafe {
             let _sg = StackGuard::new(state);
             check_stack(state, 5)?;
 
             lua.push_ref(&self.0);
-            lua.push_value(key)?;
-            lua.push_value(value)?;
+            key.push_into_stack(lua)?;
+            value.push_into_stack(lua)?;
 
             if lua.unlikely_memory_error() {
                 ffi::lua_rawset(state, -3);
@@ -296,39 +285,34 @@ impl<'lua> Table<'lua> {
     pub fn raw_get<K: IntoLua<'lua>, V: FromLua<'lua>>(&self, key: K) -> Result<V> {
         let lua = self.0.lua;
         let state = lua.state();
-        let key = key.into_lua(lua)?;
-
-        let value = unsafe {
+        unsafe {
             let _sg = StackGuard::new(state);
             check_stack(state, 3)?;
 
             lua.push_ref(&self.0);
-            lua.push_value(key)?;
+            key.push_into_stack(lua)?;
             ffi::lua_rawget(state, -2);
 
-            lua.pop_value()
-        };
-        V::from_lua(value, lua)
+            V::from_stack(-1, lua)
+        }
     }
 
     /// Inserts element value at position `idx` to the table, shifting up the elements from `table[idx]`.
     /// The worst case complexity is O(n), where n is the table length.
     pub fn raw_insert<V: IntoLua<'lua>>(&self, idx: Integer, value: V) -> Result<()> {
-        let lua = self.0.lua;
-        let state = lua.state();
-
         let size = self.raw_len();
         if idx < 1 || idx > size + 1 {
             return Err(Error::runtime("index out of bounds"));
         }
 
-        let value = value.into_lua(lua)?;
+        let lua = self.0.lua;
+        let state = lua.state();
         unsafe {
             let _sg = StackGuard::new(state);
             check_stack(state, 5)?;
 
             lua.push_ref(&self.0);
-            lua.push_value(value)?;
+            value.push_into_stack(lua)?;
             protect_lua!(state, 2, 0, |state| {
                 for i in (idx..=size).rev() {
                     // table[i+1] = table[i]
@@ -347,14 +331,12 @@ impl<'lua> Table<'lua> {
 
         let lua = self.0.lua;
         let state = lua.state();
-        let value = value.into_lua(lua)?;
-
         unsafe {
             let _sg = StackGuard::new(state);
             check_stack(state, 4)?;
 
             lua.push_ref(&self.0);
-            lua.push_value(value)?;
+            value.push_into_stack(lua)?;
 
             unsafe fn callback(state: *mut ffi::lua_State) {
                 let len = ffi::lua_rawlen(state, -2) as Integer;
@@ -377,7 +359,7 @@ impl<'lua> Table<'lua> {
 
         let lua = self.0.lua;
         let state = lua.state();
-        let value = unsafe {
+        unsafe {
             let _sg = StackGuard::new(state);
             check_stack(state, 3)?;
 
@@ -387,9 +369,9 @@ impl<'lua> Table<'lua> {
             // Set slot to nil (it must be safe to do)
             ffi::lua_pushnil(state);
             ffi::lua_rawseti(state, -3, len);
-            lua.pop_value()
-        };
-        V::from_lua(value, lua)
+
+            V::from_stack(-1, lua)
+        }
     }
 
     /// Removes a key from the table.
@@ -744,14 +726,12 @@ impl<'lua> Table<'lua> {
 
         let lua = self.0.lua;
         let state = lua.state();
-        let value = value.into_lua(lua)?;
-
         unsafe {
             let _sg = StackGuard::new(state);
             check_stack(state, 5)?;
 
             lua.push_ref(&self.0);
-            lua.push_value(value)?;
+            value.push_into_stack(lua)?;
 
             let idx = idx.try_into().unwrap();
             if lua.unlikely_memory_error() {
@@ -759,8 +739,8 @@ impl<'lua> Table<'lua> {
             } else {
                 protect_lua!(state, 2, 0, |state| ffi::lua_rawseti(state, -2, idx))?;
             }
-            Ok(())
         }
+        Ok(())
     }
 
     #[cfg(feature = "serialize")]
