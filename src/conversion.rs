@@ -3,7 +3,9 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::convert::TryInto;
 use std::ffi::{CStr, CString};
 use std::hash::{BuildHasher, Hash};
+use std::os::raw::c_int;
 use std::string::String as StdString;
+use std::{slice, str};
 
 use bstr::{BStr, BString};
 use num_traits::cast;
@@ -302,6 +304,11 @@ impl<'lua> IntoLua<'lua> for StdString {
     fn into_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
         Ok(Value::String(lua.create_string(&self)?))
     }
+
+    #[inline]
+    unsafe fn push_into_stack(self, lua: &'lua Lua) -> Result<()> {
+        push_bytes_into_stack(self, lua)
+    }
 }
 
 impl<'lua> FromLua<'lua> for StdString {
@@ -318,12 +325,36 @@ impl<'lua> FromLua<'lua> for StdString {
             .to_str()?
             .to_owned())
     }
+
+    #[inline]
+    unsafe fn from_stack(idx: c_int, lua: &'lua Lua) -> Result<Self> {
+        let state = lua.state();
+        if ffi::lua_type(state, idx) == ffi::LUA_TSTRING {
+            let mut size = 0;
+            let data = ffi::lua_tolstring(state, idx, &mut size);
+            let bytes = slice::from_raw_parts(data as *const u8, size);
+            return str::from_utf8(bytes).map(|s| s.to_owned()).map_err(|e| {
+                Error::FromLuaConversionError {
+                    from: "string",
+                    to: "String",
+                    message: Some(e.to_string()),
+                }
+            });
+        }
+        // Fallback to default
+        Self::from_lua(lua.stack_value(idx), lua)
+    }
 }
 
 impl<'lua> IntoLua<'lua> for &str {
     #[inline]
     fn into_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
         Ok(Value::String(lua.create_string(self)?))
+    }
+
+    #[inline]
+    unsafe fn push_into_stack(self, lua: &'lua Lua) -> Result<()> {
+        push_bytes_into_stack(self, lua)
     }
 }
 
@@ -431,6 +462,21 @@ impl<'lua> IntoLua<'lua> for &BStr {
     fn into_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
         Ok(Value::String(lua.create_string(self)?))
     }
+}
+
+#[inline]
+unsafe fn push_bytes_into_stack<'lua, T>(this: T, lua: &'lua Lua) -> Result<()>
+where
+    T: IntoLua<'lua> + AsRef<[u8]>,
+{
+    let bytes = this.as_ref();
+    if lua.unlikely_memory_error() && bytes.len() < (1 << 30) {
+        // Fast path: push directly into the Lua stack.
+        ffi::lua_pushlstring(lua.state(), bytes.as_ptr() as *const _, bytes.len());
+        return Ok(());
+    }
+    // Fallback to default
+    lua.push_value(T::into_lua(this, lua)?)
 }
 
 macro_rules! lua_convert_int {
