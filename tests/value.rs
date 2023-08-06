@@ -158,3 +158,74 @@ fn test_debug_format() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn test_value_conversions() -> Result<()> {
+    let lua = Lua::new();
+
+    assert!(Value::Nil.is_nil());
+    assert!(!Value::NULL.is_nil());
+    assert!(Value::NULL.is_null());
+    assert!(Value::NULL.is_light_userdata());
+    assert!(Value::NULL.as_light_userdata() == Some(LightUserData(ptr::null_mut())));
+    assert!(Value::Boolean(true).is_boolean());
+    assert_eq!(Value::Boolean(false).as_boolean(), Some(false));
+    assert!(Value::Integer(1).is_integer());
+    assert_eq!(Value::Integer(1).as_integer(), Some(1));
+    assert_eq!(Value::Integer(1).as_i32(), Some(1i32));
+    assert_eq!(Value::Integer(1).as_u32(), Some(1u32));
+    assert_eq!(Value::Integer(1).as_i64(), Some(1i64));
+    assert_eq!(Value::Integer(1).as_u64(), Some(1u64));
+    #[cfg(any(feature = "lua54", feature = "lua53"))]
+    {
+        assert_eq!(Value::Integer(mlua::Integer::MAX).as_i32(), None);
+        assert_eq!(Value::Integer(mlua::Integer::MAX).as_u32(), None);
+    }
+    assert_eq!(Value::Integer(1).as_isize(), Some(1isize));
+    assert_eq!(Value::Integer(1).as_usize(), Some(1usize));
+    assert!(Value::Number(1.23).is_number());
+    assert_eq!(Value::Number(1.23).as_number(), Some(1.23));
+    assert_eq!(Value::Number(1.23).as_f32(), Some(1.23f32));
+    assert_eq!(Value::Number(1.23).as_f64(), Some(1.23f64));
+    assert!(Value::String(lua.create_string("hello")?).is_string());
+    assert_eq!(
+        Value::String(lua.create_string("hello")?)
+            .as_string()
+            .unwrap(),
+        "hello"
+    );
+    assert_eq!(
+        Value::String(lua.create_string("hello")?).as_str().unwrap(),
+        "hello"
+    );
+    assert_eq!(
+        Value::String(lua.create_string("hello")?)
+            .as_string_lossy()
+            .unwrap(),
+        "hello"
+    );
+    assert!(Value::Table(lua.create_table()?).is_table());
+    assert!(Value::Table(lua.create_table()?).as_table().is_some());
+    assert!(Value::Function(lua.create_function(|_, ()| Ok(())).unwrap()).is_function());
+    assert!(
+        Value::Function(lua.create_function(|_, ()| Ok(())).unwrap())
+            .as_function()
+            .is_some()
+    );
+    assert!(Value::Thread(lua.create_thread(lua.load("function() end").eval()?)?).is_thread());
+    assert!(
+        Value::Thread(lua.create_thread(lua.load("function() end").eval()?)?)
+            .as_thread()
+            .is_some()
+    );
+    assert!(Value::UserData(lua.create_any_userdata("hello")?).is_userdata());
+    assert_eq!(
+        Value::UserData(lua.create_any_userdata("hello")?)
+            .as_userdata()
+            .and_then(|ud| ud.borrow::<&str>().ok())
+            .as_deref(),
+        Some(&"hello")
+    );
+
+    Ok(())
+}

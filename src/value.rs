@@ -1,4 +1,3 @@
-use num_traits::FromPrimitive;
 use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::collections::HashSet;
@@ -8,6 +7,8 @@ use std::os::raw::{c_int, c_void};
 use std::string::String as StdString;
 use std::sync::Arc;
 use std::{fmt, mem, ptr, slice, str, vec};
+
+use num_traits::FromPrimitive;
 
 #[cfg(feature = "serialize")]
 use {
@@ -161,39 +162,45 @@ impl<'lua> Value<'lua> {
         }
     }
 
-    /// Returns true if the value is a nil. Returns false otherwise.
+    /// Returns `true` if the value is a [`Nil`].
+    #[inline]
     pub fn is_nil(&self) -> bool {
         self == &Nil
     }
 
-    /// Returns true if the value is a [`NULL`]. Returns false otherwise.
+    /// Returns `true` if the value is a [`NULL`].
+    #[inline]
     pub fn is_null(&self) -> bool {
         self == &Self::NULL
     }
 
-    /// Returns true if the value is a boolean. Returns false otherwise.
+    /// Returns `true` if the value is a boolean.
+    #[inline]
     pub fn is_boolean(&self) -> bool {
-        self.as_bool().is_some()
+        self.as_boolean().is_some()
     }
 
     /// Cast the value to boolean.
     ///
-    /// If the value is a Boolean, returns the associated bool. Returns None otherwise.
-    pub fn as_bool(&self) -> Option<bool> {
+    /// If the value is a Boolean, returns it or `None` otherwise.
+    #[inline]
+    pub fn as_boolean(&self) -> Option<bool> {
         match *self {
             Value::Boolean(b) => Some(b),
             _ => None,
         }
     }
 
-    /// Returns true if the value is a lightuserdata. Returns false otherwise.
+    /// Returns `true` if the value is a [`LightUserData`].
+    #[inline]
     pub fn is_light_userdata(&self) -> bool {
         self.as_light_userdata().is_some()
     }
 
-    /// Cast the value to lightuserdata.
+    /// Cast the value to [`LightUserData`].
     ///
-    /// If the value is a LightUserData, returns the associated pointer. Returns None otherwise.
+    /// If the value is a [`LightUserData`], returns it or `None` otherwise.
+    #[inline]
     pub fn as_light_userdata(&self) -> Option<LightUserData> {
         match *self {
             Value::LightUserData(l) => Some(l),
@@ -201,14 +208,16 @@ impl<'lua> Value<'lua> {
         }
     }
 
-    /// Returns true if the value is an integer. Returns false otherwise.
+    /// Returns `true` if the value is an [`Integer`].
+    #[inline]
     pub fn is_integer(&self) -> bool {
         self.as_integer().is_some()
     }
 
-    /// Cast the value to integer.
+    /// Cast the value to [`Integer`].
     ///
-    /// If the value is an Integer, returns the associated Integer. Returns None otherwise.
+    /// If the value is a Lua [`Integer`], returns it or `None` otherwise.
+    #[inline]
     pub fn as_integer(&self) -> Option<Integer> {
         match *self {
             Value::Integer(i) => Some(i),
@@ -216,80 +225,65 @@ impl<'lua> Value<'lua> {
         }
     }
 
-    /// Cast the value to i32.
+    /// Cast the value to `i32`.
     ///
-    /// If the value is an Integer, try to convert it to i32. Returns None otherwise.
+    /// If the value is a Lua [`Integer`], try to convert it to `i32` or return `None` otherwise.
+    #[inline]
     pub fn as_i32(&self) -> Option<i32> {
         self.as_integer().and_then(|i| i32::try_from(i).ok())
     }
 
-    /// Cast the value to u32.
+    /// Cast the value to `u32`.
     ///
-    /// If the value is an Integer, try to convert it to u32. Returns None otherwise.
+    /// If the value is a Lua [`Integer`], try to convert it to `u32` or return `None` otherwise.
+    #[inline]
     pub fn as_u32(&self) -> Option<u32> {
         self.as_integer().and_then(|i| u32::try_from(i).ok())
     }
 
-    /// Cast the value to i64.
+    /// Cast the value to `i64`.
     ///
-    /// If the value is an Integer, try to convert it to i64. Returns None otherwise.
-    #[cfg(any(
-        feature = "luau",
-        all(any(feature = "lua51", feature = "lua52"), target_pointer_width = "32")
-    ))]
+    /// If the value is a Lua [`Integer`], try to convert it to `i64` or return `None` otherwise.
+    #[inline]
     pub fn as_i64(&self) -> Option<i64> {
+        #[allow(clippy::useless_conversion)]
         self.as_integer().and_then(|i| i64::try_from(i).ok())
     }
 
-    /// Cast the value to i64.
+    /// Cast the value to `u64`.
     ///
-    /// If the value is an Integer, try to convert it to i64. Returns None otherwise.
-    #[cfg(not(any(
-        feature = "luau",
-        all(any(feature = "lua51", feature = "lua52"), target_pointer_width = "32")
-    )))]
-    pub fn as_i64(&self) -> Option<i64> {
-        self.as_integer()
-    }
-
-    /// Cast the value to u64.
-    ///
-    /// If the value is an Integer, try to convert it to u64. Returns None otherwise.
+    /// If the value is a Lua [`Integer`], try to convert it to `u64` or return `None` otherwise.
+    #[inline]
     pub fn as_u64(&self) -> Option<u64> {
-        match *self {
-            Value::Integer(i) => u64::try_from(i).ok(),
-            _ => None,
-        }
+        self.as_integer().and_then(|i| u64::try_from(i).ok())
     }
 
-    /// Cast the value to isize.
+    /// Cast the value to `isize`.
     ///
-    /// If the value is an Integer, try to convert it to isize. Returns None otherwise.
+    /// If the value is a Lua [`Integer`], try to convert it to `isize` or return `None` otherwise.
+    #[inline]
     pub fn as_isize(&self) -> Option<isize> {
-        match *self {
-            Value::Integer(i) => isize::try_from(i).ok(),
-            _ => None,
-        }
+        self.as_integer().and_then(|i| isize::try_from(i).ok())
     }
 
-    /// Cast the value to usize.
+    /// Cast the value to `usize`.
     ///
-    /// If the value is an Integer, try to convert it to usize. Returns None otherwise.
+    /// If the value is a Lua [`Integer`], try to convert it to `usize` or return `None` otherwise.
+    #[inline]
     pub fn as_usize(&self) -> Option<usize> {
-        match *self {
-            Value::Integer(i) => usize::try_from(i).ok(),
-            _ => None,
-        }
+        self.as_integer().and_then(|i| usize::try_from(i).ok())
     }
 
-    /// Returns true if the value is a number. Returns false otherwise.
+    /// Returns `true` if the value is a Lua [`Number`].
+    #[inline]
     pub fn is_number(&self) -> bool {
         self.as_number().is_some()
     }
 
-    /// Cast the value to number.
+    /// Cast the value to [`Number`].
     ///
-    /// If the value is a Number, returns the associated Number. Returns None otherwise.
+    /// If the value is a Lua [`Number`], returns it or `None` otherwise.
+    #[inline]
     pub fn as_number(&self) -> Option<Number> {
         match *self {
             Value::Number(n) => Some(n),
@@ -297,114 +291,119 @@ impl<'lua> Value<'lua> {
         }
     }
 
-    /// Cast the value to f32.
+    /// Cast the value to `f32`.
     ///
-    /// If the value is a Number, try to convert it to f32. Returns None otherwise.
+    /// If the value is a Lua [`Number`], try to convert it to `f32` or return `None` otherwise.
+    #[inline]
     pub fn as_f32(&self) -> Option<f32> {
-        match *self {
-            Value::Number(n) => f32::from_f64(n),
-            _ => None,
-        }
+        self.as_number().and_then(f32::from_f64)
     }
 
-    /// Cast the value to f64.
+    /// Cast the value to `f64`.
     ///
-    /// If the value is a Number, try to convert it to f64. Returns None otherwise.
+    /// If the value is a Lua [`Number`], try to convert it to `f64` or return `None` otherwise.
+    #[inline]
     pub fn as_f64(&self) -> Option<f64> {
         self.as_number()
     }
 
-    /// Returns true if the value is a string. Returns false otherwise.
+    /// Returns `true` if the value is a Lua [`String`].
+    #[inline]
     pub fn is_string(&self) -> bool {
         self.as_string().is_some()
     }
 
-    /// Cast the value to lua string.
+    /// Cast the value to Lua [`String`].
     ///
-    /// If the value is a String, returns the associated String. Returns None otherwise.
+    /// If the value is a Lua [`String`], returns it or `None` otherwise.
+    #[inline]
     pub fn as_string(&self) -> Option<&String> {
-        match *self {
-            Value::String(ref s) => Some(s),
+        match self {
+            Value::String(s) => Some(s),
             _ => None,
         }
     }
 
-    /// Cast the value to [`str`]
+    /// Cast the value to [`str`].
     ///
-    /// If the value is a String, try to convert it to [`str`]. Returns None otherwise.
+    /// If the value is a Lua [`String`], try to convert it to [`str`] or return `None` otherwise.
+    #[inline]
     pub fn as_str(&self) -> Option<&str> {
-        match *self {
-            Value::String(ref s) => s.to_str().ok(),
-            _ => None,
-        }
+        self.as_string().and_then(|s| s.to_str().ok())
     }
 
     /// Cast the value to [`Cow<str>`].
     ///
-    /// If the value is a String, convert it to [`Cow<str>`]. Returns None otherwise.
+    /// If the value is a Lua [`String`], converts it to [`Cow<str>`] or returns `None` otherwise.
+    #[inline]
     pub fn as_string_lossy(&self) -> Option<Cow<str>> {
-        match *self {
-            Value::String(ref s) => Some(s.to_string_lossy()),
-            _ => None,
-        }
+        self.as_string().map(|s| s.to_string_lossy())
     }
 
-    /// Returns true if the value is a table. Returns false otherwise.
+    /// Returns `true` if the value is a Lua [`Table`].
+    #[inline]
     pub fn is_table(&self) -> bool {
         self.as_table().is_some()
     }
 
-    /// Cast the value to table.
+    /// Cast the value to [`Table`].
     ///
-    /// If the value is a Table, returns the associated Table. Returns None otherwise.
+    /// If the value is a Lua [`Table`], returns it or `None` otherwise.
+    #[inline]
     pub fn as_table(&self) -> Option<&Table> {
-        match *self {
-            Value::Table(ref t) => Some(t),
+        match self {
+            Value::Table(t) => Some(t),
             _ => None,
         }
     }
 
-    /// Returns true if the value is a thread. Returns false otherwise.
+    /// Returns `true` if the value is a Lua [`Thread`].
+    #[inline]
     pub fn is_thread(&self) -> bool {
         self.as_thread().is_some()
     }
 
-    /// Cast the value to thread.
+    /// Cast the value to [`Thread`].
     ///
-    /// If the value is a Thread, returns the associated Thread. Returns None otherwise.
+    /// If the value is a Lua [`Thread`], returns it or `None` otherwise.
+    #[inline]
     pub fn as_thread(&self) -> Option<&Thread> {
-        match *self {
-            Value::Thread(ref t) => Some(t),
+        match self {
+            Value::Thread(t) => Some(t),
             _ => None,
         }
     }
 
-    /// Returns true if the value is a function. Returns false otherwise.
+    /// Returns `true` if the value is a Lua [`Function`].
+    #[inline]
     pub fn is_function(&self) -> bool {
         self.as_function().is_some()
     }
 
-    /// Cast the value to function.
+    /// Cast the value to [`Function`].
     ///
-    /// If the value is a Function, returns the associated Function. Returns None otherwise.
+    /// If the value is a Lua [`Function`], returns it or `None` otherwise.
+    #[inline]
     pub fn as_function(&self) -> Option<&Function> {
-        match *self {
-            Value::Function(ref f) => Some(f),
+        match self {
+            Value::Function(f) => Some(f),
             _ => None,
         }
     }
 
-    /// Returns true if the value is a userdata. Returns false otherwise.
+    /// Returns `true` if the value is an [`AnyUserData`].
+    #[inline]
     pub fn is_userdata(&self) -> bool {
         self.as_userdata().is_some()
     }
 
-    /// Cast the value to userdata.
+    /// Cast the value to [`AnyUserData`].
     ///
-    /// If the value is a UserData, returns the associated UserData. Returns None otherwise.
+    /// If the value is an [`AnyUserData`], returns it or `None` otherwise.
+    #[inline]
     pub fn as_userdata(&self) -> Option<&AnyUserData> {
-        match *self {
-            Value::UserData(ref u) => Some(u),
+        match self {
+            Value::UserData(ud) => Some(ud),
             _ => None,
         }
     }
