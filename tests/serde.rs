@@ -4,8 +4,8 @@ use std::collections::HashMap;
 use std::error::Error as StdError;
 
 use mlua::{
-    DeserializeOptions, Error, Lua, LuaSerdeExt, Result as LuaResult, SerializeOptions, UserData,
-    Value,
+    DeserializeOptions, Error, ExternalResult, Lua, LuaSerdeExt, Result as LuaResult,
+    SerializeOptions, UserData, Value,
 };
 use serde::{Deserialize, Serialize};
 
@@ -608,6 +608,29 @@ fn test_from_value_userdata() -> Result<(), Box<dyn StdError>> {
         Ok(_) => {}
         Err(err) => panic!("expected no errors, got {err:?}"),
     };
+
+    Ok(())
+}
+
+#[test]
+fn test_from_value_sorted() -> Result<(), Box<dyn StdError>> {
+    let lua = Lua::new();
+
+    let to_json = lua.create_function(|lua, value| {
+        let json_value: serde_json::Value =
+            lua.from_value_with(value, DeserializeOptions::new().sort_keys(true))?;
+        serde_json::to_string(&json_value).into_lua_err()
+    })?;
+    lua.globals().set("to_json", to_json)?;
+
+    lua.load(
+        r#"
+        local json = to_json({c = 3, b = 2, hello = "world", x = {1}, ["0a"] = {z = "z", d = "d"}})
+        assert(json == '{"0a":{"d":"d","z":"z"},"b":2,"c":3,"hello":"world","x":[1]}', "invalid json")
+    "#,
+    )
+    .exec()
+    .unwrap();
 
     Ok(())
 }

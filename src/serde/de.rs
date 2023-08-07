@@ -42,6 +42,11 @@ pub struct Options {
     ///
     /// Default: **true**
     pub deny_recursive_tables: bool,
+
+    /// If true, keys in tables will be iterated in sorted order.
+    ///
+    /// Default: **false**
+    pub sort_keys: bool,
 }
 
 impl Default for Options {
@@ -56,6 +61,7 @@ impl Options {
         Options {
             deny_unsupported_types: true,
             deny_recursive_tables: true,
+            sort_keys: false,
         }
     }
 
@@ -74,6 +80,15 @@ impl Options {
     #[must_use]
     pub const fn deny_recursive_tables(mut self, enabled: bool) -> Self {
         self.deny_recursive_tables = enabled;
+        self
+    }
+
+    /// Sets [`sort_keys`] option.
+    ///
+    /// [`sort_keys`]: #structfield.sort_keys
+    #[must_use]
+    pub const fn sort_keys(mut self, enabled: bool) -> Self {
+        self.sort_keys = enabled;
         self
     }
 }
@@ -291,8 +306,16 @@ impl<'lua, 'de> serde::Deserializer<'de> for Deserializer<'lua> {
             Value::Table(t) => {
                 let _guard = RecursionGuard::new(&t, &self.visited);
 
+                let pairs = if self.options.sort_keys {
+                    let mut pairs = t.pairs::<Value, Value>().collect::<Result<Vec<_>>>()?;
+                    pairs.sort_by(|(a, _), (b, _)| b.cmp(a)); // reverse order as we pop values from the end
+                    MapPairs::Vec(pairs)
+                } else {
+                    MapPairs::Iter(t.pairs::<Value, Value>())
+                };
+
                 let mut deserializer = MapDeserializer {
-                    pairs: t.pairs(),
+                    pairs,
                     value: None,
                     options: self.options,
                     visited: self.visited,
@@ -443,8 +466,29 @@ impl<'de> de::SeqAccess<'de> for VecDeserializer {
     }
 }
 
+enum MapPairs<'lua> {
+    Iter(TablePairs<'lua, Value<'lua>, Value<'lua>>),
+    Vec(Vec<(Value<'lua>, Value<'lua>)>),
+}
+
+impl<'lua> MapPairs<'lua> {
+    fn count(self) -> usize {
+        match self {
+            MapPairs::Iter(iter) => iter.count(),
+            MapPairs::Vec(vec) => vec.len(),
+        }
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        match self {
+            MapPairs::Iter(iter) => iter.size_hint(),
+            MapPairs::Vec(vec) => (vec.len(), Some(vec.len())),
+        }
+    }
+}
+
 struct MapDeserializer<'lua> {
-    pairs: TablePairs<'lua, Value<'lua>, Value<'lua>>,
+    pairs: MapPairs<'lua>,
     value: Option<Value<'lua>>,
     options: Options,
     visited: Rc<RefCell<FxHashSet<*const c_void>>>,
@@ -459,21 +503,38 @@ impl<'lua, 'de> de::MapAccess<'de> for MapDeserializer<'lua> {
         T: de::DeserializeSeed<'de>,
     {
         loop {
-            match self.pairs.next() {
-                Some(item) => {
-                    let (key, value) = item?;
-                    if check_value_if_skip(&key, self.options, &self.visited)?
-                        || check_value_if_skip(&value, self.options, &self.visited)?
-                    {
-                        continue;
+            match self.pairs {
+                MapPairs::Iter(ref mut iter) => match iter.next() {
+                    Some(item) => {
+                        let (key, value) = item?;
+                        if check_value_if_skip(&key, self.options, &self.visited)?
+                            || check_value_if_skip(&value, self.options, &self.visited)?
+                        {
+                            continue;
+                        }
+                        self.processed += 1;
+                        self.value = Some(value);
+                        let visited = Rc::clone(&self.visited);
+                        let key_de = Deserializer::from_parts(key, self.options, visited);
+                        return seed.deserialize(key_de).map(Some);
                     }
-                    self.processed += 1;
-                    self.value = Some(value);
-                    let visited = Rc::clone(&self.visited);
-                    let key_de = Deserializer::from_parts(key, self.options, visited);
-                    return seed.deserialize(key_de).map(Some);
-                }
-                None => return Ok(None),
+                    None => return Ok(None),
+                },
+                MapPairs::Vec(ref mut pairs) => match pairs.pop() {
+                    Some((key, value)) => {
+                        if check_value_if_skip(&key, self.options, &self.visited)?
+                            || check_value_if_skip(&value, self.options, &self.visited)?
+                        {
+                            continue;
+                        }
+                        self.processed += 1;
+                        self.value = Some(value);
+                        let visited = Rc::clone(&self.visited);
+                        let key_de = Deserializer::from_parts(key, self.options, visited);
+                        return seed.deserialize(key_de).map(Some);
+                    }
+                    None => return Ok(None),
+                },
             }
         }
     }
