@@ -230,6 +230,7 @@ impl<'lua> Value<'lua> {
     /// If the value is a Lua [`Integer`], try to convert it to `i32` or return `None` otherwise.
     #[inline]
     pub fn as_i32(&self) -> Option<i32> {
+        #[allow(clippy::useless_conversion)]
         self.as_integer().and_then(|i| i32::try_from(i).ok())
     }
 
