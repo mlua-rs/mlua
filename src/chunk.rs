@@ -243,10 +243,10 @@ impl Compiler {
             .iter()
             .map(|s| s.as_ptr())
             .collect::<Vec<_>>();
-        let mut mutable_globals_ptr = ptr::null_mut();
+        let mut mutable_globals_ptr = ptr::null();
         if !mutable_globals.is_empty() {
             mutable_globals.push(ptr::null());
-            mutable_globals_ptr = mutable_globals.as_mut_ptr();
+            mutable_globals_ptr = mutable_globals.as_ptr();
         }
 
         unsafe {
