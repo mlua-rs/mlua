@@ -11,7 +11,7 @@ pub struct lua_CompileOptions {
     pub vectorLib: *const c_char,
     pub vectorCtor: *const c_char,
     pub vectorType: *const c_char,
-    pub mutableGlobals: *mut *const c_char,
+    pub mutableGlobals: *const *const c_char,
 }
 
 extern "C-unwind" {
