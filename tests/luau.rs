@@ -130,6 +130,48 @@ fn test_vectors() -> Result<()> {
     Ok(())
 }
 
+#[cfg(all(not(feature = "luau-vector4"), feature = "unstable"))]
+#[test]
+fn test_vector_metatable() -> Result<()> {
+    let lua = Lua::new();
+
+    let vector_mt = lua
+        .load(
+            r#"
+            {
+                __index = {
+                    new = vector,
+
+                    product = function(a, b)
+                        return vector(a.x * b.x, a.y * b.y, a.z * b.z)
+                    end
+                }
+            }
+    "#,
+        )
+        .eval::<Table>()?;
+    vector_mt.set_metatable(Some(vector_mt.clone()));
+    lua.set_vector_metatable(Some(vector_mt.clone()));
+    lua.globals().set("Vector3", vector_mt)?;
+
+    let compiler = Compiler::new()
+        .set_vector_lib("Vector3")
+        .set_vector_ctor("new");
+
+    // Test vector methods (fastcall)
+    lua.load(
+        r#"
+        local v = Vector3.new(1, 2, 3)
+        local v2 = v:product(Vector3.new(2, 3, 4))
+        assert(v2.x == 2 and v2.y == 6 and v2.z == 12)
+    "#,
+    )
+    .set_compiler(compiler)
+    .exec()?;
+
+    Ok(())
+}
+
 #[test]
 fn test_readonly_table() -> Result<()> {
     let lua = Lua::new();

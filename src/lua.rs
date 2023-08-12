@@ -1795,6 +1795,27 @@ impl Lua {
         unsafe { self.make_userdata(UserDataCell::new(UserDataProxy::<T>(PhantomData))) }
     }
 
+    /// Sets the metatable for a Luau builtin vector type.
+    #[cfg(any(all(feature = "luau", feature = "unstable"), doc))]
+    #[cfg_attr(docsrs, doc(cfg(all(feature = "luau", feature = "unstable"))))]
+    pub fn set_vector_metatable(&self, metatable: Option<Table>) {
+        unsafe {
+            let state = self.state();
+            let _sg = StackGuard::new(state);
+            assert_stack(state, 2);
+
+            #[cfg(not(feature = "luau-vector4"))]
+            ffi::lua_pushvector(state, 0., 0., 0.);
+            #[cfg(feature = "luau-vector4")]
+            ffi::lua_pushvector(state, 0., 0., 0., 0.);
+            match metatable {
+                Some(metatable) => self.push_ref(&metatable.0),
+                None => ffi::lua_pushnil(state),
+            };
+            ffi::lua_setmetatable(state, -2);
+        }
+    }
+
     /// Returns a handle to the global environment.
     pub fn globals(&self) -> Table {
         let state = self.state();
