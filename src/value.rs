@@ -591,7 +591,7 @@ impl<'a, 'lua> SerializableValue<'a, 'lua> {
         }
     }
 
-    /// If true, an attempt to serialize types such as [`Thread`], [`AnyUserData`], [`LightUserData`]
+    /// If true, an attempt to serialize types such as [`Function`], [`Thread`], [`LightUserData`]
     /// and [`Error`] will cause an error.
     /// Otherwise these types skipped when iterating or serialized as unit type.
     ///
