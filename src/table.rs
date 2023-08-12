@@ -6,8 +6,8 @@ use std::os::raw::c_void;
 #[cfg(feature = "serialize")]
 use {
     rustc_hash::FxHashSet,
-    serde::ser::{self, Serialize, SerializeMap, SerializeSeq, Serializer},
-    std::{cell::RefCell, result::Result as StdResult},
+    serde::ser::{Serialize, SerializeMap, SerializeSeq, Serializer},
+    std::{cell::RefCell, rc::Rc, result::Result as StdResult},
 };
 
 use crate::error::{Error, Result};
@@ -1016,47 +1016,86 @@ impl<'lua> TableExt<'lua> for Table<'lua> {
     }
 }
 
+/// A wrapped [`Table`] with customized serialization behavior.
+#[cfg(feature = "serialize")]
+pub(crate) struct SerializableTable<'a, 'lua> {
+    table: &'a Table<'lua>,
+    options: crate::serde::de::Options,
+    visited: Rc<RefCell<FxHashSet<*const c_void>>>,
+}
+
 #[cfg(feature = "serialize")]
 impl<'lua> Serialize for Table<'lua> {
+    #[inline]
+    fn serialize<S: Serializer>(&self, serializer: S) -> StdResult<S::Ok, S::Error> {
+        SerializableTable::new(self, Default::default(), Default::default()).serialize(serializer)
+    }
+}
+
+#[cfg(feature = "serialize")]
+impl<'a, 'lua> SerializableTable<'a, 'lua> {
+    #[inline]
+    pub(crate) fn new(
+        table: &'a Table<'lua>,
+        options: crate::serde::de::Options,
+        visited: Rc<RefCell<FxHashSet<*const c_void>>>,
+    ) -> Self {
+        Self {
+            table,
+            options,
+            visited,
+        }
+    }
+}
+
+#[cfg(feature = "serialize")]
+impl<'a, 'lua> Serialize for SerializableTable<'a, 'lua> {
     fn serialize<S>(&self, serializer: S) -> StdResult<S::Ok, S::Error>
     where
         S: Serializer,
     {
-        thread_local! {
-            static VISITED: RefCell<FxHashSet<*const c_void>> = RefCell::new(FxHashSet::default());
+        use crate::serde::de::{check_value_for_skip, MapPairs};
+        use crate::value::SerializableValue;
+
+        let options = self.options;
+        let visited = &self.visited;
+        visited.borrow_mut().insert(self.table.to_pointer());
+
+        // Array
+        let len = self.table.raw_len();
+        if len > 0 || self.table.is_array() {
+            let mut seq = serializer.serialize_seq(Some(len))?;
+            for value in self.table.clone().sequence_values_by_len::<Value>(None) {
+                let value = &value.map_err(serde::ser::Error::custom)?;
+                let skip = check_value_for_skip(value, self.options, &self.visited)
+                    .map_err(serde::ser::Error::custom)?;
+                if skip {
+                    continue;
+                }
+                seq.serialize_element(&SerializableValue::new(value, options, Some(visited)))?;
+            }
+            return seq.end();
         }
 
-        let ptr = self.to_pointer();
-        let res = VISITED.with(|visited| {
-            {
-                let mut visited = visited.borrow_mut();
-                if visited.contains(&ptr) {
-                    return Err(ser::Error::custom("recursive table detected"));
-                }
-                visited.insert(ptr);
+        // HashMap
+        let mut map = serializer.serialize_map(None)?;
+        let pairs = MapPairs::new(self.table.clone(), self.options.sort_keys)
+            .map_err(serde::ser::Error::custom)?;
+        for kv in pairs {
+            let (key, value) = kv.map_err(serde::ser::Error::custom)?;
+            let skip_key = check_value_for_skip(&key, self.options, &self.visited)
+                .map_err(serde::ser::Error::custom)?;
+            let skip_value = check_value_for_skip(&value, self.options, &self.visited)
+                .map_err(serde::ser::Error::custom)?;
+            if skip_key || skip_value {
+                continue;
             }
-
-            let len = self.raw_len();
-            if len > 0 || self.is_array() {
-                let mut seq = serializer.serialize_seq(Some(len))?;
-                for v in self.clone().sequence_values_by_len::<Value>(None) {
-                    let v = v.map_err(serde::ser::Error::custom)?;
-                    seq.serialize_element(&v)?;
-                }
-                return seq.end();
-            }
-
-            let mut map = serializer.serialize_map(None)?;
-            for kv in self.clone().pairs::<Value, Value>() {
-                let (k, v) = kv.map_err(serde::ser::Error::custom)?;
-                map.serialize_entry(&k, &v)?;
-            }
-            map.end()
-        });
-        VISITED.with(|visited| {
-            visited.borrow_mut().remove(&ptr);
-        });
-        res
+            map.serialize_entry(
+                &SerializableValue::new(&key, options, Some(visited)),
+                &SerializableValue::new(&value, options, Some(visited)),
+            )?;
+        }
+        map.end()
     }
 }
 

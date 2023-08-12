@@ -2,6 +2,7 @@ use std::cell::RefCell;
 use std::convert::TryInto;
 use std::os::raw::c_void;
 use std::rc::Rc;
+use std::result::Result as StdResult;
 use std::string::String as StdString;
 
 use rustc_hash::FxHashSet;
@@ -156,10 +157,8 @@ impl<'lua, 'de> serde::Deserializer<'de> for Deserializer<'lua> {
             | Value::LightUserData(_)
             | Value::Error(_) => {
                 if self.options.deny_unsupported_types {
-                    Err(de::Error::custom(format!(
-                        "unsupported value type `{}`",
-                        self.value.type_name()
-                    )))
+                    let msg = format!("unsupported value type `{}`", self.value.type_name());
+                    Err(de::Error::custom(msg))
                 } else {
                     visitor.visit_unit()
                 }
@@ -210,7 +209,9 @@ impl<'lua, 'de> serde::Deserializer<'de> for Deserializer<'lua> {
                         &"map with a single key",
                     ));
                 }
-                if check_value_if_skip(&value, self.options, &self.visited)? {
+                let skip = check_value_for_skip(&value, self.options, &self.visited)
+                    .map_err(|err| Error::DeserializeError(err.to_string()))?;
+                if skip {
                     return Err(de::Error::custom("bad enum value"));
                 }
 
@@ -306,16 +307,8 @@ impl<'lua, 'de> serde::Deserializer<'de> for Deserializer<'lua> {
             Value::Table(t) => {
                 let _guard = RecursionGuard::new(&t, &self.visited);
 
-                let pairs = if self.options.sort_keys {
-                    let mut pairs = t.pairs::<Value, Value>().collect::<Result<Vec<_>>>()?;
-                    pairs.sort_by(|(a, _), (b, _)| b.cmp(a)); // reverse order as we pop values from the end
-                    MapPairs::Vec(pairs)
-                } else {
-                    MapPairs::Iter(t.pairs::<Value, Value>())
-                };
-
                 let mut deserializer = MapDeserializer {
-                    pairs,
+                    pairs: MapPairs::new(t, self.options.sort_keys)?,
                     value: None,
                     options: self.options,
                     visited: self.visited,
@@ -413,7 +406,9 @@ impl<'lua, 'de> de::SeqAccess<'de> for SeqDeserializer<'lua> {
             match self.seq.next() {
                 Some(value) => {
                     let value = value?;
-                    if check_value_if_skip(&value, self.options, &self.visited)? {
+                    let skip = check_value_for_skip(&value, self.options, &self.visited)
+                        .map_err(|err| Error::DeserializeError(err.to_string()))?;
+                    if skip {
                         continue;
                     }
                     let visited = Rc::clone(&self.visited);
@@ -466,23 +461,44 @@ impl<'de> de::SeqAccess<'de> for VecDeserializer {
     }
 }
 
-enum MapPairs<'lua> {
+pub(crate) enum MapPairs<'lua> {
     Iter(TablePairs<'lua, Value<'lua>, Value<'lua>>),
     Vec(Vec<(Value<'lua>, Value<'lua>)>),
 }
 
 impl<'lua> MapPairs<'lua> {
-    fn count(self) -> usize {
+    pub(crate) fn new(t: Table<'lua>, sort_keys: bool) -> Result<Self> {
+        if sort_keys {
+            let mut pairs = t.pairs::<Value, Value>().collect::<Result<Vec<_>>>()?;
+            pairs.sort_by(|(a, _), (b, _)| b.cmp(a)); // reverse order as we pop values from the end
+            Ok(MapPairs::Vec(pairs))
+        } else {
+            Ok(MapPairs::Iter(t.pairs::<Value, Value>()))
+        }
+    }
+
+    pub(crate) fn count(self) -> usize {
         match self {
             MapPairs::Iter(iter) => iter.count(),
             MapPairs::Vec(vec) => vec.len(),
         }
     }
 
-    fn size_hint(&self) -> (usize, Option<usize>) {
+    pub(crate) fn size_hint(&self) -> (usize, Option<usize>) {
         match self {
             MapPairs::Iter(iter) => iter.size_hint(),
             MapPairs::Vec(vec) => (vec.len(), Some(vec.len())),
+        }
+    }
+}
+
+impl<'lua> Iterator for MapPairs<'lua> {
+    type Item = Result<(Value<'lua>, Value<'lua>)>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            MapPairs::Iter(iter) => iter.next(),
+            MapPairs::Vec(vec) => vec.pop().map(Ok),
         }
     }
 }
@@ -503,38 +519,23 @@ impl<'lua, 'de> de::MapAccess<'de> for MapDeserializer<'lua> {
         T: de::DeserializeSeed<'de>,
     {
         loop {
-            match self.pairs {
-                MapPairs::Iter(ref mut iter) => match iter.next() {
-                    Some(item) => {
-                        let (key, value) = item?;
-                        if check_value_if_skip(&key, self.options, &self.visited)?
-                            || check_value_if_skip(&value, self.options, &self.visited)?
-                        {
-                            continue;
-                        }
-                        self.processed += 1;
-                        self.value = Some(value);
-                        let visited = Rc::clone(&self.visited);
-                        let key_de = Deserializer::from_parts(key, self.options, visited);
-                        return seed.deserialize(key_de).map(Some);
+            match self.pairs.next() {
+                Some(item) => {
+                    let (key, value) = item?;
+                    let skip_key = check_value_for_skip(&key, self.options, &self.visited)
+                        .map_err(|err| Error::DeserializeError(err.to_string()))?;
+                    let skip_value = check_value_for_skip(&value, self.options, &self.visited)
+                        .map_err(|err| Error::DeserializeError(err.to_string()))?;
+                    if skip_key || skip_value {
+                        continue;
                     }
-                    None => return Ok(None),
-                },
-                MapPairs::Vec(ref mut pairs) => match pairs.pop() {
-                    Some((key, value)) => {
-                        if check_value_if_skip(&key, self.options, &self.visited)?
-                            || check_value_if_skip(&value, self.options, &self.visited)?
-                        {
-                            continue;
-                        }
-                        self.processed += 1;
-                        self.value = Some(value);
-                        let visited = Rc::clone(&self.visited);
-                        let key_de = Deserializer::from_parts(key, self.options, visited);
-                        return seed.deserialize(key_de).map(Some);
-                    }
-                    None => return Ok(None),
-                },
+                    self.processed += 1;
+                    self.value = Some(value);
+                    let visited = Rc::clone(&self.visited);
+                    let key_de = Deserializer::from_parts(key, self.options, visited);
+                    return seed.deserialize(key_de).map(Some);
+                }
+                None => return Ok(None),
             }
         }
     }
@@ -676,17 +677,17 @@ impl Drop for RecursionGuard {
 }
 
 // Checks `options` and decides should we emit an error or skip next element
-fn check_value_if_skip(
+pub(crate) fn check_value_for_skip(
     value: &Value,
     options: Options,
     visited: &RefCell<FxHashSet<*const c_void>>,
-) -> Result<bool> {
+) -> StdResult<bool, &'static str> {
     match value {
         Value::Table(table) => {
             let ptr = table.to_pointer();
             if visited.borrow().contains(&ptr) {
                 if options.deny_recursive_tables {
-                    return Err(de::Error::custom("recursive table detected"));
+                    return Err("recursive table detected");
                 }
                 return Ok(true); // skip
             }

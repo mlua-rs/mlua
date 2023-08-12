@@ -12,9 +12,10 @@ use num_traits::FromPrimitive;
 
 #[cfg(feature = "serialize")]
 use {
+    crate::table::SerializableTable,
+    rustc_hash::FxHashSet,
     serde::ser::{self, Serialize, Serializer},
-    std::convert::TryInto,
-    std::result::Result as StdResult,
+    std::{cell::RefCell, convert::TryInto, rc::Rc, result::Result as StdResult},
 };
 
 use crate::error::{Error, Result};
@@ -409,6 +410,16 @@ impl<'lua> Value<'lua> {
         }
     }
 
+    /// Wrap reference to this Value into [`SerializableValue`].
+    ///
+    /// This allows customizing serialization behavior using serde.
+    #[cfg(feature = "serialize")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "serialize")))]
+    #[doc(hidden)]
+    pub fn to_serializable(&self) -> SerializableValue<'_, 'lua> {
+        SerializableValue::new(self, Default::default(), None)
+    }
+
     // Compares two values.
     // Used to sort values for Debug printing.
     pub(crate) fn cmp(&self, other: &Self) -> Ordering {
@@ -539,13 +550,86 @@ impl<'lua> AsRef<Value<'lua>> for Value<'lua> {
     }
 }
 
+/// A wrapped [`Value`] with customized serialization behavior.
+#[cfg(feature = "serialize")]
+#[cfg_attr(docsrs, doc(cfg(feature = "serialize")))]
+pub struct SerializableValue<'a, 'lua> {
+    value: &'a Value<'lua>,
+    options: crate::serde::de::Options,
+    // In many cases we don't need `visited` map, so don't allocate memory by default
+    visited: Option<Rc<RefCell<FxHashSet<*const c_void>>>>,
+}
+
 #[cfg(feature = "serialize")]
 impl<'lua> Serialize for Value<'lua> {
+    #[inline]
+    fn serialize<S: Serializer>(&self, serializer: S) -> StdResult<S::Ok, S::Error> {
+        SerializableValue::new(self, Default::default(), None).serialize(serializer)
+    }
+}
+
+#[cfg(feature = "serialize")]
+impl<'a, 'lua> SerializableValue<'a, 'lua> {
+    #[inline]
+    pub(crate) fn new(
+        value: &'a Value<'lua>,
+        options: crate::serde::de::Options,
+        visited: Option<&Rc<RefCell<FxHashSet<*const c_void>>>>,
+    ) -> Self {
+        if let Value::Table(_) = value {
+            return Self {
+                value,
+                options,
+                // We need to always initialize the `visited` map for Tables
+                visited: visited.cloned().or_else(|| Some(Default::default())),
+            };
+        }
+        Self {
+            value,
+            options,
+            visited: None,
+        }
+    }
+
+    /// If true, an attempt to serialize types such as [`Thread`], [`AnyUserData`], [`LightUserData`]
+    /// and [`Error`] will cause an error.
+    /// Otherwise these types skipped when iterating or serialized as unit type.
+    ///
+    /// Default: **true**
+    #[must_use]
+    pub const fn deny_unsupported_types(mut self, enabled: bool) -> Self {
+        self.options.deny_unsupported_types = enabled;
+        self
+    }
+
+    /// If true, an attempt to serialize a recursive table (table that refers to itself)
+    /// will cause an error.
+    /// Otherwise subsequent attempts to serialize the same table will be ignored.
+    ///
+    /// Default: **true**
+    #[must_use]
+    pub const fn deny_recursive_tables(mut self, enabled: bool) -> Self {
+        self.options.deny_recursive_tables = enabled;
+        self
+    }
+
+    /// If true, keys in tables will be iterated (and serialized) in sorted order.
+    ///
+    /// Default: **false**
+    #[must_use]
+    pub const fn sort_keys(mut self, enabled: bool) -> Self {
+        self.options.sort_keys = enabled;
+        self
+    }
+}
+
+#[cfg(feature = "serialize")]
+impl<'a, 'lua> Serialize for SerializableValue<'a, 'lua> {
     fn serialize<S>(&self, serializer: S) -> StdResult<S::Ok, S::Error>
     where
         S: Serializer,
     {
-        match self {
+        match self.value {
             Value::Nil => serializer.serialize_unit(),
             Value::Boolean(b) => serializer.serialize_bool(*b),
             #[allow(clippy::useless_conversion)]
@@ -555,12 +639,25 @@ impl<'lua> Serialize for Value<'lua> {
             #[cfg(feature = "luau")]
             Value::Vector(v) => v.serialize(serializer),
             Value::String(s) => s.serialize(serializer),
-            Value::Table(t) => t.serialize(serializer),
-            Value::UserData(ud) => ud.serialize(serializer),
+            Value::Table(t) => {
+                let visited = self.visited.as_ref().unwrap().clone();
+                SerializableTable::new(t, self.options, visited).serialize(serializer)
+            }
             Value::LightUserData(ud) if ud.0.is_null() => serializer.serialize_none(),
-            Value::Error(_) | Value::LightUserData(_) | Value::Function(_) | Value::Thread(_) => {
-                let msg = format!("cannot serialize <{}>", self.type_name());
-                Err(ser::Error::custom(msg))
+            Value::UserData(ud) if ud.is_serializable() || self.options.deny_unsupported_types => {
+                ud.serialize(serializer)
+            }
+            Value::Function(_)
+            | Value::Thread(_)
+            | Value::UserData(_)
+            | Value::LightUserData(_)
+            | Value::Error(_) => {
+                if self.options.deny_unsupported_types {
+                    let msg = format!("cannot serialize <{}>", self.value.type_name());
+                    Err(ser::Error::custom(msg))
+                } else {
+                    serializer.serialize_unit()
+                }
             }
         }
     }

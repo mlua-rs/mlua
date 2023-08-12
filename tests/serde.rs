@@ -192,6 +192,69 @@ fn test_serialize_vector() -> Result<(), Box<dyn StdError>> {
 }
 
 #[test]
+fn test_serialize_sorted() -> LuaResult<()> {
+    let lua = Lua::new();
+
+    let globals = lua.globals();
+    globals.set("null", lua.null())?;
+
+    let empty_array = lua.create_table()?;
+    empty_array.set_metatable(Some(lua.array_metatable()));
+    globals.set("empty_array", empty_array)?;
+
+    let value = lua
+        .load(
+            r#"
+        {
+            _bool = true,
+            _integer = 123,
+            _number = 321.99,
+            _string = "test string serialization",
+            _table_arr = {nil, "value 1", nil, "value 2", {}},
+            _table_map = {["table"] = "map", ["null"] = null},
+            _bytes = "\240\040\140\040",
+            _null = null,
+            _empty_map = {},
+            _empty_array = empty_array,
+        }
+    "#,
+        )
+        .eval::<Value>()?;
+
+    let json = serde_json::to_string(&value.to_serializable().sort_keys(true)).unwrap();
+    assert_eq!(
+        json,
+        r#"{"_bool":true,"_bytes":[240,40,140,40],"_empty_array":[],"_empty_map":{},"_integer":123,"_null":null,"_number":321.99,"_string":"test string serialization","_table_arr":[null,"value 1",null,"value 2",{}],"_table_map":{"null":null,"table":"map"}}"#
+    );
+
+    Ok(())
+}
+
+#[test]
+fn test_serialize_globals() -> LuaResult<()> {
+    let lua = Lua::new();
+
+    let globals = Value::Table(lua.globals());
+
+    // By default it should not work
+    if let Ok(v) = serde_json::to_value(&globals) {
+        panic!("expected serialization error, got {v:?}");
+    }
+
+    // It should work with `deny_recursive_tables` and `deny_unsupported_types` disabled
+    if let Err(err) = serde_json::to_value(
+        globals
+            .to_serializable()
+            .deny_recursive_tables(false)
+            .deny_unsupported_types(false),
+    ) {
+        panic!("expected no errors, got {err:?}");
+    }
+
+    Ok(())
+}
+
+#[test]
 fn test_to_value_struct() -> LuaResult<()> {
     let lua = Lua::new();
     let globals = lua.globals();

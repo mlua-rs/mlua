@@ -1155,7 +1155,7 @@ impl<'lua> AnyUserData<'lua> {
         Ok(false)
     }
 
-    /// Returns true if this `AnyUserData` is serializable (eg. was created using `create_ser_userdata`).
+    /// Returns `true` if this `AnyUserData` is serializable (eg. was created using `create_ser_userdata`).
     #[cfg(feature = "serialize")]
     pub(crate) fn is_serializable(&self) -> bool {
         let lua = self.0.lua;
