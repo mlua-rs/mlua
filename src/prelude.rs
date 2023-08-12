@@ -40,5 +40,5 @@ pub use crate::{
 #[doc(no_inline)]
 pub use crate::{
     OwnedAnyUserData as LuaOwnedAnyUserData, OwnedFunction as LuaOwnedFunction,
-    OwnedString as LuaOwnedString, OwnedTable as LuaOwnedTable,
+    OwnedString as LuaOwnedString, OwnedTable as LuaOwnedTable, OwnedThread as LuaOwnedThread,
 };

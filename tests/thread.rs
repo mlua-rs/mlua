@@ -190,3 +190,34 @@ fn test_coroutine_panic() {
         Err(p) => assert!(*p.downcast::<&str>().unwrap() == "test_panic"),
     }
 }
+
+#[cfg(all(feature = "unstable", not(feature = "send")))]
+#[test]
+fn test_owned_thread() -> Result<()> {
+    let lua = Lua::new();
+
+    let accumulate = lua
+        .create_thread(
+            lua.load(
+                r#"
+            function (sum)
+                while true do
+                    sum = sum + coroutine.yield(sum)
+                end
+            end
+            "#,
+            )
+            .eval::<Function>()?,
+        )?
+        .into_owned();
+
+    for i in 0..4 {
+        accumulate.resume::<_, ()>(i)?;
+    }
+    assert_eq!(accumulate.resume::<_, i64>(4)?, 10);
+    assert_eq!(accumulate.status(), ThreadStatus::Resumable);
+    assert!(accumulate.resume::<_, ()>("error").is_err());
+    assert_eq!(accumulate.status(), ThreadStatus::Error);
+
+    Ok(())
+}

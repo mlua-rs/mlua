@@ -26,7 +26,7 @@ use {
     },
 };
 
-/// Status of a Lua thread (or coroutine).
+/// Status of a Lua thread (coroutine).
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum ThreadStatus {
     /// The thread was just created, or is suspended because it has called `coroutine.yield`.
@@ -41,9 +41,33 @@ pub enum ThreadStatus {
     Error,
 }
 
-/// Handle to an internal Lua thread (or coroutine).
+/// Handle to an internal Lua thread (coroutine).
 #[derive(Clone, Debug)]
 pub struct Thread<'lua>(pub(crate) LuaRef<'lua>, pub(crate) *mut ffi::lua_State);
+
+/// Owned handle to an internal Lua thread (coroutine).
+///
+/// The owned handle holds a *strong* reference to the current Lua instance.
+/// Be warned, if you place it into a Lua type (eg. [`UserData`] or a Rust callback), it is *very easy*
+/// to accidentally cause reference cycles that would prevent destroying Lua instance.
+///
+/// [`UserData`]: crate::UserData
+#[cfg(feature = "unstable")]
+#[cfg_attr(docsrs, doc(cfg(feature = "unstable")))]
+#[derive(Clone, Debug)]
+pub struct OwnedThread(
+    pub(crate) crate::types::LuaOwnedRef,
+    pub(crate) *mut ffi::lua_State,
+);
+
+#[cfg(feature = "unstable")]
+impl OwnedThread {
+    /// Get borrowed handle to the underlying Lua table.
+    #[cfg_attr(feature = "send", allow(unused))]
+    pub const fn to_ref(&self) -> Thread {
+        Thread(self.0.to_ref(), self.1)
+    }
+}
 
 /// Thread (coroutine) representation as an async [`Future`] or [`Stream`].
 ///
@@ -350,11 +374,39 @@ impl<'lua> Thread<'lua> {
             protect_lua!(state, 0, 0, |_| ffi::luaL_sandboxthread(thread_state))
         }
     }
+
+    /// Convert this handle to owned version.
+    #[cfg(all(feature = "unstable", any(not(feature = "send"), doc)))]
+    #[cfg_attr(docsrs, doc(cfg(all(feature = "unstable", not(feature = "send")))))]
+    #[inline]
+    pub fn into_owned(self) -> OwnedThread {
+        OwnedThread(self.0.into_owned(), self.1)
+    }
 }
 
 impl<'lua> PartialEq for Thread<'lua> {
     fn eq(&self, other: &Self) -> bool {
         self.0 == other.0
+    }
+}
+
+// Additional shortcuts
+#[cfg(feature = "unstable")]
+impl OwnedThread {
+    /// Resumes execution of this thread.
+    ///
+    /// See [`Thread::resume()`] for more details.
+    pub fn resume<'lua, A, R>(&'lua self, args: A) -> Result<R>
+    where
+        A: IntoLuaMulti<'lua>,
+        R: FromLuaMulti<'lua>,
+    {
+        self.to_ref().resume(args)
+    }
+
+    /// Gets the status of the thread.
+    pub fn status(&self) -> ThreadStatus {
+        self.to_ref().status()
     }
 }
 

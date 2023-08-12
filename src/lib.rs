@@ -157,7 +157,8 @@ extern crate mlua_derive;
 // Unstable features
 #[cfg(feature = "unstable")]
 pub use crate::{
-    function::OwnedFunction, string::OwnedString, table::OwnedTable, userdata::OwnedAnyUserData,
+    function::OwnedFunction, string::OwnedString, table::OwnedTable, thread::OwnedThread,
+    userdata::OwnedAnyUserData,
 };
 
 /// Create a type that implements [`AsChunk`] and can capture Rust variables.
