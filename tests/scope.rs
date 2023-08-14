@@ -1,5 +1,6 @@
 use std::cell::Cell;
 use std::rc::Rc;
+use std::string::String as StdString;
 use std::sync::Arc;
 
 use mlua::{
@@ -413,6 +414,32 @@ fn test_scope_userdata_ref_mut() -> Result<()> {
         modify_userdata(&lua, ud)
     })?;
     assert_eq!(data.0, 2);
+
+    Ok(())
+}
+
+#[test]
+fn test_scope_any_userdata() -> Result<()> {
+    let lua = Lua::new();
+
+    lua.register_userdata_type::<StdString>(|reg| {
+        reg.add_meta_method("__tostring", |_, data, ()| Ok(data.clone()));
+    })?;
+
+    lua.scope(|scope| {
+        let ud = scope.create_any_userdata(StdString::from("foo"))?;
+        lua.globals().set("ud", ud)?;
+        lua.load("assert(tostring(ud) == 'foo')").exec()
+    })?;
+
+    // Check that userdata is destructed
+    match lua.load("tostring(ud)").exec() {
+        Err(Error::CallbackError { ref cause, .. }) => match cause.as_ref() {
+            Error::CallbackDestructed => {}
+            err => panic!("expected CallbackDestructed, got {:?}", err),
+        },
+        r => panic!("improper return for destructed userdata: {:?}", r),
+    };
 
     Ok(())
 }

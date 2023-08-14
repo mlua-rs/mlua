@@ -187,6 +187,23 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
         }
     }
 
+    /// Creates a Lua userdata object from a custom Rust type.
+    ///
+    /// This is a version of [`Lua::create_any_userdata`] that creates a userdata which expires on
+    /// scope drop and does not require that the userdata type be Send (but still requires that the
+    /// UserData be 'static). See [`Lua::scope`] for more details.
+    #[inline]
+    pub fn create_any_userdata<T>(&self, data: T) -> Result<AnyUserData<'lua>>
+    where
+        T: 'static,
+    {
+        unsafe {
+            let ud = self.lua.make_any_userdata(UserDataCell::new(data))?;
+            self.seal_userdata::<T>(&ud)?;
+            Ok(ud)
+        }
+    }
+
     /// Creates a Lua userdata object from a reference to custom Rust type.
     ///
     /// This is a version of [`Lua::create_any_userdata`] that creates a userdata which expires on
