@@ -1,3 +1,9 @@
+## v0.8.10
+
+- Update to Luau 0.590 (luau0-src to 0.7.x)
+- Fix loading luau code starting with \t
+- Pin lua-src and luajit-src versions
+
 ## v0.8.9
 
 - Update minimal (vendored) Lua 5.4 to 5.4.6
