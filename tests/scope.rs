@@ -77,6 +77,7 @@ fn test_scope_userdata_fields() -> Result<()> {
 
     impl<'a> UserData for MyUserData<'a> {
         fn add_fields<'lua, F: UserDataFields<'lua, Self>>(fields: &mut F) {
+            fields.add_field("field", "hello");
             fields.add_field_method_get("val", |_, data| Ok(data.0.get()));
             fields.add_field_method_set("val", |_, data, val| {
                 data.0.set(val);
@@ -92,6 +93,7 @@ fn test_scope_userdata_fields() -> Result<()> {
         .load(
             r#"
             function(u)
+                assert(u.field == "hello")
                 assert(u.val == 42)
                 u.val = 44
             end
@@ -228,9 +230,19 @@ fn test_scope_userdata_mismatch() -> Result<()> {
         let bu = scope.create_nonstatic_userdata(MyUserData(&b))?;
         assert!(okay.call::<_, ()>((au.clone(), bu.clone())).is_ok());
         match bad.call::<_, ()>((au, bu)) {
-            Err(Error::CallbackError { ref cause, .. }) => match *cause.as_ref() {
-                Error::UserDataTypeMismatch => {}
-                ref other => panic!("wrong error type {:?}", other),
+            Err(Error::CallbackError { ref cause, .. }) => match cause.as_ref() {
+                Error::BadArgument {
+                    to,
+                    pos,
+                    name,
+                    cause,
+                } => {
+                    assert_eq!(to.as_deref(), Some("MyUserData.inc"));
+                    assert_eq!(*pos, 1);
+                    assert_eq!(name.as_deref(), Some("self"));
+                    assert!(matches!(*cause.as_ref(), Error::UserDataTypeMismatch));
+                }
+                other => panic!("wrong error type {:?}", other),
             },
             Err(other) => panic!("wrong error type {:?}", other),
             Ok(_) => panic!("incorrectly returned Ok"),

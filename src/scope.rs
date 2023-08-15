@@ -2,6 +2,7 @@ use std::any::Any;
 use std::cell::{Cell, RefCell};
 use std::marker::PhantomData;
 use std::mem;
+use std::os::raw::c_int;
 
 #[cfg(feature = "serialize")]
 use serde::Serialize;
@@ -15,10 +16,10 @@ use crate::userdata::{
 };
 use crate::userdata_impl::UserDataRegistry;
 use crate::util::{
-    self, assert_stack, check_stack, get_userdata, init_userdata_metatable, push_table,
-    rawset_field, take_userdata, StackGuard,
+    self, assert_stack, check_stack, init_userdata_metatable, push_string, push_table,
+    rawset_field, short_type_name, take_userdata, StackGuard,
 };
-use crate::value::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, MultiValue, Value};
+use crate::value::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, Value};
 
 #[cfg(feature = "lua54")]
 use crate::userdata::USER_VALUE_MAXSLOT;
@@ -314,6 +315,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
         unsafe fn wrap_method<'scope, 'lua, 'callback: 'scope, T: 'scope>(
             scope: &Scope<'lua, 'scope>,
             ud_ptr: *const UserDataCell<T>,
+            name: &str,
             method: NonStaticMethod<'callback, T>,
         ) -> Result<Function<'lua>> {
             // On methods that actually receive the userdata, we fake a type check on the passed in
@@ -323,62 +325,56 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
             // with a type mismatch, but here without this check would proceed as though you had
             // called the method on the original value (since we otherwise completely ignore the
             // first argument).
-            let check_ud_type = move |lua: &Lua, value| -> Result<&UserDataCell<T>> {
-                if let Some(Value::UserData(ud)) = value {
-                    if get_userdata(lua.ref_thread(), ud.0.index) as *const _ == ud_ptr {
-                        return Ok(&*ud_ptr);
-                    }
-                };
-                Err(Error::UserDataTypeMismatch)
+            let func_name = format!("{}.{name}", short_type_name::<T>());
+            let check_self_type = move |lua: &Lua, nargs: c_int| -> Result<&UserDataCell<T>> {
+                let state = lua.state();
+                if nargs > 0 && ffi::lua_touserdata(state, -nargs) as *const _ == ud_ptr {
+                    return Ok(&*ud_ptr);
+                }
+                Err(Error::bad_self_argument(
+                    &func_name,
+                    Error::UserDataTypeMismatch,
+                ))
             };
 
             match method {
                 NonStaticMethod::Method(method) => {
                     let f = Box::new(move |lua, nargs| {
-                        let mut args = MultiValue::from_stack_args(nargs, 1, None, lua)?;
-                        let data = check_ud_type(lua, args.pop_front())?;
+                        let data = check_self_type(lua, nargs)?;
                         let data = data.try_borrow()?;
-                        method(lua, &*data, args)?.push_into_stack_multi(lua)
+                        method(lua, &*data, nargs - 1)
                     });
                     scope.create_callback(f)
                 }
                 NonStaticMethod::MethodMut(method) => {
                     let method = RefCell::new(method);
                     let f = Box::new(move |lua, nargs| {
-                        let mut args = MultiValue::from_stack_args(nargs, 1, None, lua)?;
-                        let data = check_ud_type(lua, args.pop_front())?;
+                        let data = check_self_type(lua, nargs)?;
                         let mut method = method
                             .try_borrow_mut()
                             .map_err(|_| Error::RecursiveMutCallback)?;
                         let mut data = data.try_borrow_mut()?;
-                        (*method)(lua, &mut *data, args)?.push_into_stack_multi(lua)
+                        (*method)(lua, &mut *data, nargs - 1)
                     });
                     scope.create_callback(f)
                 }
-                NonStaticMethod::Function(function) => {
-                    scope.create_callback(Box::new(move |lua, nargs| {
-                        let args = MultiValue::from_stack_args(nargs, 1, None, lua)?;
-                        function(lua, args)?.push_into_stack_multi(lua)
-                    }))
-                }
+                NonStaticMethod::Function(function) => scope.create_callback(function),
                 NonStaticMethod::FunctionMut(function) => {
                     let function = RefCell::new(function);
                     let f = Box::new(move |lua, nargs| {
                         let mut func = function
                             .try_borrow_mut()
                             .map_err(|_| Error::RecursiveMutCallback)?;
-                        let args = MultiValue::from_stack_args(nargs, 1, None, lua)?;
-                        func(lua, args)?.push_into_stack_multi(lua)
+                        func(lua, nargs)
                     });
                     scope.create_callback(f)
                 }
             }
         }
 
-        let mut ud_fields = NonStaticUserDataFields::default();
-        let mut ud_methods = NonStaticUserDataMethods::default();
-        T::add_fields(&mut ud_fields);
-        T::add_methods(&mut ud_methods);
+        let mut registry = NonStaticUserDataRegistry::new();
+        T::add_fields(&mut registry);
+        T::add_methods(&mut registry);
 
         let lua = self.lua;
         let state = lua.state();
@@ -406,48 +402,82 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
             };
 
             // Prepare metatable, add meta methods first and then meta fields
-            let meta_methods_nrec = ud_methods.meta_methods.len() + ud_fields.meta_fields.len() + 1;
+            let meta_methods_nrec = registry.meta_methods.len() + registry.meta_fields.len() + 1;
             push_table(state, 0, meta_methods_nrec, true)?;
-
-            for (k, m) in ud_methods.meta_methods {
-                lua.push_value(Value::Function(wrap_method(self, ud_ptr, m)?))?;
+            for (k, m) in registry.meta_methods {
+                lua.push_value(Value::Function(wrap_method(self, ud_ptr, &k, m)?))?;
                 rawset_field(state, -2, MetaMethod::validate(&k)?)?;
             }
-            for (k, f) in ud_fields.meta_fields {
+            let mut has_name = false;
+            for (k, f) in registry.meta_fields {
+                has_name = has_name || k == MetaMethod::Type;
                 mlua_assert!(f(lua, 0)? == 1, "field function must return one value");
                 rawset_field(state, -2, MetaMethod::validate(&k)?)?;
             }
+            // Set `__name/__type` if not provided
+            if !has_name {
+                let type_name = short_type_name::<T>();
+                push_string(state, type_name.as_bytes(), !lua.unlikely_memory_error())?;
+                rawset_field(state, -2, MetaMethod::Type.name())?;
+            }
             let metatable_index = ffi::lua_absindex(state, -1);
 
+            let fields_nrec = registry.fields.len();
+            if fields_nrec > 0 {
+                // If __index is a table then update it inplace
+                let index_type = ffi::lua_getfield(state, metatable_index, cstr!("__index"));
+                match index_type {
+                    ffi::LUA_TNIL | ffi::LUA_TTABLE => {
+                        if index_type == ffi::LUA_TNIL {
+                            // Create a new table
+                            ffi::lua_pop(state, 1);
+                            push_table(state, 0, fields_nrec, true)?;
+                        }
+                        for (k, f) in registry.fields {
+                            let NonStaticMethod::Function(f) = f else { unreachable!() };
+                            mlua_assert!(f(lua, 0)? == 1, "field function must return one value");
+                            rawset_field(state, -2, &k)?;
+                        }
+                        rawset_field(state, metatable_index, "__index")?;
+                    }
+                    _ => {
+                        // Propagate fields to the field getters
+                        for (k, f) in registry.fields {
+                            registry.field_getters.push((k, f))
+                        }
+                    }
+                }
+            }
+
             let mut field_getters_index = None;
-            let field_getters_nrec = ud_fields.field_getters.len();
+            let field_getters_nrec = registry.field_getters.len();
             if field_getters_nrec > 0 {
                 push_table(state, 0, field_getters_nrec, true)?;
-                for (k, m) in ud_fields.field_getters {
-                    lua.push_value(Value::Function(wrap_method(self, ud_ptr, m)?))?;
+                for (k, m) in registry.field_getters {
+                    lua.push_value(Value::Function(wrap_method(self, ud_ptr, &k, m)?))?;
                     rawset_field(state, -2, &k)?;
                 }
                 field_getters_index = Some(ffi::lua_absindex(state, -1));
             }
 
             let mut field_setters_index = None;
-            let field_setters_nrec = ud_fields.field_setters.len();
+            let field_setters_nrec = registry.field_setters.len();
             if field_setters_nrec > 0 {
                 push_table(state, 0, field_setters_nrec, true)?;
-                for (k, m) in ud_fields.field_setters {
-                    lua.push_value(Value::Function(wrap_method(self, ud_ptr, m)?))?;
+                for (k, m) in registry.field_setters {
+                    lua.push_value(Value::Function(wrap_method(self, ud_ptr, &k, m)?))?;
                     rawset_field(state, -2, &k)?;
                 }
                 field_setters_index = Some(ffi::lua_absindex(state, -1));
             }
 
             let mut methods_index = None;
-            let methods_nrec = ud_methods.methods.len();
+            let methods_nrec = registry.methods.len();
             if methods_nrec > 0 {
                 // Create table used for methods lookup
                 push_table(state, 0, methods_nrec, true)?;
-                for (k, m) in ud_methods.methods {
-                    lua.push_value(Value::Function(wrap_method(self, ud_ptr, m)?))?;
+                for (k, m) in registry.methods {
+                    lua.push_value(Value::Function(wrap_method(self, ud_ptr, &k, m)?))?;
                     rawset_field(state, -2, &k)?;
                 }
                 methods_index = Some(ffi::lua_absindex(state, -1));
@@ -591,35 +621,144 @@ impl<'lua, 'scope> Drop for Scope<'lua, 'scope> {
 
 #[allow(clippy::type_complexity)]
 enum NonStaticMethod<'lua, T> {
-    Method(Box<dyn Fn(&'lua Lua, &T, MultiValue<'lua>) -> Result<MultiValue<'lua>>>),
-    MethodMut(Box<dyn FnMut(&'lua Lua, &mut T, MultiValue<'lua>) -> Result<MultiValue<'lua>>>),
-    Function(Box<dyn Fn(&'lua Lua, MultiValue<'lua>) -> Result<MultiValue<'lua>>>),
-    FunctionMut(Box<dyn FnMut(&'lua Lua, MultiValue<'lua>) -> Result<MultiValue<'lua>>>),
+    Method(Box<dyn Fn(&'lua Lua, &T, c_int) -> Result<c_int>>),
+    MethodMut(Box<dyn FnMut(&'lua Lua, &mut T, c_int) -> Result<c_int>>),
+    Function(Box<dyn Fn(&'lua Lua, c_int) -> Result<c_int>>),
+    FunctionMut(Box<dyn FnMut(&'lua Lua, c_int) -> Result<c_int>>),
 }
 
-struct NonStaticUserDataMethods<'lua, T: UserData> {
+struct NonStaticUserDataRegistry<'lua, T> {
+    // Fields
+    fields: Vec<(String, NonStaticMethod<'lua, T>)>,
+    field_getters: Vec<(String, NonStaticMethod<'lua, T>)>,
+    field_setters: Vec<(String, NonStaticMethod<'lua, T>)>,
+    meta_fields: Vec<(String, Callback<'lua, 'static>)>,
+
+    // Methods
     methods: Vec<(String, NonStaticMethod<'lua, T>)>,
     meta_methods: Vec<(String, NonStaticMethod<'lua, T>)>,
 }
 
-impl<'lua, T: UserData> Default for NonStaticUserDataMethods<'lua, T> {
-    fn default() -> NonStaticUserDataMethods<'lua, T> {
-        NonStaticUserDataMethods {
+impl<'lua, T> NonStaticUserDataRegistry<'lua, T> {
+    const fn new() -> NonStaticUserDataRegistry<'lua, T> {
+        NonStaticUserDataRegistry {
+            fields: Vec::new(),
+            field_getters: Vec::new(),
+            field_setters: Vec::new(),
+            meta_fields: Vec::new(),
             methods: Vec::new(),
             meta_methods: Vec::new(),
         }
     }
 }
 
-impl<'lua, T: UserData> UserDataMethods<'lua, T> for NonStaticUserDataMethods<'lua, T> {
+impl<'lua, T> UserDataFields<'lua, T> for NonStaticUserDataRegistry<'lua, T> {
+    fn add_field<V>(&mut self, name: impl AsRef<str>, value: V)
+    where
+        V: IntoLua<'lua> + Clone + 'static,
+    {
+        let name = name.as_ref().to_string();
+        self.fields.push((
+            name,
+            NonStaticMethod::Function(Box::new(move |lua, _| unsafe {
+                value.clone().push_into_stack_multi(lua)
+            })),
+        ));
+    }
+
+    fn add_field_method_get<M, R>(&mut self, name: impl AsRef<str>, method: M)
+    where
+        M: Fn(&'lua Lua, &T) -> Result<R> + MaybeSend + 'static,
+        R: IntoLua<'lua>,
+    {
+        let method = NonStaticMethod::Method(Box::new(move |lua, ud, _| unsafe {
+            method(lua, ud)?.push_into_stack_multi(lua)
+        }));
+        self.field_getters.push((name.as_ref().into(), method));
+    }
+
+    fn add_field_method_set<M, A>(&mut self, name: impl AsRef<str>, mut method: M)
+    where
+        M: FnMut(&'lua Lua, &mut T, A) -> Result<()> + MaybeSend + 'static,
+        A: FromLua<'lua>,
+    {
+        let func_name = format!("{}.{}", short_type_name::<T>(), name.as_ref());
+        let method = NonStaticMethod::MethodMut(Box::new(move |lua, ud, nargs| unsafe {
+            let val = A::from_stack_args(nargs, 2, Some(&func_name), lua)?;
+            method(lua, ud, val)?.push_into_stack_multi(lua)
+        }));
+        self.field_setters.push((name.as_ref().into(), method));
+    }
+
+    fn add_field_function_get<F, R>(&mut self, name: impl AsRef<str>, function: F)
+    where
+        F: Fn(&'lua Lua, AnyUserData<'lua>) -> Result<R> + MaybeSend + 'static,
+        R: IntoLua<'lua>,
+    {
+        let func_name = format!("{}.{}", short_type_name::<T>(), name.as_ref());
+        let func = NonStaticMethod::Function(Box::new(move |lua, nargs| unsafe {
+            let ud = AnyUserData::from_stack_args(nargs, 1, Some(&func_name), lua)?;
+            function(lua, ud)?.push_into_stack_multi(lua)
+        }));
+        self.field_getters.push((name.as_ref().into(), func));
+    }
+
+    fn add_field_function_set<F, A>(&mut self, name: impl AsRef<str>, mut function: F)
+    where
+        F: FnMut(&'lua Lua, AnyUserData<'lua>, A) -> Result<()> + MaybeSend + 'static,
+        A: FromLua<'lua>,
+    {
+        let func_name = format!("{}.{}", short_type_name::<T>(), name.as_ref());
+        let func = NonStaticMethod::FunctionMut(Box::new(move |lua, nargs| unsafe {
+            let (ud, val) = <_>::from_stack_args(nargs, 1, Some(&func_name), lua)?;
+            function(lua, ud, val)?.push_into_stack_multi(lua)
+        }));
+        self.field_setters.push((name.as_ref().into(), func));
+    }
+
+    fn add_meta_field<V>(&mut self, name: impl AsRef<str>, value: V)
+    where
+        V: IntoLua<'lua> + Clone + 'static,
+    {
+        let name = name.as_ref().to_string();
+        let name2 = name.clone();
+        self.meta_fields.push((
+            name,
+            Box::new(move |lua, _| unsafe {
+                UserDataRegistry::<()>::check_meta_field(lua, &name2, value.clone())?
+                    .push_into_stack_multi(lua)
+            }),
+        ));
+    }
+
+    fn add_meta_field_with<F, R>(&mut self, name: impl AsRef<str>, f: F)
+    where
+        F: Fn(&'lua Lua) -> Result<R> + MaybeSend + 'static,
+        R: IntoLua<'lua>,
+    {
+        let name = name.as_ref().to_string();
+        let name2 = name.clone();
+        self.meta_fields.push((
+            name,
+            Box::new(move |lua, _| unsafe {
+                UserDataRegistry::<()>::check_meta_field(lua, &name2, f(lua)?)?
+                    .push_into_stack_multi(lua)
+            }),
+        ));
+    }
+}
+
+impl<'lua, T> UserDataMethods<'lua, T> for NonStaticUserDataRegistry<'lua, T> {
     fn add_method<M, A, R>(&mut self, name: impl AsRef<str>, method: M)
     where
         M: Fn(&'lua Lua, &T, A) -> Result<R> + MaybeSend + 'static,
         A: FromLuaMulti<'lua>,
         R: IntoLuaMulti<'lua>,
     {
-        let method = NonStaticMethod::Method(Box::new(move |lua, ud, args| {
-            method(lua, ud, A::from_lua_multi(args, lua)?)?.into_lua_multi(lua)
+        let func_name = format!("{}.{}", short_type_name::<T>(), name.as_ref());
+        let method = NonStaticMethod::Method(Box::new(move |lua, ud, nargs| unsafe {
+            let args = A::from_stack_args(nargs, 2, Some(&func_name), lua)?;
+            method(lua, ud, args)?.push_into_stack_multi(lua)
         }));
         self.methods.push((name.as_ref().into(), method));
     }
@@ -630,8 +769,10 @@ impl<'lua, T: UserData> UserDataMethods<'lua, T> for NonStaticUserDataMethods<'l
         A: FromLuaMulti<'lua>,
         R: IntoLuaMulti<'lua>,
     {
-        let method = NonStaticMethod::MethodMut(Box::new(move |lua, ud, args| {
-            method(lua, ud, A::from_lua_multi(args, lua)?)?.into_lua_multi(lua)
+        let func_name = format!("{}.{}", short_type_name::<T>(), name.as_ref());
+        let method = NonStaticMethod::MethodMut(Box::new(move |lua, ud, nargs| unsafe {
+            let args = A::from_stack_args(nargs, 2, Some(&func_name), lua)?;
+            method(lua, ud, args)?.push_into_stack_multi(lua)
         }));
         self.methods.push((name.as_ref().into(), method));
     }
@@ -672,8 +813,10 @@ impl<'lua, T: UserData> UserDataMethods<'lua, T> for NonStaticUserDataMethods<'l
         A: FromLuaMulti<'lua>,
         R: IntoLuaMulti<'lua>,
     {
-        let func = NonStaticMethod::Function(Box::new(move |lua, args| {
-            function(lua, A::from_lua_multi(args, lua)?)?.into_lua_multi(lua)
+        let func_name = format!("{}.{}", short_type_name::<T>(), name.as_ref());
+        let func = NonStaticMethod::Function(Box::new(move |lua, nargs| unsafe {
+            let args = A::from_stack_args(nargs, 1, Some(&func_name), lua)?;
+            function(lua, args)?.push_into_stack_multi(lua)
         }));
         self.methods.push((name.as_ref().into(), func));
     }
@@ -684,8 +827,10 @@ impl<'lua, T: UserData> UserDataMethods<'lua, T> for NonStaticUserDataMethods<'l
         A: FromLuaMulti<'lua>,
         R: IntoLuaMulti<'lua>,
     {
-        let func = NonStaticMethod::FunctionMut(Box::new(move |lua, args| {
-            function(lua, A::from_lua_multi(args, lua)?)?.into_lua_multi(lua)
+        let func_name = format!("{}.{}", short_type_name::<T>(), name.as_ref());
+        let func = NonStaticMethod::FunctionMut(Box::new(move |lua, nargs| unsafe {
+            let args = A::from_stack_args(nargs, 1, Some(&func_name), lua)?;
+            function(lua, args)?.push_into_stack_multi(lua)
         }));
         self.methods.push((name.as_ref().into(), func));
     }
@@ -709,8 +854,10 @@ impl<'lua, T: UserData> UserDataMethods<'lua, T> for NonStaticUserDataMethods<'l
         A: FromLuaMulti<'lua>,
         R: IntoLuaMulti<'lua>,
     {
-        let method = NonStaticMethod::Method(Box::new(move |lua, ud, args| {
-            method(lua, ud, A::from_lua_multi(args, lua)?)?.into_lua_multi(lua)
+        let func_name = format!("{}.{}", short_type_name::<T>(), name.as_ref());
+        let method = NonStaticMethod::Method(Box::new(move |lua, ud, nargs| unsafe {
+            let args = A::from_stack_args(nargs, 2, Some(&func_name), lua)?;
+            method(lua, ud, args)?.push_into_stack_multi(lua)
         }));
         self.meta_methods.push((name.as_ref().into(), method));
     }
@@ -721,8 +868,10 @@ impl<'lua, T: UserData> UserDataMethods<'lua, T> for NonStaticUserDataMethods<'l
         A: FromLuaMulti<'lua>,
         R: IntoLuaMulti<'lua>,
     {
-        let method = NonStaticMethod::MethodMut(Box::new(move |lua, ud, args| {
-            method(lua, ud, A::from_lua_multi(args, lua)?)?.into_lua_multi(lua)
+        let func_name = format!("{}.{}", short_type_name::<T>(), name.as_ref());
+        let method = NonStaticMethod::MethodMut(Box::new(move |lua, ud, nargs| unsafe {
+            let args = A::from_stack_args(nargs, 2, Some(&func_name), lua)?;
+            method(lua, ud, args)?.push_into_stack_multi(lua)
         }));
         self.meta_methods.push((name.as_ref().into(), method));
     }
@@ -763,8 +912,10 @@ impl<'lua, T: UserData> UserDataMethods<'lua, T> for NonStaticUserDataMethods<'l
         A: FromLuaMulti<'lua>,
         R: IntoLuaMulti<'lua>,
     {
-        let func = NonStaticMethod::Function(Box::new(move |lua, args| {
-            function(lua, A::from_lua_multi(args, lua)?)?.into_lua_multi(lua)
+        let func_name = format!("{}.{}", short_type_name::<T>(), name.as_ref());
+        let func = NonStaticMethod::Function(Box::new(move |lua, nargs| unsafe {
+            let args = A::from_stack_args(nargs, 1, Some(&func_name), lua)?;
+            function(lua, args)?.push_into_stack_multi(lua)
         }));
         self.meta_methods.push((name.as_ref().into(), func));
     }
@@ -775,8 +926,10 @@ impl<'lua, T: UserData> UserDataMethods<'lua, T> for NonStaticUserDataMethods<'l
         A: FromLuaMulti<'lua>,
         R: IntoLuaMulti<'lua>,
     {
-        let func = NonStaticMethod::FunctionMut(Box::new(move |lua, args| {
-            function(lua, A::from_lua_multi(args, lua)?)?.into_lua_multi(lua)
+        let func_name = format!("{}.{}", short_type_name::<T>(), name.as_ref());
+        let func = NonStaticMethod::FunctionMut(Box::new(move |lua, nargs| unsafe {
+            let args = A::from_stack_args(nargs, 1, Some(&func_name), lua)?;
+            function(lua, args)?.push_into_stack_multi(lua)
         }));
         self.meta_methods.push((name.as_ref().into(), func));
     }
@@ -792,112 +945,5 @@ impl<'lua, T: UserData> UserDataMethods<'lua, T> for NonStaticUserDataMethods<'l
         // The panic should never happen as async non-static code wouldn't compile
         // Non-static lifetime must be bounded to 'lua lifetime
         panic!("asynchronous meta functions are not supported for non-static userdata")
-    }
-}
-
-struct NonStaticUserDataFields<'lua, T: UserData> {
-    fields: Vec<(String, Callback<'lua, 'static>)>,
-    field_getters: Vec<(String, NonStaticMethod<'lua, T>)>,
-    field_setters: Vec<(String, NonStaticMethod<'lua, T>)>,
-    meta_fields: Vec<(String, Callback<'lua, 'static>)>,
-}
-
-impl<'lua, T: UserData> Default for NonStaticUserDataFields<'lua, T> {
-    fn default() -> NonStaticUserDataFields<'lua, T> {
-        NonStaticUserDataFields {
-            fields: Vec::new(),
-            field_getters: Vec::new(),
-            field_setters: Vec::new(),
-            meta_fields: Vec::new(),
-        }
-    }
-}
-
-impl<'lua, T: UserData> UserDataFields<'lua, T> for NonStaticUserDataFields<'lua, T> {
-    fn add_field<V>(&mut self, name: impl AsRef<str>, value: V)
-    where
-        V: IntoLua<'lua> + Clone + 'static,
-    {
-        let name = name.as_ref().to_string();
-        self.fields.push((
-            name,
-            Box::new(move |lua, _| unsafe { value.clone().push_into_stack_multi(lua) }),
-        ));
-    }
-
-    fn add_field_method_get<M, R>(&mut self, name: impl AsRef<str>, method: M)
-    where
-        M: Fn(&'lua Lua, &T) -> Result<R> + MaybeSend + 'static,
-        R: IntoLua<'lua>,
-    {
-        let method = NonStaticMethod::Method(Box::new(move |lua, ud, _| {
-            method(lua, ud)?.into_lua_multi(lua)
-        }));
-        self.field_getters.push((name.as_ref().into(), method));
-    }
-
-    fn add_field_method_set<M, A>(&mut self, name: impl AsRef<str>, mut method: M)
-    where
-        M: FnMut(&'lua Lua, &mut T, A) -> Result<()> + MaybeSend + 'static,
-        A: FromLua<'lua>,
-    {
-        let method = NonStaticMethod::MethodMut(Box::new(move |lua, ud, args| {
-            method(lua, ud, A::from_lua_multi(args, lua)?)?.into_lua_multi(lua)
-        }));
-        self.field_setters.push((name.as_ref().into(), method));
-    }
-
-    fn add_field_function_get<F, R>(&mut self, name: impl AsRef<str>, function: F)
-    where
-        F: Fn(&'lua Lua, AnyUserData<'lua>) -> Result<R> + MaybeSend + 'static,
-        R: IntoLua<'lua>,
-    {
-        let func = NonStaticMethod::Function(Box::new(move |lua, args| {
-            function(lua, AnyUserData::from_lua_multi(args, lua)?)?.into_lua_multi(lua)
-        }));
-        self.field_getters.push((name.as_ref().into(), func));
-    }
-
-    fn add_field_function_set<F, A>(&mut self, name: impl AsRef<str>, mut function: F)
-    where
-        F: FnMut(&'lua Lua, AnyUserData<'lua>, A) -> Result<()> + MaybeSend + 'static,
-        A: FromLua<'lua>,
-    {
-        let func = NonStaticMethod::FunctionMut(Box::new(move |lua, args| {
-            let (ud, val) = <_>::from_lua_multi(args, lua)?;
-            function(lua, ud, val)?.into_lua_multi(lua)
-        }));
-        self.field_setters.push((name.as_ref().into(), func));
-    }
-
-    fn add_meta_field<V>(&mut self, name: impl AsRef<str>, value: V)
-    where
-        V: IntoLua<'lua> + Clone + 'static,
-    {
-        let name = name.as_ref().to_string();
-        let name2 = name.clone();
-        self.meta_fields.push((
-            name,
-            Box::new(move |lua, _| unsafe {
-                UserDataRegistry::<()>::check_meta_field(lua, &name2, value.clone())?
-                    .push_into_stack_multi(lua)
-            }),
-        ));
-    }
-
-    fn add_meta_field_with<F, R>(&mut self, name: impl AsRef<str>, f: F)
-    where
-        F: Fn(&'lua Lua) -> Result<R> + MaybeSend + 'static,
-        R: IntoLua<'lua>,
-    {
-        let name = name.as_ref().to_string();
-        let name2 = name.clone();
-        self.meta_fields.push((
-            name,
-            Box::new(move |lua, _| unsafe {
-                UserDataRegistry::<()>::check_meta_field(lua, &name2, f(lua)?)?
-                    .push_into_stack_multi(lua)
-            }),
-        ));
     }
 }
