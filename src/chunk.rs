@@ -228,6 +228,7 @@ impl Compiler {
                 coverageLevel: self.coverage_level as c_int,
                 vectorLib: vector_lib.map_or(ptr::null(), |s| s.as_ptr()),
                 vectorCtor: vector_ctor.map_or(ptr::null(), |s| s.as_ptr()),
+                vectorType: ptr::null(),
                 mutableGlobals: mutable_globals_ptr,
             };
             ffi::luau_compile(source.as_ref(), options)
