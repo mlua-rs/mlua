@@ -1,3 +1,17 @@
+## v0.9.0
+
+Changes since v0.9.0-rc.3
+
+- Improved non-static (scoped) userdata support
+- Added `Scope::create_any_userdata()` method
+- Added `Lua::set_vector_metatable()` method (`unstable` feature flag)
+- Added `OwnedThread` type (`unstable` feature flag)
+- Minimal Luau updated to 0.590
+- Added new option `sort_keys` to `DeserializeOptions` (`Lua::from_value()` method)
+- Changed `Table::raw_len()` output type to `usize`
+- Helper functions for `Value` (eg: `Value::as_number()`/`Value::as_string`/etc)
+- Performance improvements
+
 ## v0.9.0-rc.3
 
 - Minimal Luau updated to 0.588
@@ -84,6 +98,18 @@ Other:
 - Support setting memory limit for Lua 5.1/JIT/Luau
 - Support setting module name in `#[lua_module(name = "...")]` macro
 - Minor fixes and improvements
+
+## v0.8.10
+
+- Update to Luau 0.590 (luau0-src to 0.7.x)
+- Fix loading luau code starting with \t
+- Pin lua-src and luajit-src versions
+
+## v0.8.9
+
+- Update minimal (vendored) Lua 5.4 to 5.4.6
+- Use `lua_closethread` instead of `lua_resetthread` in vendored mode (Lua 5.4.6)
+- Allow deserializing Lua null into unit (`()`) or unit struct.
 
 ## v0.8.8
 

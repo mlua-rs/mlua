@@ -19,9 +19,7 @@
 
 > **Note**
 >
-> Please see the [v0.8](https://github.com/khvzak/mlua/tree/v0.8) branch for the stable versions of `mlua` released to crates.io.
->
-> v0.9 release notes can be found [here](https://github.com/khvzak/mlua/blob/master/docs/release_notes/v0.9.md).
+> See v0.9 [release notes](https://github.com/khvzak/mlua/blob/master/docs/release_notes/v0.9.md).
 
 `mlua` is bindings to [Lua](https://www.lua.org) programming language for Rust with a goal to provide
 _safe_ (as far as it's possible), high level, easy to use, practical and flexible API.
@@ -47,7 +45,7 @@ Below is a list of the available feature flags. By default `mlua` does not enabl
 * `luajit`: activate [LuaJIT] support
 * `luajit52`: activate [LuaJIT] support with partial compatibility with Lua 5.2
 * `luau`: activate [Luau] support (auto vendored mode)
-* `luau-jit`: activate [Luau] support with experimental JIT backend.
+* `luau-jit`: activate [Luau] support with JIT backend.
 * `luau-vector4`: activate [Luau] support with 4-dimensional vector.
 * `vendored`: build static Lua(JIT) library from sources during `mlua` compilation using [lua-src] or [luajit-src] crates
 * `module`: enable module mode (building loadable `cdylib` library for Lua)
@@ -119,7 +117,7 @@ Add to `Cargo.toml` :
 
 ``` toml
 [dependencies]
-mlua = { version = "0.9.0-rc.3", features = ["lua54", "vendored"] }
+mlua = { version = "0.9.0", features = ["lua54", "vendored"] }
 ```
 
 `main.rs`
@@ -154,7 +152,7 @@ Add to `Cargo.toml` :
 crate-type = ["cdylib"]
 
 [dependencies]
-mlua = { version = "0.9.0-rc.3", features = ["lua54", "vendored", "module"] }
+mlua = { version = "0.9.0", features = ["lua54", "vendored", "module"] }
 ```
 
 `lib.rs` :
