@@ -282,6 +282,13 @@ impl Deref for Lua {
     }
 }
 
+impl Default for Lua {
+    #[inline]
+    fn default() -> Self {
+        Lua::new()
+    }
+}
+
 impl Lua {
     /// Creates a new Lua state and loads the **safe** subset of the standard libraries.
     ///
@@ -292,7 +299,6 @@ impl Lua {
     /// See [`StdLib`] documentation for a list of unsafe modules that cannot be loaded.
     ///
     /// [`StdLib`]: crate::StdLib
-    #[allow(clippy::new_without_default)]
     pub fn new() -> Lua {
         mlua_expect!(
             Self::new_with(StdLib::ALL_SAFE, LuaOptions::default()),
