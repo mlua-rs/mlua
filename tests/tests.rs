@@ -504,25 +504,32 @@ fn test_result_conversions() -> Result<()> {
     let lua = Lua::new();
     let globals = lua.globals();
 
-    let err = lua.create_function(|_, ()| {
-        Ok(Err::<String, _>(
-            "only through failure can we succeed".into_lua_err(),
-        ))
-    })?;
-    let ok = lua.create_function(|_, ()| Ok(Ok::<_, Error>("!".to_owned())))?;
+    let ok = lua.create_function(|_, ()| Ok(Ok::<(), Error>(())))?;
+    let err = lua.create_function(|_, ()| Ok(Err::<(), _>("failure1".into_lua_err())))?;
+    let ok2 = lua.create_function(|_, ()| Ok(Ok::<_, Error>("!".to_owned())))?;
+    let err2 = lua.create_function(|_, ()| Ok(Err::<String, _>("failure2".into_lua_err())))?;
 
-    globals.set("err", err)?;
     globals.set("ok", ok)?;
+    globals.set("ok2", ok2)?;
+    globals.set("err", err)?;
+    globals.set("err2", err2)?;
 
     lua.load(
         r#"
+        local r, e = ok()
+        assert(r == nil and e == nil)
+
         local r, e = err()
         assert(r == nil)
-        assert(tostring(e):find("only through failure can we succeed") ~= nil)
+        assert(tostring(e):find("failure1") ~= nil)
 
-        local r, e = ok()
+        local r, e = ok2()
         assert(r == "!")
         assert(e == nil)
+
+        local r, e = err2()
+        assert(r == nil)
+        assert(tostring(e):find("failure2") ~= nil)
     "#,
     )
     .exec()?;

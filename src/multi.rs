@@ -25,6 +25,21 @@ impl<'lua, T: IntoLua<'lua>, E: IntoLua<'lua>> IntoLuaMulti<'lua> for StdResult<
     }
 }
 
+impl<'lua, E: IntoLua<'lua>> IntoLuaMulti<'lua> for StdResult<(), E> {
+    #[inline]
+    fn into_lua_multi(self, lua: &'lua Lua) -> Result<MultiValue<'lua>> {
+        match self {
+            Ok(_) => return Ok(MultiValue::new()),
+            Err(e) => {
+                let mut result = MultiValue::with_lua_and_capacity(lua, 2);
+                result.push_front(e.into_lua(lua)?);
+                result.push_front(Nil);
+                Ok(result)
+            }
+        }
+    }
+}
+
 impl<'lua, T: IntoLua<'lua>> IntoLuaMulti<'lua> for T {
     #[inline]
     fn into_lua_multi(self, lua: &'lua Lua) -> Result<MultiValue<'lua>> {
