@@ -79,10 +79,12 @@ impl<'lua, T: 'static> UserDataRegistry<'lua, T> {
                 let err = Error::from_lua_conversion("missing argument", "userdata", None);
                 try_self_arg!(Err(err));
             }
-            // Self was at index 1, so we pass 2 here
+            let state = lua.state();
+            // Find absolute "self" index before processing args
+            let index = ffi::lua_absindex(state, -nargs);
+            // Self was at position 1, so we pass 2 here
             let args = A::from_stack_args(nargs - 1, 2, Some(&name), lua);
 
-            let (state, index) = (lua.state(), -nargs);
             match try_self_arg!(lua.get_userdata_type_id(index)) {
                 Some(id) if id == TypeId::of::<T>() => {
                     let ud = try_self_arg!(get_userdata_ref::<T>(state, index));
@@ -157,10 +159,12 @@ impl<'lua, T: 'static> UserDataRegistry<'lua, T> {
                 let err = Error::from_lua_conversion("missing argument", "userdata", None);
                 try_self_arg!(Err(err));
             }
-            // Self was at index 1, so we pass 2 here
+            let state = lua.state();
+            // Find absolute "self" index before processing args
+            let index = ffi::lua_absindex(state, -nargs);
+            // Self was at position 1, so we pass 2 here
             let args = A::from_stack_args(nargs - 1, 2, Some(&name), lua);
 
-            let (state, index) = (lua.state(), -nargs);
             match try_self_arg!(lua.get_userdata_type_id(index)) {
                 Some(id) if id == TypeId::of::<T>() => {
                     let mut ud = try_self_arg!(get_userdata_mut::<T>(state, index));

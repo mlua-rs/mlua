@@ -15,7 +15,7 @@ use std::sync::atomic::{AtomicI64, Ordering};
 
 use mlua::{
     AnyUserData, AnyUserDataExt, Error, ExternalError, Function, Lua, MetaMethod, Nil, Result,
-    String, UserData, UserDataFields, UserDataMethods, UserDataRef, Value,
+    String, UserData, UserDataFields, UserDataMethods, UserDataRef, Value, Variadic,
 };
 
 #[test]
@@ -88,6 +88,30 @@ fn test_methods() -> Result<()> {
     // Additionally check serializable userdata
     #[cfg(feature = "serialize")]
     check_methods(&lua, lua.create_ser_userdata(MyUserData(42))?)?;
+
+    Ok(())
+}
+
+#[test]
+fn test_method_variadic() -> Result<()> {
+    struct MyUserData(i64);
+
+    impl UserData for MyUserData {
+        fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
+            methods.add_method("get", |_, data, ()| Ok(data.0));
+            methods.add_method_mut("add", |_, data, vals: Variadic<i64>| {
+                data.0 += vals.into_iter().sum::<i64>();
+                Ok(())
+            });
+        }
+    }
+
+    let lua = Lua::new();
+    let globals = lua.globals();
+    globals.set("userdata", MyUserData(0))?;
+    lua.load("userdata:add(1, 5, -10)").exec()?;
+    let ud: UserDataRef<MyUserData> = globals.get("userdata")?;
+    assert_eq!(ud.0, -4);
 
     Ok(())
 }
