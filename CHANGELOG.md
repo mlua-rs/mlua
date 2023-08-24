@@ -1,3 +1,9 @@
+## v0.9.1
+
+- impl Default for Lua
+- impl IntoLuaMulti for `std::result::Result<(), E>`
+- Fix using wrong userdata index after processing Variadic args (#311)
+
 ## v0.9.0
 
 Changes since v0.9.0-rc.3
