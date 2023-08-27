@@ -434,6 +434,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
                             push_table(state, 0, fields_nrec, true)?;
                         }
                         for (k, f) in registry.fields {
+                            #[rustfmt::skip]
                             let NonStaticMethod::Function(f) = f else { unreachable!() };
                             mlua_assert!(f(lua, 0)? == 1, "field function must return one value");
                             rawset_field(state, -2, &k)?;

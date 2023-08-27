@@ -353,8 +353,10 @@ impl HookTriggers {
     // Returns the `count` parameter to pass to `lua_sethook`, if applicable. Otherwise, zero is
     // returned.
     pub(crate) const fn count(&self) -> c_int {
-        let Some(n) = self.every_nth_instruction else { return 0 };
-        n as c_int
+        match self.every_nth_instruction {
+            Some(n) => n as c_int,
+            None => 0,
+        }
     }
 }
 

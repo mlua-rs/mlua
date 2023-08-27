@@ -41,7 +41,9 @@ fn test_error_context() -> Result<()> {
         .context("some new context")
     })?;
     let res = func3.call::<_, ()>(()).err().unwrap();
-    let Error::CallbackError { cause, .. } = &res else { unreachable!() };
+    let Error::CallbackError { cause, .. } = &res else {
+        unreachable!()
+    };
     assert!(!res.to_string().contains("some context"));
     assert!(res.to_string().contains("some new context"));
     assert!(cause.downcast_ref::<io::Error>().is_some());
