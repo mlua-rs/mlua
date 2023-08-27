@@ -2667,6 +2667,7 @@ impl Lua {
                     rawset_field(state, metatable_index, "__index")?;
                 }
                 _ => {
+                    ffi::lua_pop(state, 1);
                     // Propagate fields to the field getters
                     for (k, f) in registry.fields {
                         registry.field_getters.push((k, f))
