@@ -18,7 +18,7 @@ jobs:
           - os: windows-latest
             target: x86_64-pc-windows-msvc
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: ${{ matrix.rust }}
@@ -44,7 +44,7 @@ jobs:
       matrix:
         lua: [lua54, lua53, lua52, lua51, luajit]
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
@@ -60,7 +60,7 @@ jobs:
       matrix:
         lua: [lua54, lua53, lua52, lua51, luajit]
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
@@ -82,7 +82,7 @@ jobs:
       matrix:
         lua: [lua54, lua53, lua52, lua51]
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
@@ -113,7 +113,7 @@ jobs:
           - os: windows-latest
             target: x86_64-pc-windows-msvc
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: ${{ matrix.rust }}
@@ -145,7 +145,7 @@ jobs:
           - os: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: ${{ matrix.rust }}
@@ -173,7 +173,7 @@ jobs:
           - os: macos-latest
             target: x86_64-apple-darwin
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: ${{ matrix.rust }}
@@ -197,7 +197,7 @@ jobs:
         shell: msys2 {0}
     steps:
       - uses: msys2/setup-msys2@v2
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Install Rust & Lua
         run: |
           pacman -S --noconfirm mingw-w64-x86_64-rust mingw-w64-x86_64-lua mingw-w64-x86_64-luajit mingw-w64-x86_64-pkg-config
@@ -210,7 +210,7 @@ jobs:
     name: Rustfmt
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
@@ -224,7 +224,7 @@ jobs:
       matrix:
         lua: [lua54, lua53, lua52, lua51, luajit, luau, luau-jit, luau-vector4]
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: nightly
