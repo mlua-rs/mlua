@@ -6,7 +6,9 @@ use std::marker::PhantomData;
 use std::mem::MaybeUninit;
 use std::ops::Deref;
 use std::os::raw::{c_char, c_int, c_void};
-use std::panic::{catch_unwind, resume_unwind, AssertUnwindSafe, Location};
+#[cfg(not(feature = "abort"))]
+use std::panic::{catch_unwind, resume_unwind};
+use std::panic::{AssertUnwindSafe, Location};
 use std::ptr::NonNull;
 use std::result::Result as StdResult;
 use std::sync::atomic::{AtomicPtr, Ordering};
@@ -35,8 +37,10 @@ use crate::util::{
     self, assert_stack, check_stack, get_destructed_userdata_metatable, get_gc_metatable,
     get_gc_userdata, get_main_state, get_userdata, init_error_registry, init_gc_metatable,
     init_userdata_metatable, pop_error, push_gc_userdata, push_string, push_table, rawset_field,
-    safe_pcall, safe_xpcall, short_type_name, StackGuard, WrappedFailure,
+    short_type_name, StackGuard, WrappedFailure,
 };
+#[cfg(not(feature = "abort"))]
+use crate::util::{safe_pcall, safe_xpcall};
 use crate::value::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, MultiValue, Nil, Value};
 
 #[cfg(not(feature = "lua54"))]
@@ -169,6 +173,7 @@ pub struct LuaOptions {
     ///
     /// [`pcall`]: https://www.lua.org/manual/5.4/manual.html#pdf-pcall
     /// [`xpcall`]: https://www.lua.org/manual/5.4/manual.html#pdf-xpcall
+    #[cfg(not(feature = "abort"))]
     pub catch_rust_panics: bool,
 
     /// Max size of thread (coroutine) object pool used to execute asynchronous functions.
@@ -194,6 +199,7 @@ impl LuaOptions {
     /// Returns a new instance of `LuaOptions` with default parameters.
     pub const fn new() -> Self {
         LuaOptions {
+            #[cfg(not(feature = "abort"))]
             catch_rust_panics: true,
             #[cfg(feature = "async")]
             thread_pool_size: 0,
@@ -204,6 +210,7 @@ impl LuaOptions {
     ///
     /// [`catch_rust_panics`]: #structfield.catch_rust_panics
     #[must_use]
+    #[cfg(not(feature = "abort"))]
     pub const fn catch_rust_panics(mut self, enabled: bool) -> Self {
         self.catch_rust_panics = enabled;
         self
@@ -412,6 +419,7 @@ impl Lua {
         );
         (*extra).libs |= libs;
 
+        #[cfg(not(feature = "abort"))]
         if !options.catch_rust_panics {
             mlua_expect!(
                 (|| -> Result<()> {
@@ -2426,6 +2434,7 @@ impl Lua {
                         ffi::lua_pop(state, 1);
                         Value::Error(err)
                     }
+                    #[cfg(not(feature = "abort"))]
                     Some(WrappedFailure::Panic(panic)) => {
                         if let Some(panic) = panic.take() {
                             ffi::lua_pop(state, 1);
@@ -2521,6 +2530,7 @@ impl Lua {
                 match get_gc_userdata::<WrappedFailure>(state, idx, wrapped_failure_mt_ptr).as_mut()
                 {
                     Some(WrappedFailure::Error(err)) => Value::Error(err.clone()),
+                    #[cfg(not(feature = "abort"))]
                     Some(WrappedFailure::Panic(panic)) => {
                         if let Some(panic) = panic.take() {
                             resume_unwind(panic);
@@ -3368,6 +3378,11 @@ where
     // to store a wrapped failure (error or panic) *before* we proceed.
     let prealloc_failure = PreallocatedFailure::reserve(state, extra);
 
+    #[cfg(feature = "abort")]
+    fn catch_unwind<F: FnOnce() -> R, R>(f: F) -> Result<R> {
+        Ok(f())
+    }
+
     match catch_unwind(AssertUnwindSafe(|| f(nargs))) {
         Ok(Ok(r)) => {
             // Return unused `WrappedFailure` to the pool
@@ -3396,6 +3411,9 @@ where
 
             ffi::lua_error(state)
         }
+        #[cfg(feature = "abort")]
+        Err(p) => unreachable!("panic = abort, but encountered {:?}", p),
+        #[cfg(not(feature = "abort"))]
         Err(p) => {
             let wrapped_panic = prealloc_failure.r#use(state, extra);
             ptr::write(wrapped_panic, WrappedFailure::Panic(Some(p)));

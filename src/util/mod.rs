@@ -4,7 +4,9 @@ use std::ffi::CStr;
 use std::fmt::Write;
 use std::mem::MaybeUninit;
 use std::os::raw::{c_char, c_int, c_void};
-use std::panic::{catch_unwind, resume_unwind, AssertUnwindSafe};
+use std::panic::AssertUnwindSafe;
+#[cfg(not(feature = "abort"))]
+use std::panic::{catch_unwind, resume_unwind};
 use std::sync::Arc;
 use std::{mem, ptr, slice, str};
 
@@ -201,6 +203,7 @@ pub unsafe fn pop_error(state: *mut ffi::lua_State, err_code: c_int) -> Error {
             ffi::lua_pop(state, 1);
             err.clone()
         }
+        #[cfg(not(feature = "abort"))]
         Some(WrappedFailure::Panic(panic)) => {
             if let Some(p) = panic.take() {
                 resume_unwind(p);
@@ -655,6 +658,11 @@ where
     let ud = WrappedFailure::new_userdata(state);
     ffi::lua_rotate(state, 1, 1);
 
+    #[cfg(feature = "abort")]
+    fn catch_unwind<F: FnOnce() -> R, R>(f: F) -> Result<R> {
+        Ok(f())
+    }
+
     match catch_unwind(AssertUnwindSafe(|| f(nargs))) {
         Ok(Ok(r)) => {
             ffi::lua_remove(state, 1);
@@ -680,6 +688,9 @@ where
 
             ffi::lua_error(state)
         }
+        #[cfg(feature = "abort")]
+        Err(p) => unreachable!("panic = abort, but encountered {:?}", p),
+        #[cfg(not(feature = "abort"))]
         Err(p) => {
             ffi::lua_settop(state, 1);
             ptr::write(ud, WrappedFailure::Panic(Some(p)));
@@ -730,6 +741,7 @@ pub unsafe fn error_traceback_thread(state: *mut ffi::lua_State, thread: *mut ff
 }
 
 // A variant of `pcall` that does not allow Lua to catch Rust panics from `callback_error`.
+#[cfg(not(feature = "abort"))]
 pub unsafe extern "C-unwind" fn safe_pcall(state: *mut ffi::lua_State) -> c_int {
     ffi::luaL_checkstack(state, 2, ptr::null());
 
@@ -756,6 +768,7 @@ pub unsafe extern "C-unwind" fn safe_pcall(state: *mut ffi::lua_State) -> c_int 
 }
 
 // A variant of `xpcall` that does not allow Lua to catch Rust panics from `callback_error`.
+#[cfg(not(feature = "abort"))]
 pub unsafe extern "C-unwind" fn safe_xpcall(state: *mut ffi::lua_State) -> c_int {
     unsafe extern "C-unwind" fn xpcall_msgh(state: *mut ffi::lua_State) -> c_int {
         ffi::luaL_checkstack(state, 2, ptr::null());
@@ -889,6 +902,7 @@ pub unsafe fn init_error_registry(state: *mut ffi::lua_State) -> Result<()> {
                     let _ = write!(&mut (*err_buf), "{error}");
                     Ok(err_buf)
                 }
+                #[cfg(not(feature = "abort"))]
                 Some(WrappedFailure::Panic(Some(ref panic))) => {
                     let err_buf_key = &ERROR_PRINT_BUFFER_KEY as *const u8 as *const c_void;
                     ffi::lua_rawgetp(state, ffi::LUA_REGISTRYINDEX, err_buf_key);
@@ -905,6 +919,7 @@ pub unsafe fn init_error_registry(state: *mut ffi::lua_State) -> Result<()> {
                     };
                     Ok(err_buf)
                 }
+                #[cfg(not(feature = "abort"))]
                 Some(WrappedFailure::Panic(None)) => Err(Error::PreviouslyResumedPanic),
                 _ => {
                     // I'm not sure whether this is possible to trigger without bugs in mlua?
@@ -1004,6 +1019,7 @@ pub unsafe fn init_error_registry(state: *mut ffi::lua_State) -> Result<()> {
 pub(crate) enum WrappedFailure {
     None,
     Error(Error),
+    #[cfg(not(feature = "abort"))]
     Panic(Option<Box<dyn Any + Send + 'static>>),
 }
 

@@ -366,6 +366,7 @@ fn test_error() -> Result<()> {
 }
 
 #[test]
+#[cfg(not(feature = "abort"))]
 fn test_panic() -> Result<()> {
     fn make_lua(options: LuaOptions) -> Result<Lua> {
         let lua = Lua::new_with(StdLib::ALL_SAFE, options)?;
