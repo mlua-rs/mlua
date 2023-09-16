@@ -1121,7 +1121,7 @@ impl Lua {
         unsafe {
             match (*self.extra.get()).mem_state.map(|mut x| x.as_mut()) {
                 Some(mem_state) => Ok(mem_state.set_memory_limit(limit)),
-                None => Err(Error::MemoryLimitNotAvailable),
+                None => Err(Error::MemoryStatsNotAvailable),
             }
         }
     }
