@@ -1,8 +1,8 @@
 //! Contains definitions from `lua.h`.
 
+use std::ffi::{c_char, c_double, c_int, c_uchar, c_ushort, c_void};
 use std::marker::{PhantomData, PhantomPinned};
 use std::mem;
-use std::os::raw::{c_char, c_double, c_int, c_uchar, c_ushort, c_void};
 use std::ptr;
 
 // Mark for precompiled code (`<esc>Lua`)

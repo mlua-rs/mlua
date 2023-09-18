@@ -1,6 +1,6 @@
 //! Contains definitions from `lualib.h`.
 
-use std::os::raw::{c_char, c_float, c_int, c_void};
+use std::ffi::{c_char, c_float, c_int, c_void};
 use std::ptr;
 
 use super::lua::{

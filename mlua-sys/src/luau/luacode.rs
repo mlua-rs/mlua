@@ -1,6 +1,6 @@
 //! Contains definitions from `luacode.h`.
 
-use std::os::raw::{c_char, c_int, c_void};
+use std::ffi::{c_char, c_int, c_void};
 use std::slice;
 
 #[repr(C)]

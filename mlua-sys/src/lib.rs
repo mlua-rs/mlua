@@ -5,7 +5,7 @@
 #![doc(test(attr(deny(warnings))))]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
-use std::os::raw::c_int;
+use std::ffi::c_int;
 
 #[cfg(any(feature = "lua54", doc))]
 pub use lua54::*;

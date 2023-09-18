@@ -1,7 +1,7 @@
 //! Contains definitions from `lua.h`.
 
+use std::ffi::{c_char, c_double, c_float, c_int, c_uint, c_void};
 use std::marker::{PhantomData, PhantomPinned};
-use std::os::raw::{c_char, c_double, c_float, c_int, c_uint, c_void};
 use std::ptr;
 
 // Option for multiple returns in 'lua_pcall' and 'lua_call'

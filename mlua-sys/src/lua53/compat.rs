@@ -1,6 +1,6 @@
 //! MLua compatibility layer for Lua 5.3
 
-use std::os::raw::c_int;
+use std::ffi::c_int;
 
 use super::lua::*;
 

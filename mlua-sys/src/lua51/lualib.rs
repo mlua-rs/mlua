@@ -1,6 +1,6 @@
 //! Contains definitions from `lualib.h`.
 
-use std::os::raw::c_int;
+use std::ffi::c_int;
 
 use super::lua::lua_State;
 

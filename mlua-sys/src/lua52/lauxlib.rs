@@ -1,6 +1,6 @@
 //! Contains definitions from `lauxlib.h`.
 
-use std::os::raw::{c_char, c_int, c_void};
+use std::ffi::{c_char, c_int, c_void};
 use std::ptr;
 
 use super::lua::{self, lua_CFunction, lua_Integer, lua_Number, lua_State, lua_Unsigned};
