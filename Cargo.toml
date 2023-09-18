@@ -42,8 +42,9 @@ send = []
 serialize = ["serde", "erased-serde", "serde-value"]
 macros = ["mlua_derive/macros"]
 unstable = []
-panic-safety = []
-default = ["panic-safety"]
+panic-safety = ["std"]
+std = ["no-std-compat2/std"]
+default = ["std"]
 
 [dependencies]
 mlua_derive = { version = "=0.9.0", optional = true, path = "mlua_derive" }
@@ -56,6 +57,7 @@ serde = { version = "1.0", optional = true }
 erased-serde = { version = "0.3", optional = true }
 serde-value = { version = "0.7", optional = true }
 parking_lot = { version = "0.12", optional = true }
+no-std-compat2 = { version = "0.4.5", features = ["alloc", "compat_hash"] }
 
 ffi = { package = "mlua-sys", version = "0.3.2", path = "mlua-sys" }
 

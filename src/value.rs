@@ -1,3 +1,5 @@
+use std::prelude::v1::*;
+
 use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::collections::HashSet;

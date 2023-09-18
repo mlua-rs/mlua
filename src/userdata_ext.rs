@@ -1,3 +1,5 @@
+use std::prelude::v1::*;
+
 use crate::error::{Error, Result};
 use crate::private::Sealed;
 use crate::userdata::{AnyUserData, MetaMethod};

@@ -1,6 +1,7 @@
 //! Mostly copied from [bevy_utils]
 //!
 //! [bevy_utils]: https://github.com/bevyengine/bevy/blob/main/crates/bevy_utils/src/short_names.rs
+use std::prelude::v1::*;
 
 use std::any::type_name;
 
@@ -66,6 +67,7 @@ fn collapse_type_name(string: &str) -> &str {
 mod tests {
     use super::short_type_name;
     use std::collections::HashMap;
+    use std::prelude::v1::*;
 
     #[test]
     fn tests() {

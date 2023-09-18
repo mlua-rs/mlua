@@ -1,3 +1,5 @@
+use std::prelude::v1::*;
+
 use std::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, BitXorAssign};
 use std::u32;
 

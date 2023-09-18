@@ -1,4 +1,5 @@
 //! (De)Serialization support using serde.
+use std::prelude::v1::*;
 
 use std::ffi::c_void;
 

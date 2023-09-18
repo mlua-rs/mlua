@@ -75,6 +75,9 @@
 // warnings at all.
 #![doc(test(attr(deny(warnings))))]
 #![cfg_attr(docsrs, feature(doc_cfg))]
+#![no_std]
+
+extern crate no_std_compat2 as std;
 
 #[macro_use]
 mod macros;

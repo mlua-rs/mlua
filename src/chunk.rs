@@ -1,3 +1,5 @@
+use std::prelude::v1::*;
+
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::ffi::CString;

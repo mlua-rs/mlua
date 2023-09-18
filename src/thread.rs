@@ -1,3 +1,5 @@
+use std::prelude::v1::*;
+
 use std::ffi::c_int;
 
 use crate::error::{Error, Result};

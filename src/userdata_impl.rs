@@ -1,5 +1,7 @@
 #![allow(clippy::await_holding_refcell_ref, clippy::await_holding_lock)]
 
+use std::prelude::v1::*;
+
 use std::any::TypeId;
 use std::cell::{Ref, RefCell, RefMut};
 use std::ffi::c_int;
