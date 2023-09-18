@@ -1,5 +1,5 @@
 use std::ffi::CStr;
-use std::os::raw::{c_float, c_int};
+use std::ffi::{c_float, c_int};
 use std::string::String as StdString;
 
 use crate::chunk::ChunkMode;

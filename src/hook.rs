@@ -1,8 +1,8 @@
 use std::borrow::Cow;
 use std::cell::UnsafeCell;
+use std::ffi::c_int;
 #[cfg(not(feature = "luau"))]
 use std::ops::{BitOr, BitOrAssign};
-use std::os::raw::c_int;
 
 use ffi::lua_Debug;
 
@@ -353,7 +353,9 @@ impl HookTriggers {
     // Returns the `count` parameter to pass to `lua_sethook`, if applicable. Otherwise, zero is
     // returned.
     pub(crate) const fn count(&self) -> c_int {
-        let Some(n) = self.every_nth_instruction else { return 0 };
+        let Some(n) = self.every_nth_instruction else {
+            return 0;
+        };
         n as c_int
     }
 }

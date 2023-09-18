@@ -1,6 +1,6 @@
 use std::cell::RefCell;
 use std::convert::TryInto;
-use std::os::raw::c_void;
+use std::ffi::c_void;
 use std::rc::Rc;
 use std::result::Result as StdResult;
 use std::string::String as StdString;

@@ -2,8 +2,8 @@
 
 use std::any::TypeId;
 use std::cell::{Ref, RefCell, RefMut};
+use std::ffi::c_int;
 use std::marker::PhantomData;
-use std::os::raw::c_int;
 use std::string::String as StdString;
 use std::sync::{Arc, Mutex, RwLock};
 

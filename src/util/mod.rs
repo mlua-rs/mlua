@@ -1,9 +1,9 @@
 use std::any::{Any, TypeId};
 use std::borrow::Cow;
 use std::ffi::CStr;
+use std::ffi::{c_char, c_int, c_void};
 use std::fmt::Write;
 use std::mem::MaybeUninit;
-use std::os::raw::{c_char, c_int, c_void};
 use std::panic::AssertUnwindSafe;
 #[cfg(feature = "panic-safety")]
 use std::panic::{catch_unwind, resume_unwind};

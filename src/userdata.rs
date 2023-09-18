@@ -1,11 +1,11 @@
 use std::any::{type_name, TypeId};
 use std::cell::{Ref, RefCell, RefMut};
 use std::ffi::CStr;
+use std::ffi::{c_char, c_int};
 use std::fmt;
 use std::hash::Hash;
 use std::mem;
 use std::ops::{Deref, DerefMut};
-use std::os::raw::{c_char, c_int};
 use std::string::String as StdString;
 
 #[cfg(feature = "async")]

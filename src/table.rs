@@ -1,7 +1,7 @@
 use std::collections::HashSet;
+use std::ffi::c_void;
 use std::fmt;
 use std::marker::PhantomData;
-use std::os::raw::c_void;
 
 #[cfg(feature = "serialize")]
 use {

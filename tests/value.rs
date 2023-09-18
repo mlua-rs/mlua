@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::os::raw::c_void;
+use std::ffi::c_void;
 use std::ptr;
 use std::string::String as StdString;
 

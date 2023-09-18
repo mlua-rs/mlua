@@ -220,7 +220,7 @@ impl Compiler {
 
     /// Compiles the `source` into bytecode.
     pub fn compile(&self, source: impl AsRef<[u8]>) -> Vec<u8> {
-        use std::os::raw::c_int;
+        use std::ffi::c_int;
         use std::ptr;
 
         let vector_lib = self.vector_lib.clone();

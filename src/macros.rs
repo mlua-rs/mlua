@@ -10,8 +10,7 @@ macro_rules! bug_msg {
 
 macro_rules! cstr {
     ($s:expr) => {
-        concat!($s, "\0") as *const str as *const [::std::os::raw::c_char]
-            as *const ::std::os::raw::c_char
+        concat!($s, "\0") as *const str as *const [::std::ffi::c_char] as *const ::std::ffi::c_char
     };
 }
 
@@ -101,7 +100,7 @@ macro_rules! protect_lua {
     };
 
     ($state:expr, $nargs:expr, $nresults:expr, fn($state_inner:ident) $code:expr) => {{
-        use ::std::os::raw::c_int;
+        use ::std::ffi::c_int;
         unsafe extern "C-unwind" fn do_call($state_inner: *mut ffi::lua_State) -> c_int {
             $code;
             let nresults = $nresults;

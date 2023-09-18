@@ -1,6 +1,6 @@
 use std::borrow::{Borrow, Cow};
+use std::ffi::c_void;
 use std::hash::{Hash, Hasher};
-use std::os::raw::c_void;
 use std::string::String as StdString;
 use std::{fmt, slice, str};
 

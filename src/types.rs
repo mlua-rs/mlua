@@ -1,8 +1,8 @@
 use std::any::{Any, TypeId};
 use std::cell::{Cell, Ref, RefCell, RefMut, UnsafeCell};
+use std::ffi::{c_int, c_void};
 use std::hash::{Hash, Hasher};
 use std::ops::{Deref, DerefMut};
-use std::os::raw::{c_int, c_void};
 use std::result::Result as StdResult;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};

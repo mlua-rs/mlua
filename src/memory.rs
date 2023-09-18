@@ -1,5 +1,5 @@
 use std::alloc::{self, Layout};
-use std::os::raw::c_void;
+use std::ffi::c_void;
 use std::ptr;
 
 #[cfg(feature = "luau")]

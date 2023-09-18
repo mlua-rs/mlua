@@ -1,6 +1,6 @@
 use std::cell::RefCell;
+use std::ffi::{c_int, c_void};
 use std::mem;
-use std::os::raw::{c_int, c_void};
 use std::ptr;
 use std::slice;
 
@@ -458,8 +458,8 @@ impl<'lua> Function<'lua> {
     where
         F: FnMut(CoverageInfo),
     {
+        use std::ffi::c_char;
         use std::ffi::CStr;
-        use std::os::raw::c_char;
 
         unsafe extern "C-unwind" fn callback<F: FnMut(CoverageInfo)>(
             data: *mut c_void,

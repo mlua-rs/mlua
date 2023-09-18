@@ -1,11 +1,11 @@
 use std::any::TypeId;
 use std::cell::{RefCell, UnsafeCell};
+use std::ffi::{c_char, c_int, c_void};
 use std::ffi::{CStr, CString};
 use std::fmt;
 use std::marker::PhantomData;
 use std::mem::MaybeUninit;
 use std::ops::Deref;
-use std::os::raw::{c_char, c_int, c_void};
 #[cfg(feature = "panic-safety")]
 use std::panic::{catch_unwind, resume_unwind};
 use std::panic::{AssertUnwindSafe, Location};

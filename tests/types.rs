@@ -1,4 +1,4 @@
-use std::os::raw::c_void;
+use std::ffi::c_void;
 
 use mlua::{Function, LightUserData, Lua, Result};
 

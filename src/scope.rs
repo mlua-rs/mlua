@@ -1,8 +1,8 @@
 use std::any::Any;
 use std::cell::{Cell, RefCell};
+use std::ffi::c_int;
 use std::marker::PhantomData;
 use std::mem;
-use std::os::raw::c_int;
 
 #[cfg(feature = "serialize")]
 use serde::Serialize;
@@ -434,7 +434,9 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
                             push_table(state, 0, fields_nrec, true)?;
                         }
                         for (k, f) in registry.fields {
-                            let NonStaticMethod::Function(f) = f else { unreachable!() };
+                            let NonStaticMethod::Function(f) = f else {
+                                unreachable!()
+                            };
                             mlua_assert!(f(lua, 0)? == 1, "field function must return one value");
                             rawset_field(state, -2, &k)?;
                         }

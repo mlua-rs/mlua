@@ -1,9 +1,9 @@
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::convert::TryInto;
+use std::ffi::c_int;
 use std::ffi::{CStr, CString};
 use std::hash::{BuildHasher, Hash};
-use std::os::raw::c_int;
 use std::string::String as StdString;
 use std::{slice, str};
 
