@@ -52,7 +52,7 @@ pub unsafe fn lua_isinteger(L: *mut lua_State, idx: c_int) -> c_int {
     if lua_type(L, idx) == LUA_TNUMBER {
         let n = lua_tonumber(L, idx);
         let i = lua_tointeger(L, idx);
-        if (n - i as lua_Number).abs() < lua_Number::EPSILON {
+        if libm::fabs(n - i as lua_Number) < lua_Number::EPSILON {
             return 1;
         }
     }
@@ -71,7 +71,7 @@ pub unsafe fn lua_tointegerx(L: *mut lua_State, i: c_int, isnum: *mut c_int) -> 
     let mut ok = 0;
     let n = lua_tonumberx(L, i, &mut ok);
     let n_int = n as lua_Integer;
-    if ok != 0 && (n - n_int as lua_Number).abs() < lua_Number::EPSILON {
+    if ok != 0 && libm::fabs(n - n_int as lua_Number) < lua_Number::EPSILON {
         if !isnum.is_null() {
             *isnum = 1;
         }

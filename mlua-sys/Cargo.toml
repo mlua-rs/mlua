@@ -31,8 +31,12 @@ luau-codegen = ["luau"]
 luau-vector4 = ["luau"]
 vendored = ["lua-src", "luajit-src"]
 module = []
+std = ["no-std-compat2/std"]
+default = ["std"]
 
 [dependencies]
+libm = "0.2.7"
+no-std-compat2 = { version = "0.4.5", features = ["alloc", "compat_hash"] }
 
 [build-dependencies]
 cc = "1.0"

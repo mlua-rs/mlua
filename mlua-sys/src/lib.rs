@@ -4,6 +4,9 @@
 #![allow(clippy::missing_safety_doc)]
 #![doc(test(attr(deny(warnings))))]
 #![cfg_attr(docsrs, feature(doc_cfg))]
+#![no_std]
+
+extern crate no_std_compat2 as std;
 
 use std::ffi::c_int;
 
