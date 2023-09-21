@@ -35,8 +35,8 @@ std = ["no-std-compat2/std"]
 default = ["std"]
 
 [dependencies]
-libm = "0.2.7"
 no-std-compat2 = { version = "0.4.5", features = ["alloc", "compat_hash"] }
+num-traits = { version = "0.2.16", default-features = false, features = ["libm"] }
 
 [build-dependencies]
 cc = "1.0"
