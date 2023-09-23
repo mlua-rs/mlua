@@ -7,10 +7,20 @@ use std::hash::{Hash, Hasher};
 use std::ops::{Deref, DerefMut};
 use std::result::Result as StdResult;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+#[cfg(feature = "std")]
+use std::sync::Mutex;
 use std::{fmt, mem, ptr};
 
+#[cfg(not(any(feature = "std", target_has_atomic = "ptr")))]
+use std::rc::Rc as Arc;
+#[cfg(any(feature = "std", target_has_atomic = "ptr"))]
+use std::sync::Arc;
+
+#[cfg(feature = "std")]
 use rustc_hash::FxHashMap;
+#[cfg(not(feature = "std"))]
+type FxHashMap<K, V> =
+    std::collections::HashMap<K, V, core::hash::BuildHasherDefault<rustc_hash::FxHasher>>;
 
 use crate::error::Result;
 #[cfg(not(feature = "luau"))]
@@ -178,6 +188,12 @@ impl PartialEq<[f32; Self::SIZE]> for Vector {
 
 pub(crate) struct DestructedUserdata;
 
+#[cfg(feature = "std")]
+pub(crate) type UnrefList = Arc<Mutex<Option<Vec<c_int>>>>;
+
+#[cfg(not(feature = "std"))]
+pub(crate) type UnrefList = Arc<RefCell<Option<Vec<c_int>>>>;
+
 /// An auto generated key into the Lua registry.
 ///
 /// This is a handle to a value stored inside the Lua registry. It is not automatically
@@ -198,7 +214,7 @@ pub(crate) struct DestructedUserdata;
 pub struct RegistryKey {
     pub(crate) registry_id: c_int,
     pub(crate) is_nil: AtomicBool,
-    pub(crate) unref_list: Arc<Mutex<Option<Vec<c_int>>>>,
+    pub(crate) unref_list: UnrefList,
 }
 
 impl fmt::Debug for RegistryKey {
@@ -225,7 +241,10 @@ impl Drop for RegistryKey {
     fn drop(&mut self) {
         // We don't need to collect nil slot
         if self.registry_id > ffi::LUA_REFNIL {
+            #[cfg(feature = "std")]
             let mut unref_list = mlua_expect!(self.unref_list.lock(), "unref list poisoned");
+            #[cfg(not(feature = "std"))]
+            let mut unref_list = mlua_expect!(self.unref_list.try_borrow_mut(), "unref list poisoned");
             if let Some(list) = unref_list.as_mut() {
                 list.push(self.registry_id);
             }
@@ -235,7 +254,7 @@ impl Drop for RegistryKey {
 
 impl RegistryKey {
     // Creates a new instance of `RegistryKey`
-    pub(crate) const fn new(id: c_int, unref_list: Arc<Mutex<Option<Vec<c_int>>>>) -> Self {
+    pub(crate) const fn new(id: c_int, unref_list: UnrefList) -> Self {
         RegistryKey {
             registry_id: id,
             is_nil: AtomicBool::new(id == ffi::LUA_REFNIL),
@@ -526,7 +545,8 @@ impl<T: ?Sized + fmt::Debug> fmt::Debug for AppDataRefMut<'_, T> {
 mod assertions {
     use super::*;
 
-    static_assertions::assert_impl_all!(RegistryKey: Send, Sync);
+    #[cfg(feature = "std")]
+    static_assertions::assert_impl_all!(RegistryKey: Sync, Send);
     static_assertions::assert_not_impl_any!(LuaRef: Send);
 
     #[cfg(feature = "unstable")]

@@ -3,7 +3,9 @@ use std::prelude::v1::*;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::ffi::CString;
+#[cfg(feature = "std")]
 use std::io::Result as IoResult;
+#[cfg(feature = "std")]
 use std::path::{Path, PathBuf};
 use std::string::String as StdString;
 
@@ -12,6 +14,10 @@ use crate::function::Function;
 use crate::lua::Lua;
 use crate::table::Table;
 use crate::value::{FromLuaMulti, IntoLua, IntoLuaMulti};
+
+#[cfg(not(feature = "std"))]
+/// Without `std`, `AsChunk::source()` won't do any file I/O, but may try to do UTF-8 conversion.
+pub type IoResult<T> = std::result::Result<T, std::str::Utf8Error>;
 
 /// Trait for types [loadable by Lua] and convertible to a [`Chunk`]
 ///
@@ -76,6 +82,7 @@ impl<'a> AsChunk<'_, 'a> for &'a Vec<u8> {
     }
 }
 
+#[cfg(feature = "std")]
 impl AsChunk<'_, 'static> for &Path {
     fn name(&self) -> Option<StdString> {
         Some(format!("@{}", self.display()))
@@ -86,6 +93,7 @@ impl AsChunk<'_, 'static> for &Path {
     }
 }
 
+#[cfg(feature = "std")]
 impl AsChunk<'_, 'static> for PathBuf {
     fn name(&self) -> Option<StdString> {
         Some(format!("@{}", self.display()))

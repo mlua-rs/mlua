@@ -9,11 +9,19 @@ use std::mem::MaybeUninit;
 use std::panic::AssertUnwindSafe;
 #[cfg(feature = "panic-safety")]
 use std::panic::{catch_unwind, resume_unwind};
-use std::sync::Arc;
 use std::{mem, ptr, slice, str};
 
+#[cfg(not(any(feature = "std", target_has_atomic = "ptr")))]
+use std::rc::Rc as Arc;
+#[cfg(any(feature = "std", target_has_atomic = "ptr"))]
+use std::sync::Arc;
+
 use once_cell::sync::Lazy;
+#[cfg(feature = "std")]
 use rustc_hash::FxHashMap;
+#[cfg(not(feature = "std"))]
+type FxHashMap<K, V> =
+    std::collections::HashMap<K, V, core::hash::BuildHasherDefault<rustc_hash::FxHasher>>;
 
 use crate::error::{Error, Result};
 use crate::memory::MemoryState;

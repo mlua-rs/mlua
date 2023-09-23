@@ -7,6 +7,7 @@ use std::cell::{Ref, RefCell, RefMut};
 use std::ffi::c_int;
 use std::marker::PhantomData;
 use std::string::String as StdString;
+#[cfg(feature = "std")]
 use std::sync::{Arc, Mutex, RwLock};
 
 use crate::error::{Error, Result};
@@ -103,10 +104,12 @@ impl<'lua, T: 'static> UserDataRegistry<'lua, T> {
                     let ud = try_self_arg!(ud.try_borrow(), Error::UserDataBorrowError);
                     method(lua, &ud, args?)?.push_into_stack_multi(lua)
                 }
+                #[cfg(feature = "std")]
                 Some(id) if id == TypeId::of::<Arc<T>>() => {
                     let ud = try_self_arg!(get_userdata_ref::<Arc<T>>(state, index));
                     method(lua, &ud, args?)?.push_into_stack_multi(lua)
                 }
+                #[cfg(feature = "std")]
                 Some(id) if id == TypeId::of::<Arc<Mutex<T>>>() => {
                     let ud = try_self_arg!(get_userdata_ref::<Arc<Mutex<T>>>(state, index));
                     let ud = try_self_arg!(ud.try_lock(), Error::UserDataBorrowError);
@@ -119,6 +122,7 @@ impl<'lua, T: 'static> UserDataRegistry<'lua, T> {
                     let ud = try_self_arg!(ud.try_lock().ok_or(Error::UserDataBorrowError));
                     method(lua, &ud, args?)?.push_into_stack_multi(lua)
                 }
+                #[cfg(feature = "std")]
                 Some(id) if id == TypeId::of::<Arc<RwLock<T>>>() => {
                     let ud = try_self_arg!(get_userdata_ref::<Arc<RwLock<T>>>(state, index));
                     let ud = try_self_arg!(ud.try_read(), Error::UserDataBorrowError);
@@ -180,7 +184,9 @@ impl<'lua, T: 'static> UserDataRegistry<'lua, T> {
                     let mut ud = try_self_arg!(ud.try_borrow_mut(), Error::UserDataBorrowMutError);
                     method(lua, &mut ud, args?)?.push_into_stack_multi(lua)
                 }
+                #[cfg(feature = "std")]
                 Some(id) if id == TypeId::of::<Arc<T>>() => Err(Error::UserDataBorrowMutError),
+                #[cfg(feature = "std")]
                 Some(id) if id == TypeId::of::<Arc<Mutex<T>>>() => {
                     let ud = try_self_arg!(get_userdata_mut::<Arc<Mutex<T>>>(state, index));
                     let mut ud = try_self_arg!(ud.try_lock(), Error::UserDataBorrowMutError);
@@ -193,6 +199,7 @@ impl<'lua, T: 'static> UserDataRegistry<'lua, T> {
                     let mut ud = try_self_arg!(ud.try_lock().ok_or(Error::UserDataBorrowMutError));
                     method(lua, &mut ud, args?)?.push_into_stack_multi(lua)
                 }
+                #[cfg(feature = "std")]
                 Some(id) if id == TypeId::of::<Arc<RwLock<T>>>() => {
                     let ud = try_self_arg!(get_userdata_mut::<Arc<RwLock<T>>>(state, index));
                     let mut ud = try_self_arg!(ud.try_write(), Error::UserDataBorrowMutError);
@@ -785,8 +792,11 @@ lua_userdata_impl!(Rc<T>);
 #[cfg(not(feature = "send"))]
 lua_userdata_impl!(Rc<RefCell<T>>);
 
+#[cfg(feature = "std")]
 lua_userdata_impl!(Arc<T>);
+#[cfg(feature = "std")]
 lua_userdata_impl!(Arc<Mutex<T>>);
+#[cfg(feature = "std")]
 lua_userdata_impl!(Arc<RwLock<T>>);
 #[cfg(feature = "parking_lot")]
 lua_userdata_impl!(Arc<parking_lot::Mutex<T>>);

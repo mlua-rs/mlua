@@ -1,13 +1,17 @@
 use std::prelude::v1::*;
 
-use std::error::Error as StdError;
 use std::fmt;
-use std::io::Error as IoError;
-use std::net::AddrParseError;
 use std::result::Result as StdResult;
 use std::str::Utf8Error;
 use std::string::String as StdString;
+
+#[cfg(not(any(feature = "std", target_has_atomic = "ptr")))]
+use std::rc::Rc as Arc;
+#[cfg(any(feature = "std", target_has_atomic = "ptr"))]
 use std::sync::Arc;
+
+#[cfg(feature = "std")]
+use std::{error::Error as StdError, io::Error as IoError, net::AddrParseError};
 
 use crate::private::Sealed;
 
@@ -191,7 +195,10 @@ pub enum Error {
     /// Returning `Err(ExternalError(...))` from a Rust callback will raise the error as a Lua
     /// error. The Rust code that originally invoked the Lua code then receives a `CallbackError`,
     /// from which the original error (and a stack traceback) can be recovered.
+    #[cfg(feature = "std")]
     ExternalError(Arc<dyn StdError + Send + Sync>),
+    #[cfg(not(feature = "std"))]
+    Utf8Error(Arc<Utf8Error>),
     /// An error with additional context.
     WithContext {
         /// A string containing additional context.
@@ -311,7 +318,10 @@ impl fmt::Display for Error {
             Error::DeserializeError(ref err) => {
                 write!(fmt, "deserialize error: {err}")
             },
+            #[cfg(feature = "std")]
             Error::ExternalError(ref err) => write!(fmt, "{err}"),
+            #[cfg(not(feature = "std"))]
+            Error::Utf8Error(ref err) => write!(fmt, "{err}"),
             Error::WithContext { ref context, ref cause } => {
                 writeln!(fmt, "{context}")?;
                 write!(fmt, "{cause}")
@@ -320,6 +330,7 @@ impl fmt::Display for Error {
     }
 }
 
+#[cfg(feature = "std")]
 impl StdError for Error {
     fn source(&self) -> Option<&(dyn StdError + 'static)> {
         match *self {
@@ -347,11 +358,13 @@ impl Error {
 
     /// Wraps an external error object.
     #[inline]
+    #[cfg(feature = "std")]
     pub fn external<T: Into<Box<dyn StdError + Send + Sync>>>(err: T) -> Self {
         Error::ExternalError(err.into().into())
     }
 
     /// Attempts to downcast the external error object to a concrete type by reference.
+    #[cfg(feature = "std")]
     pub fn downcast_ref<T>(&self) -> Option<&T>
     where
         T: StdError + 'static,
@@ -389,10 +402,12 @@ impl Error {
 }
 
 /// Trait for converting [`std::error::Error`] into Lua [`Error`].
+#[cfg(feature = "std")]
 pub trait ExternalError {
     fn into_lua_err(self) -> Error;
 }
 
+#[cfg(feature = "std")]
 impl<E: Into<Box<dyn StdError + Send + Sync>>> ExternalError for E {
     fn into_lua_err(self) -> Error {
         Error::external(self)
@@ -400,10 +415,12 @@ impl<E: Into<Box<dyn StdError + Send + Sync>>> ExternalError for E {
 }
 
 /// Trait for converting [`std::result::Result`] into Lua [`Result`].
+#[cfg(feature = "std")]
 pub trait ExternalResult<T> {
     fn into_lua_err(self) -> Result<T>;
 }
 
+#[cfg(feature = "std")]
 impl<T, E> ExternalResult<T> for StdResult<T, E>
 where
     E: ExternalError,
@@ -457,12 +474,14 @@ impl<T> ErrorContext for StdResult<T, Error> {
     }
 }
 
+#[cfg(feature = "std")]
 impl From<AddrParseError> for Error {
     fn from(err: AddrParseError) -> Self {
         Error::external(err)
     }
 }
 
+#[cfg(feature = "std")]
 impl From<IoError> for Error {
     fn from(err: IoError) -> Self {
         Error::external(err)
@@ -471,7 +490,14 @@ impl From<IoError> for Error {
 
 impl From<Utf8Error> for Error {
     fn from(err: Utf8Error) -> Self {
-        Error::external(err)
+        #[cfg(feature = "std")]
+        {
+            Error::external(err)
+        }
+        #[cfg(not(feature = "std"))]
+        {
+            Error::Utf8Error(Arc::new(err))
+        }
     }
 }
 

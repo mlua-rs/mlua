@@ -14,10 +14,26 @@ use std::panic::{AssertUnwindSafe, Location};
 use std::ptr::NonNull;
 use std::result::Result as StdResult;
 use std::sync::atomic::{AtomicPtr, Ordering};
-use std::sync::{Arc, Mutex};
 use std::{mem, ptr, str};
 
+#[cfg(not(any(feature = "std", target_has_atomic = "ptr")))]
+use std::rc::Rc as Arc;
+#[cfg(any(feature = "std", target_has_atomic = "ptr"))]
+use std::sync::Arc;
+
+#[cfg(feature = "std")]
 use rustc_hash::FxHashMap;
+#[cfg(not(feature = "std"))]
+type FxHashMap<K, V> =
+    std::collections::HashMap<K, V, core::hash::BuildHasherDefault<rustc_hash::FxHasher>>;
+
+#[cfg(any(
+    feature = "lua52",
+    feature = "lua51",
+    feature = "luajit",
+    feature = "luau"
+))]
+use num_traits::Float;
 
 use crate::chunk::{AsChunk, Chunk, ChunkMode};
 use crate::error::{Error, Result};
@@ -31,7 +47,7 @@ use crate::table::Table;
 use crate::thread::Thread;
 use crate::types::{
     AppData, AppDataRef, AppDataRefMut, Callback, CallbackUpvalue, DestructedUserdata, Integer,
-    LightUserData, LuaRef, MaybeSend, Number, RegistryKey,
+    LightUserData, LuaRef, MaybeSend, Number, RegistryKey, UnrefList,
 };
 use crate::userdata::{AnyUserData, MetaMethod, UserData, UserDataCell};
 use crate::userdata_impl::{UserDataProxy, UserDataRegistry};
@@ -93,7 +109,7 @@ pub(crate) struct ExtraData {
     last_checked_userdata_mt: (*const c_void, Option<TypeId>),
 
     // When Lua instance dropped, setting `None` would prevent collecting `RegistryKey`s
-    registry_unref_list: Arc<Mutex<Option<Vec<c_int>>>>,
+    registry_unref_list: UnrefList,
 
     // Container to store arbitrary data (extensions)
     app_data: AppData,
@@ -269,7 +285,17 @@ impl Drop for ExtraData {
             self.inner.assume_init_drop();
         }
 
-        *mlua_expect!(self.registry_unref_list.lock(), "unref list poisoned") = None;
+        #[cfg(feature = "std")]
+        {
+            *mlua_expect!(self.registry_unref_list.lock(), "unref list poisoned") = None;
+        }
+        #[cfg(not(feature = "std"))]
+        {
+            *mlua_expect!(
+                self.registry_unref_list.try_borrow_mut(),
+                "unref list poisoned"
+            ) = None;
+        }
         if let Some(mem_state) = self.mem_state {
             drop(unsafe { Box::from_raw(mem_state.as_ptr()) });
         }
@@ -523,7 +549,7 @@ impl Lua {
             registered_userdata: FxHashMap::default(),
             registered_userdata_mt: FxHashMap::default(),
             last_checked_userdata_mt: (ptr::null(), None),
-            registry_unref_list: Arc::new(Mutex::new(Some(Vec::new()))),
+            registry_unref_list: UnrefList::default(),
             app_data: AppData::default(),
             safe: false,
             libs: StdLib::NONE,
@@ -2074,7 +2100,12 @@ impl Lua {
 
             // Try to reuse previously allocated slot
             let unref_list = (*self.extra.get()).registry_unref_list.clone();
+            #[cfg(feature = "std")]
             let free_registry_id = mlua_expect!(unref_list.lock(), "unref list poisoned")
+                .as_mut()
+                .and_then(|x| x.pop());
+            #[cfg(not(feature = "std"))]
+            let free_registry_id = mlua_expect!(unref_list.try_borrow_mut(), "unref list poisoned")
                 .as_mut()
                 .and_then(|x| x.pop());
             if let Some(registry_id) = free_registry_id {
@@ -2202,8 +2233,14 @@ impl Lua {
     pub fn expire_registry_values(&self) {
         let state = self.state();
         unsafe {
+            #[cfg(feature = "std")]
             let mut unref_list = mlua_expect!(
                 (*self.extra.get()).registry_unref_list.lock(),
+                "unref list poisoned"
+            );
+            #[cfg(not(feature = "std"))]
+            let mut unref_list = mlua_expect!(
+                (*self.extra.get()).registry_unref_list.try_borrow_mut(),
                 "unref list poisoned"
             );
             let unref_list = mem::replace(&mut *unref_list, Some(Vec::new()));
@@ -3249,7 +3286,17 @@ struct StateGuard<'a>(&'a LuaInner, *mut ffi::lua_State);
 
 impl<'a> StateGuard<'a> {
     fn new(inner: &'a LuaInner, mut state: *mut ffi::lua_State) -> Self {
-        state = inner.state.swap(state, Ordering::Relaxed);
+        #[cfg(any(feature = "std", target_has_atomic = "ptr"))]
+        {
+            state = inner.state.swap(state, Ordering::Relaxed);
+        }
+        #[cfg(not(any(feature = "std", target_has_atomic = "ptr")))]
+        {
+            // On platforms without atomic loads, just manually swap
+            let inner_state = inner.state.load(Ordering::Relaxed);
+            inner.state.store(state, Ordering::Relaxed);
+            state = inner_state;
+        }
         Self(inner, state)
     }
 }
