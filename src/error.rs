@@ -219,7 +219,7 @@ impl fmt::Display for Error {
                 write!(fmt, "safety error: {msg}")
             },
             Error::MemoryStatsNotAvailable => {
-                write!(fmt, "setting memory limit is not available")
+                write!(fmt, "memory stats information is not available")
             }
             Error::RecursiveMutCallback => write!(fmt, "mutable callback called recursively"),
             Error::CallbackDestructed => write!(
