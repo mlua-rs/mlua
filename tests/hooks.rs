@@ -1,6 +1,5 @@
 #![cfg(not(feature = "luau"))]
 
-use std::cell::RefCell;
 use std::ops::Deref;
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -170,10 +169,13 @@ fn test_hook_removal() -> Result<()> {
     Ok(())
 }
 
+// Having the code compiled (even not run) on macos and luajit causes a memory reference issue
+// See https://github.com/LuaJIT/LuaJIT/issues/1099
+#[cfg(not(all(feature = "luajit", target_os = "macos")))]
 #[test]
 fn test_hook_swap_within_hook() -> Result<()> {
     thread_local! {
-        static TL_LUA: RefCell<Option<Lua>> = RefCell::new(None);
+        static TL_LUA: std::cell::RefCell<Option<Lua>> = Default::default();
     }
 
     TL_LUA.with(|tl| {
