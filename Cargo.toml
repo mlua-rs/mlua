@@ -76,6 +76,11 @@ name = "benchmark"
 harness = false
 required-features = ["async"]
 
+[[bench]]
+name = "serde"
+harness = false
+required-features = ["serialize"]
+
 [[example]]
 name = "async_http_client"
 required-features = ["async", "macros"]
