@@ -719,8 +719,8 @@ impl<'lua> Table<'lua> {
     }
 
     /// Sets element value at position `idx` without invoking metamethods.
-    #[allow(dead_code)]
-    pub(crate) fn raw_seti<V: IntoLua<'lua>>(&self, idx: usize, value: V) -> Result<()> {
+    #[doc(hidden)]
+    pub fn raw_seti<V: IntoLua<'lua>>(&self, idx: usize, value: V) -> Result<()> {
         #[cfg(feature = "luau")]
         self.check_readonly_write()?;
 
@@ -1129,16 +1129,15 @@ where
                 lua.push_ref(&self.table);
                 lua.push_value(prev_key)?;
 
-                let next = protect_lua!(state, 2, ffi::LUA_MULTRET, |state| {
-                    ffi::lua_next(state, -2)
-                })?;
-                if next != 0 {
-                    let value = lua.pop_value();
-                    let key = lua.pop_value();
+                // It must be safe to call `lua_next` unprotected as deleting a key from a table is
+                // a permitted operation.
+                // It fails only if the key is not found (never existed) which seems impossible scenario.
+                if ffi::lua_next(state, -2) != 0 {
+                    let key = lua.stack_value(-2);
                     Ok(Some((
                         key.clone(),
                         K::from_lua(key, lua)?,
-                        V::from_lua(value, lua)?,
+                        V::from_stack(-1, lua)?,
                     )))
                 } else {
                     Ok(None)
