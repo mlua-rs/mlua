@@ -651,6 +651,34 @@ impl<'lua> Table<'lua> {
         }
     }
 
+    /// Iterates over the pairs of the table, invoking the given closure on each pair.
+    ///
+    /// This method is similar to [`Table::pairs`], but optimized for performance.
+    /// It does not invoke the `__pairs` metamethod.
+    pub fn for_each<K, V>(&self, mut f: impl FnMut(K, V) -> Result<()>) -> Result<()>
+    where
+        K: FromLua<'lua>,
+        V: FromLua<'lua>,
+    {
+        let lua = self.0.lua;
+        let state = lua.state();
+        unsafe {
+            let _sg = StackGuard::new(state);
+            check_stack(state, 5)?;
+
+            lua.push_ref(&self.0);
+            ffi::lua_pushnil(state);
+            while ffi::lua_next(state, -2) != 0 {
+                let k = K::from_stack(-2, lua)?;
+                let v = V::from_stack(-1, lua)?;
+                f(k, v)?;
+                // Keep key for next iteration
+                ffi::lua_pop(state, 1);
+            }
+        }
+        Ok(())
+    }
+
     /// Consume this table and return an iterator over all values in the sequence part of the table.
     ///
     /// The iterator will yield all values `t[1]`, `t[2]` and so on, until a `nil` value is
