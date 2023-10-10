@@ -84,6 +84,22 @@ fn table_get_set(c: &mut Criterion) {
     });
 }
 
+fn table_traversal(c: &mut Criterion) {
+    let lua = Lua::new();
+
+    c.bench_function("table traversal", |b| {
+        b.iter_batched(
+            || lua.globals(),
+            |globals| {
+                for kv in globals.pairs::<String, LuaValue>() {
+                    let (_k, _v) = kv.unwrap();
+                }
+            },
+            BatchSize::SmallInput,
+        );
+    });
+}
+
 fn create_function(c: &mut Criterion) {
     let lua = Lua::new();
 
@@ -331,6 +347,7 @@ criterion_group! {
         create_array,
         create_string_table,
         table_get_set,
+        table_traversal,
         create_function,
         call_lua_function,
         call_sum_callback,
