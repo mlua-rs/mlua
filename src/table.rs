@@ -1107,21 +1107,48 @@ impl<'a, 'lua> Serialize for SerializableTable<'a, 'lua> {
 
         // HashMap
         let mut map = serializer.serialize_map(None)?;
-        let pairs = MapPairs::new(self.table.clone(), self.options.sort_keys)
-            .map_err(serde::ser::Error::custom)?;
-        for kv in pairs {
-            let (key, value) = kv.map_err(serde::ser::Error::custom)?;
+        let mut serialize_err = None;
+        let mut process_pair = |key, value| {
             let skip_key = check_value_for_skip(&key, self.options, &self.visited)
-                .map_err(serde::ser::Error::custom)?;
+                .map_err(|err| Error::SerializeError(err.to_string()))?;
             let skip_value = check_value_for_skip(&value, self.options, &self.visited)
-                .map_err(serde::ser::Error::custom)?;
+                .map_err(|err| Error::SerializeError(err.to_string()))?;
             if skip_key || skip_value {
-                continue;
+                // continue iteration
+                return Ok(());
             }
             map.serialize_entry(
                 &SerializableValue::new(&key, options, Some(visited)),
                 &SerializableValue::new(&value, options, Some(visited)),
-            )?;
+            )
+            .map_err(|err| {
+                serialize_err = Some(err);
+                Error::SerializeError(String::new())
+            })
+        };
+
+        let res = if !self.options.sort_keys {
+            // Fast track
+            self.table.for_each(process_pair)
+        } else {
+            MapPairs::new(self.table.clone(), self.options.sort_keys)
+                .map_err(serde::ser::Error::custom)?
+                .try_for_each(|kv| {
+                    let (key, value) = kv?;
+                    process_pair(key, value)
+                })
+        };
+        match res {
+            Ok(_) => {}
+            Err(Error::SerializeError(_)) if serialize_err.is_some() => {
+                return Err(serialize_err.unwrap());
+            }
+            Err(Error::SerializeError(msg)) => {
+                return Err(serde::ser::Error::custom(msg));
+            }
+            Err(err) => {
+                return Err(serde::ser::Error::custom(err.to_string()));
+            }
         }
         map.end()
     }
