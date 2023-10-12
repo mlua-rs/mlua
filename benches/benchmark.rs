@@ -124,7 +124,7 @@ fn table_traversal_sequence(c: &mut Criterion) {
                 for v in table.sequence_values::<i32>() {
                     let _i = v.unwrap();
                 }
-            table_traversal_sequence},
+            },
             BatchSize::SmallInput,
         );
     });
