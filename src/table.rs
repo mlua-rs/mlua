@@ -720,7 +720,7 @@ impl<'lua> Table<'lua> {
     pub fn sequence_values<V: FromLua<'lua>>(self) -> TableSequence<'lua, V> {
         TableSequence {
             table: self.0,
-            index: Some(1),
+            index: 1,
             len: None,
             _phantom: PhantomData,
         }
@@ -740,7 +740,7 @@ impl<'lua> Table<'lua> {
         let len = len.unwrap_or_else(|| self.raw_len()) as Integer;
         TableSequence {
             table: self.0,
-            index: Some(1),
+            index: 1,
             len: Some(len),
             _phantom: PhantomData,
         }
@@ -1193,7 +1193,7 @@ where
 /// [`Table::sequence_values`]: crate::Table::sequence_values
 pub struct TableSequence<'lua, V> {
     table: LuaRef<'lua>,
-    index: Option<Integer>,
+    index: Integer,
     len: Option<Integer>,
     _phantom: PhantomData<V>,
 }
@@ -1205,31 +1205,22 @@ where
     type Item = Result<V>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if let Some(index) = self.index.take() {
-            let lua = self.table.lua;
-            let state = lua.state();
-
-            let res = (|| unsafe {
-                let _sg = StackGuard::new(state);
-                check_stack(state, 1)?;
-
-                lua.push_ref(&self.table);
-                match ffi::lua_rawgeti(state, -1, index) {
-                    ffi::LUA_TNIL if index > self.len.unwrap_or(0) => Ok(None),
-                    _ => Ok(Some((index, lua.pop_value()))),
-                }
-            })();
-
-            match res {
-                Ok(Some((index, r))) => {
-                    self.index = Some(index + 1);
-                    Some(V::from_lua(r, lua))
-                }
-                Ok(None) => None,
-                Err(err) => Some(Err(err)),
+        let lua = self.table.lua;
+        let state = lua.state();
+        unsafe {
+            let _sg = StackGuard::new(state);
+            if let Err(err) = check_stack(state, 1) {
+                return Some(Err(err));
             }
-        } else {
-            None
+
+            lua.push_ref(&self.table);
+            match ffi::lua_rawgeti(state, -1, self.index) {
+                ffi::LUA_TNIL if self.index > self.len.unwrap_or(0) => None,
+                _ => {
+                    self.index += 1;
+                    Some(V::from_stack(-1, lua))
+                }
+            }
         }
     }
 }
