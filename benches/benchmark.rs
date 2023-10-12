@@ -112,6 +112,24 @@ fn table_traversal_for_each(c: &mut Criterion) {
     });
 }
 
+fn table_traversal_sequence(c: &mut Criterion) {
+    let lua = Lua::new();
+
+    let table = lua.create_sequence_from(1..1000).unwrap();
+
+    c.bench_function("table traversal [sequence]", |b| {
+        b.iter_batched(
+            || table.clone(),
+            |table| {
+                for v in table.sequence_values::<i32>() {
+                    let _i = v.unwrap();
+                }
+            table_traversal_sequence},
+            BatchSize::SmallInput,
+        );
+    });
+}
+
 fn create_function(c: &mut Criterion) {
     let lua = Lua::new();
 
@@ -361,6 +379,7 @@ criterion_group! {
         table_get_set,
         table_traversal_pairs,
         table_traversal_for_each,
+        table_traversal_sequence,
         create_function,
         call_lua_function,
         call_sum_callback,
