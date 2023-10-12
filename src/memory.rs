@@ -17,6 +17,7 @@ pub(crate) struct MemoryState {
     // Indicates that the memory limit was reached on the last allocation.
     #[cfg(feature = "luau")]
     limit_reached: bool,
+    num_allocations: usize,
 }
 
 impl MemoryState {
@@ -35,6 +36,16 @@ impl MemoryState {
         let prev_limit = self.memory_limit;
         self.memory_limit = limit as isize;
         prev_limit as usize
+    }
+
+    #[inline]
+    pub(crate) fn num_allocations(&self) -> usize {
+        self.num_allocations
+    }
+
+    #[inline]
+    pub(crate) fn reset_num_allocations(&mut self) {
+        self.num_allocations = 0;
     }
 
     // This function is used primarily for calling `lua_pushcfunction` in lua5.1/jit
@@ -139,6 +150,7 @@ unsafe extern "C-unwind" fn allocator(
         if new_ptr.is_null() {
             alloc::handle_alloc_error(new_layout);
         }
+        mem_state.num_allocations = mem_state.num_allocations.wrapping_add(1);
         return new_ptr;
     }
 

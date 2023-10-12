@@ -1121,7 +1121,37 @@ impl Lua {
         unsafe {
             match (*self.extra.get()).mem_state.map(|mut x| x.as_mut()) {
                 Some(mem_state) => Ok(mem_state.set_memory_limit(limit)),
-                None => Err(Error::MemoryLimitNotAvailable),
+                None => Err(Error::MemoryStatsNotAvailable),
+            }
+        }
+    }
+
+    /// Returns the count of memory allocations invoked by this Lua runtime.
+    ///
+    /// Note that in case of overflow, the counter resets to zero(simply speaking, it 'wraps'),
+    /// and the overflowing threshold above the maximum depends on the platform.
+    ///
+    /// Returns [`Error::MemoryStatsNotAvailable`] if Lua state is managed externally.
+    pub fn num_allocations(&self) -> Result<usize> {
+        unsafe {
+            match (*self.extra.get()).mem_state.map(|x| x.as_ref()) {
+                Some(mem_state) => Ok(mem_state.num_allocations()),
+                None => Err(Error::MemoryStatsNotAvailable),
+            }
+        }
+    }
+
+    /// Resets the count of memory allocations to zero.
+    ///
+    /// Returns [`Error::MemoryStatsNotAvailable`] if Lua state is managed externally.
+    pub fn reset_num_allocations(&self) -> Result<()> {
+        unsafe {
+            match (*self.extra.get()).mem_state.map(|mut x| x.as_mut()) {
+                Some(mem_state) => {
+                    mem_state.reset_num_allocations();
+                    Ok(())
+                }
+                None => Err(Error::MemoryStatsNotAvailable),
             }
         }
     }
