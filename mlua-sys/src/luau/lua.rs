@@ -278,6 +278,7 @@ extern "C-unwind" {
     pub fn lua_getuserdatadtor(L: *mut lua_State, tag: c_int) -> Option<lua_Destructor>;
     pub fn lua_clonefunction(L: *mut lua_State, idx: c_int);
     pub fn lua_cleartable(L: *mut lua_State, idx: c_int);
+    pub fn lua_getallocf(L: *mut lua_State, ud: *mut *mut c_void) -> lua_Alloc;
 }
 
 //

@@ -2,9 +2,6 @@ use std::alloc::{self, Layout};
 use std::os::raw::c_void;
 use std::ptr;
 
-#[cfg(feature = "luau")]
-use crate::lua::ExtraData;
-
 pub(crate) static ALLOCATOR: ffi::lua_Alloc = allocator;
 
 #[derive(Default)]
@@ -20,6 +17,21 @@ pub(crate) struct MemoryState {
 }
 
 impl MemoryState {
+    #[inline]
+    pub(crate) unsafe fn get(state: *mut ffi::lua_State) -> *mut Self {
+        let mut mem_state = ptr::null_mut();
+        #[cfg(feature = "luau")]
+        {
+            ffi::lua_getallocf(state, &mut mem_state);
+            mlua_assert!(!mem_state.is_null(), "Luau state has no allocator userdata");
+        }
+        #[cfg(not(feature = "luau"))]
+        if ffi::lua_getallocf(state, &mut mem_state) != ALLOCATOR {
+            mem_state = ptr::null_mut();
+        }
+        mem_state as *mut MemoryState
+    }
+
     #[inline]
     pub(crate) fn used_memory(&self) -> usize {
         self.used_memory as usize
@@ -37,34 +49,19 @@ impl MemoryState {
         prev_limit as usize
     }
 
-    // This function is used primarily for calling `lua_pushcfunction` in lua5.1/jit
+    // This function is used primarily for calling `lua_pushcfunction` in lua5.1/jit/luau
     // to bypass the memory limit (if set).
-    #[cfg(any(feature = "lua51", feature = "luajit"))]
+    #[cfg(any(feature = "lua51", feature = "luajit", feature = "luau"))]
     #[inline]
     pub(crate) unsafe fn relax_limit_with(state: *mut ffi::lua_State, f: impl FnOnce()) {
-        let mut mem_state: *mut c_void = ptr::null_mut();
-        if ffi::lua_getallocf(state, &mut mem_state) == ALLOCATOR {
-            (*(mem_state as *mut MemoryState)).ignore_limit = true;
+        let mem_state = Self::get(state);
+        if !mem_state.is_null() {
+            (*mem_state).ignore_limit = true;
             f();
-            (*(mem_state as *mut MemoryState)).ignore_limit = false;
+            (*mem_state).ignore_limit = false;
         } else {
             f();
         }
-    }
-
-    // Same as the above but for Luau
-    // It does not have `lua_getallocf` function, so instead we use `lua_callbacks`
-    #[cfg(feature = "luau")]
-    #[inline]
-    pub(crate) unsafe fn relax_limit_with(state: *mut ffi::lua_State, f: impl FnOnce()) {
-        let extra = (*ffi::lua_callbacks(state)).userdata as *mut ExtraData;
-        if extra.is_null() {
-            return f();
-        }
-        let mem_state = (*extra).mem_state();
-        (*mem_state.as_ptr()).ignore_limit = true;
-        f();
-        (*mem_state.as_ptr()).ignore_limit = false;
     }
 
     // Does nothing apart from calling `f()`, we don't need to bypass any limits
@@ -76,12 +73,9 @@ impl MemoryState {
 
     // Returns `true` if the memory limit was reached on the last memory operation
     #[cfg(feature = "luau")]
+    #[inline]
     pub(crate) unsafe fn limit_reached(state: *mut ffi::lua_State) -> bool {
-        let extra = (*ffi::lua_callbacks(state)).userdata as *mut ExtraData;
-        if extra.is_null() {
-            return false;
-        }
-        (*(*extra).mem_state().as_ptr()).limit_reached
+        (*Self::get(state)).limit_reached
     }
 }
 
