@@ -2,7 +2,7 @@
 
 use std::marker::{PhantomData, PhantomPinned};
 use std::os::raw::{c_char, c_double, c_float, c_int, c_uint, c_void};
-use std::ptr;
+use std::{mem, ptr};
 
 // Option for multiple returns in 'lua_pcall' and 'lua_call'
 pub const LUA_MULTRET: c_int = -1;
@@ -324,6 +324,15 @@ pub unsafe fn lua_newtable(L: *mut lua_State) {
 #[inline(always)]
 pub unsafe fn lua_newuserdata(L: *mut lua_State, sz: usize) -> *mut c_void {
     lua_newuserdatatagged(L, sz, 0)
+}
+
+#[inline(always)]
+pub unsafe fn lua_newuserdata_t<T>(L: *mut lua_State) -> *mut T {
+    unsafe extern "C-unwind" fn destructor<T>(ud: *mut c_void) {
+        ptr::drop_in_place(ud as *mut T);
+    }
+
+    lua_newuserdatadtor(L, mem::size_of::<T>(), destructor::<T>) as *mut T
 }
 
 // TODO: lua_strlen

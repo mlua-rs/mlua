@@ -6,7 +6,7 @@ use std::mem::MaybeUninit;
 use std::os::raw::{c_char, c_int, c_void};
 use std::panic::{catch_unwind, resume_unwind, AssertUnwindSafe};
 use std::sync::Arc;
-use std::{mem, ptr, slice, str};
+use std::{ptr, slice, str};
 
 use once_cell::sync::Lazy;
 use rustc_hash::FxHashMap;
@@ -282,38 +282,23 @@ pub unsafe fn rawset_field(state: *mut ffi::lua_State, table: c_int, field: &str
 }
 
 // Internally uses 3 stack spaces, does not call checkstack.
-#[cfg(not(feature = "luau"))]
 #[inline]
 pub unsafe fn push_userdata<T>(state: *mut ffi::lua_State, t: T, protect: bool) -> Result<()> {
+    #[cfg(not(feature = "luau"))]
     let ud = if protect {
         protect_lua!(state, 0, 1, |state| {
-            ffi::lua_newuserdata(state, mem::size_of::<T>()) as *mut T
+            ffi::lua_newuserdata(state, std::mem::size_of::<T>()) as *mut T
         })?
     } else {
-        ffi::lua_newuserdata(state, mem::size_of::<T>()) as *mut T
+        ffi::lua_newuserdata(state, std::mem::size_of::<T>()) as *mut T
     };
-    ptr::write(ud, t);
-    Ok(())
-}
-
-// Internally uses 3 stack spaces, does not call checkstack.
-#[cfg(feature = "luau")]
-#[inline]
-pub unsafe fn push_userdata<T>(state: *mut ffi::lua_State, t: T, protect: bool) -> Result<()> {
-    unsafe extern "C-unwind" fn destructor<T>(ud: *mut c_void) {
-        ptr::drop_in_place(ud as *mut T);
-    }
-
-    let size = mem::size_of::<T>();
+    #[cfg(feature = "luau")]
     let ud = if protect {
-        protect_lua!(state, 0, 1, |state| {
-            ffi::lua_newuserdatadtor(state, size, destructor::<T>) as *mut T
-        })?
+        protect_lua!(state, 0, 1, |state| { ffi::lua_newuserdata_t::<T>(state) })?
     } else {
-        ffi::lua_newuserdatadtor(state, size, destructor::<T>) as *mut T
+        ffi::lua_newuserdata_t::<T>(state)
     };
     ptr::write(ud, t);
-
     Ok(())
 }
 
@@ -328,10 +313,10 @@ pub unsafe fn push_userdata_uv<T>(
 ) -> Result<()> {
     let ud = if protect {
         protect_lua!(state, 0, 1, |state| {
-            ffi::lua_newuserdatauv(state, mem::size_of::<T>(), nuvalue) as *mut T
+            ffi::lua_newuserdatauv(state, std::mem::size_of::<T>(), nuvalue) as *mut T
         })?
     } else {
-        ffi::lua_newuserdatauv(state, mem::size_of::<T>(), nuvalue) as *mut T
+        ffi::lua_newuserdatauv(state, std::mem::size_of::<T>(), nuvalue) as *mut T
     };
     ptr::write(ud, t);
     Ok(())
@@ -1009,16 +994,10 @@ pub(crate) enum WrappedFailure {
 
 impl WrappedFailure {
     pub(crate) unsafe fn new_userdata(state: *mut ffi::lua_State) -> *mut Self {
-        let size = mem::size_of::<WrappedFailure>();
         #[cfg(feature = "luau")]
-        let ud = {
-            unsafe extern "C-unwind" fn destructor(p: *mut c_void) {
-                ptr::drop_in_place(p as *mut WrappedFailure);
-            }
-            ffi::lua_newuserdatadtor(state, size, destructor) as *mut Self
-        };
+        let ud = ffi::lua_newuserdata_t::<Self>(state);
         #[cfg(not(feature = "luau"))]
-        let ud = ffi::lua_newuserdata(state, size) as *mut Self;
+        let ud = ffi::lua_newuserdata(state, std::mem::size_of::<WrappedFailure>()) as *mut Self;
         ptr::write(ud, WrappedFailure::None);
         ud
     }
