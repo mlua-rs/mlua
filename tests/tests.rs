@@ -1325,10 +1325,10 @@ fn test_warnings() -> Result<()> {
 
 #[test]
 #[cfg(feature = "luajit")]
-#[should_panic]
-fn test_luajit_cdata() {
+fn test_luajit_cdata() -> Result<()> {
     let lua = unsafe { Lua::unsafe_new() };
-    let _v: Result<Value> = lua
+
+    let cdata = lua
         .load(
             r#"
         local ffi = require("ffi")
@@ -1341,7 +1341,12 @@ fn test_luajit_cdata() {
         return ptr
     "#,
         )
-        .eval();
+        .eval::<Value>()?;
+    assert!(cdata.is_userdata() && cdata.is_cdata());
+    assert_eq!(cdata.type_name(), "cdata");
+    assert!(cdata.to_string()?.starts_with("cdata<void *>:"));
+
+    Ok(())
 }
 
 #[test]

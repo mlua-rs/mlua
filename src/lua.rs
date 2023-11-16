@@ -26,7 +26,7 @@ use crate::table::Table;
 use crate::thread::Thread;
 use crate::types::{
     AppData, AppDataRef, AppDataRefMut, Callback, CallbackUpvalue, DestructedUserdata, Integer,
-    LightUserData, LuaRef, MaybeSend, Number, RegistryKey,
+    LightUserData, LuaRef, MaybeSend, Number, RegistryKey, SubtypeId,
 };
 use crate::userdata::{AnyUserData, MetaMethod, UserData, UserDataCell};
 use crate::userdata_impl::{UserDataProxy, UserDataRegistry};
@@ -2419,7 +2419,7 @@ impl Lua {
                         ffi::lua_pop(state, 1);
                         Nil
                     }
-                    _ => Value::UserData(AnyUserData(self.pop_ref(), 0)),
+                    _ => Value::UserData(AnyUserData(self.pop_ref(), SubtypeId::None)),
                 }
             }
 
@@ -2428,14 +2428,13 @@ impl Lua {
             #[cfg(feature = "luau")]
             ffi::LUA_TBUFFER => {
                 // Buffer is represented as a userdata type
-                Value::UserData(AnyUserData(self.pop_ref(), crate::types::BUFFER_SUBTYPE_ID))
+                Value::UserData(AnyUserData(self.pop_ref(), SubtypeId::Buffer))
             }
 
             #[cfg(feature = "luajit")]
             ffi::LUA_TCDATA => {
-                ffi::lua_pop(state, 1);
-                // TODO: Fix this in a next major release
-                panic!("cdata objects cannot be handled by mlua yet");
+                // CDATA is represented as a userdata type
+                Value::UserData(AnyUserData(self.pop_ref(), SubtypeId::CData))
             }
 
             _ => mlua_panic!("LUA_TNONE in pop_value"),
@@ -2520,7 +2519,7 @@ impl Lua {
                     }
                     _ => {
                         ffi::lua_xpush(state, self.ref_thread(), idx);
-                        Value::UserData(AnyUserData(self.pop_ref_thread(), 0))
+                        Value::UserData(AnyUserData(self.pop_ref_thread(), SubtypeId::None))
                     }
                 }
             }
@@ -2534,14 +2533,14 @@ impl Lua {
             ffi::LUA_TBUFFER => {
                 // Buffer is represented as a userdata type
                 ffi::lua_xpush(state, self.ref_thread(), idx);
-                let subtype_id = crate::types::BUFFER_SUBTYPE_ID;
-                Value::UserData(AnyUserData(self.pop_ref_thread(), subtype_id))
+                Value::UserData(AnyUserData(self.pop_ref_thread(), SubtypeId::Buffer))
             }
 
             #[cfg(feature = "luajit")]
             ffi::LUA_TCDATA => {
-                // TODO: Fix this in a next major release
-                panic!("cdata objects cannot be handled by mlua yet");
+                // CData is represented as a userdata type
+                ffi::lua_xpush(state, self.ref_thread(), idx);
+                Value::UserData(AnyUserData(self.pop_ref_thread(), SubtypeId::CData))
             }
 
             _ => mlua_panic!("LUA_TNONE in pop_value"),
@@ -3126,7 +3125,7 @@ impl Lua {
             ffi::lua_setuservalue(state, -2);
         }
 
-        Ok(AnyUserData(self.pop_ref(), 0))
+        Ok(AnyUserData(self.pop_ref(), SubtypeId::None))
     }
 
     #[cfg(not(feature = "luau"))]

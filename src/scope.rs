@@ -10,7 +10,7 @@ use serde::Serialize;
 use crate::error::{Error, Result};
 use crate::function::Function;
 use crate::lua::Lua;
-use crate::types::{Callback, CallbackUpvalue, LuaRef, MaybeSend};
+use crate::types::{Callback, CallbackUpvalue, LuaRef, MaybeSend, SubtypeId};
 use crate::userdata::{
     AnyUserData, MetaMethod, UserData, UserDataCell, UserDataFields, UserDataMethods,
 };
@@ -511,7 +511,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
             #[cfg(not(feature = "luau"))]
             std::ptr::write(ud_ptr as _, UserDataCell::new(data));
             ffi::lua_setmetatable(state, -2);
-            let ud = AnyUserData(lua.pop_ref(), 0);
+            let ud = AnyUserData(lua.pop_ref(), SubtypeId::None);
             lua.register_raw_userdata_metatable(mt_ptr, None);
 
             #[cfg(any(feature = "lua51", feature = "luajit"))]
