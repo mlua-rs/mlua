@@ -182,7 +182,10 @@ impl<'lua> FromLua<'lua> for AnyUserData<'lua> {
 impl<'lua> IntoLua<'lua> for OwnedAnyUserData {
     #[inline]
     fn into_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
-        Ok(Value::UserData(AnyUserData(lua.adopt_owned_ref(self.0))))
+        Ok(Value::UserData(AnyUserData(
+            lua.adopt_owned_ref(self.0),
+            self.1,
+        )))
     }
 }
 

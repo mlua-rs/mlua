@@ -29,6 +29,10 @@ pub type Integer = ffi::lua_Integer;
 /// Type of Lua floating point numbers.
 pub type Number = ffi::lua_Number;
 
+// LUA_TBUFFER subtype
+#[cfg(feature = "luau")]
+pub(crate) const BUFFER_SUBTYPE_ID: u8 = 1;
+
 /// A "light" userdata value. Equivalent to an unmanaged raw pointer.
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub struct LightUserData(pub *mut c_void);

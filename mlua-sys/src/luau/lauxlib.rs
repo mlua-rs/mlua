@@ -52,6 +52,8 @@ extern "C-unwind" {
     pub fn luaL_newmetatable_(L: *mut lua_State, tname: *const c_char) -> c_int;
     pub fn luaL_checkudata(L: *mut lua_State, ud: c_int, tname: *const c_char) -> *mut c_void;
 
+    pub fn luaL_checkbuffer(L: *mut lua_State, narg: c_int, len: *mut usize) -> *mut c_void;
+
     pub fn luaL_where(L: *mut lua_State, lvl: c_int);
 
     #[link_name = "luaL_errorL"]
@@ -152,5 +154,48 @@ pub unsafe fn luaL_sandbox(L: *mut lua_State, enabled: c_int) {
 }
 
 //
-// TODO: Generic Buffer Manipulation
+// Generic Buffer Manipulation
 //
+
+/// Buffer size used for on-stack string operations. This limit depends on native stack size.
+pub const LUA_BUFFERSIZE: usize = 512;
+
+#[repr(C)]
+pub struct luaL_Strbuf {
+    p: *mut c_char,   // current position in buffer
+    end: *mut c_char, // end of the current buffer
+    L: *mut lua_State,
+    storage: *mut c_void, // TString
+    buffer: [c_char; LUA_BUFFERSIZE],
+}
+
+// For compatibility
+pub type luaL_Buffer = luaL_Strbuf;
+
+extern "C-unwind" {
+    pub fn luaL_buffinit(L: *mut lua_State, B: *mut luaL_Strbuf);
+    pub fn luaL_buffinitsize(L: *mut lua_State, B: *mut luaL_Strbuf, size: usize) -> *mut c_char;
+    pub fn luaL_prepbuffsize(B: *mut luaL_Strbuf, size: usize) -> *mut c_char;
+    pub fn luaL_addlstring(B: *mut luaL_Strbuf, s: *const c_char, l: usize);
+    pub fn luaL_addvalue(B: *mut luaL_Strbuf);
+    pub fn luaL_addvalueany(B: *mut luaL_Strbuf, idx: c_int);
+    pub fn luaL_pushresult(B: *mut luaL_Strbuf);
+    pub fn luaL_pushresultsize(B: *mut luaL_Strbuf, size: usize);
+}
+
+pub unsafe fn luaL_addchar(B: *mut luaL_Strbuf, c: c_char) {
+    if (*B).p >= (*B).end {
+        luaL_prepbuffsize(B, 1);
+    }
+    *(*B).p = c;
+    (*B).p = (*B).p.add(1);
+}
+
+pub unsafe fn luaL_addstring(B: *mut luaL_Strbuf, s: *const c_char) {
+    // Calculate length of s
+    let mut len = 0;
+    while *s.add(len) != 0 {
+        len += 1;
+    }
+    luaL_addlstring(B, s, len);
+}

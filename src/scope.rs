@@ -511,7 +511,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
             #[cfg(not(feature = "luau"))]
             std::ptr::write(ud_ptr as _, UserDataCell::new(data));
             ffi::lua_setmetatable(state, -2);
-            let ud = AnyUserData(lua.pop_ref());
+            let ud = AnyUserData(lua.pop_ref(), 0);
             lua.register_raw_userdata_metatable(mt_ptr, None);
 
             #[cfg(any(feature = "lua51", feature = "luajit"))]

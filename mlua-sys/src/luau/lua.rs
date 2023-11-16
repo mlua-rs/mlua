@@ -55,6 +55,7 @@ pub const LUA_TTABLE: c_int = 6;
 pub const LUA_TFUNCTION: c_int = 7;
 pub const LUA_TUSERDATA: c_int = 8;
 pub const LUA_TTHREAD: c_int = 9;
+pub const LUA_TBUFFER: c_int = 10;
 
 /// Guaranteed number of Lua stack slots available to a C function.
 pub const LUA_MINSTACK: c_int = 20;
@@ -147,6 +148,7 @@ extern "C-unwind" {
     pub fn lua_touserdatatagged(L: *mut lua_State, idx: c_int, tag: c_int) -> *mut c_void;
     pub fn lua_userdatatag(L: *mut lua_State, idx: c_int) -> c_int;
     pub fn lua_tothread(L: *mut lua_State, idx: c_int) -> *mut lua_State;
+    pub fn lua_tobuffer(L: *mut lua_State, idx: c_int, len: *mut usize) -> *mut c_void;
     pub fn lua_topointer(L: *mut lua_State, idx: c_int) -> *const c_void;
 
     //
@@ -180,6 +182,8 @@ extern "C-unwind" {
     pub fn lua_pushlightuserdata(L: *mut lua_State, p: *mut c_void);
     pub fn lua_newuserdatatagged(L: *mut lua_State, sz: usize, tag: c_int) -> *mut c_void;
     pub fn lua_newuserdatadtor(L: *mut lua_State, sz: usize, dtor: lua_Udestructor) -> *mut c_void;
+
+    pub fn lua_newbuffer(L: *mut lua_State, sz: usize) -> *mut c_void;
 
     //
     // Get functions (Lua -> stack)
@@ -370,6 +374,11 @@ pub unsafe fn lua_isvector(L: *mut lua_State, n: c_int) -> c_int {
 #[inline(always)]
 pub unsafe fn lua_isthread(L: *mut lua_State, n: c_int) -> c_int {
     (lua_type(L, n) == LUA_TTHREAD) as c_int
+}
+
+#[inline(always)]
+pub unsafe fn lua_isbuffer(L: *mut lua_State, n: c_int) -> c_int {
+    (lua_type(L, n) == LUA_TBUFFER) as c_int
 }
 
 #[inline(always)]

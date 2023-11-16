@@ -2419,11 +2419,17 @@ impl Lua {
                         ffi::lua_pop(state, 1);
                         Nil
                     }
-                    _ => Value::UserData(AnyUserData(self.pop_ref())),
+                    _ => Value::UserData(AnyUserData(self.pop_ref(), 0)),
                 }
             }
 
             ffi::LUA_TTHREAD => Value::Thread(Thread::new(self.pop_ref())),
+
+            #[cfg(feature = "luau")]
+            ffi::LUA_TBUFFER => {
+                // Buffer is represented as a userdata type
+                Value::UserData(AnyUserData(self.pop_ref(), crate::types::BUFFER_SUBTYPE_ID))
+            }
 
             #[cfg(feature = "luajit")]
             ffi::LUA_TCDATA => {
@@ -2514,7 +2520,7 @@ impl Lua {
                     }
                     _ => {
                         ffi::lua_xpush(state, self.ref_thread(), idx);
-                        Value::UserData(AnyUserData(self.pop_ref_thread()))
+                        Value::UserData(AnyUserData(self.pop_ref_thread(), 0))
                     }
                 }
             }
@@ -2522,6 +2528,14 @@ impl Lua {
             ffi::LUA_TTHREAD => {
                 ffi::lua_xpush(state, self.ref_thread(), idx);
                 Value::Thread(Thread::new(self.pop_ref_thread()))
+            }
+
+            #[cfg(feature = "luau")]
+            ffi::LUA_TBUFFER => {
+                // Buffer is represented as a userdata type
+                ffi::lua_xpush(state, self.ref_thread(), idx);
+                let subtype_id = crate::types::BUFFER_SUBTYPE_ID;
+                Value::UserData(AnyUserData(self.pop_ref_thread(), subtype_id))
             }
 
             #[cfg(feature = "luajit")]
@@ -3112,7 +3126,7 @@ impl Lua {
             ffi::lua_setuservalue(state, -2);
         }
 
-        Ok(AnyUserData(self.pop_ref()))
+        Ok(AnyUserData(self.pop_ref(), 0))
     }
 
     #[cfg(not(feature = "luau"))]
@@ -3495,6 +3509,12 @@ unsafe fn load_from_std_lib(state: *mut ffi::lua_State, libs: StdLib) -> Result<
             requiref(state, ffi::LUA_BITLIBNAME, ffi::luaopen_bit, 1)?;
             ffi::lua_pop(state, 1);
         }
+    }
+
+    #[cfg(feature = "luau")]
+    if libs.contains(StdLib::BUFFER) {
+        requiref(state, ffi::LUA_BUFFERLIBNAME, ffi::luaopen_buffer, 1)?;
+        ffi::lua_pop(state, 1);
     }
 
     if libs.contains(StdLib::MATH) {

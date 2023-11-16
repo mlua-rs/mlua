@@ -791,7 +791,7 @@ impl<T> Deref for UserDataVariant<T> {
 /// [`is`]: crate::AnyUserData::is
 /// [`borrow`]: crate::AnyUserData::borrow
 #[derive(Clone, Debug)]
-pub struct AnyUserData<'lua>(pub(crate) LuaRef<'lua>);
+pub struct AnyUserData<'lua>(pub(crate) LuaRef<'lua>, pub(crate) u8);
 
 /// Owned handle to an internal Lua userdata.
 ///
@@ -801,14 +801,14 @@ pub struct AnyUserData<'lua>(pub(crate) LuaRef<'lua>);
 #[cfg(feature = "unstable")]
 #[cfg_attr(docsrs, doc(cfg(feature = "unstable")))]
 #[derive(Clone, Debug)]
-pub struct OwnedAnyUserData(pub(crate) crate::types::LuaOwnedRef);
+pub struct OwnedAnyUserData(pub(crate) crate::types::LuaOwnedRef, pub(crate) u8);
 
 #[cfg(feature = "unstable")]
 impl OwnedAnyUserData {
     /// Get borrowed handle to the underlying Lua userdata.
     #[cfg_attr(feature = "send", allow(unused))]
     pub const fn to_ref(&self) -> AnyUserData {
-        AnyUserData(self.0.to_ref())
+        AnyUserData(self.0.to_ref(), self.1)
     }
 }
 
@@ -1101,7 +1101,7 @@ impl<'lua> AnyUserData<'lua> {
     #[cfg_attr(docsrs, doc(cfg(all(feature = "unstable", not(feature = "send")))))]
     #[inline]
     pub fn into_owned(self) -> OwnedAnyUserData {
-        OwnedAnyUserData(self.0.into_owned())
+        OwnedAnyUserData(self.0.into_owned(), self.1)
     }
 
     #[cfg(feature = "async")]
@@ -1112,6 +1112,11 @@ impl<'lua> AnyUserData<'lua> {
 
     /// Returns a type name of this `UserData` (from a metatable field).
     pub(crate) fn type_name(&self) -> Result<Option<StdString>> {
+        #[cfg(feature = "luau")]
+        if self.1 == crate::types::BUFFER_SUBTYPE_ID {
+            return Ok(Some("buffer".to_owned()));
+        }
+
         let lua = self.0.lua;
         let state = lua.state();
         unsafe {

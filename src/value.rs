@@ -88,6 +88,8 @@ impl<'lua> Value<'lua> {
             Value::Table(_) => "table",
             Value::Function(_) => "function",
             Value::Thread(_) => "thread",
+            #[cfg(feature = "luau")]
+            Value::UserData(AnyUserData(_, crate::types::BUFFER_SUBTYPE_ID)) => "buffer",
             Value::UserData(_) => "userdata",
             Value::Error(_) => "error",
         }
@@ -126,7 +128,7 @@ impl<'lua> Value<'lua> {
             | Value::Table(Table(r))
             | Value::Function(Function(r))
             | Value::Thread(Thread(r, ..))
-            | Value::UserData(AnyUserData(r)) => r.to_pointer(),
+            | Value::UserData(AnyUserData(r, ..)) => r.to_pointer(),
             _ => ptr::null(),
         }
     }
@@ -148,7 +150,7 @@ impl<'lua> Value<'lua> {
             Value::Table(Table(r))
             | Value::Function(Function(r))
             | Value::Thread(Thread(r, ..))
-            | Value::UserData(AnyUserData(r)) => unsafe {
+            | Value::UserData(AnyUserData(r, ..)) => unsafe {
                 let state = r.lua.state();
                 let _guard = StackGuard::new(state);
                 check_stack(state, 3)?;
@@ -408,6 +410,17 @@ impl<'lua> Value<'lua> {
             Value::UserData(ud) => Some(ud),
             _ => None,
         }
+    }
+
+    /// Returns `true` if the value is a Buffer wrapped in [`AnyUserData`].
+    #[cfg(any(feature = "luau", doc))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
+    #[doc(hidden)]
+    #[inline]
+    pub fn is_buffer(&self) -> bool {
+        self.as_userdata()
+            .map(|ud| ud.1 == crate::types::BUFFER_SUBTYPE_ID)
+            .unwrap_or_default()
     }
 
     /// Wrap reference to this Value into [`SerializableValue`].
