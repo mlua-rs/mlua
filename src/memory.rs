@@ -4,6 +4,7 @@ use std::ptr;
 
 pub(crate) static ALLOCATOR: ffi::lua_Alloc = allocator;
 
+#[repr(C)]
 #[derive(Default)]
 pub(crate) struct MemoryState {
     used_memory: isize,

@@ -222,7 +222,6 @@ impl LuaOptions {
 
 #[cfg(feature = "async")]
 pub(crate) static ASYNC_POLL_PENDING: u8 = 0;
-#[cfg(not(feature = "luau"))]
 pub(crate) static EXTRA_REGISTRY_KEY: u8 = 0;
 
 const WRAPPED_FAILURE_POOL_SIZE: usize = 64;
@@ -359,23 +358,22 @@ impl Lua {
     ///
     /// [`StdLib`]: crate::StdLib
     pub unsafe fn unsafe_new_with(libs: StdLib, options: LuaOptions) -> Lua {
+        // Workaround to avoid stripping a few unused Lua symbols that could be imported
+        // by C modules in unsafe mode
+        let mut _symbols: Vec<*const extern "C-unwind" fn()> =
+            vec![ffi::lua_isuserdata as _, ffi::lua_tocfunction as _];
+
         #[cfg(not(feature = "luau"))]
+        _symbols.extend_from_slice(&[
+            ffi::lua_atpanic as _,
+            ffi::luaL_loadstring as _,
+            ffi::luaL_openlibs as _,
+        ]);
+        #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
         {
-            // Workaround to avoid stripping a few unused Lua symbols that could be imported
-            // by C modules in unsafe mode
-            let mut _symbols: Vec<*const extern "C-unwind" fn()> = vec![
-                ffi::lua_atpanic as _,
-                ffi::lua_isuserdata as _,
-                ffi::lua_tocfunction as _,
-                ffi::luaL_loadstring as _,
-                ffi::luaL_openlibs as _,
-            ];
-            #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
-            {
-                _symbols.push(ffi::lua_getglobal as _);
-                _symbols.push(ffi::lua_setglobal as _);
-                _symbols.push(ffi::luaL_setfuncs as _);
-            }
+            _symbols.push(ffi::lua_getglobal as _);
+            _symbols.push(ffi::lua_setglobal as _);
+            _symbols.push(ffi::luaL_setfuncs as _);
         }
 
         Self::inner_new(libs, options)
@@ -3232,22 +3230,13 @@ impl<'a> Drop for StateGuard<'a> {
     }
 }
 
-#[cfg(feature = "luau")]
 unsafe fn extra_data(state: *mut ffi::lua_State) -> *mut ExtraData {
-    (*ffi::lua_callbacks(state)).userdata as *mut ExtraData
-}
+    #[cfg(feature = "luau")]
+    if cfg!(not(feature = "module")) {
+        // In the main app we can use `lua_callbacks` to access ExtraData
+        return (*ffi::lua_callbacks(state)).userdata as *mut _;
+    }
 
-#[cfg(feature = "luau")]
-unsafe fn set_extra_data(
-    state: *mut ffi::lua_State,
-    extra: &Arc<UnsafeCell<ExtraData>>,
-) -> Result<()> {
-    (*ffi::lua_callbacks(state)).userdata = extra.get() as *mut _;
-    Ok(())
-}
-
-#[cfg(not(feature = "luau"))]
-unsafe fn extra_data(state: *mut ffi::lua_State) -> *mut ExtraData {
     let extra_key = &EXTRA_REGISTRY_KEY as *const u8 as *const c_void;
     if ffi::lua_rawgetp(state, ffi::LUA_REGISTRYINDEX, extra_key) != ffi::LUA_TUSERDATA {
         // `ExtraData` can be null only when Lua state is foreign.
@@ -3260,11 +3249,16 @@ unsafe fn extra_data(state: *mut ffi::lua_State) -> *mut ExtraData {
     (*extra_ptr).get()
 }
 
-#[cfg(not(feature = "luau"))]
 unsafe fn set_extra_data(
     state: *mut ffi::lua_State,
     extra: &Arc<UnsafeCell<ExtraData>>,
 ) -> Result<()> {
+    #[cfg(feature = "luau")]
+    if cfg!(not(feature = "module")) {
+        (*ffi::lua_callbacks(state)).userdata = extra.get() as *mut _;
+        return Ok(());
+    }
+
     push_gc_userdata(state, Arc::clone(extra), true)?;
     protect_lua!(state, 1, 0, fn(state) {
         let extra_key = &EXTRA_REGISTRY_KEY as *const u8 as *const c_void;

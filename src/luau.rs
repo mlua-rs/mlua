@@ -12,10 +12,41 @@ use crate::table::Table;
 use crate::types::RegistryKey;
 use crate::value::{IntoLua, Value};
 
+#[cfg(unix)]
+use {libloading::Library, rustc_hash::FxHashMap};
+
 // Since Luau has some missing standard function, we re-implement them here
+
+#[cfg(unix)]
+const TARGET_MLUA_LUAU_ABI_VERSION: u32 = 1;
+
+#[cfg(all(unix, feature = "module"))]
+#[no_mangle]
+#[used]
+pub static MLUA_LUAU_ABI_VERSION: u32 = TARGET_MLUA_LUAU_ABI_VERSION;
 
 // We keep reference to the `package` table in registry under this key
 struct PackageKey(RegistryKey);
+
+// We keep reference to the loaded dylibs in application data
+#[cfg(unix)]
+struct LoadedDylibs(FxHashMap<PathBuf, Library>);
+
+#[cfg(unix)]
+impl std::ops::Deref for LoadedDylibs {
+    type Target = FxHashMap<PathBuf, Library>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+#[cfg(unix)]
+impl std::ops::DerefMut for LoadedDylibs {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
 
 impl Lua {
     pub(crate) unsafe fn prepare_luau_state(&self) -> Result<()> {
@@ -162,6 +193,22 @@ fn create_package_table(lua: &Lua) -> Result<Table> {
     }
     package.raw_set("path", search_path)?;
 
+    // Set `package.cpath`
+    #[cfg(unix)]
+    {
+        let mut search_cpath = env::var("LUAU_CPATH")
+            .or_else(|_| env::var("LUA_CPATH"))
+            .unwrap_or_default();
+        if search_cpath.is_empty() {
+            if cfg!(any(target_os = "macos", target_os = "ios")) {
+                search_cpath = "?.dylib".to_string();
+            } else {
+                search_cpath = "?.so".to_string();
+            }
+        }
+        package.raw_set("cpath", search_cpath)?;
+    }
+
     // Set `package.loaded` (table with a list of loaded modules)
     let loaded = lua.create_table()?;
     package.raw_set("loaded", loaded.clone())?;
@@ -170,6 +217,12 @@ fn create_package_table(lua: &Lua) -> Result<Table> {
     // Set `package.loaders`
     let loaders = lua.create_sequence_from([lua.create_function(lua_loader)?])?;
     package.raw_set("loaders", loaders.clone())?;
+    #[cfg(unix)]
+    {
+        loaders.push(lua.create_function(dylib_loader)?)?;
+        let loaded_dylibs = LoadedDylibs(FxHashMap::default());
+        lua.set_app_data(loaded_dylibs);
+    }
     lua.set_named_registry_value("_LOADERS", loaders)?;
 
     Ok(package)
@@ -219,6 +272,57 @@ fn lua_loader(lua: &Lua, modname: StdString) -> Result<Value> {
             }
             Err(err) => {
                 return format!("cannot open '{}': {err}", file_path.display()).into_lua(lua);
+            }
+        }
+    }
+
+    Ok(Value::Nil)
+}
+
+/// Tries to load a dynamic library
+#[cfg(unix)]
+fn dylib_loader(lua: &Lua, modname: StdString) -> Result<Value> {
+    let package = {
+        let key = lua.app_data_ref::<PackageKey>().unwrap();
+        lua.registry_value::<Table>(&key.0)
+    }?;
+    let search_cpath = package.get::<_, StdString>("cpath").unwrap_or_default();
+
+    let find_symbol = |lib: &Library| unsafe {
+        if let Ok(entry) = lib.get::<ffi::lua_CFunction>(format!("luaopen_{modname}\0").as_bytes())
+        {
+            return lua.create_c_function(*entry).map(Value::Function);
+        }
+        // Try all in one mode
+        if let Ok(entry) = lib.get::<ffi::lua_CFunction>(
+            format!("luaopen_{}\0", modname.replace('.', "_")).as_bytes(),
+        ) {
+            return lua.create_c_function(*entry).map(Value::Function);
+        }
+        "cannot find module entrypoint".into_lua(lua)
+    };
+
+    if let Some(file_path) = package_searchpath(&modname, &search_cpath, true) {
+        let file_path = file_path.canonicalize()?;
+        // Load the library and check for symbol
+        unsafe {
+            // Check if it's already loaded
+            if let Some(lib) = lua.app_data_ref::<LoadedDylibs>().unwrap().get(&file_path) {
+                return find_symbol(lib);
+            }
+            if let Ok(lib) = Library::new(&file_path) {
+                // Check version
+                let mod_version = lib.get::<*const u32>(b"MLUA_LUAU_ABI_VERSION");
+                let mod_version = mod_version.map(|v| **v).unwrap_or_default();
+                if mod_version != TARGET_MLUA_LUAU_ABI_VERSION {
+                    let err = format!("wrong module ABI version (expected {TARGET_MLUA_LUAU_ABI_VERSION}, got {mod_version})");
+                    return err.into_lua(lua);
+                }
+                let symbol = find_symbol(&lib);
+                lua.app_data_mut::<LoadedDylibs>()
+                    .unwrap()
+                    .insert(file_path, lib);
+                return symbol;
             }
         }
     }

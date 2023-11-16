@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use mlua::{Lua, Result};
 
 #[test]
-fn test_module() -> Result<()> {
+fn test_module_simple() -> Result<()> {
     let lua = make_lua()?;
     lua.load(
         r#"

@@ -9,8 +9,8 @@ cfg_if::cfg_if! {
 }
 
 fn main() {
-    #[cfg(all(feature = "luau", feature = "module"))]
-    compile_error!("Luau does not support `module` mode");
+    #[cfg(all(feature = "luau", feature = "module", windows))]
+    compile_error!("Luau does not support `module` mode on Windows");
 
     #[cfg(all(feature = "module", feature = "vendored"))]
     compile_error!("`vendored` and `module` features are mutually exclusive");
