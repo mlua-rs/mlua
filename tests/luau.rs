@@ -1,6 +1,5 @@
 #![cfg(feature = "luau")]
 
-use std::env;
 use std::fmt::Debug;
 use std::fs;
 use std::panic::{catch_unwind, AssertUnwindSafe};
@@ -37,7 +36,10 @@ fn test_require() -> Result<()> {
     "#,
     )?;
 
-    env::set_var("LUAU_PATH", temp_dir.path().join("?.luau"));
+    lua.globals()
+        .get::<_, Table>("package")?
+        .set("path", temp_dir.path().join("?.luau").to_string_lossy())?;
+
     lua.load(
         r#"
         local module = require("module")

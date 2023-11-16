@@ -997,7 +997,7 @@ impl WrappedFailure {
         #[cfg(feature = "luau")]
         let ud = ffi::lua_newuserdata_t::<Self>(state);
         #[cfg(not(feature = "luau"))]
-        let ud = ffi::lua_newuserdata(state, std::mem::size_of::<WrappedFailure>()) as *mut Self;
+        let ud = ffi::lua_newuserdata(state, std::mem::size_of::<Self>()) as *mut Self;
         ptr::write(ud, WrappedFailure::None);
         ud
     }

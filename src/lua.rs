@@ -438,7 +438,7 @@ impl Lua {
         }
 
         #[cfg(feature = "luau")]
-        mlua_expect!(lua.prepare_luau_state(), "Error preparing Luau state");
+        mlua_expect!(lua.prepare_luau_state(), "Error configuring Luau");
 
         lua
     }
