@@ -71,9 +71,10 @@ fn test_require() -> Result<()> {
         .set("cpath", temp_dir.path().join("?.so").to_string_lossy())?;
     fs::write(temp_dir.path().join("dylib.so"), "")?;
     match lua.load("require('dylib')").exec() {
-        Err(Error::RuntimeError(e))
-            if e.contains("module 'dylib' not found")
-                && e.contains("dynamic libraries are disabled in safe mode") => {}
+        Err(Error::RuntimeError(e)) if cfg!(unix) && e.contains("module 'dylib' not found") => {
+            assert!(e.contains("dynamic libraries are disabled in safe mode"))
+        }
+        Err(Error::RuntimeError(e)) if e.contains("module 'dylib' not found") => {}
         r => panic!("expected RuntimeError(...) with a specific message, got {r:?}"),
     }
 
