@@ -7,7 +7,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
 use mlua::{
-    Compiler, CoverageInfo, Error, Lua, Result, Table, ThreadStatus, Value, Vector, VmState,
+    Compiler, CoverageInfo, Error, Lua, LuaOptions, Result, StdLib, Table, ThreadStatus, Value,
+    Vector, VmState,
 };
 
 #[test]
@@ -22,7 +23,12 @@ fn test_version() -> Result<()> {
 
 #[test]
 fn test_require() -> Result<()> {
-    let lua = Lua::new();
+    // Ensure that require() is not available if package module is not loaded
+    let mut lua = Lua::new_with(StdLib::NONE, LuaOptions::default())?;
+    assert!(lua.globals().get::<_, Option<Value>>("require")?.is_none());
+    assert!(lua.globals().get::<_, Option<Value>>("package")?.is_none());
+
+    lua = Lua::new();
 
     let temp_dir = tempfile::tempdir().unwrap();
     fs::write(
@@ -51,7 +57,27 @@ fn test_require() -> Result<()> {
         assert(not ok and string.find(err, "module.luau") ~= nil)
     "#,
     )
-    .exec()
+    .exec()?;
+
+    // Require non-existent module
+    match lua.load("require('non-existent')").exec() {
+        Err(Error::RuntimeError(e)) if e.contains("module 'non-existent' not found") => {}
+        r => panic!("expected RuntimeError(...) with a specific message, got {r:?}"),
+    }
+
+    // Require binary module in safe mode
+    lua.globals()
+        .get::<_, Table>("package")?
+        .set("cpath", temp_dir.path().join("?.so").to_string_lossy())?;
+    fs::write(temp_dir.path().join("dylib.so"), "")?;
+    match lua.load("require('dylib')").exec() {
+        Err(Error::RuntimeError(e))
+            if e.contains("module 'dylib' not found")
+                && e.contains("dynamic libraries are disabled in safe mode") => {}
+        r => panic!("expected RuntimeError(...) with a specific message, got {r:?}"),
+    }
+
+    Ok(())
 }
 
 #[cfg(not(feature = "luau-vector4"))]

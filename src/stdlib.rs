@@ -47,8 +47,6 @@ impl StdLib {
     pub const MATH: StdLib = StdLib(1 << 7);
 
     /// [`package`](https://www.lua.org/manual/5.4/manual.html#6.3) library
-    #[cfg(not(feature = "luau"))]
-    #[cfg_attr(docsrs, doc(cfg(not(feature = "luau"))))]
     pub const PACKAGE: StdLib = StdLib(1 << 8);
 
     /// [`buffer`](https://luau-lang.org/library#buffer-library) library

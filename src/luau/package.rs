@@ -1,6 +1,6 @@
 use std::ffi::CStr;
 use std::fmt::Write;
-use std::os::raw::{c_float, c_int};
+use std::os::raw::c_int;
 use std::path::{PathBuf, MAIN_SEPARATOR_STR};
 use std::string::String as StdString;
 use std::{env, fs};
@@ -15,7 +15,9 @@ use crate::value::{IntoLua, Value};
 #[cfg(unix)]
 use {libloading::Library, rustc_hash::FxHashMap};
 
-// Since Luau has some missing standard function, we re-implement them here
+//
+// Luau package module
+//
 
 #[cfg(unix)]
 const TARGET_MLUA_LUAU_ABI_VERSION: u32 = 1;
@@ -48,63 +50,64 @@ impl std::ops::DerefMut for LoadedDylibs {
     }
 }
 
-impl Lua {
-    pub(crate) unsafe fn prepare_luau_state(&self) -> Result<()> {
-        let globals = self.globals();
+pub(crate) fn register_package_module(lua: &Lua) -> Result<()> {
+    // Create the package table and store it in app_data for later use (bypassing globals lookup)
+    let package = lua.create_table()?;
+    lua.set_app_data(PackageKey(lua.create_registry_value(package.clone())?));
 
-        globals.raw_set(
-            "collectgarbage",
-            self.create_c_function(lua_collectgarbage)?,
-        )?;
-        globals.raw_set("require", self.create_c_function(lua_require)?)?;
-        globals.raw_set("package", create_package_table(self)?)?;
-        globals.raw_set("vector", self.create_c_function(lua_vector)?)?;
-
-        // Set `_VERSION` global to include version number
-        // The environment variable `LUAU_VERSION` set by the build script
-        if let Some(version) = ffi::luau_version() {
-            globals.raw_set("_VERSION", format!("Luau {version}"))?;
-        }
-
-        Ok(())
+    // Set `package.path`
+    let mut search_path = env::var("LUAU_PATH")
+        .or_else(|_| env::var("LUA_PATH"))
+        .unwrap_or_default();
+    if search_path.is_empty() {
+        search_path = "?.luau;?.lua".to_string();
     }
+    package.raw_set("path", search_path)?;
+
+    // Set `package.cpath`
+    #[cfg(unix)]
+    {
+        let mut search_cpath = env::var("LUAU_CPATH")
+            .or_else(|_| env::var("LUA_CPATH"))
+            .unwrap_or_default();
+        if search_cpath.is_empty() {
+            if cfg!(any(target_os = "macos", target_os = "ios")) {
+                search_cpath = "?.dylib".to_string();
+            } else {
+                search_cpath = "?.so".to_string();
+            }
+        }
+        package.raw_set("cpath", search_cpath)?;
+    }
+
+    // Set `package.loaded` (table with a list of loaded modules)
+    let loaded = lua.create_table()?;
+    package.raw_set("loaded", loaded.clone())?;
+    lua.set_named_registry_value("_LOADED", loaded)?;
+
+    // Set `package.loaders`
+    let loaders = lua.create_sequence_from([lua.create_function(lua_loader)?])?;
+    package.raw_set("loaders", loaders.clone())?;
+    #[cfg(unix)]
+    {
+        loaders.push(lua.create_function(dylib_loader)?)?;
+        lua.set_app_data(LoadedDylibs(FxHashMap::default()));
+    }
+    lua.set_named_registry_value("_LOADERS", loaders)?;
+
+    // Register the module and `require` function in globals
+    let globals = lua.globals();
+    globals.raw_set("package", package)?;
+    globals.raw_set("require", unsafe { lua.create_c_function(lua_require)? })?;
+
+    Ok(())
 }
 
-unsafe extern "C-unwind" fn lua_collectgarbage(state: *mut ffi::lua_State) -> c_int {
-    let option = ffi::luaL_optstring(state, 1, cstr!("collect"));
-    let option = CStr::from_ptr(option);
-    let arg = ffi::luaL_optinteger(state, 2, 0);
-    match option.to_str() {
-        Ok("collect") => {
-            ffi::lua_gc(state, ffi::LUA_GCCOLLECT, 0);
-            0
-        }
-        Ok("stop") => {
-            ffi::lua_gc(state, ffi::LUA_GCSTOP, 0);
-            0
-        }
-        Ok("restart") => {
-            ffi::lua_gc(state, ffi::LUA_GCRESTART, 0);
-            0
-        }
-        Ok("count") => {
-            let kbytes = ffi::lua_gc(state, ffi::LUA_GCCOUNT, 0) as ffi::lua_Number;
-            let kbytes_rem = ffi::lua_gc(state, ffi::LUA_GCCOUNTB, 0) as ffi::lua_Number;
-            ffi::lua_pushnumber(state, kbytes + kbytes_rem / 1024.0);
-            1
-        }
-        Ok("step") => {
-            let res = ffi::lua_gc(state, ffi::LUA_GCSTEP, arg);
-            ffi::lua_pushboolean(state, res);
-            1
-        }
-        Ok("isrunning") => {
-            let res = ffi::lua_gc(state, ffi::LUA_GCISRUNNING, 0);
-            ffi::lua_pushboolean(state, res);
-            1
-        }
-        _ => ffi::luaL_error(state, cstr!("collectgarbage called with invalid option")),
-    }
+pub(crate) fn disable_dylibs(lua: &Lua) {
+    // Presence of `LoadedDylibs` in app data is used as a flag
+    // to check whether binary modules are enabled
+    #[cfg(unix)]
+    lua.remove_app_data::<LoadedDylibs>();
 }
 
 unsafe extern "C-unwind" fn lua_require(state: *mut ffi::lua_State) -> c_int {
@@ -158,74 +161,6 @@ unsafe extern "C-unwind" fn lua_require(state: *mut ffi::lua_State) -> c_int {
     ffi::lua_pushvalue(state, -1); // make copy of entrypoint result
     ffi::lua_setfield(state, 2, name); /* _LOADED[name] = returned value */
     1
-}
-
-// Luau vector datatype constructor
-unsafe extern "C-unwind" fn lua_vector(state: *mut ffi::lua_State) -> c_int {
-    let x = ffi::luaL_checknumber(state, 1) as c_float;
-    let y = ffi::luaL_checknumber(state, 2) as c_float;
-    let z = ffi::luaL_checknumber(state, 3) as c_float;
-    #[cfg(feature = "luau-vector4")]
-    let w = ffi::luaL_checknumber(state, 4) as c_float;
-
-    #[cfg(not(feature = "luau-vector4"))]
-    ffi::lua_pushvector(state, x, y, z);
-    #[cfg(feature = "luau-vector4")]
-    ffi::lua_pushvector(state, x, y, z, w);
-    1
-}
-
-//
-// package module
-//
-
-fn create_package_table(lua: &Lua) -> Result<Table> {
-    // Create the package table and store it in app_data for later use (bypassing globals lookup)
-    let package = lua.create_table()?;
-    lua.set_app_data(PackageKey(lua.create_registry_value(package.clone())?));
-
-    // Set `package.path`
-    let mut search_path = env::var("LUAU_PATH")
-        .or_else(|_| env::var("LUA_PATH"))
-        .unwrap_or_default();
-    if search_path.is_empty() {
-        search_path = "?.luau;?.lua".to_string();
-    }
-    package.raw_set("path", search_path)?;
-
-    // Set `package.cpath`
-    #[cfg(unix)]
-    {
-        let mut search_cpath = env::var("LUAU_CPATH")
-            .or_else(|_| env::var("LUA_CPATH"))
-            .unwrap_or_default();
-        if search_cpath.is_empty() {
-            if cfg!(any(target_os = "macos", target_os = "ios")) {
-                search_cpath = "?.dylib".to_string();
-            } else {
-                search_cpath = "?.so".to_string();
-            }
-        }
-        package.raw_set("cpath", search_cpath)?;
-    }
-
-    // Set `package.loaded` (table with a list of loaded modules)
-    let loaded = lua.create_table()?;
-    package.raw_set("loaded", loaded.clone())?;
-    lua.set_named_registry_value("_LOADED", loaded)?;
-
-    // Set `package.loaders`
-    let loaders = lua.create_sequence_from([lua.create_function(lua_loader)?])?;
-    package.raw_set("loaders", loaders.clone())?;
-    #[cfg(unix)]
-    {
-        loaders.push(lua.create_function(dylib_loader)?)?;
-        let loaded_dylibs = LoadedDylibs(FxHashMap::default());
-        lua.set_app_data(loaded_dylibs);
-    }
-    lua.set_named_registry_value("_LOADERS", loaders)?;
-
-    Ok(package)
 }
 
 /// Searches for the given `name` in the given `path`.
@@ -306,8 +241,12 @@ fn dylib_loader(lua: &Lua, modname: StdString) -> Result<Value> {
         let file_path = file_path.canonicalize()?;
         // Load the library and check for symbol
         unsafe {
+            let mut loaded_dylibs = match lua.app_data_mut::<LoadedDylibs>() {
+                Some(loaded_dylibs) => loaded_dylibs,
+                None => return "dynamic libraries are disabled in safe mode".into_lua(lua),
+            };
             // Check if it's already loaded
-            if let Some(lib) = lua.app_data_ref::<LoadedDylibs>().unwrap().get(&file_path) {
+            if let Some(lib) = loaded_dylibs.get(&file_path) {
                 return find_symbol(lib);
             }
             if let Ok(lib) = Library::new(&file_path) {
@@ -319,9 +258,7 @@ fn dylib_loader(lua: &Lua, modname: StdString) -> Result<Value> {
                     return err.into_lua(lua);
                 }
                 let symbol = find_symbol(&lib);
-                lua.app_data_mut::<LoadedDylibs>()
-                    .unwrap()
-                    .insert(file_path, lib);
+                loaded_dylibs.insert(file_path, lib);
                 return symbol;
             }
         }

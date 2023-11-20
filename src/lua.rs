@@ -340,7 +340,6 @@ impl Lua {
 
         let lua = unsafe { Self::inner_new(libs, options) };
 
-        #[cfg(not(feature = "luau"))]
         if libs.contains(StdLib::PACKAGE) {
             mlua_expect!(lua.disable_c_modules(), "Error during disabling C modules");
         }
@@ -436,7 +435,7 @@ impl Lua {
         }
 
         #[cfg(feature = "luau")]
-        mlua_expect!(lua.prepare_luau_state(), "Error configuring Luau");
+        mlua_expect!(lua.configure_luau(), "Error configuring Luau");
 
         lua
     }
@@ -580,7 +579,6 @@ impl Lua {
     ///
     /// [`StdLib`]: crate::StdLib
     pub fn load_from_std_lib(&self, libs: StdLib) -> Result<()> {
-        #[cfg(not(feature = "luau"))]
         let is_safe = unsafe { (*self.extra.get()).safe };
 
         #[cfg(not(feature = "luau"))]
@@ -599,12 +597,9 @@ impl Lua {
         let res = unsafe { load_from_std_lib(self.main_state, libs) };
 
         // If `package` library loaded into a safe lua state then disable C modules
-        #[cfg(not(feature = "luau"))]
-        {
-            let curr_libs = unsafe { (*self.extra.get()).libs };
-            if is_safe && (curr_libs ^ (curr_libs | libs)).contains(StdLib::PACKAGE) {
-                mlua_expect!(self.disable_c_modules(), "Error during disabling C modules");
-            }
+        let curr_libs = unsafe { (*self.extra.get()).libs };
+        if is_safe && (curr_libs ^ (curr_libs | libs)).contains(StdLib::PACKAGE) {
+            mlua_expect!(self.disable_c_modules(), "Error during disabling C modules");
         }
         unsafe { (*self.extra.get()).libs |= libs };
 
@@ -3126,6 +3121,7 @@ impl Lua {
         Ok(AnyUserData(self.pop_ref(), SubtypeId::None))
     }
 
+    // Luau version located in `luau/mod.rs`
     #[cfg(not(feature = "luau"))]
     fn disable_c_modules(&self) -> Result<()> {
         let package: Table = self.globals().get("package")?;
@@ -3524,6 +3520,11 @@ unsafe fn load_from_std_lib(state: *mut ffi::lua_State, libs: StdLib) -> Result<
     if libs.contains(StdLib::PACKAGE) {
         requiref(state, ffi::LUA_LOADLIBNAME, ffi::luaopen_package, 1)?;
         ffi::lua_pop(state, 1);
+    }
+    #[cfg(feature = "luau")]
+    if libs.contains(StdLib::PACKAGE) {
+        let lua: &Lua = mem::transmute((*extra_data(state)).inner.assume_init_ref());
+        crate::luau::register_package_module(lua)?;
     }
 
     #[cfg(feature = "luajit")]
