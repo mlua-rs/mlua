@@ -1,3 +1,14 @@
+## v0.9.2
+
+- Added binary modules support to Luau
+- Added Luau package module (uses `StdLib::PACKAGE`) with loaders (follows lua5.1 interface)
+- Added support of Luau 0.601+ buffer type (represented as userdata in Rust)
+- LuaJIT `cdata` type is also represented as userdata in Rust (instead of panic)
+- Vendored LuaJIT switched to rolling vanilla (from openresty)
+- Added `Table::for_each` method for fast table pairs traversal (faster than `pairs`)
+- Performance improvements around table traversal (and faster serialization)
+- Bug fixes and improvements
+
 ## v0.9.1
 
 - impl Default for Lua

@@ -1,6 +1,6 @@
 [package]
 name = "mlua"
-version = "0.9.1" # remember to update mlua_derive
+version = "0.9.2" # remember to update mlua_derive
 authors = ["Aleksandr Orlenko <zxteam@pm.me>", "kyren <catherine@chucklefish.org>"]
 rust-version = "1.71"
 edition = "2021"
@@ -55,7 +55,7 @@ erased-serde = { version = "0.3", optional = true }
 serde-value = { version = "0.7", optional = true }
 parking_lot = { version = "0.12", optional = true }
 
-ffi = { package = "mlua-sys", version = "0.3.2", path = "mlua-sys" }
+ffi = { package = "mlua-sys", version = "0.4.0", path = "mlua-sys" }
 
 [target.'cfg(unix)'.dependencies]
 libloading = { version = "0.8", optional = true }
