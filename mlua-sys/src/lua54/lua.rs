@@ -149,7 +149,8 @@ extern "C-unwind" {
     pub fn lua_tointegerx(L: *mut lua_State, idx: c_int, isnum: *mut c_int) -> lua_Integer;
     pub fn lua_toboolean(L: *mut lua_State, idx: c_int) -> c_int;
     pub fn lua_tolstring(L: *mut lua_State, idx: c_int, len: *mut usize) -> *const c_char;
-    pub fn lua_rawlen(L: *mut lua_State, idx: c_int) -> usize;
+    #[link_name = "lua_rawlen"]
+    pub fn lua_rawlen_(L: *mut lua_State, idx: c_int) -> lua_Unsigned;
     pub fn lua_tocfunction(L: *mut lua_State, idx: c_int) -> Option<lua_CFunction>;
     pub fn lua_touserdata(L: *mut lua_State, idx: c_int) -> *mut c_void;
     pub fn lua_tothread(L: *mut lua_State, idx: c_int) -> *mut lua_State;
@@ -336,7 +337,8 @@ extern "C-unwind" {
     //
     // Miscellaneous functions
     //
-    pub fn lua_error(L: *mut lua_State) -> !;
+    #[link_name = "lua_error"]
+    pub fn lua_error_(L: *mut lua_State) -> c_int;
     pub fn lua_next(L: *mut lua_State, idx: c_int) -> c_int;
     pub fn lua_concat(L: *mut lua_State, n: c_int);
     pub fn lua_len(L: *mut lua_State, idx: c_int);

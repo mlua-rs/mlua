@@ -5,6 +5,12 @@ use std::os::raw::c_int;
 use super::lua::*;
 
 #[inline(always)]
+pub unsafe fn lua_error(L: *mut lua_State) -> ! {
+    lua_error_(L);
+    unreachable!()
+}
+
+#[inline(always)]
 pub unsafe fn lua_resume(
     L: *mut lua_State,
     from: *mut lua_State,

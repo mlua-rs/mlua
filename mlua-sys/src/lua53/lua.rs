@@ -314,7 +314,8 @@ extern "C-unwind" {
     //
     // Miscellaneous functions
     //
-    pub fn lua_error(L: *mut lua_State) -> !;
+    #[link_name = "lua_error"]
+    pub fn lua_error_(L: *mut lua_State) -> c_int;
     pub fn lua_next(L: *mut lua_State, idx: c_int) -> c_int;
     pub fn lua_concat(L: *mut lua_State, n: c_int);
     pub fn lua_len(L: *mut lua_State, idx: c_int);

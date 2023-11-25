@@ -1,6 +1,6 @@
 use mlua::{chunk, ExternalResult, Lua, LuaSerdeExt, Result};
 
-#[tokio::main]
+#[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<()> {
     let lua = Lua::new();
 

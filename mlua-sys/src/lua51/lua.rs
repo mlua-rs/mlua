@@ -228,7 +228,8 @@ extern "C-unwind" {
 //
 #[cfg_attr(all(windows, raw_dylib), link(name = "lua51", kind = "raw-dylib"))]
 extern "C-unwind" {
-    pub fn lua_error(L: *mut lua_State) -> !;
+    #[link_name = "lua_error"]
+    pub fn lua_error_(L: *mut lua_State) -> c_int;
     pub fn lua_next(L: *mut lua_State, idx: c_int) -> c_int;
     pub fn lua_concat(L: *mut lua_State, n: c_int);
     pub fn lua_getallocf(L: *mut lua_State, ud: *mut *mut c_void) -> lua_Alloc;
