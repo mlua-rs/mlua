@@ -3030,7 +3030,6 @@ impl Lua {
         self.load(
             r#"
             local poll = get_poll(...)
-            local pending, yield, unpack = pending, yield, unpack
             while true do
                 local nres, res, res2 = poll()
                 if nres ~= nil then
