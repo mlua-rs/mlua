@@ -31,10 +31,10 @@ use crate::types::{
 use crate::userdata::{AnyUserData, MetaMethod, UserData, UserDataCell};
 use crate::userdata_impl::{UserDataProxy, UserDataRegistry};
 use crate::util::{
-    self, assert_stack, check_stack, get_destructed_userdata_metatable, get_gc_metatable,
-    get_gc_userdata, get_main_state, get_userdata, init_error_registry, init_gc_metatable,
-    init_userdata_metatable, pop_error, push_gc_userdata, push_string, push_table, rawset_field,
-    safe_pcall, safe_xpcall, short_type_name, StackGuard, WrappedFailure,
+    self, assert_stack, check_stack, error_traceback, get_destructed_userdata_metatable,
+    get_gc_metatable, get_gc_userdata, get_main_state, get_userdata, init_error_registry,
+    init_gc_metatable, init_userdata_metatable, pop_error, push_gc_userdata, push_string,
+    push_table, rawset_field, safe_pcall, safe_xpcall, short_type_name, StackGuard, WrappedFailure,
 };
 use crate::value::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, MultiValue, Nil, Value};
 
@@ -498,6 +498,13 @@ impl Lua {
             ffi::lua_pop(main_state, 1);
             ptr
         };
+
+        // Store `error_traceback` function on the ref stack
+        #[cfg(any(feature = "lua51", feature = "luajit", feature = "luau"))]
+        {
+            ffi::lua_pushcfunction(ref_thread, error_traceback);
+            assert_eq!(ffi::lua_gettop(ref_thread), ExtraData::ERROR_TRACEBACK_IDX);
+        }
 
         // Create ExtraData
         let extra = Arc::new(UnsafeCell::new(ExtraData {
@@ -2601,6 +2608,16 @@ impl Lua {
         LuaRef::new(self, index)
     }
 
+    #[inline]
+    pub(crate) unsafe fn push_error_traceback(&self) {
+        let state = self.state();
+        #[cfg(any(feature = "lua51", feature = "luajit", feature = "luau"))]
+        ffi::lua_xpush(self.ref_thread(), state, ExtraData::ERROR_TRACEBACK_IDX);
+        // Lua 5.2+ support light C functions that does not require extra allocations
+        #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+        ffi::lua_pushcfunction(state, error_traceback);
+    }
+
     unsafe fn register_userdata_metatable<'lua, T: 'static>(
         &'lua self,
         mut registry: UserDataRegistry<'lua, T>,
@@ -3209,6 +3226,12 @@ impl LuaInner {
                 .push(unsafe { mem::transmute(multivalue) });
         }
     }
+}
+
+impl ExtraData {
+    // Index of `error_traceback` function in auxiliary thread stack
+    #[cfg(any(feature = "lua51", feature = "luajit", feature = "luau"))]
+    const ERROR_TRACEBACK_IDX: c_int = 1;
 }
 
 struct StateGuard<'a>(&'a LuaInner, *mut ffi::lua_State);

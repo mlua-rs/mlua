@@ -6,12 +6,11 @@ use std::slice;
 
 use crate::error::{Error, Result};
 use crate::lua::Lua;
-use crate::memory::MemoryState;
 use crate::table::Table;
 use crate::types::{Callback, LuaRef, MaybeSend};
 use crate::util::{
-    assert_stack, check_stack, error_traceback, linenumber_to_usize, pop_error, ptr_to_lossy_str,
-    ptr_to_str, StackGuard,
+    assert_stack, check_stack, linenumber_to_usize, pop_error, ptr_to_lossy_str, ptr_to_str,
+    StackGuard,
 };
 use crate::value::{FromLuaMulti, IntoLua, IntoLuaMulti, Value};
 
@@ -131,7 +130,7 @@ impl<'lua> Function<'lua> {
             check_stack(state, 2)?;
 
             // Push error handler
-            MemoryState::relax_limit_with(state, || ffi::lua_pushcfunction(state, error_traceback));
+            lua.push_error_traceback();
             let stack_start = ffi::lua_gettop(state);
             // Push function and the arguments
             lua.push_ref(&self.0);
