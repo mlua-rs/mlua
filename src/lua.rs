@@ -2961,11 +2961,15 @@ impl Lua {
                 let fut = &mut (*upvalue).data;
                 let mut ctx = Context::from_waker(lua.waker());
                 match fut.as_mut().poll(&mut ctx) {
-                    Poll::Pending => Ok(0),
+                    Poll::Pending => {
+                        ffi::lua_pushnil(state);
+                        let pending = &ASYNC_POLL_PENDING as *const u8 as *mut c_void;
+                        ffi::lua_pushlightuserdata(state, pending);
+                        Ok(2)
+                    }
                     Poll::Ready(nresults) => {
-                        let nresults = nresults?;
-                        match nresults {
-                            0..=2 => {
+                        match nresults? {
+                            nresults @ 0..=2 => {
                                 // Fast path for up to 2 results without creating a table
                                 ffi::lua_pushinteger(state, nresults as _);
                                 if nresults > 0 {
@@ -2973,7 +2977,7 @@ impl Lua {
                                 }
                                 Ok(nresults + 1)
                             }
-                            _ => {
+                            nresults => {
                                 let results = MultiValue::from_stack_multi(nresults, lua)?;
                                 ffi::lua_pushinteger(state, nresults as _);
                                 lua.push_value(Value::Table(lua.create_sequence_from(results)?))?;
@@ -3017,15 +3021,13 @@ impl Lua {
 
         let coroutine = self.globals().get::<_, Table>("coroutine")?;
 
-        let env = self.create_table_with_capacity(0, 4)?;
+        let env = self.create_table_with_capacity(0, 3)?;
         env.set("get_poll", get_poll)?;
+        // Cache `yield` function
         env.set("yield", coroutine.get::<_, Function>("yield")?)?;
         unsafe {
             env.set("unpack", self.create_c_function(unpack)?)?;
         }
-        env.set("pending", {
-            LightUserData(&ASYNC_POLL_PENDING as *const u8 as *mut c_void)
-        })?;
 
         self.load(
             r#"
@@ -3043,7 +3045,7 @@ impl Lua {
                         return unpack(res, nres)
                     end
                 end
-                yield(pending)
+                yield(res) -- `res` is a "pending" value
             end
             "#,
         )
