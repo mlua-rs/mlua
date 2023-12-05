@@ -1001,6 +1001,18 @@ pub trait FromLuaMulti<'lua>: Sized {
     }
 }
 
+#[cfg(feature = "json")]
+impl<'lua> FromLua<'lua> for serde_json::Value {
+    fn from_lua(value: Value<'lua>, _: &'lua Lua) -> Result<Self> {
+        let ty = value.type_name();
+        serde_json::to_value(value).map_err(|e| Error::FromLuaConversionError {
+            from: ty,
+            to: "serde_json::Value",
+            message: Some(format!("{}", e)),
+        })
+    }
+}
+
 #[cfg(test)]
 mod assertions {
     use super::*;
