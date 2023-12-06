@@ -314,13 +314,22 @@ extern "C-unwind" {
     //
     // Miscellaneous functions
     //
-    pub fn lua_error(L: *mut lua_State) -> !;
+    #[link_name = "lua_error"]
+    fn lua_error_(L: *mut lua_State) -> c_int;
     pub fn lua_next(L: *mut lua_State, idx: c_int) -> c_int;
     pub fn lua_concat(L: *mut lua_State, n: c_int);
     pub fn lua_len(L: *mut lua_State, idx: c_int);
     pub fn lua_stringtonumber(L: *mut lua_State, s: *const c_char) -> usize;
     pub fn lua_getallocf(L: *mut lua_State, ud: *mut *mut c_void) -> lua_Alloc;
     pub fn lua_setallocf(L: *mut lua_State, f: lua_Alloc, ud: *mut c_void);
+}
+
+// lua_error does not return but is declared to return int, and Rust translates
+// ! to void which can cause link-time errors if the platform linker is aware
+// of return types and requires they match (for example: wasm does this).
+pub unsafe fn lua_error(L: *mut lua_State) -> ! {
+    lua_error_(L);
+    unreachable!();
 }
 
 //
