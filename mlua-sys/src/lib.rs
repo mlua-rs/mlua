@@ -65,6 +65,7 @@ pub const SYS_MIN_ALIGN: usize = 8;
     target_arch = "sparc64",
     target_arch = "riscv64",
     target_arch = "wasm64",
+    target_arch = "loongarch64",
 ))]
 #[doc(hidden)]
 pub const SYS_MIN_ALIGN: usize = 16;
