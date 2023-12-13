@@ -149,11 +149,18 @@ extern "C-unwind" {
     pub fn lua_tointegerx(L: *mut lua_State, idx: c_int, isnum: *mut c_int) -> lua_Integer;
     pub fn lua_toboolean(L: *mut lua_State, idx: c_int) -> c_int;
     pub fn lua_tolstring(L: *mut lua_State, idx: c_int, len: *mut usize) -> *const c_char;
-    pub fn lua_rawlen(L: *mut lua_State, idx: c_int) -> usize;
+    #[link_name = "lua_rawlen"]
+    fn lua_rawlen_(L: *mut lua_State, idx: c_int) -> lua_Unsigned;
     pub fn lua_tocfunction(L: *mut lua_State, idx: c_int) -> Option<lua_CFunction>;
     pub fn lua_touserdata(L: *mut lua_State, idx: c_int) -> *mut c_void;
     pub fn lua_tothread(L: *mut lua_State, idx: c_int) -> *mut lua_State;
     pub fn lua_topointer(L: *mut lua_State, idx: c_int) -> *const c_void;
+}
+
+// lua_rawlen's return type changed from size_t to lua_Unsigned int in Lua 5.4.
+// This adapts the crate API to the new Lua ABI.
+pub unsafe fn lua_rawlen(L: *mut lua_State, idx: c_int) -> usize {
+    lua_rawlen_(L, idx) as usize
 }
 
 //
@@ -336,7 +343,8 @@ extern "C-unwind" {
     //
     // Miscellaneous functions
     //
-    pub fn lua_error(L: *mut lua_State) -> !;
+    #[link_name = "lua_error"]
+    fn lua_error_(L: *mut lua_State) -> c_int;
     pub fn lua_next(L: *mut lua_State, idx: c_int) -> c_int;
     pub fn lua_concat(L: *mut lua_State, n: c_int);
     pub fn lua_len(L: *mut lua_State, idx: c_int);
@@ -346,6 +354,14 @@ extern "C-unwind" {
 
     pub fn lua_toclose(L: *mut lua_State, idx: c_int);
     pub fn lua_closeslot(L: *mut lua_State, idx: c_int);
+}
+
+// lua_error does not return but is declared to return int, and Rust translates
+// ! to void which can cause link-time errors if the platform linker is aware
+// of return types and requires they match (for example: wasm does this).
+pub unsafe fn lua_error(L: *mut lua_State) -> ! {
+    lua_error_(L);
+    unreachable!();
 }
 
 //
