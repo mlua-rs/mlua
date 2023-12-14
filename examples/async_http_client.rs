@@ -1,3 +1,6 @@
+#[cfg(target_arch = "wasm32")]
+compile_error!("Not available for wasm");
+
 use std::collections::HashMap;
 
 use hyper::body::{Body as HyperBody, HttpBody as _};

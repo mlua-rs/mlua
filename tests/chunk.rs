@@ -1,9 +1,12 @@
+#![allow(unused_imports)]
+
 use std::fs;
 use std::io;
 
 use mlua::{Lua, Result};
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn test_chunk_path() -> Result<()> {
     let lua = Lua::new();
 

@@ -60,19 +60,25 @@ ffi = { package = "mlua-sys", version = "0.4.0", path = "mlua-sys" }
 [target.'cfg(unix)'.dependencies]
 libloading = { version = "0.8", optional = true }
 
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+ffi = { package = "mlua-sys", version = "0.4.0", path = "mlua-sys", features = ["vendored"] }
+
 [dev-dependencies]
-rustyline = "12.0"
-criterion = { version = "0.5", features = ["async_tokio"] }
 trybuild = "1.0"
 futures = "0.3.5"
 hyper = { version = "0.14", features = ["client", "server"] }
 reqwest = { version = "0.11", features = ["json"] }
-tokio = { version = "1.0", features = ["full"] }
+tokio = { version = "1.0", features = ["macros", "rt", "time"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 maplit = "1.0"
 tempfile = "3"
 static_assertions = "1.0"
+
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+criterion = { version = "0.5", features = ["async_tokio"] }
+rustyline = "12.0"
+tokio = { version = "1.0", features = ["full"] }
 
 [[bench]]
 name = "benchmark"
