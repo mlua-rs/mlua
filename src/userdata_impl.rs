@@ -218,7 +218,7 @@ impl<'lua, T: 'static> UserDataRegistry<'lua, T> {
         MR: Future<Output = Result<R>> + 's,
         R: IntoLuaMulti<'lua>,
     {
-        let name = get_function_name::<T>(name);
+        let name = Arc::new(get_function_name::<T>(name));
         let method = Arc::new(method);
 
         Box::new(move |lua, mut args| unsafe {
@@ -312,7 +312,7 @@ impl<'lua, T: 'static> UserDataRegistry<'lua, T> {
         MR: Future<Output = Result<R>> + 's,
         R: IntoLuaMulti<'lua>,
     {
-        let name = get_function_name::<T>(name);
+        let name = Arc::new(get_function_name::<T>(name));
         let method = Arc::new(method);
 
         Box::new(move |lua, mut args| unsafe {

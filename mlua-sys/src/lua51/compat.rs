@@ -146,12 +146,6 @@ unsafe fn compat53_pushfuncname(L: *mut lua_State, ar: *mut lua_Debug) {
 //
 
 #[inline(always)]
-pub unsafe fn lua_error(L: *mut lua_State) -> ! {
-    lua_error_(L);
-    unreachable!()
-}
-
-#[inline(always)]
 pub unsafe fn lua_absindex(L: *mut lua_State, mut idx: c_int) -> c_int {
     if idx < 0 && idx > LUA_REGISTRYINDEX {
         idx += lua_gettop(L) + 1;

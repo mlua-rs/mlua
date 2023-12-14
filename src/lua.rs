@@ -31,10 +31,10 @@ use crate::types::{
 use crate::userdata::{AnyUserData, MetaMethod, UserData, UserDataCell};
 use crate::userdata_impl::{UserDataProxy, UserDataRegistry};
 use crate::util::{
-    self, assert_stack, check_stack, get_destructed_userdata_metatable, get_gc_metatable,
-    get_gc_userdata, get_main_state, get_userdata, init_error_registry, init_gc_metatable,
-    init_userdata_metatable, pop_error, push_gc_userdata, push_string, push_table, rawset_field,
-    safe_pcall, safe_xpcall, short_type_name, StackGuard, WrappedFailure,
+    self, assert_stack, check_stack, error_traceback, get_destructed_userdata_metatable,
+    get_gc_metatable, get_gc_userdata, get_main_state, get_userdata, init_error_registry,
+    init_gc_metatable, init_userdata_metatable, pop_error, push_gc_userdata, push_string,
+    push_table, rawset_field, safe_pcall, safe_xpcall, short_type_name, StackGuard, WrappedFailure,
 };
 use crate::value::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, MultiValue, Nil, Value};
 
@@ -498,6 +498,13 @@ impl Lua {
             ffi::lua_pop(main_state, 1);
             ptr
         };
+
+        // Store `error_traceback` function on the ref stack
+        #[cfg(any(feature = "lua51", feature = "luajit", feature = "luau"))]
+        {
+            ffi::lua_pushcfunction(ref_thread, error_traceback);
+            assert_eq!(ffi::lua_gettop(ref_thread), ExtraData::ERROR_TRACEBACK_IDX);
+        }
 
         // Create ExtraData
         let extra = Arc::new(UnsafeCell::new(ExtraData {
@@ -2601,6 +2608,16 @@ impl Lua {
         LuaRef::new(self, index)
     }
 
+    #[inline]
+    pub(crate) unsafe fn push_error_traceback(&self) {
+        let state = self.state();
+        #[cfg(any(feature = "lua51", feature = "luajit", feature = "luau"))]
+        ffi::lua_xpush(self.ref_thread(), state, ExtraData::ERROR_TRACEBACK_IDX);
+        // Lua 5.2+ support light C functions that does not require extra allocations
+        #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+        ffi::lua_pushcfunction(state, error_traceback);
+    }
+
     unsafe fn register_userdata_metatable<'lua, T: 'static>(
         &'lua self,
         mut registry: UserDataRegistry<'lua, T>,
@@ -2944,11 +2961,15 @@ impl Lua {
                 let fut = &mut (*upvalue).data;
                 let mut ctx = Context::from_waker(lua.waker());
                 match fut.as_mut().poll(&mut ctx) {
-                    Poll::Pending => Ok(0),
+                    Poll::Pending => {
+                        ffi::lua_pushnil(state);
+                        let pending = &ASYNC_POLL_PENDING as *const u8 as *mut c_void;
+                        ffi::lua_pushlightuserdata(state, pending);
+                        Ok(2)
+                    }
                     Poll::Ready(nresults) => {
-                        let nresults = nresults?;
-                        match nresults {
-                            0..=2 => {
+                        match nresults? {
+                            nresults @ 0..=2 => {
                                 // Fast path for up to 2 results without creating a table
                                 ffi::lua_pushinteger(state, nresults as _);
                                 if nresults > 0 {
@@ -2956,7 +2977,7 @@ impl Lua {
                                 }
                                 Ok(nresults + 1)
                             }
-                            _ => {
+                            nresults => {
                                 let results = MultiValue::from_stack_multi(nresults, lua)?;
                                 ffi::lua_pushinteger(state, nresults as _);
                                 lua.push_value(Value::Table(lua.create_sequence_from(results)?))?;
@@ -3000,20 +3021,17 @@ impl Lua {
 
         let coroutine = self.globals().get::<_, Table>("coroutine")?;
 
-        let env = self.create_table_with_capacity(0, 4)?;
+        let env = self.create_table_with_capacity(0, 3)?;
         env.set("get_poll", get_poll)?;
+        // Cache `yield` function
         env.set("yield", coroutine.get::<_, Function>("yield")?)?;
         unsafe {
             env.set("unpack", self.create_c_function(unpack)?)?;
         }
-        env.set("pending", {
-            LightUserData(&ASYNC_POLL_PENDING as *const u8 as *mut c_void)
-        })?;
 
         self.load(
             r#"
             local poll = get_poll(...)
-            local pending, yield, unpack = pending, yield, unpack
             while true do
                 local nres, res, res2 = poll()
                 if nres ~= nil then
@@ -3027,7 +3045,7 @@ impl Lua {
                         return unpack(res, nres)
                     end
                 end
-                yield(pending)
+                yield(res) -- `res` is a "pending" value
             end
             "#,
         )
@@ -3209,6 +3227,12 @@ impl LuaInner {
                 .push(unsafe { mem::transmute(multivalue) });
         }
     }
+}
+
+impl ExtraData {
+    // Index of `error_traceback` function in auxiliary thread stack
+    #[cfg(any(feature = "lua51", feature = "luajit", feature = "luau"))]
+    const ERROR_TRACEBACK_IDX: c_int = 1;
 }
 
 struct StateGuard<'a>(&'a LuaInner, *mut ffi::lua_State);

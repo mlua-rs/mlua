@@ -25,12 +25,6 @@ unsafe fn compat53_reverse(L: *mut lua_State, mut a: c_int, mut b: c_int) {
 // lua ported functions
 //
 
-#[inline(always)]
-pub unsafe fn lua_error(L: *mut crate::lua_State) -> ! {
-    crate::lua_error_(L);
-    unreachable!()
-}
-
 pub unsafe fn lua_rotate(L: *mut lua_State, mut idx: c_int, mut n: c_int) {
     idx = lua_absindex(L, idx);
     if n > 0 {
