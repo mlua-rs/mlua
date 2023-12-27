@@ -20,7 +20,7 @@ pub struct luaL_Reg {
     pub func: lua_CFunction,
 }
 
-#[cfg_attr(all(windows, raw_dylib), link(name = "lua54", kind = "raw-dylib"))]
+#[cfg_attr(all(windows, raw_dylib), link(name = "lua53", kind = "raw-dylib"))]
 extern "C-unwind" {
     pub fn luaL_checkversion_(L: *mut lua_State, ver: lua_Number, sz: usize);
 
