@@ -3194,8 +3194,12 @@ impl Lua {
     }
 
     /// Compile all the files to bytecode under a directory, save as `*.bin`
+    /// 
     /// It designs for build script, so there will be no error return.
+    /// 
     /// It will automatically print cargo:rerun-if-changed=*
+    /// 
+    /// In release mode, it may not save all the debug information, see also [`Function::dump()`]
     ///
     /// # Examples
     ///
@@ -3204,8 +3208,8 @@ impl Lua {
     /// fn main(){
     ///     let lua = Lua::new();
     ///     
-    ///     lua.compile_single("./a.lua")
-    ///         .compile_single("./b.lua");
+    ///     lua.compile_single("./tests/scripts/a.lua")
+    ///         .compile_single("./tests/scripts/b.lua");
     /// }
     /// ```
     #[cfg(not(feature = "luau"))]
@@ -3223,11 +3227,11 @@ impl Lua {
         let strip;
         #[cfg(debug_assertions)]
         {
-            strip = true;
+            strip = false;
         }
         #[cfg(not(debug_assertions))]
         {
-            strip = false;
+            strip = true;
         }
 
         let bytecode = self.load(&bytes).into_function().unwrap().dump(strip);
@@ -3240,9 +3244,13 @@ impl Lua {
         self
     }
 
-    /// Compile all the files to bytecode under a directory, save as `*.bin`
-    /// It designs for build script, so there will be no error return.
-    /// It automatically print cargo:rerun-if-changed=*
+    /// Compile all the files with the extension `lua` to bytecode under a directory, save as `*.bin`
+    /// 
+    /// It is designed for build script, so there will be no error return.
+    /// 
+    /// It automatically print cargo:rerun-if-changed=* of each script file
+    /// 
+    /// It calls [`Lua::compile_single()`] on every file
     ///
     /// # Examples
     ///
@@ -3251,8 +3259,8 @@ impl Lua {
     /// fn main(){
     ///     let lua = Lua::new();
     ///     
-    ///     lua.compile_directory("./scripts")
-    ///         compile_directory("./exetensions");
+    ///     lua.compile_directory("./tests/scripts")
+    ///         .compile_directory("./tests/scripts");
     /// }
     /// ```
     #[cfg(not(feature = "luau"))]
