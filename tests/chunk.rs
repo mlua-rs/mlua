@@ -29,6 +29,36 @@ fn test_chunk_path() -> Result<()> {
 }
 
 #[test]
+fn test_compile() {
+    let lua = Lua::new();
+
+    let assert = || {
+        assert_eq!(
+            lua.load(fs::read("./tests/scripts/a.bin").unwrap())
+                .eval::<String>()
+                .unwrap(),
+            "Helloworld".to_string()
+        );
+
+        assert_eq!(
+            lua.load(fs::read("./tests/scripts/b.bin").unwrap())
+                .eval::<String>()
+                .unwrap(),
+            "Helloworld".to_string()
+        );
+    };
+
+    lua.compile_single("./tests/scripts/a.lua")
+        .compile_single("./tests/scripts/b.lua");
+
+    assert();
+
+    lua.compile_directory("./tests/scripts");
+
+    assert();
+}
+
+#[test]
 #[cfg(feature = "macros")]
 fn test_chunk_macro() -> Result<()> {
     let lua = Lua::new();

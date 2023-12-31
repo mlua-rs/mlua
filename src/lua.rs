@@ -3192,6 +3192,111 @@ impl Lua {
     pub(crate) fn clone(&self) -> Arc<LuaInner> {
         Arc::clone(&self.0)
     }
+
+    /// Compile all the files to bytecode under a directory, save as `*.bin`
+    /// It designs for build script, so there will be no error return.
+    /// It will automatically print cargo:rerun-if-changed=*
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use mlua::prelude::*;
+    /// fn main(){
+    ///     let lua = Lua::new();
+    ///     
+    ///     lua.compile_single("./a.lua")
+    ///         .compile_single("./b.lua");
+    /// }
+    /// ```
+    #[cfg(not(feature = "luau"))]
+    #[cfg_attr(docsrs, doc(cfg(not(feature = "luau"))))]
+    #[track_caller]
+    #[inline]
+    pub fn compile_single(&self, path: &str) -> &Self {
+        use std::fs;
+        use std::path::PathBuf;
+
+        println!("cargo:rerun-if-changed={}", path);
+
+        let bytes = fs::read(path).unwrap();
+
+        let strip;
+        #[cfg(debug_assertions)]
+        {
+            strip = true;
+        }
+        #[cfg(not(debug_assertions))]
+        {
+            strip = false;
+        }
+
+        let bytecode = self.load(&bytes).into_function().unwrap().dump(strip);
+
+        let mut path = PathBuf::from(path);
+        path.set_extension("bin");
+
+        fs::write(path, bytecode).unwrap();
+
+        self
+    }
+
+    /// Compile all the files to bytecode under a directory, save as `*.bin`
+    /// It designs for build script, so there will be no error return.
+    /// It automatically print cargo:rerun-if-changed=*
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use mlua::prelude::*;
+    /// fn main(){
+    ///     let lua = Lua::new();
+    ///     
+    ///     lua.compile_directory("./scripts")
+    ///         compile_directory("./exetensions");
+    /// }
+    /// ```
+    #[cfg(not(feature = "luau"))]
+    #[cfg_attr(docsrs, doc(cfg(not(feature = "luau"))))]
+    #[track_caller]
+    pub fn compile_directory(&self, path: &str) -> &Self {
+        use std::fs;
+        use std::string::String;
+        #[track_caller]
+        fn all_files(path: &str) -> std::io::Result<Vec<String>> {
+            // here use a BFS to traversal all the files under a directory
+            let mut stk = vec![path.to_string()];
+            let mut ans = Vec::new();
+            while let Some(path) = stk.pop() {
+                for entry in fs::read_dir(path)? {
+                    let entry = entry?;
+                    let path = entry.path();
+                    let s = path
+                        .to_str()
+                        .unwrap_or_else(|| panic!("a path : {} is not UTF-8", path.display()))
+                        .to_string();
+                    if path.is_dir() {
+                        stk.push(s);
+                    } else {
+                        if let Some(exe)=path.extension(){
+                            if exe=="lua"{
+                                ans.push(s);
+                            }
+                        }
+                    }
+                }
+            }
+
+            Ok(ans)
+        }
+
+        let files = all_files(path).expect("Fail to traversal the directory");
+
+        for path in files {
+            self.compile_single(path.as_str());
+        }
+
+        self
+    }
 }
 
 impl LuaInner {
