@@ -3194,11 +3194,11 @@ impl Lua {
     }
 
     /// Compile all the files to bytecode under a directory, save as `*.bin`
-    /// 
+    ///
     /// It designs for build script, so there will be no error return.
-    /// 
+    ///
     /// It will automatically print cargo:rerun-if-changed=*
-    /// 
+    ///
     /// In release mode, it may not save all the debug information, see also [`Function::dump()`]
     ///
     /// # Examples
@@ -3216,13 +3216,21 @@ impl Lua {
     #[cfg_attr(docsrs, doc(cfg(not(feature = "luau"))))]
     #[track_caller]
     #[inline]
-    pub fn compile_single(&self, path: &str) -> &Self {
+    pub fn compile_single(&self, path: impl AsRef<std::path::Path>) -> &Self {
         use std::fs;
         use std::path::PathBuf;
 
-        println!("cargo:rerun-if-changed={}", path);
+        let path = path.as_ref();
 
-        let bytes = fs::read(path).unwrap();
+        println!("cargo:rerun-if-changed={}", path.display());
+
+        let bytes = fs::read(path).unwrap_or_else(|err| {
+            panic!(
+                "Error caused while reading the source file\nAt Path: {}\nCaused by:\n\t{:?}",
+                path.display(),
+                err
+            )
+        });
 
         let strip;
         #[cfg(debug_assertions)]
@@ -3234,22 +3242,34 @@ impl Lua {
             strip = true;
         }
 
-        let bytecode = self.load(&bytes).into_function().unwrap().dump(strip);
+        let bytecode = self.load(&bytes).into_function().unwrap_or_else(|err|{
+            panic!(
+                "Error caused while converting chunk into function\nAt Path: {}\nCaused by:\n\t{:?}",
+                path.display(),
+                err
+            )
+        }).dump(strip);
 
         let mut path = PathBuf::from(path);
         path.set_extension("bin");
 
-        fs::write(path, bytecode).unwrap();
+        fs::write(&path, bytecode).unwrap_or_else(|err| {
+            panic!(
+                "Error caused while writing the bytecode\nAt Path: {}\nCaused by:\n\t{:?}",
+                path.display(),
+                err
+            )
+        });
 
         self
     }
 
     /// Compile all the files with the extension `lua` to bytecode under a directory, save as `*.bin`
-    /// 
+    ///
     /// It is designed for build script, so there will be no error return.
-    /// 
+    ///
     /// It automatically print cargo:rerun-if-changed=* of each script file
-    /// 
+    ///
     /// It calls [`Lua::compile_single()`] on every file
     ///
     /// # Examples
@@ -3266,28 +3286,24 @@ impl Lua {
     #[cfg(not(feature = "luau"))]
     #[cfg_attr(docsrs, doc(cfg(not(feature = "luau"))))]
     #[track_caller]
-    pub fn compile_directory(&self, path: &str) -> &Self {
+    pub fn compile_directory(&self, path: impl AsRef<std::path::Path>) -> &Self {
         use std::fs;
-        use std::string::String;
+        use std::path::{Path, PathBuf};
         #[track_caller]
-        fn all_files(path: &str) -> std::io::Result<Vec<String>> {
+        fn all_files(path: impl AsRef<Path>) -> std::io::Result<Vec<PathBuf>> {
             // here use a BFS to traversal all the files under a directory
-            let mut stk = vec![path.to_string()];
+            let mut stk = vec![path.as_ref().to_path_buf()];
             let mut ans = Vec::new();
             while let Some(path) = stk.pop() {
                 for entry in fs::read_dir(path)? {
                     let entry = entry?;
                     let path = entry.path();
-                    let s = path
-                        .to_str()
-                        .unwrap_or_else(|| panic!("a path : {} is not UTF-8", path.display()))
-                        .to_string();
                     if path.is_dir() {
-                        stk.push(s);
+                        stk.push(path);
                     } else {
-                        if let Some(exe)=path.extension(){
-                            if exe=="lua"{
-                                ans.push(s);
+                        if let Some(exe) = path.extension() {
+                            if exe == "lua" {
+                                ans.push(path);
                             }
                         }
                     }
@@ -3297,10 +3313,18 @@ impl Lua {
             Ok(ans)
         }
 
-        let files = all_files(path).expect("Fail to traversal the directory");
+        let path = path.as_ref();
+
+        let files = all_files(path).unwrap_or_else(|err| {
+            panic!(
+                "Error caused while traversal the directory\nAt Path: {}\nCaused by:\n\t{:?}",
+                path.display(),
+                err
+            )
+        });
 
         for path in files {
-            self.compile_single(path.as_str());
+            self.compile_single(path);
         }
 
         self
