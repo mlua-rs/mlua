@@ -58,6 +58,10 @@ fn test_compile() {
 
     assert();
 
+    // remove them to make sure the code above don't influence them test below
+    fs::remove_file(work_dir.join("a.bin")).unwrap();
+    fs::remove_file(work_dir.join("b.bin")).unwrap();
+
     lua.compile_directory(work_dir);
 
     assert();
