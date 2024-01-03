@@ -239,6 +239,7 @@ extern "C-unwind" {
 // lua_error does not return but is declared to return int, and Rust translates
 // ! to void which can cause link-time errors if the platform linker is aware
 // of return types and requires they match (for example: wasm does this).
+#[inline(always)]
 pub unsafe fn lua_error(L: *mut lua_State) -> ! {
     lua_error_(L);
     unreachable!();
