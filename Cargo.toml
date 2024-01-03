@@ -60,9 +60,6 @@ ffi = { package = "mlua-sys", version = "0.4.0", path = "mlua-sys" }
 [target.'cfg(unix)'.dependencies]
 libloading = { version = "0.8", optional = true }
 
-[target.'cfg(target_arch = "wasm32")'.dependencies]
-ffi = { package = "mlua-sys", version = "0.4.0", path = "mlua-sys", features = ["vendored"] }
-
 [dev-dependencies]
 trybuild = "1.0"
 futures = "0.3.5"

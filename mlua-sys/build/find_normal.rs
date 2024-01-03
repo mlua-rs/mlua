@@ -4,6 +4,12 @@ use std::env;
 use std::ops::Bound;
 
 pub fn probe_lua() {
+    let target_arch = env::var("CARGO_CFG_TARGET_ARCH").unwrap();
+
+    if target_arch == "wasm32" && cfg!(not(feature = "vendored")) {
+        panic!("Please enable `vendored` feature to build for wasm32");
+    }
+
     let lib_dir = env::var("LUA_LIB").unwrap_or_default();
     let lua_lib = env::var("LUA_LIB_NAME").unwrap_or_default();
 
