@@ -10,8 +10,15 @@ use mlua::{
     UserData, UserDataMethods, Value,
 };
 
+#[cfg(not(target_arch = "wasm32"))]
 async fn sleep_ms(ms: u64) {
     tokio::time::sleep(Duration::from_millis(ms)).await;
+}
+
+#[cfg(target_arch = "wasm32")]
+async fn sleep_ms(_ms: u64) {
+    // I was unable to make sleep() work in wasm32-emscripten target
+    tokio::task::yield_now().await;
 }
 
 #[tokio::test]

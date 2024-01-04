@@ -1,14 +1,17 @@
-#![allow(unused_imports)]
-
 use std::fs;
 use std::io;
 
 use mlua::{Lua, Result};
 
 #[test]
-#[cfg(not(target_arch = "wasm32"))]
 fn test_chunk_path() -> Result<()> {
     let lua = Lua::new();
+
+    if cfg!(target_arch = "wasm32") {
+        // TODO: figure out why emscripten fails on file operations
+        // Also see https://github.com/rust-lang/rust/issues/119250
+        return Ok(());
+    }
 
     let temp_dir = tempfile::tempdir().unwrap();
     fs::write(

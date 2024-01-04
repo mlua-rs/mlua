@@ -1,6 +1,4 @@
 //! This example shows a simple read-evaluate-print-loop (REPL).
-#[cfg(target_arch = "wasm32")]
-compile_error!("Not available for wasm");
 
 use mlua::{Error, Lua, MultiValue};
 use rustyline::DefaultEditor;

@@ -28,6 +28,12 @@ fn test_require() -> Result<()> {
     assert!(lua.globals().get::<_, Option<Value>>("require")?.is_none());
     assert!(lua.globals().get::<_, Option<Value>>("package")?.is_none());
 
+    if cfg!(target_arch = "wasm32") {
+        // TODO: figure out why emscripten fails on file operations
+        // Also see https://github.com/rust-lang/rust/issues/119250
+        return Ok(());
+    }
+
     lua = Lua::new();
 
     let temp_dir = tempfile::tempdir().unwrap();

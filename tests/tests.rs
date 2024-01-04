@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+#[cfg(not(target_arch = "wasm32"))]
 use std::iter::FromIterator;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::string::String as StdString;
@@ -312,30 +313,29 @@ fn test_error() -> Result<()> {
     globals.set("rust_error_function", rust_error_function)?;
 
     let no_error = globals.get::<_, Function>("no_error")?;
-    let lua_error = globals.get::<_, Function>("lua_error")?;
-    let rust_error = globals.get::<_, Function>("rust_error")?;
-    let return_error = globals.get::<_, Function>("return_error")?;
-    let return_string_error = globals.get::<_, Function>("return_string_error")?;
-    let test_pcall = globals.get::<_, Function>("test_pcall")?;
-    let understand_recursion = globals.get::<_, Function>("understand_recursion")?;
-
     assert!(no_error.call::<_, ()>(()).is_ok());
+
+    let lua_error = globals.get::<_, Function>("lua_error")?;
     match lua_error.call::<_, ()>(()) {
         Err(Error::RuntimeError(_)) => {}
         Err(e) => panic!("error is not RuntimeError kind, got {:?}", e),
         _ => panic!("error not returned"),
     }
+
+    let rust_error = globals.get::<_, Function>("rust_error")?;
     match rust_error.call::<_, ()>(()) {
         Err(Error::CallbackError { .. }) => {}
         Err(e) => panic!("error is not CallbackError kind, got {:?}", e),
         _ => panic!("error not returned"),
     }
 
+    let return_error = globals.get::<_, Function>("return_error")?;
     match return_error.call::<_, Value>(()) {
         Ok(Value::Error(_)) => {}
         _ => panic!("Value::Error not returned"),
     }
 
+    let return_string_error = globals.get::<_, Function>("return_string_error")?;
     assert!(return_string_error.call::<_, Error>(()).is_ok());
 
     match lua
@@ -358,9 +358,14 @@ fn test_error() -> Result<()> {
         _ => panic!("error not returned"),
     }
 
+    let test_pcall = globals.get::<_, Function>("test_pcall")?;
     test_pcall.call::<_, ()>(())?;
 
-    assert!(understand_recursion.call::<_, ()>(()).is_err());
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let understand_recursion = globals.get::<_, Function>("understand_recursion")?;
+        assert!(understand_recursion.call::<_, ()>(()).is_err());
+    }
 
     Ok(())
 }
@@ -947,6 +952,7 @@ fn test_application_data() -> Result<()> {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn test_recursion() -> Result<()> {
     let lua = Lua::new();
 
@@ -966,14 +972,16 @@ fn test_recursion() -> Result<()> {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn test_too_many_returns() -> Result<()> {
     let lua = Lua::new();
     let f = lua.create_function(|_, ()| Ok(Variadic::from_iter(1..1000000)))?;
-    assert!(f.call::<_, Vec<u32>>(()).is_err());
+    assert!(f.call::<_, Variadic<u32>>(()).is_err());
     Ok(())
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn test_too_many_arguments() -> Result<()> {
     let lua = Lua::new();
     lua.load("function test(...) end").exec()?;
@@ -988,6 +996,7 @@ fn test_too_many_arguments() -> Result<()> {
 
 #[test]
 #[cfg(not(feature = "luajit"))]
+#[cfg(not(target_arch = "wasm32"))]
 fn test_too_many_recursions() -> Result<()> {
     let lua = Lua::new();
 
@@ -1001,6 +1010,7 @@ fn test_too_many_recursions() -> Result<()> {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn test_too_many_binds() -> Result<()> {
     let lua = Lua::new();
     let globals = lua.globals();
@@ -1022,6 +1032,7 @@ fn test_too_many_binds() -> Result<()> {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn test_ref_stack_exhaustion() {
     match catch_unwind(AssertUnwindSafe(|| -> Result<()> {
         let lua = Lua::new();
@@ -1351,6 +1362,7 @@ fn test_luajit_cdata() -> Result<()> {
 
 #[test]
 #[cfg(feature = "send")]
+#[cfg(not(target_arch = "wasm32"))]
 fn test_send() {
     let lua = Lua::new();
     std::thread::spawn(move || {

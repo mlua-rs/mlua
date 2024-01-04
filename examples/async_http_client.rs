@@ -1,6 +1,3 @@
-#[cfg(target_arch = "wasm32")]
-compile_error!("Not available for wasm");
-
 use std::collections::HashMap;
 
 use hyper::body::{Body as HyperBody, HttpBody as _};
@@ -22,7 +19,7 @@ impl UserData for BodyReader {
     }
 }
 
-#[tokio::main]
+#[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<()> {
     let lua = Lua::new();
 

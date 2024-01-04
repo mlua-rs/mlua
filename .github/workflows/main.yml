@@ -206,6 +206,29 @@ jobs:
           (cd tests/module && cargo build --release --features "${{ matrix.lua }}")
           (cd tests/module/loader && cargo test --release --features "${{ matrix.lua }}")
 
+  test_wasm32_emscripten:
+    name: Test on wasm32-unknown-emscripten
+    runs-on: ubuntu-22.04
+    needs: build
+    strategy:
+      matrix:
+        lua: [lua54, lua53, lua52, lua51, luau]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+          target: wasm32-unknown-emscripten
+      - name: Install Emscripten
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends emscripten
+      - name: Run ${{ matrix.lua }} tests
+        run: |
+          cargo test --tests --features "${{ matrix.lua }},vendored"
+          cargo test --tests --features "${{ matrix.lua }},vendored,async,send,serialize,macros,parking_lot"
+          cargo test --tests --features "${{ matrix.lua }},vendored,async,serialize,macros,parking_lot,unstable"
+
   rustfmt:
     name: Rustfmt
     runs-on: ubuntu-22.04

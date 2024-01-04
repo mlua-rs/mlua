@@ -73,13 +73,22 @@ fn test_static_lua_coroutine() -> Result<()> {
 async fn test_static_async() -> Result<()> {
     let lua = Lua::new().into_static();
 
+    #[cfg(not(target_arch = "wasm32"))]
+    async fn sleep_ms(ms: u64) {
+        tokio::time::sleep(std::time::Duration::from_millis(ms)).await;
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    async fn sleep_ms(_ms: u64) {
+        tokio::task::yield_now().await;
+    }
+
     let timer =
         lua.create_async_function(|_, (i, n, f): (u64, u64, mlua::Function)| async move {
             tokio::task::spawn_local(async move {
-                let dur = std::time::Duration::from_millis(i);
                 for _ in 0..n {
                     tokio::task::spawn_local(f.call_async::<(), ()>(()));
-                    tokio::time::sleep(dur).await;
+                    sleep_ms(i).await;
                 }
             });
             Ok(())

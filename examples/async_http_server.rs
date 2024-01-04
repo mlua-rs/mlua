@@ -1,6 +1,3 @@
-#[cfg(target_arch = "wasm32")]
-compile_error!("Not available for wasm");
-
 use std::future::Future;
 use std::net::SocketAddr;
 use std::pin::Pin;

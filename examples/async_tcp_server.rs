@@ -1,6 +1,3 @@
-#[cfg(target_arch = "wasm32")]
-compile_error!("Not available for wasm");
-
 use std::io;
 use std::net::SocketAddr;
 use std::rc::Rc;
