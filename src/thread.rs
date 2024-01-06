@@ -239,7 +239,7 @@ impl<'lua> Thread<'lua> {
     ///
     /// [Lua 5.4]: https://www.lua.org/manual/5.4/manual.html#lua_closethread
     #[cfg(any(feature = "lua54", feature = "luau"))]
-    #[cfg_attr(docsrs, doc(cfg(not(feature = "luau"))))]
+    #[cfg_attr(docsrs, doc(cfg(any(feature = "lua54", feature = "luau"))))]
     pub fn reset(&self, func: crate::function::Function<'lua>) -> Result<()> {
         let lua = self.0.lua;
         let thread_state = self.state();
