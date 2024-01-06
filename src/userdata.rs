@@ -580,12 +580,12 @@ pub trait UserDataFields<'lua, T> {
 /// # use mlua::{Lua, Result, UserData};
 /// # fn main() -> Result<()> {
 /// # let lua = Lua::new();
-/// struct MyUserData(i32);
+/// struct MyUserData;
 ///
 /// impl UserData for MyUserData {}
 ///
 /// // `MyUserData` now implements `IntoLua`:
-/// lua.globals().set("myobject", MyUserData(123))?;
+/// lua.globals().set("myobject", MyUserData)?;
 ///
 /// lua.load("assert(type(myobject) == 'userdata')").exec()?;
 /// # Ok(())
