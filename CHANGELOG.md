@@ -1,3 +1,8 @@
+## v0.9.3
+
+- WebAssembly support (`wasm32-unknown-emscripten` target)
+- Performance improvements (faster Lua function calls for lua51/jit/luau)
+
 ## v0.9.2
 
 - Added binary modules support to Luau
