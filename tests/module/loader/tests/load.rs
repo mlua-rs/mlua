@@ -59,10 +59,34 @@ fn test_module_from_thread() -> Result<()> {
             assert(mod.sum(a, b) == a + b)
         end)
 
-        coroutine.resume(co, 3, 5)
+        local ok, err = coroutine.resume(co, 3, 5)
+        assert(ok, err)
         collectgarbage()
 
         assert(mod.used_memory() > 0)
+    "#,
+    )
+    .exec()
+}
+
+#[cfg(any(
+    feature = "lua54",
+    feature = "lua53",
+    feature = "lua52",
+    feature = "lua51"
+))]
+#[test]
+fn test_module_multi_from_thread() -> Result<()> {
+    let lua = make_lua()?;
+    lua.load(
+        r#"
+        local mod = require("test_module")
+        local co = coroutine.create(function()
+            local mod2 = require("test_module.second")
+            assert(mod2.userdata ~= nil)
+        end)
+        local ok, err = coroutine.resume(co)
+        assert(ok, err)
     "#,
     )
     .exec()

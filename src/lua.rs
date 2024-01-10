@@ -708,18 +708,20 @@ impl Lua {
     // The returned value then pushed onto the stack.
     #[doc(hidden)]
     #[cfg(not(tarpaulin_include))]
-    pub unsafe fn entrypoint<'lua, A, R, F>(self, func: F) -> c_int
+    pub unsafe fn entrypoint<'lua, A, R, F>(self, state: *mut ffi::lua_State, func: F) -> c_int
     where
         A: FromLuaMulti<'lua>,
         R: IntoLua<'lua>,
         F: Fn(&'lua Lua, A) -> Result<R> + MaybeSend + 'static,
     {
-        let (state, extra) = (self.state(), self.extra.get());
-        // It must be safe to drop `self` as in the module mode we keep strong reference to `Lua` in the registry
+        let extra = self.extra.get();
+        // `self` is no longer needed and must be dropped at this point to avoid possible memory leak
+        // in case of possible longjmp (lua_error) below
         drop(self);
 
         callback_error_ext(state, extra, move |nargs| {
             let lua: &Lua = mem::transmute((*extra).inner.assume_init_ref());
+            let _guard = StateGuard::new(&lua.0, state);
             let args = A::from_stack_args(nargs, 1, None, lua)?;
             func(lua, args)?.push_into_stack(lua)?;
             Ok(1)
@@ -729,12 +731,12 @@ impl Lua {
     // A simple module entrypoint without arguments
     #[doc(hidden)]
     #[cfg(not(tarpaulin_include))]
-    pub unsafe fn entrypoint1<'lua, R, F>(self, func: F) -> c_int
+    pub unsafe fn entrypoint1<'lua, R, F>(self, state: *mut ffi::lua_State, func: F) -> c_int
     where
         R: IntoLua<'lua>,
         F: Fn(&'lua Lua) -> Result<R> + MaybeSend + 'static,
     {
-        self.entrypoint(move |lua, _: ()| func(lua))
+        self.entrypoint(state, move |lua, _: ()| func(lua))
     }
 
     /// Skips memory checks for some operations.
