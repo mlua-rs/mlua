@@ -51,7 +51,11 @@ pub fn lua_module(attr: TokenStream, item: TokenStream) -> TokenStream {
     let func_name = &func.sig.ident;
     let module_name = args.name.unwrap_or_else(|| func_name.clone());
     let ext_entrypoint_name = Ident::new(&format!("luaopen_{module_name}"), Span::call_site());
-    let skip_memory_check = args.skip_memory_check;
+    let skip_memory_check = if args.skip_memory_check {
+        quote! { lua.skip_memory_check(true); }
+    } else {
+        quote! {}
+    };
 
     let wrapped = quote! {
         ::mlua::require_module_feature!();
@@ -61,7 +65,7 @@ pub fn lua_module(attr: TokenStream, item: TokenStream) -> TokenStream {
         #[no_mangle]
         unsafe extern "C-unwind" fn #ext_entrypoint_name(state: *mut ::mlua::lua_State) -> ::std::os::raw::c_int {
             let lua = ::mlua::Lua::init_from_ptr(state);
-            lua.skip_memory_check(#skip_memory_check);
+            #skip_memory_check
             lua.entrypoint1(state, #func_name)
         }
     };
