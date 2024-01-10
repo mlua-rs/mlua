@@ -1,3 +1,7 @@
+## v0.9.4
+
+- Fixed loading all-in-one modules under mixed states (eg. main state and coroutines)
+
 ## v0.9.3
 
 - WebAssembly support (`wasm32-unknown-emscripten` target)
