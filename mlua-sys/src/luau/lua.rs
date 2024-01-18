@@ -8,7 +8,7 @@ use std::{mem, ptr};
 pub const LUA_MULTRET: c_int = -1;
 
 // Max number of Lua stack slots
-const LUAI_MAXCSTACK: c_int = 100000;
+const LUAI_MAXCSTACK: c_int = 1000000;
 
 //
 // Pseudo-indices
