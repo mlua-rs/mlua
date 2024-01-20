@@ -8,8 +8,8 @@ use std::sync::Arc;
 use std::{error, f32, f64, fmt};
 
 use mlua::{
-    ChunkMode, Error, ExternalError, Function, Lua, LuaOptions, Nil, Result, StdLib, String, Table,
-    UserData, Value, Variadic,
+    ChunkMode, Error, ExternalError, Function, IntoLua, Lua, LuaOptions, Nil, Result, StdLib,
+    String, Table, UserData, Value, Variadic,
 };
 
 #[cfg(not(feature = "luau"))]
@@ -775,6 +775,35 @@ fn test_registry_value() -> Result<()> {
     })?;
 
     f.call::<_, ()>(())?;
+
+    Ok(())
+}
+
+#[test]
+fn test_registry_value_into_lua() -> Result<()> {
+    let lua = Lua::new();
+
+    let t = lua.create_table()?;
+    let r = lua.create_registry_value(t)?;
+    let f = lua.create_function(|_, t: Table| t.raw_set("hello", "world"))?;
+
+    f.call(&r)?;
+    let v = r.into_lua(&lua)?;
+    let t = v.as_table().unwrap();
+    assert_eq!(t.get::<_, String>("hello")?, "world");
+
+    // Try to set nil registry key
+    let r_nil = lua.create_registry_value(Value::Nil)?;
+    t.set("hello", &r_nil)?;
+    assert_eq!(t.get::<_, Value>("hello")?, Value::Nil);
+
+    // Check non-owned registry key
+    let lua2 = Lua::new();
+    let r2 = lua2.create_registry_value("abc")?;
+    assert!(matches!(
+        f.call::<_, ()>(&r2),
+        Err(Error::MismatchedRegistryKey)
+    ));
 
     Ok(())
 }

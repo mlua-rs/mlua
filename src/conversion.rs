@@ -16,7 +16,7 @@ use crate::lua::Lua;
 use crate::string::String;
 use crate::table::Table;
 use crate::thread::Thread;
-use crate::types::{LightUserData, MaybeSend};
+use crate::types::{LightUserData, MaybeSend, RegistryKey};
 use crate::userdata::{AnyUserData, UserData, UserDataRef, UserDataRefMut};
 use crate::value::{FromLua, IntoLua, Nil, Value};
 
@@ -237,6 +237,26 @@ impl<'lua> FromLua<'lua> for Error {
                     .unwrap_or_else(|| "<unprintable error>".to_owned()),
             )),
         }
+    }
+}
+
+impl<'lua> IntoLua<'lua> for &RegistryKey {
+    #[inline]
+    fn into_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
+        lua.registry_value(self)
+    }
+
+    unsafe fn push_into_stack(self, lua: &'lua Lua) -> Result<()> {
+        if !lua.owns_registry_value(self) {
+            return Err(Error::MismatchedRegistryKey);
+        }
+
+        if self.is_nil() {
+            ffi::lua_pushnil(lua.state());
+        } else {
+            ffi::lua_rawgeti(lua.state(), ffi::LUA_REGISTRYINDEX, self.registry_id as _);
+        }
+        Ok(())
     }
 }
 
