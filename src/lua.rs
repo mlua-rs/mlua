@@ -2965,8 +2965,7 @@ impl Lua {
                 match fut.as_mut().poll(&mut ctx) {
                     Poll::Pending => {
                         ffi::lua_pushnil(state);
-                        let pending = &ASYNC_POLL_PENDING as *const u8 as *mut c_void;
-                        ffi::lua_pushlightuserdata(state, pending);
+                        ffi::lua_pushlightuserdata(state, Lua::poll_pending().0);
                         Ok(2)
                     }
                     Poll::Ready(nresults) => {
@@ -3067,6 +3066,14 @@ impl Lua {
     #[inline]
     pub(crate) unsafe fn set_waker(&self, waker: NonNull<Waker>) -> NonNull<Waker> {
         mem::replace(&mut (*self.extra.get()).waker, waker)
+    }
+
+    /// Returns internal `Poll::Pending` constant used for executing async callbacks.
+    #[cfg(feature = "async")]
+    #[doc(hidden)]
+    #[inline]
+    pub fn poll_pending() -> LightUserData {
+        LightUserData(&ASYNC_POLL_PENDING as *const u8 as *mut c_void)
     }
 
     pub(crate) unsafe fn make_userdata<T>(&self, data: UserDataCell<T>) -> Result<AnyUserData>

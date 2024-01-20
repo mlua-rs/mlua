@@ -425,6 +425,14 @@ pub unsafe fn lua_pushglobaltable(L: *mut lua_State) -> c_int {
 }
 
 #[inline(always)]
+pub unsafe fn lua_tolightuserdata(L: *mut lua_State, idx: c_int) -> *mut c_void {
+    if lua_islightuserdata(L, idx) != 0 {
+        return lua_touserdata(L, idx);
+    }
+    ptr::null_mut()
+}
+
+#[inline(always)]
 pub unsafe fn lua_tostring(L: *mut lua_State, i: c_int) -> *const c_char {
     lua_tolstring(L, i, ptr::null_mut())
 }

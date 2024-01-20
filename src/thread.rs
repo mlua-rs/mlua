@@ -15,7 +15,7 @@ use crate::{
 
 #[cfg(feature = "async")]
 use {
-    crate::{lua::ASYNC_POLL_PENDING, value::MultiValue},
+    crate::value::MultiValue,
     futures_util::stream::Stream,
     std::{
         future::Future,
@@ -530,12 +530,7 @@ where
 #[cfg(feature = "async")]
 #[inline(always)]
 unsafe fn is_poll_pending(state: *mut ffi::lua_State) -> bool {
-    if ffi::lua_islightuserdata(state, -1) != 0 {
-        let stack_ptr = ffi::lua_touserdata(state, -1) as *const u8;
-        let pending_ptr = &ASYNC_POLL_PENDING as *const u8;
-        return std::ptr::eq(stack_ptr, pending_ptr);
-    }
-    false
+    ffi::lua_tolightuserdata(state, -1) == Lua::poll_pending().0
 }
 
 #[cfg(feature = "async")]
