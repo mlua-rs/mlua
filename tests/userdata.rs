@@ -58,7 +58,7 @@ fn test_methods() -> Result<()> {
 
     fn check_methods(lua: &Lua, userdata: AnyUserData) -> Result<()> {
         let globals = lua.globals();
-        globals.set("userdata", userdata.clone())?;
+        globals.set("userdata", &userdata)?;
         lua.load(
             r#"
             function get_it()
@@ -342,7 +342,7 @@ fn test_userdata_take() -> Result<()> {
     }
 
     fn check_userdata_take(lua: &Lua, userdata: AnyUserData, rc: Arc<i64>) -> Result<()> {
-        lua.globals().set("userdata", userdata.clone())?;
+        lua.globals().set("userdata", &userdata)?;
         assert_eq!(Arc::strong_count(&rc), 3);
         {
             let _value = userdata.borrow::<MyUserdata>()?;
@@ -474,7 +474,7 @@ fn test_functions() -> Result<()> {
     let lua = Lua::new();
     let globals = lua.globals();
     let userdata = lua.create_userdata(MyUserData(42))?;
-    globals.set("userdata", userdata.clone())?;
+    globals.set("userdata", &userdata)?;
     lua.load(
         r#"
         function get_it()

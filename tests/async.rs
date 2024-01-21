@@ -443,7 +443,7 @@ async fn test_async_userdata() -> Result<()> {
     let globals = lua.globals();
 
     let userdata = lua.create_userdata(MyUserData(11))?;
-    globals.set("userdata", userdata.clone())?;
+    globals.set("userdata", &userdata)?;
 
     lua.load(
         r#"

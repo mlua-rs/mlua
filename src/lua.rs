@@ -2558,6 +2558,15 @@ impl Lua {
         ffi::lua_xpush(self.ref_thread(), self.state(), lref.index);
     }
 
+    #[cfg(all(feature = "unstable", not(feature = "send")))]
+    pub(crate) unsafe fn push_owned_ref(&self, loref: &crate::types::LuaOwnedRef) {
+        assert!(
+            Arc::ptr_eq(&loref.inner, &self.0),
+            "Lua instance passed Value created from a different main Lua state"
+        );
+        ffi::lua_xpush(self.ref_thread(), self.state(), loref.index);
+    }
+
     // Pops the topmost element of the stack and stores a reference to it. This pins the object,
     // preventing garbage collection until the returned `LuaRef` is dropped.
     //

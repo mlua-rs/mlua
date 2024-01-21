@@ -44,6 +44,18 @@ impl<'lua> IntoLua<'lua> for String<'lua> {
     }
 }
 
+impl<'lua> IntoLua<'lua> for &String<'lua> {
+    #[inline]
+    fn into_lua(self, _: &'lua Lua) -> Result<Value<'lua>> {
+        Ok(Value::String(self.clone()))
+    }
+
+    #[inline]
+    unsafe fn push_into_stack(self, lua: &'lua Lua) -> Result<()> {
+        Ok(lua.push_ref(&self.0))
+    }
+}
+
 impl<'lua> FromLua<'lua> for String<'lua> {
     #[inline]
     fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> Result<String<'lua>> {
@@ -61,6 +73,18 @@ impl<'lua> IntoLua<'lua> for Table<'lua> {
     #[inline]
     fn into_lua(self, _: &'lua Lua) -> Result<Value<'lua>> {
         Ok(Value::Table(self))
+    }
+}
+
+impl<'lua> IntoLua<'lua> for &Table<'lua> {
+    #[inline]
+    fn into_lua(self, _: &'lua Lua) -> Result<Value<'lua>> {
+        Ok(Value::Table(self.clone()))
+    }
+
+    #[inline]
+    unsafe fn push_into_stack(self, lua: &'lua Lua) -> Result<()> {
+        Ok(lua.push_ref(&self.0))
     }
 }
 
@@ -89,6 +113,20 @@ impl<'lua> IntoLua<'lua> for OwnedTable {
 
 #[cfg(all(feature = "unstable", any(not(feature = "send"), doc)))]
 #[cfg_attr(docsrs, doc(cfg(all(feature = "unstable", not(feature = "send")))))]
+impl<'lua> IntoLua<'lua> for &OwnedTable {
+    #[inline]
+    fn into_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
+        OwnedTable::into_lua(self.clone(), lua)
+    }
+
+    #[inline]
+    unsafe fn push_into_stack(self, lua: &'lua Lua) -> Result<()> {
+        Ok(lua.push_owned_ref(&self.0))
+    }
+}
+
+#[cfg(all(feature = "unstable", any(not(feature = "send"), doc)))]
+#[cfg_attr(docsrs, doc(cfg(all(feature = "unstable", not(feature = "send")))))]
 impl<'lua> FromLua<'lua> for OwnedTable {
     #[inline]
     fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> Result<OwnedTable> {
@@ -100,6 +138,18 @@ impl<'lua> IntoLua<'lua> for Function<'lua> {
     #[inline]
     fn into_lua(self, _: &'lua Lua) -> Result<Value<'lua>> {
         Ok(Value::Function(self))
+    }
+}
+
+impl<'lua> IntoLua<'lua> for &Function<'lua> {
+    #[inline]
+    fn into_lua(self, _: &'lua Lua) -> Result<Value<'lua>> {
+        Ok(Value::Function(self.clone()))
+    }
+
+    #[inline]
+    unsafe fn push_into_stack(self, lua: &'lua Lua) -> Result<()> {
+        Ok(lua.push_ref(&self.0))
     }
 }
 
@@ -128,6 +178,20 @@ impl<'lua> IntoLua<'lua> for OwnedFunction {
 
 #[cfg(all(feature = "unstable", any(not(feature = "send"), doc)))]
 #[cfg_attr(docsrs, doc(cfg(all(feature = "unstable", not(feature = "send")))))]
+impl<'lua> IntoLua<'lua> for &OwnedFunction {
+    #[inline]
+    fn into_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
+        OwnedFunction::into_lua(self.clone(), lua)
+    }
+
+    #[inline]
+    unsafe fn push_into_stack(self, lua: &'lua Lua) -> Result<()> {
+        Ok(lua.push_owned_ref(&self.0))
+    }
+}
+
+#[cfg(all(feature = "unstable", any(not(feature = "send"), doc)))]
+#[cfg_attr(docsrs, doc(cfg(all(feature = "unstable", not(feature = "send")))))]
 impl<'lua> FromLua<'lua> for OwnedFunction {
     #[inline]
     fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> Result<OwnedFunction> {
@@ -139,6 +203,18 @@ impl<'lua> IntoLua<'lua> for Thread<'lua> {
     #[inline]
     fn into_lua(self, _: &'lua Lua) -> Result<Value<'lua>> {
         Ok(Value::Thread(self))
+    }
+}
+
+impl<'lua> IntoLua<'lua> for &Thread<'lua> {
+    #[inline]
+    fn into_lua(self, _: &'lua Lua) -> Result<Value<'lua>> {
+        Ok(Value::Thread(self.clone()))
+    }
+
+    #[inline]
+    unsafe fn push_into_stack(self, lua: &'lua Lua) -> Result<()> {
+        Ok(lua.push_ref(&self.0))
     }
 }
 
@@ -160,6 +236,18 @@ impl<'lua> IntoLua<'lua> for AnyUserData<'lua> {
     #[inline]
     fn into_lua(self, _: &'lua Lua) -> Result<Value<'lua>> {
         Ok(Value::UserData(self))
+    }
+}
+
+impl<'lua> IntoLua<'lua> for &AnyUserData<'lua> {
+    #[inline]
+    fn into_lua(self, _: &'lua Lua) -> Result<Value<'lua>> {
+        Ok(Value::UserData(self.clone()))
+    }
+
+    #[inline]
+    unsafe fn push_into_stack(self, lua: &'lua Lua) -> Result<()> {
+        Ok(lua.push_ref(&self.0))
     }
 }
 
@@ -186,6 +274,20 @@ impl<'lua> IntoLua<'lua> for OwnedAnyUserData {
             lua.adopt_owned_ref(self.0),
             self.1,
         )))
+    }
+}
+
+#[cfg(all(feature = "unstable", any(not(feature = "send"), doc)))]
+#[cfg_attr(docsrs, doc(cfg(all(feature = "unstable", not(feature = "send")))))]
+impl<'lua> IntoLua<'lua> for &OwnedAnyUserData {
+    #[inline]
+    fn into_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
+        OwnedAnyUserData::into_lua(self.clone(), lua)
+    }
+
+    #[inline]
+    unsafe fn push_into_stack(self, lua: &'lua Lua) -> Result<()> {
+        Ok(lua.push_owned_ref(&self.0))
     }
 }
 

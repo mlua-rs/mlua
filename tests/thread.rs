@@ -182,7 +182,7 @@ fn test_coroutine_panic() {
         let thrd_main = lua.create_function(|_, ()| -> Result<()> {
             panic!("test_panic");
         })?;
-        lua.globals().set("main", thrd_main.clone())?;
+        lua.globals().set("main", &thrd_main)?;
         let thrd: Thread = lua.create_thread(thrd_main)?;
         thrd.resume(())
     }) {

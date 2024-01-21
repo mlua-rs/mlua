@@ -8,8 +8,8 @@ use std::sync::Arc;
 use std::{error, f32, f64, fmt};
 
 use mlua::{
-    ChunkMode, Error, ExternalError, Function, IntoLua, Lua, LuaOptions, Nil, Result, StdLib,
-    String, Table, UserData, Value, Variadic,
+    ChunkMode, Error, ExternalError, Function, Lua, LuaOptions, Nil, Result, StdLib, String, Table,
+    UserData, Value, Variadic,
 };
 
 #[cfg(not(feature = "luau"))]
@@ -780,35 +780,6 @@ fn test_registry_value() -> Result<()> {
 }
 
 #[test]
-fn test_registry_value_into_lua() -> Result<()> {
-    let lua = Lua::new();
-
-    let t = lua.create_table()?;
-    let r = lua.create_registry_value(t)?;
-    let f = lua.create_function(|_, t: Table| t.raw_set("hello", "world"))?;
-
-    f.call(&r)?;
-    let v = r.into_lua(&lua)?;
-    let t = v.as_table().unwrap();
-    assert_eq!(t.get::<_, String>("hello")?, "world");
-
-    // Try to set nil registry key
-    let r_nil = lua.create_registry_value(Value::Nil)?;
-    t.set("hello", &r_nil)?;
-    assert_eq!(t.get::<_, Value>("hello")?, Value::Nil);
-
-    // Check non-owned registry key
-    let lua2 = Lua::new();
-    let r2 = lua2.create_registry_value("abc")?;
-    assert!(matches!(
-        f.call::<_, ()>(&r2),
-        Err(Error::MismatchedRegistryKey)
-    ));
-
-    Ok(())
-}
-
-#[test]
 fn test_drop_registry_value() -> Result<()> {
     struct MyUserdata(Arc<()>);
 
@@ -994,7 +965,7 @@ fn test_recursion() -> Result<()> {
         Ok(())
     })?;
 
-    lua.globals().set("f", f.clone())?;
+    lua.globals().set("f", &f)?;
     f.call::<_, ()>(1)?;
 
     Ok(())
@@ -1032,7 +1003,7 @@ fn test_too_many_recursions() -> Result<()> {
     let f = lua
         .create_function(move |lua, ()| lua.globals().get::<_, Function>("f")?.call::<_, ()>(()))?;
 
-    lua.globals().set("f", f.clone())?;
+    lua.globals().set("f", &f)?;
     assert!(f.call::<_, ()>(()).is_err());
 
     Ok(())

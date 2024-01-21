@@ -3,7 +3,180 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::ffi::{CStr, CString};
 
 use maplit::{btreemap, btreeset, hashmap, hashset};
-use mlua::{Error, Lua, Result};
+use mlua::{AnyUserData, Error, Function, IntoLua, Lua, Result, Table, Thread, UserDataRef, Value};
+
+#[test]
+fn test_string_into_lua() -> Result<()> {
+    let lua = Lua::new();
+
+    // Direct conversion
+    let s = lua.create_string("hello, world!")?;
+    let s2 = (&s).into_lua(&lua)?;
+    assert_eq!(s, s2.as_string().unwrap());
+
+    // Push into stack
+    let table = lua.create_table()?;
+    table.set("s", &s)?;
+    assert_eq!(s, table.get::<_, String>("s")?);
+
+    Ok(())
+}
+
+#[test]
+fn test_table_into_lua() -> Result<()> {
+    let lua = Lua::new();
+
+    // Direct conversion
+    let t = lua.create_table()?;
+    let t2 = (&t).into_lua(&lua)?;
+    assert_eq!(&t, t2.as_table().unwrap());
+
+    // Push into stack
+    let f = lua.create_function(|_, (t, s): (Table, String)| t.set("s", s))?;
+    f.call((&t, "hello"))?;
+    assert_eq!("hello", t.get::<_, String>("s")?);
+
+    Ok(())
+}
+
+#[cfg(all(feature = "unstable", not(feature = "send")))]
+#[test]
+fn test_owned_table_into_lua() -> Result<()> {
+    let lua = Lua::new();
+
+    // Direct conversion
+    let t = lua.create_table()?.into_owned();
+    let t2 = (&t).into_lua(&lua)?;
+    assert_eq!(t.to_ref(), *t2.as_table().unwrap());
+
+    // Push into stack
+    let f = lua.create_function(|_, (t, s): (Table, String)| t.set("s", s))?;
+    f.call((&t, "hello"))?;
+    assert_eq!("hello", t.to_ref().get::<_, String>("s")?);
+
+    Ok(())
+}
+
+#[test]
+fn test_function_into_lua() -> Result<()> {
+    let lua = Lua::new();
+
+    // Direct conversion
+    let f = lua.create_function(|_, ()| Ok::<_, Error>(()))?;
+    let f2 = (&f).into_lua(&lua)?;
+    assert_eq!(&f, f2.as_function().unwrap());
+
+    // Push into stack
+    let table = lua.create_table()?;
+    table.set("f", &f)?;
+    assert_eq!(f, table.get::<_, Function>("f")?);
+
+    Ok(())
+}
+
+#[cfg(all(feature = "unstable", not(feature = "send")))]
+#[test]
+fn test_owned_function_into_lua() -> Result<()> {
+    let lua = Lua::new();
+
+    // Direct conversion
+    let f = lua
+        .create_function(|_, ()| Ok::<_, Error>(()))?
+        .into_owned();
+    let f2 = (&f).into_lua(&lua)?;
+    assert_eq!(f.to_ref(), *f2.as_function().unwrap());
+
+    // Push into stack
+    let table = lua.create_table()?;
+    table.set("f", &f)?;
+    assert_eq!(f.to_ref(), table.get::<_, Function>("f")?);
+
+    Ok(())
+}
+
+#[test]
+fn test_thread_into_lua() -> Result<()> {
+    let lua = Lua::new();
+
+    // Direct conversion
+    let f = lua.create_function(|_, ()| Ok::<_, Error>(()))?;
+    let th = lua.create_thread(f)?;
+    let th2 = (&th).into_lua(&lua)?;
+    assert_eq!(&th, th2.as_thread().unwrap());
+
+    // Push into stack
+    let table = lua.create_table()?;
+    table.set("th", &th)?;
+    assert_eq!(th, table.get::<_, Thread>("th")?);
+
+    Ok(())
+}
+
+#[test]
+fn test_anyuserdata_into_lua() -> Result<()> {
+    let lua = Lua::new();
+
+    // Direct conversion
+    let ud = lua.create_any_userdata(String::from("hello"))?;
+    let ud2 = (&ud).into_lua(&lua)?;
+    assert_eq!(&ud, ud2.as_userdata().unwrap());
+
+    // Push into stack
+    let table = lua.create_table()?;
+    table.set("ud", &ud)?;
+    assert_eq!(ud, table.get::<_, AnyUserData>("ud")?);
+    assert_eq!("hello", *table.get::<_, UserDataRef<String>>("ud")?);
+
+    Ok(())
+}
+
+#[cfg(all(feature = "unstable", not(feature = "send")))]
+#[test]
+fn test_owned_anyuserdata_into_lua() -> Result<()> {
+    let lua = Lua::new();
+
+    // Direct conversion
+    let ud = lua.create_any_userdata(String::from("hello"))?.into_owned();
+    let ud2 = (&ud).into_lua(&lua)?;
+    assert_eq!(ud.to_ref(), *ud2.as_userdata().unwrap());
+
+    // Push into stack
+    let table = lua.create_table()?;
+    table.set("ud", &ud)?;
+    assert_eq!(ud.to_ref(), table.get::<_, AnyUserData>("ud")?);
+    assert_eq!("hello", *table.get::<_, UserDataRef<String>>("ud")?);
+
+    Ok(())
+}
+
+#[test]
+fn test_registry_value_into_lua() -> Result<()> {
+    let lua = Lua::new();
+
+    let t = lua.create_table()?;
+    let r = lua.create_registry_value(t)?;
+    let f = lua.create_function(|_, t: Table| t.raw_set("hello", "world"))?;
+
+    f.call(&r)?;
+    let v = r.into_lua(&lua)?;
+    let t = v.as_table().unwrap();
+    assert_eq!(t.get::<_, String>("hello")?, "world");
+
+    // Try to set nil registry key
+    let r_nil = lua.create_registry_value(Value::Nil)?;
+    t.set("hello", &r_nil)?;
+    assert_eq!(t.get::<_, Value>("hello")?, Value::Nil);
+
+    // Check non-owned registry key
+    let lua2 = Lua::new();
+    let r2 = lua2.create_registry_value("abc")?;
+    assert!(matches!(
+        f.call::<_, ()>(&r2),
+        Err(Error::MismatchedRegistryKey)
+    ));
+
+    Ok(())
+}
 
 #[test]
 fn test_conv_vec() -> Result<()> {

@@ -598,7 +598,7 @@ fn test_from_value_with_options() -> Result<(), Box<dyn StdError>> {
 
     // Check recursion when using `Serialize` impl
     let t = lua.create_table()?;
-    t.set("t", t.clone())?;
+    t.set("t", &t)?;
     assert!(serde_json::to_string(&t).is_err());
 
     // Serialize Lua globals table
