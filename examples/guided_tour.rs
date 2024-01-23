@@ -24,7 +24,7 @@ fn main() -> Result<()> {
 
     // You can load and evaluate Lua code. The returned type of `Lua::load` is a builder
     // that allows you to change settings before running Lua code. Here, we are using it to set
-    // the name of the laoded chunk to "example code", which will be used when Lua error
+    // the name of the loaded chunk to "example code", which will be used when Lua error
     // messages are printed.
 
     lua.load(
@@ -89,7 +89,7 @@ fn main() -> Result<()> {
     let print: Function = globals.get("print")?;
     print.call::<_, ()>("hello from rust")?;
 
-    // This API generally handles variadics using tuples. This is one way to call a function with
+    // This API generally handles variadic using tuples. This is one way to call a function with
     // multiple parameters:
 
     print.call::<_, ()>(("hello", "again", "from", "rust"))?;
@@ -100,7 +100,7 @@ fn main() -> Result<()> {
         ["hello", "yet", "again", "from", "rust"].iter().cloned(),
     ))?;
 
-    // You can bind rust functions to Lua as well. Callbacks receive the Lua state inself as their
+    // You can bind rust functions to Lua as well. Callbacks receive the Lua state itself as their
     // first parameter, and the arguments given to the function as the second parameter. The type
     // of the arguments can be anything that is convertible from the parameters given by Lua, in
     // this case, the function expects two string sequences.
