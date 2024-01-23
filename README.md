@@ -7,8 +7,8 @@
 [crates.io]: https://crates.io/crates/mlua
 [API Documentation]: https://docs.rs/mlua/badge.svg
 [docs.rs]: https://docs.rs/mlua
-[Coverage Status]: https://codecov.io/gh/khvzak/mlua/branch/master/graph/badge.svg?token=99339FS1CG
-[codecov.io]: https://codecov.io/gh/khvzak/mlua
+[Coverage Status]: https://codecov.io/gh/mlua-rs/mlua/branch/master/graph/badge.svg?token=99339FS1CG
+[codecov.io]: https://codecov.io/gh/mlua-rs/mlua
 [MSRV]: https://img.shields.io/badge/rust-1.71+-brightgreen.svg?&logo=rust
 
 [Guided Tour] | [Benchmarks] | [FAQ]
