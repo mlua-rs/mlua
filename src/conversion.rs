@@ -21,7 +21,9 @@ use crate::userdata::{AnyUserData, UserData, UserDataRef, UserDataRefMut};
 use crate::value::{FromLua, IntoLua, Nil, Value};
 
 #[cfg(all(feature = "unstable", any(not(feature = "send"), doc)))]
-use crate::{function::OwnedFunction, table::OwnedTable, userdata::OwnedAnyUserData};
+use crate::{
+    function::OwnedFunction, table::OwnedTable, thread::OwnedThread, userdata::OwnedAnyUserData,
+};
 
 impl<'lua> IntoLua<'lua> for Value<'lua> {
     #[inline]
@@ -229,6 +231,38 @@ impl<'lua> FromLua<'lua> for Thread<'lua> {
                 message: None,
             }),
         }
+    }
+}
+
+#[cfg(all(feature = "unstable", any(not(feature = "send"), doc)))]
+#[cfg_attr(docsrs, doc(cfg(all(feature = "unstable", not(feature = "send")))))]
+impl<'lua> IntoLua<'lua> for OwnedThread {
+    #[inline]
+    fn into_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
+        Ok(Value::Thread(Thread(lua.adopt_owned_ref(self.0), self.1)))
+    }
+}
+
+#[cfg(all(feature = "unstable", any(not(feature = "send"), doc)))]
+#[cfg_attr(docsrs, doc(cfg(all(feature = "unstable", not(feature = "send")))))]
+impl<'lua> IntoLua<'lua> for &OwnedThread {
+    #[inline]
+    fn into_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
+        OwnedThread::into_lua(self.clone(), lua)
+    }
+
+    #[inline]
+    unsafe fn push_into_stack(self, lua: &'lua Lua) -> Result<()> {
+        Ok(lua.push_owned_ref(&self.0))
+    }
+}
+
+#[cfg(all(feature = "unstable", any(not(feature = "send"), doc)))]
+#[cfg_attr(docsrs, doc(cfg(all(feature = "unstable", not(feature = "send")))))]
+impl<'lua> FromLua<'lua> for OwnedThread {
+    #[inline]
+    fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> Result<OwnedThread> {
+        Thread::from_lua(value, lua).map(|s| s.into_owned())
     }
 }
 

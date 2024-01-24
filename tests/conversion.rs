@@ -112,6 +112,36 @@ fn test_thread_into_lua() -> Result<()> {
     Ok(())
 }
 
+#[cfg(all(feature = "unstable", not(feature = "send")))]
+#[test]
+fn test_owned_thread_into_lua() -> Result<()> {
+    let lua = Lua::new();
+
+    // Direct conversion
+    let f = lua.create_function(|_, ()| Ok::<_, Error>(()))?;
+    let th = lua.create_thread(f)?.into_owned();
+    let th2 = (&th).into_lua(&lua)?;
+    assert_eq!(&th.to_ref(), th2.as_thread().unwrap());
+
+    // Push into stack
+    let table = lua.create_table()?;
+    table.set("th", &th)?;
+    assert_eq!(th.to_ref(), table.get::<_, Thread>("th")?);
+
+    Ok(())
+}
+
+#[cfg(all(feature = "unstable", not(feature = "send")))]
+#[test]
+fn test_owned_thread_from_lua() -> Result<()> {
+    let lua = Lua::new();
+
+    let th = lua.unpack::<mlua::OwnedThread>(Value::Thread(lua.current_thread()))?;
+    assert_eq!(th.to_ref(), lua.current_thread());
+
+    Ok(())
+}
+
 #[test]
 fn test_anyuserdata_into_lua() -> Result<()> {
     let lua = Lua::new();
