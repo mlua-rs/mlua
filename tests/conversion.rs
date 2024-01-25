@@ -22,6 +22,35 @@ fn test_string_into_lua() -> Result<()> {
     Ok(())
 }
 
+#[cfg(all(feature = "unstable", not(feature = "send")))]
+#[test]
+fn test_owned_string_into_lua() -> Result<()> {
+    let lua = Lua::new();
+
+    // Direct conversion
+    let s = lua.create_string("hello, world")?.into_owned();
+    let s2 = (&s).into_lua(&lua)?;
+    assert_eq!(s.to_ref(), *s2.as_string().unwrap());
+
+    // Push into stack
+    let table = lua.create_table()?;
+    table.set("s", &s)?;
+    assert_eq!(s.to_ref(), table.get::<_, String>("s")?);
+
+    Ok(())
+}
+
+#[cfg(all(feature = "unstable", not(feature = "send")))]
+#[test]
+fn test_owned_string_from_lua() -> Result<()> {
+    let lua = Lua::new();
+
+    let s = lua.unpack::<mlua::OwnedString>(lua.pack("hello, world")?)?;
+    assert_eq!(s.to_ref(), "hello, world");
+
+    Ok(())
+}
+
 #[test]
 fn test_table_into_lua() -> Result<()> {
     let lua = Lua::new();

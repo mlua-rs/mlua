@@ -22,7 +22,8 @@ use crate::value::{FromLua, IntoLua, Nil, Value};
 
 #[cfg(all(feature = "unstable", any(not(feature = "send"), doc)))]
 use crate::{
-    function::OwnedFunction, table::OwnedTable, thread::OwnedThread, userdata::OwnedAnyUserData,
+    function::OwnedFunction, string::OwnedString, table::OwnedTable, thread::OwnedThread,
+    userdata::OwnedAnyUserData,
 };
 
 impl<'lua> IntoLua<'lua> for Value<'lua> {
@@ -68,6 +69,38 @@ impl<'lua> FromLua<'lua> for String<'lua> {
                 to: "string",
                 message: Some("expected string or number".to_string()),
             })
+    }
+}
+
+#[cfg(all(feature = "unstable", any(not(feature = "send"), doc)))]
+#[cfg_attr(docsrs, doc(cfg(all(feature = "unstable", not(feature = "send")))))]
+impl<'lua> IntoLua<'lua> for OwnedString {
+    #[inline]
+    fn into_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
+        Ok(Value::String(String(lua.adopt_owned_ref(self.0))))
+    }
+}
+
+#[cfg(all(feature = "unstable", any(not(feature = "send"), doc)))]
+#[cfg_attr(docsrs, doc(cfg(all(feature = "unstable", not(feature = "send")))))]
+impl<'lua> IntoLua<'lua> for &OwnedString {
+    #[inline]
+    fn into_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
+        OwnedString::into_lua(self.clone(), lua)
+    }
+
+    #[inline]
+    unsafe fn push_into_stack(self, lua: &'lua Lua) -> Result<()> {
+        Ok(lua.push_owned_ref(&self.0))
+    }
+}
+
+#[cfg(all(feature = "unstable", any(not(feature = "send"), doc)))]
+#[cfg_attr(docsrs, doc(cfg(all(feature = "unstable", not(feature = "send")))))]
+impl<'lua> FromLua<'lua> for OwnedString {
+    #[inline]
+    fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> Result<OwnedString> {
+        String::from_lua(value, lua).map(|s| s.into_owned())
     }
 }
 
