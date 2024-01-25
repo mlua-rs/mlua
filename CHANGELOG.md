@@ -1,3 +1,11 @@
+## v0.9.5
+
+- Minimal Luau updated to 0.609
+- Luau max stack size increased to 1M (from 100K)
+- Implemented `IntoLua` for refs to `String`/`Table`/`Function`/`AnyUserData`/`Thread` + `RegistryKey`
+- Implemented `IntoLua` and `FromLua` for `OwnedThread`/`OwnedString`
+- Fixed `FromLua` derive proc macro to cover more cases
+
 ## v0.9.4
 
 - Fixed loading all-in-one modules under mixed states (eg. main state and coroutines)
