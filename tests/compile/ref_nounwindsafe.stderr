@@ -7,17 +7,57 @@ error[E0277]: the type `UnsafeCell<mlua::lua::ExtraData>` may contain interior m
   |     required by a bound introduced by this call
   |
   = help: within `Lua`, the trait `RefUnwindSafe` is not implemented for `UnsafeCell<mlua::lua::ExtraData>`
-  = note: required because it appears within the type `ArcInner<UnsafeCell<ExtraData>>`
-  = note: required because it appears within the type `PhantomData<ArcInner<UnsafeCell<ExtraData>>>`
-  = note: required because it appears within the type `Arc<UnsafeCell<ExtraData>>`
-  = note: required because it appears within the type `LuaInner`
-  = note: required because it appears within the type `ArcInner<LuaInner>`
-  = note: required because it appears within the type `PhantomData<ArcInner<LuaInner>>`
-  = note: required because it appears within the type `Arc<LuaInner>`
-  = note: required because it appears within the type `Lua`
+note: required because it appears within the type `ArcInner<UnsafeCell<ExtraData>>`
+ --> $RUST/alloc/src/sync.rs
+  |
+  | struct ArcInner<T: ?Sized> {
+  |        ^^^^^^^^
+note: required because it appears within the type `PhantomData<ArcInner<UnsafeCell<ExtraData>>>`
+ --> $RUST/core/src/marker.rs
+  |
+  | pub struct PhantomData<T: ?Sized>;
+  |            ^^^^^^^^^^^
+note: required because it appears within the type `Arc<UnsafeCell<ExtraData>>`
+ --> $RUST/alloc/src/sync.rs
+  |
+  | pub struct Arc<
+  |            ^^^
+note: required because it appears within the type `LuaInner`
+ --> src/lua.rs
+  |
+  | pub struct LuaInner {
+  |            ^^^^^^^^
+note: required because it appears within the type `ArcInner<LuaInner>`
+ --> $RUST/alloc/src/sync.rs
+  |
+  | struct ArcInner<T: ?Sized> {
+  |        ^^^^^^^^
+note: required because it appears within the type `PhantomData<ArcInner<LuaInner>>`
+ --> $RUST/core/src/marker.rs
+  |
+  | pub struct PhantomData<T: ?Sized>;
+  |            ^^^^^^^^^^^
+note: required because it appears within the type `Arc<LuaInner>`
+ --> $RUST/alloc/src/sync.rs
+  |
+  | pub struct Arc<
+  |            ^^^
+note: required because it appears within the type `Lua`
+ --> src/lua.rs
+  |
+  | pub struct Lua(Arc<LuaInner>);
+  |            ^^^
   = note: required for `&Lua` to implement `UnwindSafe`
-  = note: required because it appears within the type `LuaRef<'_>`
-  = note: required because it appears within the type `Table<'_>`
+note: required because it appears within the type `LuaRef<'_>`
+ --> src/types.rs
+  |
+  | pub(crate) struct LuaRef<'lua> {
+  |                   ^^^^^^
+note: required because it appears within the type `Table<'_>`
+ --> src/table.rs
+  |
+  | pub struct Table<'lua>(pub(crate) LuaRef<'lua>);
+  |            ^^^^^
 note: required because it's used within this closure
  --> tests/compile/ref_nounwindsafe.rs:8:18
   |

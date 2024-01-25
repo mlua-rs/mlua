@@ -4,7 +4,7 @@ error: lifetime may not live long enough
 9  |           reg.add_async_method("t", |_, this: &String, ()| async {
    |  ___________________________________----------------------_^
    | |                                   |                    |
-   | |                                   |                    return type of closure `[async block@$DIR/tests/compile/async_any_userdata_method.rs:9:58: 12:10]` contains a lifetime `'2`
+   | |                                   |                    return type of closure `{async block@$DIR/tests/compile/async_any_userdata_method.rs:9:58: 12:10}` contains a lifetime `'2`
    | |                                   lifetime `'1` represents this closure's body
 10 | |             s = this;
 11 | |             Ok(())
@@ -27,6 +27,8 @@ error[E0596]: cannot borrow `s` as mutable, as it is a captured variable in a `F
 error[E0597]: `s` does not live long enough
   --> tests/compile/async_any_userdata_method.rs:8:21
    |
+7  |           let s = String::new();
+   |               - binding `s` declared here
 8  |           let mut s = &s;
    |                       ^^ borrowed value does not live long enough
 9  | /         reg.add_async_method("t", |_, this: &String, ()| async {

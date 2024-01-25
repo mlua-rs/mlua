@@ -4,6 +4,8 @@ error[E0597]: `ibad` does not live long enough
 11 |     lua.scope(|scope| {
    |                ----- has type `&mlua::Scope<'_, '1>`
 ...
+14 |             let ibad = 42;
+   |                 ---- binding `ibad` declared here
 15 |             scope.create_nonstatic_userdata(MyUserData(&ibad)).unwrap();
    |             -------------------------------------------^^^^^--
    |             |                                          |
