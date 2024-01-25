@@ -1,7 +1,7 @@
 [package]
 name = "mlua"
 version = "0.9.4" # remember to update mlua_derive
-authors = ["Aleksandr Orlenko <zxteam@pm.me>", "kyren <catherine@chucklefish.org>"]
+authors = ["Aleksandr Orlenko <zxteam@pm.me>", "kyren <catherine@kyju.org>"]
 rust-version = "1.71"
 edition = "2021"
 repository = "https://github.com/khvzak/mlua"
