@@ -7,16 +7,17 @@ pub fn from_lua(input: TokenStream) -> TokenStream {
         ident, generics, ..
     } = parse_macro_input!(input as DeriveInput);
 
+    let ident_str = ident.to_string();
+    let (impl_generics, ty_generics, _) = generics.split_for_impl();
     let where_clause = match &generics.where_clause {
         Some(where_clause) => quote! { #where_clause, Self: 'static + Clone },
         None => quote! { where Self: 'static + Clone },
     };
-    let ident_str = ident.to_string();
 
     quote! {
-      impl #generics ::mlua::FromLua<'_> for #ident #generics #where_clause {
+      impl #impl_generics ::mlua::FromLua<'_> for #ident #ty_generics #where_clause {
         #[inline]
-        fn from_lua(value: ::mlua::Value<'_>, lua: &'_ ::mlua::Lua) -> ::mlua::Result<Self> {
+        fn from_lua(value: ::mlua::Value<'_>, _: &'_ ::mlua::Lua) -> ::mlua::Result<Self> {
           match value {
             ::mlua::Value::UserData(ud) => Ok(ud.borrow::<Self>()?.clone()),
             _ => Err(::mlua::Error::FromLuaConversionError {

@@ -991,9 +991,9 @@ fn test_userdata_derive() -> Result<()> {
     // More complex struct where generics and where clause
 
     #[derive(Clone, Copy, mlua::FromLua)]
-    struct MyUserData2<'a, T>(&'a T)
+    struct MyUserData2<'a, T: ?Sized>(&'a T)
     where
-        T: ?Sized;
+        T: Copy;
 
     lua.register_userdata_type::<MyUserData2<'static, i32>>(|reg| {
         reg.add_function("val", |_, this: MyUserData2<'static, i32>| Ok(*this.0));
