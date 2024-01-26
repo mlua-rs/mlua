@@ -434,6 +434,12 @@ impl<'lua> IntoLua<'lua> for bool {
     fn into_lua(self, _: &'lua Lua) -> Result<Value<'lua>> {
         Ok(Value::Boolean(self))
     }
+
+    #[inline]
+    unsafe fn push_into_stack(self, lua: &'lua Lua) -> Result<()> {
+        ffi::lua_pushboolean(lua.state(), self as c_int);
+        Ok(())
+    }
 }
 
 impl<'lua> FromLua<'lua> for bool {
@@ -444,6 +450,10 @@ impl<'lua> FromLua<'lua> for bool {
             Value::Boolean(b) => Ok(b),
             _ => Ok(true),
         }
+    }
+
+    unsafe fn from_stack(idx: c_int, lua: &'lua Lua) -> Result<Self> {
+        Ok(ffi::lua_toboolean(lua.state(), idx) != 0)
     }
 }
 
