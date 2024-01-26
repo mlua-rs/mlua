@@ -919,7 +919,7 @@ impl<'lua> AnyUserData<'lua> {
             check_stack(state, 5)?;
 
             lua.push_userdata_ref(&self.0)?;
-            lua.push_value(v.into_lua(lua)?)?;
+            lua.push(v)?;
 
             #[cfg(feature = "lua54")]
             if n < USER_VALUE_MAXSLOT {
@@ -1014,7 +1014,7 @@ impl<'lua> AnyUserData<'lua> {
             check_stack(state, 5)?;
 
             lua.push_userdata_ref(&self.0)?;
-            lua.push_value(v.into_lua(lua)?)?;
+            lua.push(v)?;
 
             // Multiple (extra) user values are emulated by storing them in a table
             protect_lua!(state, 2, 0, |state| {

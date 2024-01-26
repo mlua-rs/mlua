@@ -1413,8 +1413,8 @@ impl Lua {
             let protect = !self.unlikely_memory_error();
             push_table(state, 0, lower_bound, protect)?;
             for (k, v) in iter {
-                self.push_value(k.into_lua(self)?)?;
-                self.push_value(v.into_lua(self)?)?;
+                self.push(k)?;
+                self.push(v)?;
                 if protect {
                     protect_lua!(state, 3, 1, fn(state) ffi::lua_rawset(state, -3))?;
                 } else {
@@ -1442,7 +1442,7 @@ impl Lua {
             let protect = !self.unlikely_memory_error();
             push_table(state, lower_bound, 0, protect)?;
             for (i, v) in iter.enumerate() {
-                self.push_value(v.into_lua(self)?)?;
+                self.push(v)?;
                 if protect {
                     protect_lua!(state, 2, 1, |state| {
                         ffi::lua_rawseti(state, -2, (i + 1) as Integer);
@@ -1977,12 +1977,11 @@ impl Lua {
         T: IntoLua<'lua>,
     {
         let state = self.state();
-        let t = t.into_lua(self)?;
         unsafe {
             let _sg = StackGuard::new(state);
             check_stack(state, 5)?;
 
-            self.push_value(t)?;
+            self.push(t)?;
             rawset_field(state, ffi::LUA_REGISTRYINDEX, name)
         }
     }
@@ -2267,6 +2266,12 @@ impl Lua {
     pub fn remove_app_data<T: 'static>(&self) -> Option<T> {
         let extra = unsafe { &*self.extra.get() };
         extra.app_data.remove()
+    }
+
+    #[doc(hidden)]
+    #[inline(always)]
+    pub unsafe fn push<'lua>(&'lua self, value: impl IntoLua<'lua>) -> Result<()> {
+        value.push_into_stack(self)
     }
 
     /// Pushes a value onto the Lua stack.
@@ -2643,12 +2648,12 @@ impl Lua {
         let metatable_nrec = metatable_nrec + registry.async_meta_methods.len();
         push_table(state, 0, metatable_nrec, true)?;
         for (k, m) in registry.meta_methods {
-            self.push_value(Value::Function(self.create_callback(m)?))?;
+            self.push(self.create_callback(m)?)?;
             rawset_field(state, -2, MetaMethod::validate(&k)?)?;
         }
         #[cfg(feature = "async")]
         for (k, m) in registry.async_meta_methods {
-            self.push_value(Value::Function(self.create_async_callback(m)?))?;
+            self.push(self.create_async_callback(m)?)?;
             rawset_field(state, -2, MetaMethod::validate(&k)?)?;
         }
         let mut has_name = false;
@@ -2699,7 +2704,7 @@ impl Lua {
         if field_getters_nrec > 0 {
             push_table(state, 0, field_getters_nrec, true)?;
             for (k, m) in registry.field_getters {
-                self.push_value(Value::Function(self.create_callback(m)?))?;
+                self.push(self.create_callback(m)?)?;
                 rawset_field(state, -2, &k)?;
             }
             field_getters_index = Some(ffi::lua_absindex(state, -1));
@@ -2711,7 +2716,7 @@ impl Lua {
         if field_setters_nrec > 0 {
             push_table(state, 0, field_setters_nrec, true)?;
             for (k, m) in registry.field_setters {
-                self.push_value(Value::Function(self.create_callback(m)?))?;
+                self.push(self.create_callback(m)?)?;
                 rawset_field(state, -2, &k)?;
             }
             field_setters_index = Some(ffi::lua_absindex(state, -1));
@@ -2734,12 +2739,12 @@ impl Lua {
                 }
             }
             for (k, m) in registry.methods {
-                self.push_value(Value::Function(self.create_callback(m)?))?;
+                self.push(self.create_callback(m)?)?;
                 rawset_field(state, -2, &k)?;
             }
             #[cfg(feature = "async")]
             for (k, m) in registry.async_methods {
-                self.push_value(Value::Function(self.create_async_callback(m)?))?;
+                self.push(self.create_async_callback(m)?)?;
                 rawset_field(state, -2, &k)?;
             }
             match index_type {
@@ -2990,7 +2995,7 @@ impl Lua {
                             nresults => {
                                 let results = MultiValue::from_stack_multi(nresults, lua)?;
                                 ffi::lua_pushinteger(state, nresults as _);
-                                lua.push_value(Value::Table(lua.create_sequence_from(results)?))?;
+                                lua.push(lua.create_sequence_from(results)?)?;
                                 Ok(2)
                             }
                         }
