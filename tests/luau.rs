@@ -276,6 +276,22 @@ fn test_sandbox() -> Result<()> {
 }
 
 #[test]
+fn test_sandbox_nolibs() -> Result<()> {
+    let lua = Lua::new_with(StdLib::NONE, LuaOptions::default()).unwrap();
+
+    lua.sandbox(true)?;
+    lua.load("global = 123").exec()?;
+    let n: i32 = lua.load("return global").eval()?;
+    assert_eq!(n, 123);
+    assert_eq!(lua.globals().get::<_, Option<i32>>("global")?, Some(123));
+
+    lua.sandbox(false)?;
+    assert_eq!(lua.globals().get::<_, Option<i32>>("global")?, None);
+
+    Ok(())
+}
+
+#[test]
 fn test_sandbox_threads() -> Result<()> {
     let lua = Lua::new();
 
