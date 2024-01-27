@@ -452,6 +452,7 @@ impl<'lua> FromLua<'lua> for bool {
         }
     }
 
+    #[inline]
     unsafe fn from_stack(idx: c_int, lua: &'lua Lua) -> Result<Self> {
         Ok(ffi::lua_toboolean(lua.state(), idx) != 0)
     }
