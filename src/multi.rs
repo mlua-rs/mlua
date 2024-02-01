@@ -23,6 +23,20 @@ impl<'lua, T: IntoLua<'lua>, E: IntoLua<'lua>> IntoLuaMulti<'lua> for StdResult<
         }
         Ok(result)
     }
+
+    #[inline]
+    unsafe fn push_into_stack_multi(self, lua: &'lua Lua) -> Result<c_int> {
+        match self {
+            Ok(v) => v.push_into_stack(lua).map(|_| 1),
+            Err(e) => {
+                let state = lua.state();
+                check_stack(state, 3)?;
+                ffi::lua_pushnil(state);
+                e.push_into_stack(lua)?;
+                Ok(2)
+            }
+        }
+    }
 }
 
 impl<'lua, E: IntoLua<'lua>> IntoLuaMulti<'lua> for StdResult<(), E> {
@@ -35,6 +49,20 @@ impl<'lua, E: IntoLua<'lua>> IntoLuaMulti<'lua> for StdResult<(), E> {
                 result.push_front(e.into_lua(lua)?);
                 result.push_front(Nil);
                 Ok(result)
+            }
+        }
+    }
+
+    #[inline]
+    unsafe fn push_into_stack_multi(self, lua: &'lua Lua) -> Result<c_int> {
+        match self {
+            Ok(_) => Ok(0),
+            Err(e) => {
+                let state = lua.state();
+                check_stack(state, 3)?;
+                ffi::lua_pushnil(state);
+                e.push_into_stack(lua)?;
+                Ok(2)
             }
         }
     }
