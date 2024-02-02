@@ -591,7 +591,7 @@ impl<'lua> Table<'lua> {
         unsafe { ffi::lua_getreadonly(ref_thread, self.0.index) != 0 }
     }
 
-    /// Converts the table to a generic C pointer.
+    /// Converts this table to a generic C pointer.
     ///
     /// Different tables will give different pointers.
     /// There is no way to convert the pointer back to its original value.

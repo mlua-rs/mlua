@@ -191,6 +191,19 @@ fn test_coroutine_panic() {
     }
 }
 
+#[test]
+fn test_thread_pointer() -> Result<()> {
+    let lua = Lua::new();
+
+    let func = lua.load("return 123").into_function()?;
+    let thread = lua.create_thread(func.clone())?;
+
+    assert_eq!(thread.to_pointer(), thread.clone().to_pointer());
+    assert_ne!(thread.to_pointer(), lua.current_thread().to_pointer());
+
+    Ok(())
+}
+
 #[cfg(all(feature = "unstable", not(feature = "send")))]
 #[test]
 fn test_owned_thread() -> Result<()> {

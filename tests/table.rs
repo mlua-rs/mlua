@@ -370,6 +370,19 @@ fn test_table_eq() -> Result<()> {
 }
 
 #[test]
+fn test_table_pointer() -> Result<()> {
+    let lua = Lua::new();
+
+    let table1 = lua.create_table()?;
+    let table2 = lua.create_table()?;
+
+    assert_eq!(table1.to_pointer(), table1.clone().to_pointer());
+    assert_ne!(table1.to_pointer(), table2.to_pointer());
+
+    Ok(())
+}
+
+#[test]
 fn test_table_error() -> Result<()> {
     let lua = Lua::new();
 

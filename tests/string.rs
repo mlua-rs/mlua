@@ -99,6 +99,19 @@ fn test_string_debug() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn test_string_pointer() -> Result<()> {
+    let lua = Lua::new();
+
+    let str1 = lua.create_string("hello")?;
+    let str2 = lua.create_string("hello")?;
+
+    // Lua uses string interning, so these should be the same
+    assert_eq!(str1.to_pointer(), str2.to_pointer());
+
+    Ok(())
+}
+
 #[cfg(all(feature = "unstable", not(feature = "send")))]
 #[test]
 fn test_owned_string() -> Result<()> {

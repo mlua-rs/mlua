@@ -1,4 +1,4 @@
-use std::os::raw::c_int;
+use std::os::raw::{c_int, c_void};
 
 use crate::error::{Error, Result};
 #[allow(unused)]
@@ -373,6 +373,16 @@ impl<'lua> Thread<'lua> {
             check_stack(state, 3)?;
             protect_lua!(state, 0, 0, |_| ffi::luaL_sandboxthread(thread_state))
         }
+    }
+
+    /// Converts this thread to a generic C pointer.
+    ///
+    /// There is no way to convert the pointer back to its original value.
+    ///
+    /// Typically this function is used only for hashing and debug information.
+    #[inline]
+    pub fn to_pointer(&self) -> *const c_void {
+        self.0.to_pointer()
     }
 
     /// Convert this handle to owned version.

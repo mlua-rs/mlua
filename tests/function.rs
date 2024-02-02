@@ -232,6 +232,19 @@ fn test_function_info() -> Result<()> {
 }
 
 #[test]
+fn test_function_pointer() -> Result<()> {
+    let lua = Lua::new();
+
+    let func1 = lua.load("return function() end").into_function()?;
+    let func2 = func1.call::<_, Function>(())?;
+
+    assert_eq!(func1.to_pointer(), func1.clone().to_pointer());
+    assert_ne!(func1.to_pointer(), func2.to_pointer());
+
+    Ok(())
+}
+
+#[test]
 fn test_function_wrap() -> Result<()> {
     use mlua::Error;
 

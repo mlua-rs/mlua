@@ -5,7 +5,7 @@ use std::fmt;
 use std::hash::Hash;
 use std::mem;
 use std::ops::{Deref, DerefMut};
-use std::os::raw::{c_char, c_int};
+use std::os::raw::{c_char, c_int, c_void};
 use std::string::String as StdString;
 
 #[cfg(feature = "async")]
@@ -1094,6 +1094,16 @@ impl<'lua> AnyUserData<'lua> {
             ffi::lua_getmetatable(state, -1); // Checked that non-empty on the previous call
             Ok(Table(lua.pop_ref()))
         }
+    }
+
+    /// Converts this userdata to a generic C pointer.
+    ///
+    /// There is no way to convert the pointer back to its original value.
+    ///
+    /// Typically this function is used only for hashing and debug information.
+    #[inline]
+    pub fn to_pointer(&self) -> *const c_void {
+        self.0.to_pointer()
     }
 
     /// Convert this handle to owned version.

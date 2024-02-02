@@ -951,6 +951,20 @@ fn test_userdata_method_errors() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn test_userdata_pointer() -> Result<()> {
+    let lua = Lua::new();
+
+    let ud1 = lua.create_any_userdata("hello")?;
+    let ud2 = lua.create_any_userdata("hello")?;
+
+    assert_eq!(ud1.to_pointer(), ud1.clone().to_pointer());
+    // Different userdata objects with the same value should have different pointers
+    assert_ne!(ud1.to_pointer(), ud2.to_pointer());
+
+    Ok(())
+}
+
 #[cfg(all(feature = "unstable", not(feature = "send")))]
 #[test]
 fn test_owned_userdata() -> Result<()> {

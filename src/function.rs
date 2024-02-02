@@ -494,6 +494,16 @@ impl<'lua> Function<'lua> {
         }
     }
 
+    /// Converts this function to a generic C pointer.
+    ///
+    /// There is no way to convert the pointer back to its original value.
+    ///
+    /// Typically this function is used only for hashing and debug information.
+    #[inline]
+    pub fn to_pointer(&self) -> *const c_void {
+        self.0.to_pointer()
+    }
+
     /// Convert this handle to owned version.
     #[cfg(all(feature = "unstable", any(not(feature = "send"), doc)))]
     #[cfg_attr(docsrs, doc(cfg(all(feature = "unstable", not(feature = "send")))))]
