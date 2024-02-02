@@ -226,6 +226,7 @@ pub(crate) static EXTRA_REGISTRY_KEY: u8 = 0;
 
 const WRAPPED_FAILURE_POOL_SIZE: usize = 64;
 const MULTIVALUE_POOL_SIZE: usize = 64;
+const REF_STACK_RESERVE: c_int = 1;
 
 /// Requires `feature = "send"`
 #[cfg(feature = "send")]
@@ -519,8 +520,8 @@ impl Lua {
             #[cfg(feature = "module")]
             skip_memory_check: false,
             ref_thread,
-            // We need 1 extra stack space to move values in and out of the ref stack.
-            ref_stack_size: ffi::LUA_MINSTACK - 1,
+            // We need some reserved stack space to move values in and out of the ref stack.
+            ref_stack_size: ffi::LUA_MINSTACK - REF_STACK_RESERVE,
             ref_stack_top: ffi::lua_gettop(ref_thread),
             ref_free: Vec::new(),
             wrapped_failure_pool: Vec::with_capacity(WRAPPED_FAILURE_POOL_SIZE),
