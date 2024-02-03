@@ -697,6 +697,15 @@ macro_rules! lua_convert_int {
                         message: Some("out of range".to_owned()),
                     })
             }
+
+            #[inline]
+            unsafe fn push_into_stack(self, lua: &'lua Lua) -> Result<()> {
+                match cast(self) {
+                    Some(i) => ffi::lua_pushinteger(lua.state(), i),
+                    None => ffi::lua_pushnumber(lua.state(), self as ffi::lua_Number),
+                }
+                Ok(())
+            }
         }
 
         impl<'lua> FromLua<'lua> for $x {
