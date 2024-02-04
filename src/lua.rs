@@ -2269,39 +2269,38 @@ impl Lua {
         extra.app_data.remove()
     }
 
+    /// Pushes a value that implements `IntoLua` onto the Lua stack.
+    ///
+    /// Uses 2 stack spaces, does not call checkstack.
     #[doc(hidden)]
     #[inline(always)]
     pub unsafe fn push<'lua>(&'lua self, value: impl IntoLua<'lua>) -> Result<()> {
         value.push_into_stack(self)
     }
 
-    /// Pushes a value onto the Lua stack.
+    /// Pushes a `Value` onto the Lua stack.
     ///
     /// Uses 2 stack spaces, does not call checkstack.
     #[doc(hidden)]
     pub unsafe fn push_value(&self, value: Value) -> Result<()> {
+        if let Value::Error(err) = value {
+            let protect = !self.unlikely_memory_error();
+            return push_gc_userdata(self.state(), WrappedFailure::Error(err), protect);
+        }
+        self.push_value_ref(&value)
+    }
+
+    /// Pushes a `&Value` (by reference) onto the Lua stack.
+    ///
+    /// Similar to [`Lua::push_value`], uses 2 stack spaces, does not call checkstack.
+    pub(crate) unsafe fn push_value_ref(&self, value: &Value) -> Result<()> {
         let state = self.state();
         match value {
-            Value::Nil => {
-                ffi::lua_pushnil(state);
-            }
-
-            Value::Boolean(b) => {
-                ffi::lua_pushboolean(state, b as c_int);
-            }
-
-            Value::LightUserData(ud) => {
-                ffi::lua_pushlightuserdata(state, ud.0);
-            }
-
-            Value::Integer(i) => {
-                ffi::lua_pushinteger(state, i);
-            }
-
-            Value::Number(n) => {
-                ffi::lua_pushnumber(state, n);
-            }
-
+            Value::Nil => ffi::lua_pushnil(state),
+            Value::Boolean(b) => ffi::lua_pushboolean(state, *b as c_int),
+            Value::LightUserData(ud) => ffi::lua_pushlightuserdata(state, ud.0),
+            Value::Integer(i) => ffi::lua_pushinteger(state, *i),
+            Value::Number(n) => ffi::lua_pushnumber(state, *n),
             #[cfg(feature = "luau")]
             Value::Vector(v) => {
                 #[cfg(not(feature = "luau-vector4"))]
@@ -2309,33 +2308,16 @@ impl Lua {
                 #[cfg(feature = "luau-vector4")]
                 ffi::lua_pushvector(state, v.x(), v.y(), v.z(), v.w());
             }
-
-            Value::String(s) => {
-                self.push_ref(&s.0);
-            }
-
-            Value::Table(t) => {
-                self.push_ref(&t.0);
-            }
-
-            Value::Function(f) => {
-                self.push_ref(&f.0);
-            }
-
-            Value::Thread(t) => {
-                self.push_ref(&t.0);
-            }
-
-            Value::UserData(ud) => {
-                self.push_ref(&ud.0);
-            }
-
+            Value::String(s) => self.push_ref(&s.0),
+            Value::Table(t) => self.push_ref(&t.0),
+            Value::Function(f) => self.push_ref(&f.0),
+            Value::Thread(t) => self.push_ref(&t.0),
+            Value::UserData(ud) => self.push_ref(&ud.0),
             Value::Error(err) => {
                 let protect = !self.unlikely_memory_error();
-                push_gc_userdata(state, WrappedFailure::Error(err), protect)?;
+                push_gc_userdata(state, WrappedFailure::Error(err.clone()), protect)?;
             }
         }
-
         Ok(())
     }
 

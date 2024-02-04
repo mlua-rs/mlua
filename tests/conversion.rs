@@ -6,6 +6,23 @@ use maplit::{btreemap, btreeset, hashmap, hashset};
 use mlua::{AnyUserData, Error, Function, IntoLua, Lua, Result, Table, Thread, UserDataRef, Value};
 
 #[test]
+fn test_value_into_lua() -> Result<()> {
+    let lua = Lua::new();
+
+    // Direct conversion
+    let v = Value::Boolean(true);
+    let v2 = (&v).into_lua(&lua)?;
+    assert_eq!(v, v2);
+
+    // Push into stack
+    let table = lua.create_table()?;
+    table.set("v", &v)?;
+    assert_eq!(v, table.get::<_, Value>("v")?);
+
+    Ok(())
+}
+
+#[test]
 fn test_string_into_lua() -> Result<()> {
     let lua = Lua::new();
 

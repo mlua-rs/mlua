@@ -33,6 +33,18 @@ impl<'lua> IntoLua<'lua> for Value<'lua> {
     }
 }
 
+impl<'lua> IntoLua<'lua> for &Value<'lua> {
+    #[inline]
+    fn into_lua(self, _: &'lua Lua) -> Result<Value<'lua>> {
+        Ok(self.clone())
+    }
+
+    #[inline]
+    unsafe fn push_into_stack(self, lua: &'lua Lua) -> Result<()> {
+        lua.push_value_ref(self)
+    }
+}
+
 impl<'lua> FromLua<'lua> for Value<'lua> {
     #[inline]
     fn from_lua(lua_value: Value<'lua>, _: &'lua Lua) -> Result<Self> {
