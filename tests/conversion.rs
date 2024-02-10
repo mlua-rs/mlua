@@ -3,7 +3,10 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::ffi::{CStr, CString};
 
 use maplit::{btreemap, btreeset, hashmap, hashset};
-use mlua::{AnyUserData, Error, Function, IntoLua, Lua, Result, Table, Thread, UserDataRef, Value};
+use mlua::{
+    AnyUserData, Error, Function, IntoLua, Lua, RegistryKey, Result, Table, Thread, UserDataRef,
+    Value,
+};
 
 #[test]
 fn test_value_into_lua() -> Result<()> {
@@ -250,6 +253,17 @@ fn test_registry_value_into_lua() -> Result<()> {
         f.call::<_, ()>(&r2),
         Err(Error::MismatchedRegistryKey)
     ));
+
+    Ok(())
+}
+
+#[test]
+fn test_registry_key_from_lua() -> Result<()> {
+    let lua = Lua::new();
+
+    let fkey = lua.load("function() return 1 end").eval::<RegistryKey>()?;
+    let f = lua.registry_value::<Function>(&fkey)?;
+    assert_eq!(f.call::<_, i32>(())?, 1);
 
     Ok(())
 }

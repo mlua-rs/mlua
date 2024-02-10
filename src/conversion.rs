@@ -441,6 +441,13 @@ impl<'lua> IntoLua<'lua> for &RegistryKey {
     }
 }
 
+impl<'lua> FromLua<'lua> for RegistryKey {
+    #[inline]
+    fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> Result<RegistryKey> {
+        lua.create_registry_value(value)
+    }
+}
+
 impl<'lua> IntoLua<'lua> for bool {
     #[inline]
     fn into_lua(self, _: &'lua Lua) -> Result<Value<'lua>> {
