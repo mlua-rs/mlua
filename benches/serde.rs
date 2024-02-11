@@ -8,43 +8,35 @@ fn collect_gc_twice(lua: &Lua) {
     lua.gc_collect().unwrap();
 }
 
-fn serialize_json(c: &mut Criterion) {
+fn encode_json(c: &mut Criterion) {
     let lua = Lua::new();
 
-    lua.globals()
-        .set(
-            "encode",
-            LuaFunction::wrap(|_, t: LuaValue| Ok(serde_json::to_string(&t).unwrap())),
+    let encode = lua
+        .create_function(|_, t: LuaValue| Ok(serde_json::to_string(&t).unwrap()))
+        .unwrap();
+    let table = lua
+        .load(
+            r#"{
+        name = "Clark Kent",
+        address = {
+            city = "Smallville",
+            state = "Kansas",
+            country = "USA",
+        },
+        age = 22,
+        parents = {"Jonathan Kent", "Martha Kent"},
+        superman = true,
+        interests = {"flying", "saving the world", "kryptonite"},
+    }"#,
         )
+        .eval::<LuaTable>()
         .unwrap();
 
-    c.bench_function("serialize table to json [10]", |b| {
+    c.bench_function("serialize json", |b| {
         b.iter_batched(
-            || {
-                collect_gc_twice(&lua);
-                lua.load(
-                    r#"
-                local encode = encode
-                return function()
-                    for i = 1, 10 do
-                        encode({
-                            name = "Clark Kent",
-                            nickname = "Superman",
-                            address = {
-                                city = "Metropolis",
-                            },
-                            age = 32,
-                            superman = true,
-                        })
-                    end
-                end
-            "#,
-                )
-                .eval::<LuaFunction>()
-                .unwrap()
-            },
-            |func| {
-                func.call::<_, ()>(()).unwrap();
+            || collect_gc_twice(&lua),
+            |_| {
+                encode.call::<_, LuaString>(&table).unwrap();
             },
             BatchSize::SmallInput,
         );
@@ -54,11 +46,11 @@ fn serialize_json(c: &mut Criterion) {
 criterion_group! {
     name = benches;
     config = Criterion::default()
-        .sample_size(300)
+        .sample_size(500)
         .measurement_time(Duration::from_secs(10))
         .noise_threshold(0.02);
     targets =
-        serialize_json,
+        encode_json,
 }
 
 criterion_main!(benches);
