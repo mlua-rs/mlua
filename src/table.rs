@@ -721,7 +721,6 @@ impl<'lua> Table<'lua> {
         TableSequence {
             table: self.0,
             index: 1,
-            len: None,
             _phantom: PhantomData,
         }
     }
@@ -733,17 +732,25 @@ impl<'lua> Table<'lua> {
     }
 
     #[cfg(feature = "serialize")]
-    pub(crate) fn sequence_values_by_len<V: FromLua<'lua>>(
-        self,
-        len: Option<usize>,
-    ) -> TableSequence<'lua, V> {
-        let len = len.unwrap_or_else(|| self.raw_len()) as Integer;
-        TableSequence {
-            table: self.0,
-            index: 1,
-            len: Some(len),
-            _phantom: PhantomData,
+    pub(crate) fn for_each_value<V>(&self, mut f: impl FnMut(V) -> Result<()>) -> Result<()>
+    where
+        V: FromLua<'lua>,
+    {
+        let lua = self.0.lua;
+        let state = lua.state();
+        unsafe {
+            let _sg = StackGuard::new(state);
+            check_stack(state, 4)?;
+
+            lua.push_ref(&self.0);
+            let len = ffi::lua_rawlen(state, -1);
+            for i in 1..=len {
+                ffi::lua_rawgeti(state, -1, i as _);
+                f(V::from_stack(-1, lua)?)?;
+                ffi::lua_pop(state, 1);
+            }
         }
+        Ok(())
     }
 
     /// Sets element value at position `idx` without invoking metamethods.
@@ -1085,6 +1092,13 @@ impl<'a, 'lua> Serialize for SerializableTable<'a, 'lua> {
         use crate::serde::de::{check_value_for_skip, MapPairs};
         use crate::value::SerializableValue;
 
+        let convert_result = |res: Result<()>, serialize_err: Option<S::Error>| match res {
+            Ok(v) => Ok(v),
+            Err(Error::SerializeError(_)) if serialize_err.is_some() => Err(serialize_err.unwrap()),
+            Err(Error::SerializeError(msg)) => Err(serde::ser::Error::custom(msg)),
+            Err(err) => Err(serde::ser::Error::custom(err.to_string())),
+        };
+
         let options = self.options;
         let visited = &self.visited;
         visited.borrow_mut().insert(self.table.to_pointer());
@@ -1093,15 +1107,21 @@ impl<'a, 'lua> Serialize for SerializableTable<'a, 'lua> {
         let len = self.table.raw_len();
         if len > 0 || self.table.is_array() {
             let mut seq = serializer.serialize_seq(Some(len))?;
-            for value in self.table.clone().sequence_values_by_len::<Value>(None) {
-                let value = &value.map_err(serde::ser::Error::custom)?;
-                let skip = check_value_for_skip(value, self.options, &self.visited)
-                    .map_err(serde::ser::Error::custom)?;
+            let mut serialize_err = None;
+            let res = self.table.for_each_value::<Value>(|value| {
+                let skip = check_value_for_skip(&value, self.options, &self.visited)
+                    .map_err(|err| Error::SerializeError(err.to_string()))?;
                 if skip {
-                    continue;
+                    // continue iteration
+                    return Ok(());
                 }
-                seq.serialize_element(&SerializableValue::new(value, options, Some(visited)))?;
-            }
+                seq.serialize_element(&SerializableValue::new(&value, options, Some(visited)))
+                    .map_err(|err| {
+                        serialize_err = Some(err);
+                        Error::SerializeError(String::new())
+                    })
+            });
+            convert_result(res, serialize_err)?;
             return seq.end();
         }
 
@@ -1138,18 +1158,7 @@ impl<'a, 'lua> Serialize for SerializableTable<'a, 'lua> {
                     process_pair(key, value)
                 })
         };
-        match res {
-            Ok(_) => {}
-            Err(Error::SerializeError(_)) if serialize_err.is_some() => {
-                return Err(serialize_err.unwrap());
-            }
-            Err(Error::SerializeError(msg)) => {
-                return Err(serde::ser::Error::custom(msg));
-            }
-            Err(err) => {
-                return Err(serde::ser::Error::custom(err.to_string()));
-            }
-        }
+        convert_result(res, serialize_err)?;
         map.end()
     }
 }
@@ -1219,9 +1228,9 @@ where
 ///
 /// [`Table::sequence_values`]: crate::Table::sequence_values
 pub struct TableSequence<'lua, V> {
+    // TODO: Use `&Table`
     table: LuaRef<'lua>,
     index: Integer,
-    len: Option<Integer>,
     _phantom: PhantomData<V>,
 }
 
@@ -1242,7 +1251,7 @@ where
 
             lua.push_ref(&self.table);
             match ffi::lua_rawgeti(state, -1, self.index) {
-                ffi::LUA_TNIL if self.index > self.len.unwrap_or(0) => None,
+                ffi::LUA_TNIL => None,
                 _ => {
                     self.index += 1;
                     Some(V::from_stack(-1, lua))
