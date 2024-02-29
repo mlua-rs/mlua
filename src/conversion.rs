@@ -421,6 +421,18 @@ impl<'lua> FromLua<'lua> for Error {
     }
 }
 
+impl<'lua> IntoLua<'lua> for RegistryKey {
+    #[inline]
+    fn into_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
+        lua.registry_value(&self)
+    }
+
+    #[inline]
+    unsafe fn push_into_stack(self, lua: &'lua Lua) -> Result<()> {
+        <&RegistryKey>::push_into_stack(&self, lua)
+    }
+}
+
 impl<'lua> IntoLua<'lua> for &RegistryKey {
     #[inline]
     fn into_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {

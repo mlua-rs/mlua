@@ -232,14 +232,22 @@ fn test_owned_anyuserdata_into_lua() -> Result<()> {
 fn test_registry_value_into_lua() -> Result<()> {
     let lua = Lua::new();
 
-    let t = lua.create_table()?;
-    let r = lua.create_registry_value(t)?;
-    let f = lua.create_function(|_, t: Table| t.raw_set("hello", "world"))?;
+    // Direct conversion
+    let s = lua.create_string("hello, world")?;
+    let r = lua.create_registry_value(&s)?;
+    let value1 = lua.pack(&r)?;
+    let value2 = lua.pack(r)?;
+    assert_eq!(value1.as_str(), Some("hello, world"));
+    assert_eq!(value2.to_pointer(), value2.to_pointer());
 
-    f.call(&r)?;
-    let v = r.into_lua(&lua)?;
-    let t = v.as_table().unwrap();
+    // Push into stack
+    let t = lua.create_table()?;
+    let r = lua.create_registry_value(&t)?;
+    let f = lua.create_function(|_, (t, k, v): (Table, Value, Value)| t.set(k, v))?;
+    f.call((&r, "hello", "world"))?;
+    f.call((r, "welcome", "to the jungle"))?;
     assert_eq!(t.get::<_, String>("hello")?, "world");
+    assert_eq!(t.get::<_, String>("welcome")?, "to the jungle");
 
     // Try to set nil registry key
     let r_nil = lua.create_registry_value(Value::Nil)?;
