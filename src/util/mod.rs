@@ -1045,6 +1045,8 @@ pub(crate) unsafe fn to_string(state: *mut ffi::lua_State, index: c_int) -> Stri
         ffi::LUA_TTHREAD => format!("<thread {:?}>", ffi::lua_topointer(state, index)),
         #[cfg(feature = "luau")]
         ffi::LUA_TBUFFER => format!("<buffer {:?}>", ffi::lua_topointer(state, index)),
+        #[cfg(feature = "luajit")]
+        ffi::LUA_TCDATA => format!("<cdata {:?}>", ffi::lua_topointer(state, index)),
         _ => "<unknown>".to_string(),
     }
 }
