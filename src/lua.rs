@@ -1,5 +1,5 @@
 use std::any::TypeId;
-use std::cell::{RefCell, UnsafeCell};
+use std::cell::{Cell, RefCell, UnsafeCell};
 use std::ffi::{CStr, CString};
 use std::fmt;
 use std::marker::PhantomData;
@@ -9,7 +9,6 @@ use std::os::raw::{c_char, c_int, c_void};
 use std::panic::{catch_unwind, resume_unwind, AssertUnwindSafe, Location};
 use std::ptr;
 use std::result::Result as StdResult;
-use std::sync::atomic::{AtomicPtr, Ordering};
 use std::sync::{Arc, Mutex};
 
 use rustc_hash::FxHashMap;
@@ -72,7 +71,7 @@ pub struct Lua(Arc<LuaInner>);
 /// An inner Lua struct which holds a raw Lua state.
 pub struct LuaInner {
     // The state is dynamic and depends on context
-    state: AtomicPtr<ffi::lua_State>,
+    state: Cell<*mut ffi::lua_State>,
     main_state: *mut ffi::lua_State,
     extra: Arc<UnsafeCell<ExtraData>>,
 }
@@ -569,7 +568,7 @@ impl Lua {
         assert_stack(main_state, ffi::LUA_MINSTACK);
 
         let inner = Arc::new(LuaInner {
-            state: AtomicPtr::new(state),
+            state: Cell::new(state),
             main_state,
             extra: Arc::clone(&extra),
         });
@@ -3253,7 +3252,7 @@ impl Lua {
 impl LuaInner {
     #[inline(always)]
     pub(crate) fn state(&self) -> *mut ffi::lua_State {
-        self.state.load(Ordering::Relaxed)
+        self.state.get()
     }
 
     #[cfg(feature = "luau")]
@@ -3295,14 +3294,14 @@ struct StateGuard<'a>(&'a LuaInner, *mut ffi::lua_State);
 
 impl<'a> StateGuard<'a> {
     fn new(inner: &'a LuaInner, mut state: *mut ffi::lua_State) -> Self {
-        state = inner.state.swap(state, Ordering::Relaxed);
+        state = inner.state.replace(state);
         Self(inner, state)
     }
 }
 
 impl<'a> Drop for StateGuard<'a> {
     fn drop(&mut self) {
-        self.0.state.store(self.1, Ordering::Relaxed);
+        self.0.state.set(self.1);
     }
 }
 
