@@ -1,3 +1,11 @@
+## v0.9.6
+
+- Added `to_pointer` function to `Function`/`Table`/`Thread`
+- Implemented `IntoLua` for `&Value`
+- Implemented `FromLua` for `RegistryKey`
+- Faster (~5%) table array traversal during serialization
+- Some performance improvements for bool/int types
+
 ## v0.9.5
 
 - Minimal Luau updated to 0.609
