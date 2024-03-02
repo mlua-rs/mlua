@@ -53,7 +53,7 @@ impl std::ops::DerefMut for LoadedDylibs {
 pub(crate) fn register_package_module(lua: &Lua) -> Result<()> {
     // Create the package table and store it in app_data for later use (bypassing globals lookup)
     let package = lua.create_table()?;
-    lua.set_app_data(PackageKey(lua.create_registry_value(package.clone())?));
+    lua.set_app_data(PackageKey(lua.create_registry_value(&package)?));
 
     // Set `package.path`
     let mut search_path = env::var("LUAU_PATH")
@@ -82,12 +82,12 @@ pub(crate) fn register_package_module(lua: &Lua) -> Result<()> {
 
     // Set `package.loaded` (table with a list of loaded modules)
     let loaded = lua.create_table()?;
-    package.raw_set("loaded", loaded.clone())?;
+    package.raw_set("loaded", &loaded)?;
     lua.set_named_registry_value("_LOADED", loaded)?;
 
     // Set `package.loaders`
     let loaders = lua.create_sequence_from([lua.create_function(lua_loader)?])?;
-    package.raw_set("loaders", loaders.clone())?;
+    package.raw_set("loaders", &loaders)?;
     #[cfg(unix)]
     {
         loaders.push(lua.create_function(dylib_loader)?)?;

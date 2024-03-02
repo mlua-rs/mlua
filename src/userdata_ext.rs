@@ -83,7 +83,7 @@ impl<'lua> AnyUserDataExt<'lua> for AnyUserData<'lua> {
         let metatable = self.get_metatable()?;
         match metatable.get::<Value>(MetaMethod::Index)? {
             Value::Table(table) => table.raw_get(key),
-            Value::Function(func) => func.call((self.clone(), key)),
+            Value::Function(func) => func.call((self, key)),
             _ => Err(Error::runtime("attempt to index a userdata value")),
         }
     }
@@ -92,7 +92,7 @@ impl<'lua> AnyUserDataExt<'lua> for AnyUserData<'lua> {
         let metatable = self.get_metatable()?;
         match metatable.get::<Value>(MetaMethod::NewIndex)? {
             Value::Table(table) => table.raw_set(key, value),
-            Value::Function(func) => func.call((self.clone(), key, value)),
+            Value::Function(func) => func.call((self, key, value)),
             _ => Err(Error::runtime("attempt to index a userdata value")),
         }
     }
@@ -104,7 +104,7 @@ impl<'lua> AnyUserDataExt<'lua> for AnyUserData<'lua> {
     {
         let metatable = self.get_metatable()?;
         match metatable.get::<Value>(MetaMethod::Call)? {
-            Value::Function(func) => func.call((self.clone(), args)),
+            Value::Function(func) => func.call((self, args)),
             _ => Err(Error::runtime("attempt to call a userdata value")),
         }
     }
@@ -121,11 +121,10 @@ impl<'lua> AnyUserDataExt<'lua> for AnyUserData<'lua> {
         };
         match metatable.get::<Value>(MetaMethod::Call) {
             Ok(Value::Function(func)) => {
-                let mut args = match args.into_lua_multi(self.0.lua) {
+                let args = match (self, args).into_lua_multi(self.0.lua) {
                     Ok(args) => args,
                     Err(e) => return Box::pin(future::err(e)),
                 };
-                args.push_front(Value::UserData(self.clone()));
                 Box::pin(async move { func.call_async(args).await })
             }
             Ok(_) => Box::pin(future::err(Error::runtime(
@@ -140,7 +139,7 @@ impl<'lua> AnyUserDataExt<'lua> for AnyUserData<'lua> {
         A: IntoLuaMulti<'lua>,
         R: FromLuaMulti<'lua>,
     {
-        self.call_function(name, (self.clone(), args))
+        self.call_function(name, (self, args))
     }
 
     #[cfg(feature = "async")]
@@ -149,7 +148,7 @@ impl<'lua> AnyUserDataExt<'lua> for AnyUserData<'lua> {
         A: IntoLuaMulti<'lua>,
         R: FromLuaMulti<'lua> + 'lua,
     {
-        self.call_async_function(name, (self.clone(), args))
+        self.call_async_function(name, (self, args))
     }
 
     fn call_function<A, R>(&self, name: &str, args: A) -> Result<R>

@@ -240,16 +240,12 @@ impl<'lua> Table<'lua> {
         // If self does not define it, then check the other table.
         if let Some(mt) = self.get_metatable() {
             if mt.contains_key("__eq")? {
-                return mt
-                    .get::<_, Function>("__eq")?
-                    .call((self.clone(), other.clone()));
+                return mt.get::<_, Function>("__eq")?.call((self, other));
             }
         }
         if let Some(mt) = other.get_metatable() {
             if mt.contains_key("__eq")? {
-                return mt
-                    .get::<_, Function>("__eq")?
-                    .call((self.clone(), other.clone()));
+                return mt.get::<_, Function>("__eq")?.call((self, other));
             }
         }
 
@@ -1004,10 +1000,7 @@ impl<'lua> TableExt<'lua> for Table<'lua> {
         A: IntoLuaMulti<'lua>,
         R: FromLuaMulti<'lua>,
     {
-        let lua = self.0.lua;
-        let mut args = args.into_lua_multi(lua)?;
-        args.push_front(Value::Table(self.clone()));
-        self.get::<_, Function>(name)?.call(args)
+        self.get::<_, Function>(name)?.call((self, args))
     }
 
     fn call_function<A, R>(&self, name: &str, args: A) -> Result<R>
@@ -1024,13 +1017,7 @@ impl<'lua> TableExt<'lua> for Table<'lua> {
         A: IntoLuaMulti<'lua>,
         R: FromLuaMulti<'lua> + 'lua,
     {
-        let lua = self.0.lua;
-        let mut args = match args.into_lua_multi(lua) {
-            Ok(args) => args,
-            Err(e) => return Box::pin(future::err(e)),
-        };
-        args.push_front(Value::Table(self.clone()));
-        self.call_async_function(name, args)
+        self.call_async_function(name, (self, args))
     }
 
     #[cfg(feature = "async")]
@@ -1040,12 +1027,14 @@ impl<'lua> TableExt<'lua> for Table<'lua> {
         R: FromLuaMulti<'lua> + 'lua,
     {
         let lua = self.0.lua;
-        let args = match args.into_lua_multi(lua) {
-            Ok(args) => args,
-            Err(e) => return Box::pin(future::err(e)),
-        };
         match self.get::<_, Function>(name) {
-            Ok(func) => Box::pin(async move { func.call_async(args).await }),
+            Ok(func) => {
+                let args = match args.into_lua_multi(lua) {
+                    Ok(args) => args,
+                    Err(e) => return Box::pin(future::err(e)),
+                };
+                Box::pin(async move { func.call_async(args).await })
+            }
             Err(e) => Box::pin(future::err(e)),
         }
     }
