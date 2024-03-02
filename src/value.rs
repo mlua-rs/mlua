@@ -63,7 +63,7 @@ pub enum Value<'lua> {
     /// Special builtin userdata types will be represented as other `Value` variants.
     UserData(AnyUserData<'lua>),
     /// `Error` is a special builtin userdata type. When received from Lua it is implicitly cloned.
-    Error(Error),
+    Error(Box<Error>),
 }
 
 pub use self::Value::Nil;

@@ -140,7 +140,7 @@ fn test_value_to_string() -> Result<()> {
     let ud: Value = Value::UserData(lua.create_userdata(MyUserData)?);
     assert!(ud.to_string()?.starts_with("MyUserData:"));
 
-    let err = Value::Error(Error::runtime("test error"));
+    let err = Value::Error(Box::new(Error::runtime("test error")));
     assert_eq!(err.to_string()?, "runtime error: test error");
 
     Ok(())
