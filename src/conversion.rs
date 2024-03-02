@@ -412,7 +412,7 @@ impl<'lua, T: 'static> FromLua<'lua> for UserDataRefMut<'lua, T> {
 impl<'lua> IntoLua<'lua> for Error {
     #[inline]
     fn into_lua(self, _: &'lua Lua) -> Result<Value<'lua>> {
-        Ok(Value::Error(self))
+        Ok(Value::Error(Box::new(self)))
     }
 }
 
@@ -420,7 +420,7 @@ impl<'lua> FromLua<'lua> for Error {
     #[inline]
     fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> Result<Error> {
         match value {
-            Value::Error(err) => Ok(err),
+            Value::Error(err) => Ok(*err),
             val => Ok(Error::runtime(
                 lua.coerce_string(val)?
                     .and_then(|s| Some(s.to_str().ok()?.to_owned()))

@@ -2334,7 +2334,7 @@ impl Lua {
     pub unsafe fn push_value(&self, value: Value) -> Result<()> {
         if let Value::Error(err) = value {
             let protect = !self.unlikely_memory_error();
-            return push_gc_userdata(self.state(), WrappedFailure::Error(err), protect);
+            return push_gc_userdata(self.state(), WrappedFailure::Error(*err), protect);
         }
         self.push_value_ref(&value)
     }
@@ -2364,7 +2364,7 @@ impl Lua {
             Value::UserData(ud) => self.push_ref(&ud.0),
             Value::Error(err) => {
                 let protect = !self.unlikely_memory_error();
-                push_gc_userdata(state, WrappedFailure::Error(err.clone()), protect)?;
+                push_gc_userdata(state, WrappedFailure::Error(*err.clone()), protect)?;
             }
         }
         Ok(())
@@ -2447,7 +2447,7 @@ impl Lua {
                     Some(WrappedFailure::Error(err)) => {
                         let err = err.clone();
                         ffi::lua_pop(state, 1);
-                        Value::Error(err)
+                        Value::Error(Box::new(err))
                     }
                     Some(WrappedFailure::Panic(panic)) => {
                         if let Some(panic) = panic.take() {
@@ -2548,7 +2548,7 @@ impl Lua {
                 // WrappedPanics are automatically resumed.
                 match get_gc_userdata::<WrappedFailure>(state, idx, wrapped_failure_mt_ptr).as_mut()
                 {
-                    Some(WrappedFailure::Error(err)) => Value::Error(err.clone()),
+                    Some(WrappedFailure::Error(err)) => Value::Error(Box::new(err.clone())),
                     Some(WrappedFailure::Panic(panic)) => {
                         if let Some(panic) = panic.take() {
                             resume_unwind(panic);
