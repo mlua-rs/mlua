@@ -1,12 +1,11 @@
 use std::borrow::Cow;
 use std::cmp::Ordering;
-use std::collections::HashSet;
-use std::iter;
-use std::ops::Index;
+use std::collections::{vec_deque, HashSet, VecDeque};
+use std::ops::{Deref, DerefMut};
 use std::os::raw::{c_int, c_void};
 use std::string::String as StdString;
 use std::sync::Arc;
-use std::{fmt, mem, ptr, slice, str, vec};
+use std::{fmt, mem, ptr, str};
 
 use num_traits::FromPrimitive;
 
@@ -751,41 +750,15 @@ pub trait FromLua<'lua>: Sized {
 /// Multiple Lua values used for both argument passing and also for multiple return values.
 #[derive(Debug, Clone)]
 pub struct MultiValue<'lua> {
-    vec: Vec<Value<'lua>>,
+    deque: VecDeque<Value<'lua>>,
     lua: Option<&'lua Lua>,
 }
 
 impl Drop for MultiValue<'_> {
     fn drop(&mut self) {
         if let Some(lua) = self.lua {
-            let vec = mem::take(&mut self.vec);
+            let vec = mem::take(&mut self.deque);
             lua.push_multivalue_to_pool(vec);
-        }
-    }
-}
-
-impl<'lua> MultiValue<'lua> {
-    /// Creates an empty `MultiValue` containing no values.
-    pub const fn new() -> MultiValue<'lua> {
-        MultiValue {
-            vec: Vec::new(),
-            lua: None,
-        }
-    }
-
-    /// Similar to `new` but can reuse previously used container with allocated capacity.
-    #[inline]
-    pub(crate) fn with_lua_and_capacity(lua: &'lua Lua, capacity: usize) -> MultiValue<'lua> {
-        let vec = lua
-            .pop_multivalue_from_pool()
-            .map(|mut vec| {
-                vec.reserve(capacity);
-                vec
-            })
-            .unwrap_or_else(|| Vec::with_capacity(capacity));
-        MultiValue {
-            vec,
-            lua: Some(lua),
         }
     }
 }
@@ -797,121 +770,88 @@ impl<'lua> Default for MultiValue<'lua> {
     }
 }
 
+impl<'lua> Deref for MultiValue<'lua> {
+    type Target = VecDeque<Value<'lua>>;
+
+    #[inline]
+    fn deref(&self) -> &Self::Target {
+        &self.deque
+    }
+}
+
+impl<'lua> DerefMut for MultiValue<'lua> {
+    #[inline]
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.deque
+    }
+}
+
+impl<'lua> MultiValue<'lua> {
+    /// Creates an empty `MultiValue` containing no values.
+    pub const fn new() -> MultiValue<'lua> {
+        MultiValue {
+            deque: VecDeque::new(),
+            lua: None,
+        }
+    }
+
+    /// Similar to `new` but can reuse previously used container with allocated capacity.
+    #[inline]
+    pub(crate) fn with_lua_and_capacity(lua: &'lua Lua, capacity: usize) -> MultiValue<'lua> {
+        let deque = lua
+            .pop_multivalue_from_pool()
+            .map(|mut deque| {
+                if capacity > 0 {
+                    deque.reserve(capacity);
+                }
+                deque
+            })
+            .unwrap_or_else(|| VecDeque::with_capacity(capacity));
+        MultiValue {
+            deque,
+            lua: Some(lua),
+        }
+    }
+
+    #[inline]
+    pub(crate) fn extend_from_values(
+        &mut self,
+        iter: impl IntoIterator<Item = Result<Value<'lua>>>,
+    ) -> Result<()> {
+        for value in iter {
+            self.push_back(value?);
+        }
+        Ok(())
+    }
+}
+
 impl<'lua> FromIterator<Value<'lua>> for MultiValue<'lua> {
     #[inline]
     fn from_iter<I: IntoIterator<Item = Value<'lua>>>(iter: I) -> Self {
-        MultiValue::from_vec(Vec::from_iter(iter))
+        let deque = VecDeque::from_iter(iter);
+        MultiValue { deque, lua: None }
     }
 }
 
 impl<'lua> IntoIterator for MultiValue<'lua> {
     type Item = Value<'lua>;
-    type IntoIter = iter::Rev<vec::IntoIter<Value<'lua>>>;
+    type IntoIter = vec_deque::IntoIter<Value<'lua>>;
 
     #[inline]
     fn into_iter(mut self) -> Self::IntoIter {
-        let vec = mem::take(&mut self.vec);
+        let deque = mem::take(&mut self.deque);
         mem::forget(self);
-        vec.into_iter().rev()
+        deque.into_iter()
     }
 }
 
 impl<'a, 'lua> IntoIterator for &'a MultiValue<'lua> {
     type Item = &'a Value<'lua>;
-    type IntoIter = iter::Rev<slice::Iter<'a, Value<'lua>>>;
+    type IntoIter = vec_deque::Iter<'a, Value<'lua>>;
 
     #[inline]
     fn into_iter(self) -> Self::IntoIter {
-        self.vec.iter().rev()
-    }
-}
-
-impl<'lua> Index<usize> for MultiValue<'lua> {
-    type Output = Value<'lua>;
-
-    #[inline]
-    fn index(&self, index: usize) -> &Self::Output {
-        if let Some(result) = self.get(index) {
-            result
-        } else {
-            panic!(
-                "index out of bounds: the len is {} but the index is {}",
-                self.len(),
-                index
-            )
-        }
-    }
-}
-
-impl<'lua> MultiValue<'lua> {
-    #[inline]
-    pub fn from_vec(mut vec: Vec<Value<'lua>>) -> MultiValue<'lua> {
-        vec.reverse();
-        MultiValue { vec, lua: None }
-    }
-
-    #[inline]
-    pub fn into_vec(mut self) -> Vec<Value<'lua>> {
-        let mut vec = mem::take(&mut self.vec);
-        mem::forget(self);
-        vec.reverse();
-        vec
-    }
-
-    #[inline]
-    pub fn get(&self, index: usize) -> Option<&Value<'lua>> {
-        if index < self.vec.len() {
-            return self.vec.get(self.vec.len() - index - 1);
-        }
-        None
-    }
-
-    #[inline]
-    pub fn pop_front(&mut self) -> Option<Value<'lua>> {
-        self.vec.pop()
-    }
-
-    #[inline]
-    pub fn push_front(&mut self, value: Value<'lua>) {
-        self.vec.push(value);
-    }
-
-    #[inline]
-    pub fn clear(&mut self) {
-        self.vec.clear();
-    }
-
-    #[inline]
-    pub fn len(&self) -> usize {
-        self.vec.len()
-    }
-
-    #[inline]
-    pub fn is_empty(&self) -> bool {
-        self.vec.is_empty()
-    }
-
-    #[inline]
-    pub fn iter(&self) -> iter::Rev<slice::Iter<Value<'lua>>> {
-        self.vec.iter().rev()
-    }
-
-    #[inline]
-    pub(crate) fn drain_all(&mut self) -> iter::Rev<vec::Drain<Value<'lua>>> {
-        self.vec.drain(..).rev()
-    }
-
-    #[inline]
-    pub(crate) fn refill(
-        &mut self,
-        iter: impl IntoIterator<Item = Result<Value<'lua>>>,
-    ) -> Result<()> {
-        self.vec.clear();
-        for value in iter {
-            self.vec.push(value?);
-        }
-        self.vec.reverse();
-        Ok(())
+        self.deque.iter()
     }
 }
 
@@ -975,8 +915,8 @@ pub trait FromLuaMulti<'lua>: Sized {
     #[inline]
     unsafe fn from_stack_multi(nvals: c_int, lua: &'lua Lua) -> Result<Self> {
         let mut values = MultiValue::with_lua_and_capacity(lua, nvals as usize);
-        for idx in 1..=nvals {
-            values.push_front(lua.stack_value(-idx));
+        for idx in 0..nvals {
+            values.push_back(lua.stack_value(-nvals + idx));
         }
         if nvals > 0 {
             // It's safe to clear the stack as all references moved to ref thread

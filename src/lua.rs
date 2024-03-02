@@ -1,5 +1,6 @@
 use std::any::TypeId;
 use std::cell::{Cell, RefCell, UnsafeCell};
+use std::collections::VecDeque;
 use std::ffi::{CStr, CString};
 use std::fmt;
 use std::marker::PhantomData;
@@ -105,7 +106,7 @@ pub(crate) struct ExtraData {
     // Pool of `WrappedFailure` enums in the ref thread (as userdata)
     wrapped_failure_pool: Vec<c_int>,
     // Pool of `MultiValue` containers
-    multivalue_pool: Vec<Vec<Value<'static>>>,
+    multivalue_pool: Vec<VecDeque<Value<'static>>>,
     // Pool of `Thread`s (coroutines) for async execution
     #[cfg(feature = "async")]
     thread_pool: Vec<c_int>,
@@ -3255,13 +3256,13 @@ impl LuaInner {
     }
 
     #[inline]
-    pub(crate) fn pop_multivalue_from_pool(&self) -> Option<Vec<Value>> {
+    pub(crate) fn pop_multivalue_from_pool(&self) -> Option<VecDeque<Value>> {
         let extra = unsafe { &mut *self.extra.get() };
         extra.multivalue_pool.pop()
     }
 
     #[inline]
-    pub(crate) fn push_multivalue_to_pool(&self, mut multivalue: Vec<Value>) {
+    pub(crate) fn push_multivalue_to_pool(&self, mut multivalue: VecDeque<Value>) {
         let extra = unsafe { &mut *self.extra.get() };
         if extra.multivalue_pool.len() < MULTIVALUE_POOL_SIZE {
             multivalue.clear();
