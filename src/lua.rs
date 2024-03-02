@@ -1928,7 +1928,7 @@ impl Lua {
                 let _sg = StackGuard::new(state);
                 check_stack(state, 4)?;
 
-                self.push_value(v)?;
+                self.push_value(&v)?;
                 let res = if self.unlikely_memory_error() {
                     ffi::lua_tolstring(state, -1, ptr::null_mut())
                 } else {
@@ -1959,7 +1959,7 @@ impl Lua {
                 let _sg = StackGuard::new(state);
                 check_stack(state, 2)?;
 
-                self.push_value(v)?;
+                self.push_value(&v)?;
                 let mut isint = 0;
                 let i = ffi::lua_tointegerx(state, -1, &mut isint);
                 if isint == 0 {
@@ -1984,7 +1984,7 @@ impl Lua {
                 let _sg = StackGuard::new(state);
                 check_stack(state, 2)?;
 
-                self.push_value(v)?;
+                self.push_value(&v)?;
                 let mut isnum = 0;
                 let n = ffi::lua_tonumberx(state, -1, &mut isnum);
                 if isnum == 0 {
@@ -2085,7 +2085,7 @@ impl Lua {
             let _sg = StackGuard::new(state);
             check_stack(state, 4)?;
 
-            self.push(t)?;
+            self.push_value(&t)?;
 
             let unref_list = (*self.extra.get()).registry_unref_list.clone();
 
@@ -2197,7 +2197,7 @@ impl Lua {
                 }
                 (value, registry_id) => {
                     // It must be safe to replace the value without triggering memory error
-                    self.push_value(value)?;
+                    self.push_value(&value)?;
                     ffi::lua_rawseti(state, ffi::LUA_REGISTRYINDEX, registry_id as Integer);
                 }
             }
@@ -2327,22 +2327,10 @@ impl Lua {
         value.push_into_stack(self)
     }
 
-    /// Pushes a `Value` onto the Lua stack.
+    /// Pushes a `Value` (by reference) onto the Lua stack.
     ///
-    /// Uses 2 stack spaces, does not call checkstack.
-    #[doc(hidden)]
-    pub unsafe fn push_value(&self, value: Value) -> Result<()> {
-        if let Value::Error(err) = value {
-            let protect = !self.unlikely_memory_error();
-            return push_gc_userdata(self.state(), WrappedFailure::Error(*err), protect);
-        }
-        self.push_value_ref(&value)
-    }
-
-    /// Pushes a `&Value` (by reference) onto the Lua stack.
-    ///
-    /// Similar to [`Lua::push_value`], uses 2 stack spaces, does not call checkstack.
-    pub(crate) unsafe fn push_value_ref(&self, value: &Value) -> Result<()> {
+    /// Uses 2 stack spaces, does not call `checkstack`.
+    pub(crate) unsafe fn push_value(&self, value: &Value) -> Result<()> {
         let state = self.state();
         match value {
             Value::Nil => ffi::lua_pushnil(state),

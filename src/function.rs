@@ -252,7 +252,7 @@ impl<'lua> Function<'lua> {
             check_stack(state, nargs + 3)?;
 
             ffi::lua_pushinteger(state, nargs as ffi::lua_Integer);
-            for arg in args {
+            for arg in &args {
                 lua.push_value(arg)?;
             }
             protect_lua!(state, nargs + 1, 1, fn(state) {

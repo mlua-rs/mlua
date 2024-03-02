@@ -1191,7 +1191,7 @@ where
                 check_stack(state, 5)?;
 
                 lua.push_ref(&self.table);
-                lua.push_value(prev_key)?;
+                lua.push_value(&prev_key)?;
 
                 // It must be safe to call `lua_next` unprotected as deleting a key from a table is
                 // a permitted operation.
