@@ -644,13 +644,13 @@ impl Lua {
         };
 
         let modname = self.create_string(modname)?;
-        let value = match loaded.raw_get(modname.clone())? {
+        let value = match loaded.raw_get(&modname)? {
             Value::Nil => {
-                let result = match func.call(modname.clone())? {
+                let result = match func.call(&modname)? {
                     Value::Nil => Value::Boolean(true),
                     res => res,
                 };
-                loaded.raw_set(modname, result.clone())?;
+                loaded.raw_set(modname, &result)?;
                 result
             }
             res => res,
@@ -3205,7 +3205,7 @@ impl Lua {
         let loader = self.create_function(|_, ()| Ok("\n\tcan't load C modules in safe mode"))?;
 
         // The third and fourth searchers looks for a loader as a C library
-        searchers.raw_set(3, loader.clone())?;
+        searchers.raw_set(3, loader)?;
         searchers.raw_remove(4)?;
 
         Ok(())

@@ -272,7 +272,7 @@ impl<'lua> Function<'lua> {
         )
         .try_cache()
         .set_name("__mlua_bind")
-        .call((self.clone(), args_wrapper))
+        .call((self, args_wrapper))
     }
 
     /// Returns the environment of the Lua function.

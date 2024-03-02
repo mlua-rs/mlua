@@ -1161,9 +1161,7 @@ impl<'lua> AnyUserData<'lua> {
         }
 
         if mt.contains_key("__eq")? {
-            return mt
-                .get::<_, Function>("__eq")?
-                .call((self.clone(), other.clone()));
+            return mt.get::<_, Function>("__eq")?.call((self, other));
         }
 
         Ok(false)
