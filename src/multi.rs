@@ -12,28 +12,17 @@ use crate::value::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, MultiValue, Nil
 impl<'lua, T: IntoLua<'lua>, E: IntoLua<'lua>> IntoLuaMulti<'lua> for StdResult<T, E> {
     #[inline]
     fn into_lua_multi(self, lua: &'lua Lua) -> Result<MultiValue<'lua>> {
-        let mut result = MultiValue::with_lua_and_capacity(lua, 2);
         match self {
-            Ok(v) => result.push_front(v.into_lua(lua)?),
-            Err(e) => {
-                result.push_front(e.into_lua(lua)?);
-                result.push_front(Nil);
-            }
+            Ok(val) => (val,).into_lua_multi(lua),
+            Err(err) => (Nil, err).into_lua_multi(lua),
         }
-        Ok(result)
     }
 
     #[inline]
     unsafe fn push_into_stack_multi(self, lua: &'lua Lua) -> Result<c_int> {
         match self {
-            Ok(v) => v.push_into_stack(lua).map(|_| 1),
-            Err(e) => {
-                let state = lua.state();
-                check_stack(state, 3)?;
-                ffi::lua_pushnil(state);
-                e.push_into_stack(lua)?;
-                Ok(2)
-            }
+            Ok(val) => (val,).push_into_stack_multi(lua),
+            Err(err) => (Nil, err).push_into_stack_multi(lua),
         }
     }
 }
@@ -42,13 +31,8 @@ impl<'lua, E: IntoLua<'lua>> IntoLuaMulti<'lua> for StdResult<(), E> {
     #[inline]
     fn into_lua_multi(self, lua: &'lua Lua) -> Result<MultiValue<'lua>> {
         match self {
-            Ok(_) => return Ok(MultiValue::new()),
-            Err(e) => {
-                let mut result = MultiValue::with_lua_and_capacity(lua, 2);
-                result.push_front(e.into_lua(lua)?);
-                result.push_front(Nil);
-                Ok(result)
-            }
+            Ok(_) => Ok(MultiValue::new()),
+            Err(err) => (Nil, err).into_lua_multi(lua),
         }
     }
 
@@ -56,13 +40,7 @@ impl<'lua, E: IntoLua<'lua>> IntoLuaMulti<'lua> for StdResult<(), E> {
     unsafe fn push_into_stack_multi(self, lua: &'lua Lua) -> Result<c_int> {
         match self {
             Ok(_) => Ok(0),
-            Err(e) => {
-                let state = lua.state();
-                check_stack(state, 3)?;
-                ffi::lua_pushnil(state);
-                e.push_into_stack(lua)?;
-                Ok(2)
-            }
+            Err(err) => (Nil, err).push_into_stack_multi(lua),
         }
     }
 }
@@ -71,7 +49,7 @@ impl<'lua, T: IntoLua<'lua>> IntoLuaMulti<'lua> for T {
     #[inline]
     fn into_lua_multi(self, lua: &'lua Lua) -> Result<MultiValue<'lua>> {
         let mut v = MultiValue::with_lua_and_capacity(lua, 1);
-        v.push_front(self.into_lua(lua)?);
+        v.push_back(self.into_lua(lua)?);
         Ok(v)
     }
 
@@ -209,7 +187,7 @@ impl<'lua, T: IntoLua<'lua>> IntoLuaMulti<'lua> for Variadic<T> {
     #[inline]
     fn into_lua_multi(self, lua: &'lua Lua) -> Result<MultiValue<'lua>> {
         let mut values = MultiValue::with_lua_and_capacity(lua, self.0.len());
-        values.refill(self.0.into_iter().map(|e| e.into_lua(lua)))?;
+        values.extend_from_values(self.0.into_iter().map(|val| val.into_lua(lua)))?;
         Ok(values)
     }
 }
@@ -218,8 +196,8 @@ impl<'lua, T: FromLua<'lua>> FromLuaMulti<'lua> for Variadic<T> {
     #[inline]
     fn from_lua_multi(mut values: MultiValue<'lua>, lua: &'lua Lua) -> Result<Self> {
         values
-            .drain_all()
-            .map(|e| T::from_lua(e, lua))
+            .drain(..)
+            .map(|val| T::from_lua(val, lua))
             .collect::<Result<Vec<T>>>()
             .map(Variadic)
     }
