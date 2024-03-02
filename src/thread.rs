@@ -3,7 +3,7 @@ use std::os::raw::{c_int, c_void};
 use crate::error::{Error, Result};
 #[allow(unused)]
 use crate::lua::Lua;
-use crate::types::LuaRef;
+use crate::types::ValueRef;
 use crate::util::{check_stack, error_traceback_thread, pop_error, StackGuard};
 use crate::value::{FromLuaMulti, IntoLuaMulti};
 
@@ -43,7 +43,7 @@ pub enum ThreadStatus {
 
 /// Handle to an internal Lua thread (coroutine).
 #[derive(Clone, Debug)]
-pub struct Thread<'lua>(pub(crate) LuaRef<'lua>, pub(crate) *mut ffi::lua_State);
+pub struct Thread<'lua>(pub(crate) ValueRef<'lua>, pub(crate) *mut ffi::lua_State);
 
 /// Owned handle to an internal Lua thread (coroutine).
 ///
@@ -56,7 +56,7 @@ pub struct Thread<'lua>(pub(crate) LuaRef<'lua>, pub(crate) *mut ffi::lua_State)
 #[cfg_attr(docsrs, doc(cfg(feature = "unstable")))]
 #[derive(Clone, Debug)]
 pub struct OwnedThread(
-    pub(crate) crate::types::LuaOwnedRef,
+    pub(crate) crate::types::OwnedValueRef,
     pub(crate) *mut ffi::lua_State,
 );
 
@@ -87,7 +87,7 @@ pub struct AsyncThread<'lua, R> {
 
 impl<'lua> Thread<'lua> {
     #[inline(always)]
-    pub(crate) fn new(r#ref: LuaRef<'lua>) -> Self {
+    pub(crate) fn new(r#ref: ValueRef<'lua>) -> Self {
         let state = unsafe { ffi::lua_tothread(r#ref.lua.ref_thread(), r#ref.index) };
         Thread(r#ref, state)
     }

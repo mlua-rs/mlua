@@ -273,15 +273,15 @@ impl RegistryKey {
     }
 }
 
-pub(crate) struct LuaRef<'lua> {
+pub(crate) struct ValueRef<'lua> {
     pub(crate) lua: &'lua Lua,
     pub(crate) index: c_int,
     pub(crate) drop: bool,
 }
 
-impl<'lua> LuaRef<'lua> {
+impl<'lua> ValueRef<'lua> {
     pub(crate) const fn new(lua: &'lua Lua, index: c_int) -> Self {
-        LuaRef {
+        ValueRef {
             lua,
             index,
             drop: true,
@@ -295,27 +295,27 @@ impl<'lua> LuaRef<'lua> {
 
     #[cfg(feature = "unstable")]
     #[inline]
-    pub(crate) fn into_owned(self) -> LuaOwnedRef {
+    pub(crate) fn into_owned(self) -> OwnedValueRef {
         assert!(self.drop, "Cannot turn non-drop reference into owned");
-        let owned_ref = LuaOwnedRef::new(self.lua.clone(), self.index);
+        let owned_ref = OwnedValueRef::new(self.lua.clone(), self.index);
         mem::forget(self);
         owned_ref
     }
 }
 
-impl<'lua> fmt::Debug for LuaRef<'lua> {
+impl<'lua> fmt::Debug for ValueRef<'lua> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "Ref({:p})", self.to_pointer())
     }
 }
 
-impl<'lua> Clone for LuaRef<'lua> {
+impl<'lua> Clone for ValueRef<'lua> {
     fn clone(&self) -> Self {
         self.lua.clone_ref(self)
     }
 }
 
-impl<'lua> Drop for LuaRef<'lua> {
+impl<'lua> Drop for ValueRef<'lua> {
     fn drop(&mut self) {
         if self.drop {
             self.lua.drop_ref_index(self.index);
@@ -323,7 +323,7 @@ impl<'lua> Drop for LuaRef<'lua> {
     }
 }
 
-impl<'lua> PartialEq for LuaRef<'lua> {
+impl<'lua> PartialEq for ValueRef<'lua> {
     fn eq(&self, other: &Self) -> bool {
         let ref_thread = self.lua.ref_thread();
         assert!(
@@ -335,28 +335,28 @@ impl<'lua> PartialEq for LuaRef<'lua> {
 }
 
 #[cfg(feature = "unstable")]
-pub(crate) struct LuaOwnedRef {
+pub(crate) struct OwnedValueRef {
     pub(crate) inner: Arc<LuaInner>,
     pub(crate) index: c_int,
     _non_send: PhantomData<*const ()>,
 }
 
 #[cfg(feature = "unstable")]
-impl fmt::Debug for LuaOwnedRef {
+impl fmt::Debug for OwnedValueRef {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "OwnedRef({:p})", self.to_ref().to_pointer())
     }
 }
 
 #[cfg(feature = "unstable")]
-impl Clone for LuaOwnedRef {
+impl Clone for OwnedValueRef {
     fn clone(&self) -> Self {
         self.to_ref().clone().into_owned()
     }
 }
 
 #[cfg(feature = "unstable")]
-impl Drop for LuaOwnedRef {
+impl Drop for OwnedValueRef {
     fn drop(&mut self) {
         let lua: &Lua = unsafe { mem::transmute(&self.inner) };
         lua.drop_ref_index(self.index);
@@ -364,17 +364,17 @@ impl Drop for LuaOwnedRef {
 }
 
 #[cfg(feature = "unstable")]
-impl LuaOwnedRef {
+impl OwnedValueRef {
     pub(crate) const fn new(inner: Arc<LuaInner>, index: c_int) -> Self {
-        LuaOwnedRef {
+        OwnedValueRef {
             inner,
             index,
             _non_send: PhantomData,
         }
     }
 
-    pub(crate) const fn to_ref(&self) -> LuaRef {
-        LuaRef {
+    pub(crate) const fn to_ref(&self) -> ValueRef {
+        ValueRef {
             lua: unsafe { mem::transmute(&self.inner) },
             index: self.index,
             drop: false,
@@ -531,8 +531,8 @@ mod assertions {
     use super::*;
 
     static_assertions::assert_impl_all!(RegistryKey: Send, Sync);
-    static_assertions::assert_not_impl_any!(LuaRef: Send);
+    static_assertions::assert_not_impl_any!(ValueRef: Send);
 
     #[cfg(feature = "unstable")]
-    static_assertions::assert_not_impl_any!(LuaOwnedRef: Send);
+    static_assertions::assert_not_impl_any!(OwnedValueRef: Send);
 }

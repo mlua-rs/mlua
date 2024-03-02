@@ -7,7 +7,7 @@ use std::slice;
 use crate::error::{Error, Result};
 use crate::lua::Lua;
 use crate::table::Table;
-use crate::types::{Callback, LuaRef, MaybeSend};
+use crate::types::{Callback, MaybeSend, ValueRef};
 use crate::util::{
     assert_stack, check_stack, linenumber_to_usize, pop_error, ptr_to_lossy_str, ptr_to_str,
     StackGuard,
@@ -22,7 +22,7 @@ use {
 
 /// Handle to an internal Lua function.
 #[derive(Clone, Debug)]
-pub struct Function<'lua>(pub(crate) LuaRef<'lua>);
+pub struct Function<'lua>(pub(crate) ValueRef<'lua>);
 
 /// Owned handle to an internal Lua function.
 ///
@@ -34,7 +34,7 @@ pub struct Function<'lua>(pub(crate) LuaRef<'lua>);
 #[cfg(feature = "unstable")]
 #[cfg_attr(docsrs, doc(cfg(feature = "unstable")))]
 #[derive(Clone, Debug)]
-pub struct OwnedFunction(pub(crate) crate::types::LuaOwnedRef);
+pub struct OwnedFunction(pub(crate) crate::types::OwnedValueRef);
 
 #[cfg(feature = "unstable")]
 impl OwnedFunction {
