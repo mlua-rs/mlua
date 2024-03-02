@@ -11,13 +11,13 @@ use {
 };
 
 use crate::error::{Error, Result};
-use crate::types::LuaRef;
+use crate::types::ValueRef;
 
 /// Handle to an internal Lua string.
 ///
 /// Unlike Rust strings, Lua strings may not be valid UTF-8.
 #[derive(Clone)]
-pub struct String<'lua>(pub(crate) LuaRef<'lua>);
+pub struct String<'lua>(pub(crate) ValueRef<'lua>);
 
 /// Owned handle to an internal Lua string.
 ///
@@ -29,7 +29,7 @@ pub struct String<'lua>(pub(crate) LuaRef<'lua>);
 #[cfg(feature = "unstable")]
 #[cfg_attr(docsrs, doc(cfg(feature = "unstable")))]
 #[derive(Clone)]
-pub struct OwnedString(pub(crate) crate::types::LuaOwnedRef);
+pub struct OwnedString(pub(crate) crate::types::OwnedValueRef);
 
 #[cfg(feature = "unstable")]
 impl OwnedString {

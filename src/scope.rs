@@ -10,7 +10,7 @@ use serde::Serialize;
 use crate::error::{Error, Result};
 use crate::function::Function;
 use crate::lua::Lua;
-use crate::types::{Callback, CallbackUpvalue, LuaRef, MaybeSend, SubtypeId};
+use crate::types::{Callback, CallbackUpvalue, MaybeSend, SubtypeId, ValueRef};
 use crate::userdata::{
     AnyUserData, MetaMethod, UserData, UserDataCell, UserDataFields, UserDataMethods,
 };
@@ -38,11 +38,11 @@ where
     'lua: 'scope,
 {
     lua: &'lua Lua,
-    destructors: RefCell<Vec<(LuaRef<'lua>, DestructorCallback<'lua>)>>,
+    destructors: RefCell<Vec<(ValueRef<'lua>, DestructorCallback<'lua>)>>,
     _scope_invariant: PhantomData<Cell<&'scope ()>>,
 }
 
-type DestructorCallback<'lua> = Box<dyn Fn(LuaRef<'lua>) -> Vec<Box<dyn Any>> + 'lua>;
+type DestructorCallback<'lua> = Box<dyn Fn(ValueRef<'lua>) -> Vec<Box<dyn Any>> + 'lua>;
 
 impl<'lua, 'scope> Scope<'lua, 'scope> {
     pub(crate) fn new(lua: &'lua Lua) -> Scope<'lua, 'scope> {

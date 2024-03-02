@@ -22,7 +22,7 @@ use crate::function::Function;
 use crate::lua::Lua;
 use crate::string::String;
 use crate::table::{Table, TablePairs};
-use crate::types::{LuaRef, MaybeSend, SubtypeId};
+use crate::types::{MaybeSend, SubtypeId, ValueRef};
 use crate::util::{check_stack, get_userdata, take_userdata, StackGuard};
 use crate::value::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, Value};
 use crate::UserDataRegistry;
@@ -791,7 +791,7 @@ impl<T> Deref for UserDataVariant<T> {
 /// [`is`]: crate::AnyUserData::is
 /// [`borrow`]: crate::AnyUserData::borrow
 #[derive(Clone, Debug)]
-pub struct AnyUserData<'lua>(pub(crate) LuaRef<'lua>, pub(crate) SubtypeId);
+pub struct AnyUserData<'lua>(pub(crate) ValueRef<'lua>, pub(crate) SubtypeId);
 
 /// Owned handle to an internal Lua userdata.
 ///
@@ -801,7 +801,7 @@ pub struct AnyUserData<'lua>(pub(crate) LuaRef<'lua>, pub(crate) SubtypeId);
 #[cfg(feature = "unstable")]
 #[cfg_attr(docsrs, doc(cfg(feature = "unstable")))]
 #[derive(Clone, Debug)]
-pub struct OwnedAnyUserData(pub(crate) crate::types::LuaOwnedRef, pub(crate) SubtypeId);
+pub struct OwnedAnyUserData(pub(crate) crate::types::OwnedValueRef, pub(crate) SubtypeId);
 
 #[cfg(feature = "unstable")]
 impl OwnedAnyUserData {

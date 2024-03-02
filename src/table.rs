@@ -13,7 +13,7 @@ use {
 use crate::error::{Error, Result};
 use crate::function::Function;
 use crate::private::Sealed;
-use crate::types::{Integer, LuaRef};
+use crate::types::{Integer, ValueRef};
 use crate::util::{assert_stack, check_stack, StackGuard};
 use crate::value::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, Nil, Value};
 
@@ -22,7 +22,7 @@ use futures_util::future::{self, LocalBoxFuture};
 
 /// Handle to an internal Lua table.
 #[derive(Clone)]
-pub struct Table<'lua>(pub(crate) LuaRef<'lua>);
+pub struct Table<'lua>(pub(crate) ValueRef<'lua>);
 
 /// Owned handle to an internal Lua table.
 ///
@@ -34,7 +34,7 @@ pub struct Table<'lua>(pub(crate) LuaRef<'lua>);
 #[cfg(feature = "unstable")]
 #[cfg_attr(docsrs, doc(cfg(feature = "unstable")))]
 #[derive(Clone, Debug)]
-pub struct OwnedTable(pub(crate) crate::types::LuaOwnedRef);
+pub struct OwnedTable(pub(crate) crate::types::OwnedValueRef);
 
 #[cfg(feature = "unstable")]
 impl OwnedTable {
@@ -1158,7 +1158,7 @@ impl<'a, 'lua> Serialize for SerializableTable<'a, 'lua> {
 ///
 /// [`Table::pairs`]: crate::Table::pairs
 pub struct TablePairs<'lua, K, V> {
-    table: LuaRef<'lua>,
+    table: ValueRef<'lua>,
     key: Option<Value<'lua>>,
     _phantom: PhantomData<(K, V)>,
 }
@@ -1218,7 +1218,7 @@ where
 /// [`Table::sequence_values`]: crate::Table::sequence_values
 pub struct TableSequence<'lua, V> {
     // TODO: Use `&Table`
-    table: LuaRef<'lua>,
+    table: ValueRef<'lua>,
     index: Integer,
     _phantom: PhantomData<V>,
 }

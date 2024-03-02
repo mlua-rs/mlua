@@ -26,7 +26,7 @@ use crate::table::Table;
 use crate::thread::Thread;
 use crate::types::{
     AppData, AppDataRef, AppDataRefMut, Callback, CallbackUpvalue, DestructedUserdata, Integer,
-    LightUserData, LuaRef, MaybeSend, Number, RegistryKey, SubtypeId,
+    LightUserData, MaybeSend, Number, RegistryKey, SubtypeId, ValueRef,
 };
 use crate::userdata::{AnyUserData, MetaMethod, UserData, UserDataCell};
 use crate::userdata_impl::{UserDataProxy, UserDataRegistry};
@@ -1691,7 +1691,7 @@ impl Lua {
                     ffi::lua_replace(thread_state, ffi::LUA_GLOBALSINDEX);
                 }
 
-                return Ok(Thread::new(LuaRef::new(self, index)));
+                return Ok(Thread::new(ValueRef::new(self, index)));
             }
         };
         self.create_thread_inner(func)
@@ -2575,26 +2575,26 @@ impl Lua {
         }
     }
 
-    // Pushes a LuaRef value onto the stack, uses 1 stack space, does not call checkstack
-    pub(crate) unsafe fn push_ref(&self, lref: &LuaRef) {
+    // Pushes a ValueRef value onto the stack, uses 1 stack space, does not call checkstack
+    pub(crate) unsafe fn push_ref(&self, vref: &ValueRef) {
         assert!(
-            Arc::ptr_eq(&lref.lua.0, &self.0),
+            Arc::ptr_eq(&vref.lua.0, &self.0),
             "Lua instance passed Value created from a different main Lua state"
         );
-        ffi::lua_xpush(self.ref_thread(), self.state(), lref.index);
+        ffi::lua_xpush(self.ref_thread(), self.state(), vref.index);
     }
 
     #[cfg(all(feature = "unstable", not(feature = "send")))]
-    pub(crate) unsafe fn push_owned_ref(&self, loref: &crate::types::LuaOwnedRef) {
+    pub(crate) unsafe fn push_owned_ref(&self, vref: &crate::types::OwnedValueRef) {
         assert!(
-            Arc::ptr_eq(&loref.inner, &self.0),
+            Arc::ptr_eq(&vref.inner, &self.0),
             "Lua instance passed Value created from a different main Lua state"
         );
-        ffi::lua_xpush(self.ref_thread(), self.state(), loref.index);
+        ffi::lua_xpush(self.ref_thread(), self.state(), vref.index);
     }
 
     // Pops the topmost element of the stack and stores a reference to it. This pins the object,
-    // preventing garbage collection until the returned `LuaRef` is dropped.
+    // preventing garbage collection until the returned `ValueRef` is dropped.
     //
     // References are stored in the stack of a specially created auxiliary thread that exists only
     // to store reference values. This is much faster than storing these in the registry, and also
@@ -2602,23 +2602,23 @@ impl Lua {
     // used stack. The implementation is somewhat biased towards the use case of a relatively small
     // number of short term references being created, and `RegistryKey` being used for long term
     // references.
-    pub(crate) unsafe fn pop_ref(&self) -> LuaRef {
+    pub(crate) unsafe fn pop_ref(&self) -> ValueRef {
         ffi::lua_xmove(self.state(), self.ref_thread(), 1);
         let index = ref_stack_pop(self.extra.get());
-        LuaRef::new(self, index)
+        ValueRef::new(self, index)
     }
 
     // Same as `pop_ref` but assumes the value is already on the reference thread
-    pub(crate) unsafe fn pop_ref_thread(&self) -> LuaRef {
+    pub(crate) unsafe fn pop_ref_thread(&self) -> ValueRef {
         let index = ref_stack_pop(self.extra.get());
-        LuaRef::new(self, index)
+        ValueRef::new(self, index)
     }
 
-    pub(crate) fn clone_ref(&self, lref: &LuaRef) -> LuaRef {
+    pub(crate) fn clone_ref(&self, vref: &ValueRef) -> ValueRef {
         unsafe {
-            ffi::lua_pushvalue(self.ref_thread(), lref.index);
+            ffi::lua_pushvalue(self.ref_thread(), vref.index);
             let index = ref_stack_pop(self.extra.get());
-            LuaRef::new(self, index)
+            ValueRef::new(self, index)
         }
     }
 
@@ -2632,17 +2632,17 @@ impl Lua {
     }
 
     #[cfg(all(feature = "unstable", not(feature = "send")))]
-    pub(crate) fn adopt_owned_ref(&self, loref: crate::types::LuaOwnedRef) -> LuaRef {
+    pub(crate) fn adopt_owned_ref(&self, vref: crate::types::OwnedValueRef) -> ValueRef {
         assert!(
-            Arc::ptr_eq(&loref.inner, &self.0),
+            Arc::ptr_eq(&vref.inner, &self.0),
             "Lua instance passed Value created from a different main Lua state"
         );
-        let index = loref.index;
+        let index = vref.index;
         unsafe {
-            ptr::read(&loref.inner);
-            mem::forget(loref);
+            ptr::read(&vref.inner);
+            mem::forget(vref);
         }
-        LuaRef::new(self, index)
+        ValueRef::new(self, index)
     }
 
     #[inline]
@@ -2835,11 +2835,14 @@ impl Lua {
         }
     }
 
-    // Returns `TypeId` for the `lref` userdata, checking that it's registered and not destructed.
+    // Returns `TypeId` for the userdata ref, checking that it's registered and not destructed.
     //
     // Returns `None` if the userdata is registered but non-static.
-    pub(crate) unsafe fn get_userdata_ref_type_id(&self, lref: &LuaRef) -> Result<Option<TypeId>> {
-        self.get_userdata_type_id_inner(self.ref_thread(), lref.index)
+    pub(crate) unsafe fn get_userdata_ref_type_id(
+        &self,
+        vref: &ValueRef,
+    ) -> Result<Option<TypeId>> {
+        self.get_userdata_type_id_inner(self.ref_thread(), vref.index)
     }
 
     // Same as `get_userdata_ref_type_id` but assumes the userdata is already on the stack.
@@ -2876,11 +2879,11 @@ impl Lua {
         }
     }
 
-    // Pushes a LuaRef (userdata) value onto the stack, returning their `TypeId`.
+    // Pushes a ValueRef (userdata) value onto the stack, returning their `TypeId`.
     // Uses 1 stack space, does not call checkstack.
-    pub(crate) unsafe fn push_userdata_ref(&self, lref: &LuaRef) -> Result<Option<TypeId>> {
-        let type_id = self.get_userdata_type_id_inner(self.ref_thread(), lref.index)?;
-        self.push_ref(lref);
+    pub(crate) unsafe fn push_userdata_ref(&self, vref: &ValueRef) -> Result<Option<TypeId>> {
+        let type_id = self.get_userdata_type_id_inner(self.ref_thread(), vref.index)?;
+        self.push_ref(vref);
         Ok(type_id)
     }
 
