@@ -40,7 +40,7 @@ impl<'lua> IntoLua<'lua> for &Value<'lua> {
 
     #[inline]
     unsafe fn push_into_stack(self, lua: &'lua Lua) -> Result<()> {
-        lua.push_value_ref(self)
+        lua.push_value(self)
     }
 }
 
@@ -750,7 +750,7 @@ where
         return Ok(());
     }
     // Fallback to default
-    lua.push_value(T::into_lua(this, lua)?)
+    lua.push_value(&T::into_lua(this, lua)?)
 }
 
 macro_rules! lua_convert_int {

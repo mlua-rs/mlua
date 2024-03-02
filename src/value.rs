@@ -699,7 +699,7 @@ pub trait IntoLua<'lua>: Sized {
     #[doc(hidden)]
     #[inline]
     unsafe fn push_into_stack(self, lua: &'lua Lua) -> Result<()> {
-        lua.push_value(self.into_lua(lua)?)
+        lua.push_value(&self.into_lua(lua)?)
     }
 }
 
@@ -929,12 +929,12 @@ pub trait IntoLuaMulti<'lua>: Sized {
     #[doc(hidden)]
     #[inline]
     unsafe fn push_into_stack_multi(self, lua: &'lua Lua) -> Result<c_int> {
-        let mut values = self.into_lua_multi(lua)?;
+        let values = self.into_lua_multi(lua)?;
         let len: c_int = values.len().try_into().unwrap();
         unsafe {
             check_stack(lua.state(), len + 1)?;
-            for v in values.drain_all() {
-                lua.push_value(v)?;
+            for val in &values {
+                lua.push_value(val)?;
             }
         }
         Ok(len)
