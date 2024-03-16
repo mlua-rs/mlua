@@ -36,6 +36,7 @@ pub unsafe fn luau_compile(source: &[u8], mut options: lua_CompileOptions) -> Ve
         &mut options,
         &mut outsize,
     );
+    assert!(!data_ptr.is_null(), "luau_compile failed");
     let data = slice::from_raw_parts(data_ptr as *mut u8, outsize).to_vec();
     free(data_ptr as *mut c_void);
     data
