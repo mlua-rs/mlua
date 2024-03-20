@@ -177,7 +177,7 @@ fn test_load_mode() -> Result<()> {
         // Test that compilation doesn't work when it shouldn't
         // Also! Using stringify! for lua chunks works without a hitch and gives basic syntax highlighting! It's great.
         static INCORRECT_CODE: &str = stringify! {
-            print({}.1)
+            print({1}.1)
         };
         match mlua::Compiler::new().compile(INCORRECT_CODE) {
             Ok(_) => panic!("failed to reject incorrect Luau code"),
