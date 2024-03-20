@@ -815,11 +815,7 @@ impl OwnedAnyUserData {
 impl<'lua> AnyUserData<'lua> {
     /// Checks whether the type of this userdata is `T`.
     pub fn is<T: 'static>(&self) -> bool {
-        match self.inspect(|_: &UserDataCell<T>| Ok(())) {
-            Ok(()) => true,
-            Err(Error::UserDataTypeMismatch) => false,
-            Err(_) => unreachable!(),
-        }
+        self.inspect(|_: &UserDataCell<T>| Ok(())).is_ok()
     }
 
     /// Borrow this userdata immutably if it is of type `T`.
