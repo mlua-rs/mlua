@@ -4,7 +4,7 @@ use std::{
     ffi::CString,
     io::Result as IoResult,
     path::{Path, PathBuf},
-    string::String as StdString
+    string::String as StdString,
 };
 
 use crate::{
@@ -12,7 +12,7 @@ use crate::{
     function::Function,
     lua::Lua,
     table::Table,
-    value::{FromLuaMulti, IntoLua, IntoLuaMulti}
+    value::{FromLuaMulti, IntoLua, IntoLuaMulti},
 };
 
 /// Trait for types [loadable by Lua] and convertible to a [`Chunk`]
@@ -223,7 +223,7 @@ impl Compiler {
     }
 
     /// Compiles the `source` into bytecode.
-    /// 
+    ///
     /// # Errors
     /// Returns an error if compilation of the source code fails.
     pub fn compile(&self, source: impl AsRef<[u8]>) -> Result<Vec<u8>> {
@@ -442,7 +442,7 @@ impl<'lua, 'a> Chunk<'lua, 'a> {
     /// Compiles the chunk and changes mode to binary.
     ///
     /// It does nothing if the chunk is already binary.
-    /// 
+    ///
     /// # Errors
     /// Errors if a Luau chunk fails to compile. See [`Compiler::compile`].
     fn compile(&mut self) -> Result<()> {
@@ -470,7 +470,7 @@ impl<'lua, 'a> Chunk<'lua, 'a> {
 
     /// Fetches compiled bytecode of this chunk from the cache.
     /// If not found, compiles the source code and stores it on the cache.
-    /// 
+    ///
     /// # Errors
     /// Errors if Luau is targeted and compilation of the source code fails.
     pub(crate) fn try_cache(mut self) -> Result<Self> {

@@ -156,7 +156,9 @@ fn test_load_mode() -> Result<()> {
     #[cfg(not(feature = "luau"))]
     let bytecode = lua.load("return 1 + 1").into_function()?.dump(true);
     #[cfg(feature = "luau")]
-    let bytecode = mlua::Compiler::new().compile("return 1 + 1").expect("trivial compilation failed");
+    let bytecode = mlua::Compiler::new()
+        .compile("return 1 + 1")
+        .expect("trivial compilation failed");
     assert_eq!(lua.load(&bytecode).eval::<i32>()?, 2);
     assert_eq!(
         lua.load(&bytecode)
@@ -182,7 +184,10 @@ fn test_load_mode() -> Result<()> {
         match mlua::Compiler::new().compile(INCORRECT_CODE) {
             Ok(_) => panic!("failed to reject incorrect Luau code"),
             Err(err @ Error::CompileError { .. }) => eprintln!("{err}"),
-            Err(ref e) => panic!("incorrect error {} for failure to compile Luau code", std::any::type_name_of_val(e))
+            Err(ref e) => panic!(
+                "incorrect error {} for failure to compile Luau code",
+                std::any::type_name_of_val(e)
+            ),
         }
     }
 

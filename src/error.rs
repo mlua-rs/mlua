@@ -200,11 +200,11 @@ pub enum Error {
     #[cfg(any(feature = "luau", doc))]
     #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
     /// Luau compilation error.
-    CompileError { 
+    CompileError {
         /// The line on which the error occurred.
         line: usize,
         /// The error message as returned by Luau.
-        message: String
+        message: String,
     },
 }
 
