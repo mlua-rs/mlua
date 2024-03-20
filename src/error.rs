@@ -323,6 +323,7 @@ impl fmt::Display for Error {
                 writeln!(fmt, "{context}")?;
                 write!(fmt, "{cause}")
             },
+            #[cfg(feature = "luau")]
             Error::CompileError { line, ref message} => {
                 writeln!(fmt, "luau compilation error on line {line}: {message}")
             }

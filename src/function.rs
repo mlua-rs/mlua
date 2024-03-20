@@ -344,7 +344,7 @@ impl<'lua> Function<'lua> {
                         let f_with_env = lua
                             .load("return _ENV")
                             .set_environment(env)
-                            .try_cache()
+                            .try_cache()?
                             .into_function()?;
                         lua.push_ref(&f_with_env.0);
                         ffi::lua_upvaluejoin(state, -2, i, -1, 1);
