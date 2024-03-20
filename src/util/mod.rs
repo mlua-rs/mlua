@@ -928,7 +928,7 @@ pub unsafe fn init_error_registry(state: *mut ffi::lua_State) -> Result<()> {
         "__mod",
         "__pow",
         "__unm",
-        #[cfg(any(feature = "lua54", feature = "lua53"))]
+        #[cfg(any(feature = "lua54", feature = "lua53", feature = "luau"))]
         "__idiv",
         #[cfg(any(feature = "lua54", feature = "lua53"))]
         "__band",
