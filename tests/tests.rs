@@ -121,7 +121,7 @@ fn test_eval() -> Result<()> {
     let lua = Lua::new();
 
     assert_eq!(lua.load("1 + 1").eval::<i32>()?, 2);
-    assert_eq!(lua.load("false == false").eval::<bool>()?, true);
+    assert!(lua.load("false == false").eval::<bool>()?);
     assert_eq!(lua.load("return 1 + 2").eval::<i32>()?, 3);
     match lua.load("if true then").eval::<()>() {
         Err(Error::SyntaxError {
@@ -156,7 +156,7 @@ fn test_load_mode() -> Result<()> {
     #[cfg(not(feature = "luau"))]
     let bytecode = lua.load("return 1 + 1").into_function()?.dump(true);
     #[cfg(feature = "luau")]
-    let bytecode = mlua::Compiler::new().compile("return 1 + 1");
+    let bytecode = mlua::Compiler::new().compile("return 1 + 1").expect("trivial compilation failed");
     assert_eq!(lua.load(&bytecode).eval::<i32>()?, 2);
     assert_eq!(
         lua.load(&bytecode)
@@ -171,6 +171,20 @@ fn test_load_mode() -> Result<()> {
         }
         Err(e) => panic!("expected SyntaxError, got {:?}", e),
     };
+
+    #[cfg(feature = "luau")]
+    {
+        // Test that compilation doesn't work when it shouldn't
+        // Also! Using stringify! for lua chunks works without a hitch and gives basic syntax highlighting! It's great.
+        static INCORRECT_CODE: &str = stringify! {
+            print({}.1)
+        };
+        match mlua::Compiler::new().compile(INCORRECT_CODE) {
+            Ok(_) => panic!("failed to reject incorrect Luau code"),
+            Err(err @ Error::CompileError { .. }) => eprintln!("{err}"),
+            Err(ref e) => panic!("incorrect error {} for failure to compile Luau code", std::any::type_name_of_val(e))
+        }
+    }
 
     Ok(())
 }

@@ -1,15 +1,19 @@
-use std::borrow::Cow;
-use std::collections::HashMap;
-use std::ffi::CString;
-use std::io::Result as IoResult;
-use std::path::{Path, PathBuf};
-use std::string::String as StdString;
+use std::{
+    borrow::Cow,
+    collections::HashMap,
+    ffi::CString,
+    io::Result as IoResult,
+    path::{Path, PathBuf},
+    string::String as StdString
+};
 
-use crate::error::{Error, ErrorContext, Result};
-use crate::function::Function;
-use crate::lua::Lua;
-use crate::table::Table;
-use crate::value::{FromLuaMulti, IntoLua, IntoLuaMulti};
+use crate::{
+    error::{Error, ErrorContext, Result},
+    function::Function,
+    lua::Lua,
+    table::Table,
+    value::{FromLuaMulti, IntoLua, IntoLuaMulti}
+};
 
 /// Trait for types [loadable by Lua] and convertible to a [`Chunk`]
 ///
@@ -219,7 +223,10 @@ impl Compiler {
     }
 
     /// Compiles the `source` into bytecode.
-    pub fn compile(&self, source: impl AsRef<[u8]>) -> Vec<u8> {
+    /// 
+    /// # Errors
+    /// Returns an error if compilation of the source code fails.
+    pub fn compile(&self, source: impl AsRef<[u8]>) -> Result<Vec<u8>> {
         use std::os::raw::c_int;
         use std::ptr;
 
@@ -249,7 +256,7 @@ impl Compiler {
             mutable_globals_ptr = mutable_globals.as_ptr();
         }
 
-        unsafe {
+        let bytecode = unsafe {
             let options = ffi::lua_CompileOptions {
                 optimizationLevel: self.optimization_level as c_int,
                 debugLevel: self.debug_level as c_int,
@@ -260,6 +267,25 @@ impl Compiler {
                 mutableGlobals: mutable_globals_ptr,
             };
             ffi::luau_compile(source.as_ref(), options)
+        };
+
+        if bytecode.get(0).is_some_and(|b| *b == 0) {
+            // We have an error message here
+            // Error messages are formatted as b"\0:<line>: <message>"
+            // We can't be confident that they're valid UTF-8, so we use lossy conversion
+            let formatted_error = String::from_utf8_lossy(&bytecode[2..]);
+            let (line, message) = formatted_error
+                .split_once(':')
+                .expect("error messages have at least one colon after the line number");
+            let line: usize = line
+                .parse()
+                .expect("error messages have a valid line number between the colons");
+            Err(Error::CompileError {
+                line,
+                message: message.trim().to_string(),
+            })
+        } else {
+            Ok(bytecode)
         }
     }
 }
@@ -405,7 +431,7 @@ impl<'lua, 'a> Chunk<'lua, 'a> {
         #[cfg(feature = "luau")]
         if self.compiler.is_some() {
             // We don't need to compile source if no compiler set
-            self.compile();
+            self.compile()?;
         }
 
         let name = Self::convert_name(self.name)?;
@@ -416,7 +442,10 @@ impl<'lua, 'a> Chunk<'lua, 'a> {
     /// Compiles the chunk and changes mode to binary.
     ///
     /// It does nothing if the chunk is already binary.
-    fn compile(&mut self) {
+    /// 
+    /// # Errors
+    /// Errors if a Luau chunk fails to compile. See [`Compiler::compile`].
+    fn compile(&mut self) -> Result<()> {
         if let Ok(ref source) = self.source {
             if self.detect_mode() == ChunkMode::Text {
                 #[cfg(feature = "luau")]
@@ -424,7 +453,7 @@ impl<'lua, 'a> Chunk<'lua, 'a> {
                     let data = self
                         .compiler
                         .get_or_insert_with(Default::default)
-                        .compile(source);
+                        .compile(source)?;
                     self.source = Ok(Cow::Owned(data));
                     self.mode = Some(ChunkMode::Binary);
                 }
@@ -436,12 +465,15 @@ impl<'lua, 'a> Chunk<'lua, 'a> {
                 }
             }
         }
+        Ok(())
     }
 
     /// Fetches compiled bytecode of this chunk from the cache.
-    ///
     /// If not found, compiles the source code and stores it on the cache.
-    pub(crate) fn try_cache(mut self) -> Self {
+    /// 
+    /// # Errors
+    /// Errors if Luau is targeted and compilation of the source code fails.
+    pub(crate) fn try_cache(mut self) -> Result<Self> {
         struct ChunksCache(HashMap<Vec<u8>, Vec<u8>>);
 
         // Try to fetch compiled chunk from cache
@@ -452,7 +484,7 @@ impl<'lua, 'a> Chunk<'lua, 'a> {
                     if let Some(data) = cache.0.get(source.as_ref()) {
                         self.source = Ok(Cow::Owned(data.clone()));
                         self.mode = Some(ChunkMode::Binary);
-                        return self;
+                        return Ok(self);
                     }
                 }
                 text_source = Some(source.as_ref().to_vec());
@@ -461,7 +493,7 @@ impl<'lua, 'a> Chunk<'lua, 'a> {
 
         // Compile and cache the chunk
         if let Some(text_source) = text_source {
-            self.compile();
+            self.compile()?;
             if let Ok(ref binary_source) = self.source {
                 if self.detect_mode() == ChunkMode::Binary {
                     if let Some(mut cache) = self.lua.app_data_mut::<ChunksCache>() {
@@ -475,7 +507,7 @@ impl<'lua, 'a> Chunk<'lua, 'a> {
             }
         }
 
-        self
+        Ok(self)
     }
 
     fn to_expression(&self) -> Result<Function<'lua>> {
@@ -489,7 +521,7 @@ impl<'lua, 'a> Chunk<'lua, 'a> {
             .compiler
             .as_ref()
             .map(|c| c.compile(&source))
-            .unwrap_or(source);
+            .unwrap_or(Ok(source))?;
 
         let name = Self::convert_name(self.name.clone())?;
         self.lua

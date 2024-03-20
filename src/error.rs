@@ -197,6 +197,15 @@ pub enum Error {
         /// Underlying error.
         cause: Arc<Error>,
     },
+    #[cfg(any(feature = "luau", doc))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
+    /// Luau compilation error.
+    CompileError { 
+        /// The line on which the error occurred.
+        line: usize,
+        /// The error message as returned by Luau.
+        message: String
+    },
 }
 
 /// A specialized `Result` type used by `mlua`'s API.
@@ -313,6 +322,9 @@ impl fmt::Display for Error {
             Error::WithContext { ref context, ref cause } => {
                 writeln!(fmt, "{context}")?;
                 write!(fmt, "{cause}")
+            },
+            Error::CompileError { line, ref message} => {
+                writeln!(fmt, "luau compilation error on line {line}: {message}")
             }
         }
     }

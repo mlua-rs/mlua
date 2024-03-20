@@ -270,7 +270,7 @@ impl<'lua> Function<'lua> {
             end
             "#,
         )
-        .try_cache()
+        .try_cache()?
         .set_name("__mlua_bind")
         .call((self.clone(), args_wrapper))
     }
