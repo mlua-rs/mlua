@@ -54,8 +54,8 @@ pub enum MetaMethod {
     /// The unary minus (`-`) operator.
     Unm,
     /// The floor division (//) operator.
-    /// Requires `feature = "lua54/lua53"`
-    #[cfg(any(feature = "lua54", feature = "lua53"))]
+    /// Requires `feature = "lua54/lua53/luau"`
+    #[cfg(any(feature = "lua54", feature = "lua53", feature = "luau"))]
     IDiv,
     /// The bitwise AND (&) operator.
     /// Requires `feature = "lua54/lua53"`
@@ -180,7 +180,7 @@ impl MetaMethod {
             MetaMethod::Pow => "__pow",
             MetaMethod::Unm => "__unm",
 
-            #[cfg(any(feature = "lua54", feature = "lua53"))]
+            #[cfg(any(feature = "lua54", feature = "lua53", feature = "luau"))]
             MetaMethod::IDiv => "__idiv",
             #[cfg(any(feature = "lua54", feature = "lua53"))]
             MetaMethod::BAnd => "__band",
@@ -815,11 +815,7 @@ impl OwnedAnyUserData {
 impl<'lua> AnyUserData<'lua> {
     /// Checks whether the type of this userdata is `T`.
     pub fn is<T: 'static>(&self) -> bool {
-        match self.inspect(|_: &UserDataCell<T>| Ok(())) {
-            Ok(()) => true,
-            Err(Error::UserDataTypeMismatch) => false,
-            Err(_) => unreachable!(),
-        }
+        self.inspect(|_: &UserDataCell<T>| Ok(())).is_ok()
     }
 
     /// Borrow this userdata immutably if it is of type `T`.

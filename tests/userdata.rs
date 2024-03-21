@@ -370,6 +370,8 @@ fn test_userdata_take() -> Result<()> {
             r => panic!("improper return for destructed userdata: {:?}", r),
         }
 
+        assert!(!userdata.is::<MyUserdata>());
+
         drop(userdata);
         lua.globals().raw_remove("userdata")?;
         lua.gc_collect()?;

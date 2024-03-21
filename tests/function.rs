@@ -244,6 +244,27 @@ fn test_function_pointer() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "luau")]
+#[test]
+fn test_function_deep_clone() -> Result<()> {
+    let lua = Lua::new();
+
+    lua.globals().set("a", 1)?;
+    let func1 = lua.load("a += 1; return a").into_function()?;
+    let func2 = func1.deep_clone();
+
+    assert_ne!(func1.to_pointer(), func2.to_pointer());
+    assert_eq!(func1.call::<_, i32>(())?, 2);
+    assert_eq!(func2.call::<_, i32>(())?, 3);
+
+    // Check that for Rust functions deep_clone is just a clone
+    let rust_func = lua.create_function(|_, ()| Ok(42))?;
+    let rust_func2 = rust_func.deep_clone();
+    assert_eq!(rust_func.to_pointer(), rust_func2.to_pointer());
+
+    Ok(())
+}
+
 #[test]
 fn test_function_wrap() -> Result<()> {
     use mlua::Error;

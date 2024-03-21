@@ -504,6 +504,27 @@ impl<'lua> Function<'lua> {
         self.0.to_pointer()
     }
 
+    /// Creates a deep clone of the Lua function.
+    ///
+    /// Copies the function prototype and all its upvalues to the
+    /// newly created function.
+    ///
+    /// This function returns shallow clone (same handle) for Rust/C functions.
+    /// Requires `feature = "luau"`
+    #[cfg(feature = "luau")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
+    pub fn deep_clone(&self) -> Self {
+        let ref_thread = self.0.lua.ref_thread();
+        unsafe {
+            if ffi::lua_iscfunction(ref_thread, self.0.index) != 0 {
+                return self.clone();
+            }
+
+            ffi::lua_clonefunction(ref_thread, self.0.index);
+            Function(self.0.lua.pop_ref_thread())
+        }
+    }
+
     /// Convert this handle to owned version.
     #[cfg(all(feature = "unstable", any(not(feature = "send"), doc)))]
     #[cfg_attr(docsrs, doc(cfg(all(feature = "unstable", not(feature = "send")))))]
