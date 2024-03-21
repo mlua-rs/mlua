@@ -1,10 +1,8 @@
-use mlua::{chunk, ExternalResult, Lua, LuaSerdeExt, Result};
+use mlua::{chunk, ExternalResult, Lua, LuaSerdeExt, Result, Value};
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<()> {
     let lua = Lua::new();
-
-    let null = lua.null();
 
     let fetch_json = lua.create_async_function(|lua, uri: String| async move {
         let resp = reqwest::get(&uri)
@@ -15,19 +13,15 @@ async fn main() -> Result<()> {
         lua.to_value(&json)
     })?;
 
+    let dbg = lua.create_function(|_, value: Value| {
+        println!("{value:#?}");
+        Ok(())
+    })?;
+
     let f = lua
         .load(chunk! {
-            function print_r(t, indent)
-                local indent = indent or ""
-                for k, v in pairs(t) do
-                    io.write(indent, tostring(k))
-                    if type(v) == "table" then io.write(":\n") print_r(v, indent.."  ")
-                    else io.write(": ", v == $null and "null" or tostring(v), "\n") end
-                end
-            end
-
             local res = $fetch_json(...)
-            print_r(res)
+            $dbg(res)
         })
         .into_function()?;
 
