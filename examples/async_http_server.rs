@@ -1,18 +1,14 @@
-use std::future::Future;
-use std::net::SocketAddr;
-use std::pin::Pin;
-use std::rc::Rc;
-use std::task::{Context, Poll};
-
-use hyper::server::conn::AddrStream;
-use hyper::service::Service;
-use hyper::{Body, Request, Response, Server};
-
+use bytes::Bytes;
+use http_body_util::{combinators::BoxBody, BodyExt, Empty, Full};
+use hyper::{body::Incoming, service::Service, Request, Response};
+use hyper_util::{rt::TokioIo, server::conn::auto};
 use mlua::{
     chunk, Error as LuaError, Function, Lua, String as LuaString, Table, UserData, UserDataMethods,
 };
+use std::{future::Future, net::SocketAddr, pin::Pin, rc::Rc};
+use tokio::{net::TcpListener, task::LocalSet};
 
-struct LuaRequest(SocketAddr, Request<Body>);
+struct LuaRequest(SocketAddr, Request<Incoming>);
 
 impl UserData for LuaRequest {
     fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
@@ -23,16 +19,12 @@ impl UserData for LuaRequest {
 
 pub struct Svc(Rc<Lua>, SocketAddr);
 
-impl Service<Request<Body>> for Svc {
-    type Response = Response<Body>;
+impl Service<Request<Incoming>> for Svc {
+    type Response = Response<BoxBody<Bytes, hyper::Error>>;
     type Error = LuaError;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>>>>;
 
-    fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        Poll::Ready(Ok(()))
-    }
-
-    fn call(&mut self, req: Request<Body>) -> Self::Future {
+    fn call(&self, req: Request<Incoming>) -> Self::Future {
         // If handler returns an error then generate 5xx response
         let lua = self.0.clone();
         let lua_req = LuaRequest(self.1, req);
@@ -53,8 +45,16 @@ impl Service<Request<Body>> for Svc {
 
                     let body = lua_resp
                         .get::<_, Option<LuaString>>("body")?
-                        .map(|b| Body::from(b.as_bytes().to_vec()))
-                        .unwrap_or_else(Body::empty);
+                        .map(|b| {
+                            Full::new(Bytes::copy_from_slice(b.clone().as_bytes()))
+                                .map_err(|never| match never {})
+                                .boxed()
+                        })
+                        .unwrap_or_else(|| {
+                            Empty::<Bytes>::new()
+                                .map_err(|never| match never {})
+                                .boxed()
+                        });
 
                     Ok(resp.body(body).unwrap())
                 }
@@ -62,7 +62,11 @@ impl Service<Request<Body>> for Svc {
                     eprintln!("{}", err);
                     Ok(Response::builder()
                         .status(500)
-                        .body(Body::from("Internal Server Error"))
+                        .body(
+                            Full::new(Bytes::from("Internal Server Error".as_bytes()))
+                                .map_err(|never| match never {})
+                                .boxed(),
+                        )
                         .unwrap())
                 }
             }
@@ -77,16 +81,16 @@ async fn main() {
     // Create Lua handler function
     let handler: Function = lua
         .load(chunk! {
-            function(req)
-                return {
-                    status = 200,
-                    headers = {
-                        ["X-Req-Method"] = req:method(),
-                        ["X-Remote-Addr"] = req:remote_addr(),
-                    },
-                    body = "Hello from Lua!\n"
-                }
-            end
+          function(req)
+            return {
+              status = 200,
+              headers = {
+                ["X-Req-Method"] = req:method(),
+                ["X-Remote-Addr"] = req:remote_addr(),
+              },
+              body = "Hello from Lua!\n"
+            }
+          end
         })
         .eval()
         .expect("cannot create Lua handler");
@@ -95,31 +99,26 @@ async fn main() {
     lua.set_named_registry_value("http_handler", handler)
         .expect("cannot store Lua handler");
 
-    let addr = ([127, 0, 0, 1], 3000).into();
-    let server = Server::bind(&addr).executor(LocalExec).serve(MakeSvc(lua));
+    let addr = "127.0.0.1:3000";
 
-    println!("Listening on http://{}", addr);
+    let local = LocalSet::new();
+    let listener = TcpListener::bind(addr).await.unwrap();
+    loop {
+        let (stream, peer_addr) = listener.accept().await.unwrap();
+        let io = TokioIo::new(stream);
 
-    // Create `LocalSet` to spawn !Send futures
-    let local = tokio::task::LocalSet::new();
-    local.run_until(server).await.expect("cannot run server")
-}
-
-struct MakeSvc(Rc<Lua>);
-
-impl Service<&AddrStream> for MakeSvc {
-    type Response = Svc;
-    type Error = hyper::Error;
-    type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>>>>;
-
-    fn poll_ready(&mut self, _: &mut Context) -> Poll<Result<(), Self::Error>> {
-        Poll::Ready(Ok(()))
-    }
-
-    fn call(&mut self, stream: &AddrStream) -> Self::Future {
-        let lua = self.0.clone();
-        let remote_addr = stream.remote_addr();
-        Box::pin(async move { Ok(Svc(lua, remote_addr)) })
+        let svc = Svc(lua.clone(), peer_addr);
+        local
+            .run_until(async move {
+                if let Err(err) = auto::Builder::new(LocalExec)
+                    .http1()
+                    .serve_connection(io, svc)
+                    .await
+                {
+                    println!("Error serving connection: {:?}", err);
+                }
+            })
+            .await;
     }
 }
 

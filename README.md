@@ -84,6 +84,17 @@ This works using Lua [coroutines](https://www.lua.org/manual/5.3/manual.html#2.6
 - [HTTP Server](examples/async_http_server.rs)
 - [TCP Server](examples/async_tcp_server.rs)
 
+
+**shell command example**:
+``` shell
+# async http client
+cargo run --example async_http_client --features="async macros lua54"
+
+# async http server
+cargo run --example async_http_server --features="async macros lua54"
+curl http://localhost:3000
+```
+
 ### Serialization (serde) support
 
 With `serialize` feature flag enabled, `mlua` allows you to serialize/deserialize any type that implements [`serde::Serialize`] and [`serde::Deserialize`] into/from [`mlua::Value`]. In addition `mlua` provides [`serde::Serialize`] trait implementation for it (including `UserData` support).
