@@ -85,14 +85,17 @@ This works using Lua [coroutines](https://www.lua.org/manual/5.3/manual.html#2.6
 - [TCP Server](examples/async_tcp_server.rs)
 
 
-**shell command example**:
-``` shell
-# async http client
-cargo run --example async_http_client --features="async macros lua54"
+**shell command examples**:
+```shell
+# async http client (hyper)
+cargo run --example async_http_client --features=lua54,async,macros
+
+# async http client (reqwest)
+cargo run --example async_http_reqwest --features=lua54,async,macros,serialize
 
 # async http server
-cargo run --example async_http_server --features="async macros lua54"
-curl http://localhost:3000
+cargo run --example async_http_server --features=lua54,async,macros
+curl -v http://localhost:3000
 ```
 
 ### Serialization (serde) support
