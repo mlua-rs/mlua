@@ -43,6 +43,12 @@ pub struct Options {
     /// [`null`]: crate::LuaSerdeExt::null
     /// [`Nil`]: crate::Value::Nil
     pub serialize_unit_to_null: bool,
+
+    /// If true, serialize `serde_json::Number` with arbitrary_precision to a Lua number.
+    /// Otherwise it will be serialized as an object (what serde does).
+    ///
+    /// Default: **false**
+    pub detect_serde_json_arbitrary_precision: bool,
 }
 
 impl Default for Options {
@@ -58,6 +64,7 @@ impl Options {
             set_array_metatable: true,
             serialize_none_to_null: true,
             serialize_unit_to_null: true,
+            detect_serde_json_arbitrary_precision: false,
         }
     }
 
@@ -85,6 +92,20 @@ impl Options {
     #[must_use]
     pub const fn serialize_unit_to_null(mut self, enabled: bool) -> Self {
         self.serialize_unit_to_null = enabled;
+        self
+    }
+
+    /// Sets [`detect_serde_json_arbitrary_precision`] option.
+    ///
+    /// This option is used to serialize `serde_json::Number` with arbitrary precision to a Lua number.
+    /// Otherwise it will be serialized as an object (what serde does).
+    ///
+    /// This option is disabled by default.
+    ///
+    /// [`detect_serde_json_arbitrary_precision`]: #structfield.detect_serde_json_arbitrary_precision
+    #[must_use]
+    pub const fn detect_serde_json_arbitrary_precision(mut self, enabled: bool) -> Self {
+        self.detect_serde_json_arbitrary_precision = enabled;
         self
     }
 }
@@ -121,7 +142,7 @@ impl<'lua> ser::Serializer for Serializer<'lua> {
     type SerializeTupleStruct = SerializeSeq<'lua>;
     type SerializeTupleVariant = SerializeTupleVariant<'lua>;
     type SerializeMap = SerializeMap<'lua>;
-    type SerializeStruct = SerializeMap<'lua>;
+    type SerializeStruct = SerializeStruct<'lua>;
     type SerializeStructVariant = SerializeStructVariant<'lua>;
 
     #[inline]
@@ -282,8 +303,23 @@ impl<'lua> ser::Serializer for Serializer<'lua> {
     }
 
     #[inline]
-    fn serialize_struct(self, _name: &'static str, len: usize) -> Result<Self::SerializeStruct> {
-        self.serialize_map(Some(len))
+    fn serialize_struct(self, name: &'static str, len: usize) -> Result<Self::SerializeStruct> {
+        if self.options.detect_serde_json_arbitrary_precision
+            && name == "$serde_json::private::Number"
+            && len == 1
+        {
+            return Ok(SerializeStruct {
+                lua: self.lua,
+                inner: None,
+                options: self.options,
+            });
+        }
+
+        Ok(SerializeStruct {
+            lua: self.lua,
+            inner: Some(Value::Table(self.lua.create_table_with_capacity(0, len)?)),
+            options: self.options,
+        })
     }
 
     #[inline]
@@ -465,7 +501,14 @@ impl<'lua> ser::SerializeMap for SerializeMap<'lua> {
     }
 }
 
-impl<'lua> ser::SerializeStruct for SerializeMap<'lua> {
+#[doc(hidden)]
+pub struct SerializeStruct<'lua> {
+    lua: &'lua Lua,
+    inner: Option<Value<'lua>>,
+    options: Options,
+}
+
+impl<'lua> ser::SerializeStruct for SerializeStruct<'lua> {
     type Ok = Value<'lua>;
     type Error = Error;
 
@@ -473,12 +516,38 @@ impl<'lua> ser::SerializeStruct for SerializeMap<'lua> {
     where
         T: Serialize + ?Sized,
     {
-        ser::SerializeMap::serialize_key(self, key)?;
-        ser::SerializeMap::serialize_value(self, value)
+        match self.inner {
+            Some(Value::Table(ref table)) => {
+                table.raw_set(key, self.lua.to_value_with(value, self.options)?)?;
+            }
+            None if self.options.detect_serde_json_arbitrary_precision => {
+                // A special case for `serde_json::Number` with arbitrary precision.
+                assert_eq!(key, "$serde_json::private::Number");
+                self.inner = Some(self.lua.to_value_with(value, self.options)?);
+            }
+            _ => unreachable!(),
+        }
+        Ok(())
     }
 
     fn end(self) -> Result<Value<'lua>> {
-        ser::SerializeMap::end(self)
+        match self.inner {
+            Some(table @ Value::Table(_)) => Ok(table),
+            Some(value) if self.options.detect_serde_json_arbitrary_precision => {
+                let number_s = value.as_str().expect("not an arbitrary precision number");
+                if number_s.contains(&['.', 'e', 'E']) {
+                    if let Ok(number) = number_s.parse().map(Value::Number) {
+                        return Ok(number);
+                    }
+                }
+                Ok(number_s
+                    .parse()
+                    .map(Value::Integer)
+                    .or_else(|_| number_s.parse().map(Value::Number))
+                    .unwrap_or_else(|_| value))
+            }
+            _ => unreachable!(),
+        }
     }
 }
 
@@ -505,7 +574,7 @@ impl<'lua> ser::SerializeStructVariant for SerializeStructVariant<'lua> {
 
     fn end(self) -> Result<Value<'lua>> {
         let lua = self.table.0.lua;
-        let table = lua.create_table()?;
+        let table = lua.create_table_with_capacity(0, 1)?;
         table.raw_set(self.name, self.table)?;
         Ok(Value::Table(table))
     }

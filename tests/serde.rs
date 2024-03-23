@@ -697,3 +697,34 @@ fn test_from_value_sorted() -> Result<(), Box<dyn StdError>> {
 
     Ok(())
 }
+
+#[test]
+fn test_arbitrary_precision() {
+    let lua = Lua::new();
+
+    let opts = SerializeOptions::new().detect_serde_json_arbitrary_precision(true);
+
+    // Number
+    let num = serde_json::Value::Number(serde_json::Number::from_f64(1.244e2).unwrap());
+    let num = lua.to_value_with(&num, opts).unwrap();
+    assert_eq!(num, Value::Number(1.244e2));
+
+    // Integer
+    let num = serde_json::Value::Number(serde_json::Number::from_f64(123.0).unwrap());
+    let num = lua.to_value_with(&num, opts).unwrap();
+    assert_eq!(num, Value::Integer(123));
+
+    // Max u64
+    let num = serde_json::Value::Number(serde_json::Number::from(i64::MAX));
+    let num = lua.to_value_with(&num, opts).unwrap();
+    assert_eq!(num, Value::Number(i64::MAX as f64));
+
+    // Check that the option is disabled by default
+    let num = serde_json::Value::Number(serde_json::Number::from_f64(1.244e2).unwrap());
+    let num = lua.to_value(&num).unwrap();
+    assert_eq!(num.type_name(), "table");
+    assert_eq!(
+        format!("{:#?}", num),
+        "{\n  [\"$serde_json::private::Number\"] = \"124.4\",\n}"
+    );
+}
