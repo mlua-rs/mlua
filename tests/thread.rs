@@ -101,7 +101,7 @@ fn test_thread_reset() -> Result<()> {
 
     let lua = Lua::new();
 
-    struct MyUserData(Arc<()>);
+    struct MyUserData(#[allow(unused)] Arc<()>);
     impl UserData for MyUserData {}
 
     let arc = Arc::new(());

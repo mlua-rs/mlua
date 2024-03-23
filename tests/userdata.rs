@@ -402,7 +402,7 @@ fn test_userdata_take() -> Result<()> {
 
 #[test]
 fn test_userdata_destroy() -> Result<()> {
-    struct MyUserdata(Arc<()>);
+    struct MyUserdata(#[allow(unused)] Arc<()>);
 
     impl UserData for MyUserdata {}
 

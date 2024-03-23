@@ -84,7 +84,7 @@ fn test_gc_control() -> Result<()> {
 
     assert_eq!(lua.gc_inc(200, 100, 13), GCMode::Incremental);
 
-    struct MyUserdata(Arc<()>);
+    struct MyUserdata(#[allow(unused)] Arc<()>);
     impl UserData for MyUserdata {}
 
     let rc = Arc::new(());

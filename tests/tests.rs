@@ -743,7 +743,7 @@ fn test_registry_value() -> Result<()> {
 
 #[test]
 fn test_drop_registry_value() -> Result<()> {
-    struct MyUserdata(Arc<()>);
+    struct MyUserdata(#[allow(unused)] Arc<()>);
 
     impl UserData for MyUserdata {}
 

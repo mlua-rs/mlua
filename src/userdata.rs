@@ -1358,7 +1358,7 @@ impl<'lua> Serialize for AnyUserData<'lua> {
 /// A wrapper type for an immutably borrowed value from a `AnyUserData`.
 ///
 /// It implements [`FromLua`] and can be used to receive a typed userdata from Lua.
-pub struct UserDataRef<'lua, T: 'static>(AnyUserData<'lua>, Ref<'lua, T>);
+pub struct UserDataRef<'lua, T: 'static>(#[allow(unused)] AnyUserData<'lua>, Ref<'lua, T>);
 
 impl<'lua, T: 'static> Deref for UserDataRef<'lua, T> {
     type Target = T;
@@ -1380,7 +1380,7 @@ impl<'lua, T: 'static> UserDataRef<'lua, T> {
 /// A wrapper type for a mutably borrowed value from a `AnyUserData`.
 ///
 /// It implements [`FromLua`] and can be used to receive a typed userdata from Lua.
-pub struct UserDataRefMut<'lua, T: 'static>(AnyUserData<'lua>, RefMut<'lua, T>);
+pub struct UserDataRefMut<'lua, T: 'static>(#[allow(unused)] AnyUserData<'lua>, RefMut<'lua, T>);
 
 impl<'lua, T: 'static> Deref for UserDataRefMut<'lua, T> {
     type Target = T;

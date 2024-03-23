@@ -99,7 +99,7 @@ fn test_serialize_in_scope() -> LuaResult<()> {
         Err(e) => panic!("expected destructed error, got {}", e),
     }
 
-    struct MyUserDataRef<'a>(&'a ());
+    struct MyUserDataRef<'a>(#[allow(unused)] &'a ());
 
     impl<'a> UserData for MyUserDataRef<'a> {}
 

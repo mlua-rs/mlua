@@ -269,7 +269,7 @@ fn registry_value_create(c: &mut Criterion) {
 }
 
 fn userdata_create(c: &mut Criterion) {
-    struct UserData(i64);
+    struct UserData(#[allow(unused)] i64);
     impl LuaUserData for UserData {}
 
     let lua = Lua::new();
@@ -286,7 +286,7 @@ fn userdata_create(c: &mut Criterion) {
 }
 
 fn userdata_call_index(c: &mut Criterion) {
-    struct UserData(i64);
+    struct UserData(#[allow(unused)] i64);
     impl LuaUserData for UserData {
         fn add_methods<'lua, M: LuaUserDataMethods<'lua, Self>>(methods: &mut M) {
             methods.add_meta_method(LuaMetaMethod::Index, move |_, _, key: LuaString| Ok(key));

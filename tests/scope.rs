@@ -155,14 +155,14 @@ fn test_scope_userdata_functions() -> Result<()> {
 
     impl<'a> UserData for MyUserData<'a> {
         fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
-            methods.add_meta_function(MetaMethod::Add, |lua, ()| {
+            methods.add_meta_method(MetaMethod::Add, |lua, this, ()| {
                 let globals = lua.globals();
-                globals.set("i", globals.get::<_, i64>("i")? + 1)?;
+                globals.set("i", globals.get::<_, i64>("i")? + this.0)?;
                 Ok(())
             });
-            methods.add_meta_function(MetaMethod::Sub, |lua, ()| {
+            methods.add_meta_method(MetaMethod::Sub, |lua, this, ()| {
                 let globals = lua.globals();
-                globals.set("i", globals.get::<_, i64>("i")? + 1)?;
+                globals.set("i", globals.get::<_, i64>("i")? + this.0)?;
                 Ok(())
             });
         }
@@ -170,7 +170,7 @@ fn test_scope_userdata_functions() -> Result<()> {
 
     let lua = Lua::new();
 
-    let dummy = 0;
+    let dummy = 1;
     let f = lua
         .load(
             r#"
@@ -178,7 +178,7 @@ fn test_scope_userdata_functions() -> Result<()> {
             return function(u)
                 _ = u + u
                 _ = u - 1
-                _ = 1 + u
+                _ = u + 1
             end
         "#,
         )
@@ -257,7 +257,7 @@ fn test_scope_userdata_mismatch() -> Result<()> {
 fn test_scope_userdata_drop() -> Result<()> {
     let lua = Lua::new();
 
-    struct MyUserData(Rc<()>);
+    struct MyUserData(#[allow(unused)] Rc<()>);
 
     impl UserData for MyUserData {
         fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
@@ -265,7 +265,7 @@ fn test_scope_userdata_drop() -> Result<()> {
         }
     }
 
-    struct MyUserDataArc(Arc<()>);
+    struct MyUserDataArc(#[allow(unused)] Arc<()>);
 
     impl UserData for MyUserDataArc {}
 
@@ -315,7 +315,7 @@ fn test_scope_userdata_drop() -> Result<()> {
 fn test_scope_nonstatic_userdata_drop() -> Result<()> {
     let lua = Lua::new();
 
-    struct MyUserData<'a>(&'a Cell<i64>, Arc<()>);
+    struct MyUserData<'a>(&'a Cell<i64>, #[allow(unused)] Arc<()>);
 
     impl<'a> UserData for MyUserData<'a> {
         fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
@@ -326,7 +326,7 @@ fn test_scope_nonstatic_userdata_drop() -> Result<()> {
         }
     }
 
-    struct MyUserDataArc(Arc<()>);
+    struct MyUserDataArc(#[allow(unused)] Arc<()>);
 
     impl UserData for MyUserDataArc {}
 
