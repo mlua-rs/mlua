@@ -535,7 +535,7 @@ impl<'lua> ser::SerializeStruct for SerializeStruct<'lua> {
             Some(table @ Value::Table(_)) => Ok(table),
             Some(value) if self.options.detect_serde_json_arbitrary_precision => {
                 let number_s = value.as_str().expect("not an arbitrary precision number");
-                if number_s.contains(&['.', 'e', 'E']) {
+                if number_s.contains(['.', 'e', 'E']) {
                     if let Ok(number) = number_s.parse().map(Value::Number) {
                         return Ok(number);
                     }
@@ -544,7 +544,7 @@ impl<'lua> ser::SerializeStruct for SerializeStruct<'lua> {
                     .parse()
                     .map(Value::Integer)
                     .or_else(|_| number_s.parse().map(Value::Number))
-                    .unwrap_or_else(|_| value))
+                    .unwrap_or(value))
             }
             _ => unreachable!(),
         }

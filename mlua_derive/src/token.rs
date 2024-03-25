@@ -1,7 +1,6 @@
 use std::{
     cmp::{Eq, PartialEq},
     fmt::{self, Display, Formatter},
-    iter::IntoIterator,
     vec::IntoIter,
 };
 

@@ -103,6 +103,7 @@ pub(crate) fn register_package_module(lua: &Lua) -> Result<()> {
     Ok(())
 }
 
+#[allow(unused_variables)]
 pub(crate) fn disable_dylibs(lua: &Lua) {
     // Presence of `LoadedDylibs` in app data is used as a flag
     // to check whether binary modules are enabled
