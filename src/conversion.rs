@@ -1,6 +1,5 @@
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
-use std::convert::TryInto;
 use std::ffi::{CStr, CString};
 use std::hash::{BuildHasher, Hash};
 use std::os::raw::c_int;
@@ -67,7 +66,8 @@ impl<'lua> IntoLua<'lua> for &String<'lua> {
 
     #[inline]
     unsafe fn push_into_stack(self, lua: &'lua Lua) -> Result<()> {
-        Ok(lua.push_ref(&self.0))
+        lua.push_ref(&self.0);
+        Ok(())
     }
 }
 
@@ -131,7 +131,8 @@ impl<'lua> IntoLua<'lua> for &Table<'lua> {
 
     #[inline]
     unsafe fn push_into_stack(self, lua: &'lua Lua) -> Result<()> {
-        Ok(lua.push_ref(&self.0))
+        lua.push_ref(&self.0);
+        Ok(())
     }
 }
 
@@ -196,7 +197,8 @@ impl<'lua> IntoLua<'lua> for &Function<'lua> {
 
     #[inline]
     unsafe fn push_into_stack(self, lua: &'lua Lua) -> Result<()> {
-        Ok(lua.push_ref(&self.0))
+        lua.push_ref(&self.0);
+        Ok(())
     }
 }
 
@@ -261,7 +263,8 @@ impl<'lua> IntoLua<'lua> for &Thread<'lua> {
 
     #[inline]
     unsafe fn push_into_stack(self, lua: &'lua Lua) -> Result<()> {
-        Ok(lua.push_ref(&self.0))
+        lua.push_ref(&self.0);
+        Ok(())
     }
 }
 
@@ -326,7 +329,8 @@ impl<'lua> IntoLua<'lua> for &AnyUserData<'lua> {
 
     #[inline]
     unsafe fn push_into_stack(self, lua: &'lua Lua) -> Result<()> {
-        Ok(lua.push_ref(&self.0))
+        lua.push_ref(&self.0);
+        Ok(())
     }
 }
 

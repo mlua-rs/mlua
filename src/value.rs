@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::collections::HashSet;
-use std::iter::{self, FromIterator};
+use std::iter;
 use std::ops::Index;
 use std::os::raw::{c_int, c_void};
 use std::string::String as StdString;
@@ -15,7 +15,7 @@ use {
     crate::table::SerializableTable,
     rustc_hash::FxHashSet,
     serde::ser::{self, Serialize, Serializer},
-    std::{cell::RefCell, convert::TryInto, rc::Rc, result::Result as StdResult},
+    std::{cell::RefCell, rc::Rc, result::Result as StdResult},
 };
 
 use crate::error::{Error, Result};
@@ -252,8 +252,7 @@ impl<'lua> Value<'lua> {
     /// If the value is a Lua [`Integer`], try to convert it to `i64` or return `None` otherwise.
     #[inline]
     pub fn as_i64(&self) -> Option<i64> {
-        #[allow(clippy::useless_conversion)]
-        self.as_integer().and_then(|i| i64::try_from(i).ok())
+        self.as_integer().map(i64::from)
     }
 
     /// Cast the value to `u64`.
@@ -659,8 +658,7 @@ impl<'a, 'lua> Serialize for SerializableValue<'a, 'lua> {
             Value::Nil => serializer.serialize_unit(),
             Value::Boolean(b) => serializer.serialize_bool(*b),
             #[allow(clippy::useless_conversion)]
-            Value::Integer(i) => serializer
-                .serialize_i64((*i).try_into().expect("cannot convert Lua Integer to i64")),
+            Value::Integer(i) => serializer.serialize_i64((*i).into()),
             Value::Number(n) => serializer.serialize_f64(*n),
             #[cfg(feature = "luau")]
             Value::Vector(v) => v.serialize(serializer),
