@@ -1063,6 +1063,15 @@ impl<'lua, T: IntoLua<'lua>> IntoLua<'lua> for Option<T> {
             None => Ok(Nil),
         }
     }
+
+    #[inline]
+    unsafe fn push_into_stack(self, lua: &'lua Lua) -> Result<()> {
+        match self {
+            Some(val) => val.push_into_stack(lua)?,
+            None => ffi::lua_pushnil(lua.state()),
+        }
+        Ok(())
+    }
 }
 
 impl<'lua, T: FromLua<'lua>> FromLua<'lua> for Option<T> {
@@ -1071,6 +1080,15 @@ impl<'lua, T: FromLua<'lua>> FromLua<'lua> for Option<T> {
         match value {
             Nil => Ok(None),
             value => Ok(Some(T::from_lua(value, lua)?)),
+        }
+    }
+
+    #[inline]
+    unsafe fn from_stack(idx: c_int, lua: &'lua Lua) -> Result<Self> {
+        if ffi::lua_isnil(lua.state(), idx) != 0 {
+            Ok(None)
+        } else {
+            Ok(Some(T::from_stack(idx, lua)?))
         }
     }
 }

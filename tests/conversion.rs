@@ -453,3 +453,21 @@ fn test_bstring_from_lua_buffer() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn test_option_into_from_lua() -> Result<()> {
+    let lua = Lua::new();
+
+    // Direct conversion
+    let v = Some(42);
+    let v2 = v.into_lua(&lua)?;
+    assert_eq!(v, v2.as_i32());
+
+    // Push into stack / get from stack
+    let f = lua.create_function(|_, v: Option<i32>| Ok(v))?;
+    assert_eq!(f.call::<_, Option<i32>>(Some(42))?, Some(42));
+    assert_eq!(f.call::<_, Option<i32>>(Option::<i32>::None)?, None);
+    assert_eq!(f.call::<_, Option<i32>>(())?, None);
+
+    Ok(())
+}
