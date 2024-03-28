@@ -679,19 +679,49 @@ impl<'lua> IntoLua<'lua> for BString {
 }
 
 impl<'lua> FromLua<'lua> for BString {
-    #[inline]
     fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> Result<Self> {
         let ty = value.type_name();
-        Ok(BString::from(
-            lua.coerce_string(value)?
+        match value {
+            Value::String(s) => Ok(s.as_bytes().into()),
+            #[cfg(feature = "luau")]
+            Value::UserData(ud) if ud.1 == crate::types::SubtypeId::Buffer => unsafe {
+                let mut size = 0usize;
+                let buf = ffi::lua_tobuffer(ud.0.lua.ref_thread(), ud.0.index, &mut size);
+                mlua_assert!(!buf.is_null(), "invalid Luau buffer");
+                Ok(slice::from_raw_parts(buf as *const u8, size).into())
+            },
+            _ => Ok(lua
+                .coerce_string(value)?
                 .ok_or_else(|| Error::FromLuaConversionError {
                     from: ty,
                     to: "BString",
                     message: Some("expected string or number".to_string()),
                 })?
                 .as_bytes()
-                .to_vec(),
-        ))
+                .into()),
+        }
+    }
+
+    unsafe fn from_stack(idx: c_int, lua: &'lua Lua) -> Result<Self> {
+        let state = lua.state();
+        match ffi::lua_type(state, idx) {
+            ffi::LUA_TSTRING => {
+                let mut size = 0;
+                let data = ffi::lua_tolstring(state, idx, &mut size);
+                Ok(slice::from_raw_parts(data as *const u8, size).into())
+            }
+            #[cfg(feature = "luau")]
+            ffi::LUA_TBUFFER => {
+                let mut size = 0;
+                let buf = ffi::lua_tobuffer(state, idx, &mut size);
+                mlua_assert!(!buf.is_null(), "invalid Luau buffer");
+                Ok(slice::from_raw_parts(buf as *const u8, size).into())
+            }
+            _ => {
+                // Fallback to default
+                Self::from_lua(lua.stack_value(idx), lua)
+            }
+        }
     }
 }
 

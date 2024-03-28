@@ -253,6 +253,20 @@ pub unsafe fn push_string(state: *mut ffi::lua_State, s: &[u8], protect: bool) -
     }
 }
 
+// Uses 3 stack spaces (when protect), does not call checkstack.
+#[cfg(feature = "luau")]
+#[inline(always)]
+pub unsafe fn push_buffer(state: *mut ffi::lua_State, b: &[u8], protect: bool) -> Result<()> {
+    let data = if protect {
+        protect_lua!(state, 0, 1, |state| ffi::lua_newbuffer(state, b.len()))?
+    } else {
+        ffi::lua_newbuffer(state, b.len())
+    };
+    let buf = slice::from_raw_parts_mut(data as *mut u8, b.len());
+    buf.copy_from_slice(b);
+    Ok(())
+}
+
 // Uses 3 stack spaces, does not call checkstack.
 #[inline]
 pub unsafe fn push_table(

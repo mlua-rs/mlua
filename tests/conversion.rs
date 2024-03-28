@@ -2,6 +2,7 @@ use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::ffi::{CStr, CString};
 
+use bstr::BString;
 use maplit::{btreemap, btreeset, hashmap, hashset};
 use mlua::{
     AnyUserData, Error, Function, IntoLua, Lua, RegistryKey, Result, Table, Thread, UserDataRef,
@@ -406,6 +407,49 @@ fn test_conv_array() -> Result<()> {
 
     let v2 = lua.globals().get::<_, [i32; 4]>("v");
     assert!(matches!(v2, Err(Error::FromLuaConversionError { .. })));
+
+    Ok(())
+}
+
+#[test]
+fn test_bstring_from_lua() -> Result<()> {
+    let lua = Lua::new();
+
+    let s = lua.create_string("hello, world")?;
+    let bstr = lua.unpack::<BString>(Value::String(s))?;
+    assert_eq!(bstr, "hello, world");
+
+    let bstr = lua.unpack::<BString>(Value::Integer(123))?;
+    assert_eq!(bstr, "123");
+
+    let bstr = lua.unpack::<BString>(Value::Number(-123.55))?;
+    assert_eq!(bstr, "-123.55");
+
+    // Test from stack
+    let f = lua.create_function(|_, bstr: BString| Ok(bstr))?;
+    let bstr = f.call::<_, BString>("hello, world")?;
+    assert_eq!(bstr, "hello, world");
+
+    let bstr = f.call::<_, BString>(-43.22)?;
+    assert_eq!(bstr, "-43.22");
+
+    Ok(())
+}
+
+#[cfg(feature = "luau")]
+#[test]
+fn test_bstring_from_lua_buffer() -> Result<()> {
+    let lua = Lua::new();
+
+    let b = lua.create_buffer("hello, world")?;
+    let bstr = lua.unpack::<BString>(Value::UserData(b))?;
+    assert_eq!(bstr, "hello, world");
+
+    // Test from stack
+    let f = lua.create_function(|_, bstr: BString| Ok(bstr))?;
+    let buf = lua.create_buffer("hello, world")?;
+    let bstr = f.call::<_, BString>(buf)?;
+    assert_eq!(bstr, "hello, world");
 
     Ok(())
 }

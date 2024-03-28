@@ -728,3 +728,30 @@ fn test_arbitrary_precision() {
         "{\n  [\"$serde_json::private::Number\"] = \"124.4\",\n}"
     );
 }
+
+#[cfg(feature = "luau")]
+#[test]
+fn test_buffer_serialize() {
+    let lua = Lua::new();
+
+    let buf = lua.create_buffer(&[1, 2, 3, 4]).unwrap();
+    let val = serde_value::to_value(&buf).unwrap();
+    assert_eq!(val, serde_value::Value::Bytes(vec![1, 2, 3, 4]));
+
+    // Try empty buffer
+    let buf = lua.create_buffer(&[]).unwrap();
+    let val = serde_value::to_value(&buf).unwrap();
+    assert_eq!(val, serde_value::Value::Bytes(vec![]));
+}
+
+#[cfg(feature = "luau")]
+#[test]
+fn test_buffer_from_value() {
+    let lua = Lua::new();
+
+    let buf = lua.create_buffer(&[1, 2, 3, 4]).unwrap();
+    let val = lua
+        .from_value::<serde_value::Value>(Value::UserData(buf))
+        .unwrap();
+    assert_eq!(val, serde_value::Value::Bytes(vec![1, 2, 3, 4]));
+}

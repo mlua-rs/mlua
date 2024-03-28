@@ -148,6 +148,14 @@ impl<'lua, 'de> serde::Deserializer<'de> for Deserializer<'lua> {
             Value::UserData(ud) if ud.is_serializable() => {
                 serde_userdata(ud, |value| value.deserialize_any(visitor))
             }
+            #[cfg(feature = "luau")]
+            Value::UserData(ud) if ud.1 == crate::types::SubtypeId::Buffer => unsafe {
+                let mut size = 0usize;
+                let buf = ffi::lua_tobuffer(ud.0.lua.ref_thread(), ud.0.index, &mut size);
+                mlua_assert!(!buf.is_null(), "invalid Luau buffer");
+                let buf = std::slice::from_raw_parts(buf as *const u8, size);
+                visitor.visit_bytes(buf)
+            },
             Value::Function(_)
             | Value::Thread(_)
             | Value::UserData(_)

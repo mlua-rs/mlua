@@ -1373,6 +1373,27 @@ impl Lua {
         }
     }
 
+    /// Create and return a Luau [buffer] object from a byte slice of data.
+    ///
+    /// Requires `feature = "luau"`
+    ///
+    /// [buffer]: https://luau-lang.org/library#buffer-library
+    #[cfg(feature = "luau")]
+    pub fn create_buffer(&self, buf: impl AsRef<[u8]>) -> Result<AnyUserData> {
+        let state = self.state();
+        unsafe {
+            if self.unlikely_memory_error() {
+                crate::util::push_buffer(self.ref_thread(), buf.as_ref(), false)?;
+                return Ok(AnyUserData(self.pop_ref_thread(), SubtypeId::Buffer));
+            }
+
+            let _sg = StackGuard::new(state);
+            check_stack(state, 4)?;
+            crate::util::push_buffer(state, buf.as_ref(), true)?;
+            Ok(AnyUserData(self.pop_ref(), SubtypeId::Buffer))
+        }
+    }
+
     /// Creates and returns a new empty table.
     pub fn create_table(&self) -> Result<Table> {
         self.create_table_with_capacity(0, 0)

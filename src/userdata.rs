@@ -1340,6 +1340,19 @@ impl<'lua> Serialize for AnyUserData<'lua> {
         S: Serializer,
     {
         let lua = self.0.lua;
+
+        // Special case for Luau buffer type
+        #[cfg(feature = "luau")]
+        if self.1 == SubtypeId::Buffer {
+            let buf = unsafe {
+                let mut size = 0usize;
+                let buf = ffi::lua_tobuffer(lua.ref_thread(), self.0.index, &mut size);
+                mlua_assert!(!buf.is_null(), "invalid Luau buffer");
+                std::slice::from_raw_parts(buf as *const u8, size)
+            };
+            return serializer.serialize_bytes(buf);
+        }
+
         let data = unsafe {
             let _ = lua
                 .get_userdata_ref_type_id(&self.0)
