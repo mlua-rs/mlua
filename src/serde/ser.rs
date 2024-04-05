@@ -3,7 +3,6 @@ use serde::{ser, Serialize};
 use super::LuaSerdeExt;
 use crate::error::{Error, Result};
 use crate::lua::Lua;
-use crate::string::String;
 use crate::table::Table;
 use crate::value::{IntoLua, Value};
 
@@ -287,7 +286,7 @@ impl<'lua> ser::Serializer for Serializer<'lua> {
         _len: usize,
     ) -> Result<Self::SerializeTupleVariant> {
         Ok(SerializeTupleVariant {
-            name: self.lua.create_string(variant)?,
+            variant,
             table: self.lua.create_table()?,
             options: self.options,
         })
@@ -331,7 +330,7 @@ impl<'lua> ser::Serializer for Serializer<'lua> {
         len: usize,
     ) -> Result<Self::SerializeStructVariant> {
         Ok(SerializeStructVariant {
-            name: self.lua.create_string(variant)?,
+            variant,
             table: self.lua.create_table_with_capacity(0, len)?,
             options: self.options,
         })
@@ -438,7 +437,7 @@ impl<'lua> ser::SerializeTupleStruct for SerializeSeq<'lua> {
 
 #[doc(hidden)]
 pub struct SerializeTupleVariant<'lua> {
-    name: String<'lua>,
+    variant: &'static str,
     table: Table<'lua>,
     options: Options,
 }
@@ -458,7 +457,7 @@ impl<'lua> ser::SerializeTupleVariant for SerializeTupleVariant<'lua> {
     fn end(self) -> Result<Value<'lua>> {
         let lua = self.table.0.lua;
         let table = lua.create_table()?;
-        table.raw_set(self.name, self.table)?;
+        table.raw_set(self.variant, self.table)?;
         Ok(Value::Table(table))
     }
 }
@@ -553,7 +552,7 @@ impl<'lua> ser::SerializeStruct for SerializeStruct<'lua> {
 
 #[doc(hidden)]
 pub struct SerializeStructVariant<'lua> {
-    name: String<'lua>,
+    variant: &'static str,
     table: Table<'lua>,
     options: Options,
 }
@@ -575,7 +574,7 @@ impl<'lua> ser::SerializeStructVariant for SerializeStructVariant<'lua> {
     fn end(self) -> Result<Value<'lua>> {
         let lua = self.table.0.lua;
         let table = lua.create_table_with_capacity(0, 1)?;
-        table.raw_set(self.name, self.table)?;
+        table.raw_set(self.variant, self.table)?;
         Ok(Value::Table(table))
     }
 }
