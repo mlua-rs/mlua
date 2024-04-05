@@ -116,6 +116,21 @@ fn test_serialize_in_scope() -> LuaResult<()> {
 }
 
 #[test]
+fn test_serialize_any_userdata() -> Result<(), Box<dyn StdError>> {
+    let lua = Lua::new();
+
+    let json_val = serde_json::json!({
+        "a": 1,
+        "b": "test",
+    });
+    let json_ud = lua.create_ser_any_userdata(json_val)?;
+    let json_str = serde_json::to_string_pretty(&json_ud)?;
+    assert_eq!(json_str, "{\n  \"a\": 1,\n  \"b\": \"test\"\n}");
+
+    Ok(())
+}
+
+#[test]
 fn test_serialize_failure() -> Result<(), Box<dyn StdError>> {
     #[derive(Serialize)]
     struct MyUserData(i64);

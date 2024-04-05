@@ -1746,6 +1746,21 @@ impl Lua {
         unsafe { self.make_any_userdata(UserDataCell::new(data)) }
     }
 
+    /// Creates a Lua userdata object from a custom serializable Rust type.
+    ///
+    /// See [`Lua::create_any_userdata()`] for more details.
+    ///
+    /// Requires `feature = "serialize"`
+    #[cfg(feature = "serialize")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "serialize")))]
+    #[inline]
+    pub fn create_ser_any_userdata<T>(&self, data: T) -> Result<AnyUserData>
+    where
+        T: Serialize + MaybeSend + 'static,
+    {
+        unsafe { self.make_any_userdata(UserDataCell::new_ser(data)) }
+    }
+
     /// Registers a custom Rust type in Lua to use in userdata objects.
     ///
     /// This methods provides a way to add fields or methods to userdata objects of a type `T`.
