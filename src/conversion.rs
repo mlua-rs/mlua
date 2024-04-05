@@ -103,7 +103,8 @@ impl<'lua> IntoLua<'lua> for &OwnedString {
 
     #[inline]
     unsafe fn push_into_stack(self, lua: &'lua Lua) -> Result<()> {
-        Ok(lua.push_owned_ref(&self.0))
+        lua.push_owned_ref(&self.0);
+        Ok(())
     }
 }
 
@@ -169,7 +170,8 @@ impl<'lua> IntoLua<'lua> for &OwnedTable {
 
     #[inline]
     unsafe fn push_into_stack(self, lua: &'lua Lua) -> Result<()> {
-        Ok(lua.push_owned_ref(&self.0))
+        lua.push_owned_ref(&self.0);
+        Ok(())
     }
 }
 
@@ -235,7 +237,8 @@ impl<'lua> IntoLua<'lua> for &OwnedFunction {
 
     #[inline]
     unsafe fn push_into_stack(self, lua: &'lua Lua) -> Result<()> {
-        Ok(lua.push_owned_ref(&self.0))
+        lua.push_owned_ref(&self.0);
+        Ok(())
     }
 }
 
@@ -301,7 +304,8 @@ impl<'lua> IntoLua<'lua> for &OwnedThread {
 
     #[inline]
     unsafe fn push_into_stack(self, lua: &'lua Lua) -> Result<()> {
-        Ok(lua.push_owned_ref(&self.0))
+        lua.push_owned_ref(&self.0);
+        Ok(())
     }
 }
 
@@ -370,7 +374,8 @@ impl<'lua> IntoLua<'lua> for &OwnedAnyUserData {
 
     #[inline]
     unsafe fn push_into_stack(self, lua: &'lua Lua) -> Result<()> {
-        Ok(lua.push_owned_ref(&self.0))
+        lua.push_owned_ref(&self.0);
+        Ok(())
     }
 }
 
