@@ -1,3 +1,14 @@
+## v0.9.7
+
+- Implemented `IntoLua` for `RegistryKey`
+- Mark `__idiv` metamethod as available for luau
+- Added `Function::deep_clone()` method (Luau)
+- Added `SerializeOptions::detect_serde_json_arbitrary_precision` option
+- Added `Lua::create_buffer()` method (Luau)
+- Support serializing buffer type as a byte slice (Luau)
+- Perf: Implemented `push_into_stack`/`from_stack` for `Option<T>`
+- Added `Lua::create_ser_any_userdata()` method
+
 ## v0.9.6
 
 - Added `to_pointer` function to `Function`/`Table`/`Thread`
