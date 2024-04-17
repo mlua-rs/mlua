@@ -1,3 +1,5 @@
+use std::env;
+
 cfg_if::cfg_if! {
     if #[cfg(any(feature = "luau", feature = "vendored"))] {
         #[path = "find_vendored.rs"]
@@ -17,8 +19,8 @@ fn main() {
 
     println!("cargo:rerun-if-changed=build");
 
-    #[cfg(windows)]
-    if cfg!(feature = "module") {
+    let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap();
+    if target_os == "windows" && cfg!(feature = "module") {
         if !std::env::var("LUA_LIB_NAME").unwrap_or_default().is_empty() {
             // Don't use raw-dylib linking
             find::probe_lua();
