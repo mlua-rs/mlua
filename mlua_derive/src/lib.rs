@@ -58,13 +58,13 @@ pub fn lua_module(attr: TokenStream, item: TokenStream) -> TokenStream {
     };
 
     let wrapped = quote! {
-        ::mlua::require_module_feature!();
+        mlua::require_module_feature!();
 
         #func
 
         #[no_mangle]
-        unsafe extern "C-unwind" fn #ext_entrypoint_name(state: *mut ::mlua::lua_State) -> ::std::os::raw::c_int {
-            let lua = ::mlua::Lua::init_from_ptr(state);
+        unsafe extern "C-unwind" fn #ext_entrypoint_name(state: *mut mlua::lua_State) -> ::std::os::raw::c_int {
+            let lua = mlua::Lua::init_from_ptr(state);
             #skip_memory_check
             lua.entrypoint1(state, #func_name)
         }
@@ -95,7 +95,7 @@ pub fn chunk(input: TokenStream) -> TokenStream {
     });
 
     let wrapped_code = quote! {{
-        use ::mlua::{AsChunk, ChunkMode, Lua, Result, Table};
+        use mlua::{AsChunk, ChunkMode, Lua, Result, Table};
         use ::std::borrow::Cow;
         use ::std::cell::Cell;
         use ::std::io::Result as IoResult;
