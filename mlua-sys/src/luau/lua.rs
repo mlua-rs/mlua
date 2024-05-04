@@ -525,6 +525,7 @@ pub struct lua_Debug {
 //
 
 #[repr(C)]
+#[non_exhaustive]
 pub struct lua_Callbacks {
     /// arbitrary userdata pointer that is never overwritten by Luau
     pub userdata: *mut c_void,
