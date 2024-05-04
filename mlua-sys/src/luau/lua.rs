@@ -553,3 +553,8 @@ pub struct lua_Callbacks {
 extern "C" {
     pub fn lua_callbacks(L: *mut lua_State) -> *mut lua_Callbacks;
 }
+
+// Functions from customization lib
+extern "C" {
+    pub fn luau_setfflag(name: *const c_char, value: c_int) -> c_int;
+}

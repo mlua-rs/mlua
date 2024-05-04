@@ -1288,6 +1288,20 @@ impl Lua {
         unsafe { (*self.extra.get()).enable_jit = enable };
     }
 
+    /// Sets Luau feature flag (global setting).
+    ///
+    /// See https://github.com/luau-lang/luau/blob/master/CONTRIBUTING.md#feature-flags for details.
+    #[cfg(feature = "luau")]
+    #[doc(hidden)]
+    pub fn set_fflag(name: &str, enabled: bool) -> StdResult<(), ()> {
+        if let Ok(name) = CString::new(name) {
+            if unsafe { ffi::luau_setfflag(name.as_ptr(), enabled as c_int) != 0 } {
+                return Ok(());
+            }
+        }
+        Err(())
+    }
+
     /// Returns Lua source code as a `Chunk` builder type.
     ///
     /// In order to actually compile or run the resulting code, you must call [`Chunk::exec`] or

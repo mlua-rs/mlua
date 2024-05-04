@@ -484,3 +484,9 @@ fn test_buffer() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn test_fflags() {
+    // We cannot really on any particular feature flag to be present
+    assert!(Lua::set_fflag("UnknownFlag", true).is_err());
+}
