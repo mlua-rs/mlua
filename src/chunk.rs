@@ -122,6 +122,7 @@ pub enum ChunkMode {
 pub struct Compiler {
     optimization_level: u8,
     debug_level: u8,
+    type_info_level: u8,
     coverage_level: u8,
     vector_lib: Option<String>,
     vector_ctor: Option<String>,
@@ -144,6 +145,7 @@ impl Compiler {
         Compiler {
             optimization_level: 1,
             debug_level: 1,
+            type_info_level: 0,
             coverage_level: 0,
             vector_lib: None,
             vector_ctor: None,
@@ -173,6 +175,16 @@ impl Compiler {
     #[must_use]
     pub const fn set_debug_level(mut self, level: u8) -> Self {
         self.debug_level = level;
+        self
+    }
+
+    /// Sets Luau type information level used to guide native code generation decisions.
+    ///
+    /// Possible values:
+    /// * 0 - generate for native modules (default)
+    /// * 1 - generate for all modules
+    pub const fn set_type_info_level(mut self, level: u8) -> Self {
+        self.type_info_level = level;
         self
     }
 
@@ -250,15 +262,15 @@ impl Compiler {
         }
 
         unsafe {
-            let options = ffi::lua_CompileOptions {
-                optimizationLevel: self.optimization_level as c_int,
-                debugLevel: self.debug_level as c_int,
-                coverageLevel: self.coverage_level as c_int,
-                vectorLib: vector_lib.map_or(ptr::null(), |s| s.as_ptr()),
-                vectorCtor: vector_ctor.map_or(ptr::null(), |s| s.as_ptr()),
-                vectorType: vector_type.map_or(ptr::null(), |s| s.as_ptr()),
-                mutableGlobals: mutable_globals_ptr,
-            };
+            let mut options = ffi::lua_CompileOptions::default();
+            options.optimizationLevel = self.optimization_level as c_int;
+            options.debugLevel = self.debug_level as c_int;
+            options.typeInfoLevel = self.type_info_level as c_int;
+            options.coverageLevel = self.coverage_level as c_int;
+            options.vectorLib = vector_lib.map_or(ptr::null(), |s| s.as_ptr());
+            options.vectorCtor = vector_ctor.map_or(ptr::null(), |s| s.as_ptr());
+            options.vectorType = vector_type.map_or(ptr::null(), |s| s.as_ptr());
+            options.mutableGlobals = mutable_globals_ptr;
             ffi::luau_compile(source.as_ref(), options)
         }
     }
