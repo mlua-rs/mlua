@@ -270,6 +270,27 @@ fn test_serialize_globals() -> LuaResult<()> {
 }
 
 #[test]
+fn test_serialize_same_table_twice() -> LuaResult<()> {
+    let lua = Lua::new();
+
+    let value = lua
+        .load(
+            r#"
+        local foo = {}
+        return {
+            a = foo,
+            b = foo,
+        }
+    "#,
+        )
+        .eval::<Value>()?;
+    let json = serde_json::to_string(&value.to_serializable().sort_keys(true)).unwrap();
+    assert_eq!(json, r#"{"a":{},"b":{}}"#);
+
+    Ok(())
+}
+
+#[test]
 fn test_to_value_struct() -> LuaResult<()> {
     let lua = Lua::new();
     let globals = lua.globals();

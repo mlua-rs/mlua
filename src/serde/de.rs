@@ -660,14 +660,14 @@ impl<'lua, 'de> de::VariantAccess<'de> for VariantDeserializer<'lua> {
 
 // Adds `ptr` to the `visited` map and removes on drop
 // Used to track recursive tables but allow to traverse same tables multiple times
-struct RecursionGuard {
+pub(crate) struct RecursionGuard {
     ptr: *const c_void,
     visited: Rc<RefCell<FxHashSet<*const c_void>>>,
 }
 
 impl RecursionGuard {
     #[inline]
-    fn new(table: &Table, visited: &Rc<RefCell<FxHashSet<*const c_void>>>) -> Self {
+    pub(crate) fn new(table: &Table, visited: &Rc<RefCell<FxHashSet<*const c_void>>>) -> Self {
         let visited = Rc::clone(visited);
         let ptr = table.to_pointer();
         visited.borrow_mut().insert(ptr);

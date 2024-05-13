@@ -1089,7 +1089,7 @@ impl<'a, 'lua> Serialize for SerializableTable<'a, 'lua> {
     where
         S: Serializer,
     {
-        use crate::serde::de::{check_value_for_skip, MapPairs};
+        use crate::serde::de::{check_value_for_skip, MapPairs, RecursionGuard};
         use crate::value::SerializableValue;
 
         let convert_result = |res: Result<()>, serialize_err: Option<S::Error>| match res {
@@ -1101,7 +1101,7 @@ impl<'a, 'lua> Serialize for SerializableTable<'a, 'lua> {
 
         let options = self.options;
         let visited = &self.visited;
-        visited.borrow_mut().insert(self.table.to_pointer());
+        let _guard = RecursionGuard::new(&self.table, visited);
 
         // Array
         let len = self.table.raw_len();
@@ -1109,7 +1109,7 @@ impl<'a, 'lua> Serialize for SerializableTable<'a, 'lua> {
             let mut seq = serializer.serialize_seq(Some(len))?;
             let mut serialize_err = None;
             let res = self.table.for_each_value::<Value>(|value| {
-                let skip = check_value_for_skip(&value, self.options, &self.visited)
+                let skip = check_value_for_skip(&value, self.options, visited)
                     .map_err(|err| Error::SerializeError(err.to_string()))?;
                 if skip {
                     // continue iteration
@@ -1129,9 +1129,9 @@ impl<'a, 'lua> Serialize for SerializableTable<'a, 'lua> {
         let mut map = serializer.serialize_map(None)?;
         let mut serialize_err = None;
         let mut process_pair = |key, value| {
-            let skip_key = check_value_for_skip(&key, self.options, &self.visited)
+            let skip_key = check_value_for_skip(&key, self.options, visited)
                 .map_err(|err| Error::SerializeError(err.to_string()))?;
-            let skip_value = check_value_for_skip(&value, self.options, &self.visited)
+            let skip_value = check_value_for_skip(&value, self.options, visited)
                 .map_err(|err| Error::SerializeError(err.to_string()))?;
             if skip_key || skip_value {
                 // continue iteration
