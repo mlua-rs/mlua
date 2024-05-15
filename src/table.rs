@@ -1101,7 +1101,7 @@ impl<'a, 'lua> Serialize for SerializableTable<'a, 'lua> {
 
         let options = self.options;
         let visited = &self.visited;
-        let _guard = RecursionGuard::new(&self.table, visited);
+        let _guard = RecursionGuard::new(self.table, visited);
 
         // Array
         let len = self.table.raw_len();

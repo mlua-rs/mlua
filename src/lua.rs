@@ -1293,6 +1293,7 @@ impl Lua {
     /// See https://github.com/luau-lang/luau/blob/master/CONTRIBUTING.md#feature-flags for details.
     #[cfg(feature = "luau")]
     #[doc(hidden)]
+    #[allow(clippy::result_unit_err)]
     pub fn set_fflag(name: &str, enabled: bool) -> StdResult<(), ()> {
         if let Ok(name) = CString::new(name) {
             if unsafe { ffi::luau_setfflag(name.as_ptr(), enabled as c_int) != 0 } {
