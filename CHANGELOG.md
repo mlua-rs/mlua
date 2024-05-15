@@ -1,3 +1,9 @@
+## v0.9.8
+
+- Fixed serializing same table multiple times (#408)
+- Use `mlua-sys` v0.6 (to support Luau 0.624+)
+- Fixed cross compilation of windows dlls from unix (#394)
+
 ## v0.9.7
 
 - Implemented `IntoLua` for `RegistryKey`
