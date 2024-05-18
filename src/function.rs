@@ -122,7 +122,7 @@ impl<'lua> Function<'lua> {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn call<A: IntoLuaMulti<'lua>, R: FromLuaMulti<'lua>>(&self, args: A) -> Result<R> {
+    pub fn call<A: IntoLuaMulti, R: FromLuaMulti<'lua>>(&self, args: A) -> Result<R> {
         let lua = self.0.lua;
         let state = lua.state();
         unsafe {
@@ -178,7 +178,7 @@ impl<'lua> Function<'lua> {
     #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
     pub fn call_async<A, R>(&self, args: A) -> impl Future<Output = Result<R>> + 'lua
     where
-        A: IntoLuaMulti<'lua>,
+        A: IntoLuaMulti,
         R: FromLuaMulti<'lua> + 'lua,
     {
         let lua = self.0.lua;
@@ -217,7 +217,7 @@ impl<'lua> Function<'lua> {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn bind<A: IntoLuaMulti<'lua>>(&self, args: A) -> Result<Function<'lua>> {
+    pub fn bind<A: IntoLuaMulti>(&self, args: A) -> Result<Function<'lua>> {
         unsafe extern "C-unwind" fn args_wrapper_impl(state: *mut ffi::lua_State) -> c_int {
             let nargs = ffi::lua_gettop(state);
             let nbinds = ffi::lua_tointeger(state, ffi::lua_upvalueindex(1)) as c_int;
@@ -549,7 +549,7 @@ impl OwnedFunction {
     #[inline]
     pub fn call<'lua, A, R>(&'lua self, args: A) -> Result<R>
     where
-        A: IntoLuaMulti<'lua>,
+        A: IntoLuaMulti,
         R: FromLuaMulti<'lua>,
     {
         self.to_ref().call(args)
@@ -564,7 +564,7 @@ impl OwnedFunction {
     #[inline]
     pub async fn call_async<'lua, A, R>(&'lua self, args: A) -> Result<R>
     where
-        A: IntoLuaMulti<'lua>,
+        A: IntoLuaMulti,
         R: FromLuaMulti<'lua> + 'lua,
     {
         self.to_ref().call_async(args).await
@@ -579,10 +579,10 @@ pub(crate) struct WrappedAsyncFunction<'lua>(pub(crate) AsyncCallback<'lua, 'sta
 impl<'lua> Function<'lua> {
     /// Wraps a Rust function or closure, returning an opaque type that implements [`IntoLua`] trait.
     #[inline]
-    pub fn wrap<A, R, F>(func: F) -> impl IntoLua<'lua>
+    pub fn wrap<A, R, F>(func: F) -> impl IntoLua
     where
         A: FromLuaMulti<'lua>,
-        R: IntoLuaMulti<'lua>,
+        R: IntoLuaMulti,
         F: Fn(&'lua Lua, A) -> Result<R> + MaybeSend + 'static,
     {
         WrappedFunction(Box::new(move |lua, nargs| unsafe {
@@ -593,10 +593,10 @@ impl<'lua> Function<'lua> {
 
     /// Wraps a Rust mutable closure, returning an opaque type that implements [`IntoLua`] trait.
     #[inline]
-    pub fn wrap_mut<A, R, F>(func: F) -> impl IntoLua<'lua>
+    pub fn wrap_mut<A, R, F>(func: F) -> impl IntoLua
     where
         A: FromLuaMulti<'lua>,
-        R: IntoLuaMulti<'lua>,
+        R: IntoLuaMulti,
         F: FnMut(&'lua Lua, A) -> Result<R> + MaybeSend + 'static,
     {
         let func = RefCell::new(func);
@@ -612,12 +612,12 @@ impl<'lua> Function<'lua> {
     /// Wraps a Rust async function or closure, returning an opaque type that implements [`IntoLua`] trait.
     #[cfg(feature = "async")]
     #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
-    pub fn wrap_async<A, R, F, FR>(func: F) -> impl IntoLua<'lua>
+    pub fn wrap_async<A, R, F, FR>(func: F) -> impl IntoLua
     where
         A: FromLuaMulti<'lua>,
-        R: IntoLuaMulti<'lua>,
+        R: IntoLuaMulti,
         F: Fn(&'lua Lua, A) -> FR + MaybeSend + 'static,
-        FR: Future<Output = Result<R>> + 'lua,
+        FR: Future<Output = Result<R>> + 'static,
     {
         WrappedAsyncFunction(Box::new(move |lua, args| unsafe {
             let args = match A::from_lua_args(args, 1, None, lua) {
@@ -630,18 +630,20 @@ impl<'lua> Function<'lua> {
     }
 }
 
-impl<'lua> IntoLua<'lua> for WrappedFunction<'lua> {
+impl IntoLua for WrappedFunction<'_> {
     #[inline]
-    fn into_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
-        lua.create_callback(self.0).map(Value::Function)
+    fn into_lua(self, lua: &Lua) -> Result<Value<'_>> {
+        lua.create_callback(unsafe { mem::transmute(self.0) })
+            .map(Value::Function)
     }
 }
 
 #[cfg(feature = "async")]
-impl<'lua> IntoLua<'lua> for WrappedAsyncFunction<'lua> {
+impl IntoLua for WrappedAsyncFunction<'_> {
     #[inline]
-    fn into_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
-        lua.create_async_callback(self.0).map(Value::Function)
+    fn into_lua(self, lua: &Lua) -> Result<Value<'_>> {
+        lua.create_async_callback(unsafe { mem::transmute(self.0) })
+            .map(Value::Function)
     }
 }
 

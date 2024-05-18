@@ -63,7 +63,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
     pub fn create_function<'callback, A, R, F>(&'callback self, func: F) -> Result<Function<'lua>>
     where
         A: FromLuaMulti<'callback>,
-        R: IntoLuaMulti<'callback>,
+        R: IntoLuaMulti,
         F: Fn(&'callback Lua, A) -> Result<R> + 'scope,
     {
         // Safe, because 'scope must outlive 'callback (due to Self containing 'scope), however the
@@ -97,7 +97,7 @@ impl<'lua, 'scope> Scope<'lua, 'scope> {
     ) -> Result<Function<'lua>>
     where
         A: FromLuaMulti<'callback>,
-        R: IntoLuaMulti<'callback>,
+        R: IntoLuaMulti,
         F: FnMut(&'callback Lua, A) -> Result<R> + 'scope,
     {
         let func = RefCell::new(func);
@@ -656,7 +656,7 @@ impl<'lua, T> NonStaticUserDataRegistry<'lua, T> {
 impl<'lua, T> UserDataFields<'lua, T> for NonStaticUserDataRegistry<'lua, T> {
     fn add_field<V>(&mut self, name: impl AsRef<str>, value: V)
     where
-        V: IntoLua<'lua> + Clone + 'static,
+        V: IntoLua + Clone + 'static,
     {
         let name = name.as_ref().to_string();
         self.fields.push((
@@ -670,7 +670,7 @@ impl<'lua, T> UserDataFields<'lua, T> for NonStaticUserDataRegistry<'lua, T> {
     fn add_field_method_get<M, R>(&mut self, name: impl AsRef<str>, method: M)
     where
         M: Fn(&'lua Lua, &T) -> Result<R> + MaybeSend + 'static,
-        R: IntoLua<'lua>,
+        R: IntoLua,
     {
         let method = NonStaticMethod::Method(Box::new(move |lua, ud, _| unsafe {
             method(lua, ud)?.push_into_stack_multi(lua)
@@ -694,7 +694,7 @@ impl<'lua, T> UserDataFields<'lua, T> for NonStaticUserDataRegistry<'lua, T> {
     fn add_field_function_get<F, R>(&mut self, name: impl AsRef<str>, function: F)
     where
         F: Fn(&'lua Lua, AnyUserData<'lua>) -> Result<R> + MaybeSend + 'static,
-        R: IntoLua<'lua>,
+        R: IntoLua,
     {
         let func_name = format!("{}.{}", short_type_name::<T>(), name.as_ref());
         let func = NonStaticMethod::Function(Box::new(move |lua, nargs| unsafe {
@@ -719,7 +719,7 @@ impl<'lua, T> UserDataFields<'lua, T> for NonStaticUserDataRegistry<'lua, T> {
 
     fn add_meta_field<V>(&mut self, name: impl AsRef<str>, value: V)
     where
-        V: IntoLua<'lua> + Clone + 'static,
+        V: IntoLua + Clone + 'static,
     {
         let name = name.as_ref().to_string();
         let name2 = name.clone();
@@ -735,7 +735,7 @@ impl<'lua, T> UserDataFields<'lua, T> for NonStaticUserDataRegistry<'lua, T> {
     fn add_meta_field_with<F, R>(&mut self, name: impl AsRef<str>, f: F)
     where
         F: Fn(&'lua Lua) -> Result<R> + MaybeSend + 'static,
-        R: IntoLua<'lua>,
+        R: IntoLua,
     {
         let name = name.as_ref().to_string();
         let name2 = name.clone();
@@ -754,7 +754,7 @@ impl<'lua, T> UserDataMethods<'lua, T> for NonStaticUserDataRegistry<'lua, T> {
     where
         M: Fn(&'lua Lua, &T, A) -> Result<R> + MaybeSend + 'static,
         A: FromLuaMulti<'lua>,
-        R: IntoLuaMulti<'lua>,
+        R: IntoLuaMulti,
     {
         let func_name = format!("{}.{}", short_type_name::<T>(), name.as_ref());
         let method = NonStaticMethod::Method(Box::new(move |lua, ud, nargs| unsafe {
@@ -768,7 +768,7 @@ impl<'lua, T> UserDataMethods<'lua, T> for NonStaticUserDataRegistry<'lua, T> {
     where
         M: FnMut(&'lua Lua, &mut T, A) -> Result<R> + MaybeSend + 'static,
         A: FromLuaMulti<'lua>,
-        R: IntoLuaMulti<'lua>,
+        R: IntoLuaMulti,
     {
         let func_name = format!("{}.{}", short_type_name::<T>(), name.as_ref());
         let method = NonStaticMethod::MethodMut(Box::new(move |lua, ud, nargs| unsafe {
@@ -786,7 +786,7 @@ impl<'lua, T> UserDataMethods<'lua, T> for NonStaticUserDataRegistry<'lua, T> {
         M: Fn(&'lua Lua, &'s T, A) -> MR + MaybeSend + 'static,
         A: FromLuaMulti<'lua>,
         MR: Future<Output = Result<R>> + 's,
-        R: IntoLuaMulti<'lua>,
+        R: IntoLuaMulti,
     {
         // The panic should never happen as async non-static code wouldn't compile
         // Non-static lifetime must be bounded to 'lua lifetime
@@ -801,7 +801,7 @@ impl<'lua, T> UserDataMethods<'lua, T> for NonStaticUserDataRegistry<'lua, T> {
         M: Fn(&'lua Lua, &'s mut T, A) -> MR + MaybeSend + 'static,
         A: FromLuaMulti<'lua>,
         MR: Future<Output = Result<R>> + 's,
-        R: IntoLuaMulti<'lua>,
+        R: IntoLuaMulti,
     {
         // The panic should never happen as async non-static code wouldn't compile
         // Non-static lifetime must be bounded to 'lua lifetime
@@ -812,7 +812,7 @@ impl<'lua, T> UserDataMethods<'lua, T> for NonStaticUserDataRegistry<'lua, T> {
     where
         F: Fn(&'lua Lua, A) -> Result<R> + MaybeSend + 'static,
         A: FromLuaMulti<'lua>,
-        R: IntoLuaMulti<'lua>,
+        R: IntoLuaMulti,
     {
         let func_name = format!("{}.{}", short_type_name::<T>(), name.as_ref());
         let func = NonStaticMethod::Function(Box::new(move |lua, nargs| unsafe {
@@ -826,7 +826,7 @@ impl<'lua, T> UserDataMethods<'lua, T> for NonStaticUserDataRegistry<'lua, T> {
     where
         F: FnMut(&'lua Lua, A) -> Result<R> + MaybeSend + 'static,
         A: FromLuaMulti<'lua>,
-        R: IntoLuaMulti<'lua>,
+        R: IntoLuaMulti,
     {
         let func_name = format!("{}.{}", short_type_name::<T>(), name.as_ref());
         let func = NonStaticMethod::FunctionMut(Box::new(move |lua, nargs| unsafe {
@@ -842,7 +842,7 @@ impl<'lua, T> UserDataMethods<'lua, T> for NonStaticUserDataRegistry<'lua, T> {
         F: Fn(&'lua Lua, A) -> FR + MaybeSend + 'static,
         A: FromLuaMulti<'lua>,
         FR: Future<Output = Result<R>> + 'lua,
-        R: IntoLuaMulti<'lua>,
+        R: IntoLuaMulti,
     {
         // The panic should never happen as async non-static code wouldn't compile
         // Non-static lifetime must be bounded to 'lua lifetime
@@ -853,7 +853,7 @@ impl<'lua, T> UserDataMethods<'lua, T> for NonStaticUserDataRegistry<'lua, T> {
     where
         M: Fn(&'lua Lua, &T, A) -> Result<R> + MaybeSend + 'static,
         A: FromLuaMulti<'lua>,
-        R: IntoLuaMulti<'lua>,
+        R: IntoLuaMulti,
     {
         let func_name = format!("{}.{}", short_type_name::<T>(), name.as_ref());
         let method = NonStaticMethod::Method(Box::new(move |lua, ud, nargs| unsafe {
@@ -867,7 +867,7 @@ impl<'lua, T> UserDataMethods<'lua, T> for NonStaticUserDataRegistry<'lua, T> {
     where
         M: FnMut(&'lua Lua, &mut T, A) -> Result<R> + MaybeSend + 'static,
         A: FromLuaMulti<'lua>,
-        R: IntoLuaMulti<'lua>,
+        R: IntoLuaMulti,
     {
         let func_name = format!("{}.{}", short_type_name::<T>(), name.as_ref());
         let method = NonStaticMethod::MethodMut(Box::new(move |lua, ud, nargs| unsafe {
@@ -885,7 +885,7 @@ impl<'lua, T> UserDataMethods<'lua, T> for NonStaticUserDataRegistry<'lua, T> {
         M: Fn(&'lua Lua, &'s T, A) -> MR + MaybeSend + 'static,
         A: FromLuaMulti<'lua>,
         MR: Future<Output = Result<R>> + 's,
-        R: IntoLuaMulti<'lua>,
+        R: IntoLuaMulti,
     {
         // The panic should never happen as async non-static code wouldn't compile
         // Non-static lifetime must be bounded to 'lua lifetime
@@ -900,7 +900,7 @@ impl<'lua, T> UserDataMethods<'lua, T> for NonStaticUserDataRegistry<'lua, T> {
         M: Fn(&'lua Lua, &'s mut T, A) -> MR + MaybeSend + 'static,
         A: FromLuaMulti<'lua>,
         MR: Future<Output = Result<R>> + 's,
-        R: IntoLuaMulti<'lua>,
+        R: IntoLuaMulti,
     {
         // The panic should never happen as async non-static code wouldn't compile
         // Non-static lifetime must be bounded to 'lua lifetime
@@ -911,7 +911,7 @@ impl<'lua, T> UserDataMethods<'lua, T> for NonStaticUserDataRegistry<'lua, T> {
     where
         F: Fn(&'lua Lua, A) -> Result<R> + MaybeSend + 'static,
         A: FromLuaMulti<'lua>,
-        R: IntoLuaMulti<'lua>,
+        R: IntoLuaMulti,
     {
         let func_name = format!("{}.{}", short_type_name::<T>(), name.as_ref());
         let func = NonStaticMethod::Function(Box::new(move |lua, nargs| unsafe {
@@ -925,7 +925,7 @@ impl<'lua, T> UserDataMethods<'lua, T> for NonStaticUserDataRegistry<'lua, T> {
     where
         F: FnMut(&'lua Lua, A) -> Result<R> + MaybeSend + 'static,
         A: FromLuaMulti<'lua>,
-        R: IntoLuaMulti<'lua>,
+        R: IntoLuaMulti,
     {
         let func_name = format!("{}.{}", short_type_name::<T>(), name.as_ref());
         let func = NonStaticMethod::FunctionMut(Box::new(move |lua, nargs| unsafe {
@@ -941,7 +941,7 @@ impl<'lua, T> UserDataMethods<'lua, T> for NonStaticUserDataRegistry<'lua, T> {
         F: Fn(&'lua Lua, A) -> FR + MaybeSend + 'static,
         A: FromLuaMulti<'lua>,
         FR: Future<Output = Result<R>> + 'lua,
-        R: IntoLuaMulti<'lua>,
+        R: IntoLuaMulti,
     {
         // The panic should never happen as async non-static code wouldn't compile
         // Non-static lifetime must be bounded to 'lua lifetime

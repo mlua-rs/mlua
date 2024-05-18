@@ -2,6 +2,7 @@ use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::ffi::{CStr, CString};
 use std::hash::{BuildHasher, Hash};
+use std::mem::transmute;
 use std::os::raw::c_int;
 use std::string::String as StdString;
 use std::{slice, str};
@@ -25,21 +26,21 @@ use crate::{
     userdata::OwnedAnyUserData,
 };
 
-impl<'lua> IntoLua<'lua> for Value<'lua> {
+impl IntoLua for Value<'_> {
     #[inline]
-    fn into_lua(self, _: &'lua Lua) -> Result<Value<'lua>> {
-        Ok(self)
+    fn into_lua(self, _: &Lua) -> Result<Value<'_>> {
+        unsafe { Ok(transmute(self)) }
     }
 }
 
-impl<'lua> IntoLua<'lua> for &Value<'lua> {
+impl IntoLua for &Value<'_> {
     #[inline]
-    fn into_lua(self, _: &'lua Lua) -> Result<Value<'lua>> {
-        Ok(self.clone())
+    fn into_lua(self, _: &Lua) -> Result<Value<'_>> {
+        unsafe { Ok(transmute(self.clone())) }
     }
 
     #[inline]
-    unsafe fn push_into_stack(self, lua: &'lua Lua) -> Result<()> {
+    unsafe fn push_into_stack(self, lua: &Lua) -> Result<()> {
         lua.push_value(self)
     }
 }
@@ -51,21 +52,21 @@ impl<'lua> FromLua<'lua> for Value<'lua> {
     }
 }
 
-impl<'lua> IntoLua<'lua> for String<'lua> {
+impl IntoLua for String<'_> {
     #[inline]
-    fn into_lua(self, _: &'lua Lua) -> Result<Value<'lua>> {
-        Ok(Value::String(self))
+    fn into_lua(self, _: &Lua) -> Result<Value<'_>> {
+        unsafe { Ok(Value::String(transmute(self))) }
     }
 }
 
-impl<'lua> IntoLua<'lua> for &String<'lua> {
+impl IntoLua for &String<'_> {
     #[inline]
-    fn into_lua(self, _: &'lua Lua) -> Result<Value<'lua>> {
-        Ok(Value::String(self.clone()))
+    fn into_lua(self, _: &Lua) -> Result<Value<'_>> {
+        unsafe { Ok(Value::String(transmute(self.clone()))) }
     }
 
     #[inline]
-    unsafe fn push_into_stack(self, lua: &'lua Lua) -> Result<()> {
+    unsafe fn push_into_stack(self, lua: &Lua) -> Result<()> {
         lua.push_ref(&self.0);
         Ok(())
     }
@@ -86,18 +87,18 @@ impl<'lua> FromLua<'lua> for String<'lua> {
 
 #[cfg(all(feature = "unstable", any(not(feature = "send"), doc)))]
 #[cfg_attr(docsrs, doc(cfg(all(feature = "unstable", not(feature = "send")))))]
-impl<'lua> IntoLua<'lua> for OwnedString {
+impl IntoLua for OwnedString {
     #[inline]
-    fn into_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
+    fn into_lua(self, lua: &'_ Lua) -> Result<Value<'_>> {
         Ok(Value::String(String(lua.adopt_owned_ref(self.0))))
     }
 }
 
 #[cfg(all(feature = "unstable", any(not(feature = "send"), doc)))]
 #[cfg_attr(docsrs, doc(cfg(all(feature = "unstable", not(feature = "send")))))]
-impl<'lua> IntoLua<'lua> for &OwnedString {
+impl IntoLua for &OwnedString {
     #[inline]
-    fn into_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
+    fn into_lua(self, lua: &Lua) -> Result<Value<'_>> {
         OwnedString::into_lua(self.clone(), lua)
     }
 
@@ -117,21 +118,21 @@ impl<'lua> FromLua<'lua> for OwnedString {
     }
 }
 
-impl<'lua> IntoLua<'lua> for Table<'lua> {
+impl IntoLua for Table<'_> {
     #[inline]
-    fn into_lua(self, _: &'lua Lua) -> Result<Value<'lua>> {
-        Ok(Value::Table(self))
+    fn into_lua(self, _: &Lua) -> Result<Value<'_>> {
+        unsafe { Ok(Value::Table(transmute(self))) }
     }
 }
 
-impl<'lua> IntoLua<'lua> for &Table<'lua> {
+impl IntoLua for &Table<'_> {
     #[inline]
-    fn into_lua(self, _: &'lua Lua) -> Result<Value<'lua>> {
-        Ok(Value::Table(self.clone()))
+    fn into_lua(self, _: &'_ Lua) -> Result<Value<'_>> {
+        unsafe { Ok(Value::Table(transmute(self.clone()))) }
     }
 
     #[inline]
-    unsafe fn push_into_stack(self, lua: &'lua Lua) -> Result<()> {
+    unsafe fn push_into_stack(self, lua: &Lua) -> Result<()> {
         lua.push_ref(&self.0);
         Ok(())
     }
@@ -153,18 +154,18 @@ impl<'lua> FromLua<'lua> for Table<'lua> {
 
 #[cfg(all(feature = "unstable", any(not(feature = "send"), doc)))]
 #[cfg_attr(docsrs, doc(cfg(all(feature = "unstable", not(feature = "send")))))]
-impl<'lua> IntoLua<'lua> for OwnedTable {
+impl IntoLua for OwnedTable {
     #[inline]
-    fn into_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
+    fn into_lua(self, lua: &Lua) -> Result<Value<'_>> {
         Ok(Value::Table(Table(lua.adopt_owned_ref(self.0))))
     }
 }
 
 #[cfg(all(feature = "unstable", any(not(feature = "send"), doc)))]
 #[cfg_attr(docsrs, doc(cfg(all(feature = "unstable", not(feature = "send")))))]
-impl<'lua> IntoLua<'lua> for &OwnedTable {
+impl IntoLua for &OwnedTable {
     #[inline]
-    fn into_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
+    fn into_lua(self, lua: &Lua) -> Result<Value<'_>> {
         OwnedTable::into_lua(self.clone(), lua)
     }
 
@@ -184,21 +185,21 @@ impl<'lua> FromLua<'lua> for OwnedTable {
     }
 }
 
-impl<'lua> IntoLua<'lua> for Function<'lua> {
+impl IntoLua for Function<'_> {
     #[inline]
-    fn into_lua(self, _: &'lua Lua) -> Result<Value<'lua>> {
-        Ok(Value::Function(self))
+    fn into_lua(self, _: &Lua) -> Result<Value<'_>> {
+        unsafe { Ok(Value::Function(transmute(self))) }
     }
 }
 
-impl<'lua> IntoLua<'lua> for &Function<'lua> {
+impl IntoLua for &Function<'_> {
     #[inline]
-    fn into_lua(self, _: &'lua Lua) -> Result<Value<'lua>> {
-        Ok(Value::Function(self.clone()))
+    fn into_lua(self, _: &Lua) -> Result<Value<'_>> {
+        unsafe { Ok(Value::Function(transmute(self.clone()))) }
     }
 
     #[inline]
-    unsafe fn push_into_stack(self, lua: &'lua Lua) -> Result<()> {
+    unsafe fn push_into_stack(self, lua: &Lua) -> Result<()> {
         lua.push_ref(&self.0);
         Ok(())
     }
@@ -220,18 +221,18 @@ impl<'lua> FromLua<'lua> for Function<'lua> {
 
 #[cfg(all(feature = "unstable", any(not(feature = "send"), doc)))]
 #[cfg_attr(docsrs, doc(cfg(all(feature = "unstable", not(feature = "send")))))]
-impl<'lua> IntoLua<'lua> for OwnedFunction {
+impl IntoLua for OwnedFunction {
     #[inline]
-    fn into_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
+    fn into_lua(self, lua: &Lua) -> Result<Value<'_>> {
         Ok(Value::Function(Function(lua.adopt_owned_ref(self.0))))
     }
 }
 
 #[cfg(all(feature = "unstable", any(not(feature = "send"), doc)))]
 #[cfg_attr(docsrs, doc(cfg(all(feature = "unstable", not(feature = "send")))))]
-impl<'lua> IntoLua<'lua> for &OwnedFunction {
+impl IntoLua for &OwnedFunction {
     #[inline]
-    fn into_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
+    fn into_lua(self, lua: &Lua) -> Result<Value<'_>> {
         OwnedFunction::into_lua(self.clone(), lua)
     }
 
@@ -251,21 +252,21 @@ impl<'lua> FromLua<'lua> for OwnedFunction {
     }
 }
 
-impl<'lua> IntoLua<'lua> for Thread<'lua> {
+impl IntoLua for Thread<'_> {
     #[inline]
-    fn into_lua(self, _: &'lua Lua) -> Result<Value<'lua>> {
-        Ok(Value::Thread(self))
+    fn into_lua(self, _: &Lua) -> Result<Value<'_>> {
+        unsafe { Ok(Value::Thread(transmute(self))) }
     }
 }
 
-impl<'lua> IntoLua<'lua> for &Thread<'lua> {
+impl IntoLua for &Thread<'_> {
     #[inline]
-    fn into_lua(self, _: &'lua Lua) -> Result<Value<'lua>> {
-        Ok(Value::Thread(self.clone()))
+    fn into_lua(self, _: &Lua) -> Result<Value<'_>> {
+        unsafe { Ok(Value::Thread(transmute(self.clone()))) }
     }
 
     #[inline]
-    unsafe fn push_into_stack(self, lua: &'lua Lua) -> Result<()> {
+    unsafe fn push_into_stack(self, lua: &Lua) -> Result<()> {
         lua.push_ref(&self.0);
         Ok(())
     }
@@ -287,18 +288,18 @@ impl<'lua> FromLua<'lua> for Thread<'lua> {
 
 #[cfg(all(feature = "unstable", any(not(feature = "send"), doc)))]
 #[cfg_attr(docsrs, doc(cfg(all(feature = "unstable", not(feature = "send")))))]
-impl<'lua> IntoLua<'lua> for OwnedThread {
+impl IntoLua for OwnedThread {
     #[inline]
-    fn into_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
+    fn into_lua(self, lua: &Lua) -> Result<Value<'_>> {
         Ok(Value::Thread(Thread(lua.adopt_owned_ref(self.0), self.1)))
     }
 }
 
 #[cfg(all(feature = "unstable", any(not(feature = "send"), doc)))]
 #[cfg_attr(docsrs, doc(cfg(all(feature = "unstable", not(feature = "send")))))]
-impl<'lua> IntoLua<'lua> for &OwnedThread {
+impl IntoLua for &OwnedThread {
     #[inline]
-    fn into_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
+    fn into_lua(self, lua: &Lua) -> Result<Value<'_>> {
         OwnedThread::into_lua(self.clone(), lua)
     }
 
@@ -318,21 +319,21 @@ impl<'lua> FromLua<'lua> for OwnedThread {
     }
 }
 
-impl<'lua> IntoLua<'lua> for AnyUserData<'lua> {
+impl IntoLua for AnyUserData<'_> {
     #[inline]
-    fn into_lua(self, _: &'lua Lua) -> Result<Value<'lua>> {
-        Ok(Value::UserData(self))
+    fn into_lua(self, _: &Lua) -> Result<Value<'_>> {
+        unsafe { Ok(Value::UserData(transmute(self))) }
     }
 }
 
-impl<'lua> IntoLua<'lua> for &AnyUserData<'lua> {
+impl IntoLua for &AnyUserData<'_> {
     #[inline]
-    fn into_lua(self, _: &'lua Lua) -> Result<Value<'lua>> {
-        Ok(Value::UserData(self.clone()))
+    fn into_lua(self, _: &Lua) -> Result<Value<'_>> {
+        unsafe { Ok(Value::UserData(transmute(self.clone()))) }
     }
 
     #[inline]
-    unsafe fn push_into_stack(self, lua: &'lua Lua) -> Result<()> {
+    unsafe fn push_into_stack(self, lua: &Lua) -> Result<()> {
         lua.push_ref(&self.0);
         Ok(())
     }
@@ -354,9 +355,9 @@ impl<'lua> FromLua<'lua> for AnyUserData<'lua> {
 
 #[cfg(all(feature = "unstable", any(not(feature = "send"), doc)))]
 #[cfg_attr(docsrs, doc(cfg(all(feature = "unstable", not(feature = "send")))))]
-impl<'lua> IntoLua<'lua> for OwnedAnyUserData {
+impl IntoLua for OwnedAnyUserData {
     #[inline]
-    fn into_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
+    fn into_lua(self, lua: &Lua) -> Result<Value<'_>> {
         Ok(Value::UserData(AnyUserData(
             lua.adopt_owned_ref(self.0),
             self.1,
@@ -366,9 +367,9 @@ impl<'lua> IntoLua<'lua> for OwnedAnyUserData {
 
 #[cfg(all(feature = "unstable", any(not(feature = "send"), doc)))]
 #[cfg_attr(docsrs, doc(cfg(all(feature = "unstable", not(feature = "send")))))]
-impl<'lua> IntoLua<'lua> for &OwnedAnyUserData {
+impl IntoLua for &OwnedAnyUserData {
     #[inline]
-    fn into_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
+    fn into_lua(self, lua: &Lua) -> Result<Value<'_>> {
         OwnedAnyUserData::into_lua(self.clone(), lua)
     }
 
@@ -388,9 +389,9 @@ impl<'lua> FromLua<'lua> for OwnedAnyUserData {
     }
 }
 
-impl<'lua, T: UserData + MaybeSend + 'static> IntoLua<'lua> for T {
+impl<T: UserData + MaybeSend + 'static> IntoLua for T {
     #[inline]
-    fn into_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
+    fn into_lua(self, lua: &Lua) -> Result<Value<'_>> {
         Ok(Value::UserData(lua.create_userdata(self)?))
     }
 }
@@ -409,9 +410,9 @@ impl<'lua, T: 'static> FromLua<'lua> for UserDataRefMut<'lua, T> {
     }
 }
 
-impl<'lua> IntoLua<'lua> for Error {
+impl IntoLua for Error {
     #[inline]
-    fn into_lua(self, _: &'lua Lua) -> Result<Value<'lua>> {
+    fn into_lua(self, _: &Lua) -> Result<Value<'_>> {
         Ok(Value::Error(Box::new(self)))
     }
 }
@@ -430,25 +431,25 @@ impl<'lua> FromLua<'lua> for Error {
     }
 }
 
-impl<'lua> IntoLua<'lua> for RegistryKey {
+impl IntoLua for RegistryKey {
     #[inline]
-    fn into_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
+    fn into_lua(self, lua: &Lua) -> Result<Value<'_>> {
         lua.registry_value(&self)
     }
 
     #[inline]
-    unsafe fn push_into_stack(self, lua: &'lua Lua) -> Result<()> {
+    unsafe fn push_into_stack(self, lua: &Lua) -> Result<()> {
         <&RegistryKey>::push_into_stack(&self, lua)
     }
 }
 
-impl<'lua> IntoLua<'lua> for &RegistryKey {
+impl IntoLua for &RegistryKey {
     #[inline]
-    fn into_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
+    fn into_lua(self, lua: &Lua) -> Result<Value<'_>> {
         lua.registry_value(self)
     }
 
-    unsafe fn push_into_stack(self, lua: &'lua Lua) -> Result<()> {
+    unsafe fn push_into_stack(self, lua: &Lua) -> Result<()> {
         if !lua.owns_registry_value(self) {
             return Err(Error::MismatchedRegistryKey);
         }
@@ -470,14 +471,14 @@ impl<'lua> FromLua<'lua> for RegistryKey {
     }
 }
 
-impl<'lua> IntoLua<'lua> for bool {
+impl IntoLua for bool {
     #[inline]
-    fn into_lua(self, _: &'lua Lua) -> Result<Value<'lua>> {
+    fn into_lua(self, _: &Lua) -> Result<Value<'_>> {
         Ok(Value::Boolean(self))
     }
 
     #[inline]
-    unsafe fn push_into_stack(self, lua: &'lua Lua) -> Result<()> {
+    unsafe fn push_into_stack(self, lua: &Lua) -> Result<()> {
         ffi::lua_pushboolean(lua.state(), self as c_int);
         Ok(())
     }
@@ -499,9 +500,9 @@ impl<'lua> FromLua<'lua> for bool {
     }
 }
 
-impl<'lua> IntoLua<'lua> for LightUserData {
+impl IntoLua for LightUserData {
     #[inline]
-    fn into_lua(self, _: &'lua Lua) -> Result<Value<'lua>> {
+    fn into_lua(self, _: &Lua) -> Result<Value<'_>> {
         Ok(Value::LightUserData(self))
     }
 }
@@ -521,9 +522,9 @@ impl<'lua> FromLua<'lua> for LightUserData {
 }
 
 #[cfg(feature = "luau")]
-impl<'lua> IntoLua<'lua> for crate::types::Vector {
+impl IntoLua for crate::types::Vector {
     #[inline]
-    fn into_lua(self, _: &'lua Lua) -> Result<Value<'lua>> {
+    fn into_lua(self, _: &Lua) -> Result<Value<'_>> {
         Ok(Value::Vector(self))
     }
 }
@@ -543,14 +544,14 @@ impl<'lua> FromLua<'lua> for crate::types::Vector {
     }
 }
 
-impl<'lua> IntoLua<'lua> for StdString {
+impl IntoLua for StdString {
     #[inline]
-    fn into_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
+    fn into_lua(self, lua: &Lua) -> Result<Value<'_>> {
         Ok(Value::String(lua.create_string(&self)?))
     }
 
     #[inline]
-    unsafe fn push_into_stack(self, lua: &'lua Lua) -> Result<()> {
+    unsafe fn push_into_stack(self, lua: &Lua) -> Result<()> {
         push_bytes_into_stack(self, lua)
     }
 }
@@ -590,28 +591,28 @@ impl<'lua> FromLua<'lua> for StdString {
     }
 }
 
-impl<'lua> IntoLua<'lua> for &str {
+impl IntoLua for &str {
     #[inline]
-    fn into_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
+    fn into_lua(self, lua: &Lua) -> Result<Value<'_>> {
         Ok(Value::String(lua.create_string(self)?))
     }
 
     #[inline]
-    unsafe fn push_into_stack(self, lua: &'lua Lua) -> Result<()> {
+    unsafe fn push_into_stack(self, lua: &Lua) -> Result<()> {
         push_bytes_into_stack(self, lua)
     }
 }
 
-impl<'lua> IntoLua<'lua> for Cow<'_, str> {
+impl IntoLua for Cow<'_, str> {
     #[inline]
-    fn into_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
+    fn into_lua(self, lua: &Lua) -> Result<Value<'_>> {
         Ok(Value::String(lua.create_string(self.as_bytes())?))
     }
 }
 
-impl<'lua> IntoLua<'lua> for Box<str> {
+impl IntoLua for Box<str> {
     #[inline]
-    fn into_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
+    fn into_lua(self, lua: &Lua) -> Result<Value<'_>> {
         Ok(Value::String(lua.create_string(&*self)?))
     }
 }
@@ -633,9 +634,9 @@ impl<'lua> FromLua<'lua> for Box<str> {
     }
 }
 
-impl<'lua> IntoLua<'lua> for CString {
+impl IntoLua for CString {
     #[inline]
-    fn into_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
+    fn into_lua(self, lua: &Lua) -> Result<Value<'_>> {
         Ok(Value::String(lua.create_string(self.as_bytes())?))
     }
 }
@@ -663,23 +664,23 @@ impl<'lua> FromLua<'lua> for CString {
     }
 }
 
-impl<'lua> IntoLua<'lua> for &CStr {
+impl IntoLua for &CStr {
     #[inline]
-    fn into_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
+    fn into_lua(self, lua: &Lua) -> Result<Value<'_>> {
         Ok(Value::String(lua.create_string(self.to_bytes())?))
     }
 }
 
-impl<'lua> IntoLua<'lua> for Cow<'_, CStr> {
+impl IntoLua for Cow<'_, CStr> {
     #[inline]
-    fn into_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
+    fn into_lua(self, lua: &Lua) -> Result<Value<'_>> {
         Ok(Value::String(lua.create_string(self.to_bytes())?))
     }
 }
 
-impl<'lua> IntoLua<'lua> for BString {
+impl IntoLua for BString {
     #[inline]
-    fn into_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
+    fn into_lua(self, lua: &Lua) -> Result<Value<'_>> {
         Ok(Value::String(lua.create_string(&self)?))
     }
 }
@@ -731,9 +732,9 @@ impl<'lua> FromLua<'lua> for BString {
     }
 }
 
-impl<'lua> IntoLua<'lua> for &BStr {
+impl IntoLua for &BStr {
     #[inline]
-    fn into_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
+    fn into_lua(self, lua: &Lua) -> Result<Value<'_>> {
         Ok(Value::String(lua.create_string(self)?))
     }
 }
@@ -741,7 +742,7 @@ impl<'lua> IntoLua<'lua> for &BStr {
 #[inline]
 unsafe fn push_bytes_into_stack<'lua, T>(this: T, lua: &'lua Lua) -> Result<()>
 where
-    T: IntoLua<'lua> + AsRef<[u8]>,
+    T: IntoLua + AsRef<[u8]>,
 {
     let bytes = this.as_ref();
     if lua.unlikely_memory_error() && bytes.len() < (1 << 30) {
@@ -755,9 +756,9 @@ where
 
 macro_rules! lua_convert_int {
     ($x:ty) => {
-        impl<'lua> IntoLua<'lua> for $x {
+        impl IntoLua for $x {
             #[inline]
-            fn into_lua(self, _: &'lua Lua) -> Result<Value<'lua>> {
+            fn into_lua(self, _: &Lua) -> Result<Value<'_>> {
                 cast(self)
                     .map(Value::Integer)
                     .or_else(|| cast(self).map(Value::Number))
@@ -770,7 +771,7 @@ macro_rules! lua_convert_int {
             }
 
             #[inline]
-            unsafe fn push_into_stack(self, lua: &'lua Lua) -> Result<()> {
+            unsafe fn push_into_stack(self, lua: &Lua) -> Result<()> {
                 match cast(self) {
                     Some(i) => ffi::lua_pushinteger(lua.state(), i),
                     None => ffi::lua_pushnumber(lua.state(), self as ffi::lua_Number),
@@ -827,9 +828,9 @@ lua_convert_int!(usize);
 
 macro_rules! lua_convert_float {
     ($x:ty) => {
-        impl<'lua> IntoLua<'lua> for $x {
+        impl IntoLua for $x {
             #[inline]
-            fn into_lua(self, _: &'lua Lua) -> Result<Value<'lua>> {
+            fn into_lua(self, _: &Lua) -> Result<Value<'_>> {
                 cast(self)
                     .ok_or_else(|| Error::ToLuaConversionError {
                         from: stringify!($x),
@@ -865,24 +866,24 @@ macro_rules! lua_convert_float {
 lua_convert_float!(f32);
 lua_convert_float!(f64);
 
-impl<'lua, T> IntoLua<'lua> for &[T]
+impl<T> IntoLua for &[T]
 where
-    T: IntoLua<'lua> + Clone,
+    T: IntoLua + Clone,
 {
     #[inline]
-    fn into_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
+    fn into_lua(self, lua: &Lua) -> Result<Value<'_>> {
         Ok(Value::Table(
             lua.create_sequence_from(self.iter().cloned())?,
         ))
     }
 }
 
-impl<'lua, T, const N: usize> IntoLua<'lua> for [T; N]
+impl<T, const N: usize> IntoLua for [T; N]
 where
-    T: IntoLua<'lua>,
+    T: IntoLua,
 {
     #[inline]
-    fn into_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
+    fn into_lua(self, lua: &Lua) -> Result<Value<'_>> {
         Ok(Value::Table(lua.create_sequence_from(self)?))
     }
 }
@@ -924,9 +925,9 @@ where
     }
 }
 
-impl<'lua, T: IntoLua<'lua>> IntoLua<'lua> for Box<[T]> {
+impl<T: IntoLua> IntoLua for Box<[T]> {
     #[inline]
-    fn into_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
+    fn into_lua(self, lua: &Lua) -> Result<Value<'_>> {
         Ok(Value::Table(lua.create_sequence_from(self.into_vec())?))
     }
 }
@@ -938,9 +939,9 @@ impl<'lua, T: FromLua<'lua>> FromLua<'lua> for Box<[T]> {
     }
 }
 
-impl<'lua, T: IntoLua<'lua>> IntoLua<'lua> for Vec<T> {
+impl<T: IntoLua> IntoLua for Vec<T> {
     #[inline]
-    fn into_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
+    fn into_lua(self, lua: &Lua) -> Result<Value<'_>> {
         Ok(Value::Table(lua.create_sequence_from(self)?))
     }
 }
@@ -959,11 +960,9 @@ impl<'lua, T: FromLua<'lua>> FromLua<'lua> for Vec<T> {
     }
 }
 
-impl<'lua, K: Eq + Hash + IntoLua<'lua>, V: IntoLua<'lua>, S: BuildHasher> IntoLua<'lua>
-    for HashMap<K, V, S>
-{
+impl<K: Eq + Hash + IntoLua, V: IntoLua, S: BuildHasher> IntoLua for HashMap<K, V, S> {
     #[inline]
-    fn into_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
+    fn into_lua(self, lua: &Lua) -> Result<Value<'_>> {
         Ok(Value::Table(lua.create_table_from(self)?))
     }
 }
@@ -985,9 +984,9 @@ impl<'lua, K: Eq + Hash + FromLua<'lua>, V: FromLua<'lua>, S: BuildHasher + Defa
     }
 }
 
-impl<'lua, K: Ord + IntoLua<'lua>, V: IntoLua<'lua>> IntoLua<'lua> for BTreeMap<K, V> {
+impl<K: Ord + IntoLua, V: IntoLua> IntoLua for BTreeMap<K, V> {
     #[inline]
-    fn into_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
+    fn into_lua(self, lua: &Lua) -> Result<Value<'_>> {
         Ok(Value::Table(lua.create_table_from(self)?))
     }
 }
@@ -1007,9 +1006,9 @@ impl<'lua, K: Ord + FromLua<'lua>, V: FromLua<'lua>> FromLua<'lua> for BTreeMap<
     }
 }
 
-impl<'lua, T: Eq + Hash + IntoLua<'lua>, S: BuildHasher> IntoLua<'lua> for HashSet<T, S> {
+impl<T: Eq + Hash + IntoLua, S: BuildHasher> IntoLua for HashSet<T, S> {
     #[inline]
-    fn into_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
+    fn into_lua(self, lua: &Lua) -> Result<Value<'_>> {
         Ok(Value::Table(lua.create_table_from(
             self.into_iter().map(|val| (val, true)),
         )?))
@@ -1034,9 +1033,9 @@ impl<'lua, T: Eq + Hash + FromLua<'lua>, S: BuildHasher + Default> FromLua<'lua>
     }
 }
 
-impl<'lua, T: Ord + IntoLua<'lua>> IntoLua<'lua> for BTreeSet<T> {
+impl<T: Ord + IntoLua> IntoLua for BTreeSet<T> {
     #[inline]
-    fn into_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
+    fn into_lua(self, lua: &Lua) -> Result<Value<'_>> {
         Ok(Value::Table(lua.create_table_from(
             self.into_iter().map(|val| (val, true)),
         )?))
@@ -1061,9 +1060,9 @@ impl<'lua, T: Ord + FromLua<'lua>> FromLua<'lua> for BTreeSet<T> {
     }
 }
 
-impl<'lua, T: IntoLua<'lua>> IntoLua<'lua> for Option<T> {
+impl<T: IntoLua> IntoLua for Option<T> {
     #[inline]
-    fn into_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
+    fn into_lua(self, lua: &Lua) -> Result<Value<'_>> {
         match self {
             Some(val) => val.into_lua(lua),
             None => Ok(Nil),
@@ -1071,7 +1070,7 @@ impl<'lua, T: IntoLua<'lua>> IntoLua<'lua> for Option<T> {
     }
 
     #[inline]
-    unsafe fn push_into_stack(self, lua: &'lua Lua) -> Result<()> {
+    unsafe fn push_into_stack(self, lua: &Lua) -> Result<()> {
         match self {
             Some(val) => val.push_into_stack(lua)?,
             None => ffi::lua_pushnil(lua.state()),

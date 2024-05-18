@@ -1,3 +1,5 @@
+use std::iter::FromIterator;
+use std::mem::transmute;
 use std::ops::{Deref, DerefMut};
 use std::os::raw::c_int;
 use std::result::Result as StdResult;
@@ -9,9 +11,9 @@ use crate::value::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, MultiValue, Nil
 
 /// Result is convertible to `MultiValue` following the common Lua idiom of returning the result
 /// on success, or in the case of an error, returning `nil` and an error message.
-impl<'lua, T: IntoLua<'lua>, E: IntoLua<'lua>> IntoLuaMulti<'lua> for StdResult<T, E> {
+impl<T: IntoLua, E: IntoLua> IntoLuaMulti for StdResult<T, E> {
     #[inline]
-    fn into_lua_multi(self, lua: &'lua Lua) -> Result<MultiValue<'lua>> {
+    fn into_lua_multi(self, lua: &Lua) -> Result<MultiValue<'_>> {
         match self {
             Ok(val) => (val,).into_lua_multi(lua),
             Err(err) => (Nil, err).into_lua_multi(lua),
@@ -19,7 +21,7 @@ impl<'lua, T: IntoLua<'lua>, E: IntoLua<'lua>> IntoLuaMulti<'lua> for StdResult<
     }
 
     #[inline]
-    unsafe fn push_into_stack_multi(self, lua: &'lua Lua) -> Result<c_int> {
+    unsafe fn push_into_stack_multi(self, lua: &Lua) -> Result<c_int> {
         match self {
             Ok(val) => (val,).push_into_stack_multi(lua),
             Err(err) => (Nil, err).push_into_stack_multi(lua),
@@ -27,9 +29,9 @@ impl<'lua, T: IntoLua<'lua>, E: IntoLua<'lua>> IntoLuaMulti<'lua> for StdResult<
     }
 }
 
-impl<'lua, E: IntoLua<'lua>> IntoLuaMulti<'lua> for StdResult<(), E> {
+impl<E: IntoLua> IntoLuaMulti for StdResult<(), E> {
     #[inline]
-    fn into_lua_multi(self, lua: &'lua Lua) -> Result<MultiValue<'lua>> {
+    fn into_lua_multi(self, lua: &Lua) -> Result<MultiValue<'_>> {
         match self {
             Ok(_) => Ok(MultiValue::new()),
             Err(err) => (Nil, err).into_lua_multi(lua),
@@ -37,7 +39,7 @@ impl<'lua, E: IntoLua<'lua>> IntoLuaMulti<'lua> for StdResult<(), E> {
     }
 
     #[inline]
-    unsafe fn push_into_stack_multi(self, lua: &'lua Lua) -> Result<c_int> {
+    unsafe fn push_into_stack_multi(self, lua: &Lua) -> Result<c_int> {
         match self {
             Ok(_) => Ok(0),
             Err(err) => (Nil, err).push_into_stack_multi(lua),
@@ -45,16 +47,16 @@ impl<'lua, E: IntoLua<'lua>> IntoLuaMulti<'lua> for StdResult<(), E> {
     }
 }
 
-impl<'lua, T: IntoLua<'lua>> IntoLuaMulti<'lua> for T {
+impl<T: IntoLua> IntoLuaMulti for T {
     #[inline]
-    fn into_lua_multi(self, lua: &'lua Lua) -> Result<MultiValue<'lua>> {
+    fn into_lua_multi(self, lua: &Lua) -> Result<MultiValue<'_>> {
         let mut v = MultiValue::with_lua_and_capacity(lua, 1);
         v.push_back(self.into_lua(lua)?);
         Ok(v)
     }
 
     #[inline]
-    unsafe fn push_into_stack_multi(self, lua: &'lua Lua) -> Result<c_int> {
+    unsafe fn push_into_stack_multi(self, lua: &Lua) -> Result<c_int> {
         self.push_into_stack(lua)?;
         Ok(1)
     }
@@ -98,10 +100,10 @@ impl<'lua, T: FromLua<'lua>> FromLuaMulti<'lua> for T {
     }
 }
 
-impl<'lua> IntoLuaMulti<'lua> for MultiValue<'lua> {
+impl IntoLuaMulti for MultiValue<'_> {
     #[inline]
-    fn into_lua_multi(self, _: &'lua Lua) -> Result<MultiValue<'lua>> {
-        Ok(self)
+    fn into_lua_multi(self, _: &Lua) -> Result<MultiValue<'_>> {
+        unsafe { Ok(transmute(self)) }
     }
 }
 
@@ -183,9 +185,9 @@ impl<T> DerefMut for Variadic<T> {
     }
 }
 
-impl<'lua, T: IntoLua<'lua>> IntoLuaMulti<'lua> for Variadic<T> {
+impl<T: IntoLua> IntoLuaMulti for Variadic<T> {
     #[inline]
-    fn into_lua_multi(self, lua: &'lua Lua) -> Result<MultiValue<'lua>> {
+    fn into_lua_multi(self, lua: &Lua) -> Result<MultiValue<'_>> {
         let mut values = MultiValue::with_lua_and_capacity(lua, self.0.len());
         values.extend_from_values(self.0.into_iter().map(|val| val.into_lua(lua)))?;
         Ok(values)
@@ -205,14 +207,14 @@ impl<'lua, T: FromLua<'lua>> FromLuaMulti<'lua> for Variadic<T> {
 
 macro_rules! impl_tuple {
     () => (
-        impl<'lua> IntoLuaMulti<'lua> for () {
+        impl IntoLuaMulti for () {
             #[inline]
-            fn into_lua_multi(self, lua: &'lua Lua) -> Result<MultiValue<'lua>> {
+            fn into_lua_multi(self, lua: &Lua) -> Result<MultiValue<'_>> {
                 Ok(MultiValue::with_lua_and_capacity(lua, 0))
             }
 
             #[inline]
-            unsafe fn push_into_stack_multi(self, _lua: &'lua Lua) -> Result<c_int> {
+            unsafe fn push_into_stack_multi(self, _lua: &Lua) -> Result<c_int> {
                 Ok(0)
             }
         }
@@ -234,13 +236,13 @@ macro_rules! impl_tuple {
     );
 
     ($last:ident $($name:ident)*) => (
-        impl<'lua, $($name,)* $last> IntoLuaMulti<'lua> for ($($name,)* $last,)
-            where $($name: IntoLua<'lua>,)*
-                  $last: IntoLuaMulti<'lua>
+        impl<$($name,)* $last> IntoLuaMulti for ($($name,)* $last,)
+            where $($name: IntoLua,)*
+                  $last: IntoLuaMulti
         {
             #[allow(unused_mut, non_snake_case)]
             #[inline]
-            fn into_lua_multi(self, lua: &'lua Lua) -> Result<MultiValue<'lua>> {
+            fn into_lua_multi(self, lua: &Lua) -> Result<MultiValue<'_>> {
                 let ($($name,)* $last,) = self;
 
                 let mut results = $last.into_lua_multi(lua)?;
@@ -250,7 +252,7 @@ macro_rules! impl_tuple {
 
             #[allow(non_snake_case)]
             #[inline]
-            unsafe fn push_into_stack_multi(self, lua: &'lua Lua) -> Result<c_int> {
+            unsafe fn push_into_stack_multi(self, lua: &Lua) -> Result<c_int> {
                 let ($($name,)* $last,) = self;
                 let mut nresults = 0;
                 $(

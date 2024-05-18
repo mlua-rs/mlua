@@ -79,7 +79,7 @@ impl<'lua> Table<'lua> {
     /// ```
     ///
     /// [`raw_set`]: #method.raw_set
-    pub fn set<K: IntoLua<'lua>, V: IntoLua<'lua>>(&self, key: K, value: V) -> Result<()> {
+    pub fn set<K: IntoLua, V: IntoLua>(&self, key: K, value: V) -> Result<()> {
         // Fast track
         if !self.has_metatable() {
             return self.raw_set(key, value);
@@ -122,7 +122,7 @@ impl<'lua> Table<'lua> {
     /// ```
     ///
     /// [`raw_get`]: #method.raw_get
-    pub fn get<K: IntoLua<'lua>, V: FromLua<'lua>>(&self, key: K) -> Result<V> {
+    pub fn get<K: IntoLua, V: FromLua<'lua>>(&self, key: K) -> Result<V> {
         // Fast track
         if !self.has_metatable() {
             return self.raw_get(key);
@@ -145,14 +145,14 @@ impl<'lua> Table<'lua> {
     /// Checks whether the table contains a non-nil value for `key`.
     ///
     /// This might invoke the `__index` metamethod.
-    pub fn contains_key<K: IntoLua<'lua>>(&self, key: K) -> Result<bool> {
+    pub fn contains_key<K: IntoLua>(&self, key: K) -> Result<bool> {
         Ok(self.get::<_, Value>(key)? != Value::Nil)
     }
 
     /// Appends a value to the back of the table.
     ///
     /// This might invoke the `__len` and `__newindex` metamethods.
-    pub fn push<V: IntoLua<'lua>>(&self, value: V) -> Result<()> {
+    pub fn push<V: IntoLua>(&self, value: V) -> Result<()> {
         // Fast track
         if !self.has_metatable() {
             return self.raw_push(value);
@@ -253,7 +253,7 @@ impl<'lua> Table<'lua> {
     }
 
     /// Sets a key-value pair without invoking metamethods.
-    pub fn raw_set<K: IntoLua<'lua>, V: IntoLua<'lua>>(&self, key: K, value: V) -> Result<()> {
+    pub fn raw_set<K: IntoLua, V: IntoLua>(&self, key: K, value: V) -> Result<()> {
         #[cfg(feature = "luau")]
         self.check_readonly_write()?;
 
@@ -278,7 +278,7 @@ impl<'lua> Table<'lua> {
     }
 
     /// Gets the value associated to `key` without invoking metamethods.
-    pub fn raw_get<K: IntoLua<'lua>, V: FromLua<'lua>>(&self, key: K) -> Result<V> {
+    pub fn raw_get<K: IntoLua, V: FromLua<'lua>>(&self, key: K) -> Result<V> {
         let lua = self.0.lua;
         let state = lua.state();
         unsafe {
@@ -295,7 +295,7 @@ impl<'lua> Table<'lua> {
 
     /// Inserts element value at position `idx` to the table, shifting up the elements from `table[idx]`.
     /// The worst case complexity is O(n), where n is the table length.
-    pub fn raw_insert<V: IntoLua<'lua>>(&self, idx: Integer, value: V) -> Result<()> {
+    pub fn raw_insert<V: IntoLua>(&self, idx: Integer, value: V) -> Result<()> {
         let size = self.raw_len() as Integer;
         if idx < 1 || idx > size + 1 {
             return Err(Error::runtime("index out of bounds"));
@@ -321,7 +321,7 @@ impl<'lua> Table<'lua> {
     }
 
     /// Appends a value to the back of the table without invoking metamethods.
-    pub fn raw_push<V: IntoLua<'lua>>(&self, value: V) -> Result<()> {
+    pub fn raw_push<V: IntoLua>(&self, value: V) -> Result<()> {
         #[cfg(feature = "luau")]
         self.check_readonly_write()?;
 
@@ -377,7 +377,7 @@ impl<'lua> Table<'lua> {
     /// where n is the table length.
     ///
     /// For other key types this is equivalent to setting `table[key] = nil`.
-    pub fn raw_remove<K: IntoLua<'lua>>(&self, key: K) -> Result<()> {
+    pub fn raw_remove<K: IntoLua>(&self, key: K) -> Result<()> {
         let lua = self.0.lua;
         let state = lua.state();
         let key = key.into_lua(lua)?;
@@ -751,7 +751,7 @@ impl<'lua> Table<'lua> {
 
     /// Sets element value at position `idx` without invoking metamethods.
     #[doc(hidden)]
-    pub fn raw_seti<V: IntoLua<'lua>>(&self, idx: usize, value: V) -> Result<()> {
+    pub fn raw_seti<V: IntoLua>(&self, idx: usize, value: V) -> Result<()> {
         #[cfg(feature = "luau")]
         self.check_readonly_write()?;
 
@@ -852,7 +852,7 @@ impl<'lua> AsRef<Table<'lua>> for Table<'lua> {
 
 impl<'lua, T> PartialEq<[T]> for Table<'lua>
 where
-    T: IntoLua<'lua> + Clone,
+    T: IntoLua + Clone,
 {
     fn eq(&self, other: &[T]) -> bool {
         let lua = self.0.lua;
@@ -882,7 +882,7 @@ where
 
 impl<'lua, T> PartialEq<&[T]> for Table<'lua>
 where
-    T: IntoLua<'lua> + Clone,
+    T: IntoLua + Clone,
 {
     #[inline]
     fn eq(&self, other: &&[T]) -> bool {
@@ -892,7 +892,7 @@ where
 
 impl<'lua, T, const N: usize> PartialEq<[T; N]> for Table<'lua>
 where
-    T: IntoLua<'lua> + Clone,
+    T: IntoLua + Clone,
 {
     #[inline]
     fn eq(&self, other: &[T; N]) -> bool {
@@ -907,7 +907,7 @@ pub trait TableExt<'lua>: Sealed {
     /// The metamethod is called with the table as its first argument, followed by the passed arguments.
     fn call<A, R>(&self, args: A) -> Result<R>
     where
-        A: IntoLuaMulti<'lua>,
+        A: IntoLuaMulti,
         R: FromLuaMulti<'lua>;
 
     /// Asynchronously calls the table as function assuming it has `__call` metamethod.
@@ -917,7 +917,7 @@ pub trait TableExt<'lua>: Sealed {
     #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
     fn call_async<A, R>(&self, args: A) -> LocalBoxFuture<'lua, Result<R>>
     where
-        A: IntoLuaMulti<'lua>,
+        A: IntoLuaMulti,
         R: FromLuaMulti<'lua> + 'lua;
 
     /// Gets the function associated to `key` from the table and executes it,
@@ -929,7 +929,7 @@ pub trait TableExt<'lua>: Sealed {
     /// This might invoke the `__index` metamethod.
     fn call_method<A, R>(&self, name: &str, args: A) -> Result<R>
     where
-        A: IntoLuaMulti<'lua>,
+        A: IntoLuaMulti,
         R: FromLuaMulti<'lua>;
 
     /// Gets the function associated to `key` from the table and executes it,
@@ -941,7 +941,7 @@ pub trait TableExt<'lua>: Sealed {
     /// This might invoke the `__index` metamethod.
     fn call_function<A, R>(&self, name: &str, args: A) -> Result<R>
     where
-        A: IntoLuaMulti<'lua>,
+        A: IntoLuaMulti,
         R: FromLuaMulti<'lua>;
 
     /// Gets the function associated to `key` from the table and asynchronously executes it,
@@ -954,7 +954,7 @@ pub trait TableExt<'lua>: Sealed {
     #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
     fn call_async_method<A, R>(&self, name: &str, args: A) -> LocalBoxFuture<'lua, Result<R>>
     where
-        A: IntoLuaMulti<'lua>,
+        A: IntoLuaMulti,
         R: FromLuaMulti<'lua> + 'lua;
 
     /// Gets the function associated to `key` from the table and asynchronously executes it,
@@ -967,14 +967,14 @@ pub trait TableExt<'lua>: Sealed {
     #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
     fn call_async_function<A, R>(&self, name: &str, args: A) -> LocalBoxFuture<'lua, Result<R>>
     where
-        A: IntoLuaMulti<'lua>,
+        A: IntoLuaMulti,
         R: FromLuaMulti<'lua> + 'lua;
 }
 
 impl<'lua> TableExt<'lua> for Table<'lua> {
     fn call<A, R>(&self, args: A) -> Result<R>
     where
-        A: IntoLuaMulti<'lua>,
+        A: IntoLuaMulti,
         R: FromLuaMulti<'lua>,
     {
         // Convert table to a function and call via pcall that respects the `__call` metamethod.
@@ -984,7 +984,7 @@ impl<'lua> TableExt<'lua> for Table<'lua> {
     #[cfg(feature = "async")]
     fn call_async<A, R>(&self, args: A) -> LocalBoxFuture<'lua, Result<R>>
     where
-        A: IntoLuaMulti<'lua>,
+        A: IntoLuaMulti,
         R: FromLuaMulti<'lua> + 'lua,
     {
         let args = match args.into_lua_multi(self.0.lua) {
@@ -997,7 +997,7 @@ impl<'lua> TableExt<'lua> for Table<'lua> {
 
     fn call_method<A, R>(&self, name: &str, args: A) -> Result<R>
     where
-        A: IntoLuaMulti<'lua>,
+        A: IntoLuaMulti,
         R: FromLuaMulti<'lua>,
     {
         self.get::<_, Function>(name)?.call((self, args))
@@ -1005,7 +1005,7 @@ impl<'lua> TableExt<'lua> for Table<'lua> {
 
     fn call_function<A, R>(&self, name: &str, args: A) -> Result<R>
     where
-        A: IntoLuaMulti<'lua>,
+        A: IntoLuaMulti,
         R: FromLuaMulti<'lua>,
     {
         self.get::<_, Function>(name)?.call(args)
@@ -1014,7 +1014,7 @@ impl<'lua> TableExt<'lua> for Table<'lua> {
     #[cfg(feature = "async")]
     fn call_async_method<A, R>(&self, name: &str, args: A) -> LocalBoxFuture<'lua, Result<R>>
     where
-        A: IntoLuaMulti<'lua>,
+        A: IntoLuaMulti,
         R: FromLuaMulti<'lua> + 'lua,
     {
         self.call_async_function(name, (self, args))
@@ -1023,7 +1023,7 @@ impl<'lua> TableExt<'lua> for Table<'lua> {
     #[cfg(feature = "async")]
     fn call_async_function<A, R>(&self, name: &str, args: A) -> LocalBoxFuture<'lua, Result<R>>
     where
-        A: IntoLuaMulti<'lua>,
+        A: IntoLuaMulti,
         R: FromLuaMulti<'lua> + 'lua,
     {
         let lua = self.0.lua;

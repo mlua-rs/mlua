@@ -139,7 +139,7 @@ impl<'lua> Thread<'lua> {
     /// ```
     pub fn resume<A, R>(&self, args: A) -> Result<R>
     where
-        A: IntoLuaMulti<'lua>,
+        A: IntoLuaMulti,
         R: FromLuaMulti<'lua>,
     {
         if self.status() != ThreadStatus::Resumable {
@@ -164,7 +164,7 @@ impl<'lua> Thread<'lua> {
     /// Resumes execution of this thread.
     ///
     /// It's similar to `resume()` but leaves `nresults` values on the thread stack.
-    unsafe fn resume_inner<A: IntoLuaMulti<'lua>>(&self, args: A) -> Result<c_int> {
+    unsafe fn resume_inner<A: IntoLuaMulti>(&self, args: A) -> Result<c_int> {
         let lua = self.0.lua;
         let state = lua.state();
         let thread_state = self.state();
@@ -325,7 +325,7 @@ impl<'lua> Thread<'lua> {
     #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
     pub fn into_async<A, R>(self, args: A) -> AsyncThread<'lua, R>
     where
-        A: IntoLuaMulti<'lua>,
+        A: IntoLuaMulti,
         R: FromLuaMulti<'lua>,
     {
         let args = args.into_lua_multi(self.0.lua);
@@ -415,7 +415,7 @@ impl OwnedThread {
     /// See [`Thread::resume()`] for more details.
     pub fn resume<'lua, A, R>(&'lua self, args: A) -> Result<R>
     where
-        A: IntoLuaMulti<'lua>,
+        A: IntoLuaMulti,
         R: FromLuaMulti<'lua>,
     {
         self.to_ref().resume(args)

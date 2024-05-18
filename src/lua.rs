@@ -712,7 +712,7 @@ impl Lua {
     pub unsafe fn entrypoint<'lua, A, R, F>(self, state: *mut ffi::lua_State, func: F) -> c_int
     where
         A: FromLuaMulti<'lua>,
-        R: IntoLua<'lua>,
+        R: IntoLua,
         F: Fn(&'lua Lua, A) -> Result<R> + MaybeSend + 'static,
     {
         let extra = self.extra.get();
@@ -734,7 +734,7 @@ impl Lua {
     #[cfg(not(tarpaulin_include))]
     pub unsafe fn entrypoint1<'lua, R, F>(self, state: *mut ffi::lua_State, func: F) -> c_int
     where
-        R: IntoLua<'lua>,
+        R: IntoLua,
         F: Fn(&'lua Lua) -> Result<R> + MaybeSend + 'static,
     {
         self.entrypoint(state, move |lua, _: ()| func(lua))
@@ -1436,8 +1436,8 @@ impl Lua {
     /// Creates a table and fills it with values from an iterator.
     pub fn create_table_from<'lua, K, V, I>(&'lua self, iter: I) -> Result<Table<'lua>>
     where
-        K: IntoLua<'lua>,
-        V: IntoLua<'lua>,
+        K: IntoLua,
+        V: IntoLua,
         I: IntoIterator<Item = (K, V)>,
     {
         let state = self.state();
@@ -1466,7 +1466,7 @@ impl Lua {
     /// Creates a table from an iterator of values, using `1..` as the keys.
     pub fn create_sequence_from<'lua, T, I>(&'lua self, iter: I) -> Result<Table<'lua>>
     where
-        T: IntoLua<'lua>,
+        T: IntoLua,
         I: IntoIterator<Item = T>,
     {
         let state = self.state();
@@ -1541,7 +1541,7 @@ impl Lua {
     pub fn create_function<'lua, A, R, F>(&'lua self, func: F) -> Result<Function<'lua>>
     where
         A: FromLuaMulti<'lua>,
-        R: IntoLuaMulti<'lua>,
+        R: IntoLuaMulti,
         F: Fn(&'lua Lua, A) -> Result<R> + MaybeSend + 'static,
     {
         self.create_callback(Box::new(move |lua, nargs| unsafe {
@@ -1559,7 +1559,7 @@ impl Lua {
     pub fn create_function_mut<'lua, A, R, F>(&'lua self, func: F) -> Result<Function<'lua>>
     where
         A: FromLuaMulti<'lua>,
-        R: IntoLuaMulti<'lua>,
+        R: IntoLuaMulti,
         F: FnMut(&'lua Lua, A) -> Result<R> + MaybeSend + 'static,
     {
         let func = RefCell::new(func);
@@ -1625,7 +1625,7 @@ impl Lua {
     pub fn create_async_function<'lua, A, R, F, FR>(&'lua self, func: F) -> Result<Function<'lua>>
     where
         A: FromLuaMulti<'lua>,
-        R: IntoLuaMulti<'lua>,
+        R: IntoLuaMulti,
         F: Fn(&'lua Lua, A) -> FR + MaybeSend + 'static,
         FR: Future<Output = Result<R>> + 'lua,
     {
@@ -1998,7 +1998,7 @@ impl Lua {
     }
 
     /// Converts a value that implements `IntoLua` into a `Value` instance.
-    pub fn pack<'lua, T: IntoLua<'lua>>(&'lua self, t: T) -> Result<Value<'lua>> {
+    pub fn pack<'lua, T: IntoLua>(&'lua self, t: T) -> Result<Value<'lua>> {
         t.into_lua(self)
     }
 
@@ -2008,7 +2008,7 @@ impl Lua {
     }
 
     /// Converts a value that implements `IntoLuaMulti` into a `MultiValue` instance.
-    pub fn pack_multi<'lua, T: IntoLuaMulti<'lua>>(&'lua self, t: T) -> Result<MultiValue<'lua>> {
+    pub fn pack_multi<'lua, T: IntoLuaMulti>(&'lua self, t: T) -> Result<MultiValue<'lua>> {
         t.into_lua_multi(self)
     }
 
@@ -2026,7 +2026,7 @@ impl Lua {
     /// state.
     pub fn set_named_registry_value<'lua, T>(&'lua self, name: &str, t: T) -> Result<()>
     where
-        T: IntoLua<'lua>,
+        T: IntoLua,
     {
         let state = self.state();
         unsafe {
@@ -2080,13 +2080,13 @@ impl Lua {
     /// However, dropped [`RegistryKey`]s automatically reused to store new values.
     ///
     /// [`RegistryKey`]: crate::RegistryKey
-    pub fn create_registry_value<'lua, T: IntoLua<'lua>>(&'lua self, t: T) -> Result<RegistryKey> {
+    pub fn create_registry_value<T: IntoLua>(&self, t: T) -> Result<RegistryKey> {
         let state = self.state();
         unsafe {
             let _sg = StackGuard::new(state);
             check_stack(state, 4)?;
 
-            self.push_value(&t)?;
+            self.push(t)?;
 
             let unref_list = (*self.extra.get()).registry_unref_list.clone();
 
@@ -2166,7 +2166,7 @@ impl Lua {
     /// See [`create_registry_value`] for more details.
     ///
     /// [`create_registry_value`]: #method.create_registry_value
-    pub fn replace_registry_value<'lua, T: IntoLua<'lua>>(
+    pub fn replace_registry_value<'lua, T: IntoLua>(
         &'lua self,
         key: &RegistryKey,
         t: T,
@@ -2324,7 +2324,7 @@ impl Lua {
     /// Uses 2 stack spaces, does not call checkstack.
     #[doc(hidden)]
     #[inline(always)]
-    pub unsafe fn push<'lua>(&'lua self, value: impl IntoLua<'lua>) -> Result<()> {
+    pub unsafe fn push<'lua>(&'lua self, value: impl IntoLua) -> Result<()> {
         value.push_into_stack(self)
     }
 
