@@ -687,9 +687,9 @@ impl<'a, 'lua> Serialize for SerializableValue<'a, 'lua> {
 }
 
 /// Trait for types convertible to `Value`.
-pub trait IntoLua<'lua>: Sized {
+pub trait IntoLua: Sized {
     /// Performs the conversion.
-    fn into_lua(self, lua: &'lua Lua) -> Result<Value<'lua>>;
+    fn into_lua(self, lua: &Lua) -> Result<Value<'_>>;
 
     /// Pushes the value into the Lua stack.
     ///
@@ -697,7 +697,7 @@ pub trait IntoLua<'lua>: Sized {
     /// This method does not check Lua stack space.
     #[doc(hidden)]
     #[inline]
-    unsafe fn push_into_stack(self, lua: &'lua Lua) -> Result<()> {
+    unsafe fn push_into_stack(self, lua: &Lua) -> Result<()> {
         lua.push_value(&self.into_lua(lua)?)
     }
 }
@@ -859,16 +859,16 @@ impl<'a, 'lua> IntoIterator for &'a MultiValue<'lua> {
 ///
 /// This is a generalization of `IntoLua`, allowing any number of resulting Lua values instead of just
 /// one. Any type that implements `IntoLua` will automatically implement this trait.
-pub trait IntoLuaMulti<'lua>: Sized {
+pub trait IntoLuaMulti: Sized {
     /// Performs the conversion.
-    fn into_lua_multi(self, lua: &'lua Lua) -> Result<MultiValue<'lua>>;
+    fn into_lua_multi(self, lua: &Lua) -> Result<MultiValue<'_>>;
 
     /// Pushes the values into the Lua stack.
     ///
     /// Returns number of pushed values.
     #[doc(hidden)]
     #[inline]
-    unsafe fn push_into_stack_multi(self, lua: &'lua Lua) -> Result<c_int> {
+    unsafe fn push_into_stack_multi(self, lua: &Lua) -> Result<c_int> {
         let values = self.into_lua_multi(lua)?;
         let len: c_int = values.len().try_into().unwrap();
         unsafe {

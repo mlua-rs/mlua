@@ -9,17 +9,17 @@ use futures_util::future::{self, LocalBoxFuture};
 /// An extension trait for [`AnyUserData`] that provides a variety of convenient functionality.
 pub trait AnyUserDataExt<'lua>: Sealed {
     /// Gets the value associated to `key` from the userdata, assuming it has `__index` metamethod.
-    fn get<K: IntoLua<'lua>, V: FromLua<'lua>>(&self, key: K) -> Result<V>;
+    fn get<K: IntoLua, V: FromLua<'lua>>(&self, key: K) -> Result<V>;
 
     /// Sets the value associated to `key` in the userdata, assuming it has `__newindex` metamethod.
-    fn set<K: IntoLua<'lua>, V: IntoLua<'lua>>(&self, key: K, value: V) -> Result<()>;
+    fn set<K: IntoLua, V: IntoLua>(&self, key: K, value: V) -> Result<()>;
 
     /// Calls the userdata as a function assuming it has `__call` metamethod.
     ///
     /// The metamethod is called with the userdata as its first argument, followed by the passed arguments.
     fn call<A, R>(&self, args: A) -> Result<R>
     where
-        A: IntoLuaMulti<'lua>,
+        A: IntoLuaMulti,
         R: FromLuaMulti<'lua>;
 
     /// Asynchronously calls the userdata as a function assuming it has `__call` metamethod.
@@ -29,14 +29,14 @@ pub trait AnyUserDataExt<'lua>: Sealed {
     #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
     fn call_async<A, R>(&self, args: A) -> LocalBoxFuture<'lua, Result<R>>
     where
-        A: IntoLuaMulti<'lua>,
+        A: IntoLuaMulti,
         R: FromLuaMulti<'lua> + 'lua;
 
     /// Calls the userdata method, assuming it has `__index` metamethod
     /// and a function associated to `name`.
     fn call_method<A, R>(&self, name: &str, args: A) -> Result<R>
     where
-        A: IntoLuaMulti<'lua>,
+        A: IntoLuaMulti,
         R: FromLuaMulti<'lua>;
 
     /// Gets the function associated to `key` from the table and asynchronously executes it,
@@ -49,7 +49,7 @@ pub trait AnyUserDataExt<'lua>: Sealed {
     #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
     fn call_async_method<A, R>(&self, name: &str, args: A) -> LocalBoxFuture<'lua, Result<R>>
     where
-        A: IntoLuaMulti<'lua>,
+        A: IntoLuaMulti,
         R: FromLuaMulti<'lua> + 'lua;
 
     /// Gets the function associated to `key` from the table and executes it,
@@ -61,7 +61,7 @@ pub trait AnyUserDataExt<'lua>: Sealed {
     /// This might invoke the `__index` metamethod.
     fn call_function<A, R>(&self, name: &str, args: A) -> Result<R>
     where
-        A: IntoLuaMulti<'lua>,
+        A: IntoLuaMulti,
         R: FromLuaMulti<'lua>;
 
     /// Gets the function associated to `key` from the table and asynchronously executes it,
@@ -74,12 +74,12 @@ pub trait AnyUserDataExt<'lua>: Sealed {
     #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
     fn call_async_function<A, R>(&self, name: &str, args: A) -> LocalBoxFuture<'lua, Result<R>>
     where
-        A: IntoLuaMulti<'lua>,
+        A: IntoLuaMulti,
         R: FromLuaMulti<'lua> + 'lua;
 }
 
 impl<'lua> AnyUserDataExt<'lua> for AnyUserData<'lua> {
-    fn get<K: IntoLua<'lua>, V: FromLua<'lua>>(&self, key: K) -> Result<V> {
+    fn get<K: IntoLua, V: FromLua<'lua>>(&self, key: K) -> Result<V> {
         let metatable = self.get_metatable()?;
         match metatable.get::<Value>(MetaMethod::Index)? {
             Value::Table(table) => table.raw_get(key),
@@ -88,7 +88,7 @@ impl<'lua> AnyUserDataExt<'lua> for AnyUserData<'lua> {
         }
     }
 
-    fn set<K: IntoLua<'lua>, V: IntoLua<'lua>>(&self, key: K, value: V) -> Result<()> {
+    fn set<K: IntoLua, V: IntoLua>(&self, key: K, value: V) -> Result<()> {
         let metatable = self.get_metatable()?;
         match metatable.get::<Value>(MetaMethod::NewIndex)? {
             Value::Table(table) => table.raw_set(key, value),
@@ -99,7 +99,7 @@ impl<'lua> AnyUserDataExt<'lua> for AnyUserData<'lua> {
 
     fn call<A, R>(&self, args: A) -> Result<R>
     where
-        A: IntoLuaMulti<'lua>,
+        A: IntoLuaMulti,
         R: FromLuaMulti<'lua>,
     {
         let metatable = self.get_metatable()?;
@@ -112,7 +112,7 @@ impl<'lua> AnyUserDataExt<'lua> for AnyUserData<'lua> {
     #[cfg(feature = "async")]
     fn call_async<A, R>(&self, args: A) -> LocalBoxFuture<'lua, Result<R>>
     where
-        A: IntoLuaMulti<'lua>,
+        A: IntoLuaMulti,
         R: FromLuaMulti<'lua> + 'lua,
     {
         let metatable = match self.get_metatable() {
@@ -136,7 +136,7 @@ impl<'lua> AnyUserDataExt<'lua> for AnyUserData<'lua> {
 
     fn call_method<A, R>(&self, name: &str, args: A) -> Result<R>
     where
-        A: IntoLuaMulti<'lua>,
+        A: IntoLuaMulti,
         R: FromLuaMulti<'lua>,
     {
         self.call_function(name, (self, args))
@@ -145,7 +145,7 @@ impl<'lua> AnyUserDataExt<'lua> for AnyUserData<'lua> {
     #[cfg(feature = "async")]
     fn call_async_method<A, R>(&self, name: &str, args: A) -> LocalBoxFuture<'lua, Result<R>>
     where
-        A: IntoLuaMulti<'lua>,
+        A: IntoLuaMulti,
         R: FromLuaMulti<'lua> + 'lua,
     {
         self.call_async_function(name, (self, args))
@@ -153,7 +153,7 @@ impl<'lua> AnyUserDataExt<'lua> for AnyUserData<'lua> {
 
     fn call_function<A, R>(&self, name: &str, args: A) -> Result<R>
     where
-        A: IntoLuaMulti<'lua>,
+        A: IntoLuaMulti,
         R: FromLuaMulti<'lua>,
     {
         match self.get(name)? {
@@ -168,7 +168,7 @@ impl<'lua> AnyUserDataExt<'lua> for AnyUserData<'lua> {
     #[cfg(feature = "async")]
     fn call_async_function<A, R>(&self, name: &str, args: A) -> LocalBoxFuture<'lua, Result<R>>
     where
-        A: IntoLuaMulti<'lua>,
+        A: IntoLuaMulti,
         R: FromLuaMulti<'lua> + 'lua,
     {
         match self.get(name) {

@@ -62,7 +62,7 @@ impl<'lua, T: 'static> UserDataRegistry<'lua, T> {
     where
         M: Fn(&'lua Lua, &T, A) -> Result<R> + MaybeSend + 'static,
         A: FromLuaMulti<'lua>,
-        R: IntoLuaMulti<'lua>,
+        R: IntoLuaMulti,
     {
         let name = get_function_name::<T>(name);
         macro_rules! try_self_arg {
@@ -138,7 +138,7 @@ impl<'lua, T: 'static> UserDataRegistry<'lua, T> {
     where
         M: FnMut(&'lua Lua, &mut T, A) -> Result<R> + MaybeSend + 'static,
         A: FromLuaMulti<'lua>,
-        R: IntoLuaMulti<'lua>,
+        R: IntoLuaMulti,
     {
         let name = get_function_name::<T>(name);
         macro_rules! try_self_arg {
@@ -216,7 +216,7 @@ impl<'lua, T: 'static> UserDataRegistry<'lua, T> {
         M: Fn(&'lua Lua, &'s T, A) -> MR + MaybeSend + 'static,
         A: FromLuaMulti<'lua>,
         MR: Future<Output = Result<R>> + 's,
-        R: IntoLuaMulti<'lua>,
+        R: IntoLuaMulti,
     {
         let name = Arc::new(get_function_name::<T>(name));
         let method = Arc::new(method);
@@ -310,7 +310,7 @@ impl<'lua, T: 'static> UserDataRegistry<'lua, T> {
         M: Fn(&'lua Lua, &'s mut T, A) -> MR + MaybeSend + 'static,
         A: FromLuaMulti<'lua>,
         MR: Future<Output = Result<R>> + 's,
-        R: IntoLuaMulti<'lua>,
+        R: IntoLuaMulti,
     {
         let name = Arc::new(get_function_name::<T>(name));
         let method = Arc::new(method);
@@ -398,7 +398,7 @@ impl<'lua, T: 'static> UserDataRegistry<'lua, T> {
     where
         F: Fn(&'lua Lua, A) -> Result<R> + MaybeSend + 'static,
         A: FromLuaMulti<'lua>,
-        R: IntoLuaMulti<'lua>,
+        R: IntoLuaMulti,
     {
         let name = get_function_name::<T>(name);
         Box::new(move |lua, nargs| unsafe {
@@ -411,7 +411,7 @@ impl<'lua, T: 'static> UserDataRegistry<'lua, T> {
     where
         F: FnMut(&'lua Lua, A) -> Result<R> + MaybeSend + 'static,
         A: FromLuaMulti<'lua>,
-        R: IntoLuaMulti<'lua>,
+        R: IntoLuaMulti,
     {
         let name = get_function_name::<T>(name);
         let function = RefCell::new(function);
@@ -430,7 +430,7 @@ impl<'lua, T: 'static> UserDataRegistry<'lua, T> {
         F: Fn(&'lua Lua, A) -> FR + MaybeSend + 'static,
         A: FromLuaMulti<'lua>,
         FR: Future<Output = Result<R>> + 'lua,
-        R: IntoLuaMulti<'lua>,
+        R: IntoLuaMulti,
     {
         let name = get_function_name::<T>(name);
         Box::new(move |lua, args| unsafe {
@@ -445,7 +445,7 @@ impl<'lua, T: 'static> UserDataRegistry<'lua, T> {
 
     pub(crate) fn check_meta_field<V>(lua: &'lua Lua, name: &str, value: V) -> Result<Value<'lua>>
     where
-        V: IntoLua<'lua>,
+        V: IntoLua,
     {
         let value = value.into_lua(lua)?;
         if name == MetaMethod::Index || name == MetaMethod::NewIndex {
@@ -472,7 +472,7 @@ fn get_function_name<T>(name: &str) -> StdString {
 impl<'lua, T: 'static> UserDataFields<'lua, T> for UserDataRegistry<'lua, T> {
     fn add_field<V>(&mut self, name: impl AsRef<str>, value: V)
     where
-        V: IntoLua<'lua> + Clone + 'static,
+        V: IntoLua + Clone + 'static,
     {
         let name = name.as_ref().to_string();
         self.fields.push((
@@ -484,7 +484,7 @@ impl<'lua, T: 'static> UserDataFields<'lua, T> for UserDataRegistry<'lua, T> {
     fn add_field_method_get<M, R>(&mut self, name: impl AsRef<str>, method: M)
     where
         M: Fn(&'lua Lua, &T) -> Result<R> + MaybeSend + 'static,
-        R: IntoLua<'lua>,
+        R: IntoLua,
     {
         let name = name.as_ref();
         let method = Self::box_method(name, move |lua, data, ()| method(lua, data));
@@ -504,7 +504,7 @@ impl<'lua, T: 'static> UserDataFields<'lua, T> for UserDataRegistry<'lua, T> {
     fn add_field_function_get<F, R>(&mut self, name: impl AsRef<str>, function: F)
     where
         F: Fn(&'lua Lua, AnyUserData<'lua>) -> Result<R> + MaybeSend + 'static,
-        R: IntoLua<'lua>,
+        R: IntoLua,
     {
         let name = name.as_ref();
         let func = Self::box_function(name, function);
@@ -523,7 +523,7 @@ impl<'lua, T: 'static> UserDataFields<'lua, T> for UserDataRegistry<'lua, T> {
 
     fn add_meta_field<V>(&mut self, name: impl AsRef<str>, value: V)
     where
-        V: IntoLua<'lua> + Clone + 'static,
+        V: IntoLua + Clone + 'static,
     {
         let name = name.as_ref().to_string();
         let name2 = name.clone();
@@ -538,7 +538,7 @@ impl<'lua, T: 'static> UserDataFields<'lua, T> for UserDataRegistry<'lua, T> {
     fn add_meta_field_with<F, R>(&mut self, name: impl AsRef<str>, f: F)
     where
         F: Fn(&'lua Lua) -> Result<R> + MaybeSend + 'static,
-        R: IntoLua<'lua>,
+        R: IntoLua,
     {
         let name = name.as_ref().to_string();
         let name2 = name.clone();
@@ -565,7 +565,7 @@ impl<'lua, T: 'static> UserDataMethods<'lua, T> for UserDataRegistry<'lua, T> {
     where
         M: Fn(&'lua Lua, &T, A) -> Result<R> + MaybeSend + 'static,
         A: FromLuaMulti<'lua>,
-        R: IntoLuaMulti<'lua>,
+        R: IntoLuaMulti,
     {
         let name = name.as_ref();
         self.methods
@@ -576,7 +576,7 @@ impl<'lua, T: 'static> UserDataMethods<'lua, T> for UserDataRegistry<'lua, T> {
     where
         M: FnMut(&'lua Lua, &mut T, A) -> Result<R> + MaybeSend + 'static,
         A: FromLuaMulti<'lua>,
-        R: IntoLuaMulti<'lua>,
+        R: IntoLuaMulti,
     {
         let name = name.as_ref();
         self.methods
@@ -591,7 +591,7 @@ impl<'lua, T: 'static> UserDataMethods<'lua, T> for UserDataRegistry<'lua, T> {
         M: Fn(&'lua Lua, &'s T, A) -> MR + MaybeSend + 'static,
         A: FromLuaMulti<'lua>,
         MR: Future<Output = Result<R>> + 's,
-        R: IntoLuaMulti<'lua>,
+        R: IntoLuaMulti,
     {
         let name = name.as_ref();
         self.async_methods
@@ -606,7 +606,7 @@ impl<'lua, T: 'static> UserDataMethods<'lua, T> for UserDataRegistry<'lua, T> {
         M: Fn(&'lua Lua, &'s mut T, A) -> MR + MaybeSend + 'static,
         A: FromLuaMulti<'lua>,
         MR: Future<Output = Result<R>> + 's,
-        R: IntoLuaMulti<'lua>,
+        R: IntoLuaMulti,
     {
         let name = name.as_ref();
         self.async_methods
@@ -617,7 +617,7 @@ impl<'lua, T: 'static> UserDataMethods<'lua, T> for UserDataRegistry<'lua, T> {
     where
         F: Fn(&'lua Lua, A) -> Result<R> + MaybeSend + 'static,
         A: FromLuaMulti<'lua>,
-        R: IntoLuaMulti<'lua>,
+        R: IntoLuaMulti,
     {
         let name = name.as_ref();
         self.methods
@@ -628,7 +628,7 @@ impl<'lua, T: 'static> UserDataMethods<'lua, T> for UserDataRegistry<'lua, T> {
     where
         F: FnMut(&'lua Lua, A) -> Result<R> + MaybeSend + 'static,
         A: FromLuaMulti<'lua>,
-        R: IntoLuaMulti<'lua>,
+        R: IntoLuaMulti,
     {
         let name = name.as_ref();
         self.methods
@@ -641,7 +641,7 @@ impl<'lua, T: 'static> UserDataMethods<'lua, T> for UserDataRegistry<'lua, T> {
         F: Fn(&'lua Lua, A) -> FR + MaybeSend + 'static,
         A: FromLuaMulti<'lua>,
         FR: Future<Output = Result<R>> + 'lua,
-        R: IntoLuaMulti<'lua>,
+        R: IntoLuaMulti,
     {
         let name = name.as_ref();
         self.async_methods
@@ -652,7 +652,7 @@ impl<'lua, T: 'static> UserDataMethods<'lua, T> for UserDataRegistry<'lua, T> {
     where
         M: Fn(&'lua Lua, &T, A) -> Result<R> + MaybeSend + 'static,
         A: FromLuaMulti<'lua>,
-        R: IntoLuaMulti<'lua>,
+        R: IntoLuaMulti,
     {
         let name = name.as_ref();
         self.meta_methods
@@ -663,7 +663,7 @@ impl<'lua, T: 'static> UserDataMethods<'lua, T> for UserDataRegistry<'lua, T> {
     where
         M: FnMut(&'lua Lua, &mut T, A) -> Result<R> + MaybeSend + 'static,
         A: FromLuaMulti<'lua>,
-        R: IntoLuaMulti<'lua>,
+        R: IntoLuaMulti,
     {
         let name = name.as_ref();
         self.meta_methods
@@ -678,7 +678,7 @@ impl<'lua, T: 'static> UserDataMethods<'lua, T> for UserDataRegistry<'lua, T> {
         M: Fn(&'lua Lua, &'s T, A) -> MR + MaybeSend + 'static,
         A: FromLuaMulti<'lua>,
         MR: Future<Output = Result<R>> + 's,
-        R: IntoLuaMulti<'lua>,
+        R: IntoLuaMulti,
     {
         let name = name.as_ref();
         self.async_meta_methods
@@ -693,7 +693,7 @@ impl<'lua, T: 'static> UserDataMethods<'lua, T> for UserDataRegistry<'lua, T> {
         M: Fn(&'lua Lua, &'s mut T, A) -> MR + MaybeSend + 'static,
         A: FromLuaMulti<'lua>,
         MR: Future<Output = Result<R>> + 's,
-        R: IntoLuaMulti<'lua>,
+        R: IntoLuaMulti,
     {
         let name = name.as_ref();
         self.async_meta_methods
@@ -704,7 +704,7 @@ impl<'lua, T: 'static> UserDataMethods<'lua, T> for UserDataRegistry<'lua, T> {
     where
         F: Fn(&'lua Lua, A) -> Result<R> + MaybeSend + 'static,
         A: FromLuaMulti<'lua>,
-        R: IntoLuaMulti<'lua>,
+        R: IntoLuaMulti,
     {
         let name = name.as_ref();
         self.meta_methods
@@ -715,7 +715,7 @@ impl<'lua, T: 'static> UserDataMethods<'lua, T> for UserDataRegistry<'lua, T> {
     where
         F: FnMut(&'lua Lua, A) -> Result<R> + MaybeSend + 'static,
         A: FromLuaMulti<'lua>,
-        R: IntoLuaMulti<'lua>,
+        R: IntoLuaMulti,
     {
         let name = name.as_ref();
         self.meta_methods
@@ -728,7 +728,7 @@ impl<'lua, T: 'static> UserDataMethods<'lua, T> for UserDataRegistry<'lua, T> {
         F: Fn(&'lua Lua, A) -> FR + MaybeSend + 'static,
         A: FromLuaMulti<'lua>,
         FR: Future<Output = Result<R>> + 'lua,
-        R: IntoLuaMulti<'lua>,
+        R: IntoLuaMulti,
     {
         let name = name.as_ref();
         self.async_meta_methods
