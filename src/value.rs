@@ -19,7 +19,7 @@ use {
 
 use crate::error::{Error, Result};
 use crate::function::Function;
-use crate::lua::Lua;
+use crate::lua::{Lua, LuaInner};
 use crate::string::String;
 use crate::table::Table;
 use crate::thread::Thread;
@@ -31,7 +31,7 @@ use crate::util::{check_stack, StackGuard};
 /// variants contain handle types into the internal Lua state. It is a logic error to mix handle
 /// types between separate `Lua` instances, and doing so will result in a panic.
 #[derive(Clone)]
-pub enum Value<'lua> {
+pub enum Value {
     /// The Lua value `nil`.
     Nil,
     /// The Lua value `true` or `false`.
@@ -51,27 +51,27 @@ pub enum Value<'lua> {
     /// An interned string, managed by Lua.
     ///
     /// Unlike Rust strings, Lua strings may not be valid UTF-8.
-    String(String<'lua>),
+    String(String),
     /// Reference to a Lua table.
-    Table(Table<'lua>),
+    Table(Table),
     /// Reference to a Lua function (or closure).
-    Function(Function<'lua>),
+    Function(Function),
     /// Reference to a Lua thread (or coroutine).
-    Thread(Thread<'lua>),
+    Thread(Thread),
     /// Reference to a userdata object that holds a custom type which implements `UserData`.
     /// Special builtin userdata types will be represented as other `Value` variants.
-    UserData(AnyUserData<'lua>),
+    UserData(AnyUserData),
     /// `Error` is a special builtin userdata type. When received from Lua it is implicitly cloned.
     Error(Box<Error>),
 }
 
 pub use self::Value::Nil;
 
-impl<'lua> Value<'lua> {
+impl Value {
     /// A special value (lightuserdata) to represent null value.
     ///
     /// It can be used in Lua tables without downsides of `nil`.
-    pub const NULL: Value<'static> = Value::LightUserData(LightUserData(ptr::null_mut()));
+    pub const NULL: Value = Value::LightUserData(LightUserData(ptr::null_mut()));
 
     /// Returns type name of this value.
     pub const fn type_name(&self) -> &'static str {
@@ -152,15 +152,16 @@ impl<'lua> Value<'lua> {
             | Value::Function(Function(r))
             | Value::Thread(Thread(r, ..))
             | Value::UserData(AnyUserData(r, ..)) => unsafe {
-                let state = r.lua.state();
+                let lua = r.lua.lock();
+                let state = lua.state();
                 let _guard = StackGuard::new(state);
                 check_stack(state, 3)?;
 
-                r.lua.push_ref(r);
+                lua.push_ref(r);
                 protect_lua!(state, 1, 1, fn(state) {
                     ffi::luaL_tolstring(state, -1, ptr::null_mut());
                 })?;
-                Ok(String(r.lua.pop_ref()).to_str()?.to_string())
+                Ok(String(lua.pop_ref()).to_str()?.to_string())
             },
             Value::Error(err) => Ok(err.to_string()),
         }
@@ -440,7 +441,7 @@ impl<'lua> Value<'lua> {
     #[cfg(feature = "serialize")]
     #[cfg_attr(docsrs, doc(cfg(feature = "serialize")))]
     #[doc(hidden)]
-    pub fn to_serializable(&self) -> SerializableValue<'_, 'lua> {
+    pub fn to_serializable(&self) -> SerializableValue {
         SerializableValue::new(self, Default::default(), None)
     }
 
@@ -522,7 +523,7 @@ impl<'lua> Value<'lua> {
     }
 }
 
-impl fmt::Debug for Value<'_> {
+impl fmt::Debug for Value {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
         if fmt.alternate() {
             return self.fmt_pretty(fmt, true, 0, &mut HashSet::new());
@@ -545,7 +546,7 @@ impl fmt::Debug for Value<'_> {
     }
 }
 
-impl<'lua> PartialEq for Value<'lua> {
+impl PartialEq for Value {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Value::Nil, Value::Nil) => true,
@@ -567,7 +568,7 @@ impl<'lua> PartialEq for Value<'lua> {
     }
 }
 
-impl<'lua> AsRef<Value<'lua>> for Value<'lua> {
+impl AsRef<Value> for Value {
     #[inline]
     fn as_ref(&self) -> &Self {
         self
@@ -577,15 +578,15 @@ impl<'lua> AsRef<Value<'lua>> for Value<'lua> {
 /// A wrapped [`Value`] with customized serialization behavior.
 #[cfg(feature = "serialize")]
 #[cfg_attr(docsrs, doc(cfg(feature = "serialize")))]
-pub struct SerializableValue<'a, 'lua> {
-    value: &'a Value<'lua>,
+pub struct SerializableValue<'a> {
+    value: &'a Value,
     options: crate::serde::de::Options,
     // In many cases we don't need `visited` map, so don't allocate memory by default
     visited: Option<Rc<RefCell<FxHashSet<*const c_void>>>>,
 }
 
 #[cfg(feature = "serialize")]
-impl<'lua> Serialize for Value<'lua> {
+impl Serialize for Value {
     #[inline]
     fn serialize<S: Serializer>(&self, serializer: S) -> StdResult<S::Ok, S::Error> {
         SerializableValue::new(self, Default::default(), None).serialize(serializer)
@@ -593,10 +594,10 @@ impl<'lua> Serialize for Value<'lua> {
 }
 
 #[cfg(feature = "serialize")]
-impl<'a, 'lua> SerializableValue<'a, 'lua> {
+impl<'a> SerializableValue<'a> {
     #[inline]
     pub(crate) fn new(
-        value: &'a Value<'lua>,
+        value: &'a Value,
         options: crate::serde::de::Options,
         visited: Option<&Rc<RefCell<FxHashSet<*const c_void>>>>,
     ) -> Self {
@@ -648,7 +649,7 @@ impl<'a, 'lua> SerializableValue<'a, 'lua> {
 }
 
 #[cfg(feature = "serialize")]
-impl<'a, 'lua> Serialize for SerializableValue<'a, 'lua> {
+impl<'a> Serialize for SerializableValue<'a> {
     fn serialize<S>(&self, serializer: S) -> StdResult<S::Ok, S::Error>
     where
         S: Serializer,
@@ -689,7 +690,7 @@ impl<'a, 'lua> Serialize for SerializableValue<'a, 'lua> {
 /// Trait for types convertible to `Value`.
 pub trait IntoLua: Sized {
     /// Performs the conversion.
-    fn into_lua(self, lua: &Lua) -> Result<Value<'_>>;
+    fn into_lua(self, lua: &Lua) -> Result<Value>;
 
     /// Pushes the value into the Lua stack.
     ///
@@ -697,15 +698,15 @@ pub trait IntoLua: Sized {
     /// This method does not check Lua stack space.
     #[doc(hidden)]
     #[inline]
-    unsafe fn push_into_stack(self, lua: &Lua) -> Result<()> {
-        lua.push_value(&self.into_lua(lua)?)
+    unsafe fn push_into_stack(self, lua: &LuaInner) -> Result<()> {
+        lua.push_value(&self.into_lua(lua.lua())?)
     }
 }
 
 /// Trait for types convertible from `Value`.
-pub trait FromLua<'lua>: Sized {
+pub trait FromLua: Sized {
     /// Performs the conversion.
-    fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> Result<Self>;
+    fn from_lua(value: Value, lua: &Lua) -> Result<Self>;
 
     /// Performs the conversion for an argument (eg. function argument).
     ///
@@ -713,7 +714,7 @@ pub trait FromLua<'lua>: Sized {
     /// `to` is a function name that received the argument.
     #[doc(hidden)]
     #[inline]
-    fn from_lua_arg(arg: Value<'lua>, i: usize, to: Option<&str>, lua: &'lua Lua) -> Result<Self> {
+    fn from_lua_arg(arg: Value, i: usize, to: Option<&str>, lua: &Lua) -> Result<Self> {
         Self::from_lua(arg, lua).map_err(|err| Error::BadArgument {
             to: to.map(|s| s.to_string()),
             pos: i,
@@ -725,8 +726,8 @@ pub trait FromLua<'lua>: Sized {
     /// Performs the conversion for a value in the Lua stack at index `idx`.
     #[doc(hidden)]
     #[inline]
-    unsafe fn from_stack(idx: c_int, lua: &'lua Lua) -> Result<Self> {
-        Self::from_lua(lua.stack_value(idx), lua)
+    unsafe fn from_stack(idx: c_int, lua: &LuaInner) -> Result<Self> {
+        Self::from_lua(lua.stack_value(idx), lua.lua())
     }
 
     /// Same as `from_lua_arg` but for a value in the Lua stack at index `idx`.
@@ -736,7 +737,7 @@ pub trait FromLua<'lua>: Sized {
         idx: c_int,
         i: usize,
         to: Option<&str>,
-        lua: &'lua Lua,
+        lua: &LuaInner,
     ) -> Result<Self> {
         Self::from_stack(idx, lua).map_err(|err| Error::BadArgument {
             to: to.map(|s| s.to_string()),
@@ -749,29 +750,31 @@ pub trait FromLua<'lua>: Sized {
 
 /// Multiple Lua values used for both argument passing and also for multiple return values.
 #[derive(Debug, Clone)]
-pub struct MultiValue<'lua> {
-    deque: VecDeque<Value<'lua>>,
-    lua: Option<&'lua Lua>,
+pub struct MultiValue {
+    deque: VecDeque<Value>,
+    // FIXME
+    // lua: Option<&'static Lua>,
 }
 
-impl Drop for MultiValue<'_> {
+impl Drop for MultiValue {
     fn drop(&mut self) {
-        if let Some(lua) = self.lua {
-            let vec = mem::take(&mut self.deque);
-            lua.push_multivalue_to_pool(vec);
-        }
+        // FIXME
+        // if let Some(lua) = self.lua {
+        //     let vec = mem::take(&mut self.deque);
+        //     lua.push_multivalue_to_pool(vec);
+        // }
     }
 }
 
-impl<'lua> Default for MultiValue<'lua> {
+impl Default for MultiValue {
     #[inline]
-    fn default() -> MultiValue<'lua> {
+    fn default() -> MultiValue {
         MultiValue::new()
     }
 }
 
-impl<'lua> Deref for MultiValue<'lua> {
-    type Target = VecDeque<Value<'lua>>;
+impl Deref for MultiValue {
+    type Target = VecDeque<Value>;
 
     #[inline]
     fn deref(&self) -> &Self::Target {
@@ -779,44 +782,46 @@ impl<'lua> Deref for MultiValue<'lua> {
     }
 }
 
-impl<'lua> DerefMut for MultiValue<'lua> {
+impl DerefMut for MultiValue {
     #[inline]
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.deque
     }
 }
 
-impl<'lua> MultiValue<'lua> {
+impl MultiValue {
     /// Creates an empty `MultiValue` containing no values.
-    pub const fn new() -> MultiValue<'lua> {
+    pub const fn new() -> MultiValue {
         MultiValue {
             deque: VecDeque::new(),
-            lua: None,
+            // lua: None,
         }
     }
 
     /// Similar to `new` but can reuse previously used container with allocated capacity.
     #[inline]
-    pub(crate) fn with_lua_and_capacity(lua: &'lua Lua, capacity: usize) -> MultiValue<'lua> {
-        let deque = lua
-            .pop_multivalue_from_pool()
-            .map(|mut deque| {
-                if capacity > 0 {
-                    deque.reserve(capacity);
-                }
-                deque
-            })
-            .unwrap_or_else(|| VecDeque::with_capacity(capacity));
+    pub(crate) fn with_lua_and_capacity(_lua: &Lua, capacity: usize) -> MultiValue {
+        // FIXME
+        // let deque = lua
+        //     .pop_multivalue_from_pool()
+        //     .map(|mut deque| {
+        //         if capacity > 0 {
+        //             deque.reserve(capacity);
+        //         }
+        //         deque
+        //     })
+        //     .unwrap_or_else(|| VecDeque::with_capacity(capacity));
+        let deque = VecDeque::with_capacity(capacity);
         MultiValue {
             deque,
-            lua: Some(lua),
+            // lua: Some(lua),
         }
     }
 
     #[inline]
     pub(crate) fn extend_from_values(
         &mut self,
-        iter: impl IntoIterator<Item = Result<Value<'lua>>>,
+        iter: impl IntoIterator<Item = Result<Value>>,
     ) -> Result<()> {
         for value in iter {
             self.push_back(value?);
@@ -825,17 +830,20 @@ impl<'lua> MultiValue<'lua> {
     }
 }
 
-impl<'lua> FromIterator<Value<'lua>> for MultiValue<'lua> {
+impl FromIterator<Value> for MultiValue {
     #[inline]
-    fn from_iter<I: IntoIterator<Item = Value<'lua>>>(iter: I) -> Self {
+    fn from_iter<I: IntoIterator<Item = Value>>(iter: I) -> Self {
         let deque = VecDeque::from_iter(iter);
-        MultiValue { deque, lua: None }
+        MultiValue {
+            deque,
+            // lua: None,
+        }
     }
 }
 
-impl<'lua> IntoIterator for MultiValue<'lua> {
-    type Item = Value<'lua>;
-    type IntoIter = vec_deque::IntoIter<Value<'lua>>;
+impl IntoIterator for MultiValue {
+    type Item = Value;
+    type IntoIter = vec_deque::IntoIter<Value>;
 
     #[inline]
     fn into_iter(mut self) -> Self::IntoIter {
@@ -845,9 +853,9 @@ impl<'lua> IntoIterator for MultiValue<'lua> {
     }
 }
 
-impl<'a, 'lua> IntoIterator for &'a MultiValue<'lua> {
-    type Item = &'a Value<'lua>;
-    type IntoIter = vec_deque::Iter<'a, Value<'lua>>;
+impl<'a> IntoIterator for &'a MultiValue {
+    type Item = &'a Value;
+    type IntoIter = vec_deque::Iter<'a, Value>;
 
     #[inline]
     fn into_iter(self) -> Self::IntoIter {
@@ -861,15 +869,15 @@ impl<'a, 'lua> IntoIterator for &'a MultiValue<'lua> {
 /// one. Any type that implements `IntoLua` will automatically implement this trait.
 pub trait IntoLuaMulti: Sized {
     /// Performs the conversion.
-    fn into_lua_multi(self, lua: &Lua) -> Result<MultiValue<'_>>;
+    fn into_lua_multi(self, lua: &Lua) -> Result<MultiValue>;
 
     /// Pushes the values into the Lua stack.
     ///
     /// Returns number of pushed values.
     #[doc(hidden)]
     #[inline]
-    unsafe fn push_into_stack_multi(self, lua: &Lua) -> Result<c_int> {
-        let values = self.into_lua_multi(lua)?;
+    unsafe fn push_into_stack_multi(self, lua: &LuaInner) -> Result<c_int> {
+        let values = self.into_lua_multi(lua.lua())?;
         let len: c_int = values.len().try_into().unwrap();
         unsafe {
             check_stack(lua.state(), len + 1)?;
@@ -885,14 +893,14 @@ pub trait IntoLuaMulti: Sized {
 ///
 /// This is a generalization of `FromLua`, allowing an arbitrary number of Lua values to participate
 /// in the conversion. Any type that implements `FromLua` will automatically implement this trait.
-pub trait FromLuaMulti<'lua>: Sized {
+pub trait FromLuaMulti: Sized {
     /// Performs the conversion.
     ///
     /// In case `values` contains more values than needed to perform the conversion, the excess
     /// values should be ignored. This reflects the semantics of Lua when calling a function or
     /// assigning values. Similarly, if not enough values are given, conversions should assume that
     /// any missing values are nil.
-    fn from_lua_multi(values: MultiValue<'lua>, lua: &'lua Lua) -> Result<Self>;
+    fn from_lua_multi(values: MultiValue, lua: &Lua) -> Result<Self>;
 
     /// Performs the conversion for a list of arguments.
     ///
@@ -900,12 +908,7 @@ pub trait FromLuaMulti<'lua>: Sized {
     /// `to` is a function name that received the arguments.
     #[doc(hidden)]
     #[inline]
-    fn from_lua_args(
-        args: MultiValue<'lua>,
-        i: usize,
-        to: Option<&str>,
-        lua: &'lua Lua,
-    ) -> Result<Self> {
+    fn from_lua_args(args: MultiValue, i: usize, to: Option<&str>, lua: &Lua) -> Result<Self> {
         let _ = (i, to);
         Self::from_lua_multi(args, lua)
     }
@@ -913,8 +916,8 @@ pub trait FromLuaMulti<'lua>: Sized {
     /// Performs the conversion for a number of values in the Lua stack.
     #[doc(hidden)]
     #[inline]
-    unsafe fn from_stack_multi(nvals: c_int, lua: &'lua Lua) -> Result<Self> {
-        let mut values = MultiValue::with_lua_and_capacity(lua, nvals as usize);
+    unsafe fn from_stack_multi(nvals: c_int, lua: &LuaInner) -> Result<Self> {
+        let mut values = MultiValue::with_lua_and_capacity(lua.lua(), nvals as usize);
         for idx in 0..nvals {
             values.push_back(lua.stack_value(-nvals + idx));
         }
@@ -922,7 +925,7 @@ pub trait FromLuaMulti<'lua>: Sized {
             // It's safe to clear the stack as all references moved to ref thread
             ffi::lua_pop(lua.state(), nvals);
         }
-        Self::from_lua_multi(values, lua)
+        Self::from_lua_multi(values, lua.lua())
     }
 
     /// Same as `from_lua_args` but for a number of values in the Lua stack.
@@ -932,7 +935,7 @@ pub trait FromLuaMulti<'lua>: Sized {
         nargs: c_int,
         i: usize,
         to: Option<&str>,
-        lua: &'lua Lua,
+        lua: &LuaInner,
     ) -> Result<Self> {
         let _ = (i, to);
         Self::from_stack_multi(nargs, lua)

@@ -386,7 +386,7 @@ async fn test_async_userdata() -> Result<()> {
     struct MyUserData(u64);
 
     impl UserData for MyUserData {
-        fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
+        fn add_methods<'a, M: UserDataMethods<'a, Self>>(methods: &mut M) {
             methods.add_async_method("get_value", |_, data, ()| async move {
                 sleep_ms(10).await;
                 Ok(data.0)
@@ -488,7 +488,7 @@ async fn test_async_thread_error() -> Result<()> {
     struct MyUserData;
 
     impl UserData for MyUserData {
-        fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
+        fn add_methods<'a, M: UserDataMethods<'a, Self>>(methods: &mut M) {
             methods.add_meta_method("__tostring", |_, _this, ()| Ok("myuserdata error"))
         }
     }
@@ -503,24 +503,6 @@ async fn test_async_thread_error() -> Result<()> {
         matches!(result, Err(Error::RuntimeError(cause)) if cause.contains("myuserdata error")),
         "improper error traceback from dead thread"
     );
-
-    Ok(())
-}
-
-#[cfg(all(feature = "unstable", not(feature = "send")))]
-#[tokio::test]
-async fn test_owned_async_call() -> Result<()> {
-    let lua = Lua::new();
-
-    let hello = lua
-        .create_async_function(|_, name: String| async move {
-            sleep_ms(10).await;
-            Ok(format!("hello, {}!", name))
-        })?
-        .into_owned();
-    drop(lua);
-
-    assert_eq!(hello.call_async::<_, String>("alex").await?, "hello, alex!");
 
     Ok(())
 }
