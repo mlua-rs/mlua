@@ -17,30 +17,9 @@ use crate::types::ValueRef;
 ///
 /// Unlike Rust strings, Lua strings may not be valid UTF-8.
 #[derive(Clone)]
-pub struct String<'lua>(pub(crate) ValueRef<'lua>);
+pub struct String(pub(crate) ValueRef);
 
-/// Owned handle to an internal Lua string.
-///
-/// The owned handle holds a *strong* reference to the current Lua instance.
-/// Be warned, if you place it into a Lua type (eg. [`UserData`] or a Rust callback), it is *very easy*
-/// to accidentally cause reference cycles that would prevent destroying Lua instance.
-///
-/// [`UserData`]: crate::UserData
-#[cfg(feature = "unstable")]
-#[cfg_attr(docsrs, doc(cfg(feature = "unstable")))]
-#[derive(Clone)]
-pub struct OwnedString(pub(crate) crate::types::OwnedValueRef);
-
-#[cfg(feature = "unstable")]
-impl OwnedString {
-    /// Get borrowed handle to the underlying Lua string.
-    #[cfg_attr(feature = "send", allow(unused))]
-    pub const fn to_ref(&self) -> String {
-        String(self.0.to_ref())
-    }
-}
-
-impl<'lua> String<'lua> {
+impl String {
     /// Get a `&str` slice if the Lua string is valid UTF-8.
     ///
     /// # Examples
@@ -116,7 +95,8 @@ impl<'lua> String<'lua> {
 
     /// Get the bytes that make up this string, including the trailing nul byte.
     pub fn as_bytes_with_nul(&self) -> &[u8] {
-        let ref_thread = self.0.lua.ref_thread();
+        let lua = self.0.lua.lock();
+        let ref_thread = lua.ref_thread();
         unsafe {
             mlua_debug_assert!(
                 ffi::lua_type(ref_thread, self.0.index) == ffi::LUA_TSTRING,
@@ -141,17 +121,9 @@ impl<'lua> String<'lua> {
     pub fn to_pointer(&self) -> *const c_void {
         self.0.to_pointer()
     }
-
-    /// Convert this handle to owned version.
-    #[cfg(all(feature = "unstable", any(not(feature = "send"), doc)))]
-    #[cfg_attr(docsrs, doc(cfg(all(feature = "unstable", not(feature = "send")))))]
-    #[inline]
-    pub fn into_owned(self) -> OwnedString {
-        OwnedString(self.0.into_owned())
-    }
 }
 
-impl<'lua> fmt::Debug for String<'lua> {
+impl fmt::Debug for String {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let bytes = self.as_bytes();
         // Check if the string is valid utf8
@@ -180,13 +152,13 @@ impl<'lua> fmt::Debug for String<'lua> {
     }
 }
 
-impl<'lua> AsRef<[u8]> for String<'lua> {
+impl AsRef<[u8]> for String {
     fn as_ref(&self) -> &[u8] {
         self.as_bytes()
     }
 }
 
-impl<'lua> Borrow<[u8]> for String<'lua> {
+impl Borrow<[u8]> for String {
     fn borrow(&self) -> &[u8] {
         self.as_bytes()
     }
@@ -200,7 +172,7 @@ impl<'lua> Borrow<[u8]> for String<'lua> {
 // The only downside is that this disallows a comparison with `Cow<str>`, as that only implements
 // `AsRef<str>`, which collides with this impl. Requiring `AsRef<str>` would fix that, but limit us
 // in other ways.
-impl<'lua, T> PartialEq<T> for String<'lua>
+impl<T> PartialEq<T> for String
 where
     T: AsRef<[u8]> + ?Sized,
 {
@@ -209,16 +181,16 @@ where
     }
 }
 
-impl<'lua> Eq for String<'lua> {}
+impl Eq for String {}
 
-impl<'lua> Hash for String<'lua> {
+impl Hash for String {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.as_bytes().hash(state);
     }
 }
 
 #[cfg(feature = "serialize")]
-impl<'lua> Serialize for String<'lua> {
+impl Serialize for String {
     fn serialize<S>(&self, serializer: S) -> StdResult<S::Ok, S::Error>
     where
         S: Serializer,
@@ -230,40 +202,9 @@ impl<'lua> Serialize for String<'lua> {
     }
 }
 
-// Additional shortcuts
-#[cfg(feature = "unstable")]
-impl OwnedString {
-    /// Get a `&str` slice if the Lua string is valid UTF-8.
-    ///
-    /// This is a shortcut for [`String::to_str()`].
-    #[inline]
-    pub fn to_str(&self) -> Result<&str> {
-        let s = self.to_ref();
-        // Reattach lifetime to &self
-        unsafe { std::mem::transmute(s.to_str()) }
-    }
+// #[cfg(test)]
+// mod assertions {
+//     use super::*;
 
-    /// Get the bytes that make up this string.
-    ///
-    /// This is a shortcut for [`String::as_bytes()`].
-    #[inline]
-    pub fn as_bytes(&self) -> &[u8] {
-        let s = self.to_ref();
-        // Reattach lifetime to &self
-        unsafe { std::mem::transmute(s.as_bytes()) }
-    }
-}
-
-#[cfg(feature = "unstable")]
-impl fmt::Debug for OwnedString {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        self.to_ref().fmt(f)
-    }
-}
-
-#[cfg(test)]
-mod assertions {
-    use super::*;
-
-    static_assertions::assert_not_impl_any!(String: Send);
-}
+//     static_assertions::assert_not_impl_any!(String: Send);
+// }

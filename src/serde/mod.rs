@@ -99,7 +99,7 @@ pub trait LuaSerdeExt: Sealed {
     ///     "#).exec()
     /// }
     /// ```
-    fn to_value<'lua, T: Serialize + ?Sized>(&'lua self, t: &T) -> Result<Value<'lua>>;
+    fn to_value<T: Serialize + ?Sized>(&self, t: &T) -> Result<Value>;
 
     /// Converts `T` into a [`Value`] instance with options.
     ///
@@ -124,7 +124,7 @@ pub trait LuaSerdeExt: Sealed {
     ///     "#).exec()
     /// }
     /// ```
-    fn to_value_with<'lua, T>(&'lua self, t: &T, options: ser::Options) -> Result<Value<'lua>>
+    fn to_value_with<T>(&self, t: &T, options: ser::Options) -> Result<Value>
     where
         T: Serialize + ?Sized;
 
@@ -199,20 +199,21 @@ impl LuaSerdeExt for Lua {
     }
 
     fn array_metatable(&self) -> Table {
+        let lua = self.lock();
         unsafe {
-            push_array_metatable(self.ref_thread());
-            Table(self.pop_ref_thread())
+            push_array_metatable(lua.ref_thread());
+            Table(lua.pop_ref_thread())
         }
     }
 
-    fn to_value<'lua, T>(&'lua self, t: &T) -> Result<Value<'lua>>
+    fn to_value<T>(&self, t: &T) -> Result<Value>
     where
         T: Serialize + ?Sized,
     {
         t.serialize(ser::Serializer::new(self))
     }
 
-    fn to_value_with<'lua, T>(&'lua self, t: &T, options: ser::Options) -> Result<Value<'lua>>
+    fn to_value_with<T>(&self, t: &T, options: ser::Options) -> Result<Value>
     where
         T: Serialize + ?Sized,
     {

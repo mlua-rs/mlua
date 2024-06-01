@@ -154,8 +154,8 @@ fn main() -> Result<()> {
     struct Vec2(f32, f32);
 
     // We can implement `FromLua` trait for our `Vec2` to return a copy
-    impl<'lua> FromLua<'lua> for Vec2 {
-        fn from_lua(value: Value<'lua>, _: &'lua Lua) -> Result<Self> {
+    impl FromLua for Vec2 {
+        fn from_lua(value: Value, _: &Lua) -> Result<Self> {
             match value {
                 Value::UserData(ud) => Ok(*ud.borrow::<Self>()?),
                 _ => unreachable!(),
@@ -192,6 +192,8 @@ fn main() -> Result<()> {
     // requirement. You can call `Lua::scope` to create userdata and callbacks types that only live
     // for as long as the call to scope, but do not have to be `'static` (and `Send`).
 
+    // TODO: Re-enable this
+    /*
     {
         let mut rust_val = 0;
 
@@ -213,6 +215,7 @@ fn main() -> Result<()> {
 
         assert_eq!(rust_val, 42);
     }
+    */
 
     // We were able to run our 'sketchy' function inside the scope just fine. However, if we
     // try to run our 'sketchy' function outside of the scope, the function we created will have

@@ -35,10 +35,3 @@ pub use crate::{
     DeserializeOptions as LuaDeserializeOptions, LuaSerdeExt,
     SerializeOptions as LuaSerializeOptions,
 };
-
-#[cfg(feature = "unstable")]
-#[doc(no_inline)]
-pub use crate::{
-    OwnedAnyUserData as LuaOwnedAnyUserData, OwnedFunction as LuaOwnedFunction,
-    OwnedString as LuaOwnedString, OwnedTable as LuaOwnedTable, OwnedThread as LuaOwnedThread,
-};

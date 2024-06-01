@@ -5,7 +5,7 @@ use std::os::raw::c_int;
 use std::result::Result as StdResult;
 
 use crate::error::Result;
-use crate::lua::Lua;
+use crate::lua::{Lua, LuaInner};
 use crate::util::check_stack;
 use crate::value::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, MultiValue, Nil};
 
@@ -13,7 +13,7 @@ use crate::value::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, MultiValue, Nil
 /// on success, or in the case of an error, returning `nil` and an error message.
 impl<T: IntoLua, E: IntoLua> IntoLuaMulti for StdResult<T, E> {
     #[inline]
-    fn into_lua_multi(self, lua: &Lua) -> Result<MultiValue<'_>> {
+    fn into_lua_multi(self, lua: &Lua) -> Result<MultiValue> {
         match self {
             Ok(val) => (val,).into_lua_multi(lua),
             Err(err) => (Nil, err).into_lua_multi(lua),
@@ -21,7 +21,7 @@ impl<T: IntoLua, E: IntoLua> IntoLuaMulti for StdResult<T, E> {
     }
 
     #[inline]
-    unsafe fn push_into_stack_multi(self, lua: &Lua) -> Result<c_int> {
+    unsafe fn push_into_stack_multi(self, lua: &LuaInner) -> Result<c_int> {
         match self {
             Ok(val) => (val,).push_into_stack_multi(lua),
             Err(err) => (Nil, err).push_into_stack_multi(lua),
@@ -31,7 +31,7 @@ impl<T: IntoLua, E: IntoLua> IntoLuaMulti for StdResult<T, E> {
 
 impl<E: IntoLua> IntoLuaMulti for StdResult<(), E> {
     #[inline]
-    fn into_lua_multi(self, lua: &Lua) -> Result<MultiValue<'_>> {
+    fn into_lua_multi(self, lua: &Lua) -> Result<MultiValue> {
         match self {
             Ok(_) => Ok(MultiValue::new()),
             Err(err) => (Nil, err).into_lua_multi(lua),
@@ -39,7 +39,7 @@ impl<E: IntoLua> IntoLuaMulti for StdResult<(), E> {
     }
 
     #[inline]
-    unsafe fn push_into_stack_multi(self, lua: &Lua) -> Result<c_int> {
+    unsafe fn push_into_stack_multi(self, lua: &LuaInner) -> Result<c_int> {
         match self {
             Ok(_) => Ok(0),
             Err(err) => (Nil, err).push_into_stack_multi(lua),
@@ -49,39 +49,34 @@ impl<E: IntoLua> IntoLuaMulti for StdResult<(), E> {
 
 impl<T: IntoLua> IntoLuaMulti for T {
     #[inline]
-    fn into_lua_multi(self, lua: &Lua) -> Result<MultiValue<'_>> {
+    fn into_lua_multi(self, lua: &Lua) -> Result<MultiValue> {
         let mut v = MultiValue::with_lua_and_capacity(lua, 1);
         v.push_back(self.into_lua(lua)?);
         Ok(v)
     }
 
     #[inline]
-    unsafe fn push_into_stack_multi(self, lua: &Lua) -> Result<c_int> {
+    unsafe fn push_into_stack_multi(self, lua: &LuaInner) -> Result<c_int> {
         self.push_into_stack(lua)?;
         Ok(1)
     }
 }
 
-impl<'lua, T: FromLua<'lua>> FromLuaMulti<'lua> for T {
+impl<T: FromLua> FromLuaMulti for T {
     #[inline]
-    fn from_lua_multi(mut values: MultiValue<'lua>, lua: &'lua Lua) -> Result<Self> {
+    fn from_lua_multi(mut values: MultiValue, lua: &Lua) -> Result<Self> {
         T::from_lua(values.pop_front().unwrap_or(Nil), lua)
     }
 
     #[inline]
-    fn from_lua_args(
-        mut args: MultiValue<'lua>,
-        i: usize,
-        to: Option<&str>,
-        lua: &'lua Lua,
-    ) -> Result<Self> {
+    fn from_lua_args(mut args: MultiValue, i: usize, to: Option<&str>, lua: &Lua) -> Result<Self> {
         T::from_lua_arg(args.pop_front().unwrap_or(Nil), i, to, lua)
     }
 
     #[inline]
-    unsafe fn from_stack_multi(nvals: c_int, lua: &'lua Lua) -> Result<Self> {
+    unsafe fn from_stack_multi(nvals: c_int, lua: &LuaInner) -> Result<Self> {
         if nvals == 0 {
-            return T::from_lua(Nil, lua);
+            return T::from_lua(Nil, lua.lua());
         }
         T::from_stack(-nvals, lua)
     }
@@ -91,25 +86,25 @@ impl<'lua, T: FromLua<'lua>> FromLuaMulti<'lua> for T {
         nargs: c_int,
         i: usize,
         to: Option<&str>,
-        lua: &'lua Lua,
+        lua: &LuaInner,
     ) -> Result<Self> {
         if nargs == 0 {
-            return T::from_lua_arg(Nil, i, to, lua);
+            return T::from_lua_arg(Nil, i, to, lua.lua());
         }
         T::from_stack_arg(-nargs, i, to, lua)
     }
 }
 
-impl IntoLuaMulti for MultiValue<'_> {
+impl IntoLuaMulti for MultiValue {
     #[inline]
-    fn into_lua_multi(self, _: &Lua) -> Result<MultiValue<'_>> {
+    fn into_lua_multi(self, _: &Lua) -> Result<MultiValue> {
         unsafe { Ok(transmute(self)) }
     }
 }
 
-impl<'lua> FromLuaMulti<'lua> for MultiValue<'lua> {
+impl FromLuaMulti for MultiValue {
     #[inline]
-    fn from_lua_multi(values: MultiValue<'lua>, _: &'lua Lua) -> Result<Self> {
+    fn from_lua_multi(values: MultiValue, _: &Lua) -> Result<Self> {
         Ok(values)
     }
 }
@@ -187,16 +182,16 @@ impl<T> DerefMut for Variadic<T> {
 
 impl<T: IntoLua> IntoLuaMulti for Variadic<T> {
     #[inline]
-    fn into_lua_multi(self, lua: &Lua) -> Result<MultiValue<'_>> {
+    fn into_lua_multi(self, lua: &Lua) -> Result<MultiValue> {
         let mut values = MultiValue::with_lua_and_capacity(lua, self.0.len());
         values.extend_from_values(self.0.into_iter().map(|val| val.into_lua(lua)))?;
         Ok(values)
     }
 }
 
-impl<'lua, T: FromLua<'lua>> FromLuaMulti<'lua> for Variadic<T> {
+impl<T: FromLua> FromLuaMulti for Variadic<T> {
     #[inline]
-    fn from_lua_multi(mut values: MultiValue<'lua>, lua: &'lua Lua) -> Result<Self> {
+    fn from_lua_multi(mut values: MultiValue, lua: &Lua) -> Result<Self> {
         values
             .drain(..)
             .map(|val| T::from_lua(val, lua))
@@ -209,24 +204,24 @@ macro_rules! impl_tuple {
     () => (
         impl IntoLuaMulti for () {
             #[inline]
-            fn into_lua_multi(self, lua: &Lua) -> Result<MultiValue<'_>> {
+            fn into_lua_multi(self, lua: &Lua) -> Result<MultiValue> {
                 Ok(MultiValue::with_lua_and_capacity(lua, 0))
             }
 
             #[inline]
-            unsafe fn push_into_stack_multi(self, _lua: &Lua) -> Result<c_int> {
+            unsafe fn push_into_stack_multi(self, _lua: &LuaInner) -> Result<c_int> {
                 Ok(0)
             }
         }
 
-        impl<'lua> FromLuaMulti<'lua> for () {
+        impl FromLuaMulti for () {
             #[inline]
-            fn from_lua_multi(_values: MultiValue<'lua>, _lua: &'lua Lua) -> Result<Self> {
+            fn from_lua_multi(_values: MultiValue, _lua: &Lua) -> Result<Self> {
                 Ok(())
             }
 
             #[inline]
-            unsafe fn from_stack_multi(nvals: c_int, lua: &'lua Lua) -> Result<Self> {
+            unsafe fn from_stack_multi(nvals: c_int, lua: &LuaInner) -> Result<Self> {
                 if nvals > 0 {
                     ffi::lua_pop(lua.state(), nvals);
                 }
@@ -242,7 +237,7 @@ macro_rules! impl_tuple {
         {
             #[allow(unused_mut, non_snake_case)]
             #[inline]
-            fn into_lua_multi(self, lua: &Lua) -> Result<MultiValue<'_>> {
+            fn into_lua_multi(self, lua: &Lua) -> Result<MultiValue> {
                 let ($($name,)* $last,) = self;
 
                 let mut results = $last.into_lua_multi(lua)?;
@@ -252,7 +247,7 @@ macro_rules! impl_tuple {
 
             #[allow(non_snake_case)]
             #[inline]
-            unsafe fn push_into_stack_multi(self, lua: &Lua) -> Result<c_int> {
+            unsafe fn push_into_stack_multi(self, lua: &LuaInner) -> Result<c_int> {
                 let ($($name,)* $last,) = self;
                 let mut nresults = 0;
                 $(
@@ -268,13 +263,13 @@ macro_rules! impl_tuple {
             }
         }
 
-        impl<'lua, $($name,)* $last> FromLuaMulti<'lua> for ($($name,)* $last,)
-            where $($name: FromLua<'lua>,)*
-                  $last: FromLuaMulti<'lua>
+        impl<$($name,)* $last> FromLuaMulti for ($($name,)* $last,)
+            where $($name: FromLua,)*
+                  $last: FromLuaMulti
         {
             #[allow(unused_mut, non_snake_case)]
             #[inline]
-            fn from_lua_multi(mut values: MultiValue<'lua>, lua: &'lua Lua) -> Result<Self> {
+            fn from_lua_multi(mut values: MultiValue, lua: &Lua) -> Result<Self> {
                 $(let $name = FromLua::from_lua(values.pop_front().unwrap_or(Nil), lua)?;)*
                 let $last = FromLuaMulti::from_lua_multi(values, lua)?;
                 Ok(($($name,)* $last,))
@@ -282,7 +277,7 @@ macro_rules! impl_tuple {
 
             #[allow(unused_mut, non_snake_case)]
             #[inline]
-            fn from_lua_args(mut args: MultiValue<'lua>, mut i: usize, to: Option<&str>, lua: &'lua Lua) -> Result<Self> {
+            fn from_lua_args(mut args: MultiValue, mut i: usize, to: Option<&str>, lua: &Lua) -> Result<Self> {
                 $(
                     let $name = FromLua::from_lua_arg(args.pop_front().unwrap_or(Nil), i, to, lua)?;
                     i += 1;
@@ -293,13 +288,13 @@ macro_rules! impl_tuple {
 
             #[allow(unused_mut, non_snake_case)]
             #[inline]
-            unsafe fn from_stack_multi(mut nvals: c_int, lua: &'lua Lua) -> Result<Self> {
+            unsafe fn from_stack_multi(mut nvals: c_int, lua: &LuaInner) -> Result<Self> {
                 $(
                     let $name = if nvals > 0 {
                         nvals -= 1;
                         FromLua::from_stack(-(nvals + 1), lua)
                     } else {
-                        FromLua::from_lua(Nil, lua)
+                        FromLua::from_lua(Nil, lua.lua())
                     }?;
                 )*
                 let $last = FromLuaMulti::from_stack_multi(nvals, lua)?;
@@ -308,13 +303,13 @@ macro_rules! impl_tuple {
 
             #[allow(unused_mut, non_snake_case)]
             #[inline]
-            unsafe fn from_stack_args(mut nargs: c_int, mut i: usize, to: Option<&str>, lua: &'lua Lua) -> Result<Self> {
+            unsafe fn from_stack_args(mut nargs: c_int, mut i: usize, to: Option<&str>, lua: &LuaInner) -> Result<Self> {
                 $(
                     let $name = if nargs > 0 {
                         nargs -= 1;
                         FromLua::from_stack_arg(-(nargs + 1), i, to, lua)
                     } else {
-                        FromLua::from_lua_arg(Nil, i, to, lua)
+                        FromLua::from_lua_arg(Nil, i, to, lua.lua())
                     }?;
                     i += 1;
                 )*

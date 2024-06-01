@@ -89,13 +89,14 @@ mod lua;
 mod luau;
 mod memory;
 mod multi;
-mod scope;
+// mod scope;
 mod stdlib;
 mod string;
 mod table;
 mod thread;
 mod types;
 mod userdata;
+mod userdata_cell;
 mod userdata_ext;
 mod userdata_impl;
 mod util;
@@ -111,7 +112,7 @@ pub use crate::function::{Function, FunctionInfo};
 pub use crate::hook::{Debug, DebugEvent, DebugNames, DebugSource, DebugStack};
 pub use crate::lua::{GCMode, Lua, LuaOptions};
 pub use crate::multi::Variadic;
-pub use crate::scope::Scope;
+// pub use crate::scope::Scope;
 pub use crate::stdlib::StdLib;
 pub use crate::string::String;
 pub use crate::table::{Table, TableExt, TablePairs, TableSequence};
@@ -119,8 +120,8 @@ pub use crate::thread::{Thread, ThreadStatus};
 pub use crate::types::{AppDataRef, AppDataRefMut, Integer, LightUserData, Number, RegistryKey};
 pub use crate::userdata::{
     AnyUserData, MetaMethod, UserData, UserDataFields, UserDataMetatable, UserDataMethods,
-    UserDataRef, UserDataRefMut,
 };
+pub use crate::userdata_cell::{UserDataRef, UserDataRefMut};
 pub use crate::userdata_ext::AnyUserDataExt;
 pub use crate::userdata_impl::UserDataRegistry;
 pub use crate::value::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, MultiValue, Nil, Value};
@@ -153,13 +154,6 @@ pub mod serde;
 #[allow(unused_imports)]
 #[macro_use]
 extern crate mlua_derive;
-
-// Unstable features
-#[cfg(feature = "unstable")]
-pub use crate::{
-    function::OwnedFunction, string::OwnedString, table::OwnedTable, thread::OwnedThread,
-    userdata::OwnedAnyUserData,
-};
 
 /// Create a type that implements [`AsChunk`] and can capture Rust variables.
 ///
@@ -279,6 +273,6 @@ pub(crate) mod private {
     impl Sealed for Error {}
     impl<T> Sealed for std::result::Result<T, Error> {}
     impl Sealed for Lua {}
-    impl Sealed for Table<'_> {}
-    impl Sealed for AnyUserData<'_> {}
+    impl Sealed for Table {}
+    impl Sealed for AnyUserData {}
 }

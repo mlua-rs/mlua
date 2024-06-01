@@ -1,12 +1,14 @@
 use std::borrow::Cow;
 use std::cell::UnsafeCell;
+use std::mem::ManuallyDrop;
 #[cfg(not(feature = "luau"))]
 use std::ops::{BitOr, BitOrAssign};
 use std::os::raw::c_int;
 
 use ffi::lua_Debug;
+use parking_lot::ReentrantMutexGuard;
 
-use crate::lua::Lua;
+use crate::lua::{Lua, LuaInner};
 use crate::util::{linenumber_to_usize, ptr_to_lossy_str, ptr_to_str};
 
 /// Contains information about currently executing Lua code.
@@ -19,24 +21,37 @@ use crate::util::{linenumber_to_usize, ptr_to_lossy_str, ptr_to_str};
 /// [lua_doc]: https://www.lua.org/manual/5.4/manual.html#lua_Debug
 /// [`Lua::set_hook`]: crate::Lua::set_hook
 pub struct Debug<'lua> {
-    lua: &'lua Lua,
+    lua: ManuallyDrop<ReentrantMutexGuard<'lua, LuaInner>>,
     ar: ActivationRecord,
     #[cfg(feature = "luau")]
     level: c_int,
 }
 
+impl<'lua> Drop for Debug<'lua> {
+    fn drop(&mut self) {
+        if let ActivationRecord::Owned(_) = self.ar {
+            unsafe { ManuallyDrop::drop(&mut self.lua) }
+        }
+    }
+}
+
 impl<'lua> Debug<'lua> {
+    // We assume the lock is held when this function is called.
     #[cfg(not(feature = "luau"))]
     pub(crate) fn new(lua: &'lua Lua, ar: *mut lua_Debug) -> Self {
         Debug {
-            lua,
+            lua: unsafe { lua.guard_unchecked() },
             ar: ActivationRecord::Borrowed(ar),
         }
     }
 
-    pub(crate) fn new_owned(lua: &'lua Lua, _level: c_int, ar: lua_Debug) -> Self {
+    pub(crate) fn new_owned(
+        guard: ReentrantMutexGuard<'lua, LuaInner>,
+        _level: c_int,
+        ar: lua_Debug,
+    ) -> Self {
         Debug {
-            lua,
+            lua: ManuallyDrop::new(guard),
             ar: ActivationRecord::Owned(UnsafeCell::new(ar)),
             #[cfg(feature = "luau")]
             level: _level,
