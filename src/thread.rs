@@ -1,4 +1,6 @@
 use std::os::raw::{c_int, c_void};
+use std::sync::atomic::{AtomicPtr, Ordering};
+use std::sync::Arc;
 
 use crate::error::{Error, Result};
 #[allow(unused)]
@@ -43,7 +45,10 @@ pub enum ThreadStatus {
 
 /// Handle to an internal Lua thread (coroutine).
 #[derive(Clone, Debug)]
-pub struct Thread<'lua>(pub(crate) LuaRef<'lua>, pub(crate) *mut ffi::lua_State);
+pub struct Thread<'lua>(
+    pub(crate) LuaRef<'lua>,
+    pub(crate) Arc<AtomicPtr<ffi::lua_State>>,
+);
 
 /// Owned handle to an internal Lua thread (coroutine).
 ///
@@ -89,11 +94,12 @@ impl<'lua> Thread<'lua> {
     #[inline(always)]
     pub(crate) fn new(r#ref: LuaRef<'lua>) -> Self {
         let state = unsafe { ffi::lua_tothread(r#ref.lua.ref_thread(), r#ref.index) };
-        Thread(r#ref, state)
+        Thread(r#ref, Arc::new(AtomicPtr::new(state)))
     }
 
-    const fn state(&self) -> *mut ffi::lua_State {
-        self.1
+    #[inline(always)]
+    fn state(&self) -> *mut ffi::lua_State {
+        self.1.load(Ordering::Relaxed)
     }
 
     /// Resumes execution of this thread.
