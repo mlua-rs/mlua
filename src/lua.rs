@@ -232,6 +232,9 @@ const REF_STACK_RESERVE: c_int = 1;
 #[cfg(feature = "send")]
 #[cfg_attr(docsrs, doc(cfg(feature = "send")))]
 unsafe impl Send for Lua {}
+#[cfg(feature = "send")]
+#[cfg_attr(docsrs, doc(cfg(feature = "send")))]
+unsafe impl Sync for Lua {}
 
 #[cfg(not(feature = "module"))]
 impl Drop for Lua {
