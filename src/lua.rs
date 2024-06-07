@@ -3013,7 +3013,7 @@ impl Lua {
                 match fut.as_mut().poll(&mut ctx) {
                     Poll::Pending => {
                         ffi::lua_pushnil(state);
-                        ffi::lua_pushlightuserdata(state, Lua::poll_pending().0);
+                        ffi::lua_pushlightuserdata(state, Lua::poll_pending().as_ptr());
                         Ok(2)
                     }
                     Poll::Ready(nresults) => {
@@ -3121,7 +3121,7 @@ impl Lua {
     #[doc(hidden)]
     #[inline]
     pub fn poll_pending() -> LightUserData {
-        LightUserData(&ASYNC_POLL_PENDING as *const u8 as *mut c_void)
+        LightUserData::new(&ASYNC_POLL_PENDING as *const u8 as *mut c_void)
     }
 
     pub(crate) unsafe fn make_userdata<T>(&self, data: UserDataCell<T>) -> Result<AnyUserData>

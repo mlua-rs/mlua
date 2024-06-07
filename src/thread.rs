@@ -540,7 +540,7 @@ where
 #[cfg(feature = "async")]
 #[inline(always)]
 unsafe fn is_poll_pending(state: *mut ffi::lua_State) -> bool {
-    ffi::lua_tolightuserdata(state, -1) == Lua::poll_pending().0
+    ffi::lua_tolightuserdata(state, -1) == Lua::poll_pending().as_ptr()
 }
 
 #[cfg(feature = "async")]
