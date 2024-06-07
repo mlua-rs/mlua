@@ -41,7 +41,25 @@ pub(crate) enum SubtypeId {
 
 /// A "light" userdata value. Equivalent to an unmanaged raw pointer.
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
-pub struct LightUserData(pub *mut c_void);
+pub struct LightUserData(usize);
+
+impl LightUserData {
+    pub fn new(ptr: *mut c_void) -> Self {
+        LightUserData(ptr as usize)
+    }
+
+    pub const fn null_ptr() -> Self {
+        LightUserData(0)
+    }
+
+    pub fn as_ptr(&self) -> *mut c_void {
+        self.0 as *mut c_void
+    }
+
+    pub fn is_null(&self) -> bool {
+        self.as_ptr().is_null()
+    }
+}
 
 pub(crate) type Callback<'lua, 'a> = Box<dyn Fn(&'lua Lua, c_int) -> Result<c_int> + 'a>;
 

@@ -72,7 +72,7 @@ impl<'lua> Value<'lua> {
     /// A special value (lightuserdata) to represent null value.
     ///
     /// It can be used in Lua tables without downsides of `nil`.
-    pub const NULL: Value<'static> = Value::LightUserData(LightUserData(ptr::null_mut()));
+    pub const NULL: Value<'static> = Value::LightUserData(LightUserData::null_ptr());
 
     /// Returns type name of this value.
     pub const fn type_name(&self) -> &'static str {
@@ -125,7 +125,7 @@ impl<'lua> Value<'lua> {
     #[inline]
     pub fn to_pointer(&self) -> *const c_void {
         match self {
-            Value::LightUserData(ud) => ud.0,
+            Value::LightUserData(ud) => ud.as_ptr(),
             Value::String(String(r))
             | Value::Table(Table(r))
             | Value::Function(Function(r))
@@ -142,8 +142,8 @@ impl<'lua> Value<'lua> {
         match self {
             Value::Nil => Ok("nil".to_string()),
             Value::Boolean(b) => Ok(b.to_string()),
-            Value::LightUserData(ud) if ud.0.is_null() => Ok("null".to_string()),
-            Value::LightUserData(ud) => Ok(format!("lightuserdata: {:p}", ud.0)),
+            Value::LightUserData(ud) if ud.is_null() => Ok("null".to_string()),
+            Value::LightUserData(ud) => Ok(format!("lightuserdata: {:p}", ud.as_ptr())),
             Value::Integer(i) => Ok(i.to_string()),
             Value::Number(n) => Ok(n.to_string()),
             #[cfg(feature = "luau")]
@@ -463,8 +463,8 @@ impl<'lua> Value<'lua> {
             (_, Value::Nil) => Ordering::Greater,
             // Null (a special case)
             (Value::LightUserData(ud1), Value::LightUserData(ud2)) if ud1 == ud2 => Ordering::Equal,
-            (Value::LightUserData(ud1), _) if ud1.0.is_null() => Ordering::Less,
-            (_, Value::LightUserData(ud2)) if ud2.0.is_null() => Ordering::Greater,
+            (Value::LightUserData(ud1), _) if ud1.is_null() => Ordering::Less,
+            (_, Value::LightUserData(ud2)) if ud2.is_null() => Ordering::Greater,
             // Boolean
             (Value::Boolean(a), Value::Boolean(b)) => a.cmp(b),
             (Value::Boolean(_), _) => Ordering::Less,
@@ -495,8 +495,8 @@ impl<'lua> Value<'lua> {
         match self {
             Value::Nil => write!(fmt, "nil"),
             Value::Boolean(b) => write!(fmt, "{b}"),
-            Value::LightUserData(ud) if ud.0.is_null() => write!(fmt, "null"),
-            Value::LightUserData(ud) => write!(fmt, "lightuserdata: {:?}", ud.0),
+            Value::LightUserData(ud) if ud.is_null() => write!(fmt, "null"),
+            Value::LightUserData(ud) => write!(fmt, "lightuserdata: {:?}", ud.as_ptr()),
             Value::Integer(i) => write!(fmt, "{i}"),
             Value::Number(n) => write!(fmt, "{n}"),
             #[cfg(feature = "luau")]

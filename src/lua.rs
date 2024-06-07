@@ -2349,7 +2349,7 @@ impl Lua {
         match value {
             Value::Nil => ffi::lua_pushnil(state),
             Value::Boolean(b) => ffi::lua_pushboolean(state, *b as c_int),
-            Value::LightUserData(ud) => ffi::lua_pushlightuserdata(state, ud.0),
+            Value::LightUserData(ud) => ffi::lua_pushlightuserdata(state, ud.as_ptr()),
             Value::Integer(i) => ffi::lua_pushinteger(state, *i),
             Value::Number(n) => ffi::lua_pushnumber(state, *n),
             #[cfg(feature = "luau")]
@@ -2391,7 +2391,7 @@ impl Lua {
             }
 
             ffi::LUA_TLIGHTUSERDATA => {
-                let ud = Value::LightUserData(LightUserData(ffi::lua_touserdata(state, -1)));
+                let ud = Value::LightUserData(LightUserData::new(ffi::lua_touserdata(state, -1)));
                 ffi::lua_pop(state, 1);
                 ud
             }
@@ -2493,7 +2493,7 @@ impl Lua {
             ffi::LUA_TBOOLEAN => Value::Boolean(ffi::lua_toboolean(state, idx) != 0),
 
             ffi::LUA_TLIGHTUSERDATA => {
-                Value::LightUserData(LightUserData(ffi::lua_touserdata(state, idx)))
+                Value::LightUserData(LightUserData::new(ffi::lua_touserdata(state, idx)))
             }
 
             #[cfg(any(feature = "lua54", feature = "lua53"))]
