@@ -73,7 +73,7 @@ pub struct Lua(Arc<LuaInner>);
 pub struct LuaInner {
     // The state is dynamic and depends on context
     state: AtomicPtr<ffi::lua_State>,
-    main_state: *mut ffi::lua_State,
+    main_state: AtomicPtr<ffi::lua_State>,
     extra: Arc<UnsafeCell<ExtraData>>,
 }
 
@@ -244,9 +244,9 @@ impl Drop for Lua {
 impl Drop for LuaInner {
     fn drop(&mut self) {
         unsafe {
-            let mem_state = MemoryState::get(self.main_state);
+            let mem_state = MemoryState::get(self.main_state());
 
-            ffi::lua_close(self.main_state);
+            ffi::lua_close(self.main_state());
 
             // Deallocate MemoryState
             if !mem_state.is_null() {
@@ -570,7 +570,7 @@ impl Lua {
 
         let inner = Arc::new(LuaInner {
             state: AtomicPtr::new(state),
-            main_state,
+            main_state: AtomicPtr::new(main_state),
             extra: Arc::clone(&extra),
         });
 
@@ -602,7 +602,7 @@ impl Lua {
             ));
         }
 
-        let res = unsafe { load_from_std_lib(self.main_state, libs) };
+        let res = unsafe { load_from_std_lib(self.main_state(), libs) };
 
         // If `package` library loaded into a safe lua state then disable C modules
         let curr_libs = unsafe { (*self.extra.get()).libs };
@@ -890,7 +890,7 @@ impl Lua {
         unsafe {
             let state = self.state();
             ffi::lua_sethook(state, None, 0, 0);
-            match get_main_state(self.main_state) {
+            match get_main_state(self.main_state()) {
                 Some(main_state) if !ptr::eq(state, main_state) => {
                     // If main_state is different from state, remove hook from it too
                     ffi::lua_sethook(main_state, None, 0, 0);
@@ -977,7 +977,7 @@ impl Lua {
 
         unsafe {
             (*self.extra.get()).interrupt_callback = Some(Arc::new(callback));
-            (*ffi::lua_callbacks(self.main_state)).interrupt = Some(interrupt_proc);
+            (*ffi::lua_callbacks(self.main_state())).interrupt = Some(interrupt_proc);
         }
     }
 
@@ -989,7 +989,7 @@ impl Lua {
     pub fn remove_interrupt(&self) {
         unsafe {
             (*self.extra.get()).interrupt_callback = None;
-            (*ffi::lua_callbacks(self.main_state)).interrupt = None;
+            (*ffi::lua_callbacks(self.main_state())).interrupt = None;
         }
     }
 
@@ -1015,7 +1015,7 @@ impl Lua {
             });
         }
 
-        let state = self.main_state;
+        let state = self.main_state();
         unsafe {
             (*self.extra.get()).warn_callback = Some(Box::new(callback));
             ffi::lua_setwarnf(state, Some(warn_proc), self.extra.get() as *mut c_void);
@@ -1032,7 +1032,7 @@ impl Lua {
     pub fn remove_warning_function(&self) {
         unsafe {
             (*self.extra.get()).warn_callback = None;
-            ffi::lua_setwarnf(self.main_state, None, ptr::null_mut());
+            ffi::lua_setwarnf(self.main_state(), None, ptr::null_mut());
         }
     }
 
@@ -1085,12 +1085,12 @@ impl Lua {
     /// Returns the amount of memory (in bytes) currently used inside this Lua state.
     pub fn used_memory(&self) -> usize {
         unsafe {
-            match MemoryState::get(self.main_state) {
+            match MemoryState::get(self.main_state()) {
                 mem_state if !mem_state.is_null() => (*mem_state).used_memory(),
                 _ => {
                     // Get data from the Lua GC
-                    let used_kbytes = ffi::lua_gc(self.main_state, ffi::LUA_GCCOUNT, 0);
-                    let used_kbytes_rem = ffi::lua_gc(self.main_state, ffi::LUA_GCCOUNTB, 0);
+                    let used_kbytes = ffi::lua_gc(self.main_state(), ffi::LUA_GCCOUNT, 0);
+                    let used_kbytes_rem = ffi::lua_gc(self.main_state(), ffi::LUA_GCCOUNTB, 0);
                     (used_kbytes as usize) * 1024 + (used_kbytes_rem as usize)
                 }
             }
@@ -1106,7 +1106,7 @@ impl Lua {
     /// Does not work in module mode where Lua state is managed externally.
     pub fn set_memory_limit(&self, limit: usize) -> Result<usize> {
         unsafe {
-            match MemoryState::get(self.main_state) {
+            match MemoryState::get(self.main_state()) {
                 mem_state if !mem_state.is_null() => Ok((*mem_state).set_memory_limit(limit)),
                 _ => Err(Error::MemoryLimitNotAvailable),
             }
@@ -1123,17 +1123,17 @@ impl Lua {
         feature = "luau"
     ))]
     pub fn gc_is_running(&self) -> bool {
-        unsafe { ffi::lua_gc(self.main_state, ffi::LUA_GCISRUNNING, 0) != 0 }
+        unsafe { ffi::lua_gc(self.main_state(), ffi::LUA_GCISRUNNING, 0) != 0 }
     }
 
     /// Stop the Lua GC from running
     pub fn gc_stop(&self) {
-        unsafe { ffi::lua_gc(self.main_state, ffi::LUA_GCSTOP, 0) };
+        unsafe { ffi::lua_gc(self.main_state(), ffi::LUA_GCSTOP, 0) };
     }
 
     /// Restarts the Lua GC if it is not running
     pub fn gc_restart(&self) {
-        unsafe { ffi::lua_gc(self.main_state, ffi::LUA_GCRESTART, 0) };
+        unsafe { ffi::lua_gc(self.main_state(), ffi::LUA_GCRESTART, 0) };
     }
 
     /// Perform a full garbage-collection cycle.
@@ -1142,8 +1142,8 @@ impl Lua {
     /// objects. Once to finish the current gc cycle, and once to start and finish the next cycle.
     pub fn gc_collect(&self) -> Result<()> {
         unsafe {
-            check_stack(self.main_state, 2)?;
-            protect_lua!(self.main_state, 0, 0, fn(state) ffi::lua_gc(state, ffi::LUA_GCCOLLECT, 0))
+            check_stack(self.main_state(), 2)?;
+            protect_lua!(self.main_state(), 0, 0, fn(state) ffi::lua_gc(state, ffi::LUA_GCCOLLECT, 0))
         }
     }
 
@@ -1160,8 +1160,8 @@ impl Lua {
     /// finished a collection cycle.
     pub fn gc_step_kbytes(&self, kbytes: c_int) -> Result<bool> {
         unsafe {
-            check_stack(self.main_state, 3)?;
-            protect_lua!(self.main_state, 0, 0, |state| {
+            check_stack(self.main_state(), 3)?;
+            protect_lua!(self.main_state(), 0, 0, |state| {
                 ffi::lua_gc(state, ffi::LUA_GCSTEP, kbytes) != 0
             })
         }
@@ -1178,9 +1178,9 @@ impl Lua {
     pub fn gc_set_pause(&self, pause: c_int) -> c_int {
         unsafe {
             #[cfg(not(feature = "luau"))]
-            return ffi::lua_gc(self.main_state, ffi::LUA_GCSETPAUSE, pause);
+            return ffi::lua_gc(self.main_state(), ffi::LUA_GCSETPAUSE, pause);
             #[cfg(feature = "luau")]
-            return ffi::lua_gc(self.main_state, ffi::LUA_GCSETGOAL, pause);
+            return ffi::lua_gc(self.main_state(), ffi::LUA_GCSETGOAL, pause);
         }
     }
 
@@ -1191,7 +1191,7 @@ impl Lua {
     ///
     /// [documentation]: https://www.lua.org/manual/5.4/manual.html#2.5
     pub fn gc_set_step_multiplier(&self, step_multiplier: c_int) -> c_int {
-        unsafe { ffi::lua_gc(self.main_state, ffi::LUA_GCSETSTEPMUL, step_multiplier) }
+        unsafe { ffi::lua_gc(self.main_state(), ffi::LUA_GCSETSTEPMUL, step_multiplier) }
     }
 
     /// Changes the collector to incremental mode with the given parameters.
@@ -1201,7 +1201,7 @@ impl Lua {
     ///
     /// [documentation]: https://www.lua.org/manual/5.4/manual.html#2.5.1
     pub fn gc_inc(&self, pause: c_int, step_multiplier: c_int, step_size: c_int) -> GCMode {
-        let state = self.main_state;
+        let state = self.main_state();
 
         #[cfg(any(
             feature = "lua53",
@@ -1254,7 +1254,7 @@ impl Lua {
     #[cfg(feature = "lua54")]
     #[cfg_attr(docsrs, doc(cfg(feature = "lua54")))]
     pub fn gc_gen(&self, minor_multiplier: c_int, major_multiplier: c_int) -> GCMode {
-        let state = self.main_state;
+        let state = self.main_state();
         let prev_mode =
             unsafe { ffi::lua_gc(state, ffi::LUA_GCGEN, minor_multiplier, major_multiplier) };
         match prev_mode {
@@ -2967,7 +2967,7 @@ impl Lua {
         ))]
         unsafe {
             if !(*self.extra.get()).libs.contains(StdLib::COROUTINE) {
-                load_from_std_lib(self.main_state, StdLib::COROUTINE)?;
+                load_from_std_lib(self.main_state(), StdLib::COROUTINE)?;
                 (*self.extra.get()).libs |= StdLib::COROUTINE;
             }
         }
@@ -3235,7 +3235,7 @@ impl Lua {
     #[inline]
     pub(crate) unsafe fn unlikely_memory_error(&self) -> bool {
         // MemoryInfo is empty in module mode so we cannot predict memory limits
-        match MemoryState::get(self.main_state) {
+        match MemoryState::get(self.main_state()) {
             mem_state if !mem_state.is_null() => (*mem_state).memory_limit() == 0,
             #[cfg(feature = "module")]
             _ => (*self.extra.get()).skip_memory_check, // Check the special flag (only for module mode)
@@ -3257,10 +3257,9 @@ impl LuaInner {
         self.state.load(Ordering::Relaxed)
     }
 
-    #[cfg(feature = "luau")]
     #[inline(always)]
     pub(crate) fn main_state(&self) -> *mut ffi::lua_State {
-        self.main_state
+        self.main_state.load(Ordering::Relaxed)
     }
 
     #[inline(always)]
