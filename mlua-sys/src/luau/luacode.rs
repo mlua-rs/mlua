@@ -14,6 +14,7 @@ pub struct lua_CompileOptions {
     pub vectorCtor: *const c_char,
     pub vectorType: *const c_char,
     pub mutableGlobals: *const *const c_char,
+    pub userdataTypes: *const *const c_char,
 }
 
 impl Default for lua_CompileOptions {
@@ -27,6 +28,7 @@ impl Default for lua_CompileOptions {
             vectorCtor: ptr::null(),
             vectorType: ptr::null(),
             mutableGlobals: ptr::null(),
+            userdataTypes: ptr::null(),
         }
     }
 }

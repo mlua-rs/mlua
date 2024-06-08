@@ -128,6 +128,7 @@ pub struct Compiler {
     vector_ctor: Option<String>,
     vector_type: Option<String>,
     mutable_globals: Vec<String>,
+    userdata_types: Vec<String>,
 }
 
 #[cfg(any(feature = "luau", doc))]
@@ -151,6 +152,7 @@ impl Compiler {
             vector_ctor: None,
             vector_type: None,
             mutable_globals: Vec::new(),
+            userdata_types: Vec::new(),
         }
     }
 
@@ -230,6 +232,13 @@ impl Compiler {
         self
     }
 
+    /// Sets a list of userdata types that will be included in the type information.
+    #[must_use]
+    pub fn set_userdata_types(mut self, types: Vec<String>) -> Self {
+        self.userdata_types = types;
+        self
+    }
+
     /// Compiles the `source` into bytecode.
     pub fn compile(&self, source: impl AsRef<[u8]>) -> Vec<u8> {
         use std::os::raw::c_int;
@@ -245,21 +254,25 @@ impl Compiler {
         let vector_type = vector_type.and_then(|t| CString::new(t).ok());
         let vector_type = vector_type.as_ref();
 
-        let mutable_globals = self
-            .mutable_globals
-            .iter()
-            .map(|name| CString::new(name.clone()).ok())
-            .collect::<Option<Vec<_>>>()
-            .unwrap_or_default();
-        let mut mutable_globals = mutable_globals
-            .iter()
-            .map(|s| s.as_ptr())
-            .collect::<Vec<_>>();
-        let mut mutable_globals_ptr = ptr::null();
-        if !mutable_globals.is_empty() {
-            mutable_globals.push(ptr::null());
-            mutable_globals_ptr = mutable_globals.as_ptr();
+        macro_rules! vec2cstring_ptr {
+            ($name:ident, $name_ptr:ident) => {
+                let $name = self
+                    .$name
+                    .iter()
+                    .map(|name| CString::new(name.clone()).ok())
+                    .collect::<Option<Vec<_>>>()
+                    .unwrap_or_default();
+                let mut $name = $name.iter().map(|s| s.as_ptr()).collect::<Vec<_>>();
+                let mut $name_ptr = ptr::null();
+                if !$name.is_empty() {
+                    $name.push(ptr::null());
+                    $name_ptr = $name.as_ptr();
+                }
+            };
         }
+
+        vec2cstring_ptr!(mutable_globals, mutable_globals_ptr);
+        vec2cstring_ptr!(userdata_types, userdata_types_ptr);
 
         unsafe {
             let mut options = ffi::lua_CompileOptions::default();
@@ -271,6 +284,7 @@ impl Compiler {
             options.vectorCtor = vector_ctor.map_or(ptr::null(), |s| s.as_ptr());
             options.vectorType = vector_type.map_or(ptr::null(), |s| s.as_ptr());
             options.mutableGlobals = mutable_globals_ptr;
+            options.userdataTypes = userdata_types_ptr;
             ffi::luau_compile(source.as_ref(), options)
         }
     }

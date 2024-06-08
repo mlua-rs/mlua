@@ -288,6 +288,8 @@ extern "C-unwind" {
     pub fn lua_setuserdatatag(L: *mut lua_State, idx: c_int, tag: c_int);
     pub fn lua_setuserdatadtor(L: *mut lua_State, tag: c_int, dtor: Option<lua_Destructor>);
     pub fn lua_getuserdatadtor(L: *mut lua_State, tag: c_int) -> Option<lua_Destructor>;
+    pub fn lua_setuserdatametatable(L: *mut lua_State, tag: c_int, idx: c_int);
+    pub fn lua_getuserdatametatable(L: *mut lua_State, tag: c_int);
     pub fn lua_setlightuserdataname(L: *mut lua_State, tag: c_int, name: *const c_char);
     pub fn lua_getlightuserdataname(L: *mut lua_State, tag: c_int) -> *const c_char;
     pub fn lua_clonefunction(L: *mut lua_State, idx: c_int);
