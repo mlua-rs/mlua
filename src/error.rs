@@ -101,7 +101,7 @@ pub enum Error {
     /// [`Thread::resume`] was called on an inactive coroutine.
     ///
     /// A coroutine is inactive if its main function has returned or if an error has occurred inside
-    /// the coroutine.
+    /// the coroutine. Already running coroutines are also marked as inactive (unresumable).
     ///
     /// [`Thread::status`] can be used to check if the coroutine can be resumed without causing this
     /// error.

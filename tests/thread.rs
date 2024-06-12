@@ -90,6 +90,19 @@ fn test_thread() -> Result<()> {
         _ => panic!("resuming dead coroutine did not return error"),
     }
 
+    // Already running thread must be unresumable
+    let thread = lua.create_thread(lua.create_function(|lua, ()| {
+        assert_eq!(lua.current_thread().status(), ThreadStatus::Unresumable);
+        let result = lua.current_thread().resume::<_, ()>(());
+        assert!(
+            matches!(result, Err(Error::CoroutineInactive)),
+            "unexpected result: {result:?}",
+        );
+        Ok(())
+    })?)?;
+    let result = thread.resume::<_, ()>(());
+    assert!(result.is_ok(), "unexpected result: {result:?}");
+
     Ok(())
 }
 
@@ -145,6 +158,21 @@ fn test_thread_reset() -> Result<()> {
         assert!(thread.reset(func.clone()).is_ok());
         assert_eq!(thread.status(), ThreadStatus::Resumable);
     }
+
+    // Try reset running thread
+    let thread = lua.create_thread(lua.create_function(|lua, ()| {
+        let this = lua.current_thread();
+        this.reset(lua.create_function(|_, ()| Ok(()))?)?;
+        Ok(())
+    })?)?;
+    let result = thread.resume::<_, ()>(());
+    assert!(
+        matches!(result, Err(Error::CallbackError{ ref cause, ..})
+            if matches!(cause.as_ref(), Error::RuntimeError(ref err)
+                if err == "cannot reset a running thread")
+        ),
+        "unexpected result: {result:?}",
+    );
 
     Ok(())
 }

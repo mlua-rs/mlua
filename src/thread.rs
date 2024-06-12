@@ -142,6 +142,10 @@ impl<'lua> Thread<'lua> {
         A: IntoLuaMulti<'lua>,
         R: FromLuaMulti<'lua>,
     {
+        if self.status() != ThreadStatus::Resumable {
+            return Err(Error::CoroutineInactive);
+        }
+
         let lua = self.0.lua;
         let state = lua.state();
         let thread_state = self.state();
@@ -164,10 +168,6 @@ impl<'lua> Thread<'lua> {
         let lua = self.0.lua;
         let state = lua.state();
         let thread_state = self.state();
-
-        if self.status() != ThreadStatus::Resumable {
-            return Err(Error::CoroutineInactive);
-        }
 
         let nargs = args.push_into_stack_multi(lua)?;
         if nargs > 0 {
@@ -196,6 +196,10 @@ impl<'lua> Thread<'lua> {
     /// Gets the status of the thread.
     pub fn status(&self) -> ThreadStatus {
         let thread_state = self.state();
+        if thread_state == self.0.lua.state() {
+            // The coroutine is currently running
+            return ThreadStatus::Unresumable;
+        }
         unsafe {
             let status = ffi::lua_status(thread_state);
             if status != ffi::LUA_OK && status != ffi::LUA_YIELD {
@@ -243,6 +247,9 @@ impl<'lua> Thread<'lua> {
     pub fn reset(&self, func: crate::function::Function<'lua>) -> Result<()> {
         let lua = self.0.lua;
         let thread_state = self.state();
+        if thread_state == lua.state() {
+            return Err(Error::runtime("cannot reset a running thread"));
+        }
         unsafe {
             #[cfg(all(feature = "lua54", not(feature = "vendored")))]
             let status = ffi::lua_resetthread(thread_state);
