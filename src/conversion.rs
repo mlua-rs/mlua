@@ -453,10 +453,11 @@ impl<'lua> IntoLua<'lua> for &RegistryKey {
             return Err(Error::MismatchedRegistryKey);
         }
 
-        if self.is_nil() {
-            ffi::lua_pushnil(lua.state());
-        } else {
-            ffi::lua_rawgeti(lua.state(), ffi::LUA_REGISTRYINDEX, self.registry_id as _);
+        match self.id() {
+            ffi::LUA_REFNIL => ffi::lua_pushnil(lua.state()),
+            id => {
+                ffi::lua_rawgeti(lua.state(), ffi::LUA_REGISTRYINDEX, id as _);
+            }
         }
         Ok(())
     }

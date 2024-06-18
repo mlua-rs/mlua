@@ -775,12 +775,11 @@ fn test_replace_registry_value() -> Result<()> {
     lua.replace_registry_value(&key, 123)?;
     assert_eq!(lua.registry_value::<i32>(&key)?, 123);
 
-    // It should be impossible to replace (initial) nil value with non-nil
     let key2 = lua.create_registry_value(Value::Nil)?;
-    match lua.replace_registry_value(&key2, "abc") {
-        Err(Error::RuntimeError(_)) => {}
-        r => panic!("expected RuntimeError, got {r:?}"),
-    }
+    lua.replace_registry_value(&key2, Value::Nil)?;
+    assert_eq!(lua.registry_value::<Value>(&key2)?, Value::Nil);
+    lua.replace_registry_value(&key2, "abc")?;
+    assert_eq!(lua.registry_value::<String>(&key2)?, "abc");
 
     Ok(())
 }

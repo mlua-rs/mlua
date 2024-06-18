@@ -2049,7 +2049,7 @@ impl Lua {
         T: FromLua<'lua>,
     {
         let state = self.state();
-        let value = unsafe {
+        unsafe {
             let _sg = StackGuard::new(state);
             check_stack(state, 3)?;
 
@@ -2057,9 +2057,8 @@ impl Lua {
             push_string(state, name.as_bytes(), protect)?;
             ffi::lua_rawget(state, ffi::LUA_REGISTRYINDEX);
 
-            self.pop_value()
-        };
-        T::from_lua(value, self)
+            T::from_stack(-1, self)
+        }
     }
 
     /// Removes a named value in the Lua registry.
@@ -2082,22 +2081,21 @@ impl Lua {
     ///
     /// [`RegistryKey`]: crate::RegistryKey
     pub fn create_registry_value<'lua, T: IntoLua<'lua>>(&'lua self, t: T) -> Result<RegistryKey> {
-        let t = t.into_lua(self)?;
-        if t == Value::Nil {
-            // Special case to skip calling `luaL_ref` and use `LUA_REFNIL` instead
-            let unref_list = unsafe { (*self.extra.get()).registry_unref_list.clone() };
-            return Ok(RegistryKey::new(ffi::LUA_REFNIL, unref_list));
-        }
-
         let state = self.state();
         unsafe {
             let _sg = StackGuard::new(state);
             check_stack(state, 4)?;
 
-            self.push_value(t)?;
+            self.push(t)?;
+
+            let unref_list = (*self.extra.get()).registry_unref_list.clone();
+
+            // Check if the value is nil (no need to store it in the registry)
+            if ffi::lua_isnil(state, -1) != 0 {
+                return Ok(RegistryKey::new(ffi::LUA_REFNIL, unref_list));
+            }
 
             // Try to reuse previously allocated slot
-            let unref_list = (*self.extra.get()).registry_unref_list.clone();
             let free_registry_id = mlua_expect!(unref_list.lock(), "unref list poisoned")
                 .as_mut()
                 .and_then(|x| x.pop());
@@ -2107,7 +2105,7 @@ impl Lua {
                 return Ok(RegistryKey::new(registry_id, unref_list));
             }
 
-            // Allocate a new RegistryKey
+            // Allocate a new RegistryKey slot
             let registry_id = if self.unlikely_memory_error() {
                 ffi::luaL_ref(state, ffi::LUA_REGISTRYINDEX)
             } else {
@@ -2131,18 +2129,16 @@ impl Lua {
         }
 
         let state = self.state();
-        let value = match key.is_nil() {
-            true => Value::Nil,
-            false => unsafe {
+        match key.id() {
+            ffi::LUA_REFNIL => T::from_lua(Value::Nil, self),
+            registry_id => unsafe {
                 let _sg = StackGuard::new(state);
                 check_stack(state, 1)?;
 
-                let id = key.registry_id as Integer;
-                ffi::lua_rawgeti(state, ffi::LUA_REGISTRYINDEX, id);
-                self.pop_value()
+                ffi::lua_rawgeti(state, ffi::LUA_REGISTRYINDEX, registry_id as Integer);
+                T::from_stack(-1, self)
             },
-        };
-        T::from_lua(value, self)
+        }
     }
 
     /// Removes a value from the Lua registry.
@@ -2180,29 +2176,32 @@ impl Lua {
         }
 
         let t = t.into_lua(self)?;
-        if t == Value::Nil && key.is_nil() {
-            // Nothing to replace
-            return Ok(());
-        } else if t != Value::Nil && key.registry_id == ffi::LUA_REFNIL {
-            // We cannot update `LUA_REFNIL` slot
-            return Err(Error::runtime("cannot replace nil value with non-nil"));
-        }
 
         let state = self.state();
         unsafe {
             let _sg = StackGuard::new(state);
             check_stack(state, 2)?;
 
-            let id = key.registry_id as Integer;
-            if t == Value::Nil {
-                self.push_value(Value::Integer(id))?;
-                key.set_nil(true);
-            } else {
-                self.push_value(t)?;
-                key.set_nil(false);
+            match (t, key.id()) {
+                (Value::Nil, ffi::LUA_REFNIL) => {
+                    // Do nothing, no need to replace nil with nil
+                }
+                (Value::Nil, registry_id) => {
+                    // Remove the value
+                    ffi::luaL_unref(state, ffi::LUA_REGISTRYINDEX, registry_id);
+                    key.set_id(ffi::LUA_REFNIL);
+                }
+                (value, ffi::LUA_REFNIL) => {
+                    // Allocate a new `RegistryKey`
+                    let new_key = self.create_registry_value(value)?;
+                    key.set_id(new_key.take());
+                }
+                (value, registry_id) => {
+                    // It must be safe to replace the value without triggering memory error
+                    self.push_value(value)?;
+                    ffi::lua_rawseti(state, ffi::LUA_REGISTRYINDEX, registry_id as Integer);
+                }
             }
-            // It must be safe to replace the value without triggering memory error
-            ffi::lua_rawseti(state, ffi::LUA_REGISTRYINDEX, id);
         }
         Ok(())
     }

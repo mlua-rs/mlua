@@ -4,7 +4,7 @@ use std::hash::{Hash, Hasher};
 use std::ops::{Deref, DerefMut};
 use std::os::raw::{c_int, c_void};
 use std::result::Result as StdResult;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::{Arc, Mutex};
 use std::{fmt, mem, ptr};
 
@@ -204,26 +204,25 @@ pub(crate) struct DestructedUserdata;
 /// [`AnyUserData::set_user_value`]: crate::AnyUserData::set_user_value
 /// [`AnyUserData::user_value`]: crate::AnyUserData::user_value
 pub struct RegistryKey {
-    pub(crate) registry_id: c_int,
-    pub(crate) is_nil: AtomicBool,
+    pub(crate) registry_id: AtomicI32,
     pub(crate) unref_list: Arc<Mutex<Option<Vec<c_int>>>>,
 }
 
 impl fmt::Debug for RegistryKey {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "RegistryKey({})", self.registry_id)
+        write!(f, "RegistryKey({})", self.id())
     }
 }
 
 impl Hash for RegistryKey {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        self.registry_id.hash(state)
+        self.id().hash(state)
     }
 }
 
 impl PartialEq for RegistryKey {
     fn eq(&self, other: &RegistryKey) -> bool {
-        self.registry_id == other.registry_id && Arc::ptr_eq(&self.unref_list, &other.unref_list)
+        self.id() == other.id() && Arc::ptr_eq(&self.unref_list, &other.unref_list)
     }
 }
 
@@ -231,49 +230,46 @@ impl Eq for RegistryKey {}
 
 impl Drop for RegistryKey {
     fn drop(&mut self) {
+        let registry_id = self.id();
         // We don't need to collect nil slot
-        if self.registry_id > ffi::LUA_REFNIL {
+        if registry_id > ffi::LUA_REFNIL {
             let mut unref_list = mlua_expect!(self.unref_list.lock(), "unref list poisoned");
             if let Some(list) = unref_list.as_mut() {
-                list.push(self.registry_id);
+                list.push(registry_id);
             }
         }
     }
 }
 
 impl RegistryKey {
-    // Creates a new instance of `RegistryKey`
+    /// Creates a new instance of `RegistryKey`
     pub(crate) const fn new(id: c_int, unref_list: Arc<Mutex<Option<Vec<c_int>>>>) -> Self {
         RegistryKey {
-            registry_id: id,
-            is_nil: AtomicBool::new(id == ffi::LUA_REFNIL),
+            registry_id: AtomicI32::new(id),
             unref_list,
         }
     }
 
-    // Destroys the `RegistryKey` without adding to the unref list
-    pub(crate) fn take(self) -> c_int {
-        let registry_id = self.registry_id;
+    /// Returns the underlying Lua reference of this `RegistryKey`
+    #[inline(always)]
+    pub fn id(&self) -> c_int {
+        self.registry_id.load(Ordering::Relaxed)
+    }
+
+    /// Sets the unique Lua reference key of this `RegistryKey`
+    #[inline(always)]
+    pub(crate) fn set_id(&self, id: c_int) {
+        self.registry_id.store(id, Ordering::Relaxed);
+    }
+
+    /// Destroys the `RegistryKey` without adding to the unref list
+    pub(crate) fn take(self) -> i32 {
+        let registry_id = self.id();
         unsafe {
             ptr::read(&self.unref_list);
             mem::forget(self);
         }
         registry_id
-    }
-
-    // Returns true if this `RegistryKey` holds a nil value
-    #[inline(always)]
-    pub(crate) fn is_nil(&self) -> bool {
-        self.is_nil.load(Ordering::Relaxed)
-    }
-
-    // Marks value of this `RegistryKey` as `Nil`
-    #[inline(always)]
-    pub(crate) fn set_nil(&self, enabled: bool) {
-        // We cannot replace previous value with nil in as this will break
-        // Lua mechanism to find free keys.
-        // Instead, we set a special flag to mark value as nil.
-        self.is_nil.store(enabled, Ordering::Relaxed);
     }
 }
 
