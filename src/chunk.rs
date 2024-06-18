@@ -341,7 +341,7 @@ impl<'lua, 'a> Chunk<'lua, 'a> {
     ///
     /// This is equivalent to calling the chunk function with no arguments and no return values.
     pub fn exec(self) -> Result<()> {
-        self.call(())?;
+        self.call::<_, ()>(())?;
         Ok(())
     }
 

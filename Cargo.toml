@@ -45,7 +45,7 @@ unstable = []
 
 [dependencies]
 mlua_derive = { version = "=0.9.3", optional = true, path = "mlua_derive" }
-bstr = { version = "1.0", features = ["std"], default_features = false }
+bstr = { version = "1.0", features = ["std"], default-features = false }
 once_cell = { version = "1.0" }
 num-traits = { version = "0.2.14" }
 rustc-hash = "2.0"
@@ -78,6 +78,9 @@ static_assertions = "1.0"
 criterion = { version = "0.5", features = ["async_tokio"] }
 rustyline = "14.0"
 tokio = { version = "1.0", features = ["full"] }
+
+[lints.rust]
+unexpected_cfgs = { level = "allow", check-cfg = ['cfg(tarpaulin_include)'] }
 
 [[bench]]
 name = "benchmark"

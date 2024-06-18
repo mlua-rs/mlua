@@ -73,7 +73,7 @@
 
 // Deny warnings inside doc tests / examples. When this isn't present, rustdoc doesn't show *any*
 // warnings at all.
-#![doc(test(attr(deny(warnings))))]
+#![doc(test(attr(warn(warnings))))] // FIXME: Remove this when rust-lang/rust#123748 is fixed
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
 #[macro_use]

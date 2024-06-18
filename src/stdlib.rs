@@ -1,5 +1,4 @@
 use std::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, BitXorAssign};
-use std::u32;
 
 /// Flags describing the set of lua standard libraries to load.
 #[derive(Copy, Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
