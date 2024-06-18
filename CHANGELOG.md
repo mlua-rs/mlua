@@ -1,3 +1,9 @@
+## v0.9.9
+
+- Minimal Luau updated to 0.629
+- Fixed bug when attempting to reset or resume already running coroutines (#416).
+- Added `RegistryKey::id()` method to get the underlying Lua registry key id.
+
 ## v0.9.8
 
 - Fixed serializing same table multiple times (#408)
