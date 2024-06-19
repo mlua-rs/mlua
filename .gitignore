@@ -5,3 +5,5 @@ Cargo.lock
 .vscode/
 .DS_Store
 .stignore
+
+*.bin
