@@ -32,15 +32,15 @@ pub fn probe_lua() {
     // Find using `pkg-config`
 
     #[cfg(feature = "lua54")]
-    let (incl_bound, excl_bound, alt_probe, ver) = ("5.4", "5.5", Some("lua5.4"), "5.4");
+    let (incl_bound, excl_bound, alt_probe, ver) = ("5.4", "5.5", ["lua5.4", "lua-5.4"], "5.4");
     #[cfg(feature = "lua53")]
-    let (incl_bound, excl_bound, alt_probe, ver) = ("5.3", "5.4", Some("lua5.3"), "5.3");
+    let (incl_bound, excl_bound, alt_probe, ver) = ("5.3", "5.4", ["lua5.3", "lua-5.3"], "5.3");
     #[cfg(feature = "lua52")]
-    let (incl_bound, excl_bound, alt_probe, ver) = ("5.2", "5.3", Some("lua5.2"), "5.2");
+    let (incl_bound, excl_bound, alt_probe, ver) = ("5.2", "5.3", ["lua5.2", "lua-5.2"], "5.2");
     #[cfg(feature = "lua51")]
-    let (incl_bound, excl_bound, alt_probe, ver) = ("5.1", "5.2", Some("lua5.1"), "5.1");
+    let (incl_bound, excl_bound, alt_probe, ver) = ("5.1", "5.2", ["lua5.1", "lua-5.1"], "5.1");
     #[cfg(feature = "luajit")]
-    let (incl_bound, excl_bound, alt_probe, ver) = ("2.0.4", "2.2", None, "JIT");
+    let (incl_bound, excl_bound, alt_probe, ver) = ("2.0.4", "2.2", [], "JIT");
 
     #[rustfmt::skip]
     let mut lua = pkg_config::Config::new()
@@ -48,10 +48,16 @@ pub fn probe_lua() {
         .cargo_metadata(true)
         .probe(if cfg!(feature = "luajit") { "luajit" } else { "lua" });
 
-    if lua.is_err() && alt_probe.is_some() {
-        lua = pkg_config::Config::new()
-            .cargo_metadata(true)
-            .probe(alt_probe.unwrap());
+    if lua.is_err() {
+        for pkg in alt_probe {
+            lua = pkg_config::Config::new()
+                .cargo_metadata(true)
+                .probe(pkg);
+
+            if lua.is_ok() {
+                break;
+            }
+        }
     }
 
     lua.unwrap_or_else(|err| panic!("cannot find Lua{ver} using `pkg-config`: {err}"));
