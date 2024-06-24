@@ -11,9 +11,10 @@ use crate::error::{Error, Result};
 use crate::lua::Lua;
 use crate::types::{Callback, MaybeSend};
 use crate::userdata::{AnyUserData, MetaMethod, UserData, UserDataFields, UserDataMethods};
-use crate::userdata_cell::{UserDataBorrowMut, UserDataBorrowRef, UserDataVariant};
 use crate::util::{get_userdata, short_type_name};
 use crate::value::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, Value};
+
+use super::cell::{UserDataBorrowMut, UserDataBorrowRef, UserDataVariant};
 
 #[cfg(not(feature = "send"))]
 use std::rc::Rc;

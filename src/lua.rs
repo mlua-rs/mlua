@@ -30,9 +30,10 @@ use crate::types::{
     DestructedUserdata, Integer, LightUserData, MaybeSend, Number, RegistryKey, SubtypeId,
     ValueRef,
 };
-use crate::userdata::{AnyUserData, MetaMethod, UserData};
-use crate::userdata_cell::{UserDataRef, UserDataVariant};
-use crate::userdata_impl::{UserDataProxy, UserDataRegistry};
+use crate::userdata::{
+    AnyUserData, MetaMethod, UserData, UserDataProxy, UserDataRef, UserDataRegistry,
+    UserDataVariant,
+};
 use crate::util::{
     self, assert_stack, check_stack, error_traceback, get_destructed_userdata_metatable,
     get_gc_metatable, get_gc_userdata, get_main_state, get_userdata, init_error_registry,
