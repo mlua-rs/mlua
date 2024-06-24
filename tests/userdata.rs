@@ -1,10 +1,6 @@
 use std::collections::HashMap;
 use std::string::String as StdString;
 use std::sync::Arc;
-use std::sync::{Mutex, RwLock};
-
-#[cfg(not(feature = "send"))]
-use std::{cell::RefCell, rc::Rc};
 
 #[cfg(feature = "lua54")]
 use std::sync::atomic::{AtomicI64, Ordering};
@@ -662,120 +658,6 @@ fn test_metatable() -> Result<()> {
         metatable.get::<String>(MetaMethod::Type)?.to_str()?,
         "CustomName"
     );
-
-    Ok(())
-}
-
-#[test]
-#[ignore = "this functionality is deprecated"]
-fn test_userdata_wrapped() -> Result<()> {
-    struct MyUserData(i64);
-
-    impl UserData for MyUserData {
-        fn add_fields<'a, F: UserDataFields<'a, Self>>(fields: &mut F) {
-            fields.add_field("static", "constant");
-            fields.add_field_method_get("data", |_, this| Ok(this.0));
-            fields.add_field_method_set("data", |_, this, val| {
-                this.0 = val;
-                Ok(())
-            })
-        }
-    }
-
-    let lua = Lua::new();
-    let globals = lua.globals();
-
-    // Rc<T>
-    #[cfg(not(feature = "send"))]
-    {
-        let ud = Rc::new(MyUserData(1));
-        globals.set("rc_ud", ud.clone())?;
-        lua.load(
-            r#"
-            assert(rc_ud.static == "constant")
-            local ok, err = pcall(function() rc_ud.data = 2 end)
-            assert(
-                tostring(err):sub(1, 32) == "error mutably borrowing userdata",
-                "expected error mutably borrowing userdata, got " .. tostring(err)
-            )
-            assert(rc_ud.data == 1)
-        "#,
-        )
-        .exec()?;
-        globals.set("rc_ud", Nil)?;
-        lua.gc_collect()?;
-        assert_eq!(Rc::strong_count(&ud), 1);
-    }
-
-    // Rc<RefCell<T>>
-    #[cfg(not(feature = "send"))]
-    {
-        let ud = Rc::new(RefCell::new(MyUserData(1)));
-        globals.set("rc_refcell_ud", ud.clone())?;
-        lua.load(
-            r#"
-            assert(rc_refcell_ud.static == "constant")
-            rc_refcell_ud.data = rc_refcell_ud.data + 1
-            assert(rc_refcell_ud.data == 2)
-        "#,
-        )
-        .exec()?;
-        assert_eq!(ud.borrow().0, 2);
-        globals.set("rc_refcell_ud", Nil)?;
-        lua.gc_collect()?;
-        assert_eq!(Rc::strong_count(&ud), 1);
-    }
-
-    // Arc<T>
-    let ud1 = Arc::new(MyUserData(2));
-    globals.set("arc_ud", ud1.clone())?;
-    lua.load(
-        r#"
-        assert(arc_ud.static == "constant")
-        local ok, err = pcall(function() arc_ud.data = 3 end)
-        assert(
-            tostring(err):sub(1, 32) == "error mutably borrowing userdata",
-            "expected error mutably borrowing userdata, got " .. tostring(err)
-        )
-        assert(arc_ud.data == 2)
-    "#,
-    )
-    .exec()?;
-    globals.set("arc_ud", Nil)?;
-    lua.gc_collect()?;
-    assert_eq!(Arc::strong_count(&ud1), 1);
-
-    // Arc<Mutex<T>>
-    let ud2 = Arc::new(Mutex::new(MyUserData(2)));
-    globals.set("arc_mutex_ud", ud2.clone())?;
-    lua.load(
-        r#"
-        assert(arc_mutex_ud.static == "constant")
-        arc_mutex_ud.data = arc_mutex_ud.data + 1
-        assert(arc_mutex_ud.data == 3)
-    "#,
-    )
-    .exec()?;
-    assert_eq!(ud2.lock().unwrap().0, 3);
-    globals.set("arc_mutex_ud", Nil)?;
-    lua.gc_collect()?;
-    assert_eq!(Arc::strong_count(&ud2), 1);
-
-    // Arc<RwLock<T>>
-    let ud3 = Arc::new(RwLock::new(MyUserData(3)));
-    globals.set("arc_rwlock_ud", ud3.clone())?;
-    lua.load(
-        r#"
-        assert(arc_rwlock_ud.static == "constant")
-        arc_rwlock_ud.data = arc_rwlock_ud.data + 1
-        assert(arc_rwlock_ud.data == 4)
-    "#,
-    )
-    .exec()?;
-    assert_eq!(ud3.read().unwrap().0, 4);
-    globals.set("arc_rwlock_ud", Nil)?;
-    lua.gc_collect()?;
-    assert_eq!(Arc::strong_count(&ud3), 1);
 
     Ok(())
 }
