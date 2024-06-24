@@ -20,10 +20,15 @@ use crate::lua::{Lua, LuaGuard};
 use crate::string::String;
 use crate::table::{Table, TablePairs};
 use crate::types::{MaybeSend, SubtypeId, ValueRef};
-use crate::userdata_cell::{UserDataRef, UserDataRefMut, UserDataVariant};
 use crate::util::{check_stack, get_userdata, take_userdata, StackGuard};
 use crate::value::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, Value};
-use crate::UserDataRegistry;
+
+// Re-export for convenience
+pub(crate) use cell::UserDataVariant;
+pub use cell::{UserDataRef, UserDataRefMut};
+pub use ext::AnyUserDataExt;
+pub(crate) use registry::UserDataProxy;
+pub use registry::UserDataRegistry;
 
 #[cfg(feature = "lua54")]
 pub(crate) const USER_VALUE_MAXSLOT: usize = 8;
@@ -1180,6 +1185,10 @@ where
         (self.0)(lua).map(Value::UserData)
     }
 }
+
+mod cell;
+mod ext;
+mod registry;
 
 // #[cfg(test)]
 // mod assertions {

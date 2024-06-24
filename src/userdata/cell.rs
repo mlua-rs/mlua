@@ -202,7 +202,10 @@ impl<T: 'static> FromLua for UserDataRef<T> {
     unsafe fn from_stack(idx: c_int, lua: &LuaInner) -> Result<Self> {
         let type_id = lua.get_userdata_type_id(idx)?;
         match type_id {
-            Some(type_id) if type_id == TypeId::of::<T>() => lua.get_userdata_ref(idx),
+            Some(type_id) if type_id == TypeId::of::<T>() => {
+                let guard = lua.lua().lock_arc();
+                (*get_userdata::<UserDataVariant<T>>(lua.state(), idx)).try_make_ref(guard)
+            }
             _ => Err(Error::UserDataTypeMismatch),
         }
     }
@@ -348,11 +351,13 @@ impl<'a, T> Deref for UserDataBorrowRef<'a, T> {
     }
 }
 
-impl<'a, T> UserDataBorrowRef<'a, T> {
+impl<'a, T> TryFrom<&'a UserDataVariant<T>> for UserDataBorrowRef<'a, T> {
+    type Error = Error;
+
     #[inline(always)]
-    pub(crate) fn try_from(variant: &'a UserDataVariant<T>) -> Result<Self> {
+    fn try_from(variant: &'a UserDataVariant<T>) -> Result<Self> {
         set_reading(variant.flag())?;
-        Ok(UserDataBorrowRef(&variant))
+        Ok(UserDataBorrowRef(variant))
     }
 }
 
@@ -381,11 +386,13 @@ impl<'a, T> DerefMut for UserDataBorrowMut<'a, T> {
     }
 }
 
-impl<'a, T> UserDataBorrowMut<'a, T> {
+impl<'a, T> TryFrom<&'a UserDataVariant<T>> for UserDataBorrowMut<'a, T> {
+    type Error = Error;
+
     #[inline(always)]
-    pub(crate) fn try_from(variant: &'a UserDataVariant<T>) -> Result<Self> {
+    fn try_from(variant: &'a UserDataVariant<T>) -> Result<Self> {
         set_writing(variant.flag())?;
-        Ok(UserDataBorrowMut(&variant))
+        Ok(UserDataBorrowMut(variant))
     }
 }
 

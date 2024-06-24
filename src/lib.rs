@@ -96,9 +96,6 @@ mod table;
 mod thread;
 mod types;
 mod userdata;
-mod userdata_cell;
-mod userdata_ext;
-mod userdata_impl;
 mod util;
 mod value;
 
@@ -119,11 +116,9 @@ pub use crate::table::{Table, TableExt, TablePairs, TableSequence};
 pub use crate::thread::{Thread, ThreadStatus};
 pub use crate::types::{AppDataRef, AppDataRefMut, Integer, LightUserData, Number, RegistryKey};
 pub use crate::userdata::{
-    AnyUserData, MetaMethod, UserData, UserDataFields, UserDataMetatable, UserDataMethods,
+    AnyUserData, AnyUserDataExt, MetaMethod, UserData, UserDataFields, UserDataMetatable,
+    UserDataMethods, UserDataRef, UserDataRefMut, UserDataRegistry,
 };
-pub use crate::userdata_cell::{UserDataRef, UserDataRefMut};
-pub use crate::userdata_ext::AnyUserDataExt;
-pub use crate::userdata_impl::UserDataRegistry;
 pub use crate::value::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, MultiValue, Nil, Value};
 
 #[cfg(not(feature = "luau"))]
