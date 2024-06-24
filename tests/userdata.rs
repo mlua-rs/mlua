@@ -1,11 +1,7 @@
 use std::collections::HashMap;
 use std::string::String as StdString;
 use std::sync::Arc;
-#[cfg(not(feature = "parking_lot"))]
 use std::sync::{Mutex, RwLock};
-
-#[cfg(feature = "parking_lot")]
-use parking_lot::{Mutex, RwLock};
 
 #[cfg(not(feature = "send"))]
 use std::{cell::RefCell, rc::Rc};
@@ -760,10 +756,7 @@ fn test_userdata_wrapped() -> Result<()> {
     "#,
     )
     .exec()?;
-    #[cfg(not(feature = "parking_lot"))]
     assert_eq!(ud2.lock().unwrap().0, 3);
-    #[cfg(feature = "parking_lot")]
-    assert_eq!(ud2.lock().0, 3);
     globals.set("arc_mutex_ud", Nil)?;
     lua.gc_collect()?;
     assert_eq!(Arc::strong_count(&ud2), 1);
@@ -779,10 +772,7 @@ fn test_userdata_wrapped() -> Result<()> {
     "#,
     )
     .exec()?;
-    #[cfg(not(feature = "parking_lot"))]
     assert_eq!(ud3.read().unwrap().0, 4);
-    #[cfg(feature = "parking_lot")]
-    assert_eq!(ud3.read().0, 4);
     globals.set("arc_rwlock_ud", Nil)?;
     lua.gc_collect()?;
     assert_eq!(Arc::strong_count(&ud3), 1);
