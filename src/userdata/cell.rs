@@ -361,6 +361,14 @@ impl<'a, T> TryFrom<&'a UserDataVariant<T>> for UserDataBorrowRef<'a, T> {
     }
 }
 
+impl<'a, T> UserDataBorrowRef<'a, T> {
+    #[inline(always)]
+    pub(crate) fn get_ref(&self) -> &'a T {
+        // SAFETY: `UserDataBorrowRef` is only created when the borrow flag is set to reading.
+        unsafe { self.0.get_ref() }
+    }
+}
+
 pub(crate) struct UserDataBorrowMut<'a, T>(&'a UserDataVariant<T>);
 
 impl<'a, T> Drop for UserDataBorrowMut<'a, T> {
@@ -393,6 +401,14 @@ impl<'a, T> TryFrom<&'a UserDataVariant<T>> for UserDataBorrowMut<'a, T> {
     fn try_from(variant: &'a UserDataVariant<T>) -> Result<Self> {
         set_writing(variant.flag())?;
         Ok(UserDataBorrowMut(variant))
+    }
+}
+
+impl<'a, T> UserDataBorrowMut<'a, T> {
+    #[inline(always)]
+    pub(crate) fn get_mut(&mut self) -> &'a mut T {
+        // SAFETY: `UserDataBorrowMut` is only created when the borrow flag is set to writing.
+        unsafe { self.0.get_mut() }
     }
 }
 
