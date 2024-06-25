@@ -15,9 +15,6 @@ use crate::value::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, Value};
 
 use super::cell::{UserDataBorrowMut, UserDataBorrowRef, UserDataVariant};
 
-#[cfg(not(feature = "send"))]
-use std::rc::Rc;
-
 #[cfg(feature = "async")]
 use {crate::types::AsyncCallback, futures_util::future, std::future::Future};
 
@@ -68,9 +65,6 @@ impl<'a, T: 'static> UserDataRegistry<'a, T> {
             ($res:expr) => {
                 $res.map_err(|err| Error::bad_self_argument(&name, err))?
             };
-            ($res:expr, $err:expr) => {
-                $res.map_err(|_| Error::bad_self_argument(&name, $err))?
-            };
         }
 
         Box::new(move |rawlua, nargs| unsafe {
@@ -104,9 +98,6 @@ impl<'a, T: 'static> UserDataRegistry<'a, T> {
         macro_rules! try_self_arg {
             ($res:expr) => {
                 $res.map_err(|err| Error::bad_self_argument(&name, err))?
-            };
-            ($res:expr, $err:expr) => {
-                $res.map_err(|_| Error::bad_self_argument(&name, $err))?
             };
         }
 
@@ -143,39 +134,40 @@ impl<'a, T: 'static> UserDataRegistry<'a, T> {
         MR: Future<Output = Result<R>> + 'a,
         R: IntoLuaMulti,
     {
-        let name = Rc::new(get_function_name::<T>(name));
-        let method = Rc::new(method);
+        let name = get_function_name::<T>(name);
+        macro_rules! try_self_arg {
+            ($res:expr) => {
+                match $res {
+                    Ok(res) => res,
+                    Err(err) => return Box::pin(future::err(Error::bad_self_argument(&name, err))),
+                }
+            };
+        }
 
         Box::new(move |rawlua, mut args| unsafe {
-            let name = name.clone();
-            let method = method.clone();
-            macro_rules! try_self_arg {
-                ($res:expr) => {
-                    $res.map_err(|err| Error::bad_self_argument(&name, err))?
-                };
-                ($res:expr, $err:expr) => {
-                    $res.map_err(|_| Error::bad_self_argument(&name, $err))?
-                };
-            }
+            let this = args
+                .pop_front()
+                .ok_or_else(|| Error::from_lua_conversion("missing argument", "userdata", None));
+            let lua = rawlua.lua();
+            let this = try_self_arg!(AnyUserData::from_lua(try_self_arg!(this), lua));
+            let args = A::from_lua_args(args, 2, Some(&name), lua);
 
-            Box::pin(async move {
-                let this = args.pop_front().ok_or_else(|| {
-                    Error::from_lua_conversion("missing argument", "userdata", None)
-                });
-                let lua = rawlua.lua();
-                let this = try_self_arg!(AnyUserData::from_lua(try_self_arg!(this), lua));
-                let args = A::from_lua_args(args, 2, Some(&name), lua);
-
-                let (ref_thread, index) = (rawlua.ref_thread(), this.0.index);
-                match try_self_arg!(this.type_id()) {
-                    Some(id) if id == TypeId::of::<T>() => {
-                        let ud = try_self_arg!(borrow_userdata_ref::<T>(ref_thread, index));
-                        let ud = std::mem::transmute::<&T, &T>(&ud);
-                        method(lua, ud, args?).await?.push_into_stack_multi(&rawlua)
-                    }
-                    _ => Err(Error::bad_self_argument(&name, Error::UserDataTypeMismatch)),
+            let (ref_thread, index) = (rawlua.ref_thread(), this.0.index);
+            match try_self_arg!(this.type_id()) {
+                Some(id) if id == TypeId::of::<T>() => {
+                    let ud = try_self_arg!(borrow_userdata_ref::<T>(ref_thread, index));
+                    let args = match args {
+                        Ok(args) => args,
+                        Err(e) => return Box::pin(future::err(e)),
+                    };
+                    let fut = method(lua, ud.get_ref(), args);
+                    Box::pin(async move { fut.await?.push_into_stack_multi(&rawlua) })
                 }
-            })
+                _ => {
+                    let err = Error::bad_self_argument(&name, Error::UserDataTypeMismatch);
+                    Box::pin(future::err(err))
+                }
+            }
         })
     }
 
@@ -187,39 +179,40 @@ impl<'a, T: 'static> UserDataRegistry<'a, T> {
         MR: Future<Output = Result<R>> + 'a,
         R: IntoLuaMulti,
     {
-        let name = Rc::new(get_function_name::<T>(name));
-        let method = Rc::new(method);
+        let name = get_function_name::<T>(name);
+        macro_rules! try_self_arg {
+            ($res:expr) => {
+                match $res {
+                    Ok(res) => res,
+                    Err(err) => return Box::pin(future::err(Error::bad_self_argument(&name, err))),
+                }
+            };
+        }
 
         Box::new(move |rawlua, mut args| unsafe {
-            let name = name.clone();
-            let method = method.clone();
-            macro_rules! try_self_arg {
-                ($res:expr) => {
-                    $res.map_err(|err| Error::bad_self_argument(&name, err))?
-                };
-                ($res:expr, $err:expr) => {
-                    $res.map_err(|_| Error::bad_self_argument(&name, $err))?
-                };
-            }
+            let this = args
+                .pop_front()
+                .ok_or_else(|| Error::from_lua_conversion("missing argument", "userdata", None));
+            let lua = rawlua.lua();
+            let this = try_self_arg!(AnyUserData::from_lua(try_self_arg!(this), lua));
+            let args = A::from_lua_args(args, 2, Some(&name), lua);
 
-            Box::pin(async move {
-                let this = args.pop_front().ok_or_else(|| {
-                    Error::from_lua_conversion("missing argument", "userdata", None)
-                });
-                let lua = rawlua.lua();
-                let this = try_self_arg!(AnyUserData::from_lua(try_self_arg!(this), lua));
-                let args = A::from_lua_args(args, 2, Some(&name), lua);
-
-                let (ref_thread, index) = (rawlua.ref_thread(), this.0.index);
-                match try_self_arg!(this.type_id()) {
-                    Some(id) if id == TypeId::of::<T>() => {
-                        let mut ud = try_self_arg!(borrow_userdata_mut::<T>(ref_thread, index));
-                        let ud = std::mem::transmute::<&mut T, &mut T>(&mut ud);
-                        method(lua, ud, args?).await?.push_into_stack_multi(&rawlua)
-                    }
-                    _ => Err(Error::bad_self_argument(&name, Error::UserDataTypeMismatch)),
+            let (ref_thread, index) = (rawlua.ref_thread(), this.0.index);
+            match try_self_arg!(this.type_id()) {
+                Some(id) if id == TypeId::of::<T>() => {
+                    let mut ud = try_self_arg!(borrow_userdata_mut::<T>(ref_thread, index));
+                    let args = match args {
+                        Ok(args) => args,
+                        Err(e) => return Box::pin(future::err(e)),
+                    };
+                    let fut = method(lua, ud.get_mut(), args);
+                    Box::pin(async move { fut.await?.push_into_stack_multi(&rawlua) })
                 }
-            })
+                _ => {
+                    let err = Error::bad_self_argument(&name, Error::UserDataTypeMismatch);
+                    Box::pin(future::err(err))
+                }
+            }
         })
     }
 
@@ -269,8 +262,7 @@ impl<'a, T: 'static> UserDataRegistry<'a, T> {
                 Err(e) => return Box::pin(future::err(e)),
             };
             let fut = function(lua, args);
-            let weak = rawlua.weak().clone();
-            Box::pin(async move { fut.await?.push_into_stack_multi(&weak.lock()) })
+            Box::pin(async move { fut.await?.push_into_stack_multi(&rawlua) })
         })
     }
 
@@ -356,11 +348,10 @@ impl<'a, T: 'static> UserDataFields<'a, T> for UserDataRegistry<'a, T> {
         V: IntoLua + Clone + 'static,
     {
         let name = name.to_string();
-        let name2 = name.clone();
         self.meta_fields.push((
-            name,
+            name.clone(),
             Box::new(move |lua, _| unsafe {
-                Self::check_meta_field(lua.lua(), &name2, value.clone())?.push_into_stack_multi(lua)
+                Self::check_meta_field(lua.lua(), &name, value.clone())?.push_into_stack_multi(lua)
             }),
         ));
     }
@@ -371,12 +362,11 @@ impl<'a, T: 'static> UserDataFields<'a, T> for UserDataRegistry<'a, T> {
         R: IntoLua,
     {
         let name = name.to_string();
-        let name2 = name.clone();
         self.meta_fields.push((
-            name,
+            name.clone(),
             Box::new(move |rawlua, _| unsafe {
                 let lua = rawlua.lua();
-                Self::check_meta_field(lua, &name2, f(lua)?)?.push_into_stack_multi(rawlua)
+                Self::check_meta_field(lua, &name, f(lua)?)?.push_into_stack_multi(rawlua)
             }),
         ));
     }
