@@ -17,7 +17,7 @@ use crate::value::{FromLuaMulti, IntoLua, IntoLuaMulti, Value};
 #[cfg(feature = "async")]
 use {
     crate::types::AsyncCallback,
-    futures_util::future::{self, Future},
+    std::future::{self, Future},
 };
 
 /// Handle to an internal Lua function.
@@ -566,7 +566,7 @@ impl Function {
             let lua = rawlua.lua();
             let args = match A::from_lua_args(args, 1, None, lua) {
                 Ok(args) => args,
-                Err(e) => return Box::pin(future::err(e)),
+                Err(e) => return Box::pin(future::ready(Err(e))),
             };
             let fut = func(lua, args);
             let weak = rawlua.weak().clone();

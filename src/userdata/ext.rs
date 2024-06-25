@@ -4,7 +4,7 @@ use crate::userdata::{AnyUserData, MetaMethod};
 use crate::value::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, Value};
 
 #[cfg(feature = "async")]
-use futures_util::future::{self, LocalBoxFuture};
+use std::future::Future;
 
 /// An extension trait for [`AnyUserData`] that provides a variety of convenient functionality.
 pub trait AnyUserDataExt: Sealed {
@@ -27,10 +27,10 @@ pub trait AnyUserDataExt: Sealed {
     /// The metamethod is called with the userdata as its first argument, followed by the passed arguments.
     #[cfg(feature = "async")]
     #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
-    fn call_async<A, R>(&self, args: A) -> LocalBoxFuture<'static, Result<R>>
+    fn call_async<A, R>(&self, args: A) -> impl Future<Output = Result<R>>
     where
         A: IntoLuaMulti,
-        R: FromLuaMulti + 'static;
+        R: FromLuaMulti;
 
     /// Calls the userdata method, assuming it has `__index` metamethod
     /// and a function associated to `name`.
@@ -47,10 +47,10 @@ pub trait AnyUserDataExt: Sealed {
     /// This might invoke the `__index` metamethod.
     #[cfg(feature = "async")]
     #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
-    fn call_async_method<A, R>(&self, name: &str, args: A) -> LocalBoxFuture<'static, Result<R>>
+    fn call_async_method<A, R>(&self, name: &str, args: A) -> impl Future<Output = Result<R>>
     where
         A: IntoLuaMulti,
-        R: FromLuaMulti + 'static;
+        R: FromLuaMulti;
 
     /// Gets the function associated to `key` from the table and executes it,
     /// passing `args` as function arguments.
@@ -72,10 +72,10 @@ pub trait AnyUserDataExt: Sealed {
     /// This might invoke the `__index` metamethod.
     #[cfg(feature = "async")]
     #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
-    fn call_async_function<A, R>(&self, name: &str, args: A) -> LocalBoxFuture<'static, Result<R>>
+    fn call_async_function<A, R>(&self, name: &str, args: A) -> impl Future<Output = Result<R>>
     where
         A: IntoLuaMulti,
-        R: FromLuaMulti + 'static;
+        R: FromLuaMulti;
 }
 
 impl AnyUserDataExt for AnyUserData {
@@ -110,28 +110,19 @@ impl AnyUserDataExt for AnyUserData {
     }
 
     #[cfg(feature = "async")]
-    fn call_async<A, R>(&self, args: A) -> LocalBoxFuture<'static, Result<R>>
+    fn call_async<A, R>(&self, args: A) -> impl Future<Output = Result<R>>
     where
         A: IntoLuaMulti,
-        R: FromLuaMulti + 'static,
+        R: FromLuaMulti,
     {
-        let metatable = match self.get_metatable() {
-            Ok(metatable) => metatable,
-            Err(err) => return Box::pin(future::err(err)),
-        };
-        match metatable.get::<Value>(MetaMethod::Call) {
-            Ok(Value::Function(func)) => {
-                let lua = self.0.lua.lock();
-                let args = match (self, args).into_lua_multi(lua.lua()) {
-                    Ok(args) => args,
-                    Err(e) => return Box::pin(future::err(e)),
-                };
-                Box::pin(async move { func.call_async(args).await })
+        let lua = self.0.lua.lock();
+        let args = (self, args).into_lua_multi(lua.lua());
+        async move {
+            let metatable = self.get_metatable()?;
+            match metatable.get::<Value>(MetaMethod::Call)? {
+                Value::Function(func) => func.call_async(args?).await,
+                _ => Err(Error::runtime("attempt to call a userdata value")),
             }
-            Ok(_) => Box::pin(future::err(Error::runtime(
-                "attempt to call a userdata value",
-            ))),
-            Err(err) => Box::pin(future::err(err)),
         }
     }
 
@@ -144,10 +135,10 @@ impl AnyUserDataExt for AnyUserData {
     }
 
     #[cfg(feature = "async")]
-    fn call_async_method<A, R>(&self, name: &str, args: A) -> LocalBoxFuture<'static, Result<R>>
+    fn call_async_method<A, R>(&self, name: &str, args: A) -> impl Future<Output = Result<R>>
     where
         A: IntoLuaMulti,
-        R: FromLuaMulti + 'static,
+        R: FromLuaMulti,
     {
         self.call_async_function(name, (self, args))
     }
@@ -167,25 +158,21 @@ impl AnyUserDataExt for AnyUserData {
     }
 
     #[cfg(feature = "async")]
-    fn call_async_function<A, R>(&self, name: &str, args: A) -> LocalBoxFuture<'static, Result<R>>
+    fn call_async_function<A, R>(&self, name: &str, args: A) -> impl Future<Output = Result<R>>
     where
         A: IntoLuaMulti,
-        R: FromLuaMulti + 'static,
+        R: FromLuaMulti,
     {
-        match self.get(name) {
-            Ok(Value::Function(func)) => {
-                let lua = self.0.lua.lock();
-                let args = match args.into_lua_multi(lua.lua()) {
-                    Ok(args) => args,
-                    Err(e) => return Box::pin(future::err(e)),
-                };
-                Box::pin(async move { func.call_async(args).await })
+        let lua = self.0.lua.lock();
+        let args = args.into_lua_multi(lua.lua());
+        async move {
+            match self.get::<_, Value>(name)? {
+                Value::Function(func) => func.call_async(args?).await,
+                val => {
+                    let msg = format!("attempt to call a {} value", val.type_name());
+                    Err(Error::runtime(msg))
+                }
             }
-            Ok(val) => {
-                let msg = format!("attempt to call a {} value", val.type_name());
-                Box::pin(future::err(Error::runtime(msg)))
-            }
-            Err(err) => Box::pin(future::err(err)),
         }
     }
 }

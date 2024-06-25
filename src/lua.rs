@@ -61,9 +61,10 @@ use crate::{
 #[cfg(feature = "async")]
 use {
     crate::types::{AsyncCallback, AsyncCallbackUpvalue, AsyncPollUpvalue},
-    futures_util::future::{self, Future},
-    futures_util::task::{noop_waker_ref, Context, Poll, Waker},
+    futures_util::task::noop_waker_ref,
+    std::future::{self, Future},
     std::ptr::NonNull,
+    std::task::{Context, Poll, Waker},
 };
 
 #[cfg(feature = "serialize")]
@@ -1597,7 +1598,7 @@ impl Lua {
             let lua = rawlua.lua();
             let args = match A::from_lua_args(args, 1, None, lua) {
                 Ok(args) => args,
-                Err(e) => return Box::pin(future::err(e)),
+                Err(e) => return Box::pin(future::ready(Err(e))),
             };
             let fut = func(lua, args);
             Box::pin(async move { fut.await?.push_into_stack_multi(rawlua) })

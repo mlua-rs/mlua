@@ -16,7 +16,10 @@ use crate::value::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, Value};
 use super::cell::{UserDataBorrowMut, UserDataBorrowRef, UserDataVariant};
 
 #[cfg(feature = "async")]
-use {crate::types::AsyncCallback, futures_util::future, std::future::Future};
+use {
+    crate::types::AsyncCallback,
+    std::future::{self, Future},
+};
 
 /// Handle to registry for userdata methods and metamethods.
 pub struct UserDataRegistry<'a, T: 'static> {
@@ -139,7 +142,9 @@ impl<'a, T: 'static> UserDataRegistry<'a, T> {
             ($res:expr) => {
                 match $res {
                     Ok(res) => res,
-                    Err(err) => return Box::pin(future::err(Error::bad_self_argument(&name, err))),
+                    Err(err) => {
+                        return Box::pin(future::ready(Err(Error::bad_self_argument(&name, err))))
+                    }
                 }
             };
         }
@@ -158,14 +163,14 @@ impl<'a, T: 'static> UserDataRegistry<'a, T> {
                     let ud = try_self_arg!(borrow_userdata_ref::<T>(ref_thread, index));
                     let args = match args {
                         Ok(args) => args,
-                        Err(e) => return Box::pin(future::err(e)),
+                        Err(e) => return Box::pin(future::ready(Err(e))),
                     };
                     let fut = method(lua, ud.get_ref(), args);
                     Box::pin(async move { fut.await?.push_into_stack_multi(&rawlua) })
                 }
                 _ => {
                     let err = Error::bad_self_argument(&name, Error::UserDataTypeMismatch);
-                    Box::pin(future::err(err))
+                    Box::pin(future::ready(Err(err)))
                 }
             }
         })
@@ -184,7 +189,9 @@ impl<'a, T: 'static> UserDataRegistry<'a, T> {
             ($res:expr) => {
                 match $res {
                     Ok(res) => res,
-                    Err(err) => return Box::pin(future::err(Error::bad_self_argument(&name, err))),
+                    Err(err) => {
+                        return Box::pin(future::ready(Err(Error::bad_self_argument(&name, err))))
+                    }
                 }
             };
         }
@@ -203,14 +210,14 @@ impl<'a, T: 'static> UserDataRegistry<'a, T> {
                     let mut ud = try_self_arg!(borrow_userdata_mut::<T>(ref_thread, index));
                     let args = match args {
                         Ok(args) => args,
-                        Err(e) => return Box::pin(future::err(e)),
+                        Err(e) => return Box::pin(future::ready(Err(e))),
                     };
                     let fut = method(lua, ud.get_mut(), args);
                     Box::pin(async move { fut.await?.push_into_stack_multi(&rawlua) })
                 }
                 _ => {
                     let err = Error::bad_self_argument(&name, Error::UserDataTypeMismatch);
-                    Box::pin(future::err(err))
+                    Box::pin(future::ready(Err(err)))
                 }
             }
         })
@@ -259,7 +266,7 @@ impl<'a, T: 'static> UserDataRegistry<'a, T> {
             let lua = rawlua.lua();
             let args = match A::from_lua_args(args, 1, Some(&name), lua) {
                 Ok(args) => args,
-                Err(e) => return Box::pin(future::err(e)),
+                Err(e) => return Box::pin(future::ready(Err(e))),
             };
             let fut = function(lua, args);
             Box::pin(async move { fut.await?.push_into_stack_multi(&rawlua) })
