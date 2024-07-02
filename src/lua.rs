@@ -1739,8 +1739,9 @@ impl Lua {
     #[cfg(any(all(feature = "luau", feature = "unstable"), doc))]
     #[cfg_attr(docsrs, doc(cfg(all(feature = "luau", feature = "unstable"))))]
     pub fn set_vector_metatable(&self, metatable: Option<Table>) {
+        let lua = self.lock();
         unsafe {
-            let state = self.state();
+            let state = lua.state();
             let _sg = StackGuard::new(state);
             assert_stack(state, 2);
 
@@ -1749,7 +1750,7 @@ impl Lua {
             #[cfg(feature = "luau-vector4")]
             ffi::lua_pushvector(state, 0., 0., 0., 0.);
             match metatable {
-                Some(metatable) => self.push_ref(&metatable.0),
+                Some(metatable) => lua.push_ref(&metatable.0),
                 None => ffi::lua_pushnil(state),
             };
             ffi::lua_setmetatable(state, -2);
