@@ -3377,9 +3377,15 @@ impl LuaInner {
 }
 
 impl WeakLua {
+    #[track_caller]
     #[inline(always)]
     pub(crate) fn lock(&self) -> LuaGuard {
         LuaGuard::new(self.0.upgrade().unwrap())
+    }
+
+    #[inline(always)]
+    pub(crate) fn try_lock(&self) -> Option<LuaGuard> {
+        Some(LuaGuard::new(self.0.upgrade()?))
     }
 }
 

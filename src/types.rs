@@ -311,7 +311,9 @@ impl Clone for ValueRef {
 impl Drop for ValueRef {
     fn drop(&mut self) {
         if self.drop {
-            self.lua.lock().drop_ref(self);
+            if let Some(lua) = self.lua.try_lock() {
+                lua.drop_ref(self);
+            }
         }
     }
 }
