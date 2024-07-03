@@ -225,6 +225,7 @@ There is a LuaRocks build backend for mlua modules [`luarocks-build-rust-mlua`].
 
 Modules written in Rust and published to luarocks:
 - [`lua-ryaml`](https://github.com/khvzak/lua-ryaml)
+- [`decasify`](https://github.com/alerque/decasify)
 
 [`luarocks-build-rust-mlua`]: https://luarocks.org/modules/khvzak/luarocks-build-rust-mlua
 
