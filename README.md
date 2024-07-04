@@ -224,7 +224,11 @@ Module builds don't require Lua lib or headers to be installed on the system.
 There is a LuaRocks build backend for mlua modules [`luarocks-build-rust-mlua`].
 
 Modules written in Rust and published to luarocks:
+- [`decasify`](https://github.com/alerque/decasify)
 - [`lua-ryaml`](https://github.com/khvzak/lua-ryaml)
+- [`tiktoken_core`](https://github.com/gptlang/lua-tiktoken)
+- [`toml-edit`](https://github.com/vhyrro/toml-edit.lua)
+- [`typst-lua`](https://github.com/rousbound/typst-lua)
 
 [`luarocks-build-rust-mlua`]: https://luarocks.org/modules/khvzak/luarocks-build-rust-mlua
 
