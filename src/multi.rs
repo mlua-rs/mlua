@@ -5,7 +5,8 @@ use std::os::raw::c_int;
 use std::result::Result as StdResult;
 
 use crate::error::Result;
-use crate::lua::{Lua, LuaInner};
+use crate::state::Lua;
+use crate::state::RawLua;
 use crate::util::check_stack;
 use crate::value::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, MultiValue, Nil};
 
@@ -21,7 +22,7 @@ impl<T: IntoLua, E: IntoLua> IntoLuaMulti for StdResult<T, E> {
     }
 
     #[inline]
-    unsafe fn push_into_stack_multi(self, lua: &LuaInner) -> Result<c_int> {
+    unsafe fn push_into_stack_multi(self, lua: &RawLua) -> Result<c_int> {
         match self {
             Ok(val) => (val,).push_into_stack_multi(lua),
             Err(err) => (Nil, err).push_into_stack_multi(lua),
@@ -39,7 +40,7 @@ impl<E: IntoLua> IntoLuaMulti for StdResult<(), E> {
     }
 
     #[inline]
-    unsafe fn push_into_stack_multi(self, lua: &LuaInner) -> Result<c_int> {
+    unsafe fn push_into_stack_multi(self, lua: &RawLua) -> Result<c_int> {
         match self {
             Ok(_) => Ok(0),
             Err(err) => (Nil, err).push_into_stack_multi(lua),
@@ -56,7 +57,7 @@ impl<T: IntoLua> IntoLuaMulti for T {
     }
 
     #[inline]
-    unsafe fn push_into_stack_multi(self, lua: &LuaInner) -> Result<c_int> {
+    unsafe fn push_into_stack_multi(self, lua: &RawLua) -> Result<c_int> {
         self.push_into_stack(lua)?;
         Ok(1)
     }
@@ -74,7 +75,7 @@ impl<T: FromLua> FromLuaMulti for T {
     }
 
     #[inline]
-    unsafe fn from_stack_multi(nvals: c_int, lua: &LuaInner) -> Result<Self> {
+    unsafe fn from_stack_multi(nvals: c_int, lua: &RawLua) -> Result<Self> {
         if nvals == 0 {
             return T::from_lua(Nil, lua.lua());
         }
@@ -86,7 +87,7 @@ impl<T: FromLua> FromLuaMulti for T {
         nargs: c_int,
         i: usize,
         to: Option<&str>,
-        lua: &LuaInner,
+        lua: &RawLua,
     ) -> Result<Self> {
         if nargs == 0 {
             return T::from_lua_arg(Nil, i, to, lua.lua());
@@ -209,7 +210,7 @@ macro_rules! impl_tuple {
             }
 
             #[inline]
-            unsafe fn push_into_stack_multi(self, _lua: &LuaInner) -> Result<c_int> {
+            unsafe fn push_into_stack_multi(self, _lua: &RawLua) -> Result<c_int> {
                 Ok(0)
             }
         }
@@ -221,7 +222,7 @@ macro_rules! impl_tuple {
             }
 
             #[inline]
-            unsafe fn from_stack_multi(nvals: c_int, lua: &LuaInner) -> Result<Self> {
+            unsafe fn from_stack_multi(nvals: c_int, lua: &RawLua) -> Result<Self> {
                 if nvals > 0 {
                     ffi::lua_pop(lua.state(), nvals);
                 }
@@ -247,7 +248,7 @@ macro_rules! impl_tuple {
 
             #[allow(non_snake_case)]
             #[inline]
-            unsafe fn push_into_stack_multi(self, lua: &LuaInner) -> Result<c_int> {
+            unsafe fn push_into_stack_multi(self, lua: &RawLua) -> Result<c_int> {
                 let ($($name,)* $last,) = self;
                 let mut nresults = 0;
                 $(
@@ -288,7 +289,7 @@ macro_rules! impl_tuple {
 
             #[allow(unused_mut, non_snake_case)]
             #[inline]
-            unsafe fn from_stack_multi(mut nvals: c_int, lua: &LuaInner) -> Result<Self> {
+            unsafe fn from_stack_multi(mut nvals: c_int, lua: &RawLua) -> Result<Self> {
                 $(
                     let $name = if nvals > 0 {
                         nvals -= 1;
@@ -303,7 +304,7 @@ macro_rules! impl_tuple {
 
             #[allow(unused_mut, non_snake_case)]
             #[inline]
-            unsafe fn from_stack_args(mut nargs: c_int, mut i: usize, to: Option<&str>, lua: &LuaInner) -> Result<Self> {
+            unsafe fn from_stack_args(mut nargs: c_int, mut i: usize, to: Option<&str>, lua: &RawLua) -> Result<Self> {
                 $(
                     let $name = if nargs > 0 {
                         nargs -= 1;

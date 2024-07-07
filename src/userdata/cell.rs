@@ -9,7 +9,8 @@ use std::rc::Rc;
 use serde::ser::{Serialize, Serializer};
 
 use crate::error::{Error, Result};
-use crate::lua::{Lua, LuaGuard, LuaInner};
+use crate::state::{Lua, LuaGuard};
+use crate::state::RawLua;
 use crate::userdata::AnyUserData;
 use crate::util::get_userdata;
 use crate::value::{FromLua, Value};
@@ -199,7 +200,7 @@ impl<T: 'static> FromLua for UserDataRef<T> {
         try_value_to_userdata::<T>(value)?.borrow()
     }
 
-    unsafe fn from_stack(idx: c_int, lua: &LuaInner) -> Result<Self> {
+    unsafe fn from_stack(idx: c_int, lua: &RawLua) -> Result<Self> {
         let type_id = lua.get_userdata_type_id(idx)?;
         match type_id {
             Some(type_id) if type_id == TypeId::of::<T>() => {
@@ -268,7 +269,7 @@ impl<T: 'static> FromLua for UserDataRefMut<T> {
         try_value_to_userdata::<T>(value)?.borrow_mut()
     }
 
-    unsafe fn from_stack(idx: c_int, lua: &LuaInner) -> Result<Self> {
+    unsafe fn from_stack(idx: c_int, lua: &RawLua) -> Result<Self> {
         let type_id = lua.get_userdata_type_id(idx)?;
         match type_id {
             Some(type_id) if type_id == TypeId::of::<T>() => {

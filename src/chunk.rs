@@ -7,7 +7,7 @@ use std::string::String as StdString;
 
 use crate::error::{Error, ErrorContext, Result};
 use crate::function::Function;
-use crate::lua::{Lua, WeakLua};
+use crate::state::{Lua, WeakLua};
 use crate::table::Table;
 use crate::value::{FromLuaMulti, IntoLua, IntoLuaMulti};
 

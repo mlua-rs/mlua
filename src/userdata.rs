@@ -16,7 +16,7 @@ use {
 
 use crate::error::{Error, Result};
 use crate::function::Function;
-use crate::lua::{Lua, LuaGuard};
+use crate::state::{Lua, LuaGuard};
 use crate::string::String;
 use crate::table::{Table, TablePairs};
 use crate::types::{MaybeSend, SubtypeId, ValueRef};

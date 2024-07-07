@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 use std::cell::UnsafeCell;
-use std::mem::ManuallyDrop;
+use std::ops::Deref;
 #[cfg(not(feature = "luau"))]
 use std::ops::{BitOr, BitOrAssign};
 use std::os::raw::c_int;
@@ -8,7 +8,7 @@ use std::os::raw::c_int;
 use ffi::lua_Debug;
 use parking_lot::ReentrantMutexGuard;
 
-use crate::lua::{Lua, LuaInner};
+use crate::state::RawLua;
 use crate::util::{linenumber_to_usize, ptr_to_lossy_str, ptr_to_str};
 
 /// Contains information about currently executing Lua code.
@@ -20,38 +20,46 @@ use crate::util::{linenumber_to_usize, ptr_to_lossy_str, ptr_to_str};
 ///
 /// [lua_doc]: https://www.lua.org/manual/5.4/manual.html#lua_Debug
 /// [`Lua::set_hook`]: crate::Lua::set_hook
-pub struct Debug<'lua> {
-    lua: ManuallyDrop<ReentrantMutexGuard<'lua, LuaInner>>,
+pub struct Debug<'a> {
+    lua: EitherLua<'a>,
     ar: ActivationRecord,
     #[cfg(feature = "luau")]
     level: c_int,
 }
 
-impl<'lua> Drop for Debug<'lua> {
-    fn drop(&mut self) {
-        if let ActivationRecord::Owned(_) = self.ar {
-            unsafe { ManuallyDrop::drop(&mut self.lua) }
+enum EitherLua<'a> {
+    Owned(ReentrantMutexGuard<'a, RawLua>),
+    Borrowed(&'a RawLua),
+}
+
+impl Deref for EitherLua<'_> {
+    type Target = RawLua;
+
+    fn deref(&self) -> &Self::Target {
+        match self {
+            EitherLua::Owned(guard) => &*guard,
+            EitherLua::Borrowed(lua) => lua,
         }
     }
 }
 
-impl<'lua> Debug<'lua> {
+impl<'a> Debug<'a> {
     // We assume the lock is held when this function is called.
     #[cfg(not(feature = "luau"))]
-    pub(crate) fn new(lua: &'lua Lua, ar: *mut lua_Debug) -> Self {
+    pub(crate) fn new(lua: &'a RawLua, ar: *mut lua_Debug) -> Self {
         Debug {
-            lua: unsafe { lua.guard_unchecked() },
+            lua: EitherLua::Borrowed(lua),
             ar: ActivationRecord::Borrowed(ar),
         }
     }
 
     pub(crate) fn new_owned(
-        guard: ReentrantMutexGuard<'lua, LuaInner>,
+        guard: ReentrantMutexGuard<'a, RawLua>,
         _level: c_int,
         ar: lua_Debug,
     ) -> Self {
         Debug {
-            lua: ManuallyDrop::new(guard),
+            lua: EitherLua::Owned(guard),
             ar: ActivationRecord::Owned(UnsafeCell::new(ar)),
             #[cfg(feature = "luau")]
             level: _level,

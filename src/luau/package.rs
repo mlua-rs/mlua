@@ -7,7 +7,7 @@ use std::{env, fs};
 
 use crate::chunk::ChunkMode;
 use crate::error::Result;
-use crate::lua::Lua;
+use crate::state::Lua;
 use crate::table::Table;
 use crate::types::RegistryKey;
 use crate::value::{IntoLua, Value};

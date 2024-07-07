@@ -5,7 +5,7 @@ use std::ptr;
 use std::slice;
 
 use crate::error::{Error, Result};
-use crate::lua::Lua;
+use crate::state::Lua;
 use crate::table::Table;
 use crate::types::{Callback, MaybeSend, ValueRef};
 use crate::util::{
@@ -161,11 +161,13 @@ impl Function {
         R: FromLuaMulti,
     {
         let lua = self.0.lua.lock();
-        let thread_res = lua.create_recycled_thread(self).map(|th| {
-            let mut th = th.into_async(args);
-            th.set_recyclable(true);
-            th
-        });
+        let thread_res = unsafe {
+            lua.create_recycled_thread(self).map(|th| {
+                let mut th = th.into_async(args);
+                th.set_recyclable(true);
+                th
+            })
+        };
         async move { thread_res?.await }
     }
 

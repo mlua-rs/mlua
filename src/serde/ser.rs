@@ -2,7 +2,7 @@ use serde::{ser, Serialize};
 
 use super::LuaSerdeExt;
 use crate::error::{Error, Result};
-use crate::lua::Lua;
+use crate::state::Lua;
 use crate::table::Table;
 use crate::value::{IntoLua, Value};
 

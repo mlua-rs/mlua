@@ -14,7 +14,7 @@ use rustc_hash::FxHashMap;
 use crate::error::Result;
 #[cfg(not(feature = "luau"))]
 use crate::hook::Debug;
-use crate::lua::{ExtraData, Lua, LuaGuard, LuaInner, WeakLua};
+use crate::state::{ExtraData, Lua, LuaGuard, RawLua, WeakLua};
 
 #[cfg(feature = "async")]
 use {crate::value::MultiValue, futures_util::future::LocalBoxFuture};
@@ -41,7 +41,7 @@ pub(crate) enum SubtypeId {
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub struct LightUserData(pub *mut c_void);
 
-pub(crate) type Callback<'a> = Box<dyn Fn(&'a LuaInner, c_int) -> Result<c_int> + 'static>;
+pub(crate) type Callback<'a> = Box<dyn Fn(&'a RawLua, c_int) -> Result<c_int> + 'static>;
 
 pub(crate) struct Upvalue<T> {
     pub(crate) data: T,
@@ -52,7 +52,7 @@ pub(crate) type CallbackUpvalue = Upvalue<Callback<'static>>;
 
 #[cfg(feature = "async")]
 pub(crate) type AsyncCallback<'a> =
-    Box<dyn Fn(&'a LuaInner, MultiValue) -> LocalBoxFuture<'a, Result<c_int>> + 'static>;
+    Box<dyn Fn(&'a RawLua, MultiValue) -> LocalBoxFuture<'a, Result<c_int>> + 'static>;
 
 #[cfg(feature = "async")]
 pub(crate) type AsyncCallbackUpvalue = Upvalue<AsyncCallback<'static>>;
@@ -281,7 +281,8 @@ pub(crate) struct ValueRef {
 }
 
 impl ValueRef {
-    pub(crate) fn new(lua: &LuaInner, index: c_int) -> Self {
+    #[inline]
+    pub(crate) fn new(lua: &RawLua, index: c_int) -> Self {
         ValueRef {
             lua: lua.weak().clone(),
             index,
@@ -304,7 +305,7 @@ impl fmt::Debug for ValueRef {
 
 impl Clone for ValueRef {
     fn clone(&self) -> Self {
-        self.lua.lock().clone_ref(self)
+        unsafe { self.lua.lock().clone_ref(self) }
     }
 }
 
@@ -312,7 +313,7 @@ impl Drop for ValueRef {
     fn drop(&mut self) {
         if self.drop {
             if let Some(lua) = self.lua.try_lock() {
-                lua.drop_ref(self);
+                unsafe { lua.drop_ref(self) };
             }
         }
     }

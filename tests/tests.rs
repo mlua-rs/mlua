@@ -17,7 +17,7 @@ use mlua::{
 fn test_safety() -> Result<()> {
     let lua = Lua::new();
     assert!(lua.load(r#"require "debug""#).exec().is_err());
-    match lua.load_from_std_lib(StdLib::DEBUG) {
+    match lua.load_std_libs(StdLib::DEBUG) {
         Err(Error::SafetyError(_)) => {}
         Err(e) => panic!("expected SafetyError, got {:?}", e),
         Ok(_) => panic!("expected SafetyError, got no error"),
@@ -53,7 +53,7 @@ fn test_safety() -> Result<()> {
     // Test safety rules after dynamically loading `package` library
     let lua = Lua::new_with(StdLib::NONE, LuaOptions::default())?;
     assert!(lua.globals().get::<_, Option<Value>>("require")?.is_none());
-    lua.load_from_std_lib(StdLib::PACKAGE)?;
+    lua.load_std_libs(StdLib::PACKAGE)?;
     match lua.load(r#"package.loadlib()"#).exec() {
         Err(Error::CallbackError { ref cause, .. }) => match cause.as_ref() {
             Error::SafetyError(_) => {}
@@ -657,7 +657,7 @@ fn test_recursive_mut_callback_error() -> Result<()> {
     let lua = Lua::new();
 
     let mut v = Some(Box::new(123));
-    let f = lua.create_function_mut::<_, (), _>(move |lua, mutate: bool| {
+    let f = lua.create_function_mut(move |lua, mutate: bool| {
         if mutate {
             v = None;
         } else {

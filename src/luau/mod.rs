@@ -2,7 +2,7 @@ use std::ffi::CStr;
 use std::os::raw::{c_float, c_int};
 
 use crate::error::Result;
-use crate::lua::Lua;
+use crate::state::Lua;
 
 // Since Luau has some missing standard functions, we re-implement them here
 

@@ -1,5 +1,6 @@
 use std::any::{Any, TypeId};
 use std::borrow::Cow;
+use std::cell::UnsafeCell;
 use std::ffi::CStr;
 use std::fmt::Write;
 use std::mem::MaybeUninit;
@@ -18,7 +19,19 @@ pub(crate) use short_names::short_type_name;
 
 static METATABLE_CACHE: Lazy<FxHashMap<TypeId, u8>> = Lazy::new(|| {
     let mut map = FxHashMap::with_capacity_and_hasher(32, Default::default());
-    crate::lua::init_metatable_cache(&mut map);
+
+    map.insert(TypeId::of::<Arc<UnsafeCell<crate::state::ExtraData>>>(), 0);
+    map.insert(TypeId::of::<crate::types::Callback>(), 0);
+    map.insert(TypeId::of::<crate::types::CallbackUpvalue>(), 0);
+
+    #[cfg(feature = "async")]
+    {
+        map.insert(TypeId::of::<crate::types::AsyncCallback>(), 0);
+        map.insert(TypeId::of::<crate::types::AsyncCallbackUpvalue>(), 0);
+        map.insert(TypeId::of::<crate::types::AsyncPollUpvalue>(), 0);
+        map.insert(TypeId::of::<Option<std::task::Waker>>(), 0);
+    }
+
     map.insert(TypeId::of::<WrappedFailure>(), 0);
     map.insert(TypeId::of::<String>(), 0);
     map

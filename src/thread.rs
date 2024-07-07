@@ -2,8 +2,8 @@ use std::os::raw::{c_int, c_void};
 
 use crate::error::{Error, Result};
 #[allow(unused)]
-use crate::lua::Lua;
-use crate::lua::LuaInner;
+use crate::state::Lua;
+use crate::state::RawLua;
 use crate::types::ValueRef;
 use crate::util::{check_stack, error_traceback_thread, pop_error, StackGuard};
 use crate::value::{FromLuaMulti, IntoLuaMulti};
@@ -64,11 +64,6 @@ pub struct AsyncThread<R> {
 
 impl Thread {
     #[inline(always)]
-    pub(crate) fn new(lua: &LuaInner, r#ref: ValueRef) -> Self {
-        let state = unsafe { ffi::lua_tothread(lua.ref_thread(), r#ref.index) };
-        Thread(r#ref, state)
-    }
-
     const fn state(&self) -> *mut ffi::lua_State {
         self.1
     }
@@ -502,7 +497,7 @@ unsafe fn is_poll_pending(state: *mut ffi::lua_State) -> bool {
 
 #[cfg(feature = "async")]
 struct WakerGuard<'lua, 'a> {
-    lua: &'lua LuaInner,
+    lua: &'lua RawLua,
     prev: NonNull<Waker>,
     _phantom: PhantomData<&'a ()>,
 }
@@ -510,7 +505,7 @@ struct WakerGuard<'lua, 'a> {
 #[cfg(feature = "async")]
 impl<'lua, 'a> WakerGuard<'lua, 'a> {
     #[inline]
-    pub fn new(lua: &'lua LuaInner, waker: &'a Waker) -> Result<WakerGuard<'lua, 'a>> {
+    pub fn new(lua: &'lua RawLua, waker: &'a Waker) -> Result<WakerGuard<'lua, 'a>> {
         let prev = unsafe { lua.set_waker(NonNull::from(waker)) };
         Ok(WakerGuard {
             lua,

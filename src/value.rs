@@ -19,7 +19,7 @@ use {
 
 use crate::error::{Error, Result};
 use crate::function::Function;
-use crate::lua::{Lua, LuaInner};
+use crate::state::{Lua, RawLua};
 use crate::string::String;
 use crate::table::Table;
 use crate::thread::Thread;
@@ -698,7 +698,7 @@ pub trait IntoLua: Sized {
     /// This method does not check Lua stack space.
     #[doc(hidden)]
     #[inline]
-    unsafe fn push_into_stack(self, lua: &LuaInner) -> Result<()> {
+    unsafe fn push_into_stack(self, lua: &RawLua) -> Result<()> {
         lua.push_value(&self.into_lua(lua.lua())?)
     }
 }
@@ -726,19 +726,14 @@ pub trait FromLua: Sized {
     /// Performs the conversion for a value in the Lua stack at index `idx`.
     #[doc(hidden)]
     #[inline]
-    unsafe fn from_stack(idx: c_int, lua: &LuaInner) -> Result<Self> {
+    unsafe fn from_stack(idx: c_int, lua: &RawLua) -> Result<Self> {
         Self::from_lua(lua.stack_value(idx), lua.lua())
     }
 
     /// Same as `from_lua_arg` but for a value in the Lua stack at index `idx`.
     #[doc(hidden)]
     #[inline]
-    unsafe fn from_stack_arg(
-        idx: c_int,
-        i: usize,
-        to: Option<&str>,
-        lua: &LuaInner,
-    ) -> Result<Self> {
+    unsafe fn from_stack_arg(idx: c_int, i: usize, to: Option<&str>, lua: &RawLua) -> Result<Self> {
         Self::from_stack(idx, lua).map_err(|err| Error::BadArgument {
             to: to.map(|s| s.to_string()),
             pos: i,
@@ -876,7 +871,7 @@ pub trait IntoLuaMulti: Sized {
     /// Returns number of pushed values.
     #[doc(hidden)]
     #[inline]
-    unsafe fn push_into_stack_multi(self, lua: &LuaInner) -> Result<c_int> {
+    unsafe fn push_into_stack_multi(self, lua: &RawLua) -> Result<c_int> {
         let values = self.into_lua_multi(lua.lua())?;
         let len: c_int = values.len().try_into().unwrap();
         unsafe {
@@ -916,7 +911,7 @@ pub trait FromLuaMulti: Sized {
     /// Performs the conversion for a number of values in the Lua stack.
     #[doc(hidden)]
     #[inline]
-    unsafe fn from_stack_multi(nvals: c_int, lua: &LuaInner) -> Result<Self> {
+    unsafe fn from_stack_multi(nvals: c_int, lua: &RawLua) -> Result<Self> {
         let mut values = MultiValue::with_lua_and_capacity(lua.lua(), nvals as usize);
         for idx in 0..nvals {
             values.push_back(lua.stack_value(-nvals + idx));
@@ -935,7 +930,7 @@ pub trait FromLuaMulti: Sized {
         nargs: c_int,
         i: usize,
         to: Option<&str>,
-        lua: &LuaInner,
+        lua: &RawLua,
     ) -> Result<Self> {
         let _ = (i, to);
         Self::from_stack_multi(nargs, lua)
