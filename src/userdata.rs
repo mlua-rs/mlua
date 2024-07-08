@@ -1190,9 +1190,12 @@ mod cell;
 mod ext;
 mod registry;
 
-// #[cfg(test)]
-// mod assertions {
-//     use super::*;
+#[cfg(test)]
+mod assertions {
+    use super::*;
 
-//     static_assertions::assert_not_impl_any!(AnyUserData: Send);
-// }
+    #[cfg(not(feature = "send"))]
+    static_assertions::assert_not_impl_any!(AnyUserData: Send);
+    #[cfg(feature = "send")]
+    static_assertions::assert_impl_all!(AnyUserData: Send, Sync);
+}

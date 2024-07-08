@@ -9,14 +9,6 @@ use std::{fmt, mem, ptr, str};
 
 use num_traits::FromPrimitive;
 
-#[cfg(feature = "serialize")]
-use {
-    crate::table::SerializableTable,
-    rustc_hash::FxHashSet,
-    serde::ser::{self, Serialize, Serializer},
-    std::{cell::RefCell, rc::Rc, result::Result as StdResult},
-};
-
 use crate::error::{Error, Result};
 use crate::function::Function;
 use crate::state::{Lua, RawLua};
@@ -26,6 +18,14 @@ use crate::thread::Thread;
 use crate::types::{Integer, LightUserData, Number, SubtypeId};
 use crate::userdata::AnyUserData;
 use crate::util::{check_stack, StackGuard};
+
+#[cfg(feature = "serialize")]
+use {
+    crate::table::SerializableTable,
+    rustc_hash::FxHashSet,
+    serde::ser::{self, Serialize, Serializer},
+    std::{cell::RefCell, rc::Rc, result::Result as StdResult},
+};
 
 /// A dynamically typed Lua value. The `String`, `Table`, `Function`, `Thread`, and `UserData`
 /// variants contain handle types into the internal Lua state. It is a logic error to mix handle

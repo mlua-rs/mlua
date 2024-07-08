@@ -202,9 +202,12 @@ impl Serialize for String {
     }
 }
 
-// #[cfg(test)]
-// mod assertions {
-//     use super::*;
+#[cfg(test)]
+mod assertions {
+    use super::*;
 
-//     static_assertions::assert_not_impl_any!(String: Send);
-// }
+    #[cfg(not(feature = "send"))]
+    static_assertions::assert_not_impl_any!(String: Send);
+    #[cfg(feature = "send")]
+    static_assertions::assert_impl_all!(String: Send, Sync);
+}

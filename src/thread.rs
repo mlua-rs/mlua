@@ -46,6 +46,11 @@ pub enum ThreadStatus {
 #[derive(Clone, Debug)]
 pub struct Thread(pub(crate) ValueRef, pub(crate) *mut ffi::lua_State);
 
+#[cfg(feature = "send")]
+unsafe impl Send for Thread {}
+#[cfg(feature = "send")]
+unsafe impl Sync for Thread {}
+
 /// Thread (coroutine) representation as an async [`Future`] or [`Stream`].
 ///
 /// Requires `feature = "async"`
@@ -526,5 +531,8 @@ impl<'lua, 'a> Drop for WakerGuard<'lua, 'a> {
 mod assertions {
     use super::*;
 
+    #[cfg(not(feature = "send"))]
     static_assertions::assert_not_impl_any!(Thread: Send);
+    #[cfg(feature = "send")]
+    static_assertions::assert_impl_all!(Thread: Send, Sync);
 }

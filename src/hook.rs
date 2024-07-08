@@ -6,9 +6,9 @@ use std::ops::{BitOr, BitOrAssign};
 use std::os::raw::c_int;
 
 use ffi::lua_Debug;
-use parking_lot::ReentrantMutexGuard;
 
 use crate::state::RawLua;
+use crate::types::ReentrantMutexGuard;
 use crate::util::{linenumber_to_usize, ptr_to_lossy_str, ptr_to_str};
 
 /// Contains information about currently executing Lua code.

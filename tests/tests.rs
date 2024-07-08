@@ -1324,11 +1324,26 @@ fn test_luajit_cdata() -> Result<()> {
 #[test]
 #[cfg(feature = "send")]
 #[cfg(not(target_arch = "wasm32"))]
-fn test_send() {
+fn test_multi_thread() -> Result<()> {
     let lua = Lua::new();
-    std::thread::spawn(move || {
-        let _lua = lua;
-    })
-    .join()
-    .unwrap();
+
+    lua.globals().set("i", 0)?;
+    let func = lua.load("i = i + 1").into_function()?;
+
+    std::thread::scope(|s| {
+        s.spawn(|| {
+            for _ in 0..5 {
+                func.call::<_, ()>(()).unwrap();
+            }
+        });
+        s.spawn(|| {
+            for _ in 0..5 {
+                func.call::<_, ()>(()).unwrap();
+            }
+        });
+    });
+
+    assert_eq!(lua.globals().get::<_, i32>("i")?, 10);
+
+    Ok(())
 }

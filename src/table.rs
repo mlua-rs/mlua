@@ -1219,9 +1219,12 @@ where
     }
 }
 
-// #[cfg(test)]
-// mod assertions {
-//     use super::*;
+#[cfg(test)]
+mod assertions {
+    use super::*;
 
-//     static_assertions::assert_not_impl_any!(Table: Send);
-// }
+    #[cfg(not(feature = "send"))]
+    static_assertions::assert_not_impl_any!(Table: Send);
+    #[cfg(feature = "send")]
+    static_assertions::assert_impl_all!(Table: Send, Sync);
+}

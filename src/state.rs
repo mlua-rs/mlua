@@ -6,11 +6,9 @@ use std::marker::PhantomData;
 use std::ops::Deref;
 use std::os::raw::{c_int, c_void};
 use std::panic::Location;
+use std::rc::Rc;
 use std::result::Result as StdResult;
-use std::sync::{Arc, Weak};
 use std::{mem, ptr};
-
-use parking_lot::{ReentrantMutex, ReentrantMutexGuard};
 
 use crate::chunk::{AsChunk, Chunk};
 use crate::error::{Error, Result};
@@ -24,7 +22,7 @@ use crate::table::Table;
 use crate::thread::Thread;
 use crate::types::{
     AppDataRef, AppDataRefMut, ArcReentrantMutexGuard, Integer, LightUserData, MaybeSend, Number,
-    RegistryKey,
+    ReentrantMutex, ReentrantMutexGuard, RegistryKey, XRc, XWeak,
 };
 use crate::userdata::{AnyUserData, UserData, UserDataProxy, UserDataRegistry, UserDataVariant};
 use crate::util::{assert_stack, check_stack, push_string, push_table, rawset_field, StackGuard};
@@ -49,11 +47,11 @@ use util::{callback_error_ext, StateGuard};
 /// Top level Lua struct which represents an instance of Lua VM.
 #[derive(Clone)]
 #[repr(transparent)]
-pub struct Lua(Arc<ReentrantMutex<RawLua>>);
+pub struct Lua(XRc<ReentrantMutex<RawLua>>);
 
 #[derive(Clone)]
 #[repr(transparent)]
-pub(crate) struct WeakLua(Weak<ReentrantMutex<RawLua>>);
+pub(crate) struct WeakLua(XWeak<ReentrantMutex<RawLua>>);
 
 pub(crate) struct LuaGuard(ArcReentrantMutexGuard<RawLua>);
 
@@ -141,11 +139,6 @@ impl LuaOptions {
         self
     }
 }
-
-/// Requires `feature = "send"`
-#[cfg(feature = "send")]
-#[cfg_attr(docsrs, doc(cfg(feature = "send")))]
-unsafe impl Send for Lua {}
 
 #[cfg(not(feature = "module"))]
 impl Drop for Lua {
@@ -421,7 +414,8 @@ impl Lua {
     #[doc(hidden)]
     #[cfg(feature = "module")]
     pub fn skip_memory_check(&self, skip: bool) {
-        unsafe { (*self.extra.get()).skip_memory_check = skip };
+        let lua = self.lock();
+        unsafe { (*lua.extra.get()).skip_memory_check = skip };
     }
 
     /// Enables (or disables) sandbox mode on this Lua instance.
@@ -605,7 +599,7 @@ impl Lua {
                 let interrupt_cb = (*extra).interrupt_callback.clone();
                 let interrupt_cb =
                     mlua_expect!(interrupt_cb, "no interrupt callback set in interrupt_proc");
-                if Arc::strong_count(&interrupt_cb) > 2 {
+                if Rc::strong_count(&interrupt_cb) > 2 {
                     return Ok(VmState::Continue); // Don't allow recursion
                 }
                 let _guard = StateGuard::new((*extra).raw_lua(), state);
@@ -622,7 +616,7 @@ impl Lua {
         // Set interrupt callback
         let lua = self.lock();
         unsafe {
-            (*lua.extra.get()).interrupt_callback = Some(Arc::new(callback));
+            (*lua.extra.get()).interrupt_callback = Some(Rc::new(callback));
             (*ffi::lua_callbacks(lua.main_state)).interrupt = Some(interrupt_proc);
         }
     }
@@ -947,7 +941,8 @@ impl Lua {
     #[cfg(any(feature = "luau-jit", doc))]
     #[cfg_attr(docsrs, doc(cfg(feature = "luau-jit")))]
     pub fn enable_jit(&self, enable: bool) {
-        unsafe { (*self.extra.get()).enable_jit = enable };
+        let lua = self.lock();
+        unsafe { (*lua.extra.get()).enable_jit = enable };
     }
 
     /// Sets Luau feature flag (global setting).
@@ -1879,7 +1874,7 @@ impl Lua {
 
     #[inline(always)]
     pub(crate) fn weak(&self) -> WeakLua {
-        WeakLua(Arc::downgrade(&self.0))
+        WeakLua(XRc::downgrade(&self.0))
     }
 }
 
@@ -1887,7 +1882,7 @@ impl WeakLua {
     #[track_caller]
     #[inline(always)]
     pub(crate) fn lock(&self) -> LuaGuard {
-        LuaGuard::new(self.0.upgrade().unwrap())
+        LuaGuard::new(self.0.upgrade().expect("Lua instance is destroyed"))
     }
 
     #[inline(always)]
@@ -1898,15 +1893,21 @@ impl WeakLua {
 
 impl PartialEq for WeakLua {
     fn eq(&self, other: &Self) -> bool {
-        Weak::ptr_eq(&self.0, &other.0)
+        XWeak::ptr_eq(&self.0, &other.0)
     }
 }
 
 impl Eq for WeakLua {}
 
 impl LuaGuard {
-    pub(crate) fn new(handle: Arc<ReentrantMutex<RawLua>>) -> Self {
-        Self(handle.lock_arc())
+    #[cfg(feature = "send")]
+    pub(crate) fn new(handle: XRc<ReentrantMutex<RawLua>>) -> Self {
+        LuaGuard(handle.lock_arc())
+    }
+
+    #[cfg(not(feature = "send"))]
+    pub(crate) fn new(handle: XRc<ReentrantMutex<RawLua>>) -> Self {
+        LuaGuard(handle.into_lock_arc())
     }
 }
 
@@ -1922,15 +1923,15 @@ pub(crate) mod extra;
 mod raw;
 pub(crate) mod util;
 
-// #[cfg(test)]
-// mod assertions {
-//     use super::*;
+#[cfg(test)]
+mod assertions {
+    use super::*;
 
-//     // Lua has lots of interior mutability, should not be RefUnwindSafe
-//     static_assertions::assert_not_impl_any!(Lua: std::panic::RefUnwindSafe);
+    // Lua has lots of interior mutability, should not be RefUnwindSafe
+    static_assertions::assert_not_impl_any!(Lua: std::panic::RefUnwindSafe);
 
-//     #[cfg(not(feature = "send"))]
-//     static_assertions::assert_not_impl_any!(Lua: Send);
-//     #[cfg(feature = "send")]
-//     static_assertions::assert_impl_all!(Lua: Send);
-// }
+    #[cfg(not(feature = "send"))]
+    static_assertions::assert_not_impl_any!(Lua: Send);
+    #[cfg(feature = "send")]
+    static_assertions::assert_impl_all!(Lua: Send, Sync);
+}

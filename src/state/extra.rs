@@ -5,15 +5,15 @@ use std::rc::Rc;
 use std::mem::{self, MaybeUninit};
 use std::os::raw::{c_int, c_void};
 use std::ptr;
-use std::sync::{Arc, Weak};
+use std::sync::Arc;
 
-use parking_lot::{Mutex, ReentrantMutex};
+use parking_lot::Mutex;
 use rustc_hash::FxHashMap;
 
 use crate::error::Result;
 use crate::state::RawLua;
 use crate::stdlib::StdLib;
-use crate::types::AppData;
+use crate::types::{AppData, ReentrantMutex, XRc, XWeak};
 use crate::util::{get_gc_metatable, push_gc_userdata, WrappedFailure};
 
 #[cfg(any(feature = "luau", doc))]
@@ -34,9 +34,9 @@ const REF_STACK_RESERVE: c_int = 1;
 /// Data associated with the Lua state.
 pub(crate) struct ExtraData {
     // Same layout as `Lua`
-    pub(super) lua: MaybeUninit<Arc<ReentrantMutex<RawLua>>>,
+    pub(super) lua: MaybeUninit<XRc<ReentrantMutex<RawLua>>>,
     // Same layout as `WeakLua`
-    pub(super) weak: MaybeUninit<Weak<ReentrantMutex<RawLua>>>,
+    pub(super) weak: MaybeUninit<XWeak<ReentrantMutex<RawLua>>>,
 
     pub(super) registered_userdata: FxHashMap<TypeId, c_int>,
     pub(super) registered_userdata_mt: FxHashMap<*const c_void, Option<TypeId>>,
@@ -107,7 +107,7 @@ impl ExtraData {
     #[cfg(any(feature = "lua51", feature = "luajit", feature = "luau"))]
     pub(super) const ERROR_TRACEBACK_IDX: c_int = 1;
 
-    pub(super) unsafe fn init(state: *mut ffi::lua_State) -> Rc<UnsafeCell<Self>> {
+    pub(super) unsafe fn init(state: *mut ffi::lua_State) -> XRc<UnsafeCell<Self>> {
         // Create ref stack thread and place it in the registry to prevent it
         // from being garbage collected.
         let ref_thread = mlua_expect!(
@@ -133,7 +133,7 @@ impl ExtraData {
             assert_eq!(ffi::lua_gettop(ref_thread), Self::ERROR_TRACEBACK_IDX);
         }
 
-        let extra = Rc::new(UnsafeCell::new(ExtraData {
+        let extra = XRc::new(UnsafeCell::new(ExtraData {
             lua: MaybeUninit::uninit(),
             weak: MaybeUninit::uninit(),
             registered_userdata: FxHashMap::default(),
@@ -179,12 +179,12 @@ impl ExtraData {
         extra
     }
 
-    pub(super) unsafe fn set_lua(&mut self, lua: &Arc<ReentrantMutex<RawLua>>) {
-        self.lua.write(Arc::clone(lua));
+    pub(super) unsafe fn set_lua(&mut self, lua: &XRc<ReentrantMutex<RawLua>>) {
+        self.lua.write(XRc::clone(lua));
         if cfg!(not(feature = "module")) {
-            Arc::decrement_strong_count(Arc::as_ptr(lua));
+            XRc::decrement_strong_count(XRc::as_ptr(lua));
         }
-        self.weak.write(Arc::downgrade(lua));
+        self.weak.write(XRc::downgrade(lua));
     }
 
     pub(super) unsafe fn get(state: *mut ffi::lua_State) -> *mut Self {
@@ -206,14 +206,14 @@ impl ExtraData {
         (*extra_ptr).get()
     }
 
-    unsafe fn store(extra: &Rc<UnsafeCell<Self>>, state: *mut ffi::lua_State) -> Result<()> {
+    unsafe fn store(extra: &XRc<UnsafeCell<Self>>, state: *mut ffi::lua_State) -> Result<()> {
         #[cfg(feature = "luau")]
         if cfg!(not(feature = "module")) {
             (*ffi::lua_callbacks(state)).userdata = extra.get() as *mut _;
             return Ok(());
         }
 
-        push_gc_userdata(state, Rc::clone(extra), true)?;
+        push_gc_userdata(state, XRc::clone(extra), true)?;
         protect_lua!(state, 1, 0, fn(state) {
             let extra_key = &EXTRA_REGISTRY_KEY as *const u8 as *const c_void;
             ffi::lua_rawsetp(state, ffi::LUA_REGISTRYINDEX, extra_key);

@@ -8,8 +8,6 @@ use std::result::Result as StdResult;
 use std::sync::Arc;
 use std::{mem, ptr};
 
-use parking_lot::ReentrantMutex;
-
 use crate::chunk::ChunkMode;
 use crate::error::{Error, Result};
 use crate::function::Function;
@@ -21,7 +19,7 @@ use crate::table::Table;
 use crate::thread::Thread;
 use crate::types::{
     AppDataRef, AppDataRefMut, Callback, CallbackUpvalue, DestructedUserdata, Integer,
-    LightUserData, MaybeSend, RegistryKey, SubtypeId, ValueRef,
+    LightUserData, MaybeSend, ReentrantMutex, RegistryKey, SubtypeId, ValueRef, XRc,
 };
 use crate::userdata::{AnyUserData, MetaMethod, UserData, UserDataRegistry, UserDataVariant};
 use crate::util::{
@@ -50,7 +48,7 @@ pub struct RawLua {
     // The state is dynamic and depends on context
     pub(super) state: Cell<*mut ffi::lua_State>,
     pub(super) main_state: *mut ffi::lua_State,
-    pub(super) extra: Rc<UnsafeCell<ExtraData>>,
+    pub(super) extra: XRc<UnsafeCell<ExtraData>>,
 }
 
 #[cfg(not(feature = "module"))]
@@ -68,6 +66,9 @@ impl Drop for RawLua {
         }
     }
 }
+
+#[cfg(feature = "send")]
+unsafe impl Send for RawLua {}
 
 impl RawLua {
     #[inline(always)]
@@ -96,7 +97,7 @@ impl RawLua {
         unsafe { (*self.extra.get()).ref_thread }
     }
 
-    pub(super) unsafe fn new(libs: StdLib, options: LuaOptions) -> Arc<ReentrantMutex<Self>> {
+    pub(super) unsafe fn new(libs: StdLib, options: LuaOptions) -> XRc<ReentrantMutex<Self>> {
         let mem_state: *mut MemoryState = Box::into_raw(Box::default());
         let mut state = ffi::lua_newstate(ALLOCATOR, mem_state as *mut c_void);
         // If state is null then switch to Lua internal allocator
@@ -154,7 +155,7 @@ impl RawLua {
         rawlua
     }
 
-    pub(super) unsafe fn init_from_ptr(state: *mut ffi::lua_State) -> Arc<ReentrantMutex<Self>> {
+    pub(super) unsafe fn init_from_ptr(state: *mut ffi::lua_State) -> XRc<ReentrantMutex<Self>> {
         assert!(!state.is_null(), "Lua state is NULL");
         if let Some(lua) = Self::try_from_ptr(state) {
             return lua;
@@ -209,10 +210,10 @@ impl RawLua {
         assert_stack(main_state, ffi::LUA_MINSTACK);
 
         #[allow(clippy::arc_with_non_send_sync)]
-        let rawlua = Arc::new(ReentrantMutex::new(RawLua {
+        let rawlua = XRc::new(ReentrantMutex::new(RawLua {
             state: Cell::new(state),
             main_state,
-            extra: Rc::clone(&extra),
+            extra: XRc::clone(&extra),
         }));
         (*extra.get()).set_lua(&rawlua);
 
@@ -221,10 +222,10 @@ impl RawLua {
 
     pub(super) unsafe fn try_from_ptr(
         state: *mut ffi::lua_State,
-    ) -> Option<Arc<ReentrantMutex<Self>>> {
+    ) -> Option<XRc<ReentrantMutex<Self>>> {
         match ExtraData::get(state) {
             extra if extra.is_null() => None,
-            extra => Some(Arc::clone(&(*extra).lua().0)),
+            extra => Some(XRc::clone(&(*extra).lua().0)),
         }
     }
 
@@ -369,7 +370,7 @@ impl RawLua {
             callback_error_ext(state, extra, move |_| {
                 let hook_cb = (*extra).hook_callback.clone();
                 let hook_cb = mlua_expect!(hook_cb, "no hook callback set in hook_proc");
-                if Arc::strong_count(&hook_cb) > 2 {
+                if Rc::strong_count(&hook_cb) > 2 {
                     return Ok(()); // Don't allow recursion
                 }
                 let rawlua = (*extra).raw_lua();
@@ -379,7 +380,7 @@ impl RawLua {
             })
         }
 
-        (*self.extra.get()).hook_callback = Some(Arc::new(callback));
+        (*self.extra.get()).hook_callback = Some(Rc::new(callback));
         (*self.extra.get()).hook_thread = state; // Mark for what thread the hook is set
         ffi::lua_sethook(state, Some(hook_proc), triggers.mask(), triggers.count());
     }
@@ -1105,7 +1106,7 @@ impl RawLua {
             check_stack(state, 4)?;
 
             let func = mem::transmute::<Callback, Callback<'static>>(func);
-            let extra = Rc::clone(&self.extra);
+            let extra = XRc::clone(&self.extra);
             let protect = !self.unlikely_memory_error();
             push_gc_userdata(state, CallbackUpvalue { data: func, extra }, protect)?;
             if protect {
@@ -1149,7 +1150,7 @@ impl RawLua {
                 let args = MultiValue::from_stack_multi(nargs, rawlua)?;
                 let func = &*(*upvalue).data;
                 let fut = func(rawlua, args);
-                let extra = Rc::clone(&(*upvalue).extra);
+                let extra = XRc::clone(&(*upvalue).extra);
                 let protect = !rawlua.unlikely_memory_error();
                 push_gc_userdata(state, AsyncPollUpvalue { data: fut, extra }, protect)?;
                 if protect {
@@ -1209,7 +1210,7 @@ impl RawLua {
             check_stack(state, 4)?;
 
             let func = mem::transmute::<AsyncCallback, AsyncCallback<'static>>(func);
-            let extra = Rc::clone(&self.extra);
+            let extra = XRc::clone(&self.extra);
             let protect = !self.unlikely_memory_error();
             let upvalue = AsyncCallbackUpvalue { data: func, extra };
             push_gc_userdata(state, upvalue, protect)?;

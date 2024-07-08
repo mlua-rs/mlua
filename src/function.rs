@@ -594,9 +594,12 @@ impl IntoLua for WrappedAsyncFunction {
     }
 }
 
-// #[cfg(test)]
-// mod assertions {
-//     use super::*;
+#[cfg(test)]
+mod assertions {
+    use super::*;
 
-//     static_assertions::assert_not_impl_any!(Function: Send);
-// }
+    #[cfg(not(feature = "send"))]
+    static_assertions::assert_not_impl_any!(Function: Send);
+    #[cfg(feature = "send")]
+    static_assertions::assert_impl_all!(Function: Send, Sync);
+}

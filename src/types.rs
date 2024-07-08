@@ -9,7 +9,7 @@ use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::Arc;
 use std::{fmt, mem, ptr};
 
-use parking_lot::{Mutex, RawMutex, RawThreadId};
+use parking_lot::Mutex;
 use rustc_hash::FxHashMap;
 
 use crate::error::Result;
@@ -22,6 +22,9 @@ use {crate::value::MultiValue, futures_util::future::LocalBoxFuture};
 
 #[cfg(all(feature = "luau", feature = "serialize"))]
 use serde::ser::{Serialize, SerializeTupleStruct, Serializer};
+
+// Re-export mutex wrappers
+pub(crate) use sync::{ArcReentrantMutexGuard, ReentrantMutex, ReentrantMutexGuard, XRc, XWeak};
 
 /// Type of Lua integer numbers.
 pub type Integer = ffi::lua_Integer;
@@ -70,16 +73,16 @@ pub enum VmState {
 }
 
 #[cfg(all(feature = "send", not(feature = "luau")))]
-pub(crate) type HookCallback = Arc<dyn Fn(&Lua, Debug) -> Result<()> + Send>;
+pub(crate) type HookCallback = Rc<dyn Fn(&Lua, Debug) -> Result<()> + Send>;
 
 #[cfg(all(not(feature = "send"), not(feature = "luau")))]
-pub(crate) type HookCallback = Arc<dyn Fn(&Lua, Debug) -> Result<()>>;
+pub(crate) type HookCallback = Rc<dyn Fn(&Lua, Debug) -> Result<()>>;
 
-#[cfg(all(feature = "luau", feature = "send"))]
-pub(crate) type InterruptCallback = Arc<dyn Fn(&Lua) -> Result<VmState> + Send>;
+#[cfg(all(feature = "send", feature = "luau"))]
+pub(crate) type InterruptCallback = Rc<dyn Fn(&Lua) -> Result<VmState> + Send>;
 
-#[cfg(all(feature = "luau", not(feature = "send")))]
-pub(crate) type InterruptCallback = Arc<dyn Fn(&Lua) -> Result<VmState>>;
+#[cfg(all(not(feature = "send"), feature = "luau"))]
+pub(crate) type InterruptCallback = Rc<dyn Fn(&Lua) -> Result<VmState>>;
 
 #[cfg(all(feature = "send", feature = "lua54"))]
 pub(crate) type WarnCallback = Box<dyn Fn(&Lua, &str, bool) -> Result<()> + Send>;
@@ -182,9 +185,6 @@ impl PartialEq<[f32; Self::SIZE]> for Vector {
         self.0 == *other
     }
 }
-
-pub(crate) type ArcReentrantMutexGuard<T> =
-    parking_lot::lock_api::ArcReentrantMutexGuard<RawMutex, RawThreadId, T>;
 
 pub(crate) struct DestructedUserdata;
 
@@ -482,10 +482,16 @@ impl<T: ?Sized + fmt::Debug> fmt::Debug for AppDataRefMut<'_, T> {
     }
 }
 
-// #[cfg(test)]
-// mod assertions {
-//     use super::*;
+mod sync;
 
-//     static_assertions::assert_impl_all!(RegistryKey: Send, Sync);
-//     static_assertions::assert_not_impl_any!(ValueRef: Send);
-// }
+#[cfg(test)]
+mod assertions {
+    use super::*;
+
+    static_assertions::assert_impl_all!(RegistryKey: Send, Sync);
+
+    #[cfg(not(feature = "send"))]
+    static_assertions::assert_not_impl_any!(ValueRef: Send);
+    #[cfg(feature = "send")]
+    static_assertions::assert_impl_all!(ValueRef: Send, Sync);
+}
