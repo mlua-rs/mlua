@@ -1,21 +1,17 @@
-use std::any::{Any, TypeId};
-use std::cell::{Cell, Ref, RefCell, RefMut, UnsafeCell};
+use std::cell::UnsafeCell;
 use std::hash::{Hash, Hasher};
-use std::ops::{Deref, DerefMut};
 use std::os::raw::{c_int, c_void};
 use std::rc::Rc;
-use std::result::Result as StdResult;
 use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::Arc;
 use std::{fmt, mem, ptr};
 
 use parking_lot::Mutex;
-use rustc_hash::FxHashMap;
 
 use crate::error::Result;
 #[cfg(not(feature = "luau"))]
 use crate::hook::Debug;
-use crate::state::{ExtraData, Lua, LuaGuard, RawLua, WeakLua};
+use crate::state::{ExtraData, Lua, RawLua, WeakLua};
 
 #[cfg(feature = "async")]
 use {crate::value::MultiValue, futures_util::future::LocalBoxFuture};
@@ -24,6 +20,7 @@ use {crate::value::MultiValue, futures_util::future::LocalBoxFuture};
 use serde::ser::{Serialize, SerializeTupleStruct, Serializer};
 
 // Re-export mutex wrappers
+pub use app_data::{AppData, AppDataRef, AppDataRefMut};
 pub(crate) use sync::{ArcReentrantMutexGuard, ReentrantMutex, ReentrantMutexGuard, XRc, XWeak};
 
 /// Type of Lua integer numbers.
@@ -49,7 +46,7 @@ pub(crate) type Callback<'a> = Box<dyn Fn(&'a RawLua, c_int) -> Result<c_int> + 
 
 pub(crate) struct Upvalue<T> {
     pub(crate) data: T,
-    pub(crate) extra: Rc<UnsafeCell<ExtraData>>,
+    pub(crate) extra: XRc<UnsafeCell<ExtraData>>,
 }
 
 pub(crate) type CallbackUpvalue = Upvalue<Callback<'static>>;
@@ -167,7 +164,7 @@ impl Vector {
 
 #[cfg(all(feature = "luau", feature = "serialize"))]
 impl Serialize for Vector {
-    fn serialize<S: Serializer>(&self, serializer: S) -> StdResult<S::Ok, S::Error> {
+    fn serialize<S: Serializer>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error> {
         let mut ts = serializer.serialize_tuple_struct("Vector", Self::SIZE)?;
         ts.serialize_field(&self.x())?;
         ts.serialize_field(&self.y())?;
@@ -331,157 +328,7 @@ impl PartialEq for ValueRef {
     }
 }
 
-#[derive(Debug, Default)]
-pub(crate) struct AppData {
-    #[cfg(not(feature = "send"))]
-    container: UnsafeCell<FxHashMap<TypeId, RefCell<Box<dyn Any>>>>,
-    #[cfg(feature = "send")]
-    container: UnsafeCell<FxHashMap<TypeId, RefCell<Box<dyn Any + Send>>>>,
-    borrow: Cell<usize>,
-}
-
-impl AppData {
-    #[track_caller]
-    pub(crate) fn insert<T: MaybeSend + 'static>(&self, data: T) -> Option<T> {
-        match self.try_insert(data) {
-            Ok(data) => data,
-            Err(_) => panic!("cannot mutably borrow app data container"),
-        }
-    }
-
-    pub(crate) fn try_insert<T: MaybeSend + 'static>(&self, data: T) -> StdResult<Option<T>, T> {
-        if self.borrow.get() != 0 {
-            return Err(data);
-        }
-        // SAFETY: we checked that there are no other references to the container
-        Ok(unsafe { &mut *self.container.get() }
-            .insert(TypeId::of::<T>(), RefCell::new(Box::new(data)))
-            .and_then(|data| data.into_inner().downcast::<T>().ok().map(|data| *data)))
-    }
-
-    #[track_caller]
-    pub(crate) fn borrow<T: 'static>(&self, guard: Option<LuaGuard>) -> Option<AppDataRef<T>> {
-        let data = unsafe { &*self.container.get() }
-            .get(&TypeId::of::<T>())?
-            .borrow();
-        self.borrow.set(self.borrow.get() + 1);
-        Some(AppDataRef {
-            data: Ref::filter_map(data, |data| data.downcast_ref()).ok()?,
-            borrow: &self.borrow,
-            _guard: guard,
-        })
-    }
-
-    #[track_caller]
-    pub(crate) fn borrow_mut<T: 'static>(
-        &self,
-        guard: Option<LuaGuard>,
-    ) -> Option<AppDataRefMut<T>> {
-        let data = unsafe { &*self.container.get() }
-            .get(&TypeId::of::<T>())?
-            .borrow_mut();
-        self.borrow.set(self.borrow.get() + 1);
-        Some(AppDataRefMut {
-            data: RefMut::filter_map(data, |data| data.downcast_mut()).ok()?,
-            borrow: &self.borrow,
-            _guard: guard,
-        })
-    }
-
-    #[track_caller]
-    pub(crate) fn remove<T: 'static>(&self) -> Option<T> {
-        if self.borrow.get() != 0 {
-            panic!("cannot mutably borrow app data container");
-        }
-        // SAFETY: we checked that there are no other references to the container
-        unsafe { &mut *self.container.get() }
-            .remove(&TypeId::of::<T>())?
-            .into_inner()
-            .downcast::<T>()
-            .ok()
-            .map(|data| *data)
-    }
-}
-
-/// A wrapper type for an immutably borrowed value from an app data container.
-///
-/// This type is similar to [`Ref`].
-pub struct AppDataRef<'a, T: ?Sized + 'a> {
-    data: Ref<'a, T>,
-    borrow: &'a Cell<usize>,
-    _guard: Option<LuaGuard>,
-}
-
-impl<T: ?Sized> Drop for AppDataRef<'_, T> {
-    fn drop(&mut self) {
-        self.borrow.set(self.borrow.get() - 1);
-    }
-}
-
-impl<T: ?Sized> Deref for AppDataRef<'_, T> {
-    type Target = T;
-
-    #[inline]
-    fn deref(&self) -> &Self::Target {
-        &self.data
-    }
-}
-
-impl<T: ?Sized + fmt::Display> fmt::Display for AppDataRef<'_, T> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        (**self).fmt(f)
-    }
-}
-
-impl<T: ?Sized + fmt::Debug> fmt::Debug for AppDataRef<'_, T> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        (**self).fmt(f)
-    }
-}
-
-/// A wrapper type for a mutably borrowed value from an app data container.
-///
-/// This type is similar to [`RefMut`].
-pub struct AppDataRefMut<'a, T: ?Sized + 'a> {
-    data: RefMut<'a, T>,
-    borrow: &'a Cell<usize>,
-    _guard: Option<LuaGuard>,
-}
-
-impl<T: ?Sized> Drop for AppDataRefMut<'_, T> {
-    fn drop(&mut self) {
-        self.borrow.set(self.borrow.get() - 1);
-    }
-}
-
-impl<T: ?Sized> Deref for AppDataRefMut<'_, T> {
-    type Target = T;
-
-    #[inline]
-    fn deref(&self) -> &Self::Target {
-        &self.data
-    }
-}
-
-impl<T: ?Sized> DerefMut for AppDataRefMut<'_, T> {
-    #[inline]
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.data
-    }
-}
-
-impl<T: ?Sized + fmt::Display> fmt::Display for AppDataRefMut<'_, T> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        (**self).fmt(f)
-    }
-}
-
-impl<T: ?Sized + fmt::Debug> fmt::Debug for AppDataRefMut<'_, T> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        (**self).fmt(f)
-    }
-}
-
+mod app_data;
 mod sync;
 
 #[cfg(test)]
