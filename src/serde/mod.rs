@@ -5,8 +5,8 @@ use std::os::raw::c_void;
 use serde::{de::DeserializeOwned, ser::Serialize};
 
 use crate::error::Result;
-use crate::state::Lua;
 use crate::private::Sealed;
+use crate::state::Lua;
 use crate::table::Table;
 use crate::util::check_stack;
 use crate::value::Value;

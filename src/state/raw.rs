@@ -3,6 +3,7 @@ use std::cell::{Cell, UnsafeCell};
 use std::ffi::{CStr, CString};
 use std::os::raw::{c_char, c_int, c_void};
 use std::panic::resume_unwind;
+use std::rc::Rc;
 use std::result::Result as StdResult;
 use std::sync::Arc;
 use std::{mem, ptr};
@@ -49,7 +50,7 @@ pub struct RawLua {
     // The state is dynamic and depends on context
     pub(super) state: Cell<*mut ffi::lua_State>,
     pub(super) main_state: *mut ffi::lua_State,
-    pub(super) extra: Arc<UnsafeCell<ExtraData>>,
+    pub(super) extra: Rc<UnsafeCell<ExtraData>>,
 }
 
 #[cfg(not(feature = "module"))]
@@ -169,7 +170,7 @@ impl RawLua {
                 // Create the internal metatables and store them in the registry
                 // to prevent from being garbage collected.
 
-                init_gc_metatable::<Arc<UnsafeCell<ExtraData>>>(state, None)?;
+                init_gc_metatable::<Rc<UnsafeCell<ExtraData>>>(state, None)?;
                 init_gc_metatable::<Callback>(state, None)?;
                 init_gc_metatable::<CallbackUpvalue>(state, None)?;
                 #[cfg(feature = "async")]
@@ -207,10 +208,11 @@ impl RawLua {
         );
         assert_stack(main_state, ffi::LUA_MINSTACK);
 
+        #[allow(clippy::arc_with_non_send_sync)]
         let rawlua = Arc::new(ReentrantMutex::new(RawLua {
             state: Cell::new(state),
             main_state,
-            extra: Arc::clone(&extra),
+            extra: Rc::clone(&extra),
         }));
         (*extra.get()).set_lua(&rawlua);
 
@@ -1102,8 +1104,8 @@ impl RawLua {
             let _sg = StackGuard::new(state);
             check_stack(state, 4)?;
 
-            let func = mem::transmute(func);
-            let extra = Arc::clone(&self.extra);
+            let func = mem::transmute::<Callback, Callback<'static>>(func);
+            let extra = Rc::clone(&self.extra);
             let protect = !self.unlikely_memory_error();
             push_gc_userdata(state, CallbackUpvalue { data: func, extra }, protect)?;
             if protect {
@@ -1147,7 +1149,7 @@ impl RawLua {
                 let args = MultiValue::from_stack_multi(nargs, rawlua)?;
                 let func = &*(*upvalue).data;
                 let fut = func(rawlua, args);
-                let extra = Arc::clone(&(*upvalue).extra);
+                let extra = Rc::clone(&(*upvalue).extra);
                 let protect = !rawlua.unlikely_memory_error();
                 push_gc_userdata(state, AsyncPollUpvalue { data: fut, extra }, protect)?;
                 if protect {
@@ -1169,7 +1171,7 @@ impl RawLua {
                 // Lua ensures that `LUA_MINSTACK` stack spaces are available (after pushing arguments)
                 // The lock must be already held as the future is polled
                 let rawlua = (*extra).raw_lua();
-                let _guard = StateGuard::new(&rawlua, state);
+                let _guard = StateGuard::new(rawlua, state);
 
                 let fut = &mut (*upvalue).data;
                 let mut ctx = Context::from_waker(rawlua.waker());
@@ -1190,7 +1192,7 @@ impl RawLua {
                                 Ok(nresults + 1)
                             }
                             nresults => {
-                                let results = MultiValue::from_stack_multi(nresults, &rawlua)?;
+                                let results = MultiValue::from_stack_multi(nresults, rawlua)?;
                                 ffi::lua_pushinteger(state, nresults as _);
                                 rawlua.push(rawlua.create_sequence_from(results)?)?;
                                 Ok(2)
@@ -1206,8 +1208,8 @@ impl RawLua {
             let _sg = StackGuard::new(state);
             check_stack(state, 4)?;
 
-            let func = mem::transmute(func);
-            let extra = Arc::clone(&self.extra);
+            let func = mem::transmute::<AsyncCallback, AsyncCallback<'static>>(func);
+            let extra = Rc::clone(&self.extra);
             let protect = !self.unlikely_memory_error();
             let upvalue = AsyncCallbackUpvalue { data: func, extra };
             push_gc_userdata(state, upvalue, protect)?;

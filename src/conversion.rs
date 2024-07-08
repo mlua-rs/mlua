@@ -2,7 +2,6 @@ use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::ffi::{CStr, CString};
 use std::hash::{BuildHasher, Hash};
-use std::mem::transmute;
 use std::os::raw::c_int;
 use std::string::String as StdString;
 use std::{slice, str};
@@ -23,14 +22,14 @@ use crate::value::{FromLua, IntoLua, Nil, Value};
 impl IntoLua for Value {
     #[inline]
     fn into_lua(self, _: &Lua) -> Result<Value> {
-        unsafe { Ok(transmute(self)) }
+        Ok(self)
     }
 }
 
 impl IntoLua for &Value {
     #[inline]
     fn into_lua(self, _: &Lua) -> Result<Value> {
-        unsafe { Ok(transmute(self.clone())) }
+        Ok(self.clone())
     }
 
     #[inline]
@@ -49,14 +48,14 @@ impl FromLua for Value {
 impl IntoLua for String {
     #[inline]
     fn into_lua(self, _: &Lua) -> Result<Value> {
-        unsafe { Ok(Value::String(transmute(self))) }
+        Ok(Value::String(self))
     }
 }
 
 impl IntoLua for &String {
     #[inline]
     fn into_lua(self, _: &Lua) -> Result<Value> {
-        unsafe { Ok(Value::String(transmute(self.clone()))) }
+        Ok(Value::String(self.clone()))
     }
 
     #[inline]
@@ -82,14 +81,14 @@ impl FromLua for String {
 impl IntoLua for Table {
     #[inline]
     fn into_lua(self, _: &Lua) -> Result<Value> {
-        unsafe { Ok(Value::Table(transmute(self))) }
+        Ok(Value::Table(self))
     }
 }
 
 impl IntoLua for &Table {
     #[inline]
     fn into_lua(self, _: &Lua) -> Result<Value> {
-        unsafe { Ok(Value::Table(transmute(self.clone()))) }
+        Ok(Value::Table(self.clone()))
     }
 
     #[inline]
@@ -116,14 +115,14 @@ impl FromLua for Table {
 impl IntoLua for Function {
     #[inline]
     fn into_lua(self, _: &Lua) -> Result<Value> {
-        unsafe { Ok(Value::Function(transmute(self))) }
+        Ok(Value::Function(self))
     }
 }
 
 impl IntoLua for &Function {
     #[inline]
     fn into_lua(self, _: &Lua) -> Result<Value> {
-        unsafe { Ok(Value::Function(transmute(self.clone()))) }
+        Ok(Value::Function(self.clone()))
     }
 
     #[inline]
@@ -150,14 +149,14 @@ impl FromLua for Function {
 impl IntoLua for Thread {
     #[inline]
     fn into_lua(self, _: &Lua) -> Result<Value> {
-        unsafe { Ok(Value::Thread(transmute(self))) }
+        Ok(Value::Thread(self))
     }
 }
 
 impl IntoLua for &Thread {
     #[inline]
     fn into_lua(self, _: &Lua) -> Result<Value> {
-        unsafe { Ok(Value::Thread(transmute(self.clone()))) }
+        Ok(Value::Thread(self.clone()))
     }
 
     #[inline]
@@ -184,14 +183,14 @@ impl FromLua for Thread {
 impl IntoLua for AnyUserData {
     #[inline]
     fn into_lua(self, _: &Lua) -> Result<Value> {
-        unsafe { Ok(Value::UserData(transmute(self))) }
+        Ok(Value::UserData(self))
     }
 }
 
 impl IntoLua for &AnyUserData {
     #[inline]
     fn into_lua(self, _: &Lua) -> Result<Value> {
-        unsafe { Ok(Value::UserData(transmute(self.clone()))) }
+        Ok(Value::UserData(self.clone()))
     }
 
     #[inline]
@@ -359,7 +358,7 @@ impl FromLua for crate::types::Vector {
 impl IntoLua for StdString {
     #[inline]
     fn into_lua(self, lua: &Lua) -> Result<Value> {
-        Ok(Value::String(lua.create_string(&self)?))
+        Ok(Value::String(lua.create_string(self)?))
     }
 
     #[inline]
@@ -493,7 +492,7 @@ impl IntoLua for Cow<'_, CStr> {
 impl IntoLua for BString {
     #[inline]
     fn into_lua(self, lua: &Lua) -> Result<Value> {
-        Ok(Value::String(lua.create_string(&self)?))
+        Ok(Value::String(lua.create_string(self)?))
     }
 }
 

@@ -1914,7 +1914,7 @@ impl Deref for LuaGuard {
     type Target = RawLua;
 
     fn deref(&self) -> &Self::Target {
-        &*self.0
+        &self.0
     }
 }
 

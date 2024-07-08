@@ -1,5 +1,6 @@
 use std::any::TypeId;
 use std::cell::UnsafeCell;
+use std::rc::Rc;
 // use std::collections::VecDeque;
 use std::mem::{self, MaybeUninit};
 use std::os::raw::{c_int, c_void};
@@ -106,7 +107,7 @@ impl ExtraData {
     #[cfg(any(feature = "lua51", feature = "luajit", feature = "luau"))]
     pub(super) const ERROR_TRACEBACK_IDX: c_int = 1;
 
-    pub(super) unsafe fn init(state: *mut ffi::lua_State) -> Arc<UnsafeCell<Self>> {
+    pub(super) unsafe fn init(state: *mut ffi::lua_State) -> Rc<UnsafeCell<Self>> {
         // Create ref stack thread and place it in the registry to prevent it
         // from being garbage collected.
         let ref_thread = mlua_expect!(
@@ -132,7 +133,7 @@ impl ExtraData {
             assert_eq!(ffi::lua_gettop(ref_thread), Self::ERROR_TRACEBACK_IDX);
         }
 
-        let extra = Arc::new(UnsafeCell::new(ExtraData {
+        let extra = Rc::new(UnsafeCell::new(ExtraData {
             lua: MaybeUninit::uninit(),
             weak: MaybeUninit::uninit(),
             registered_userdata: FxHashMap::default(),
@@ -200,19 +201,19 @@ impl ExtraData {
             ffi::lua_pop(state, 1);
             return ptr::null_mut();
         }
-        let extra_ptr = ffi::lua_touserdata(state, -1) as *mut Arc<UnsafeCell<ExtraData>>;
+        let extra_ptr = ffi::lua_touserdata(state, -1) as *mut Rc<UnsafeCell<ExtraData>>;
         ffi::lua_pop(state, 1);
         (*extra_ptr).get()
     }
 
-    unsafe fn store(extra: &Arc<UnsafeCell<Self>>, state: *mut ffi::lua_State) -> Result<()> {
+    unsafe fn store(extra: &Rc<UnsafeCell<Self>>, state: *mut ffi::lua_State) -> Result<()> {
         #[cfg(feature = "luau")]
         if cfg!(not(feature = "module")) {
             (*ffi::lua_callbacks(state)).userdata = extra.get() as *mut _;
             return Ok(());
         }
 
-        push_gc_userdata(state, Arc::clone(extra), true)?;
+        push_gc_userdata(state, Rc::clone(extra), true)?;
         protect_lua!(state, 1, 0, fn(state) {
             let extra_key = &EXTRA_REGISTRY_KEY as *const u8 as *const c_void;
             ffi::lua_rawsetp(state, ffi::LUA_REGISTRYINDEX, extra_key);

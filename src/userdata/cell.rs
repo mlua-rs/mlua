@@ -9,8 +9,8 @@ use std::rc::Rc;
 use serde::ser::{Serialize, Serializer};
 
 use crate::error::{Error, Result};
-use crate::state::{Lua, LuaGuard};
 use crate::state::RawLua;
+use crate::state::{Lua, LuaGuard};
 use crate::userdata::AnyUserData;
 use crate::util::get_userdata;
 use crate::value::{FromLua, Value};
@@ -89,20 +89,11 @@ impl<T> UserDataVariant<T> {
     }
 
     #[inline(always)]
-    unsafe fn get_ref(&self) -> &T {
+    fn as_ptr(&self) -> *mut T {
         match self {
-            Self::Default(inner) => &*inner.value.get(),
+            Self::Default(inner) => inner.value.get(),
             #[cfg(feature = "serialize")]
-            Self::Serializable(inner) => &*(inner.value.get() as *mut Box<T>),
-        }
-    }
-
-    #[inline(always)]
-    unsafe fn get_mut(&self) -> &mut T {
-        match self {
-            Self::Default(inner) => &mut *inner.value.get(),
-            #[cfg(feature = "serialize")]
-            Self::Serializable(inner) => &mut *(inner.value.get() as *mut Box<T>),
+            Self::Serializable(inner) => unsafe { &mut **(inner.value.get() as *mut Box<T>) },
         }
     }
 }
@@ -164,7 +155,7 @@ impl<T> Deref for UserDataRef<T> {
 
     #[inline]
     fn deref(&self) -> &T {
-        unsafe { self.variant.get_ref() }
+        unsafe { &*self.variant.as_ptr() }
     }
 }
 
@@ -226,14 +217,14 @@ impl<T> Deref for UserDataRefMut<T> {
 
     #[inline]
     fn deref(&self) -> &Self::Target {
-        unsafe { self.variant.get_ref() }
+        unsafe { &*self.variant.as_ptr() }
     }
 }
 
 impl<T> DerefMut for UserDataRefMut<T> {
     #[inline]
     fn deref_mut(&mut self) -> &mut Self::Target {
-        unsafe { self.variant.get_mut() }
+        unsafe { &mut *self.variant.as_ptr() }
     }
 }
 
@@ -348,7 +339,7 @@ impl<'a, T> Deref for UserDataBorrowRef<'a, T> {
 
     #[inline]
     fn deref(&self) -> &T {
-        unsafe { self.0.get_ref() }
+        unsafe { &*self.0.as_ptr() }
     }
 }
 
@@ -366,7 +357,7 @@ impl<'a, T> UserDataBorrowRef<'a, T> {
     #[inline(always)]
     pub(crate) fn get_ref(&self) -> &'a T {
         // SAFETY: `UserDataBorrowRef` is only created when the borrow flag is set to reading.
-        unsafe { self.0.get_ref() }
+        unsafe { &*self.0.as_ptr() }
     }
 }
 
@@ -384,14 +375,14 @@ impl<'a, T> Deref for UserDataBorrowMut<'a, T> {
 
     #[inline]
     fn deref(&self) -> &T {
-        unsafe { self.0.get_ref() }
+        unsafe { &*self.0.as_ptr() }
     }
 }
 
 impl<'a, T> DerefMut for UserDataBorrowMut<'a, T> {
     #[inline]
     fn deref_mut(&mut self) -> &mut T {
-        unsafe { self.0.get_mut() }
+        unsafe { &mut *self.0.as_ptr() }
     }
 }
 
@@ -409,7 +400,7 @@ impl<'a, T> UserDataBorrowMut<'a, T> {
     #[inline(always)]
     pub(crate) fn get_mut(&mut self) -> &'a mut T {
         // SAFETY: `UserDataBorrowMut` is only created when the borrow flag is set to writing.
-        unsafe { self.0.get_mut() }
+        unsafe { &mut *self.0.as_ptr() }
     }
 }
 

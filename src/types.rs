@@ -3,6 +3,7 @@ use std::cell::{Cell, Ref, RefCell, RefMut, UnsafeCell};
 use std::hash::{Hash, Hasher};
 use std::ops::{Deref, DerefMut};
 use std::os::raw::{c_int, c_void};
+use std::rc::Rc;
 use std::result::Result as StdResult;
 use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::Arc;
@@ -45,7 +46,7 @@ pub(crate) type Callback<'a> = Box<dyn Fn(&'a RawLua, c_int) -> Result<c_int> + 
 
 pub(crate) struct Upvalue<T> {
     pub(crate) data: T,
-    pub(crate) extra: Arc<UnsafeCell<ExtraData>>,
+    pub(crate) extra: Rc<UnsafeCell<ExtraData>>,
 }
 
 pub(crate) type CallbackUpvalue = Upvalue<Callback<'static>>;

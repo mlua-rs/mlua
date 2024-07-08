@@ -1,5 +1,4 @@
 use std::iter::FromIterator;
-use std::mem::transmute;
 use std::ops::{Deref, DerefMut};
 use std::os::raw::c_int;
 use std::result::Result as StdResult;
@@ -99,7 +98,7 @@ impl<T: FromLua> FromLuaMulti for T {
 impl IntoLuaMulti for MultiValue {
     #[inline]
     fn into_lua_multi(self, _: &Lua) -> Result<MultiValue> {
-        unsafe { Ok(transmute(self)) }
+        Ok(self)
     }
 }
 

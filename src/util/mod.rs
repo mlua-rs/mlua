@@ -6,6 +6,7 @@ use std::fmt::Write;
 use std::mem::MaybeUninit;
 use std::os::raw::{c_char, c_int, c_void};
 use std::panic::{catch_unwind, resume_unwind, AssertUnwindSafe};
+use std::rc::Rc;
 use std::sync::Arc;
 use std::{ptr, slice, str};
 
@@ -20,7 +21,7 @@ pub(crate) use short_names::short_type_name;
 static METATABLE_CACHE: Lazy<FxHashMap<TypeId, u8>> = Lazy::new(|| {
     let mut map = FxHashMap::with_capacity_and_hasher(32, Default::default());
 
-    map.insert(TypeId::of::<Arc<UnsafeCell<crate::state::ExtraData>>>(), 0);
+    map.insert(TypeId::of::<Rc<UnsafeCell<crate::state::ExtraData>>>(), 0);
     map.insert(TypeId::of::<crate::types::Callback>(), 0);
     map.insert(TypeId::of::<crate::types::CallbackUpvalue>(), 0);
 

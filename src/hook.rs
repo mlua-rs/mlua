@@ -29,6 +29,7 @@ pub struct Debug<'a> {
 
 enum EitherLua<'a> {
     Owned(ReentrantMutexGuard<'a, RawLua>),
+    #[cfg(not(feature = "luau"))]
     Borrowed(&'a RawLua),
 }
 
@@ -37,7 +38,8 @@ impl Deref for EitherLua<'_> {
 
     fn deref(&self) -> &Self::Target {
         match self {
-            EitherLua::Owned(guard) => &*guard,
+            EitherLua::Owned(guard) => guard,
+            #[cfg(not(feature = "luau"))]
             EitherLua::Borrowed(lua) => lua,
         }
     }

@@ -166,7 +166,7 @@ impl<'a, T: 'static> UserDataRegistry<'a, T> {
                         Err(e) => return Box::pin(future::ready(Err(e))),
                     };
                     let fut = method(lua, ud.get_ref(), args);
-                    Box::pin(async move { fut.await?.push_into_stack_multi(&rawlua) })
+                    Box::pin(async move { fut.await?.push_into_stack_multi(rawlua) })
                 }
                 _ => {
                     let err = Error::bad_self_argument(&name, Error::UserDataTypeMismatch);
@@ -213,7 +213,7 @@ impl<'a, T: 'static> UserDataRegistry<'a, T> {
                         Err(e) => return Box::pin(future::ready(Err(e))),
                     };
                     let fut = method(lua, ud.get_mut(), args);
-                    Box::pin(async move { fut.await?.push_into_stack_multi(&rawlua) })
+                    Box::pin(async move { fut.await?.push_into_stack_multi(rawlua) })
                 }
                 _ => {
                     let err = Error::bad_self_argument(&name, Error::UserDataTypeMismatch);
@@ -261,7 +261,7 @@ impl<'a, T: 'static> UserDataRegistry<'a, T> {
         FR: Future<Output = Result<R>> + 'a,
         R: IntoLuaMulti,
     {
-        let name = get_function_name::<T>(&name);
+        let name = get_function_name::<T>(name);
         Box::new(move |rawlua, args| unsafe {
             let lua = rawlua.lua();
             let args = match A::from_lua_args(args, 1, Some(&name), lua) {
@@ -269,7 +269,7 @@ impl<'a, T: 'static> UserDataRegistry<'a, T> {
                 Err(e) => return Box::pin(future::ready(Err(e))),
             };
             let fut = function(lua, args);
-            Box::pin(async move { fut.await?.push_into_stack_multi(&rawlua) })
+            Box::pin(async move { fut.await?.push_into_stack_multi(rawlua) })
         })
     }
 
@@ -315,8 +315,8 @@ impl<'a, T: 'static> UserDataFields<'a, T> for UserDataRegistry<'a, T> {
         R: IntoLua,
     {
         let name = name.to_string();
-        let callback = Self::box_method(&name, move |lua, data, ()| method(lua, &data));
-        self.field_getters.push((name.into(), callback));
+        let callback = Self::box_method(&name, move |lua, data, ()| method(lua, data));
+        self.field_getters.push((name, callback));
     }
 
     fn add_field_method_set<M, A>(&mut self, name: impl ToString, method: M)
