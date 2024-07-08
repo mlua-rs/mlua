@@ -3,6 +3,8 @@ use std::io;
 
 use mlua::{Lua, Result};
 
+use std::path::{Path, PathBuf};
+
 #[test]
 fn test_chunk_path() -> Result<()> {
     let lua = Lua::new();
@@ -29,6 +31,64 @@ fn test_chunk_path() -> Result<()> {
     };
 
     Ok(())
+}
+
+#[test]
+#[cfg(not(feature = "luau"))]
+fn test_compile() {
+    let lua = Lua::new();
+
+    let work_dir = Path::new("./tests/scripts/compile/");
+
+    let assert = || {
+        assert_eq!(
+            lua.load(fs::read(work_dir.join("a.bin")).unwrap())
+                .eval::<String>()
+                .unwrap(),
+            "Helloworld".to_string()
+        );
+
+        assert_eq!(
+            lua.load(fs::read(work_dir.join("b.bin")).unwrap())
+                .eval::<String>()
+                .unwrap(),
+            "Helloworld".to_string()
+        );
+    };
+
+    lua.compile_single(work_dir.join("a.lua"))
+        .compile_single(work_dir.join("b.lua"));
+
+    assert();
+
+    // remove them to make sure the code above don't influence them test below
+    fs::remove_file(work_dir.join("a.bin")).unwrap();
+    fs::remove_file(work_dir.join("b.bin")).unwrap();
+
+    lua.compile_directory(work_dir);
+
+    assert();
+}
+
+#[test]
+#[cfg(not(feature = "luau"))]
+fn multi_file_def() {
+    let lua = Lua::new();
+
+    let work_dir = Path::new("./tests/scripts/multi_file_def");
+
+    lua.compile_directory(work_dir);
+
+    lua.load(fs::read(work_dir.join("c.bin")).unwrap())
+        .exec()
+        .unwrap();
+
+    let value = lua
+        .load(fs::read(work_dir.join("d.bin")).unwrap())
+        .eval::<String>()
+        .unwrap();
+
+    assert_eq!(value.as_str(), "Hello world !");
 }
 
 #[test]
