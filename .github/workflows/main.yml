@@ -234,9 +234,8 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@nightly
         with:
-          toolchain: stable
           components: rustfmt
       - run: cargo fmt -- --check
 
