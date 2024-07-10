@@ -302,7 +302,7 @@ impl<'de> serde::Deserializer<'de> for Deserializer {
                 let _guard = RecursionGuard::new(&t, &self.visited);
 
                 let mut deserializer = MapDeserializer {
-                    pairs: MapPairs::new(t, self.options.sort_keys)?,
+                    pairs: MapPairs::new(&t, self.options.sort_keys)?,
                     value: None,
                     options: self.options,
                     visited: self.visited,
@@ -383,13 +383,13 @@ impl<'de> serde::Deserializer<'de> for Deserializer {
     }
 }
 
-struct SeqDeserializer {
-    seq: TableSequence<Value>,
+struct SeqDeserializer<'a> {
+    seq: TableSequence<'a, Value>,
     options: Options,
     visited: Rc<RefCell<FxHashSet<*const c_void>>>,
 }
 
-impl<'de> de::SeqAccess<'de> for SeqDeserializer {
+impl<'de> de::SeqAccess<'de> for SeqDeserializer<'_> {
     type Error = Error;
 
     fn next_element_seed<T>(&mut self, seed: T) -> Result<Option<T::Value>>
@@ -454,13 +454,13 @@ impl<'de> de::SeqAccess<'de> for VecDeserializer {
     }
 }
 
-pub(crate) enum MapPairs {
-    Iter(TablePairs<Value, Value>),
+pub(crate) enum MapPairs<'a> {
+    Iter(TablePairs<'a, Value, Value>),
     Vec(Vec<(Value, Value)>),
 }
 
-impl MapPairs {
-    pub(crate) fn new(t: Table, sort_keys: bool) -> Result<Self> {
+impl<'a> MapPairs<'a> {
+    pub(crate) fn new(t: &'a Table, sort_keys: bool) -> Result<Self> {
         if sort_keys {
             let mut pairs = t.pairs::<Value, Value>().collect::<Result<Vec<_>>>()?;
             pairs.sort_by(|(a, _), (b, _)| b.cmp(a)); // reverse order as we pop values from the end
@@ -485,7 +485,7 @@ impl MapPairs {
     }
 }
 
-impl Iterator for MapPairs {
+impl Iterator for MapPairs<'_> {
     type Item = Result<(Value, Value)>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -496,15 +496,15 @@ impl Iterator for MapPairs {
     }
 }
 
-struct MapDeserializer {
-    pairs: MapPairs,
+struct MapDeserializer<'a> {
+    pairs: MapPairs<'a>,
     value: Option<Value>,
     options: Options,
     visited: Rc<RefCell<FxHashSet<*const c_void>>>,
     processed: usize,
 }
 
-impl<'de> de::MapAccess<'de> for MapDeserializer {
+impl<'de> de::MapAccess<'de> for MapDeserializer<'_> {
     type Error = Error;
 
     fn next_key_seed<T>(&mut self, seed: T) -> Result<Option<T::Value>>

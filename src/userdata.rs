@@ -1089,12 +1089,12 @@ impl UserDataMetatable {
         self.0.contains_key(MetaMethod::validate(key.as_ref())?)
     }
 
-    /// Consumes this metatable and returns an iterator over the pairs of the metatable.
+    /// Returns an iterator over the pairs of the metatable.
     ///
     /// The pairs are wrapped in a [`Result`], since they are lazily converted to `V` type.
     ///
     /// [`Result`]: crate::Result
-    pub fn pairs<V: FromLua>(self) -> UserDataMetatablePairs<V> {
+    pub fn pairs<V: FromLua>(&self) -> UserDataMetatablePairs<V> {
         UserDataMetatablePairs(self.0.pairs())
     }
 }
@@ -1107,9 +1107,9 @@ impl UserDataMetatable {
 ///
 /// [`UserData`]: crate::UserData
 /// [`UserDataMetatable::pairs`]: crate::UserDataMetatable::method.pairs
-pub struct UserDataMetatablePairs<V>(TablePairs<StdString, V>);
+pub struct UserDataMetatablePairs<'a, V>(TablePairs<'a, StdString, V>);
 
-impl<V> Iterator for UserDataMetatablePairs<V>
+impl<'a, V> Iterator for UserDataMetatablePairs<'a, V>
 where
     V: FromLua,
 {

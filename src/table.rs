@@ -13,6 +13,7 @@ use {
 use crate::error::{Error, Result};
 use crate::function::Function;
 use crate::private::Sealed;
+use crate::state::{LuaGuard, RawLua};
 use crate::types::{Integer, ValueRef};
 use crate::util::{assert_stack, check_stack, StackGuard};
 use crate::value::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, Nil, Value};
@@ -580,17 +581,11 @@ impl Table {
         self.0.to_pointer()
     }
 
-    /// Consume this table and return an iterator over the pairs of the table.
+    /// Returns an iterator over the pairs of the table.
     ///
     /// This works like the Lua `pairs` function, but does not invoke the `__pairs` metamethod.
     ///
     /// The pairs are wrapped in a [`Result`], since they are lazily converted to `K` and `V` types.
-    ///
-    /// # Note
-    ///
-    /// While this method consumes the `Table` object, it can not prevent code from mutating the
-    /// table while the iteration is in progress. Refer to the [Lua manual] for information about
-    /// the consequences of such mutation.
     ///
     /// # Examples
     ///
@@ -613,9 +608,10 @@ impl Table {
     ///
     /// [`Result`]: crate::Result
     /// [Lua manual]: http://www.lua.org/manual/5.4/manual.html#pdf-next
-    pub fn pairs<K: FromLua, V: FromLua>(self) -> TablePairs<K, V> {
+    pub fn pairs<K: FromLua, V: FromLua>(&self) -> TablePairs<K, V> {
         TablePairs {
-            table: self.0,
+            guard: self.0.lua.lock(),
+            table: self,
             key: Some(Nil),
             _phantom: PhantomData,
         }
@@ -649,17 +645,11 @@ impl Table {
         Ok(())
     }
 
-    /// Consume this table and return an iterator over all values in the sequence part of the table.
+    /// Returns an iterator over all values in the sequence part of the table.
     ///
     /// The iterator will yield all values `t[1]`, `t[2]` and so on, until a `nil` value is
     /// encountered. This mirrors the behavior of Lua's `ipairs` function but does not invoke
     /// any metamethods.
-    ///
-    /// # Note
-    ///
-    /// While this method consumes the `Table` object, it can not prevent code from mutating the
-    /// table while the iteration is in progress. Refer to the [Lua manual] for information about
-    /// the consequences of such mutation.
     ///
     /// # Examples
     ///
@@ -687,18 +677,13 @@ impl Table {
     /// [`pairs`]: #method.pairs
     /// [`Result`]: crate::Result
     /// [Lua manual]: http://www.lua.org/manual/5.4/manual.html#pdf-next
-    pub fn sequence_values<V: FromLua>(self) -> TableSequence<V> {
+    pub fn sequence_values<V: FromLua>(&self) -> TableSequence<V> {
         TableSequence {
-            table: self.0,
+            guard: self.0.lua.lock(),
+            table: self,
             index: 1,
             _phantom: PhantomData,
         }
-    }
-
-    #[doc(hidden)]
-    #[deprecated(since = "0.9.0", note = "use `sequence_values` instead")]
-    pub fn raw_sequence_values<V: FromLua>(self) -> TableSequence<V> {
-        self.sequence_values()
     }
 
     #[cfg(feature = "serialize")]
@@ -782,9 +767,8 @@ impl Table {
     ) -> fmt::Result {
         visited.insert(self.to_pointer());
 
-        let t = self.clone();
         // Collect key/value pairs into a vector so we can sort them
-        let mut pairs = t.pairs::<Value, Value>().flatten().collect::<Vec<_>>();
+        let mut pairs = self.pairs::<Value, Value>().flatten().collect::<Vec<_>>();
         // Sort keys
         pairs.sort_by(|(a, _), (b, _)| a.cmp(b));
         if pairs.is_empty() {
@@ -1111,7 +1095,7 @@ impl<'a> Serialize for SerializableTable<'a> {
             // Fast track
             self.table.for_each(process_pair)
         } else {
-            MapPairs::new(self.table.clone(), self.options.sort_keys)
+            MapPairs::new(self.table, self.options.sort_keys)
                 .map_err(serde::ser::Error::custom)?
                 .try_for_each(|kv| {
                     let (key, value) = kv?;
@@ -1128,13 +1112,14 @@ impl<'a> Serialize for SerializableTable<'a> {
 /// This struct is created by the [`Table::pairs`] method.
 ///
 /// [`Table::pairs`]: crate::Table::pairs
-pub struct TablePairs<K, V> {
-    table: ValueRef,
+pub struct TablePairs<'a, K, V> {
+    guard: LuaGuard,
+    table: &'a Table,
     key: Option<Value>,
     _phantom: PhantomData<(K, V)>,
 }
 
-impl<K, V> Iterator for TablePairs<K, V>
+impl<'a, K, V> Iterator for TablePairs<'a, K, V>
 where
     K: FromLua,
     V: FromLua,
@@ -1143,14 +1128,14 @@ where
 
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(prev_key) = self.key.take() {
-            let lua = self.table.lua.lock();
+            let lua: &RawLua = &self.guard;
             let state = lua.state();
 
             let res = (|| unsafe {
                 let _sg = StackGuard::new(state);
                 check_stack(state, 5)?;
 
-                lua.push_ref(&self.table);
+                lua.push_ref(&self.table.0);
                 lua.push_value(&prev_key)?;
 
                 // It must be safe to call `lua_next` unprotected as deleting a key from a table is
@@ -1187,21 +1172,21 @@ where
 /// This struct is created by the [`Table::sequence_values`] method.
 ///
 /// [`Table::sequence_values`]: crate::Table::sequence_values
-pub struct TableSequence<V> {
-    // TODO: Use `&Table`
-    table: ValueRef,
+pub struct TableSequence<'a, V> {
+    guard: LuaGuard,
+    table: &'a Table,
     index: Integer,
     _phantom: PhantomData<V>,
 }
 
-impl<V> Iterator for TableSequence<V>
+impl<'a, V> Iterator for TableSequence<'a, V>
 where
     V: FromLua,
 {
     type Item = Result<V>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let lua = self.table.lua.lock();
+        let lua: &RawLua = &self.guard;
         let state = lua.state();
         unsafe {
             let _sg = StackGuard::new(state);
@@ -1209,7 +1194,7 @@ where
                 return Some(Err(err));
             }
 
-            lua.push_ref(&self.table);
+            lua.push_ref(&self.table.0);
             match ffi::lua_rawgeti(state, -1, self.index) {
                 ffi::LUA_TNIL => None,
                 _ => {
