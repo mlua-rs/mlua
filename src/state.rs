@@ -1654,8 +1654,10 @@ impl Lua {
 
     /// Replaces a value in the Lua registry by its [`RegistryKey`].
     ///
+    /// An identifier used in [`RegistryKey`] may possibly be changed to a new value.
+    ///
     /// See [`Lua::create_registry_value`] for more details.
-    pub fn replace_registry_value<T: IntoLua>(&self, key: &RegistryKey, t: T) -> Result<()> {
+    pub fn replace_registry_value<T: IntoLua>(&self, key: &mut RegistryKey, t: T) -> Result<()> {
         let lua = self.lock();
         if !lua.owns_registry_value(key) {
             return Err(Error::MismatchedRegistryKey);

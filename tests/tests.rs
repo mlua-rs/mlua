@@ -735,18 +735,18 @@ fn test_drop_registry_value() -> Result<()> {
 fn test_replace_registry_value() -> Result<()> {
     let lua = Lua::new();
 
-    let key = lua.create_registry_value::<i32>(42)?;
-    lua.replace_registry_value(&key, "new value")?;
+    let mut key = lua.create_registry_value::<i32>(42)?;
+    lua.replace_registry_value(&mut key, "new value")?;
     assert_eq!(lua.registry_value::<String>(&key)?, "new value");
-    lua.replace_registry_value(&key, Value::Nil)?;
+    lua.replace_registry_value(&mut key, Value::Nil)?;
     assert_eq!(lua.registry_value::<Value>(&key)?, Value::Nil);
-    lua.replace_registry_value(&key, 123)?;
+    lua.replace_registry_value(&mut key, 123)?;
     assert_eq!(lua.registry_value::<i32>(&key)?, 123);
 
-    let key2 = lua.create_registry_value(Value::Nil)?;
-    lua.replace_registry_value(&key2, Value::Nil)?;
+    let mut key2 = lua.create_registry_value(Value::Nil)?;
+    lua.replace_registry_value(&mut key2, Value::Nil)?;
     assert_eq!(lua.registry_value::<Value>(&key2)?, Value::Nil);
-    lua.replace_registry_value(&key2, "abc")?;
+    lua.replace_registry_value(&mut key2, "abc")?;
     assert_eq!(lua.registry_value::<String>(&key2)?, "abc");
 
     Ok(())

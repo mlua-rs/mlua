@@ -2,7 +2,6 @@ use std::cell::UnsafeCell;
 use std::hash::{Hash, Hasher};
 use std::os::raw::{c_int, c_void};
 use std::rc::Rc;
-use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::Arc;
 use std::{fmt, mem, ptr};
 
@@ -204,7 +203,7 @@ pub(crate) struct DestructedUserdata;
 /// [`AnyUserData::set_user_value`]: crate::AnyUserData::set_user_value
 /// [`AnyUserData::user_value`]: crate::AnyUserData::user_value
 pub struct RegistryKey {
-    pub(crate) registry_id: AtomicI32,
+    pub(crate) registry_id: i32,
     pub(crate) unref_list: Arc<Mutex<Option<Vec<c_int>>>>,
 }
 
@@ -245,7 +244,7 @@ impl RegistryKey {
     /// Creates a new instance of `RegistryKey`
     pub(crate) const fn new(id: c_int, unref_list: Arc<Mutex<Option<Vec<c_int>>>>) -> Self {
         RegistryKey {
-            registry_id: AtomicI32::new(id),
+            registry_id: id,
             unref_list,
         }
     }
@@ -253,13 +252,13 @@ impl RegistryKey {
     /// Returns the underlying Lua reference of this `RegistryKey`
     #[inline(always)]
     pub fn id(&self) -> c_int {
-        self.registry_id.load(Ordering::Relaxed)
+        self.registry_id
     }
 
     /// Sets the unique Lua reference key of this `RegistryKey`
     #[inline(always)]
-    pub(crate) fn set_id(&self, id: c_int) {
-        self.registry_id.store(id, Ordering::Relaxed);
+    pub(crate) fn set_id(&mut self, id: c_int) {
+        self.registry_id = id;
     }
 
     /// Destroys the `RegistryKey` without adding to the unref list
