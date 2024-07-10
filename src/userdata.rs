@@ -107,12 +107,7 @@ pub enum MetaMethod {
     /// This is not an operator, but it will be called by the built-in `pairs` function.
     ///
     /// Requires `feature = "lua54/lua53/lua52"`
-    #[cfg(any(
-        feature = "lua54",
-        feature = "lua53",
-        feature = "lua52",
-        feature = "luajit52",
-    ))]
+    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "luajit52",))]
     Pairs,
     /// The `__ipairs` metamethod.
     ///
@@ -148,7 +143,8 @@ pub enum MetaMethod {
     Close,
     /// The `__name`/`__type` metafield.
     ///
-    /// This is not a function, but it's value can be used by `tostring` and `typeof` built-in functions.
+    /// This is not a function, but it's value can be used by `tostring` and `typeof` built-in
+    /// functions.
     #[doc(hidden)]
     Type,
 }
@@ -208,12 +204,7 @@ impl MetaMethod {
             MetaMethod::Call => "__call",
             MetaMethod::ToString => "__tostring",
 
-            #[cfg(any(
-                feature = "lua54",
-                feature = "lua53",
-                feature = "lua52",
-                feature = "luajit52"
-            ))]
+            #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "luajit52"))]
             MetaMethod::Pairs => "__pairs",
             #[cfg(any(feature = "lua52", feature = "luajit52"))]
             MetaMethod::IPairs => "__ipairs",
@@ -480,8 +471,8 @@ pub trait UserDataFields<'a, T> {
 
     /// Add a regular field getter as a method which accepts a `&T` as the parameter.
     ///
-    /// Regular field getters are implemented by overriding the `__index` metamethod and returning the
-    /// accessed field. This allows them to be used with the expected `userdata.field` syntax.
+    /// Regular field getters are implemented by overriding the `__index` metamethod and returning
+    /// the accessed field. This allows them to be used with the expected `userdata.field` syntax.
     ///
     /// If `add_meta_method` is used to set the `__index` metamethod, the `__index` metamethod will
     /// be used as a fall-back if no regular field or method are found.
@@ -492,11 +483,12 @@ pub trait UserDataFields<'a, T> {
 
     /// Add a regular field setter as a method which accepts a `&mut T` as the first parameter.
     ///
-    /// Regular field setters are implemented by overriding the `__newindex` metamethod and setting the
-    /// accessed field. This allows them to be used with the expected `userdata.field = value` syntax.
+    /// Regular field setters are implemented by overriding the `__newindex` metamethod and setting
+    /// the accessed field. This allows them to be used with the expected `userdata.field = value`
+    /// syntax.
     ///
-    /// If `add_meta_method` is used to set the `__newindex` metamethod, the `__newindex` metamethod will
-    /// be used as a fall-back if no regular field is found.
+    /// If `add_meta_method` is used to set the `__newindex` metamethod, the `__newindex` metamethod
+    /// will be used as a fall-back if no regular field is found.
     fn add_field_method_set<M, A>(&mut self, name: impl ToString, method: M)
     where
         M: FnMut(&'a Lua, &mut T, A) -> Result<()> + MaybeSend + 'static,
@@ -577,8 +569,8 @@ pub trait UserDataFields<'a, T> {
 /// # }
 /// ```
 ///
-/// Custom fields, methods and operators can be provided by implementing `add_fields` or `add_methods`
-/// (refer to [`UserDataFields`] and [`UserDataMethods`] for more information):
+/// Custom fields, methods and operators can be provided by implementing `add_fields` or
+/// `add_methods` (refer to [`UserDataFields`] and [`UserDataMethods`] for more information):
 ///
 /// ```
 /// # use mlua::{Lua, MetaMethod, Result, UserData, UserDataFields, UserDataMethods};
@@ -686,7 +678,8 @@ impl AnyUserData {
     }
 
     /// Takes the value out of this userdata.
-    /// Sets the special "destructed" metatable that prevents any further operations with this userdata.
+    /// Sets the special "destructed" metatable that prevents any further operations with this
+    /// userdata.
     ///
     /// Keeps associated user values unchanged (they will be collected by Lua's GC).
     pub fn take<T: 'static>(&self) -> Result<T> {
@@ -1005,7 +998,8 @@ impl AnyUserData {
         Ok(false)
     }
 
-    /// Returns `true` if this `AnyUserData` is serializable (eg. was created using `create_ser_userdata`).
+    /// Returns `true` if this `AnyUserData` is serializable (eg. was created using
+    /// `create_ser_userdata`).
     #[cfg(feature = "serialize")]
     pub(crate) fn is_serializable(&self) -> bool {
         let lua = self.0.lua.lock();
@@ -1079,8 +1073,8 @@ impl UserDataMetatable {
     ///
     /// If the value is `Nil`, this will effectively remove the `key`.
     /// Access to restricted metamethods such as `__gc` or `__metatable` will cause an error.
-    /// Setting `__index` or `__newindex` metamethods is also restricted because their values are cached
-    /// for `mlua` internal usage.
+    /// Setting `__index` or `__newindex` metamethods is also restricted because their values are
+    /// cached for `mlua` internal usage.
     pub fn set<V: IntoLua>(&self, key: impl AsRef<str>, value: V) -> Result<()> {
         let key = MetaMethod::validate(key.as_ref())?;
         // `__index` and `__newindex` cannot be changed in runtime, because values are cached

@@ -6,8 +6,8 @@ use std::time::Duration;
 use futures_util::stream::TryStreamExt;
 
 use mlua::{
-    AnyUserDataExt, Error, Function, Lua, LuaOptions, MultiValue, Result, StdLib, Table, TableExt,
-    UserData, UserDataMethods, Value,
+    AnyUserDataExt, Error, Function, Lua, LuaOptions, MultiValue, Result, StdLib, Table, TableExt, UserData,
+    UserDataMethods, Value,
 };
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -25,8 +25,7 @@ async fn sleep_ms(_ms: u64) {
 async fn test_async_function() -> Result<()> {
     let lua = Lua::new();
 
-    let f = lua
-        .create_async_function(|_lua, (a, b, c): (i64, i64, i64)| async move { Ok((a + b) * c) })?;
+    let f = lua.create_async_function(|_lua, (a, b, c): (i64, i64, i64)| async move { Ok((a + b) * c) })?;
     lua.globals().set("f", f)?;
 
     let res: i64 = lua.load("f(1, 2, 3)").eval_async().await?;
@@ -75,9 +74,7 @@ async fn test_async_call() -> Result<()> {
 
     match hello.call::<_, ()>("alex") {
         Err(Error::RuntimeError(_)) => {}
-        _ => panic!(
-            "non-async executing async function must fail on the yield stage with RuntimeError"
-        ),
+        _ => panic!("non-async executing async function must fail on the yield stage with RuntimeError"),
     };
 
     assert_eq!(hello.call_async::<_, String>("alex").await?, "hello, alex!");
@@ -342,15 +339,9 @@ async fn test_async_table() -> Result<()> {
     })?;
     table.set("sleep", sleep)?;
 
-    assert_eq!(
-        table.call_async_method::<_, i64>("get_value", ()).await?,
-        10
-    );
+    assert_eq!(table.call_async_method::<_, i64>("get_value", ()).await?, 10);
     table.call_async_method("set_value", 15).await?;
-    assert_eq!(
-        table.call_async_method::<_, i64>("get_value", ()).await?,
-        15
-    );
+    assert_eq!(table.call_async_method::<_, i64>("get_value", ()).await?, 15);
     assert_eq!(
         table.call_async_function::<_, String>("sleep", 7).await?,
         "elapsed:7ms"
@@ -411,17 +402,14 @@ async fn test_async_userdata() -> Result<()> {
             });
 
             #[cfg(not(any(feature = "lua51", feature = "luau")))]
-            methods.add_async_meta_method(
-                mlua::MetaMethod::Index,
-                |_, data, key: String| async move {
-                    sleep_ms(10).await;
-                    match key.as_str() {
-                        "ms" => Ok(Some(data.0 as f64)),
-                        "s" => Ok(Some((data.0 as f64) / 1000.0)),
-                        _ => Ok(None),
-                    }
-                },
-            );
+            methods.add_async_meta_method(mlua::MetaMethod::Index, |_, data, key: String| async move {
+                sleep_ms(10).await;
+                match key.as_str() {
+                    "ms" => Ok(Some(data.0 as f64)),
+                    "s" => Ok(Some((data.0 as f64) / 1000.0)),
+                    _ => Ok(None),
+                }
+            });
 
             #[cfg(not(any(feature = "lua51", feature = "luau")))]
             methods.add_async_meta_method_mut(

@@ -389,13 +389,13 @@ impl FromLua for StdString {
             let mut size = 0;
             let data = ffi::lua_tolstring(state, idx, &mut size);
             let bytes = slice::from_raw_parts(data as *const u8, size);
-            return str::from_utf8(bytes).map(|s| s.to_owned()).map_err(|e| {
-                Error::FromLuaConversionError {
+            return str::from_utf8(bytes)
+                .map(|s| s.to_owned())
+                .map_err(|e| Error::FromLuaConversionError {
                     from: "string",
                     to: "String",
                     message: Some(e.to_string()),
-                }
-            });
+                });
         }
         // Fallback to default
         Self::from_lua(lua.stack_value(idx), lua.lua())
@@ -603,15 +603,16 @@ macro_rules! lua_convert_int {
                         if let Some(i) = lua.coerce_integer(value.clone())? {
                             cast(i)
                         } else {
-                            cast(lua.coerce_number(value)?.ok_or_else(|| {
-                                Error::FromLuaConversionError {
-                                    from: ty,
-                                    to: stringify!($x),
-                                    message: Some(
-                                        "expected number or string coercible to number".to_string(),
-                                    ),
-                                }
-                            })?)
+                            cast(
+                                lua.coerce_number(value)?
+                                    .ok_or_else(|| Error::FromLuaConversionError {
+                                        from: ty,
+                                        to: stringify!($x),
+                                        message: Some(
+                                            "expected number or string coercible to number".to_string(),
+                                        ),
+                                    })?,
+                            )
                         }
                     }
                 })
@@ -684,9 +685,7 @@ where
 {
     #[inline]
     fn into_lua(self, lua: &Lua) -> Result<Value> {
-        Ok(Value::Table(
-            lua.create_sequence_from(self.iter().cloned())?,
-        ))
+        Ok(Value::Table(lua.create_sequence_from(self.iter().cloned())?))
     }
 }
 
@@ -819,9 +818,9 @@ impl<K: Ord + FromLua, V: FromLua> FromLua for BTreeMap<K, V> {
 impl<T: Eq + Hash + IntoLua, S: BuildHasher> IntoLua for HashSet<T, S> {
     #[inline]
     fn into_lua(self, lua: &Lua) -> Result<Value> {
-        Ok(Value::Table(lua.create_table_from(
-            self.into_iter().map(|val| (val, true)),
-        )?))
+        Ok(Value::Table(
+            lua.create_table_from(self.into_iter().map(|val| (val, true)))?,
+        ))
     }
 }
 
@@ -830,10 +829,7 @@ impl<T: Eq + Hash + FromLua, S: BuildHasher + Default> FromLua for HashSet<T, S>
     fn from_lua(value: Value, _: &Lua) -> Result<Self> {
         match value {
             Value::Table(table) if table.raw_len() > 0 => table.sequence_values().collect(),
-            Value::Table(table) => table
-                .pairs::<T, Value>()
-                .map(|res| res.map(|(k, _)| k))
-                .collect(),
+            Value::Table(table) => table.pairs::<T, Value>().map(|res| res.map(|(k, _)| k)).collect(),
             _ => Err(Error::FromLuaConversionError {
                 from: value.type_name(),
                 to: "HashSet",
@@ -846,9 +842,9 @@ impl<T: Eq + Hash + FromLua, S: BuildHasher + Default> FromLua for HashSet<T, S>
 impl<T: Ord + IntoLua> IntoLua for BTreeSet<T> {
     #[inline]
     fn into_lua(self, lua: &Lua) -> Result<Value> {
-        Ok(Value::Table(lua.create_table_from(
-            self.into_iter().map(|val| (val, true)),
-        )?))
+        Ok(Value::Table(
+            lua.create_table_from(self.into_iter().map(|val| (val, true)))?,
+        ))
     }
 }
 
@@ -857,10 +853,7 @@ impl<T: Ord + FromLua> FromLua for BTreeSet<T> {
     fn from_lua(value: Value, _: &Lua) -> Result<Self> {
         match value {
             Value::Table(table) if table.raw_len() > 0 => table.sequence_values().collect(),
-            Value::Table(table) => table
-                .pairs::<T, Value>()
-                .map(|res| res.map(|(k, _)| k))
-                .collect(),
+            Value::Table(table) => table.pairs::<T, Value>().map(|res| res.map(|(k, _)| k)).collect(),
             _ => Err(Error::FromLuaConversionError {
                 from: value.type_name(),
                 to: "BTreeSet",

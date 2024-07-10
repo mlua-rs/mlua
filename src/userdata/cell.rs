@@ -9,8 +9,7 @@ use std::rc::Rc;
 use serde::ser::{Serialize, Serializer};
 
 use crate::error::{Error, Result};
-use crate::state::RawLua;
-use crate::state::{Lua, LuaGuard};
+use crate::state::{Lua, LuaGuard, RawLua};
 use crate::userdata::AnyUserData;
 use crate::util::get_userdata;
 use crate::value::{FromLua, Value};
@@ -111,9 +110,7 @@ impl<T: Serialize + 'static> UserDataVariant<T> {
 impl Serialize for UserDataVariant<()> {
     fn serialize<S: Serializer>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error> {
         match self {
-            UserDataVariant::Default(_) => {
-                Err(serde::ser::Error::custom("cannot serialize <userdata>"))
-            }
+            UserDataVariant::Default(_) => Err(serde::ser::Error::custom("cannot serialize <userdata>")),
             UserDataVariant::Serializable(inner) => unsafe {
                 let _ = self.try_borrow().map_err(serde::ser::Error::custom)?;
                 (*inner.value.get()).serialize(serializer)

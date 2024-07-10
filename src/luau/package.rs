@@ -225,14 +225,13 @@ fn dylib_loader(lua: &Lua, modname: StdString) -> Result<Value> {
     let search_cpath = package.get::<_, StdString>("cpath").unwrap_or_default();
 
     let find_symbol = |lib: &Library| unsafe {
-        if let Ok(entry) = lib.get::<ffi::lua_CFunction>(format!("luaopen_{modname}\0").as_bytes())
-        {
+        if let Ok(entry) = lib.get::<ffi::lua_CFunction>(format!("luaopen_{modname}\0").as_bytes()) {
             return lua.create_c_function(*entry).map(Value::Function);
         }
         // Try all in one mode
-        if let Ok(entry) = lib.get::<ffi::lua_CFunction>(
-            format!("luaopen_{}\0", modname.replace('.', "_")).as_bytes(),
-        ) {
+        if let Ok(entry) =
+            lib.get::<ffi::lua_CFunction>(format!("luaopen_{}\0", modname.replace('.', "_")).as_bytes())
+        {
             return lua.create_c_function(*entry).map(Value::Function);
         }
         "cannot find module entrypoint".into_lua(lua)

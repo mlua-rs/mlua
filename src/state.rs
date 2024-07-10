@@ -1,14 +1,12 @@
 use std::any::TypeId;
 use std::cell::RefCell;
 // use std::collections::VecDeque;
-use std::fmt;
 use std::marker::PhantomData;
 use std::ops::Deref;
 use std::os::raw::{c_int, c_void};
 use std::panic::Location;
-use std::rc::Rc;
 use std::result::Result as StdResult;
-use std::{mem, ptr};
+use std::{fmt, mem, ptr};
 
 use crate::chunk::{AsChunk, Chunk};
 use crate::error::{Error, Result};
@@ -352,8 +350,9 @@ impl Lua {
     /// of the program's life.
     ///
     /// Dropping the returned reference will cause a memory leak. If this is not acceptable,
-    /// the reference should first be wrapped with the [`Lua::from_static`] function producing a `Lua`.
-    /// This `Lua` object can then be dropped which will properly release the allocated memory.
+    /// the reference should first be wrapped with the [`Lua::from_static`] function producing a
+    /// `Lua`. This `Lua` object can then be dropped which will properly release the allocated
+    /// memory.
     ///
     /// [`Lua::from_static`]: #method.from_static
     ///
@@ -366,7 +365,8 @@ impl Lua {
     /// Constructs a `Lua` from a static reference to it.
     ///
     /// # Safety
-    /// This function is unsafe because improper use may lead to memory problems or undefined behavior.
+    /// This function is unsafe because improper use may lead to memory problems or undefined
+    /// behavior.
     ///
     /// FIXME: remove
     #[doc(hidden)]
@@ -424,8 +424,8 @@ impl Lua {
     /// - Set all libraries to read-only
     /// - Set all builtin metatables to read-only
     /// - Set globals to read-only (and activates safeenv)
-    /// - Setup local environment table that performs writes locally and proxies reads
-    ///   to the global environment.
+    /// - Setup local environment table that performs writes locally and proxies reads to the global
+    ///   environment.
     ///
     /// # Examples
     ///
@@ -482,7 +482,8 @@ impl Lua {
     /// erroring once an instruction limit has been reached.
     ///
     /// This method sets a hook function for the current thread of this Lua instance.
-    /// If you want to set a hook function for another thread (coroutine), use [`Thread::set_hook()`] instead.
+    /// If you want to set a hook function for another thread (coroutine), use
+    /// [`Thread::set_hook()`] instead.
     ///
     /// Please note you cannot have more than one hook function set at a time for this Lua instance.
     ///
@@ -548,8 +549,8 @@ impl Lua {
     ///
     /// The provided interrupt function can error, and this error will be propagated through
     /// the Luau code that was executing at the time the interrupt was triggered.
-    /// Also this can be used to implement continuous execution limits by instructing Luau VM to yield
-    /// by returning [`VmState::Yield`].
+    /// Also this can be used to implement continuous execution limits by instructing Luau VM to
+    /// yield by returning [`VmState::Yield`].
     ///
     /// This is similar to [`Lua::set_hook`] but in more simplified form.
     ///
@@ -589,6 +590,8 @@ impl Lua {
     where
         F: Fn(&Lua) -> Result<VmState> + MaybeSend + 'static,
     {
+        use std::rc::Rc;
+
         unsafe extern "C-unwind" fn interrupt_proc(state: *mut ffi::lua_State, gc: c_int) {
             if gc >= 0 {
                 // We don't support GC interrupts since they cannot survive Lua exceptions
@@ -597,8 +600,7 @@ impl Lua {
             let extra = ExtraData::get(state);
             let result = callback_error_ext(state, extra, move |_| {
                 let interrupt_cb = (*extra).interrupt_callback.clone();
-                let interrupt_cb =
-                    mlua_expect!(interrupt_cb, "no interrupt callback set in interrupt_proc");
+                let interrupt_cb = mlua_expect!(interrupt_cb, "no interrupt callback set in interrupt_proc");
                 if Rc::strong_count(&interrupt_cb) > 2 {
                     return Ok(VmState::Continue); // Don't allow recursion
                 }
@@ -704,9 +706,10 @@ impl Lua {
 
     /// Gets information about the interpreter runtime stack.
     ///
-    /// This function returns [`Debug`] structure that can be used to get information about the function
-    /// executing at a given level. Level `0` is the current running function, whereas level `n+1` is the
-    /// function that has called level `n` (except for tail calls, which do not count in the stack).
+    /// This function returns [`Debug`] structure that can be used to get information about the
+    /// function executing at a given level. Level `0` is the current running function, whereas
+    /// level `n+1` is the function that has called level `n` (except for tail calls, which do
+    /// not count in the stack).
     ///
     /// [`Debug`]: crate::hook::Debug
     pub fn inspect_stack(&self, level: usize) -> Option<Debug> {
@@ -762,12 +765,7 @@ impl Lua {
     /// Returns true if the garbage collector is currently running automatically.
     ///
     /// Requires `feature = "lua54/lua53/lua52/luau"`
-    #[cfg(any(
-        feature = "lua54",
-        feature = "lua53",
-        feature = "lua52",
-        feature = "luau"
-    ))]
+    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "luau"))]
     pub fn gc_is_running(&self) -> bool {
         let lua = self.lock();
         unsafe { ffi::lua_gc(lua.main_state, ffi::LUA_GCISRUNNING, 0) != 0 }
@@ -887,8 +885,7 @@ impl Lua {
         }
 
         #[cfg(feature = "lua54")]
-        let prev_mode =
-            unsafe { ffi::lua_gc(state, ffi::LUA_GCINC, pause, step_multiplier, step_size) };
+        let prev_mode = unsafe { ffi::lua_gc(state, ffi::LUA_GCINC, pause, step_multiplier, step_size) };
         #[cfg(feature = "lua54")]
         match prev_mode {
             ffi::LUA_GCINC => GCMode::Incremental,
@@ -910,8 +907,7 @@ impl Lua {
     pub fn gc_gen(&self, minor_multiplier: c_int, major_multiplier: c_int) -> GCMode {
         let lua = self.lock();
         let state = lua.main_state;
-        let prev_mode =
-            unsafe { ffi::lua_gc(state, ffi::LUA_GCGEN, minor_multiplier, major_multiplier) };
+        let prev_mode = unsafe { ffi::lua_gc(state, ffi::LUA_GCGEN, minor_multiplier, major_multiplier) };
         match prev_mode {
             ffi::LUA_GCGEN => GCMode::Generational,
             ffi::LUA_GCINC => GCMode::Incremental,
@@ -1074,8 +1070,8 @@ impl Lua {
     /// intermediate Lua code.
     ///
     /// If the function returns `Ok`, the contained value will be converted to one or more Lua
-    /// values. For details on Rust-to-Lua conversions, refer to the [`IntoLua`] and [`IntoLuaMulti`]
-    /// traits.
+    /// values. For details on Rust-to-Lua conversions, refer to the [`IntoLua`] and
+    /// [`IntoLuaMulti`] traits.
     ///
     /// # Examples
     ///
@@ -1137,9 +1133,7 @@ impl Lua {
     {
         let func = RefCell::new(func);
         self.create_function(move |lua, args| {
-            (*func
-                .try_borrow_mut()
-                .map_err(|_| Error::RecursiveMutCallback)?)(lua, args)
+            (*func.try_borrow_mut().map_err(|_| Error::RecursiveMutCallback)?)(lua, args)
         })
     }
 
@@ -1158,10 +1152,10 @@ impl Lua {
     /// While executing the function Rust will poll Future and if the result is not ready, call
     /// `yield()` passing internal representation of a `Poll::Pending` value.
     ///
-    /// The function must be called inside Lua coroutine ([`Thread`]) to be able to suspend its execution.
-    /// An executor should be used to poll [`AsyncThread`] and mlua will take a provided Waker
-    /// in that case. Otherwise noop waker will be used if try to call the function outside of Rust
-    /// executors.
+    /// The function must be called inside Lua coroutine ([`Thread`]) to be able to suspend its
+    /// execution. An executor should be used to poll [`AsyncThread`] and mlua will take a
+    /// provided Waker in that case. Otherwise noop waker will be used if try to call the
+    /// function outside of Rust executors.
     ///
     /// The family of `call_async()` functions takes care about creating [`Thread`].
     ///
@@ -1277,10 +1271,7 @@ impl Lua {
     /// Registers a custom Rust type in Lua to use in userdata objects.
     ///
     /// This methods provides a way to add fields or methods to userdata objects of a type `T`.
-    pub fn register_userdata_type<T: 'static>(
-        &self,
-        f: impl FnOnce(&mut UserDataRegistry<T>),
-    ) -> Result<()> {
+    pub fn register_userdata_type<T: 'static>(&self, f: impl FnOnce(&mut UserDataRegistry<T>)) -> Result<()> {
         let mut registry = UserDataRegistry::new();
         f(&mut registry);
 
@@ -1376,8 +1367,9 @@ impl Lua {
         }
     }
 
-    /// Returns a handle to the active `Thread`. For calls to `Lua` this will be the main Lua thread,
-    /// for parameters given to a callback, this will be whatever Lua thread called the callback.
+    /// Returns a handle to the active `Thread`. For calls to `Lua` this will be the main Lua
+    /// thread, for parameters given to a callback, this will be whatever Lua thread called the
+    /// callback.
     pub fn current_thread(&self) -> Thread {
         let lua = self.lock();
         let state = lua.state();
@@ -1645,9 +1637,9 @@ impl Lua {
     /// Removes a value from the Lua registry.
     ///
     /// You may call this function to manually remove a value placed in the registry with
-    /// [`Lua::create_registry_value`]. In addition to manual [`RegistryKey`] removal, you can also call
-    /// [`Lua::expire_registry_values`] to automatically remove values from the registry whose
-    /// [`RegistryKey`]s have been dropped.
+    /// [`Lua::create_registry_value`]. In addition to manual [`RegistryKey`] removal, you can also
+    /// call [`Lua::expire_registry_values`] to automatically remove values from the registry
+    /// whose [`RegistryKey`]s have been dropped.
     pub fn remove_registry_value(&self, key: RegistryKey) -> Result<()> {
         let lua = self.lock();
         if !lua.owns_registry_value(&key) {
@@ -1700,8 +1692,8 @@ impl Lua {
         Ok(())
     }
 
-    /// Returns true if the given [`RegistryKey`] was created by a [`Lua`] which shares the underlying
-    /// main state with this [`Lua`] instance.
+    /// Returns true if the given [`RegistryKey`] was created by a [`Lua`] which shares the
+    /// underlying main state with this [`Lua`] instance.
     ///
     /// Other than this, methods that accept a [`RegistryKey`] will return
     /// [`Error::MismatchedRegistryKey`] if passed a [`RegistryKey`] that was not created with a
@@ -1713,9 +1705,9 @@ impl Lua {
 
     /// Remove any registry values whose [`RegistryKey`]s have all been dropped.
     ///
-    /// Unlike normal handle values, [`RegistryKey`]s do not automatically remove themselves on Drop,
-    /// but you can call this method to remove any unreachable registry values not manually removed
-    /// by [`Lua::remove_registry_value`].
+    /// Unlike normal handle values, [`RegistryKey`]s do not automatically remove themselves on
+    /// Drop, but you can call this method to remove any unreachable registry values not
+    /// manually removed by [`Lua::remove_registry_value`].
     pub fn expire_registry_values(&self) {
         let lua = self.lock();
         let state = lua.state();
@@ -1730,8 +1722,8 @@ impl Lua {
 
     /// Sets or replaces an application data object of type `T`.
     ///
-    /// Application data could be accessed at any time by using [`Lua::app_data_ref`] or [`Lua::app_data_mut`]
-    /// methods where `T` is the data type.
+    /// Application data could be accessed at any time by using [`Lua::app_data_ref`] or
+    /// [`Lua::app_data_mut`] methods where `T` is the data type.
     ///
     /// # Panics
     ///
@@ -1770,7 +1762,8 @@ impl Lua {
     /// Returns:
     /// - `Ok(Some(old_data))` if the data object of type `T` was successfully replaced.
     /// - `Ok(None)` if the data object of type `T` was successfully inserted.
-    /// - `Err(data)` if the data object of type `T` was not inserted because the container is currently borrowed.
+    /// - `Err(data)` if the data object of type `T` was not inserted because the container is
+    ///   currently borrowed.
     ///
     /// See [`Lua::set_app_data()`] for examples.
     pub fn try_set_app_data<T: MaybeSend + 'static>(&self, data: T) -> StdResult<Option<T>, T> {
@@ -1779,12 +1772,13 @@ impl Lua {
         extra.app_data.try_insert(data)
     }
 
-    /// Gets a reference to an application data object stored by [`Lua::set_app_data()`] of type `T`.
+    /// Gets a reference to an application data object stored by [`Lua::set_app_data()`] of type
+    /// `T`.
     ///
     /// # Panics
     ///
-    /// Panics if the data object of type `T` is currently mutably borrowed. Multiple immutable reads
-    /// can be taken out at the same time.
+    /// Panics if the data object of type `T` is currently mutably borrowed. Multiple immutable
+    /// reads can be taken out at the same time.
     #[track_caller]
     pub fn app_data_ref<T: 'static>(&self) -> Option<AppDataRef<T>> {
         let guard = self.lock_arc();
@@ -1792,7 +1786,8 @@ impl Lua {
         extra.app_data.borrow(Some(guard))
     }
 
-    /// Gets a mutable reference to an application data object stored by [`Lua::set_app_data()`] of type `T`.
+    /// Gets a mutable reference to an application data object stored by [`Lua::set_app_data()`] of
+    /// type `T`.
     ///
     /// # Panics
     ///

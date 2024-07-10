@@ -55,11 +55,7 @@ impl<'a> Debug<'a> {
         }
     }
 
-    pub(crate) fn new_owned(
-        guard: ReentrantMutexGuard<'a, RawLua>,
-        _level: c_int,
-        ar: lua_Debug,
-    ) -> Self {
+    pub(crate) fn new_owned(guard: ReentrantMutexGuard<'a, RawLua>, _level: c_int, ar: lua_Debug) -> Self {
         Debug {
             lua: EitherLua::Owned(guard),
             ar: ActivationRecord::Owned(UnsafeCell::new(ar)),
@@ -259,7 +255,8 @@ pub struct DebugSource<'a> {
     pub line_defined: Option<usize>,
     /// The line number where the definition of the function ends (not set by Luau).
     pub last_line_defined: Option<usize>,
-    /// A string `Lua` if the function is a Lua function, `C` if it is a C function, `main` if it is the main part of a chunk.
+    /// A string `Lua` if the function is a Lua function, `C` if it is a C function, `main` if it is
+    /// the main part of a chunk.
     pub what: &'static str,
 }
 
@@ -267,20 +264,10 @@ pub struct DebugSource<'a> {
 pub struct DebugStack {
     pub num_ups: i32,
     /// Requires `feature = "lua54/lua53/lua52/luau"`
-    #[cfg(any(
-        feature = "lua54",
-        feature = "lua53",
-        feature = "lua52",
-        feature = "luau"
-    ))]
+    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "luau"))]
     pub num_params: i32,
     /// Requires `feature = "lua54/lua53/lua52/luau"`
-    #[cfg(any(
-        feature = "lua54",
-        feature = "lua53",
-        feature = "lua52",
-        feature = "luau"
-    ))]
+    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "luau"))]
     pub is_vararg: bool,
 }
 

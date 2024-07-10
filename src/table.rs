@@ -272,8 +272,8 @@ impl Table {
         }
     }
 
-    /// Inserts element value at position `idx` to the table, shifting up the elements from `table[idx]`.
-    /// The worst case complexity is O(n), where n is the table length.
+    /// Inserts element value at position `idx` to the table, shifting up the elements from
+    /// `table[idx]`. The worst case complexity is O(n), where n is the table length.
     pub fn raw_insert<V: IntoLua>(&self, idx: Integer, value: V) -> Result<()> {
         let size = self.raw_len() as Integer;
         if idx < 1 || idx > size + 1 {
@@ -878,7 +878,8 @@ where
 pub trait TableExt: Sealed {
     /// Calls the table as function assuming it has `__call` metamethod.
     ///
-    /// The metamethod is called with the table as its first argument, followed by the passed arguments.
+    /// The metamethod is called with the table as its first argument, followed by the passed
+    /// arguments.
     fn call<A, R>(&self, args: A) -> Result<R>
     where
         A: IntoLuaMulti,
@@ -886,7 +887,8 @@ pub trait TableExt: Sealed {
 
     /// Asynchronously calls the table as function assuming it has `__call` metamethod.
     ///
-    /// The metamethod is called with the table as its first argument, followed by the passed arguments.
+    /// The metamethod is called with the table as its first argument, followed by the passed
+    /// arguments.
     #[cfg(feature = "async")]
     #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
     fn call_async<A, R>(&self, args: A) -> impl Future<Output = Result<R>>

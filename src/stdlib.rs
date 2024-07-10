@@ -8,12 +8,7 @@ impl StdLib {
     /// [`coroutine`](https://www.lua.org/manual/5.4/manual.html#6.2) library
     ///
     /// Requires `feature = "lua54/lua53/lua52/luau"`
-    #[cfg(any(
-        feature = "lua54",
-        feature = "lua53",
-        feature = "lua52",
-        feature = "luau"
-    ))]
+    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "luau"))]
     pub const COROUTINE: StdLib = StdLib(1);
 
     /// [`table`](https://www.lua.org/manual/5.4/manual.html#6.6) library

@@ -116,8 +116,8 @@ impl Value {
 
     /// Converts the value to a generic C pointer.
     ///
-    /// The value can be a userdata, a table, a thread, a string, or a function; otherwise it returns NULL.
-    /// Different objects will give different pointers.
+    /// The value can be a userdata, a table, a thread, a string, or a function; otherwise it
+    /// returns NULL. Different objects will give different pointers.
     /// There is no way to convert the pointer back to its original value.
     ///
     /// Typically this function is used only for hashing and debug information.
@@ -136,7 +136,8 @@ impl Value {
 
     /// Converts the value to a string.
     ///
-    /// If the value has a metatable with a `__tostring` method, then it will be called to get the result.
+    /// If the value has a metatable with a `__tostring` method, then it will be called to get the
+    /// result.
     pub fn to_string(&self) -> Result<StdString> {
         match self {
             Value::Nil => Ok("nil".to_string()),
@@ -814,10 +815,7 @@ impl MultiValue {
     }
 
     #[inline]
-    pub(crate) fn extend_from_values(
-        &mut self,
-        iter: impl IntoIterator<Item = Result<Value>>,
-    ) -> Result<()> {
+    pub(crate) fn extend_from_values(&mut self, iter: impl IntoIterator<Item = Result<Value>>) -> Result<()> {
         for value in iter {
             self.push_back(value?);
         }
@@ -860,8 +858,8 @@ impl<'a> IntoIterator for &'a MultiValue {
 
 /// Trait for types convertible to any number of Lua values.
 ///
-/// This is a generalization of `IntoLua`, allowing any number of resulting Lua values instead of just
-/// one. Any type that implements `IntoLua` will automatically implement this trait.
+/// This is a generalization of `IntoLua`, allowing any number of resulting Lua values instead of
+/// just one. Any type that implements `IntoLua` will automatically implement this trait.
 pub trait IntoLuaMulti: Sized {
     /// Performs the conversion.
     fn into_lua_multi(self, lua: &Lua) -> Result<MultiValue>;
@@ -926,12 +924,7 @@ pub trait FromLuaMulti: Sized {
     /// Same as `from_lua_args` but for a number of values in the Lua stack.
     #[doc(hidden)]
     #[inline]
-    unsafe fn from_stack_args(
-        nargs: c_int,
-        i: usize,
-        to: Option<&str>,
-        lua: &RawLua,
-    ) -> Result<Self> {
+    unsafe fn from_stack_args(nargs: c_int, i: usize, to: Option<&str>, lua: &RawLua) -> Result<Self> {
         let _ = (i, to);
         Self::from_stack_multi(nargs, lua)
     }

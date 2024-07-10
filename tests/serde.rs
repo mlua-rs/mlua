@@ -4,8 +4,8 @@ use std::collections::HashMap;
 use std::error::Error as StdError;
 
 use mlua::{
-    DeserializeOptions, Error, ExternalResult, Lua, LuaSerdeExt, Result as LuaResult,
-    SerializeOptions, UserData, Value,
+    DeserializeOptions, Error, ExternalResult, Lua, LuaSerdeExt, Result as LuaResult, SerializeOptions,
+    UserData, Value,
 };
 use serde::{Deserialize, Serialize};
 
@@ -395,10 +395,7 @@ fn test_to_value_with_options() -> Result<(), Box<dyn StdError>> {
         unit: (),
         unitstruct: UnitStruct,
     };
-    let data2 = lua.to_value_with(
-        &mydata,
-        SerializeOptions::new().serialize_none_to_null(false),
-    )?;
+    let data2 = lua.to_value_with(&mydata, SerializeOptions::new().serialize_none_to_null(false))?;
     globals.set("data2", data2)?;
     lua.load(
         r#"
@@ -410,10 +407,7 @@ fn test_to_value_with_options() -> Result<(), Box<dyn StdError>> {
     .exec()?;
 
     // serialize_unit_to_null
-    let data3 = lua.to_value_with(
-        &mydata,
-        SerializeOptions::new().serialize_unit_to_null(false),
-    )?;
+    let data3 = lua.to_value_with(&mydata, SerializeOptions::new().serialize_unit_to_null(false))?;
     globals.set("data3", data3)?;
     lua.load(
         r#"

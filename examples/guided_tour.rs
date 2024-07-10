@@ -1,9 +1,7 @@
 use std::f32;
 use std::iter::FromIterator;
 
-use mlua::{
-    chunk, FromLua, Function, Lua, MetaMethod, Result, UserData, UserDataMethods, Value, Variadic,
-};
+use mlua::{chunk, FromLua, Function, Lua, MetaMethod, Result, UserData, UserDataMethods, Value, Variadic};
 
 fn main() -> Result<()> {
     // You can create a new Lua state with `Lua::new()`. This loads the default Lua std library
@@ -179,13 +177,7 @@ fn main() -> Result<()> {
     let vec2_constructor = lua.create_function(|_, (x, y): (f32, f32)| Ok(Vec2(x, y)))?;
     globals.set("vec2", vec2_constructor)?;
 
-    assert!(
-        (lua.load("(vec2(1, 2) + vec2(2, 2)):magnitude()")
-            .eval::<f32>()?
-            - 5.0)
-            .abs()
-            < f32::EPSILON
-    );
+    assert!((lua.load("(vec2(1, 2) + vec2(2, 2)):magnitude()").eval::<f32>()? - 5.0).abs() < f32::EPSILON);
 
     // Normally, Rust types passed to `Lua` must be `'static`, because there is no way to be
     // sure of their lifetime inside the Lua state. There is, however, a limited way to lift this

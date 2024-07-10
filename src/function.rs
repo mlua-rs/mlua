@@ -1,16 +1,13 @@
 use std::cell::RefCell;
-use std::mem;
 use std::os::raw::{c_int, c_void};
-use std::ptr;
-use std::slice;
+use std::{mem, ptr, slice};
 
 use crate::error::{Error, Result};
 use crate::state::Lua;
 use crate::table::Table;
 use crate::types::{Callback, MaybeSend, ValueRef};
 use crate::util::{
-    assert_stack, check_stack, linenumber_to_usize, pop_error, ptr_to_lossy_str, ptr_to_str,
-    StackGuard,
+    assert_stack, check_stack, linenumber_to_usize, pop_error, ptr_to_lossy_str, ptr_to_str, StackGuard,
 };
 use crate::value::{FromLuaMulti, IntoLua, IntoLuaMulti, Value};
 
@@ -37,7 +34,8 @@ pub struct FunctionInfo {
     ///
     /// Always `None` for Luau.
     pub name_what: Option<&'static str>,
-    /// A string `Lua` if the function is a Lua function, `C` if it is a C function, `main` if it is the main part of a chunk.
+    /// A string `Lua` if the function is a Lua function, `C` if it is a C function, `main` if it is
+    /// the main part of a chunk.
     pub what: &'static str,
     /// Source of the chunk that created the function.
     pub source: Option<String>,
@@ -426,8 +424,8 @@ impl Function {
 
     /// Retrieves recorded coverage information about this Lua function including inner calls.
     ///
-    /// This function takes a callback as an argument and calls it providing [`CoverageInfo`] snapshot
-    /// per each executed inner function.
+    /// This function takes a callback as an argument and calls it providing [`CoverageInfo`]
+    /// snapshot per each executed inner function.
     ///
     /// Recording of coverage information is controlled by [`Compiler::set_coverage_level`] option.
     ///
@@ -522,7 +520,8 @@ pub(crate) struct WrappedFunction(pub(crate) Callback<'static>);
 pub(crate) struct WrappedAsyncFunction(pub(crate) AsyncCallback<'static>);
 
 impl Function {
-    /// Wraps a Rust function or closure, returning an opaque type that implements [`IntoLua`] trait.
+    /// Wraps a Rust function or closure, returning an opaque type that implements [`IntoLua`]
+    /// trait.
     #[inline]
     pub fn wrap<A, R, F>(func: F) -> impl IntoLua
     where
@@ -546,15 +545,14 @@ impl Function {
     {
         let func = RefCell::new(func);
         WrappedFunction(Box::new(move |lua, nargs| unsafe {
-            let mut func = func
-                .try_borrow_mut()
-                .map_err(|_| Error::RecursiveMutCallback)?;
+            let mut func = func.try_borrow_mut().map_err(|_| Error::RecursiveMutCallback)?;
             let args = A::from_stack_args(nargs, 1, None, lua)?;
             func(lua.lua(), args)?.push_into_stack_multi(lua)
         }))
     }
 
-    /// Wraps a Rust async function or closure, returning an opaque type that implements [`IntoLua`] trait.
+    /// Wraps a Rust async function or closure, returning an opaque type that implements [`IntoLua`]
+    /// trait.
     #[cfg(feature = "async")]
     #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
     pub fn wrap_async<A, R, F, FR>(func: F) -> impl IntoLua
@@ -588,9 +586,7 @@ impl IntoLua for WrappedFunction {
 impl IntoLua for WrappedAsyncFunction {
     #[inline]
     fn into_lua(self, lua: &Lua) -> Result<Value> {
-        lua.lock()
-            .create_async_callback(self.0)
-            .map(Value::Function)
+        lua.lock().create_async_callback(self.0).map(Value::Function)
     }
 }
 

@@ -45,17 +45,11 @@ fn test_table() -> Result<()> {
     assert_eq!(table1.len()?, 5);
     assert!(!table1.is_empty());
     assert_eq!(
-        table1
-            .clone()
-            .pairs()
-            .collect::<Result<Vec<(i64, i64)>>>()?,
+        table1.clone().pairs().collect::<Result<Vec<(i64, i64)>>>()?,
         vec![(1, 1), (2, 2), (3, 3), (4, 4), (5, 5)]
     );
     assert_eq!(
-        table1
-            .clone()
-            .sequence_values()
-            .collect::<Result<Vec<i64>>>()?,
+        table1.clone().sequence_values().collect::<Result<Vec<i64>>>()?,
         vec![1, 2, 3, 4, 5]
     );
     assert_eq!(table1, [1, 2, 3, 4, 5]);
@@ -63,10 +57,7 @@ fn test_table() -> Result<()> {
     assert_eq!(table2.len()?, 0);
     assert!(table2.is_empty());
     assert_eq!(
-        table2
-            .clone()
-            .pairs()
-            .collect::<Result<Vec<(i64, i64)>>>()?,
+        table2.clone().pairs().collect::<Result<Vec<(i64, i64)>>>()?,
         vec![]
     );
     assert_eq!(table2, [0; 0]);
@@ -81,29 +72,20 @@ fn test_table() -> Result<()> {
     globals.set("table4", lua.create_sequence_from(vec![1, 2, 3, 4, 5])?)?;
     let table4 = globals.get::<_, Table>("table4")?;
     assert_eq!(
-        table4
-            .clone()
-            .pairs()
-            .collect::<Result<Vec<(i64, i64)>>>()?,
+        table4.clone().pairs().collect::<Result<Vec<(i64, i64)>>>()?,
         vec![(1, 1), (2, 2), (3, 3), (4, 4), (5, 5)]
     );
 
     table4.raw_insert(4, 35)?;
     table4.raw_insert(7, 7)?;
     assert_eq!(
-        table4
-            .clone()
-            .pairs()
-            .collect::<Result<Vec<(i64, i64)>>>()?,
+        table4.clone().pairs().collect::<Result<Vec<(i64, i64)>>>()?,
         vec![(1, 1), (2, 2), (3, 3), (4, 35), (5, 4), (6, 5), (7, 7)]
     );
 
     table4.raw_remove(1)?;
     assert_eq!(
-        table4
-            .clone()
-            .pairs()
-            .collect::<Result<Vec<(i64, i64)>>>()?,
+        table4.clone().pairs().collect::<Result<Vec<(i64, i64)>>>()?,
         vec![(1, 2), (2, 3), (3, 35), (4, 4), (5, 5), (6, 7)]
     );
 
@@ -448,10 +430,7 @@ fn test_table_call() -> Result<()> {
 
     // Test calling non-callable table
     let table2 = lua.create_table()?;
-    assert!(matches!(
-        table2.call::<_, ()>(()),
-        Err(Error::RuntimeError(_))
-    ));
+    assert!(matches!(table2.call::<_, ()>(()), Err(Error::RuntimeError(_))));
 
     Ok(())
 }

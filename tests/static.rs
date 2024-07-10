@@ -83,16 +83,15 @@ async fn test_static_async() -> Result<()> {
         tokio::task::yield_now().await;
     }
 
-    let timer =
-        lua.create_async_function(|_, (i, n, f): (u64, u64, mlua::Function)| async move {
-            tokio::task::spawn_local(async move {
-                for _ in 0..n {
-                    tokio::task::spawn_local(f.call_async::<(), ()>(()));
-                    sleep_ms(i).await;
-                }
-            });
-            Ok(())
-        })?;
+    let timer = lua.create_async_function(|_, (i, n, f): (u64, u64, mlua::Function)| async move {
+        tokio::task::spawn_local(async move {
+            for _ in 0..n {
+                tokio::task::spawn_local(f.call_async::<(), ()>(()));
+                sleep_ms(i).await;
+            }
+        });
+        Ok(())
+    })?;
     lua.globals().set("timer", timer)?;
 
     {

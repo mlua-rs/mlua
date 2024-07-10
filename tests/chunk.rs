@@ -1,5 +1,4 @@
-use std::fs;
-use std::io;
+use std::{fs, io};
 
 use mlua::{Lua, Result};
 

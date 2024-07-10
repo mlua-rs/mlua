@@ -4,8 +4,7 @@ use std::os::raw::c_int;
 use std::result::Result as StdResult;
 
 use crate::error::Result;
-use crate::state::Lua;
-use crate::state::RawLua;
+use crate::state::{Lua, RawLua};
 use crate::util::check_stack;
 use crate::value::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, MultiValue, Nil};
 
@@ -82,12 +81,7 @@ impl<T: FromLua> FromLuaMulti for T {
     }
 
     #[inline]
-    unsafe fn from_stack_args(
-        nargs: c_int,
-        i: usize,
-        to: Option<&str>,
-        lua: &RawLua,
-    ) -> Result<Self> {
+    unsafe fn from_stack_args(nargs: c_int, i: usize, to: Option<&str>, lua: &RawLua) -> Result<Self> {
         if nargs == 0 {
             return T::from_lua_arg(Nil, i, to, lua.lua());
         }

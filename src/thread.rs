@@ -161,10 +161,7 @@ impl Thread {
                 return Err(pop_error(thread_state, ret));
             }
             check_stack(state, 3)?;
-            protect_lua!(state, 0, 1, |state| error_traceback_thread(
-                state,
-                thread_state
-            ))?;
+            protect_lua!(state, 0, 1, |state| error_traceback_thread(state, thread_state))?;
             return Err(pop_error(state, ret));
         }
 

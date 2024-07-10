@@ -5,8 +5,7 @@ use std::ffi::{CStr, CString};
 use bstr::BString;
 use maplit::{btreemap, btreeset, hashmap, hashset};
 use mlua::{
-    AnyUserData, Error, Function, IntoLua, Lua, RegistryKey, Result, Table, Thread, UserDataRef,
-    Value,
+    AnyUserData, Error, Function, IntoLua, Lua, RegistryKey, Result, Table, Thread, UserDataRef, Value,
 };
 
 #[test]
@@ -142,10 +141,7 @@ fn test_registry_value_into_lua() -> Result<()> {
     // Check non-owned registry key
     let lua2 = Lua::new();
     let r2 = lua2.create_registry_value("abc")?;
-    assert!(matches!(
-        f.call::<_, ()>(&r2),
-        Err(Error::MismatchedRegistryKey)
-    ));
+    assert!(matches!(f.call::<_, ()>(&r2), Err(Error::MismatchedRegistryKey)));
 
     Ok(())
 }

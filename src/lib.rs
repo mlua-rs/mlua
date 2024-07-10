@@ -27,9 +27,9 @@
 //!
 //! # Serde support
 //!
-//! The [`LuaSerdeExt`] trait implemented for [`Lua`] allows conversion from Rust types to Lua values
-//! and vice versa using serde. Any user defined data type that implements [`serde::Serialize`] or
-//! [`serde::Deserialize`] can be converted.
+//! The [`LuaSerdeExt`] trait implemented for [`Lua`] allows conversion from Rust types to Lua
+//! values and vice versa using serde. Any user defined data type that implements
+//! [`serde::Serialize`] or [`serde::Deserialize`] can be converted.
 //! For convenience, additional functionality to handle `NULL` values and arrays is provided.
 //!
 //! The [`Value`] enum implements [`serde::Serialize`] trait to support serializing Lua values
@@ -40,14 +40,14 @@
 //! # Async/await support
 //!
 //! The [`create_async_function`] allows creating non-blocking functions that returns [`Future`].
-//! Lua code with async capabilities can be executed by [`call_async`] family of functions or polling
-//! [`AsyncThread`] using any runtime (eg. Tokio).
+//! Lua code with async capabilities can be executed by [`call_async`] family of functions or
+//! polling [`AsyncThread`] using any runtime (eg. Tokio).
 //!
 //! Requires `feature = "async"`.
 //!
 //! # `Send` requirement
-//! By default `mlua` is `!Send`. This can be changed by enabling `feature = "send"` that adds `Send` requirement
-//! to [`Function`]s and [`UserData`].
+//! By default `mlua` is `!Send`. This can be changed by enabling `feature = "send"` that adds
+//! `Send` requirement to [`Function`]s and [`UserData`].
 //!
 //! [Lua programming language]: https://www.lua.org/
 //! [`Lua`]: crate::Lua
@@ -116,8 +116,8 @@ pub use crate::table::{Table, TableExt, TablePairs, TableSequence};
 pub use crate::thread::{Thread, ThreadStatus};
 pub use crate::types::{AppDataRef, AppDataRefMut, Integer, LightUserData, Number, RegistryKey};
 pub use crate::userdata::{
-    AnyUserData, AnyUserDataExt, MetaMethod, UserData, UserDataFields, UserDataMetatable,
-    UserDataMethods, UserDataRef, UserDataRefMut, UserDataRegistry,
+    AnyUserData, AnyUserDataExt, MetaMethod, UserData, UserDataFields, UserDataMetatable, UserDataMethods,
+    UserDataRef, UserDataRefMut, UserDataRegistry,
 };
 pub use crate::value::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, MultiValue, Nil, Value};
 
@@ -137,9 +137,7 @@ pub use crate::thread::AsyncThread;
 
 #[cfg(feature = "serialize")]
 #[doc(inline)]
-pub use crate::serde::{
-    de::Options as DeserializeOptions, ser::Options as SerializeOptions, LuaSerdeExt,
-};
+pub use crate::serde::{de::Options as DeserializeOptions, ser::Options as SerializeOptions, LuaSerdeExt};
 
 #[cfg(feature = "serialize")]
 #[cfg_attr(docsrs, doc(cfg(feature = "serialize")))]
@@ -190,8 +188,8 @@ extern crate mlua_derive;
 ///
 /// Other minor limitations:
 ///
-/// - Certain escape codes in string literals don't work.
-///   (Specifically: `\a`, `\b`, `\f`, `\v`, `\123` (octal escape codes), `\u`, and `\U`).
+/// - Certain escape codes in string literals don't work. (Specifically: `\a`, `\b`, `\f`, `\v`,
+///   `\123` (octal escape codes), `\u`, and `\U`).
 ///
 ///   These are accepted: : `\\`, `\n`, `\t`, `\r`, `\xAB` (hex escape codes), and `\0`.
 ///
@@ -255,7 +253,6 @@ pub use mlua_derive::FromLua;
 ///     ...
 /// }
 /// ```
-///
 #[cfg(any(feature = "module", docsrs))]
 #[cfg_attr(docsrs, doc(cfg(feature = "module")))]
 pub use mlua_derive::lua_module;

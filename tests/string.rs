@@ -15,9 +15,7 @@ fn test_string_compare() {
     with_str("teststring", |t| assert_eq!(t, b"teststring".to_vec())); // Vec<u8>
     with_str("teststring", |t| assert_eq!(t, "teststring".to_string())); // String
     with_str("teststring", |t| assert_eq!(t, t)); // mlua::String
-    with_str("teststring", |t| {
-        assert_eq!(t, Cow::from(b"teststring".as_ref()))
-    }); // Cow (borrowed)
+    with_str("teststring", |t| assert_eq!(t, Cow::from(b"teststring".as_ref()))); // Cow (borrowed)
     with_str("bla", |t| assert_eq!(t, Cow::from(b"bla".to_vec()))); // Cow (owned)
 }
 
@@ -40,14 +38,8 @@ fn test_string_views() -> Result<()> {
     let empty: String = globals.get("empty")?;
 
     assert_eq!(ok.to_str()?, "null bytes are valid utf-8, wh\0 knew?");
-    assert_eq!(
-        ok.to_string_lossy(),
-        "null bytes are valid utf-8, wh\0 knew?"
-    );
-    assert_eq!(
-        ok.as_bytes(),
-        &b"null bytes are valid utf-8, wh\0 knew?"[..]
-    );
+    assert_eq!(ok.to_string_lossy(), "null bytes are valid utf-8, wh\0 knew?");
+    assert_eq!(ok.as_bytes(), &b"null bytes are valid utf-8, wh\0 knew?"[..]);
 
     assert!(err.to_str().is_err());
     assert_eq!(err.as_bytes(), &b"but \xff isn't :("[..]);

@@ -183,9 +183,7 @@ fn function_call_concat(c: &mut Criterion) {
     let lua = Lua::new();
 
     let concat = lua
-        .create_function(|_, (a, b): (LuaString, LuaString)| {
-            Ok(format!("{}{}", a.to_str()?, b.to_str()?))
-        })
+        .create_function(|_, (a, b): (LuaString, LuaString)| Ok(format!("{}{}", a.to_str()?, b.to_str()?)))
         .unwrap();
     let i = AtomicUsize::new(0);
 
@@ -383,17 +381,10 @@ fn userdata_async_call_method(c: &mut Criterion) {
         b.to_async(rt).iter_batched(
             || {
                 collect_gc_twice(&lua);
-                (
-                    method.clone(),
-                    ud.clone(),
-                    i.fetch_add(1, Ordering::Relaxed),
-                )
+                (method.clone(), ud.clone(), i.fetch_add(1, Ordering::Relaxed))
             },
             |(method, ud, i)| async move {
-                assert_eq!(
-                    method.call_async::<_, usize>((ud, i)).await.unwrap(),
-                    123 + i
-                );
+                assert_eq!(method.call_async::<_, usize>((ud, i)).await.unwrap(), 123 + i);
             },
             BatchSize::SmallInput,
         );

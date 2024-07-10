@@ -12,9 +12,7 @@ struct LuaTcpStream(TcpStream);
 
 impl UserData for LuaTcpStream {
     fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
-        methods.add_method("peer_addr", |_, this, ()| {
-            Ok(this.0.peer_addr()?.to_string())
-        });
+        methods.add_method("peer_addr", |_, this, ()| Ok(this.0.peer_addr()?.to_string()));
 
         methods.add_async_method_mut("read", |lua, this, size| async move {
             let mut buf = vec![0; size];
@@ -53,9 +51,7 @@ async fn run_server(lua: Lua, handler: RegistryKey) -> io::Result<()> {
         let lua = lua.clone();
         let handler = handler.clone();
         task::spawn_local(async move {
-            let handler: Function = lua
-                .registry_value(&handler)
-                .expect("cannot get Lua handler");
+            let handler: Function = lua.registry_value(&handler).expect("cannot get Lua handler");
 
             let stream = LuaTcpStream(stream);
             if let Err(err) = handler.call_async::<_, ()>(stream).await {

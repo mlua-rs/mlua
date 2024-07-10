@@ -6,9 +6,8 @@ use mlua::{Error, ErrorContext, Lua, Result};
 fn test_error_context() -> Result<()> {
     let lua = Lua::new();
 
-    let func = lua.create_function(|_, ()| {
-        Err::<(), _>(Error::runtime("runtime error")).context("some context")
-    })?;
+    let func =
+        lua.create_function(|_, ()| Err::<(), _>(Error::runtime("runtime error")).context("some context"))?;
     lua.globals().set("func", func)?;
 
     let msg = lua
@@ -33,12 +32,9 @@ fn test_error_context() -> Result<()> {
 
     // Rewrite context message and test `downcast_ref`
     let func3 = lua.create_function(|_, ()| {
-        Err::<(), _>(Error::external(io::Error::new(
-            io::ErrorKind::Other,
-            "other",
-        )))
-        .context("some context")
-        .context("some new context")
+        Err::<(), _>(Error::external(io::Error::new(io::ErrorKind::Other, "other")))
+            .context("some context")
+            .context("some new context")
     })?;
     let res = func3.call::<_, ()>(()).err().unwrap();
     let Error::CallbackError { cause, .. } = &res else {

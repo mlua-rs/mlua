@@ -63,11 +63,7 @@ where
             }
         }
 
-        unsafe fn r#use(
-            &self,
-            state: *mut ffi::lua_State,
-            extra: *mut ExtraData,
-        ) -> *mut WrappedFailure {
+        unsafe fn r#use(&self, state: *mut ffi::lua_State, extra: *mut ExtraData) -> *mut WrappedFailure {
             let ref_thread = (*extra).ref_thread;
             match *self {
                 PreallocatedFailure::New(ud) => {
@@ -176,9 +172,7 @@ pub(super) unsafe fn ref_stack_pop(extra: *mut ExtraData) -> c_int {
             let top = extra.ref_stack_top;
             // It is a user error to create enough references to exhaust the Lua max stack size for
             // the ref thread.
-            panic!(
-                "cannot create a Lua reference, out of auxiliary stack space (used {top} slots)"
-            );
+            panic!("cannot create a Lua reference, out of auxiliary stack space (used {top} slots)");
         }
         extra.ref_stack_size += inc;
     }

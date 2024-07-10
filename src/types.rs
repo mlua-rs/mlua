@@ -189,7 +189,8 @@ pub(crate) struct DestructedUserdata;
 ///
 /// This is a handle to a value stored inside the Lua registry. It is not automatically
 /// garbage collected on Drop, but it can be removed with [`Lua::remove_registry_value`],
-/// and instances not manually removed can be garbage collected with [`Lua::expire_registry_values`].
+/// and instances not manually removed can be garbage collected with
+/// [`Lua::expire_registry_values`].
 ///
 /// Be warned, If you place this into Lua via a [`UserData`] type or a rust callback, it is *very
 /// easy* to accidentally cause reference cycles that the Lua garbage collector cannot resolve.

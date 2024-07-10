@@ -2,7 +2,8 @@
 
 use std::os::raw::c_void;
 
-use serde::{de::DeserializeOwned, ser::Serialize};
+use serde::de::DeserializeOwned;
+use serde::ser::Serialize;
 
 use crate::error::Result;
 use crate::private::Sealed;
@@ -189,8 +190,7 @@ pub trait LuaSerdeExt: Sealed {
     /// }
     /// ```
     #[allow(clippy::wrong_self_convention)]
-    fn from_value_with<T: DeserializeOwned>(&self, value: Value, options: de::Options)
-        -> Result<T>;
+    fn from_value_with<T: DeserializeOwned>(&self, value: Value, options: de::Options) -> Result<T>;
 }
 
 impl LuaSerdeExt for Lua {

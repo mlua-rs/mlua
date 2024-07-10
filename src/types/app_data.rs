@@ -6,9 +6,8 @@ use std::result::Result as StdResult;
 
 use rustc_hash::FxHashMap;
 
-use crate::state::LuaGuard;
-
 use super::MaybeSend;
+use crate::state::LuaGuard;
 
 #[cfg(not(feature = "send"))]
 type Container = UnsafeCell<FxHashMap<TypeId, RefCell<Box<dyn Any>>>>;
@@ -56,10 +55,7 @@ impl AppData {
     }
 
     #[track_caller]
-    pub(crate) fn borrow_mut<T: 'static>(
-        &self,
-        guard: Option<LuaGuard>,
-    ) -> Option<AppDataRefMut<T>> {
+    pub(crate) fn borrow_mut<T: 'static>(&self, guard: Option<LuaGuard>) -> Option<AppDataRefMut<T>> {
         let data = unsafe { &*self.container.get() }
             .get(&TypeId::of::<T>())?
             .borrow_mut();

@@ -43,10 +43,7 @@ fn test_bind() -> Result<()> {
     concat = concat.bind("bar")?;
     concat = concat.bind(("baz", "baf"))?;
     assert_eq!(concat.call::<_, String>(())?, "foobarbazbaf");
-    assert_eq!(
-        concat.call::<_, String>(("hi", "wut"))?,
-        "foobarbazbafhiwut"
-    );
+    assert_eq!(concat.call::<_, String>(("hi", "wut"))?, "foobarbazbafhiwut");
 
     let mut concat2 = globals.get::<_, Function>("concat")?;
     concat2 = concat2.bind(())?;
@@ -271,8 +268,7 @@ fn test_function_wrap() -> Result<()> {
 
     let lua = Lua::new();
 
-    lua.globals()
-        .set("f", Function::wrap(|_, s: String| Ok(s)))?;
+    lua.globals().set("f", Function::wrap(|_, s: String| Ok(s)))?;
     lua.load(r#"assert(f("hello") == "hello")"#).exec().unwrap();
 
     let mut _i = false;

@@ -3,9 +3,8 @@
 //! Based on github.com/keplerproject/lua-compat-5.3
 
 use std::ffi::CStr;
-use std::mem;
 use std::os::raw::{c_char, c_int, c_void};
-use std::ptr;
+use std::{mem, ptr};
 
 use super::lauxlib::*;
 use super::lua::*;
@@ -53,11 +52,7 @@ unsafe fn compat53_findfield(L: *mut lua_State, objidx: c_int, level: c_int) -> 
     0 // not found
 }
 
-unsafe fn compat53_pushglobalfuncname(
-    L: *mut lua_State,
-    level: c_int,
-    ar: *mut lua_Debug,
-) -> c_int {
+unsafe fn compat53_pushglobalfuncname(L: *mut lua_State, level: c_int, ar: *mut lua_Debug) -> c_int {
     let top = lua_gettop(L);
     // push function
     lua_getinfo(L, level, cstr!("f"), ar);
@@ -281,12 +276,7 @@ pub unsafe fn lua_pushglobaltable(L: *mut lua_State) {
 }
 
 #[inline(always)]
-pub unsafe fn lua_resume(
-    L: *mut lua_State,
-    from: *mut lua_State,
-    narg: c_int,
-    nres: *mut c_int,
-) -> c_int {
+pub unsafe fn lua_resume(L: *mut lua_State, from: *mut lua_State, narg: c_int, nres: *mut c_int) -> c_int {
     let ret = lua_resume_(L, from, narg);
     if (ret == LUA_OK || ret == LUA_YIELD) && !(nres.is_null()) {
         *nres = lua_gettop(L);
@@ -345,18 +335,10 @@ pub unsafe fn luaL_loadbufferx(
     if !mode.is_null() {
         let modeb = CStr::from_ptr(mode).to_bytes();
         if !chunk_is_text && !modeb.contains(&b'b') {
-            lua_pushfstring(
-                L,
-                cstr!("attempt to load a binary chunk (mode is '%s')"),
-                mode,
-            );
+            lua_pushfstring(L, cstr!("attempt to load a binary chunk (mode is '%s')"), mode);
             return LUA_ERRSYNTAX;
         } else if chunk_is_text && !modeb.contains(&b't') {
-            lua_pushfstring(
-                L,
-                cstr!("attempt to load a text chunk (mode is '%s')"),
-                mode,
-            );
+            lua_pushfstring(L, cstr!("attempt to load a text chunk (mode is '%s')"), mode);
             return LUA_ERRSYNTAX;
         }
     }
@@ -397,12 +379,7 @@ pub unsafe fn luaL_len(L: *mut lua_State, idx: c_int) -> lua_Integer {
     res
 }
 
-pub unsafe fn luaL_traceback(
-    L: *mut lua_State,
-    L1: *mut lua_State,
-    msg: *const c_char,
-    mut level: c_int,
-) {
+pub unsafe fn luaL_traceback(L: *mut lua_State, L1: *mut lua_State, msg: *const c_char, mut level: c_int) {
     let mut ar: lua_Debug = mem::zeroed();
     let top = lua_gettop(L);
     let numlevels = lua_stackdepth(L);
@@ -494,12 +471,7 @@ pub unsafe fn luaL_getsubtable(L: *mut lua_State, idx: c_int, fname: *const c_ch
     0
 }
 
-pub unsafe fn luaL_requiref(
-    L: *mut lua_State,
-    modname: *const c_char,
-    openf: lua_CFunction,
-    glb: c_int,
-) {
+pub unsafe fn luaL_requiref(L: *mut lua_State, modname: *const c_char, openf: lua_CFunction, glb: c_int) {
     luaL_checkstack(L, 3, cstr!("not enough stack slots available"));
     luaL_getsubtable(L, LUA_REGISTRYINDEX, cstr!("_LOADED"));
     if lua_getfield(L, -1, modname) == LUA_TNIL {

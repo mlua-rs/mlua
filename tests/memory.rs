@@ -68,12 +68,7 @@ fn test_gc_control() -> Result<()> {
         assert_eq!(lua.gc_inc(0, 0, 0), GCMode::Generational);
     }
 
-    #[cfg(any(
-        feature = "lua54",
-        feature = "lua53",
-        feature = "lua52",
-        feature = "luau"
-    ))]
+    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "luau"))]
     {
         assert!(lua.gc_is_running());
         lua.gc_stop();

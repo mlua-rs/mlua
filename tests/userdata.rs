@@ -6,8 +6,8 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicI64, Ordering};
 
 use mlua::{
-    AnyUserData, AnyUserDataExt, Error, ExternalError, Function, Lua, MetaMethod, Nil, Result,
-    String, UserData, UserDataFields, UserDataMethods, UserDataRef, Value, Variadic,
+    AnyUserData, AnyUserDataExt, Error, ExternalError, Function, Lua, MetaMethod, Nil, Result, String,
+    UserData, UserDataFields, UserDataMethods, UserDataRef, Value, Variadic,
 };
 
 #[test]
@@ -118,15 +118,11 @@ fn test_metamethods() -> Result<()> {
             methods.add_method("get", |_, data, ()| Ok(data.0));
             methods.add_meta_function(
                 MetaMethod::Add,
-                |_, (lhs, rhs): (UserDataRef<Self>, UserDataRef<Self>)| {
-                    Ok(MyUserData(lhs.0 + rhs.0))
-                },
+                |_, (lhs, rhs): (UserDataRef<Self>, UserDataRef<Self>)| Ok(MyUserData(lhs.0 + rhs.0)),
             );
             methods.add_meta_function(
                 MetaMethod::Sub,
-                |_, (lhs, rhs): (UserDataRef<Self>, UserDataRef<Self>)| {
-                    Ok(MyUserData(lhs.0 - rhs.0))
-                },
+                |_, (lhs, rhs): (UserDataRef<Self>, UserDataRef<Self>)| Ok(MyUserData(lhs.0 - rhs.0)),
             );
             methods.add_meta_function(
                 MetaMethod::Eq,
@@ -139,22 +135,16 @@ fn test_metamethods() -> Result<()> {
                     Err("no such custom index".into_lua_err())
                 }
             });
-            #[cfg(any(
-                feature = "lua54",
-                feature = "lua53",
-                feature = "lua52",
-                feature = "luajit52"
-            ))]
+            #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "luajit52"))]
             methods.add_meta_method(MetaMethod::Pairs, |lua, data, ()| {
                 use std::iter::FromIterator;
-                let stateless_iter =
-                    lua.create_function(|_, (data, i): (UserDataRef<Self>, i64)| {
-                        let i = i + 1;
-                        if i <= data.0 {
-                            return Ok(mlua::Variadic::from_iter(vec![i, i]));
-                        }
-                        return Ok(mlua::Variadic::new());
-                    })?;
+                let stateless_iter = lua.create_function(|_, (data, i): (UserDataRef<Self>, i64)| {
+                    let i = i + 1;
+                    if i <= data.0 {
+                        return Ok(mlua::Variadic::from_iter(vec![i, i]));
+                    }
+                    return Ok(mlua::Variadic::new());
+                })?;
                 Ok((stateless_iter, data.clone(), 0))
             });
         }
@@ -172,12 +162,7 @@ fn test_metamethods() -> Result<()> {
         10
     );
 
-    #[cfg(any(
-        feature = "lua54",
-        feature = "lua53",
-        feature = "lua52",
-        feature = "luajit52"
-    ))]
+    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "luajit52"))]
     let pairs_it = lua
         .load(
             r#"
@@ -202,12 +187,7 @@ fn test_metamethods() -> Result<()> {
     assert_eq!(lua.load("userdata2.inner").eval::<i64>()?, 3);
     assert!(lua.load("userdata2.nonexist_field").eval::<()>().is_err());
 
-    #[cfg(any(
-        feature = "lua54",
-        feature = "lua53",
-        feature = "lua52",
-        feature = "luajit52"
-    ))]
+    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "luajit52"))]
     assert_eq!(pairs_it.call::<_, i64>(())?, 28);
 
     let userdata2: Value = globals.get("userdata2")?;
@@ -454,9 +434,7 @@ fn test_functions() -> Result<()> {
 
     impl UserData for MyUserData {
         fn add_methods<'a, M: UserDataMethods<'a, Self>>(methods: &mut M) {
-            methods.add_function("get_value", |_, ud: AnyUserData| {
-                Ok(ud.borrow::<MyUserData>()?.0)
-            });
+            methods.add_function("get_value", |_, ud: AnyUserData| Ok(ud.borrow::<MyUserData>()?.0));
             methods.add_function_mut("set_value", |_, (ud, value): (AnyUserData, i64)| {
                 ud.borrow_mut::<MyUserData>()?.0 = value;
                 Ok(())
@@ -517,8 +495,7 @@ fn test_fields() -> Result<()> {
 
             // Use userdata "uservalue" storage
             fields.add_field_function_get("uval", |_, ud| ud.user_value::<Option<String>>());
-            fields
-                .add_field_function_set("uval", |_, ud, s| ud.set_user_value::<Option<String>>(s));
+            fields.add_field_function_set("uval", |_, ud, s| ud.set_user_value::<Option<String>>(s));
 
             fields.add_meta_field(MetaMethod::Index, HashMap::from([("f", 321)]));
             fields.add_meta_field_with(MetaMethod::NewIndex, |lua| {
@@ -597,8 +574,7 @@ fn test_metatable() -> Result<()> {
     let lua = Lua::new();
     let globals = lua.globals();
     globals.set("ud", MyUserData)?;
-    lua.load(r#"assert(ud:my_type_name() == "MyUserData")"#)
-        .exec()?;
+    lua.load(r#"assert(ud:my_type_name() == "MyUserData")"#).exec()?;
 
     #[cfg(any(feature = "lua54", feature = "lua53", feature = "luau"))]
     lua.load(r#"assert(tostring(ud):sub(1, 11) == "MyUserData:")"#)
@@ -654,10 +630,7 @@ fn test_metatable() -> Result<()> {
 
     let ud = lua.create_userdata(MyUserData3)?;
     let metatable = ud.get_metatable()?;
-    assert_eq!(
-        metatable.get::<String>(MetaMethod::Type)?.to_str()?,
-        "CustomName"
-    );
+    assert_eq!(metatable.get::<String>(MetaMethod::Type)?.to_str()?, "CustomName");
 
     Ok(())
 }
@@ -740,8 +713,7 @@ fn test_any_userdata_wrap() -> Result<()> {
         reg.add_method("get", |_, this, ()| Ok(this.clone()));
     })?;
 
-    lua.globals()
-        .set("s", AnyUserData::wrap("hello".to_string()))?;
+    lua.globals().set("s", AnyUserData::wrap("hello".to_string()))?;
     lua.load(
         r#"
         assert(s:get() == "hello")
@@ -854,8 +826,7 @@ fn test_userdata_derive() -> Result<()> {
         reg.add_function("val", |_, this: MyUserData| Ok(this.0));
     })?;
 
-    lua.globals()
-        .set("ud", AnyUserData::wrap(MyUserData(123)))?;
+    lua.globals().set("ud", AnyUserData::wrap(MyUserData(123)))?;
     lua.load("assert(ud:val() == 123)").exec()?;
 
     // More complex struct where generics and where clause
@@ -869,8 +840,7 @@ fn test_userdata_derive() -> Result<()> {
         reg.add_function("val", |_, this: MyUserData2<'static, i32>| Ok(*this.0));
     })?;
 
-    lua.globals()
-        .set("ud", AnyUserData::wrap(MyUserData2(&321)))?;
+    lua.globals().set("ud", AnyUserData::wrap(MyUserData2(&321)))?;
     lua.load("assert(ud:val() == 321)").exec()?;
 
     Ok(())

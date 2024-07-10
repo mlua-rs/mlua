@@ -299,8 +299,8 @@ impl<'a> Chunk<'a> {
 
     /// Sets the environment of the loaded chunk to the given value.
     ///
-    /// In Lua >=5.2 main chunks always have exactly one upvalue, and this upvalue is used as the `_ENV`
-    /// variable inside the chunk. By default this value is set to the global environment.
+    /// In Lua >=5.2 main chunks always have exactly one upvalue, and this upvalue is used as the
+    /// `_ENV` variable inside the chunk. By default this value is set to the global environment.
     ///
     /// Calling this method changes the `_ENV` upvalue to the value provided, and variables inside
     /// the chunk will refer to the given environment rather than the global one.
@@ -450,19 +450,12 @@ impl<'a> Chunk<'a> {
             if self.detect_mode() == ChunkMode::Text {
                 #[cfg(feature = "luau")]
                 {
-                    let data = self
-                        .compiler
-                        .get_or_insert_with(Default::default)
-                        .compile(source);
+                    let data = self.compiler.get_or_insert_with(Default::default).compile(source);
                     self.source = Ok(Cow::Owned(data));
                     self.mode = Some(ChunkMode::Binary);
                 }
                 #[cfg(not(feature = "luau"))]
-                if let Ok(func) = self
-                    .lua
-                    .lock()
-                    .load_chunk(None, None, None, source.as_ref())
-                {
+                if let Ok(func) = self.lua.lock().load_chunk(None, None, None, source.as_ref()) {
                     let data = func.dump(false);
                     self.source = Ok(Cow::Owned(data));
                     self.mode = Some(ChunkMode::Binary);

@@ -106,9 +106,7 @@ impl<'a, T: 'static> UserDataRegistry<'a, T> {
 
         let method = RefCell::new(method);
         Box::new(move |rawlua, nargs| unsafe {
-            let mut method = method
-                .try_borrow_mut()
-                .map_err(|_| Error::RecursiveMutCallback)?;
+            let mut method = method.try_borrow_mut().map_err(|_| Error::RecursiveMutCallback)?;
             if nargs == 0 {
                 let err = Error::from_lua_conversion("missing argument", "userdata", None);
                 try_self_arg!(Err(err));
@@ -142,9 +140,7 @@ impl<'a, T: 'static> UserDataRegistry<'a, T> {
             ($res:expr) => {
                 match $res {
                     Ok(res) => res,
-                    Err(err) => {
-                        return Box::pin(future::ready(Err(Error::bad_self_argument(&name, err))))
-                    }
+                    Err(err) => return Box::pin(future::ready(Err(Error::bad_self_argument(&name, err)))),
                 }
             };
         }
@@ -189,9 +185,7 @@ impl<'a, T: 'static> UserDataRegistry<'a, T> {
             ($res:expr) => {
                 match $res {
                     Ok(res) => res,
-                    Err(err) => {
-                        return Box::pin(future::ready(Err(Error::bad_self_argument(&name, err))))
-                    }
+                    Err(err) => return Box::pin(future::ready(Err(Error::bad_self_argument(&name, err)))),
                 }
             };
         }
@@ -345,8 +339,7 @@ impl<'a, T: 'static> UserDataFields<'a, T> for UserDataRegistry<'a, T> {
         A: FromLua,
     {
         let name = name.to_string();
-        let callback =
-            Self::box_function_mut(&name, move |lua, (data, val)| function(lua, data, val));
+        let callback = Self::box_function_mut(&name, move |lua, (data, val)| function(lua, data, val));
         self.field_setters.push((name, callback));
     }
 

@@ -96,8 +96,8 @@ impl Options {
 
     /// Sets [`detect_serde_json_arbitrary_precision`] option.
     ///
-    /// This option is used to serialize `serde_json::Number` with arbitrary precision to a Lua number.
-    /// Otherwise it will be serialized as an object (what serde does).
+    /// This option is used to serialize `serde_json::Number` with arbitrary precision to a Lua
+    /// number. Otherwise it will be serialized as an object (what serde does).
     ///
     /// This option is disabled by default.
     ///
@@ -264,11 +264,7 @@ impl<'a> ser::Serializer for Serializer<'a> {
     }
 
     #[inline]
-    fn serialize_tuple_struct(
-        self,
-        name: &'static str,
-        len: usize,
-    ) -> Result<Self::SerializeTupleStruct> {
+    fn serialize_tuple_struct(self, name: &'static str, len: usize) -> Result<Self::SerializeTupleStruct> {
         #[cfg(feature = "luau")]
         if name == "Vector" && len == crate::types::Vector::SIZE {
             return Ok(SerializeSeq::new_vector(self.lua, self.options));
@@ -454,8 +450,7 @@ impl ser::SerializeTupleVariant for SerializeTupleVariant<'_> {
     where
         T: Serialize + ?Sized,
     {
-        self.table
-            .raw_push(self.lua.to_value_with(value, self.options)?)
+        self.table.raw_push(self.lua.to_value_with(value, self.options)?)
     }
 
     fn end(self) -> Result<Value> {
@@ -489,10 +484,7 @@ impl ser::SerializeMap for SerializeMap<'_> {
     where
         T: Serialize + ?Sized,
     {
-        let key = mlua_expect!(
-            self.key.take(),
-            "serialize_value called before serialize_key"
-        );
+        let key = mlua_expect!(self.key.take(), "serialize_value called before serialize_key");
         let value = self.lua.to_value_with(value, self.options)?;
         self.table.raw_set(key, value)
     }

@@ -84,12 +84,8 @@ pub type lua_Udestructor = unsafe extern "C-unwind" fn(*mut c_void);
 pub type lua_Destructor = unsafe extern "C-unwind" fn(L: *mut lua_State, *mut c_void);
 
 /// Type for memory-allocation functions.
-pub type lua_Alloc = unsafe extern "C-unwind" fn(
-    ud: *mut c_void,
-    ptr: *mut c_void,
-    osize: usize,
-    nsize: usize,
-) -> *mut c_void;
+pub type lua_Alloc =
+    unsafe extern "C-unwind" fn(ud: *mut c_void, ptr: *mut c_void, osize: usize, nsize: usize) -> *mut c_void;
 
 /// Returns Luau release version (eg. `0.xxx`).
 pub const fn luau_version() -> Option<&'static str> {
@@ -426,12 +422,7 @@ pub unsafe fn lua_pushcclosure(L: *mut lua_State, f: lua_CFunction, nup: c_int) 
 }
 
 #[inline(always)]
-pub unsafe fn lua_pushcclosured(
-    L: *mut lua_State,
-    f: lua_CFunction,
-    debugname: *const c_char,
-    nup: c_int,
-) {
+pub unsafe fn lua_pushcclosured(L: *mut lua_State, f: lua_CFunction, debugname: *const c_char, nup: c_int) {
     lua_pushcclosurek(L, f, debugname, nup, None)
 }
 
@@ -476,12 +467,7 @@ pub type lua_Coverage = unsafe extern "C-unwind" fn(
 
 extern "C-unwind" {
     pub fn lua_stackdepth(L: *mut lua_State) -> c_int;
-    pub fn lua_getinfo(
-        L: *mut lua_State,
-        level: c_int,
-        what: *const c_char,
-        ar: *mut lua_Debug,
-    ) -> c_int;
+    pub fn lua_getinfo(L: *mut lua_State, level: c_int, what: *const c_char, ar: *mut lua_Debug) -> c_int;
     pub fn lua_getargument(L: *mut lua_State, level: c_int, n: c_int) -> c_int;
     pub fn lua_getlocal(L: *mut lua_State, level: c_int, n: c_int) -> *const c_char;
     pub fn lua_setlocal(L: *mut lua_State, level: c_int, n: c_int) -> *const c_char;
@@ -489,19 +475,9 @@ extern "C-unwind" {
     pub fn lua_setupvalue(L: *mut lua_State, funcindex: c_int, n: c_int) -> *const c_char;
 
     pub fn lua_singlestep(L: *mut lua_State, enabled: c_int);
-    pub fn lua_breakpoint(
-        L: *mut lua_State,
-        funcindex: c_int,
-        line: c_int,
-        enabled: c_int,
-    ) -> c_int;
+    pub fn lua_breakpoint(L: *mut lua_State, funcindex: c_int, line: c_int, enabled: c_int) -> c_int;
 
-    pub fn lua_getcoverage(
-        L: *mut lua_State,
-        funcindex: c_int,
-        context: *mut c_void,
-        callback: lua_Coverage,
-    );
+    pub fn lua_getcoverage(L: *mut lua_State, funcindex: c_int, context: *mut c_void, callback: lua_Coverage);
 
     pub fn lua_debugtrace(L: *mut lua_State) -> *const c_char;
 }

@@ -75,15 +75,9 @@ fn test_function_calls() -> Result<()> {
 
     let output = output.lock().unwrap();
     if cfg!(feature = "luajit") && lua.load("jit.version_num").eval::<i64>()? >= 20100 {
-        assert_eq!(
-            *output,
-            vec![(None, "main"), (Some("len".to_string()), "Lua")]
-        );
+        assert_eq!(*output, vec![(None, "main"), (Some("len".to_string()), "Lua")]);
     } else {
-        assert_eq!(
-            *output,
-            vec![(None, "main"), (Some("len".to_string()), "C")]
-        );
+        assert_eq!(*output, vec![(None, "main"), (Some("len".to_string()), "C")]);
     }
 
     Ok(())
@@ -97,10 +91,7 @@ fn test_error_within_hook() -> Result<()> {
         Err(Error::runtime("Something happened in there!"))
     });
 
-    let err = lua
-        .load("x = 1")
-        .exec()
-        .expect_err("panic didn't propagate");
+    let err = lua.load("x = 1").exec().expect_err("panic didn't propagate");
 
     match err {
         Error::CallbackError { cause, .. } => match cause.deref() {
@@ -153,14 +144,9 @@ fn test_limit_execution_instructions() -> Result<()> {
 fn test_hook_removal() -> Result<()> {
     let lua = Lua::new();
 
-    lua.set_hook(
-        HookTriggers::new().every_nth_instruction(1),
-        |_lua, _debug| {
-            Err(Error::runtime(
-                "this hook should've been removed by this time",
-            ))
-        },
-    );
+    lua.set_hook(HookTriggers::new().every_nth_instruction(1), |_lua, _debug| {
+        Err(Error::runtime("this hook should've been removed by this time"))
+    });
 
     assert!(lua.load("local x = 1").exec().is_err());
     lua.remove_hook();
@@ -189,9 +175,10 @@ fn test_hook_swap_within_hook() -> Result<()> {
             .set_hook(HookTriggers::EVERY_LINE, move |lua, _debug| {
                 lua.globals().set("ok", 1i64)?;
                 TL_LUA.with(|tl| {
-                    tl.borrow().as_ref().unwrap().set_hook(
-                        HookTriggers::EVERY_LINE,
-                        move |lua, _debug| {
+                    tl.borrow()
+                        .as_ref()
+                        .unwrap()
+                        .set_hook(HookTriggers::EVERY_LINE, move |lua, _debug| {
                             lua.load(
                                 r#"
                                     if ok ~= nil then
@@ -205,8 +192,7 @@ fn test_hook_swap_within_hook() -> Result<()> {
                                 tl.borrow().as_ref().unwrap().remove_hook();
                             });
                             Ok(())
-                        },
-                    )
+                        })
                 });
                 Ok(())
             })

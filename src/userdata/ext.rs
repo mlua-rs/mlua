@@ -16,7 +16,8 @@ pub trait AnyUserDataExt: Sealed {
 
     /// Calls the userdata as a function assuming it has `__call` metamethod.
     ///
-    /// The metamethod is called with the userdata as its first argument, followed by the passed arguments.
+    /// The metamethod is called with the userdata as its first argument, followed by the passed
+    /// arguments.
     fn call<A, R>(&self, args: A) -> Result<R>
     where
         A: IntoLuaMulti,
@@ -24,7 +25,8 @@ pub trait AnyUserDataExt: Sealed {
 
     /// Asynchronously calls the userdata as a function assuming it has `__call` metamethod.
     ///
-    /// The metamethod is called with the userdata as its first argument, followed by the passed arguments.
+    /// The metamethod is called with the userdata as its first argument, followed by the passed
+    /// arguments.
     #[cfg(feature = "async")]
     #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
     fn call_async<A, R>(&self, args: A) -> impl Future<Output = Result<R>>

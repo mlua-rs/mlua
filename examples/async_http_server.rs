@@ -4,7 +4,8 @@ use std::net::SocketAddr;
 use std::rc::Rc;
 
 use futures::future::LocalBoxFuture;
-use http_body_util::{combinators::BoxBody, BodyExt as _, Empty, Full};
+use http_body_util::combinators::BoxBody;
+use http_body_util::{BodyExt as _, Empty, Full};
 use hyper::body::{Bytes, Incoming};
 use hyper::{Request, Response};
 use hyper_util::rt::TokioIo;

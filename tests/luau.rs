@@ -7,17 +7,14 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
 use mlua::{
-    Compiler, CoverageInfo, Error, Lua, LuaOptions, Result, StdLib, Table, ThreadStatus, Value,
-    Vector, VmState,
+    Compiler, CoverageInfo, Error, Lua, LuaOptions, Result, StdLib, Table, ThreadStatus, Value, Vector,
+    VmState,
 };
 
 #[test]
 fn test_version() -> Result<()> {
     let lua = Lua::new();
-    assert!(lua
-        .globals()
-        .get::<_, String>("_VERSION")?
-        .starts_with("Luau 0."));
+    assert!(lua.globals().get::<_, String>("_VERSION")?.starts_with("Luau 0."));
     Ok(())
 }
 
@@ -189,9 +186,7 @@ fn test_vector_metatable() -> Result<()> {
     lua.set_vector_metatable(Some(vector_mt.clone()));
     lua.globals().set("Vector3", vector_mt)?;
 
-    let compiler = Compiler::new()
-        .set_vector_lib("Vector3")
-        .set_vector_ctor("new");
+    let compiler = Compiler::new().set_vector_lib("Vector3").set_vector_ctor("new");
 
     // Test vector methods (fastcall)
     lua.load(

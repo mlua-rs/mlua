@@ -45,10 +45,7 @@ pub unsafe fn assert_stack(state: *mut ffi::lua_State, amount: c_int) {
     // TODO: This should only be triggered when there is a logic error in `mlua`. In the future,
     // when there is a way to be confident about stack safety and test it, this could be enabled
     // only when `cfg!(debug_assertions)` is true.
-    mlua_assert!(
-        ffi::lua_checkstack(state, amount) != 0,
-        "out of stack space"
-    );
+    mlua_assert!(ffi::lua_checkstack(state, amount) != 0, "out of stack space");
 }
 
 // Checks that Lua has enough free stack space and returns `Error::StackError` on failure.
@@ -101,8 +98,8 @@ impl Drop for StackGuard {
 // Call a function that calls into the Lua API and may trigger a Lua error (longjmp) in a safe way.
 // Wraps the inner function in a call to `lua_pcall`, so the inner function only has access to a
 // limited lua stack. `nargs` is the same as the the parameter to `lua_pcall`, and `nresults` is
-// always `LUA_MULTRET`. Provided function must *not* panic, and since it will generally be lonjmping,
-// should not contain any values that implements Drop.
+// always `LUA_MULTRET`. Provided function must *not* panic, and since it will generally be
+// longjmping, should not contain any values that implements Drop.
 // Internally uses 2 extra stack spaces, and does not call checkstack.
 pub unsafe fn protect_lua_call(
     state: *mut ffi::lua_State,
@@ -133,8 +130,8 @@ pub unsafe fn protect_lua_call(
 // Wraps the inner function in a call to `lua_pcall`, so the inner function only has access to a
 // limited lua stack. `nargs` and `nresults` are similar to the parameters of `lua_pcall`, but the
 // given function return type is not the return value count, instead the inner function return
-// values are assumed to match the `nresults` param. Provided function must *not* panic, and since it
-// will generally be lonjmping, should not contain any values that implements Drop.
+// values are assumed to match the `nresults` param. Provided function must *not* panic, and since
+// it will generally be longjmping, should not contain any values that implements Drop.
 // Internally uses 3 extra stack spaces, and does not call checkstack.
 pub unsafe fn protect_lua_closure<F, R>(
     state: *mut ffi::lua_State,
@@ -232,8 +229,7 @@ pub unsafe fn pop_error(state: *mut ffi::lua_State, err_code: c_int) -> Error {
                     Error::SyntaxError {
                         // This seems terrible, but as far as I can tell, this is exactly what the
                         // stock Lua REPL does.
-                        incomplete_input: err_string.ends_with("<eof>")
-                            || err_string.ends_with("'<eof>'"),
+                        incomplete_input: err_string.ends_with("<eof>") || err_string.ends_with("'<eof>'"),
                         message: err_string,
                     }
                 }
@@ -283,12 +279,7 @@ pub unsafe fn push_buffer(state: *mut ffi::lua_State, b: &[u8], protect: bool) -
 
 // Uses 3 stack spaces, does not call checkstack.
 #[inline]
-pub unsafe fn push_table(
-    state: *mut ffi::lua_State,
-    narr: usize,
-    nrec: usize,
-    protect: bool,
-) -> Result<()> {
+pub unsafe fn push_table(state: *mut ffi::lua_State, narr: usize, nrec: usize, protect: bool) -> Result<()> {
     let narr: c_int = narr.try_into().unwrap_or(c_int::MAX);
     let nrec: c_int = nrec.try_into().unwrap_or(c_int::MAX);
     if protect {
@@ -380,11 +371,7 @@ pub unsafe fn take_userdata<T>(state: *mut ffi::lua_State) -> T {
 
 // Pushes the userdata and attaches a metatable with __gc method.
 // Internally uses 3 stack spaces, does not call checkstack.
-pub unsafe fn push_gc_userdata<T: Any>(
-    state: *mut ffi::lua_State,
-    t: T,
-    protect: bool,
-) -> Result<()> {
+pub unsafe fn push_gc_userdata<T: Any>(state: *mut ffi::lua_State, t: T, protect: bool) -> Result<()> {
     push_userdata(state, t, protect)?;
     get_gc_metatable::<T>(state);
     ffi::lua_setmetatable(state, -2);
@@ -556,12 +543,12 @@ pub unsafe fn init_userdata_metatable_newindex(state: *mut ffi::lua_State) -> Re
     })
 }
 
-// Populates the given table with the appropriate members to be a userdata metatable for the given type.
-// This function takes the given table at the `metatable` index, and adds an appropriate `__gc` member
-// to it for the given type and a `__metatable` entry to protect the table from script access.
-// The function also, if given a `field_getters` or `methods` tables, will create an `__index` metamethod
-// (capturing previous one) to lookup in `field_getters` first, then `methods` and falling back to the
-// captured `__index` if no matches found.
+// Populates the given table with the appropriate members to be a userdata metatable for the given
+// type. This function takes the given table at the `metatable` index, and adds an appropriate
+// `__gc` member to it for the given type and a `__metatable` entry to protect the table from script
+// access. The function also, if given a `field_getters` or `methods` tables, will create an
+// `__index` metamethod (capturing previous one) to lookup in `field_getters` first, then `methods`
+// and falling back to the captured `__index` if no matches found.
 // The same is also applicable for `__newindex` metamethod and `field_setters` table.
 // Internally uses 9 stack spaces and does not call checkstack.
 pub unsafe fn init_userdata_metatable(
@@ -873,8 +860,7 @@ pub unsafe fn init_gc_metatable<T: Any>(
 
 pub unsafe fn get_gc_metatable<T: Any>(state: *mut ffi::lua_State) {
     let type_id = TypeId::of::<T>();
-    let ref_addr =
-        mlua_expect!(METATABLE_CACHE.get(&type_id), "gc metatable does not exist") as *const u8;
+    let ref_addr = mlua_expect!(METATABLE_CACHE.get(&type_id), "gc metatable does not exist") as *const u8;
     ffi::lua_rawgetp(state, ffi::LUA_REGISTRYINDEX, ref_addr as *const c_void);
 }
 
@@ -979,12 +965,7 @@ pub unsafe fn init_error_registry(state: *mut ffi::lua_State) -> Result<()> {
         "__newindex",
         "__call",
         "__tostring",
-        #[cfg(any(
-            feature = "lua54",
-            feature = "lua53",
-            feature = "lua52",
-            feature = "luajit52"
-        ))]
+        #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "luajit52"))]
         "__pairs",
         #[cfg(any(feature = "lua53", feature = "lua52", feature = "luajit52"))]
         "__ipairs",

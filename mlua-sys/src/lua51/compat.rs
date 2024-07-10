@@ -2,9 +2,8 @@
 //!
 //! Based on github.com/keplerproject/lua-compat-5.3
 
-use std::mem;
 use std::os::raw::{c_char, c_int, c_void};
-use std::ptr;
+use std::{mem, ptr};
 
 use super::lauxlib::*;
 use super::lua::*;
@@ -328,12 +327,7 @@ pub unsafe fn lua_setuservalue(L: *mut lua_State, idx: c_int) {
 }
 
 #[inline(always)]
-pub unsafe fn lua_dump(
-    L: *mut lua_State,
-    writer: lua_Writer,
-    data: *mut c_void,
-    _strip: c_int,
-) -> c_int {
+pub unsafe fn lua_dump(L: *mut lua_State, writer: lua_Writer, data: *mut c_void, _strip: c_int) -> c_int {
     lua_dump_(L, writer, data)
 }
 
@@ -365,12 +359,7 @@ pub unsafe fn lua_pushglobaltable(L: *mut lua_State) {
 }
 
 #[inline(always)]
-pub unsafe fn lua_resume(
-    L: *mut lua_State,
-    _from: *mut lua_State,
-    narg: c_int,
-    nres: *mut c_int,
-) -> c_int {
+pub unsafe fn lua_resume(L: *mut lua_State, _from: *mut lua_State, narg: c_int, nres: *mut c_int) -> c_int {
     let ret = lua_resume_(L, narg);
     if (ret == LUA_OK || ret == LUA_YIELD) && !(nres.is_null()) {
         *nres = lua_gettop(L);
@@ -446,12 +435,7 @@ pub unsafe fn luaL_len(L: *mut lua_State, idx: c_int) -> lua_Integer {
     res
 }
 
-pub unsafe fn luaL_traceback(
-    L: *mut lua_State,
-    L1: *mut lua_State,
-    msg: *const c_char,
-    mut level: c_int,
-) {
+pub unsafe fn luaL_traceback(L: *mut lua_State, L1: *mut lua_State, msg: *const c_char, mut level: c_int) {
     let mut ar: lua_Debug = mem::zeroed();
     let top = lua_gettop(L);
     let numlevels = compat53_countlevels(L1);
@@ -543,12 +527,7 @@ pub unsafe fn luaL_getsubtable(L: *mut lua_State, idx: c_int, fname: *const c_ch
     0
 }
 
-pub unsafe fn luaL_requiref(
-    L: *mut lua_State,
-    modname: *const c_char,
-    openf: lua_CFunction,
-    glb: c_int,
-) {
+pub unsafe fn luaL_requiref(L: *mut lua_State, modname: *const c_char, openf: lua_CFunction, glb: c_int) {
     luaL_checkstack(L, 3, cstr!("not enough stack slots available"));
     luaL_getsubtable(L, LUA_REGISTRYINDEX, cstr!("_LOADED"));
     if lua_getfield(L, -1, modname) == LUA_TNIL {

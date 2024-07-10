@@ -379,12 +379,7 @@ extern "C-unwind" {
     pub fn lua_getupvalue(L: *mut lua_State, funcindex: c_int, n: c_int) -> *const c_char;
     pub fn lua_setupvalue(L: *mut lua_State, funcindex: c_int, n: c_int) -> *const c_char;
 
-    pub fn lua_sethook(
-        L: *mut lua_State,
-        func: Option<lua_Hook>,
-        mask: c_int,
-        count: c_int,
-    ) -> c_int;
+    pub fn lua_sethook(L: *mut lua_State, func: Option<lua_Hook>, mask: c_int, count: c_int) -> c_int;
     pub fn lua_gethook(L: *mut lua_State) -> Option<lua_Hook>;
     pub fn lua_gethookmask(L: *mut lua_State) -> c_int;
     pub fn lua_gethookcount(L: *mut lua_State) -> c_int;

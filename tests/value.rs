@@ -111,10 +111,7 @@ fn test_value_to_string() -> Result<()> {
         Value::Vector(mlua::Vector::new(10.0, 11.1, 12.2, 13.3)).to_string()?,
         "vector(10, 11.1, 12.2, 13.3)"
     );
-    assert_eq!(
-        Value::String(lua.create_string("hello")?).to_string()?,
-        "hello"
-    );
+    assert_eq!(Value::String(lua.create_string("hello")?).to_string()?, "hello");
 
     let table: Value = lua.load("{}").eval()?;
     assert!(table.to_string()?.starts_with("table:"));
@@ -189,9 +186,7 @@ fn test_value_conversions() -> Result<()> {
     assert_eq!(Value::Number(1.23).as_f64(), Some(1.23f64));
     assert!(Value::String(lua.create_string("hello")?).is_string());
     assert_eq!(
-        Value::String(lua.create_string("hello")?)
-            .as_string()
-            .unwrap(),
+        Value::String(lua.create_string("hello")?).as_string().unwrap(),
         "hello"
     );
     assert_eq!(
@@ -207,11 +202,9 @@ fn test_value_conversions() -> Result<()> {
     assert!(Value::Table(lua.create_table()?).is_table());
     assert!(Value::Table(lua.create_table()?).as_table().is_some());
     assert!(Value::Function(lua.create_function(|_, ()| Ok(())).unwrap()).is_function());
-    assert!(
-        Value::Function(lua.create_function(|_, ()| Ok(())).unwrap())
-            .as_function()
-            .is_some()
-    );
+    assert!(Value::Function(lua.create_function(|_, ()| Ok(())).unwrap())
+        .as_function()
+        .is_some());
     assert!(Value::Thread(lua.create_thread(lua.load("function() end").eval()?)?).is_thread());
     assert!(
         Value::Thread(lua.create_thread(lua.load("function() end").eval()?)?)
