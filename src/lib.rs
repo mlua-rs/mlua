@@ -225,6 +225,13 @@ pub use mlua_derive::chunk;
 #[cfg_attr(docsrs, doc(cfg(feature = "macros")))]
 pub use mlua_derive::FromLua;
 
+/// Derive [`ToLua`] for a Rust type.
+/// 
+/// Nested types require [`IntoLua`] as well
+#[cfg(feature = "macros")]
+#[cfg_attr(docsrs, doc(cfg(feature = "macros")))]
+pub use mlua_derive::ToLua;
+
 /// Registers Lua module entrypoint.
 ///
 /// You can register multiple entrypoints as required.

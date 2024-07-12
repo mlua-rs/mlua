@@ -154,8 +154,16 @@ pub fn from_lua(input: TokenStream) -> TokenStream {
 }
 
 #[cfg(feature = "macros")]
+#[proc_macro_derive(ToLua)]
+pub fn to_lua(input: TokenStream) -> TokenStream {
+    to_lua::to_lua(input)
+}
+
+#[cfg(feature = "macros")]
 mod chunk;
 #[cfg(feature = "macros")]
 mod from_lua;
+#[cfg(feature = "macros")]
+mod to_lua;
 #[cfg(feature = "macros")]
 mod token;
