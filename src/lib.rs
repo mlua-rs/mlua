@@ -232,6 +232,14 @@ pub use mlua_derive::FromLua;
 #[cfg_attr(docsrs, doc(cfg(feature = "macros")))]
 pub use mlua_derive::ToLua;
 
+#[cfg(feature = "macros")]
+#[cfg_attr(docsrs, doc(cfg(feature = "macros")))]
+pub use mlua_derive::ToLuaTable;
+
+#[cfg(feature = "macros")]
+#[cfg_attr(docsrs, doc(cfg(feature = "macros")))]
+pub use mlua_derive::FromLuaTable;
+
 /// Registers Lua module entrypoint.
 ///
 /// You can register multiple entrypoints as required.
