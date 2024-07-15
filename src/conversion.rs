@@ -543,8 +543,8 @@ impl<'lua> FromLua<'lua> for uuid::Uuid {
 //#[cfg(feature = "uuid")]
 impl<'lua> IntoLua<'lua> for uuid::Uuid {
     #[inline]
-    fn into_lua(self, _: &'lua Lua) -> Result<Value<'lua>> {
-        let uuid_string: String<'lua> = self.to_string();
+    fn into_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
+        let uuid_string = lua.create_string(self.to_string().as_str())?;
         Ok(Value::String(uuid_string))
     }
 }
@@ -553,13 +553,14 @@ impl<'lua> IntoLua<'lua> for uuid::Uuid {
 impl<'lua> IntoLua<'lua> for &uuid::Uuid {
     #[inline]
     fn into_lua(self, _: &'lua Lua) -> Result<Value<'lua>> {
-        let uuid_string: String<'lua> = self.clone().to_string();
+        let uuid_string = lua.create_string(self.to_string().as_str())?;
         Ok(Value::String(uuid_string))
     }
 
     #[inline]
     unsafe fn push_into_stack(self, lua: &'lua Lua) -> Result<()> {
-        lua.push_ref(&self);
+        let uuid_string = lua.create_string(self.to_string().as_str())?;
+        lua.push_ref(&uuid_string.0);
         Ok(())
     }   
 }
