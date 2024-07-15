@@ -533,7 +533,7 @@ impl<'lua> FromLua<'lua> for uuid::Uuid {
             });
         match string_result {
             Ok(string) => {
-                Ok(uuid::Uuid::parse_str(string.to_str()?))
+                Ok(uuid::Uuid::parse_str(string.to_str()?)?)
             },
             Err(e) => Err(e)
         }
