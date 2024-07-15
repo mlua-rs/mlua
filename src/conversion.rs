@@ -535,7 +535,11 @@ impl<'lua> FromLua<'lua> for uuid::Uuid {
             Ok(string) => {
                 match uuid::Uuid::parse_str(string.to_str()?) {
                     Ok(val) => Ok(val),
-                    Err(_) => Err(())
+                    Err(_) => Err(Error::FromLuaConversionError {
+                        from: "string",
+                        to: "uuid::Uuid",
+                        message: Some("failed to parse UUID".to_string()),
+                    })
                 }
             },
             Err(e) => Err(e)
