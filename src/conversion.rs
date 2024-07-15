@@ -535,7 +535,7 @@ impl<'lua> FromLua<'lua> for uuid::Uuid {
             Ok(string) => {
                 match uuid::Uuid::parse_str(string.to_str()?) {
                     Ok(val) => Ok(val),
-                    Err(e) => Err(e.into())
+                    Err(_) => Err(())
                 }
             },
             Err(e) => Err(e)
