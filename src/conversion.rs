@@ -533,7 +533,7 @@ impl<'lua> FromLua<'lua> for uuid::Uuid {
             });
         match string_result {
             Ok(string) => {
-                Ok(Uuid::parse_str(string.to_str()))
+                Ok(uuid::Uuid::parse_str(string.to_str()))
             },
             Err(e) => Err(e)
         }
@@ -552,7 +552,7 @@ impl<'lua> IntoLua<'lua> for uuid::Uuid {
 //#[cfg(feature = "uuid")]
 impl<'lua> IntoLua<'lua> for &uuid::Uuid {
     #[inline]
-    fn into_lua(self, _: &'lua Lua) -> Result<Value<'lua>> {
+    fn into_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
         let uuid_string = lua.create_string(self.to_string().as_str())?;
         Ok(Value::String(uuid_string))
     }
