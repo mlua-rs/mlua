@@ -521,28 +521,6 @@ impl<'lua> FromLua<'lua> for LightUserData {
 }
 
 //#[cfg(feature = "uuid")]
-impl<'lua> IntoLua<'lua> for uuid::Uuid {
-    #[inline]
-    fn into_lua(self, _: &'lua Lua) -> Result<Value<'lua>> {
-        Ok(Value::String(self.to_string()))
-    }
-}
-
-//#[cfg(feature = "uuid")]
-impl<'lua> IntoLua<'lua> for &uuid::Uuid {
-    #[inline]
-    fn into_lua(self, _: &'lua Lua) -> Result<Value<'lua>> {
-        Ok(Value::String(self.clone().to_string()))
-    }
-
-    #[inline]
-    unsafe fn push_into_stack(self, lua: &'lua Lua) -> Result<()> {
-        lua.push_ref(&self.to_string().0);
-        Ok(())
-    }   
-}
-
-//#[cfg(feature = "uuid")]
 impl<'lua> FromLua<'lua> for uuid::Uuid<'lua> {
     #[inline]
     fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> Result<uuid::Uuid<'lua>> {
@@ -561,6 +539,56 @@ impl<'lua> FromLua<'lua> for uuid::Uuid<'lua> {
         }
     }
 }
+
+//#[cfg(feature = "uuid")]
+impl<'lua> IntoLua<'lua> for uuid::Uuid<'lua> {
+    #[inline]
+    fn into_lua(self, _: &'lua Lua) -> Result<Value<'lua>> {
+        Ok(Value::String(self.to_string()))
+    }
+}
+
+//#[cfg(feature = "uuid")]
+impl<'lua> IntoLua<'lua> for &uuid::Uuid<'lua> {
+    #[inline]
+    fn into_lua(self, _: &'lua Lua) -> Result<Value<'lua>> {
+        Ok(Value::String(self.clone().to_string()))
+    }
+
+    #[inline]
+    unsafe fn push_into_stack(self, lua: &'lua Lua) -> Result<()> {
+        lua.push_ref(&self.0);
+        Ok(())
+    }   
+}
+
+
+// impl<'lua> FromLua<'lua> for Value<'lua> {
+//     #[inline]
+//     fn from_lua(lua_value: Value<'lua>, _: &'lua Lua) -> Result<Self> {
+//         Ok(lua_value)
+//     }
+// }
+
+// impl<'lua> IntoLua<'lua> for String<'lua> {
+//     #[inline]
+//     fn into_lua(self, _: &'lua Lua) -> Result<Value<'lua>> {
+//         Ok(Value::String(self))
+//     }
+// }
+
+// impl<'lua> IntoLua<'lua> for &String<'lua> {
+//     #[inline]
+//     fn into_lua(self, _: &'lua Lua) -> Result<Value<'lua>> {
+//         Ok(Value::String(self.clone()))
+//     }
+
+//     #[inline]
+//     unsafe fn push_into_stack(self, lua: &'lua Lua) -> Result<()> {
+//         lua.push_ref(&self.0);
+//         Ok(())
+//     }
+// }
 
 
 #[cfg(feature = "luau")]
