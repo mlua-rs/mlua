@@ -604,6 +604,61 @@ impl<'lua> FromLua<'lua> for serde_json::Value {
     }
 }
 
+
+#[cfg(feature = "json")]
+impl<'lua> IntoLua<'lua> for &serde_json::Value {
+    #[inline]
+    fn into_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
+        match self {
+            serde_json::Value::Null => Ok(Value::Nil),
+            serde_json::Value::Bool(b) => Ok(Value::Boolean(b)),
+            serde_json::Value::Number(n) => {
+                if let Some(i) = n.as_i64() {
+                    Ok(Value::Integer(i))
+                } else if let Some(f) = n.as_f64() {
+                    Ok(Value::Number(f))
+                } else {
+                    Err(Error::FromLuaConversionError {
+                        from: "number",
+                        to: "Value",
+                        message: Some("Invalid number".to_string()),
+                    })
+                }
+            },
+            serde_json::Value::String(s) => {
+                let lua_string = lua.create_string(&s)?;
+                Ok(Value::String(lua_string))
+            },
+            serde_json::Value::Array(arr) => {
+                let lua_table = lua.create_table()?;
+                for (i, value) in arr.into_iter().enumerate() {
+                    lua_table.set(i + 1, value.into_lua(lua)?)?;
+                }
+                Ok(Value::Table(lua_table))
+            },
+            serde_json::Value::Object(obj) => {
+                let lua_table = lua.create_table()?;
+                for (key, value) in obj {
+                    lua_table.set(key, value.into_lua(lua)?)?;
+                }
+                Ok(Value::Table(lua_table))
+            },
+        }
+    }
+}
+
+#[cfg(feature = "json")]
+impl<'lua> FromLua<'lua> for &serde_json::Value {
+    fn from_lua(value: Value<'lua>, _: &'lua Lua) -> Result<Self> {
+        let ty = value.type_name();
+        serde_json::to_value(value).map_err(|e| Error::FromLuaConversionError {
+            from: ty,
+            to: "serde_json::Value",
+            message: Some(format!("{}", e)),
+        })
+    }
+}
+
 #[cfg(feature = "uuid")]
 impl<'lua> FromLua<'lua> for uuid::Uuid {
     #[inline]
