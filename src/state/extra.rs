@@ -93,11 +93,12 @@ pub(crate) struct ExtraData {
 
 impl Drop for ExtraData {
     fn drop(&mut self) {
-        #[cfg(feature = "module")]
         unsafe {
-            self.inner.assume_init_drop();
+            #[cfg(feature = "module")]
+            self.lua.assume_init_drop();
+
+            self.weak.assume_init_drop();
         }
-        unsafe { self.weak.assume_init_drop() };
         *self.registry_unref_list.lock() = None;
     }
 }
