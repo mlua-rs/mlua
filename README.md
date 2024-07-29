@@ -7,7 +7,7 @@
 [crates.io]: https://crates.io/crates/mlua
 [API Documentation]: https://docs.rs/mlua/badge.svg
 [docs.rs]: https://docs.rs/mlua
-[Coverage Status]: https://codecov.io/gh/mlua-rs/mlua/branch/master/graph/badge.svg?token=99339FS1CG
+[Coverage Status]: https://codecov.io/gh/mlua-rs/mlua/branch/main/graph/badge.svg?token=99339FS1CG
 [codecov.io]: https://codecov.io/gh/mlua-rs/mlua
 [MSRV]: https://img.shields.io/badge/rust-1.71+-brightgreen.svg?&logo=rust
 
@@ -19,7 +19,7 @@
 
 > **Note**
 >
-> See v0.9 [release notes](https://github.com/khvzak/mlua/blob/master/docs/release_notes/v0.9.md).
+> See v0.9 [release notes](https://github.com/khvzak/mlua/blob/main/docs/release_notes/v0.9.md).
 
 `mlua` is bindings to [Lua](https://www.lua.org) programming language for Rust with a goal to provide
 _safe_ (as far as it's possible), high level, easy to use, practical and flexible API.

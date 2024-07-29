@@ -1,6 +1,6 @@
 [package]
 name = "mlua-sys"
-version = "0.6.1"
+version = "0.6.2"
 authors = ["Aleksandr Orlenko <zxteam@pm.me>"]
 rust-version = "1.71"
 edition = "2021"
@@ -38,7 +38,7 @@ module = []
 cc = "1.0"
 cfg-if = "1.0"
 pkg-config = "0.3.17"
-lua-src = { version = ">= 546.0.2, < 546.1.0", optional = true }
+lua-src = { version = ">= 547.0.0, < 547.1.0", optional = true }
 luajit-src = { version = ">= 210.5.0, < 210.6.0", optional = true }
 luau0-src = { version = "0.10.0", optional = true }
 
