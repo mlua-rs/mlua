@@ -23,9 +23,9 @@ use crate::types::{
 };
 use crate::userdata::{AnyUserData, MetaMethod, UserData, UserDataRegistry, UserDataVariant};
 use crate::util::{
-    assert_stack, check_stack, get_destructed_userdata_metatable, get_gc_userdata, get_main_state,
-    get_userdata, init_error_registry, init_gc_metatable, init_userdata_metatable, pop_error,
-    push_gc_userdata, push_string, push_table, rawset_field, safe_pcall, safe_xpcall, short_type_name,
+    assert_stack, check_stack, get_destructed_userdata_metatable, get_internal_userdata, get_main_state,
+    get_userdata, init_error_registry, init_internal_metatable, init_userdata_metatable, pop_error,
+    push_internal_userdata, push_string, push_table, rawset_field, safe_pcall, safe_xpcall, short_type_name,
     StackGuard, WrappedFailure,
 };
 use crate::value::{FromLuaMulti, IntoLua, MultiValue, Nil, Value};
@@ -171,15 +171,15 @@ impl RawLua {
                 // Create the internal metatables and store them in the registry
                 // to prevent from being garbage collected.
 
-                init_gc_metatable::<Rc<UnsafeCell<ExtraData>>>(state, None)?;
-                init_gc_metatable::<Callback>(state, None)?;
-                init_gc_metatable::<CallbackUpvalue>(state, None)?;
+                init_internal_metatable::<XRc<UnsafeCell<ExtraData>>>(state, None)?;
+                init_internal_metatable::<Callback>(state, None)?;
+                init_internal_metatable::<CallbackUpvalue>(state, None)?;
                 #[cfg(feature = "async")]
                 {
-                    init_gc_metatable::<AsyncCallback>(state, None)?;
-                    init_gc_metatable::<AsyncCallbackUpvalue>(state, None)?;
-                    init_gc_metatable::<AsyncPollUpvalue>(state, None)?;
-                    init_gc_metatable::<Option<Waker>>(state, None)?;
+                    init_internal_metatable::<AsyncCallback>(state, None)?;
+                    init_internal_metatable::<AsyncCallbackUpvalue>(state, None)?;
+                    init_internal_metatable::<AsyncPollUpvalue>(state, None)?;
+                    init_internal_metatable::<Option<Waker>>(state, None)?;
                 }
 
                 // Init serde metatables
@@ -550,7 +550,7 @@ impl RawLua {
             Value::UserData(ud) => self.push_ref(&ud.0),
             Value::Error(err) => {
                 let protect = !self.unlikely_memory_error();
-                push_gc_userdata(state, WrappedFailure::Error(*err.clone()), protect)?;
+                push_internal_userdata(state, WrappedFailure::Error(*err.clone()), protect)?;
             }
         }
         Ok(())
@@ -625,7 +625,7 @@ impl RawLua {
             ffi::LUA_TUSERDATA => {
                 // If the userdata is `WrappedFailure`, process it as an error or panic.
                 let failure_mt_ptr = (*self.extra.get()).wrapped_failure_mt_ptr;
-                match get_gc_userdata::<WrappedFailure>(state, idx, failure_mt_ptr).as_mut() {
+                match get_internal_userdata::<WrappedFailure>(state, idx, failure_mt_ptr).as_mut() {
                     Some(WrappedFailure::Error(err)) => Value::Error(Box::new(err.clone())),
                     Some(WrappedFailure::Panic(panic)) => {
                         if let Some(panic) = panic.take() {
@@ -1076,7 +1076,7 @@ impl RawLua {
             let func = mem::transmute::<Callback, Callback<'static>>(func);
             let extra = XRc::clone(&self.extra);
             let protect = !self.unlikely_memory_error();
-            push_gc_userdata(state, CallbackUpvalue { data: func, extra }, protect)?;
+            push_internal_userdata(state, CallbackUpvalue { data: func, extra }, protect)?;
             if protect {
                 protect_lua!(state, 1, 1, fn(state) {
                     ffi::lua_pushcclosure(state, call_callback, 1);
@@ -1115,7 +1115,7 @@ impl RawLua {
                 let fut = func(rawlua, args);
                 let extra = XRc::clone(&(*upvalue).extra);
                 let protect = !rawlua.unlikely_memory_error();
-                push_gc_userdata(state, AsyncPollUpvalue { data: fut, extra }, protect)?;
+                push_internal_userdata(state, AsyncPollUpvalue { data: fut, extra }, protect)?;
                 if protect {
                     protect_lua!(state, 1, 1, fn(state) {
                         ffi::lua_pushcclosure(state, poll_future, 1);
@@ -1176,7 +1176,7 @@ impl RawLua {
             let extra = XRc::clone(&self.extra);
             let protect = !self.unlikely_memory_error();
             let upvalue = AsyncCallbackUpvalue { data: func, extra };
-            push_gc_userdata(state, upvalue, protect)?;
+            push_internal_userdata(state, upvalue, protect)?;
             if protect {
                 protect_lua!(state, 1, 1, fn(state) {
                     ffi::lua_pushcclosure(state, call_callback, 1);

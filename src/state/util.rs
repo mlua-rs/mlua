@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use crate::error::{Error, Result};
 use crate::state::{ExtraData, RawLua};
-use crate::util::{self, get_gc_metatable, WrappedFailure};
+use crate::util::{self, get_internal_metatable, WrappedFailure};
 
 const WRAPPED_FAILURE_POOL_SIZE: usize = 64;
 // const MULTIVALUE_POOL_SIZE: usize = 64;
@@ -137,7 +137,7 @@ where
                 wrapped_error,
                 WrappedFailure::Error(Error::CallbackError { traceback, cause }),
             );
-            get_gc_metatable::<WrappedFailure>(state);
+            get_internal_metatable::<WrappedFailure>(state);
             ffi::lua_setmetatable(state, -2);
 
             ffi::lua_error(state)
@@ -145,7 +145,7 @@ where
         Err(p) => {
             let wrapped_panic = prealloc_failure.r#use(state, extra);
             ptr::write(wrapped_panic, WrappedFailure::Panic(Some(p)));
-            get_gc_metatable::<WrappedFailure>(state);
+            get_internal_metatable::<WrappedFailure>(state);
             ffi::lua_setmetatable(state, -2);
             ffi::lua_error(state)
         }

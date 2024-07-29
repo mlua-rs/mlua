@@ -14,7 +14,7 @@ use crate::error::Result;
 use crate::state::RawLua;
 use crate::stdlib::StdLib;
 use crate::types::{AppData, ReentrantMutex, XRc, XWeak};
-use crate::util::{get_gc_metatable, push_gc_userdata, WrappedFailure};
+use crate::util::{get_internal_metatable, push_internal_userdata, TypeKey, WrappedFailure};
 
 #[cfg(any(feature = "luau", doc))]
 use crate::chunk::Compiler;
@@ -102,6 +102,15 @@ impl Drop for ExtraData {
     }
 }
 
+static EXTRA_TYPE_KEY: u8 = 0;
+
+impl TypeKey for XRc<UnsafeCell<ExtraData>> {
+    #[inline(always)]
+    fn type_key() -> *const c_void {
+        &EXTRA_TYPE_KEY as *const u8 as *const c_void
+    }
+}
+
 impl ExtraData {
     // Index of `error_traceback` function in auxiliary thread stack
     #[cfg(any(feature = "lua51", feature = "luajit", feature = "luau"))]
@@ -120,7 +129,7 @@ impl ExtraData {
         );
 
         let wrapped_failure_mt_ptr = {
-            get_gc_metatable::<WrappedFailure>(state);
+            get_internal_metatable::<WrappedFailure>(state);
             let ptr = ffi::lua_topointer(state, -1);
             ffi::lua_pop(state, 1);
             ptr
@@ -213,7 +222,7 @@ impl ExtraData {
             return Ok(());
         }
 
-        push_gc_userdata(state, XRc::clone(extra), true)?;
+        push_internal_userdata(state, XRc::clone(extra), true)?;
         protect_lua!(state, 1, 0, fn(state) {
             let extra_key = &EXTRA_REGISTRY_KEY as *const u8 as *const c_void;
             ffi::lua_rawsetp(state, ffi::LUA_REGISTRYINDEX, extra_key);
