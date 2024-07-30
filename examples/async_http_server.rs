@@ -68,14 +68,14 @@ impl hyper::service::Service<Request<Incoming>> for Svc {
                     if let Some(headers) = lua_resp.get::<_, Option<Table>>("headers")? {
                         for pair in headers.pairs::<String, LuaString>() {
                             let (h, v) = pair?;
-                            resp = resp.header(&h, v.as_bytes());
+                            resp = resp.header(&h, &*v.as_bytes());
                         }
                     }
 
                     // Set body
                     let body = lua_resp
                         .get::<_, Option<LuaString>>("body")?
-                        .map(|b| Full::new(Bytes::copy_from_slice(b.as_bytes())).boxed())
+                        .map(|b| Full::new(Bytes::copy_from_slice(&b.as_bytes())).boxed())
                         .unwrap_or_else(|| Empty::<Bytes>::new().boxed());
 
                     Ok(resp.body(body).unwrap())

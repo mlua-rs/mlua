@@ -135,8 +135,8 @@ impl<'de> serde::Deserializer<'de> for Deserializer {
             #[cfg(feature = "luau")]
             Value::Vector(_) => self.deserialize_seq(visitor),
             Value::String(s) => match s.to_str() {
-                Ok(s) => visitor.visit_str(s),
-                Err(_) => visitor.visit_bytes(s.as_bytes()),
+                Ok(s) => visitor.visit_str(&s),
+                Err(_) => visitor.visit_bytes(&s.as_bytes()),
             },
             Value::Table(ref t) if t.raw_len() > 0 || t.is_array() => self.deserialize_seq(visitor),
             Value::Table(_) => self.deserialize_map(visitor),

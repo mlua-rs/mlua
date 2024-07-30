@@ -67,11 +67,11 @@ fn test_string_hash() -> Result<()> {
 
     let set: HashSet<String> = lua.load(r#"{"hello", "world", "abc", 321}"#).eval()?;
     assert_eq!(set.len(), 4);
-    assert!(set.contains(b"hello".as_ref()));
-    assert!(set.contains(b"world".as_ref()));
-    assert!(set.contains(b"abc".as_ref()));
-    assert!(set.contains(b"321".as_ref()));
-    assert!(!set.contains(b"Hello".as_ref()));
+    assert!(set.contains(&lua.create_string("hello")?));
+    assert!(set.contains(&lua.create_string("world")?));
+    assert!(set.contains(&lua.create_string("abc")?));
+    assert!(set.contains(&lua.create_string("321")?));
+    assert!(!set.contains(&lua.create_string("Hello")?));
 
     Ok(())
 }

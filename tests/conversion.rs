@@ -121,7 +121,7 @@ fn test_registry_value_into_lua() -> Result<()> {
     let r = lua.create_registry_value(&s)?;
     let value1 = lua.pack(&r)?;
     let value2 = lua.pack(r)?;
-    assert_eq!(value1.as_str(), Some("hello, world"));
+    assert_eq!(value1.as_str().as_deref(), Some("hello, world"));
     assert_eq!(value2.to_pointer(), value2.to_pointer());
 
     // Push into stack

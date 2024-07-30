@@ -111,7 +111,7 @@ pub use crate::multi::Variadic;
 pub use crate::state::{GCMode, Lua, LuaOptions};
 // pub use crate::scope::Scope;
 pub use crate::stdlib::StdLib;
-pub use crate::string::String;
+pub use crate::string::{BorrowedBytes, BorrowedStr, String};
 pub use crate::table::{Table, TableExt, TablePairs, TableSequence};
 pub use crate::thread::{Thread, ThreadStatus};
 pub use crate::types::{AppDataRef, AppDataRefMut, Integer, LightUserData, Number, RegistryKey};

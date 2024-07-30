@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::collections::{vec_deque, HashSet, VecDeque};
 use std::ops::{Deref, DerefMut};
@@ -12,7 +11,7 @@ use num_traits::FromPrimitive;
 use crate::error::{Error, Result};
 use crate::function::Function;
 use crate::state::{Lua, RawLua};
-use crate::string::String;
+use crate::string::{BorrowedStr, String};
 use crate::table::Table;
 use crate::thread::Thread;
 use crate::types::{Integer, LightUserData, Number, SubtypeId};
@@ -330,19 +329,20 @@ impl Value {
         }
     }
 
-    /// Cast the value to [`str`].
+    /// Cast the value to [`BorrowedStr`].
     ///
-    /// If the value is a Lua [`String`], try to convert it to [`str`] or return `None` otherwise.
+    /// If the value is a Lua [`String`], try to convert it to [`BorrowedStr`] or return `None`
+    /// otherwise.
     #[inline]
-    pub fn as_str(&self) -> Option<&str> {
+    pub fn as_str(&self) -> Option<BorrowedStr> {
         self.as_string().and_then(|s| s.to_str().ok())
     }
 
-    /// Cast the value to [`Cow<str>`].
+    /// Cast the value to [`StdString`].
     ///
-    /// If the value is a Lua [`String`], converts it to [`Cow<str>`] or returns `None` otherwise.
+    /// If the value is a Lua [`String`], converts it to [`StdString`] or returns `None` otherwise.
     #[inline]
-    pub fn as_string_lossy(&self) -> Option<Cow<str>> {
+    pub fn as_string_lossy(&self) -> Option<StdString> {
         self.as_string().map(|s| s.to_string_lossy())
     }
 
@@ -478,7 +478,7 @@ impl Value {
             (Value::Integer(_) | Value::Number(_), _) => Ordering::Less,
             (_, Value::Integer(_) | Value::Number(_)) => Ordering::Greater,
             // String
-            (Value::String(a), Value::String(b)) => a.as_bytes().cmp(b.as_bytes()),
+            (Value::String(a), Value::String(b)) => a.as_bytes().cmp(&b.as_bytes()),
             (Value::String(_), _) => Ordering::Less,
             (_, Value::String(_)) => Ordering::Greater,
             // Other variants can be randomly ordered

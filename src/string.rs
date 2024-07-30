@@ -1,8 +1,9 @@
-use std::borrow::{Borrow, Cow};
+use std::borrow::Borrow;
 use std::hash::{Hash, Hasher};
+use std::ops::Deref;
 use std::os::raw::c_void;
 use std::string::String as StdString;
-use std::{fmt, slice, str};
+use std::{cmp, fmt, slice, str};
 
 #[cfg(feature = "serialize")]
 use {
@@ -11,6 +12,7 @@ use {
 };
 
 use crate::error::{Error, Result};
+use crate::state::LuaGuard;
 use crate::types::ValueRef;
 
 /// Handle to an internal Lua string.
@@ -20,7 +22,7 @@ use crate::types::ValueRef;
 pub struct String(pub(crate) ValueRef);
 
 impl String {
-    /// Get a `&str` slice if the Lua string is valid UTF-8.
+    /// Get a [`BorrowedStr`] if the Lua string is valid UTF-8.
     ///
     /// # Examples
     ///
@@ -39,15 +41,17 @@ impl String {
     /// # }
     /// ```
     #[inline]
-    pub fn to_str(&self) -> Result<&str> {
-        str::from_utf8(self.as_bytes()).map_err(|e| Error::FromLuaConversionError {
+    pub fn to_str(&self) -> Result<BorrowedStr> {
+        let BorrowedBytes(bytes, guard) = self.as_bytes();
+        let s = str::from_utf8(bytes).map_err(|e| Error::FromLuaConversionError {
             from: "string",
             to: "&str",
             message: Some(e.to_string()),
-        })
+        })?;
+        Ok(BorrowedStr(s, guard))
     }
 
-    /// Converts this string to a [`Cow<str>`].
+    /// Converts this string to a [`StdString`].
     ///
     /// Any non-Unicode sequences are replaced with [`U+FFFD REPLACEMENT CHARACTER`][U+FFFD].
     ///
@@ -66,8 +70,8 @@ impl String {
     /// # }
     /// ```
     #[inline]
-    pub fn to_string_lossy(&self) -> Cow<'_, str> {
-        StdString::from_utf8_lossy(self.as_bytes())
+    pub fn to_string_lossy(&self) -> StdString {
+        StdString::from_utf8_lossy(&self.as_bytes()).into_owned()
     }
 
     /// Get the bytes that make up this string.
@@ -88,13 +92,18 @@ impl String {
     /// # }
     /// ```
     #[inline]
-    pub fn as_bytes(&self) -> &[u8] {
-        let nulled = self.as_bytes_with_nul();
-        &nulled[..nulled.len() - 1]
+    pub fn as_bytes(&self) -> BorrowedBytes {
+        let (bytes, guard) = unsafe { self.to_slice() };
+        BorrowedBytes(&bytes[..bytes.len() - 1], guard)
     }
 
     /// Get the bytes that make up this string, including the trailing nul byte.
-    pub fn as_bytes_with_nul(&self) -> &[u8] {
+    pub fn as_bytes_with_nul(&self) -> BorrowedBytes {
+        let (bytes, guard) = unsafe { self.to_slice() };
+        BorrowedBytes(bytes, guard)
+    }
+
+    unsafe fn to_slice(&self) -> (&[u8], LuaGuard) {
         let lua = self.0.lua.lock();
         let ref_thread = lua.ref_thread();
         unsafe {
@@ -108,7 +117,7 @@ impl String {
             // string type
             let data = ffi::lua_tolstring(ref_thread, self.0.index, &mut size);
 
-            slice::from_raw_parts(data as *const u8, size + 1)
+            (slice::from_raw_parts(data as *const u8, size + 1), lua)
         }
     }
 
@@ -127,7 +136,7 @@ impl fmt::Debug for String {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let bytes = self.as_bytes();
         // Check if the string is valid utf8
-        if let Ok(s) = str::from_utf8(bytes) {
+        if let Ok(s) = str::from_utf8(&bytes) {
             return s.fmt(f);
         }
 
@@ -152,22 +161,9 @@ impl fmt::Debug for String {
     }
 }
 
-impl AsRef<[u8]> for String {
-    fn as_ref(&self) -> &[u8] {
-        self.as_bytes()
-    }
-}
-
-impl Borrow<[u8]> for String {
-    fn borrow(&self) -> &[u8] {
-        self.as_bytes()
-    }
-}
-
 // Lua strings are basically &[u8] slices, so implement PartialEq for anything resembling that.
 //
-// This makes our `String` comparable with `Vec<u8>`, `[u8]`, `&str`, `String` and `mlua::String`
-// itself.
+// This makes our `String` comparable with `Vec<u8>`, `[u8]`, `&str` and `String`.
 //
 // The only downside is that this disallows a comparison with `Cow<str>`, as that only implements
 // `AsRef<str>`, which collides with this impl. Requiring `AsRef<str>` would fix that, but limit us
@@ -178,6 +174,18 @@ where
 {
     fn eq(&self, other: &T) -> bool {
         self.as_bytes() == other.as_ref()
+    }
+}
+
+impl PartialEq<String> for String {
+    fn eq(&self, other: &String) -> bool {
+        self.as_bytes() == other.as_bytes()
+    }
+}
+
+impl PartialEq<&String> for String {
+    fn eq(&self, other: &&String) -> bool {
+        self.as_bytes() == other.as_bytes()
     }
 }
 
@@ -196,9 +204,124 @@ impl Serialize for String {
         S: Serializer,
     {
         match self.to_str() {
-            Ok(s) => serializer.serialize_str(s),
-            Err(_) => serializer.serialize_bytes(self.as_bytes()),
+            Ok(s) => serializer.serialize_str(&s),
+            Err(_) => serializer.serialize_bytes(&self.as_bytes()),
         }
+    }
+}
+
+/// A borrowed string (`&str`) that holds a strong reference to the Lua state.
+pub struct BorrowedStr<'a>(&'a str, #[allow(unused)] LuaGuard);
+
+impl Deref for BorrowedStr<'_> {
+    type Target = str;
+
+    #[inline(always)]
+    fn deref(&self) -> &str {
+        self.0
+    }
+}
+
+impl Borrow<str> for BorrowedStr<'_> {
+    #[inline(always)]
+    fn borrow(&self) -> &str {
+        self.0
+    }
+}
+
+impl AsRef<str> for BorrowedStr<'_> {
+    #[inline(always)]
+    fn as_ref(&self) -> &str {
+        self.0
+    }
+}
+
+impl fmt::Display for BorrowedStr<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+impl fmt::Debug for BorrowedStr<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+impl<T> PartialEq<T> for BorrowedStr<'_>
+where
+    T: AsRef<str>,
+{
+    fn eq(&self, other: &T) -> bool {
+        self.0 == other.as_ref()
+    }
+}
+
+impl<T> PartialOrd<T> for BorrowedStr<'_>
+where
+    T: AsRef<str>,
+{
+    fn partial_cmp(&self, other: &T) -> Option<cmp::Ordering> {
+        self.0.partial_cmp(other.as_ref())
+    }
+}
+
+/// A borrowed byte slice (`&[u8]`) that holds a strong reference to the Lua state.
+pub struct BorrowedBytes<'a>(&'a [u8], #[allow(unused)] LuaGuard);
+
+impl Deref for BorrowedBytes<'_> {
+    type Target = [u8];
+
+    #[inline(always)]
+    fn deref(&self) -> &[u8] {
+        self.0
+    }
+}
+
+impl Borrow<[u8]> for BorrowedBytes<'_> {
+    #[inline(always)]
+    fn borrow(&self) -> &[u8] {
+        self.0
+    }
+}
+
+impl AsRef<[u8]> for BorrowedBytes<'_> {
+    #[inline(always)]
+    fn as_ref(&self) -> &[u8] {
+        self.0
+    }
+}
+
+impl fmt::Debug for BorrowedBytes<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+impl<T> PartialEq<T> for BorrowedBytes<'_>
+where
+    T: AsRef<[u8]>,
+{
+    fn eq(&self, other: &T) -> bool {
+        self.0 == other.as_ref()
+    }
+}
+
+impl<T> PartialOrd<T> for BorrowedBytes<'_>
+where
+    T: AsRef<[u8]>,
+{
+    fn partial_cmp(&self, other: &T) -> Option<cmp::Ordering> {
+        self.0.partial_cmp(other.as_ref())
+    }
+}
+
+impl<'a> IntoIterator for BorrowedBytes<'a> {
+    type Item = &'a u8;
+    type IntoIter = slice::Iter<'a, u8>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
     }
 }
 

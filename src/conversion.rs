@@ -464,7 +464,7 @@ impl FromLua for CString {
                 message: Some("expected string or number".to_string()),
             })?;
 
-        match CStr::from_bytes_with_nul(string.as_bytes_with_nul()) {
+        match CStr::from_bytes_with_nul(&string.as_bytes_with_nul()) {
             Ok(s) => Ok(s.into()),
             Err(_) => Err(Error::FromLuaConversionError {
                 from: ty,
@@ -500,7 +500,7 @@ impl FromLua for BString {
     fn from_lua(value: Value, lua: &Lua) -> Result<Self> {
         let ty = value.type_name();
         match value {
-            Value::String(s) => Ok(s.as_bytes().into()),
+            Value::String(s) => Ok((*s.as_bytes()).into()),
             #[cfg(feature = "luau")]
             Value::UserData(ud) if ud.1 == crate::types::SubtypeId::Buffer => unsafe {
                 let lua = ud.0.lua.lock();
@@ -509,15 +509,15 @@ impl FromLua for BString {
                 mlua_assert!(!buf.is_null(), "invalid Luau buffer");
                 Ok(slice::from_raw_parts(buf as *const u8, size).into())
             },
-            _ => Ok(lua
+            _ => Ok((*lua
                 .coerce_string(value)?
                 .ok_or_else(|| Error::FromLuaConversionError {
                     from: ty,
                     to: "BString",
                     message: Some("expected string or number".to_string()),
                 })?
-                .as_bytes()
-                .into()),
+                .as_bytes())
+            .into()),
         }
     }
 
