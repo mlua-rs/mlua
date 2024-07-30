@@ -40,6 +40,9 @@ module = ["dep:mlua_derive", "ffi/module"]
 async = ["dep:futures-util"]
 send = []
 serialize = ["dep:serde", "dep:erased-serde", "dep:serde-value"]
+uuid = ["dep:uuid", "dep:serde"]
+time = ["dep:time"]
+json = ["serialize", "serde_json"]
 macros = ["mlua_derive/macros"]
 unstable = []
 
@@ -51,8 +54,11 @@ num-traits = { version = "0.2.14" }
 rustc-hash = "2.0"
 futures-util = { version = "0.3", optional = true, default-features = false, features = ["std"] }
 serde = { version = "1.0", optional = true }
+serde_json = { version = "1.0", optional = true}
+uuid = { version = "1.10.0", optional = true, features = ["v7", "serde"]}
 erased-serde = { version = "0.4", optional = true }
 serde-value = { version = "0.7", optional = true }
+time = {version = "0.3.36", optional = true, features = ["parsing"]}
 parking_lot = { version = "0.12", optional = true }
 
 ffi = { package = "mlua-sys", version = "0.6.1", path = "mlua-sys" }
