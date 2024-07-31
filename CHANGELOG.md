@@ -1,3 +1,12 @@
+## v0.10.0-beta.1
+
+- Dropped `'lua` lifetime (subtypes now store a weak reference to Lua)
+- Removed (experimental) owned types (they no longer needed)
+- Make Lua types truly `Send` and `Sync` (when enabling `send` feature flag)
+- Removed `UserData` impl for Rc/Arc types ("any" userdata functions can be used instead)
+- `Lua::replace_registry_value` takes `&mut RegistryKey`
+- `Lua::scope` temporary disabled (will be re-added in the next release)
+
 ## v0.9.9
 
 - Minimal Luau updated to 0.629
