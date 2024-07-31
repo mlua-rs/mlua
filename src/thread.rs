@@ -30,14 +30,14 @@ use {
 /// Status of a Lua thread (coroutine).
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum ThreadStatus {
-    /// The thread was just created, or is suspended because it has called `coroutine.yield`.
+    /// The thread was just created or is suspended (yielded).
     ///
     /// If a thread is in this state, it can be resumed by calling [`Thread::resume`].
-    ///
-    /// [`Thread::resume`]: crate::Thread::resume
     Resumable,
-    /// Either the thread has finished executing, or the thread is currently running.
-    Unresumable,
+    /// The thread is currently running.
+    Running,
+    /// The thread has finished executing.
+    Finished,
     /// The thread has raised a Lua error during execution.
     Error,
 }
@@ -108,7 +108,7 @@ impl Thread {
     ///
     /// // The coroutine has now returned, so `resume` will fail
     /// match thread.resume::<_, u32>(()) {
-    ///     Err(Error::CoroutineInactive) => {},
+    ///     Err(Error::CoroutineUnresumable) => {},
     ///     unexpected => panic!("unexpected result {:?}", unexpected),
     /// }
     /// # Ok(())
@@ -120,9 +120,8 @@ impl Thread {
         R: FromLuaMulti,
     {
         let lua = self.0.lua.lock();
-
-        if unsafe { self.status_unprotected() } != ThreadStatus::Resumable {
-            return Err(Error::CoroutineInactive);
+        if self.status_inner(&lua) != ThreadStatus::Resumable {
+            return Err(Error::CoroutineUnresumable);
         }
 
         let state = lua.state();
@@ -170,25 +169,23 @@ impl Thread {
 
     /// Gets the status of the thread.
     pub fn status(&self) -> ThreadStatus {
-        let _guard = self.0.lua.lock();
-        unsafe { self.status_unprotected() }
+        self.status_inner(&self.0.lua.lock())
     }
 
-    /// Gets the status of the thread without locking the Lua state.
-    pub(crate) unsafe fn status_unprotected(&self) -> ThreadStatus {
+    /// Gets the status of the thread (internal implementation).
+    pub(crate) fn status_inner(&self, lua: &RawLua) -> ThreadStatus {
         let thread_state = self.state();
-        // FIXME: skip double lock
-        if thread_state == self.0.lua.lock().state() {
-            // The coroutine is currently running
-            return ThreadStatus::Unresumable;
+        if thread_state == lua.state() {
+            // The thread is currently running
+            return ThreadStatus::Running;
         }
-        let status = ffi::lua_status(thread_state);
+        let status = unsafe { ffi::lua_status(thread_state) };
         if status != ffi::LUA_OK && status != ffi::LUA_YIELD {
             ThreadStatus::Error
-        } else if status == ffi::LUA_YIELD || ffi::lua_gettop(thread_state) > 0 {
+        } else if status == ffi::LUA_YIELD || unsafe { ffi::lua_gettop(thread_state) > 0 } {
             ThreadStatus::Resumable
         } else {
-            ThreadStatus::Unresumable
+            ThreadStatus::Finished
         }
     }
 
@@ -226,10 +223,11 @@ impl Thread {
     #[cfg_attr(docsrs, doc(cfg(any(feature = "lua54", feature = "luau"))))]
     pub fn reset(&self, func: crate::function::Function) -> Result<()> {
         let lua = self.0.lua.lock();
-        let thread_state = self.state();
-        if thread_state == lua.state() {
+        if self.status_inner(&lua) == ThreadStatus::Running {
             return Err(Error::runtime("cannot reset a running thread"));
         }
+
+        let thread_state = self.state();
         unsafe {
             #[cfg(all(feature = "lua54", not(feature = "vendored")))]
             let status = ffi::lua_resetthread(thread_state);
@@ -398,7 +396,7 @@ impl<R> Drop for AsyncThread<R> {
                 // For Lua 5.4 this also closes all pending to-be-closed variables
                 if !lua.recycle_thread(&mut self.thread) {
                     #[cfg(feature = "lua54")]
-                    if self.thread.status_unprotected() == ThreadStatus::Error {
+                    if self.thread.status_inner(&lua) == ThreadStatus::Error {
                         #[cfg(not(feature = "vendored"))]
                         ffi::lua_resetthread(self.thread.state());
                         #[cfg(feature = "vendored")]
@@ -416,13 +414,13 @@ impl<R: FromLuaMulti> Stream for AsyncThread<R> {
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let lua = self.thread.0.lua.lock();
+        if self.thread.status_inner(&lua) != ThreadStatus::Resumable {
+            return Poll::Ready(None);
+        }
+
         let state = lua.state();
         let thread_state = self.thread.state();
         unsafe {
-            if self.thread.status_unprotected() != ThreadStatus::Resumable {
-                return Poll::Ready(None);
-            }
-
             let _sg = StackGuard::new(state);
             let _thread_sg = StackGuard::with_top(thread_state, 0);
             let _wg = WakerGuard::new(&lua, cx.waker());
@@ -454,13 +452,13 @@ impl<R: FromLuaMulti> Future for AsyncThread<R> {
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let lua = self.thread.0.lua.lock();
+        if self.thread.status_inner(&lua) != ThreadStatus::Resumable {
+            return Poll::Ready(Err(Error::CoroutineUnresumable));
+        }
+
         let state = lua.state();
         let thread_state = self.thread.state();
         unsafe {
-            if self.thread.status_unprotected() != ThreadStatus::Resumable {
-                return Poll::Ready(Err(Error::CoroutineInactive));
-            }
-
             let _sg = StackGuard::new(state);
             let _thread_sg = StackGuard::with_top(thread_state, 0);
             let _wg = WakerGuard::new(&lua, cx.waker());

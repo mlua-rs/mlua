@@ -362,7 +362,7 @@ fn test_interrupts() -> Result<()> {
     let result: i32 = co.resume(())?;
     assert_eq!(result, 6);
     assert_eq!(yield_count.load(Ordering::Relaxed), 7);
-    assert_eq!(co.status(), ThreadStatus::Unresumable);
+    assert_eq!(co.status(), ThreadStatus::Finished);
 
     //
     // Test errors in interrupts

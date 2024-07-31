@@ -98,17 +98,17 @@ pub enum Error {
         /// A string containing more detailed error information.
         message: Option<StdString>,
     },
-    /// [`Thread::resume`] was called on an inactive coroutine.
+    /// [`Thread::resume`] was called on an unresumable coroutine.
     ///
-    /// A coroutine is inactive if its main function has returned or if an error has occurred inside
-    /// the coroutine. Already running coroutines are also marked as inactive (unresumable).
+    /// A coroutine is unresumable if its main function has returned or if an error has occurred inside
+    /// the coroutine. Already running coroutines are also marked as unresumable.
     ///
     /// [`Thread::status`] can be used to check if the coroutine can be resumed without causing this
     /// error.
     ///
     /// [`Thread::resume`]: crate::Thread::resume
     /// [`Thread::status`]: crate::Thread::status
-    CoroutineInactive,
+    CoroutineUnresumable,
     /// An [`AnyUserData`] is not the expected type in a borrow.
     ///
     /// This error can only happen when manually using [`AnyUserData`], or when implementing
@@ -259,7 +259,7 @@ impl fmt::Display for Error {
                     Some(ref message) => write!(fmt, " ({message})"),
                 }
             }
-            Error::CoroutineInactive => write!(fmt, "cannot resume inactive coroutine"),
+            Error::CoroutineUnresumable => write!(fmt, "coroutine is non-resumable"),
             Error::UserDataTypeMismatch => write!(fmt, "userdata is not expected type"),
             Error::UserDataDestructed => write!(fmt, "userdata has been destructed"),
             Error::UserDataBorrowError => write!(fmt, "error borrowing userdata"),

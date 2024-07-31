@@ -31,7 +31,7 @@ fn test_thread() -> Result<()> {
     assert_eq!(thread.resume::<_, i64>(3)?, 6);
     assert_eq!(thread.status(), ThreadStatus::Resumable);
     assert_eq!(thread.resume::<_, i64>(4)?, 10);
-    assert_eq!(thread.status(), ThreadStatus::Unresumable);
+    assert_eq!(thread.status(), ThreadStatus::Finished);
 
     let accumulate = lua.create_thread(
         lua.load(
@@ -85,17 +85,17 @@ fn test_thread() -> Result<()> {
     assert_eq!(thread.resume::<_, u32>(43)?, 987);
 
     match thread.resume::<_, u32>(()) {
-        Err(Error::CoroutineInactive) => {}
+        Err(Error::CoroutineUnresumable) => {}
         Err(_) => panic!("resuming dead coroutine error is not CoroutineInactive kind"),
         _ => panic!("resuming dead coroutine did not return error"),
     }
 
     // Already running thread must be unresumable
     let thread = lua.create_thread(lua.create_function(|lua, ()| {
-        assert_eq!(lua.current_thread().status(), ThreadStatus::Unresumable);
+        assert_eq!(lua.current_thread().status(), ThreadStatus::Running);
         let result = lua.current_thread().resume::<_, ()>(());
         assert!(
-            matches!(result, Err(Error::CoroutineInactive)),
+            matches!(result, Err(Error::CoroutineUnresumable)),
             "unexpected result: {result:?}",
         );
         Ok(())
@@ -128,7 +128,7 @@ fn test_thread_reset() -> Result<()> {
         assert_eq!(thread.status(), ThreadStatus::Resumable);
         assert_eq!(Arc::strong_count(&arc), 2);
         thread.resume::<_, ()>(())?;
-        assert_eq!(thread.status(), ThreadStatus::Unresumable);
+        assert_eq!(thread.status(), ThreadStatus::Finished);
         thread.reset(func.clone())?;
         lua.gc_collect()?;
         assert_eq!(Arc::strong_count(&arc), 1);
@@ -147,11 +147,11 @@ fn test_thread_reset() -> Result<()> {
         // It's became possible to force reset thread by popping error object
         assert!(matches!(
             thread.status(),
-            ThreadStatus::Unresumable | ThreadStatus::Error
+            ThreadStatus::Finished | ThreadStatus::Error
         ));
         // Would pass in 5.4.4
-        // assert!(thread.reset(func.clone()).is_ok());
-        // assert_eq!(thread.status(), ThreadStatus::Resumable);
+        assert!(thread.reset(func.clone()).is_ok());
+        assert_eq!(thread.status(), ThreadStatus::Resumable);
     }
     #[cfg(any(feature = "lua54", feature = "luau"))]
     {
