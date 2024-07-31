@@ -934,6 +934,13 @@ pub trait FromLuaMulti: Sized {
 mod assertions {
     use super::*;
 
+    #[cfg(not(feature = "send"))]
     static_assertions::assert_not_impl_any!(Value: Send);
+    #[cfg(not(feature = "send"))]
     static_assertions::assert_not_impl_any!(MultiValue: Send);
+
+    #[cfg(feature = "send")]
+    static_assertions::assert_impl_all!(Value: Send, Sync);
+    #[cfg(feature = "send")]
+    static_assertions::assert_impl_all!(MultiValue: Send, Sync);
 }

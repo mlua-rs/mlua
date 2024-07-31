@@ -41,6 +41,11 @@ pub(crate) enum SubtypeId {
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub struct LightUserData(pub *mut c_void);
 
+#[cfg(feature = "send")]
+unsafe impl Send for LightUserData {}
+#[cfg(feature = "send")]
+unsafe impl Sync for LightUserData {}
+
 pub(crate) type Callback<'a> = Box<dyn Fn(&'a RawLua, c_int) -> Result<c_int> + 'static>;
 
 pub(crate) struct Upvalue<T> {
