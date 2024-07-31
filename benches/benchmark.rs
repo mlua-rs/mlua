@@ -194,10 +194,7 @@ fn function_call_concat(c: &mut Criterion) {
                 i.fetch_add(1, Ordering::Relaxed)
             },
             |i| {
-                assert_eq!(
-                    concat.call::<LuaString>(("num:", i)).unwrap(),
-                    format!("num:{i}")
-                );
+                assert_eq!(concat.call::<LuaString>(("num:", i)).unwrap(), format!("num:{i}"));
             },
             BatchSize::SmallInput,
         );
@@ -220,10 +217,7 @@ fn function_call_lua_concat(c: &mut Criterion) {
                 i.fetch_add(1, Ordering::Relaxed)
             },
             |i| {
-                assert_eq!(
-                    concat.call::<LuaString>(("num:", i)).unwrap(),
-                    format!("num:{i}")
-                );
+                assert_eq!(concat.call::<LuaString>(("num:", i)).unwrap(), format!("num:{i}"));
             },
             BatchSize::SmallInput,
         );

@@ -596,10 +596,7 @@ fn test_pcall_xpcall() -> Result<()> {
 
     assert_eq!(globals.get::<bool>("xpcall_statusr")?, false);
     #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "luajit"))]
-    assert_eq!(
-        globals.get::<std::string::String>("xpcall_error")?,
-        "testerror"
-    );
+    assert_eq!(globals.get::<std::string::String>("xpcall_error")?, "testerror");
     #[cfg(feature = "lua51")]
     assert!(globals
         .get::<String>("xpcall_error")?
@@ -910,11 +907,7 @@ fn test_too_many_arguments() -> Result<()> {
     let lua = Lua::new();
     lua.load("function test(...) end").exec()?;
     let args = Variadic::from_iter(1..1000000);
-    assert!(lua
-        .globals()
-        .get::<Function>("test")?
-        .call::<()>(args)
-        .is_err());
+    assert!(lua.globals().get::<Function>("test")?.call::<()>(args).is_err());
     Ok(())
 }
 

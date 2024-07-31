@@ -321,7 +321,7 @@ impl<'a> IntoIterator for BorrowedBytes<'a> {
     type IntoIter = slice::Iter<'a, u8>;
 
     fn into_iter(self) -> Self::IntoIter {
-        self.0.into_iter()
+        self.0.iter()
     }
 }
 

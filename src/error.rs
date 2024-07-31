@@ -100,8 +100,8 @@ pub enum Error {
     },
     /// [`Thread::resume`] was called on an unresumable coroutine.
     ///
-    /// A coroutine is unresumable if its main function has returned or if an error has occurred inside
-    /// the coroutine. Already running coroutines are also marked as unresumable.
+    /// A coroutine is unresumable if its main function has returned or if an error has occurred
+    /// inside the coroutine. Already running coroutines are also marked as unresumable.
     ///
     /// [`Thread::status`] can be used to check if the coroutine can be resumed without causing this
     /// error.

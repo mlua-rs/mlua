@@ -201,7 +201,7 @@ fn lua_loader(lua: &Lua, modname: StdString) -> Result<Value> {
             Ok(buf) => {
                 return lua
                     .load(&buf)
-                    .set_name(&format!("={}", file_path.display()))
+                    .set_name(format!("={}", file_path.display()))
                     .set_mode(ChunkMode::Text)
                     .into_function()
                     .map(Value::Function);

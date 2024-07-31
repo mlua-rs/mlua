@@ -1134,7 +1134,7 @@ where
                     Ok(Some((
                         key.clone(),
                         K::from_lua(key, lua.lua())?,
-                        V::from_stack(-1, &lua)?,
+                        V::from_stack(-1, lua)?,
                     )))
                 } else {
                     Ok(None)
@@ -1187,7 +1187,7 @@ where
                 ffi::LUA_TNIL => None,
                 _ => {
                     self.index += 1;
-                    Some(V::from_stack(-1, &lua))
+                    Some(V::from_stack(-1, lua))
                 }
             }
         }
