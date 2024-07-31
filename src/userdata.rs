@@ -710,7 +710,7 @@ impl AnyUserData {
     /// [`user_value`]: #method.user_value
     /// [`set_nth_user_value`]: #method.set_nth_user_value
     #[inline]
-    pub fn set_user_value<V: IntoLua>(&self, v: V) -> Result<()> {
+    pub fn set_user_value(&self, v: impl IntoLua) -> Result<()> {
         self.set_nth_user_value(1, v)
     }
 
@@ -741,7 +741,7 @@ impl AnyUserData {
     /// For other Lua versions this functionality is provided using a wrapping table.
     ///
     /// [`nth_user_value`]: #method.nth_user_value
-    pub fn set_nth_user_value<V: IntoLua>(&self, n: usize, v: V) -> Result<()> {
+    pub fn set_nth_user_value(&self, n: usize, v: impl IntoLua) -> Result<()> {
         if n < 1 || n > u16::MAX as usize {
             return Err(Error::runtime("user value index out of bounds"));
         }
@@ -840,7 +840,7 @@ impl AnyUserData {
     /// The value can be retrieved with [`named_user_value`].
     ///
     /// [`named_user_value`]: #method.named_user_value
-    pub fn set_named_user_value<V: IntoLua>(&self, name: &str, v: V) -> Result<()> {
+    pub fn set_named_user_value(&self, name: &str, v: impl IntoLua) -> Result<()> {
         let lua = self.0.lua.lock();
         let state = lua.state();
         unsafe {
@@ -992,7 +992,7 @@ impl AnyUserData {
         }
 
         if mt.contains_key("__eq")? {
-            return mt.get::<_, Function>("__eq")?.call((self, other));
+            return mt.get::<Function>("__eq")?.call((self, other));
         }
 
         Ok(false)
@@ -1075,7 +1075,7 @@ impl UserDataMetatable {
     /// Access to restricted metamethods such as `__gc` or `__metatable` will cause an error.
     /// Setting `__index` or `__newindex` metamethods is also restricted because their values are
     /// cached for `mlua` internal usage.
-    pub fn set<V: IntoLua>(&self, key: impl AsRef<str>, value: V) -> Result<()> {
+    pub fn set(&self, key: impl AsRef<str>, value: impl IntoLua) -> Result<()> {
         let key = MetaMethod::validate(key.as_ref())?;
         // `__index` and `__newindex` cannot be changed in runtime, because values are cached
         if key == MetaMethod::Index || key == MetaMethod::NewIndex {

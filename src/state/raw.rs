@@ -3,7 +3,6 @@ use std::cell::{Cell, UnsafeCell};
 use std::ffi::{CStr, CString};
 use std::os::raw::{c_char, c_int, c_void};
 use std::panic::resume_unwind;
-use std::rc::Rc;
 use std::result::Result as StdResult;
 use std::sync::Arc;
 use std::{mem, ptr};
@@ -362,7 +361,7 @@ impl RawLua {
             callback_error_ext(state, extra, move |_| {
                 let hook_cb = (*extra).hook_callback.clone();
                 let hook_cb = mlua_expect!(hook_cb, "no hook callback set in hook_proc");
-                if Rc::strong_count(&hook_cb) > 2 {
+                if std::rc::Rc::strong_count(&hook_cb) > 2 {
                     return Ok(()); // Don't allow recursion
                 }
                 let rawlua = (*extra).raw_lua();
@@ -372,7 +371,7 @@ impl RawLua {
             })
         }
 
-        (*self.extra.get()).hook_callback = Some(Rc::new(callback));
+        (*self.extra.get()).hook_callback = Some(std::rc::Rc::new(callback));
         (*self.extra.get()).hook_thread = state; // Mark for what thread the hook is set
         ffi::lua_sethook(state, Some(hook_proc), triggers.mask(), triggers.count());
     }
@@ -1198,12 +1197,12 @@ impl RawLua {
         }
 
         let lua = self.lua();
-        let coroutine = lua.globals().get::<_, Table>("coroutine")?;
+        let coroutine = lua.globals().get::<Table>("coroutine")?;
 
         let env = lua.create_table_with_capacity(0, 3)?;
         env.set("get_poll", get_poll)?;
         // Cache `yield` function
-        env.set("yield", coroutine.get::<_, Function>("yield")?)?;
+        env.set("yield", coroutine.get::<Function>("yield")?)?;
         unsafe {
             env.set("unpack", lua.create_c_function(unpack)?)?;
         }

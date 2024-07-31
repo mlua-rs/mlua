@@ -436,11 +436,11 @@ impl Lua {
     ///
     /// lua.sandbox(true)?;
     /// lua.load("var = 123").exec()?;
-    /// assert_eq!(lua.globals().get::<_, u32>("var")?, 123);
+    /// assert_eq!(lua.globals().get::<u32>("var")?, 123);
     ///
     /// // Restore the global environment (clear changes made in sandbox)
     /// lua.sandbox(false)?;
-    /// assert_eq!(lua.globals().get::<_, Option<u32>>("var")?, None);
+    /// assert_eq!(lua.globals().get::<Option<u32>>("var")?, None);
     /// # Ok(())
     /// # }
     /// ```
@@ -1497,7 +1497,7 @@ impl Lua {
 
     /// Converts a value that implements `IntoLua` into a `Value` instance.
     #[inline]
-    pub fn pack<T: IntoLua>(&self, t: T) -> Result<Value> {
+    pub fn pack(&self, t: impl IntoLua) -> Result<Value> {
         t.into_lua(self)
     }
 
@@ -1509,7 +1509,7 @@ impl Lua {
 
     /// Converts a value that implements `IntoLuaMulti` into a `MultiValue` instance.
     #[inline]
-    pub fn pack_multi<T: IntoLuaMulti>(&self, t: T) -> Result<MultiValue> {
+    pub fn pack_multi(&self, t: impl IntoLuaMulti) -> Result<MultiValue> {
         t.into_lua_multi(self)
     }
 
@@ -1523,10 +1523,7 @@ impl Lua {
     ///
     /// This value will be available to rust from all `Lua` instances which share the same main
     /// state.
-    pub fn set_named_registry_value<T>(&self, name: &str, t: T) -> Result<()>
-    where
-        T: IntoLua,
-    {
+    pub fn set_named_registry_value(&self, name: &str, t: impl IntoLua) -> Result<()> {
         let lua = self.lock();
         let state = lua.state();
         unsafe {
@@ -1575,7 +1572,7 @@ impl Lua {
     /// Be warned, garbage collection of values held inside the registry is not automatic, see
     /// [`RegistryKey`] for more details.
     /// However, dropped [`RegistryKey`]s automatically reused to store new values.
-    pub fn create_registry_value<T: IntoLua>(&self, t: T) -> Result<RegistryKey> {
+    pub fn create_registry_value(&self, t: impl IntoLua) -> Result<RegistryKey> {
         let lua = self.lock();
         let state = lua.state();
         unsafe {
@@ -1657,7 +1654,7 @@ impl Lua {
     /// An identifier used in [`RegistryKey`] may possibly be changed to a new value.
     ///
     /// See [`Lua::create_registry_value`] for more details.
-    pub fn replace_registry_value<T: IntoLua>(&self, key: &mut RegistryKey, t: T) -> Result<()> {
+    pub fn replace_registry_value(&self, key: &mut RegistryKey, t: impl IntoLua) -> Result<()> {
         let lua = self.lock();
         if !lua.owns_registry_value(key) {
             return Err(Error::MismatchedRegistryKey);

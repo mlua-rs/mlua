@@ -267,9 +267,7 @@ impl<'a, T: 'static> UserDataRegistry<'a, T> {
         })
     }
 
-    pub(crate) fn check_meta_field<V>(lua: &Lua, name: &str, value: V) -> Result<Value>
-    where
-        V: IntoLua,
+    pub(crate) fn check_meta_field(lua: &Lua, name: &str, value: impl IntoLua) -> Result<Value>
     {
         let value = value.into_lua(lua)?;
         if name == MetaMethod::Index || name == MetaMethod::NewIndex {

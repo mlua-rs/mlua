@@ -64,7 +64,7 @@ fn test_chunk_macro() -> Result<()> {
     })
     .exec()?;
 
-    assert_eq!(lua.globals().get::<_, i32>("s")?, 321);
+    assert_eq!(lua.globals().get::<i32>("s")?, 321);
 
     Ok(())
 }

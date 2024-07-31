@@ -209,7 +209,7 @@ fn test_hook_swap_within_hook() -> Result<()> {
             "#,
         )
         .exec()?;
-        assert_eq!(lua.globals().get::<_, i64>("ok")?, 2);
+        assert_eq!(lua.globals().get::<i64>("ok")?, 2);
         Ok(())
     })
 }
@@ -237,7 +237,7 @@ fn test_hook_threads() -> Result<()> {
         Ok(())
     });
 
-    co.resume(())?;
+    co.resume::<()>(())?;
     lua.remove_hook();
 
     let output = output.lock().unwrap();

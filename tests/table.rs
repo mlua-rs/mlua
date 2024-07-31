@@ -7,8 +7,8 @@ fn test_globals_set_get() -> Result<()> {
     let globals = lua.globals();
     globals.set("foo", "bar")?;
     globals.set("baz", "baf")?;
-    assert_eq!(globals.get::<_, String>("foo")?, "bar");
-    assert_eq!(globals.get::<_, String>("baz")?, "baf");
+    assert_eq!(globals.get::<String>("foo")?, "bar");
+    assert_eq!(globals.get::<String>("baz")?, "baf");
 
     Ok(())
 }
@@ -26,8 +26,8 @@ fn test_table() -> Result<()> {
     table1.set("foo", "bar")?;
     table2.set("baz", "baf")?;
 
-    assert_eq!(table2.get::<_, String>("foo")?, "bar");
-    assert_eq!(table1.get::<_, String>("baz")?, "baf");
+    assert_eq!(table2.get::<String>("foo")?, "bar");
+    assert_eq!(table1.get::<String>("baz")?, "baf");
 
     lua.load(
         r#"
@@ -38,9 +38,9 @@ fn test_table() -> Result<()> {
     )
     .exec()?;
 
-    let table1 = globals.get::<_, Table>("table1")?;
-    let table2 = globals.get::<_, Table>("table2")?;
-    let table3 = globals.get::<_, Table>("table3")?;
+    let table1 = globals.get::<Table>("table1")?;
+    let table2 = globals.get::<Table>("table2")?;
+    let table3 = globals.get::<Table>("table3")?;
 
     assert_eq!(table1.len()?, 5);
     assert!(!table1.is_empty());
@@ -70,7 +70,7 @@ fn test_table() -> Result<()> {
     );
 
     globals.set("table4", lua.create_sequence_from(vec![1, 2, 3, 4, 5])?)?;
-    let table4 = globals.get::<_, Table>("table4")?;
+    let table4 = globals.get::<Table>("table4")?;
     assert_eq!(
         table4.clone().pairs().collect::<Result<Vec<(i64, i64)>>>()?,
         vec![(1, 1), (2, 2), (3, 3), (4, 4), (5, 5)]
@@ -180,7 +180,7 @@ fn test_table_clear() -> Result<()> {
     t2.clear()?;
     assert_eq!(t2.raw_len(), 0);
     assert!(t2.is_empty());
-    assert_eq!(t2.raw_get::<_, Value>("a")?, Value::Nil);
+    assert_eq!(t2.raw_get::<Value>("a")?, Value::Nil);
     assert_ne!(t2.get_metatable(), None);
 
     Ok(())
@@ -192,9 +192,9 @@ fn test_table_sequence_from() -> Result<()> {
 
     let get_table = lua.create_function(|_, t: Table| Ok(t))?;
 
-    assert_eq!(get_table.call::<_, Table>(vec![1, 2, 3])?, [1, 2, 3]);
-    assert_eq!(get_table.call::<_, Table>([4, 5, 6])?, [4, 5, 6]);
-    assert_eq!(get_table.call::<_, Table>([7, 8, 9].as_slice())?, [7, 8, 9]);
+    assert_eq!(get_table.call::<Table>(vec![1, 2, 3])?, [1, 2, 3]);
+    assert_eq!(get_table.call::<Table>([4, 5, 6])?, [4, 5, 6]);
+    assert_eq!(get_table.call::<Table>([7, 8, 9].as_slice())?, [7, 8, 9]);
 
     Ok(())
 }
@@ -284,13 +284,13 @@ fn test_table_scope() -> Result<()> {
     // Make sure that table gets do not borrow the table, but instead just borrow lua.
     let tin;
     {
-        let touter = globals.get::<_, Table>("touter")?;
-        tin = touter.get::<_, Table>("tin")?;
+        let touter = globals.get::<Table>("touter")?;
+        tin = touter.get::<Table>("tin")?;
     }
 
-    assert_eq!(tin.get::<_, i64>(1)?, 1);
-    assert_eq!(tin.get::<_, i64>(2)?, 2);
-    assert_eq!(tin.get::<_, i64>(3)?, 3);
+    assert_eq!(tin.get::<i64>(1)?, 1);
+    assert_eq!(tin.get::<i64>(2)?, 2);
+    assert_eq!(tin.get::<i64>(3)?, 3);
 
     Ok(())
 }
@@ -303,13 +303,13 @@ fn test_metatable() -> Result<()> {
     let metatable = lua.create_table()?;
     metatable.set("__index", lua.create_function(|_, ()| Ok("index_value"))?)?;
     table.set_metatable(Some(metatable));
-    assert_eq!(table.get::<_, String>("any_key")?, "index_value");
-    match table.raw_get::<_, Value>("any_key")? {
+    assert_eq!(table.get::<String>("any_key")?, "index_value");
+    match table.raw_get::<Value>("any_key")? {
         Nil => {}
         _ => panic!(),
     }
     table.set_metatable(None);
-    match table.get::<_, Value>("any_key")? {
+    match table.get::<Value>("any_key")? {
         Nil => {}
         _ => panic!(),
     };
@@ -336,10 +336,10 @@ fn test_table_eq() -> Result<()> {
     )
     .exec()?;
 
-    let table1 = globals.get::<_, Table>("table1")?;
-    let table2 = globals.get::<_, Table>("table2")?;
-    let table3 = globals.get::<_, Table>("table3")?;
-    let table4 = globals.get::<_, Table>("table4")?;
+    let table1 = globals.get::<Table>("table1")?;
+    let table2 = globals.get::<Table>("table2")?;
+    let table3 = globals.get::<Table>("table3")?;
+    let table4 = globals.get::<Table>("table4")?;
 
     assert!(table1 != table2);
     assert!(!table1.equals(&table2)?);
@@ -389,10 +389,10 @@ fn test_table_error() -> Result<()> {
 
     let bad_table: Table = globals.get("table")?;
     assert!(bad_table.set(1, 1).is_err());
-    assert!(bad_table.get::<_, i32>(1).is_err());
+    assert!(bad_table.get::<i32>(1).is_err());
     assert!(bad_table.len().is_err());
     assert!(bad_table.raw_set(1, 1).is_ok());
-    assert!(bad_table.raw_get::<_, i32>(1).is_ok());
+    assert!(bad_table.raw_get::<i32>(1).is_ok());
     assert_eq!(bad_table.raw_len(), 1);
 
     Ok(())
@@ -424,13 +424,13 @@ fn test_table_call() -> Result<()> {
 
     let table: Table = lua.globals().get("table")?;
 
-    assert_eq!(table.call::<_, String>("b")?, "call_2");
-    assert_eq!(table.call_function::<_, String>("func", "a")?, "func_a");
-    assert_eq!(table.call_method::<_, String>("method", "a")?, "method_1");
+    assert_eq!(table.call::<String>("b")?, "call_2");
+    assert_eq!(table.call_function::<String>("func", "a")?, "func_a");
+    assert_eq!(table.call_method::<String>("method", "a")?, "method_1");
 
     // Test calling non-callable table
     let table2 = lua.create_table()?;
-    assert!(matches!(table2.call::<_, ()>(()), Err(Error::RuntimeError(_))));
+    assert!(matches!(table2.call::<()>(()), Err(Error::RuntimeError(_))));
 
     Ok(())
 }

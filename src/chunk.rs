@@ -308,7 +308,7 @@ impl<'a> Chunk<'a> {
     /// All global variables (including the standard library!) are looked up in `_ENV`, so it may be
     /// necessary to populate the environment in order for scripts using custom environments to be
     /// useful.
-    pub fn set_environment<V: IntoLua>(mut self, env: V) -> Self {
+    pub fn set_environment(mut self, env: impl IntoLua) -> Self {
         let lua = self.lua.lock();
         let lua = lua.lua();
         self.env = env
@@ -343,7 +343,7 @@ impl<'a> Chunk<'a> {
     ///
     /// This is equivalent to calling the chunk function with no arguments and no return values.
     pub fn exec(self) -> Result<()> {
-        self.call::<_, ()>(())?;
+        self.call::<()>(())?;
         Ok(())
     }
 
@@ -404,7 +404,7 @@ impl<'a> Chunk<'a> {
     /// Load the chunk function and call it with the given arguments.
     ///
     /// This is equivalent to `into_function` and calling the resulting function.
-    pub fn call<A: IntoLuaMulti, R: FromLuaMulti>(self, args: A) -> Result<R> {
+    pub fn call<R: FromLuaMulti>(self, args: impl IntoLuaMulti) -> Result<R> {
         self.into_function()?.call(args)
     }
 
@@ -417,9 +417,8 @@ impl<'a> Chunk<'a> {
     /// [`call`]: #method.call
     #[cfg(feature = "async")]
     #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
-    pub async fn call_async<A, R>(self, args: A) -> Result<R>
+    pub async fn call_async<R>(self, args: impl IntoLuaMulti) -> Result<R>
     where
-        A: IntoLuaMulti,
         R: FromLuaMulti,
     {
         self.into_function()?.call_async(args).await

@@ -14,8 +14,8 @@ fn test_function() -> Result<()> {
     )
     .exec()?;
 
-    let concat = globals.get::<_, Function>("concat")?;
-    assert_eq!(concat.call::<_, String>(("foo", "bar"))?, "foobar");
+    let concat = globals.get::<Function>("concat")?;
+    assert_eq!(concat.call::<String>(("foo", "bar"))?, "foobar");
 
     Ok(())
 }
@@ -38,17 +38,17 @@ fn test_bind() -> Result<()> {
     )
     .exec()?;
 
-    let mut concat = globals.get::<_, Function>("concat")?;
+    let mut concat = globals.get::<Function>("concat")?;
     concat = concat.bind("foo")?;
     concat = concat.bind("bar")?;
     concat = concat.bind(("baz", "baf"))?;
-    assert_eq!(concat.call::<_, String>(())?, "foobarbazbaf");
-    assert_eq!(concat.call::<_, String>(("hi", "wut"))?, "foobarbazbafhiwut");
+    assert_eq!(concat.call::<String>(())?, "foobarbazbaf");
+    assert_eq!(concat.call::<String>(("hi", "wut"))?, "foobarbazbafhiwut");
 
-    let mut concat2 = globals.get::<_, Function>("concat")?;
+    let mut concat2 = globals.get::<Function>("concat")?;
     concat2 = concat2.bind(())?;
-    assert_eq!(concat2.call::<_, String>(())?, "");
-    assert_eq!(concat2.call::<_, String>(("ab", "cd"))?, "abcd");
+    assert_eq!(concat2.call::<String>(())?, "");
+    assert_eq!(concat2.call::<String>(("ab", "cd"))?, "abcd");
 
     Ok(())
 }
@@ -70,11 +70,11 @@ fn test_rust_function() -> Result<()> {
     )
     .exec()?;
 
-    let lua_function = globals.get::<_, Function>("lua_function")?;
+    let lua_function = globals.get::<Function>("lua_function")?;
     let rust_function = lua.create_function(|_, ()| Ok("hello"))?;
 
     globals.set("rust_function", rust_function)?;
-    assert_eq!(lua_function.call::<_, String>(())?, "hello");
+    assert_eq!(lua_function.call::<String>(())?, "hello");
 
     Ok(())
 }
@@ -90,8 +90,8 @@ fn test_c_function() -> Result<()> {
     }
 
     let func = unsafe { lua.create_c_function(c_function)? };
-    func.call(())?;
-    assert_eq!(lua.globals().get::<_, bool>("c_function")?, true);
+    func.call::<()>(())?;
+    assert_eq!(lua.globals().get::<bool>("c_function")?, true);
 
     Ok(())
 }
@@ -106,7 +106,7 @@ fn test_dump() -> Result<()> {
         .eval::<Function>()?;
     let concat = lua.load(&concat_lua.dump(false)).into_function()?;
 
-    assert_eq!(concat.call::<_, String>(("foo", "bar"))?, "foobar");
+    assert_eq!(concat.call::<String>(("foo", "bar"))?, "foobar");
 
     Ok(())
 }
@@ -134,14 +134,14 @@ fn test_function_environment() -> Result<()> {
         )
         .eval::<Function>()?;
     let lua_func2 = lua.load("return hello").into_function()?;
-    assert_eq!(lua_func.call::<_, String>(())?, "global");
+    assert_eq!(lua_func.call::<String>(())?, "global");
     assert_eq!(lua_func.environment(), Some(lua.globals()));
 
     // Test changing the environment
     let env = lua.create_table_from([("hello", "local")])?;
     assert!(lua_func.set_environment(env.clone())?);
-    assert_eq!(lua_func.call::<_, String>(())?, "local");
-    assert_eq!(lua_func2.call::<_, String>(())?, "global");
+    assert_eq!(lua_func.call::<String>(())?, "local");
+    assert_eq!(lua_func2.call::<String>(())?, "global");
 
     // More complex case
     lua.load(
@@ -154,11 +154,11 @@ fn test_function_environment() -> Result<()> {
     "#,
     )
     .exec()?;
-    let lucky = lua.globals().get::<_, Function>("lucky")?;
-    assert_eq!(lucky.call::<_, String>(())?, "number is 15");
-    let new_env = lua.globals().get::<_, Table>("new_env")?;
+    let lucky = lua.globals().get::<Function>("lucky")?;
+    assert_eq!(lucky.call::<String>(())?, "number is 15");
+    let new_env = lua.globals().get::<Table>("new_env")?;
     lucky.set_environment(new_env)?;
-    assert_eq!(lucky.call::<_, String>(())?, "15");
+    assert_eq!(lucky.call::<String>(())?, "15");
 
     // Test inheritance
     let lua_func2 = lua
@@ -166,7 +166,7 @@ fn test_function_environment() -> Result<()> {
         .eval::<Function>()?;
     assert!(lua_func2.set_environment(env.clone())?);
     lua.gc_collect()?;
-    assert_eq!(lua_func2.call::<_, String>(())?, "local");
+    assert_eq!(lua_func2.call::<String>(())?, "local");
 
     Ok(())
 }
@@ -186,8 +186,8 @@ fn test_function_info() -> Result<()> {
     .set_name("source1")
     .exec()?;
 
-    let function1 = globals.get::<_, Function>("function1")?;
-    let function2 = function1.call::<_, Function>(())?;
+    let function1 = globals.get::<Function>("function1")?;
+    let function2 = function1.call::<Function>(())?;
     let function3 = lua.create_function(|_, ()| Ok(()))?;
 
     let function1_info = function1.info();
@@ -218,7 +218,7 @@ fn test_function_info() -> Result<()> {
     assert_eq!(function3_info.last_line_defined, None);
     assert_eq!(function3_info.what, "C");
 
-    let print_info = globals.get::<_, Function>("print")?.info();
+    let print_info = globals.get::<Function>("print")?.info();
     #[cfg(feature = "luau")]
     assert_eq!(print_info.name.as_deref(), Some("print"));
     assert_eq!(print_info.source.as_deref(), Some("=[C]"));
@@ -233,7 +233,7 @@ fn test_function_pointer() -> Result<()> {
     let lua = Lua::new();
 
     let func1 = lua.load("return function() end").into_function()?;
-    let func2 = func1.call::<_, Function>(())?;
+    let func2 = func1.call::<Function>(())?;
 
     assert_eq!(func1.to_pointer(), func1.clone().to_pointer());
     assert_ne!(func1.to_pointer(), func2.to_pointer());
@@ -251,8 +251,8 @@ fn test_function_deep_clone() -> Result<()> {
     let func2 = func1.deep_clone();
 
     assert_ne!(func1.to_pointer(), func2.to_pointer());
-    assert_eq!(func1.call::<_, i32>(())?, 2);
-    assert_eq!(func2.call::<_, i32>(())?, 3);
+    assert_eq!(func1.call::<i32>(())?, 2);
+    assert_eq!(func2.call::<i32>(())?, 3);
 
     // Check that for Rust functions deep_clone is just a clone
     let rust_func = lua.create_function(|_, ()| Ok(42))?;
@@ -276,10 +276,10 @@ fn test_function_wrap() -> Result<()> {
         "f",
         Function::wrap_mut(move |lua, ()| {
             _i = true;
-            lua.globals().get::<_, Function>("f")?.call::<_, ()>(())
+            lua.globals().get::<Function>("f")?.call::<()>(())
         }),
     )?;
-    match lua.globals().get::<_, Function>("f")?.call::<_, ()>(()) {
+    match lua.globals().get::<Function>("f")?.call::<()>(()) {
         Err(Error::CallbackError { ref cause, .. }) => match *cause.as_ref() {
             Error::CallbackError { ref cause, .. } => match *cause.as_ref() {
                 Error::RecursiveMutCallback { .. } => {}

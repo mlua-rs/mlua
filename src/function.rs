@@ -75,7 +75,7 @@ impl Function {
     ///
     /// let tostring: Function = globals.get("tostring")?;
     ///
-    /// assert_eq!(tostring.call::<_, String>(123)?, "123");
+    /// assert_eq!(tostring.call::<String>(123)?, "123");
     ///
     /// # Ok(())
     /// # }
@@ -94,12 +94,12 @@ impl Function {
     ///         end
     /// "#).eval()?;
     ///
-    /// assert_eq!(sum.call::<_, u32>((3, 4))?, 3 + 4);
+    /// assert_eq!(sum.call::<u32>((3, 4))?, 3 + 4);
     ///
     /// # Ok(())
     /// # }
     /// ```
-    pub fn call<A: IntoLuaMulti, R: FromLuaMulti>(&self, args: A) -> Result<R> {
+    pub fn call<R: FromLuaMulti>(&self, args: impl IntoLuaMulti) -> Result<R> {
         let lua = self.0.lua.lock();
         let state = lua.state();
         unsafe {
@@ -153,9 +153,8 @@ impl Function {
     /// [`AsyncThread`]: crate::AsyncThread
     #[cfg(feature = "async")]
     #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
-    pub fn call_async<A, R>(&self, args: A) -> impl Future<Output = Result<R>>
+    pub fn call_async<R>(&self, args: impl IntoLuaMulti) -> impl Future<Output = Result<R>>
     where
-        A: IntoLuaMulti,
         R: FromLuaMulti,
     {
         let lua = self.0.lua.lock();
@@ -188,15 +187,15 @@ impl Function {
     /// "#).eval()?;
     ///
     /// let bound_a = sum.bind(1)?;
-    /// assert_eq!(bound_a.call::<_, u32>(2)?, 1 + 2);
+    /// assert_eq!(bound_a.call::<u32>(2)?, 1 + 2);
     ///
     /// let bound_a_and_b = sum.bind(13)?.bind(57)?;
-    /// assert_eq!(bound_a_and_b.call::<_, u32>(())?, 13 + 57);
+    /// assert_eq!(bound_a_and_b.call::<u32>(())?, 13 + 57);
     ///
     /// # Ok(())
     /// # }
     /// ```
-    pub fn bind<A: IntoLuaMulti>(&self, args: A) -> Result<Function> {
+    pub fn bind(&self, args: impl IntoLuaMulti) -> Result<Function> {
         unsafe extern "C-unwind" fn args_wrapper_impl(state: *mut ffi::lua_State) -> c_int {
             let nargs = ffi::lua_gettop(state);
             let nbinds = ffi::lua_tointeger(state, ffi::lua_upvalueindex(1)) as c_int;

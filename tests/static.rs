@@ -18,7 +18,7 @@ fn test_static_lua() -> Result<()> {
         })
     })?;
 
-    f.call(lua.create_table()?)?;
+    f.call::<()>(lua.create_table()?)?;
     drop(f);
     lua.gc_collect()?;
 
@@ -50,13 +50,13 @@ fn test_static_lua_coroutine() -> Result<()> {
     })?;
 
     let co = lua.create_thread(f)?;
-    co.resume::<_, ()>(lua.create_table()?)?;
+    co.resume::<()>(lua.create_table()?)?;
     drop(co);
     lua.gc_collect()?;
 
     TABLE.with(|t| {
         assert_eq!(
-            t.borrow().as_ref().unwrap().get::<_, String>(1i32).unwrap(),
+            t.borrow().as_ref().unwrap().get::<String>(1i32).unwrap(),
             "hello".to_string()
         );
         *t.borrow_mut() = None;
@@ -86,7 +86,7 @@ async fn test_static_async() -> Result<()> {
     let timer = lua.create_async_function(|_, (i, n, f): (u64, u64, mlua::Function)| async move {
         tokio::task::spawn_local(async move {
             for _ in 0..n {
-                tokio::task::spawn_local(f.call_async::<(), ()>(()));
+                tokio::task::spawn_local(f.call_async::<()>(()));
                 sleep_ms(i).await;
             }
         });

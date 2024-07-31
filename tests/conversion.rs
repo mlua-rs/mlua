@@ -20,7 +20,7 @@ fn test_value_into_lua() -> Result<()> {
     // Push into stack
     let table = lua.create_table()?;
     table.set("v", &v)?;
-    assert_eq!(v, table.get::<_, Value>("v")?);
+    assert_eq!(v, table.get::<Value>("v")?);
 
     Ok(())
 }
@@ -37,7 +37,7 @@ fn test_string_into_lua() -> Result<()> {
     // Push into stack
     let table = lua.create_table()?;
     table.set("s", &s)?;
-    assert_eq!(s, table.get::<_, String>("s")?);
+    assert_eq!(s, table.get::<String>("s")?);
 
     Ok(())
 }
@@ -53,8 +53,8 @@ fn test_table_into_lua() -> Result<()> {
 
     // Push into stack
     let f = lua.create_function(|_, (t, s): (Table, String)| t.set("s", s))?;
-    f.call((&t, "hello"))?;
-    assert_eq!("hello", t.get::<_, String>("s")?);
+    f.call::<()>((&t, "hello"))?;
+    assert_eq!("hello", t.get::<String>("s")?);
 
     Ok(())
 }
@@ -71,7 +71,7 @@ fn test_function_into_lua() -> Result<()> {
     // Push into stack
     let table = lua.create_table()?;
     table.set("f", &f)?;
-    assert_eq!(f, table.get::<_, Function>("f")?);
+    assert_eq!(f, table.get::<Function>("f")?);
 
     Ok(())
 }
@@ -89,7 +89,7 @@ fn test_thread_into_lua() -> Result<()> {
     // Push into stack
     let table = lua.create_table()?;
     table.set("th", &th)?;
-    assert_eq!(th, table.get::<_, Thread>("th")?);
+    assert_eq!(th, table.get::<Thread>("th")?);
 
     Ok(())
 }
@@ -106,8 +106,8 @@ fn test_anyuserdata_into_lua() -> Result<()> {
     // Push into stack
     let table = lua.create_table()?;
     table.set("ud", &ud)?;
-    assert_eq!(ud, table.get::<_, AnyUserData>("ud")?);
-    assert_eq!("hello", *table.get::<_, UserDataRef<String>>("ud")?);
+    assert_eq!(ud, table.get::<AnyUserData>("ud")?);
+    assert_eq!("hello", *table.get::<UserDataRef<String>>("ud")?);
 
     Ok(())
 }
@@ -128,20 +128,20 @@ fn test_registry_value_into_lua() -> Result<()> {
     let t = lua.create_table()?;
     let r = lua.create_registry_value(&t)?;
     let f = lua.create_function(|_, (t, k, v): (Table, Value, Value)| t.set(k, v))?;
-    f.call((&r, "hello", "world"))?;
-    f.call((r, "welcome", "to the jungle"))?;
-    assert_eq!(t.get::<_, String>("hello")?, "world");
-    assert_eq!(t.get::<_, String>("welcome")?, "to the jungle");
+    f.call::<()>((&r, "hello", "world"))?;
+    f.call::<()>((r, "welcome", "to the jungle"))?;
+    assert_eq!(t.get::<String>("hello")?, "world");
+    assert_eq!(t.get::<String>("welcome")?, "to the jungle");
 
     // Try to set nil registry key
     let r_nil = lua.create_registry_value(Value::Nil)?;
     t.set("hello", &r_nil)?;
-    assert_eq!(t.get::<_, Value>("hello")?, Value::Nil);
+    assert_eq!(t.get::<Value>("hello")?, Value::Nil);
 
     // Check non-owned registry key
     let lua2 = Lua::new();
     let r2 = lua2.create_registry_value("abc")?;
-    assert!(matches!(f.call::<_, ()>(&r2), Err(Error::MismatchedRegistryKey)));
+    assert!(matches!(f.call::<()>(&r2), Err(Error::MismatchedRegistryKey)));
 
     Ok(())
 }
@@ -152,7 +152,7 @@ fn test_registry_key_from_lua() -> Result<()> {
 
     let fkey = lua.load("function() return 1 end").eval::<RegistryKey>()?;
     let f = lua.registry_value::<Function>(&fkey)?;
-    assert_eq!(f.call::<_, i32>(())?, 1);
+    assert_eq!(f.call::<i32>(())?, 1);
 
     Ok(())
 }
@@ -285,7 +285,7 @@ fn test_conv_array() -> Result<()> {
     let v2: [i32; 3] = lua.globals().get("v")?;
     assert_eq!(v, v2);
 
-    let v2 = lua.globals().get::<_, [i32; 4]>("v");
+    let v2 = lua.globals().get::<[i32; 4]>("v");
     assert!(matches!(v2, Err(Error::FromLuaConversionError { .. })));
 
     Ok(())
@@ -307,10 +307,10 @@ fn test_bstring_from_lua() -> Result<()> {
 
     // Test from stack
     let f = lua.create_function(|_, bstr: BString| Ok(bstr))?;
-    let bstr = f.call::<_, BString>("hello, world")?;
+    let bstr = f.call::<BString>("hello, world")?;
     assert_eq!(bstr, "hello, world");
 
-    let bstr = f.call::<_, BString>(-43.22)?;
+    let bstr = f.call::<BString>(-43.22)?;
     assert_eq!(bstr, "-43.22");
 
     Ok(())
@@ -328,7 +328,7 @@ fn test_bstring_from_lua_buffer() -> Result<()> {
     // Test from stack
     let f = lua.create_function(|_, bstr: BString| Ok(bstr))?;
     let buf = lua.create_buffer("hello, world")?;
-    let bstr = f.call::<_, BString>(buf)?;
+    let bstr = f.call::<BString>(buf)?;
     assert_eq!(bstr, "hello, world");
 
     Ok(())
@@ -345,9 +345,9 @@ fn test_option_into_from_lua() -> Result<()> {
 
     // Push into stack / get from stack
     let f = lua.create_function(|_, v: Option<i32>| Ok(v))?;
-    assert_eq!(f.call::<_, Option<i32>>(Some(42))?, Some(42));
-    assert_eq!(f.call::<_, Option<i32>>(Option::<i32>::None)?, None);
-    assert_eq!(f.call::<_, Option<i32>>(())?, None);
+    assert_eq!(f.call::<Option<i32>>(Some(42))?, Some(42));
+    assert_eq!(f.call::<Option<i32>>(Option::<i32>::None)?, None);
+    assert_eq!(f.call::<Option<i32>>(())?, None);
 
     Ok(())
 }

@@ -18,7 +18,7 @@ fn test_error_context() -> Result<()> {
 
     let func2 = lua.create_function(|lua, ()| {
         lua.globals()
-            .get::<_, String>("nonextant")
+            .get::<String>("nonextant")
             .with_context(|_| "failed to find global")
     })?;
     lua.globals().set("func2", func2)?;
@@ -36,7 +36,7 @@ fn test_error_context() -> Result<()> {
             .context("some context")
             .context("some new context")
     })?;
-    let res = func3.call::<_, ()>(()).err().unwrap();
+    let res = func3.call::<()>(()).err().unwrap();
     let Error::CallbackError { cause, .. } = &res else {
         unreachable!()
     };

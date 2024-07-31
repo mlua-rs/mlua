@@ -47,13 +47,13 @@ impl hyper::service::Service<Request<Incoming>> for Svc {
         let handler = self.handler.clone();
         let lua_req = LuaRequest(self.peer_addr, req);
         Box::pin(async move {
-            match handler.call_async::<_, Table>(lua_req).await {
+            match handler.call_async::<Table>(lua_req).await {
                 Ok(lua_resp) => {
-                    let status = lua_resp.get::<_, Option<u16>>("status")?.unwrap_or(200);
+                    let status = lua_resp.get::<Option<u16>>("status")?.unwrap_or(200);
                     let mut resp = Response::builder().status(status);
 
                     // Set headers
-                    if let Some(headers) = lua_resp.get::<_, Option<Table>>("headers")? {
+                    if let Some(headers) = lua_resp.get::<Option<Table>>("headers")? {
                         for pair in headers.pairs::<String, LuaString>() {
                             let (h, v) = pair?;
                             resp = resp.header(&h, &*v.as_bytes());
@@ -62,7 +62,7 @@ impl hyper::service::Service<Request<Incoming>> for Svc {
 
                     // Set body
                     let body = lua_resp
-                        .get::<_, Option<LuaString>>("body")?
+                        .get::<Option<LuaString>>("body")?
                         .map(|b| Full::new(Bytes::copy_from_slice(&b.as_bytes())).boxed())
                         .unwrap_or_else(|| Empty::<Bytes>::new().boxed());
 

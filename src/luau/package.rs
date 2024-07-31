@@ -194,7 +194,7 @@ fn lua_loader(lua: &Lua, modname: StdString) -> Result<Value> {
         let key = lua.app_data_ref::<PackageKey>().unwrap();
         lua.registry_value::<Table>(&key.0)
     }?;
-    let search_path = package.get::<_, StdString>("path").unwrap_or_default();
+    let search_path = package.get::<StdString>("path").unwrap_or_default();
 
     if let Some(file_path) = package_searchpath(&modname, &search_path, false) {
         match fs::read(&file_path) {
@@ -222,7 +222,7 @@ fn dylib_loader(lua: &Lua, modname: StdString) -> Result<Value> {
         let key = lua.app_data_ref::<PackageKey>().unwrap();
         lua.registry_value::<Table>(&key.0)
     }?;
-    let search_cpath = package.get::<_, StdString>("cpath").unwrap_or_default();
+    let search_cpath = package.get::<StdString>("cpath").unwrap_or_default();
 
     let find_symbol = |lib: &Library| unsafe {
         if let Ok(entry) = lib.get::<ffi::lua_CFunction>(format!("luaopen_{modname}\0").as_bytes()) {

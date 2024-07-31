@@ -63,13 +63,13 @@ fn test_methods() -> Result<()> {
         "#,
         )
         .exec()?;
-        let get = globals.get::<_, Function>("get_it")?;
-        let set = globals.get::<_, Function>("set_it")?;
-        assert_eq!(get.call::<_, i64>(())?, 42);
+        let get = globals.get::<Function>("get_it")?;
+        let set = globals.get::<Function>("set_it")?;
+        assert_eq!(get.call::<i64>(())?, 42);
         userdata.borrow_mut::<MyUserData>()?.0 = 64;
-        assert_eq!(get.call::<_, i64>(())?, 64);
-        set.call::<_, ()>(100)?;
-        assert_eq!(get.call::<_, i64>(())?, 100);
+        assert_eq!(get.call::<i64>(())?, 64);
+        set.call::<()>(100)?;
+        assert_eq!(get.call::<i64>(())?, 100);
         Ok(())
     }
 
@@ -188,7 +188,7 @@ fn test_metamethods() -> Result<()> {
     assert!(lua.load("userdata2.nonexist_field").eval::<()>().is_err());
 
     #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "luajit52"))]
-    assert_eq!(pairs_it.call::<_, i64>(())?, 28);
+    assert_eq!(pairs_it.call::<i64>(())?, 28);
 
     let userdata2: Value = globals.get("userdata2")?;
     let userdata3: Value = globals.get("userdata3")?;
@@ -463,15 +463,15 @@ fn test_functions() -> Result<()> {
     "#,
     )
     .exec()?;
-    let get = globals.get::<_, Function>("get_it")?;
-    let set = globals.get::<_, Function>("set_it")?;
-    let get_constant = globals.get::<_, Function>("get_constant")?;
-    assert_eq!(get.call::<_, i64>(())?, 42);
+    let get = globals.get::<Function>("get_it")?;
+    let set = globals.get::<Function>("set_it")?;
+    let get_constant = globals.get::<Function>("get_constant")?;
+    assert_eq!(get.call::<i64>(())?, 42);
     userdata.borrow_mut::<MyUserData>()?.0 = 64;
-    assert_eq!(get.call::<_, i64>(())?, 64);
-    set.call::<_, ()>(100)?;
-    assert_eq!(get.call::<_, i64>(())?, 100);
-    assert_eq!(get_constant.call::<_, i64>(())?, 7);
+    assert_eq!(get.call::<i64>(())?, 64);
+    set.call::<()>(100)?;
+    assert_eq!(get.call::<i64>(())?, 100);
+    assert_eq!(get_constant.call::<i64>(())?, 7);
 
     Ok(())
 }
@@ -495,7 +495,7 @@ fn test_fields() -> Result<()> {
 
             // Use userdata "uservalue" storage
             fields.add_field_function_get("uval", |_, ud| ud.user_value::<Option<String>>());
-            fields.add_field_function_set("uval", |_, ud, s| ud.set_user_value::<Option<String>>(s));
+            fields.add_field_function_set("uval", |_, ud, s: Option<String>| ud.set_user_value(s));
 
             fields.add_meta_field(MetaMethod::Index, HashMap::from([("f", 321)]));
             fields.add_meta_field_with(MetaMethod::NewIndex, |lua| {
@@ -752,19 +752,19 @@ fn test_userdata_ext() -> Result<()> {
 
     let ud = lua.create_userdata(MyUserData(123))?;
 
-    assert_eq!(ud.get::<_, u32>("n")?, 123);
+    assert_eq!(ud.get::<u32>("n")?, 123);
     ud.set("n", 321)?;
-    assert_eq!(ud.get::<_, u32>("n")?, 321);
-    assert_eq!(ud.get::<_, Option<u32>>("non-existent")?, None);
-    match ud.set::<_, u32>("non-existent", 123) {
+    assert_eq!(ud.get::<u32>("n")?, 321);
+    assert_eq!(ud.get::<Option<u32>>("non-existent")?, None);
+    match ud.set("non-existent", 123) {
         Err(Error::RuntimeError(_)) => {}
         r => panic!("expected RuntimeError, got {r:?}"),
     }
 
-    assert_eq!(ud.call::<_, String>(())?, "called");
+    assert_eq!(ud.call::<String>(())?, "called");
 
-    ud.call_method("add", 2)?;
-    assert_eq!(ud.get::<_, u32>("n")?, 323);
+    ud.call_method::<()>("add", 2)?;
+    assert_eq!(ud.get::<u32>("n")?, 323);
 
     Ok(())
 }
@@ -782,7 +782,7 @@ fn test_userdata_method_errors() -> Result<()> {
     let lua = Lua::new();
 
     let ud = lua.create_userdata(MyUserData(123))?;
-    let res = ud.call_function::<_, ()>("get_value", ());
+    let res = ud.call_function::<()>("get_value", ());
     let Err(Error::CallbackError { cause, .. }) = res else {
         panic!("expected CallbackError, got {res:?}");
     };

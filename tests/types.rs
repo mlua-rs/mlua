@@ -17,8 +17,8 @@ fn test_lightuserdata() -> Result<()> {
     .exec()?;
 
     let res = globals
-        .get::<_, Function>("id")?
-        .call::<_, LightUserData>(LightUserData(42 as *mut c_void))?;
+        .get::<Function>("id")?
+        .call::<LightUserData>(LightUserData(42 as *mut c_void))?;
 
     assert_eq!(res, LightUserData(42 as *mut c_void));
 

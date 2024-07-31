@@ -72,16 +72,16 @@ async fn test_async_call() -> Result<()> {
         Ok(format!("hello, {}!", name))
     })?;
 
-    match hello.call::<_, ()>("alex") {
+    match hello.call::<()>("alex") {
         Err(Error::RuntimeError(_)) => {}
         _ => panic!("non-async executing async function must fail on the yield stage with RuntimeError"),
     };
 
-    assert_eq!(hello.call_async::<_, String>("alex").await?, "hello, alex!");
+    assert_eq!(hello.call_async::<String>("alex").await?, "hello, alex!");
 
     // Executing non-async functions using async call is allowed
     let sum = lua.create_function(|_lua, (a, b): (i64, i64)| return Ok(a + b))?;
-    assert_eq!(sum.call_async::<_, i64>((5, 1)).await?, 6);
+    assert_eq!(sum.call_async::<i64>((5, 1)).await?, 6);
 
     Ok(())
 }
@@ -95,7 +95,7 @@ async fn test_async_call_many_returns() -> Result<()> {
         Ok(("a", "b", "c", 1))
     })?;
 
-    let vals = hello.call_async::<_, MultiValue>(()).await?;
+    let vals = hello.call_async::<MultiValue>(()).await?;
     assert_eq!(vals.len(), 4);
     assert_eq!(vals[0].to_string()?, "a");
     assert_eq!(vals[1].to_string()?, "b");
@@ -158,7 +158,7 @@ async fn test_async_handle_yield() -> Result<()> {
     "#,
         )
         .eval::<Function>()?;
-    assert_eq!(min.call_async::<_, i64>((-1, 1)).await?, -1);
+    assert_eq!(min.call_async::<i64>((-1, 1)).await?, -1);
 
     Ok(())
 }
@@ -227,15 +227,15 @@ async fn test_async_lua54_to_be_closed() -> Result<()> {
     let f = lua.load(code).into_function()?;
 
     // Test close using call_async
-    let _ = f.call_async::<_, ()>(()).await;
-    assert_eq!(globals.get::<_, usize>("close_count")?, 1);
+    let _ = f.call_async::<()>(()).await;
+    assert_eq!(globals.get::<usize>("close_count")?, 1);
 
     // Don't close by default when awaiting async threads
     let co = lua.create_thread(f.clone())?;
-    let _ = co.clone().into_async::<_, ()>(()).await;
-    assert_eq!(globals.get::<_, usize>("close_count")?, 1);
+    let _ = co.clone().into_async::<()>(()).await;
+    assert_eq!(globals.get::<usize>("close_count")?, 1);
     let _ = co.reset(f);
-    assert_eq!(globals.get::<_, usize>("close_count")?, 2);
+    assert_eq!(globals.get::<usize>("close_count")?, 2);
 
     Ok(())
 }
@@ -259,7 +259,7 @@ async fn test_async_thread_stream() -> Result<()> {
         .eval()?,
     )?;
 
-    let mut stream = thread.into_async::<_, i64>(1);
+    let mut stream = thread.into_async::<i64>(1);
     let mut sum = 0;
     while let Some(n) = stream.try_next().await? {
         sum += n;
@@ -307,7 +307,7 @@ fn test_async_thread_capture() -> Result<()> {
 
     let thread = lua.create_thread(f)?;
     // After first resume, `v: Value` is captured in the coroutine
-    thread.resume::<_, ()>("abc").unwrap();
+    thread.resume::<()>("abc").unwrap();
     drop(thread);
 
     Ok(())
@@ -323,7 +323,7 @@ async fn test_async_table() -> Result<()> {
 
     let get_value = lua.create_async_function(|_, table: Table| async move {
         sleep_ms(10).await;
-        table.get::<_, i64>("val")
+        table.get::<i64>("val")
     })?;
     table.set("get_value", get_value)?;
 
@@ -339,11 +339,11 @@ async fn test_async_table() -> Result<()> {
     })?;
     table.set("sleep", sleep)?;
 
-    assert_eq!(table.call_async_method::<_, i64>("get_value", ()).await?, 10);
-    table.call_async_method("set_value", 15).await?;
-    assert_eq!(table.call_async_method::<_, i64>("get_value", ()).await?, 15);
+    assert_eq!(table.call_async_method::<i64>("get_value", ()).await?, 10);
+    table.call_async_method::<()>("set_value", 15).await?;
+    assert_eq!(table.call_async_method::<i64>("get_value", ()).await?, 15);
     assert_eq!(
-        table.call_async_function::<_, String>("sleep", 7).await?,
+        table.call_async_function::<String>("sleep", 7).await?,
         "elapsed:7ms"
     );
 
@@ -365,9 +365,9 @@ async fn test_async_thread_pool() -> Result<()> {
         Ok(format!("elapsed:{}ms", n))
     })?;
 
-    assert!(error_f.call_async::<_, ()>(()).await.is_err());
+    assert!(error_f.call_async::<()>(()).await.is_err());
     // Next call should use cached thread
-    assert_eq!(sleep.call_async::<_, String>(3).await?, "elapsed:3ms");
+    assert_eq!(sleep.call_async::<String>(3).await?, "elapsed:3ms");
 
     Ok(())
 }
@@ -460,13 +460,13 @@ async fn test_async_userdata() -> Result<()> {
     .exec_async()
     .await?;
 
-    userdata.call_async_method("set_value", 24).await?;
+    userdata.call_async_method::<()>("set_value", 24).await?;
     let n: u64 = userdata.call_async_method("get_value", ()).await?;
     assert_eq!(n, 24);
-    userdata.call_async_function("sleep", 15).await?;
+    userdata.call_async_function::<()>("sleep", 15).await?;
 
     #[cfg(not(any(feature = "lua51", feature = "luau")))]
-    assert_eq!(userdata.call_async::<_, String>(()).await?, "elapsed:24ms");
+    assert_eq!(userdata.call_async::<String>(()).await?, "elapsed:24ms");
 
     Ok(())
 }
@@ -485,7 +485,7 @@ async fn test_async_thread_error() -> Result<()> {
     let result = lua
         .load("function x(...) error(...) end x(...)")
         .set_name("chunk")
-        .call_async::<_, ()>(MyUserData)
+        .call_async::<()>(MyUserData)
         .await;
     assert!(
         matches!(result, Err(Error::RuntimeError(cause)) if cause.contains("myuserdata error")),
@@ -510,7 +510,7 @@ async fn test_async_terminate() -> Result<()> {
         }
     })?;
 
-    let _ = tokio::time::timeout(Duration::from_millis(30), func.call_async::<_, ()>(())).await;
+    let _ = tokio::time::timeout(Duration::from_millis(30), func.call_async::<()>(())).await;
     lua.gc_collect()?;
     assert!(mutex.try_lock().is_ok());
 

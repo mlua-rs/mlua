@@ -47,7 +47,7 @@ async fn run_server(handler: Function) -> io::Result<()> {
         let handler = handler.clone();
         tokio::task::spawn(async move {
             let stream = LuaTcpStream(stream);
-            if let Err(err) = handler.call_async::<_, ()>(stream).await {
+            if let Err(err) = handler.call_async::<()>(stream).await {
                 eprintln!("{}", err);
             }
         });

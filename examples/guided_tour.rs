@@ -17,8 +17,8 @@ fn main() -> Result<()> {
     globals.set("string_var", "hello")?;
     globals.set("int_var", 42)?;
 
-    assert_eq!(globals.get::<_, String>("string_var")?, "hello");
-    assert_eq!(globals.get::<_, i64>("int_var")?, 42);
+    assert_eq!(globals.get::<String>("string_var")?, "hello");
+    assert_eq!(globals.get::<i64>("int_var")?, 42);
 
     // You can load and evaluate Lua code. The returned type of `Lua::load` is a builder
     // that allows you to change settings before running Lua code. Here, we are using it to set
@@ -32,7 +32,7 @@ fn main() -> Result<()> {
     )
     .set_name("example code")
     .exec()?;
-    assert_eq!(globals.get::<_, String>("global")?, "foobar");
+    assert_eq!(globals.get::<String>("global")?, "foobar");
 
     assert_eq!(lua.load("1 + 1").eval::<i32>()?, 2);
     assert_eq!(lua.load("false == false").eval::<bool>()?, true);
@@ -85,16 +85,16 @@ fn main() -> Result<()> {
     // You can load Lua functions
 
     let print: Function = globals.get("print")?;
-    print.call::<_, ()>("hello from rust")?;
+    print.call::<()>("hello from rust")?;
 
     // This API generally handles variadic using tuples. This is one way to call a function with
     // multiple parameters:
 
-    print.call::<_, ()>(("hello", "again", "from", "rust"))?;
+    print.call::<()>(("hello", "again", "from", "rust"))?;
 
     // But, you can also pass variadic arguments with the `Variadic` type.
 
-    print.call::<_, ()>(Variadic::from_iter(
+    print.call::<()>(Variadic::from_iter(
         ["hello", "yet", "again", "from", "rust"].iter().cloned(),
     ))?;
 

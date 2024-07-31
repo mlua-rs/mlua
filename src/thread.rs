@@ -103,20 +103,19 @@ impl Thread {
     ///     end)
     /// "#).eval()?;
     ///
-    /// assert_eq!(thread.resume::<_, u32>(42)?, 123);
-    /// assert_eq!(thread.resume::<_, u32>(43)?, 987);
+    /// assert_eq!(thread.resume::<u32>(42)?, 123);
+    /// assert_eq!(thread.resume::<u32>(43)?, 987);
     ///
     /// // The coroutine has now returned, so `resume` will fail
-    /// match thread.resume::<_, u32>(()) {
+    /// match thread.resume::<u32>(()) {
     ///     Err(Error::CoroutineUnresumable) => {},
     ///     unexpected => panic!("unexpected result {:?}", unexpected),
     /// }
     /// # Ok(())
     /// # }
     /// ```
-    pub fn resume<A, R>(&self, args: A) -> Result<R>
+    pub fn resume<R>(&self, args: impl IntoLuaMulti) -> Result<R>
     where
-        A: IntoLuaMulti,
         R: FromLuaMulti,
     {
         let lua = self.0.lua.lock();
@@ -141,7 +140,7 @@ impl Thread {
     /// Resumes execution of this thread.
     ///
     /// It's similar to `resume()` but leaves `nresults` values on the thread stack.
-    unsafe fn resume_inner<A: IntoLuaMulti>(&self, args: A) -> Result<c_int> {
+    unsafe fn resume_inner(&self, args: impl IntoLuaMulti) -> Result<c_int> {
         let lua = self.0.lua.lock();
         let state = lua.state();
         let thread_state = self.state();
@@ -288,7 +287,7 @@ impl Thread {
     ///     end)
     /// "#).eval()?;
     ///
-    /// let mut stream = thread.into_async::<_, i64>(1);
+    /// let mut stream = thread.into_async::<i64>(1);
     /// let mut sum = 0;
     /// while let Some(n) = stream.try_next().await? {
     ///     sum += n;
@@ -301,9 +300,8 @@ impl Thread {
     /// ```
     #[cfg(feature = "async")]
     #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
-    pub fn into_async<A, R>(self, args: A) -> AsyncThread<R>
+    pub fn into_async<R>(self, args: impl IntoLuaMulti) -> AsyncThread<R>
     where
-        A: IntoLuaMulti,
         R: FromLuaMulti,
     {
         let lua = self.0.lua.lock();
@@ -334,14 +332,14 @@ impl Thread {
     /// let lua = Lua::new();
     /// let thread = lua.create_thread(lua.create_function(|lua2, ()| {
     ///     lua2.load("var = 123").exec()?;
-    ///     assert_eq!(lua2.globals().get::<_, u32>("var")?, 123);
+    ///     assert_eq!(lua2.globals().get::<u32>("var")?, 123);
     ///     Ok(())
     /// })?)?;
     /// thread.sandbox()?;
     /// thread.resume(())?;
     ///
     /// // The global environment should be unchanged
-    /// assert_eq!(lua.globals().get::<_, Option<u32>>("var")?, None);
+    /// assert_eq!(lua.globals().get::<Option<u32>>("var")?, None);
     /// # Ok(())
     /// # }
     /// ```
