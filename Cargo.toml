@@ -61,7 +61,6 @@ libloading = { version = "0.8", optional = true }
 
 [dev-dependencies]
 trybuild = "1.0"
-futures = "0.3.5"
 hyper = { version = "1.2", features = ["full"] }
 hyper-util = { version = "0.1.3", features = ["full"] }
 http-body-util = "0.1.1"
@@ -101,11 +100,11 @@ required-features = ["async", "serialize", "macros"]
 
 [[example]]
 name = "async_http_server"
-required-features = ["async", "macros"]
+required-features = ["async", "macros", "send"]
 
 [[example]]
 name = "async_tcp_server"
-required-features = ["async", "macros"]
+required-features = ["async", "macros", "send"]
 
 [[example]]
 name = "guided_tour"

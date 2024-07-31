@@ -276,7 +276,7 @@ impl Thread {
     ///
     /// ```
     /// # use mlua::{Lua, Result, Thread};
-    /// use futures::stream::TryStreamExt;
+    /// use futures_util::stream::TryStreamExt;
     /// # #[tokio::main]
     /// # async fn main() -> Result<()> {
     /// # let lua = Lua::new();

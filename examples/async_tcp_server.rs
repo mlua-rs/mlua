@@ -1,12 +1,10 @@
 use std::io;
 use std::net::SocketAddr;
-use std::rc::Rc;
 
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
-use tokio::task;
 
-use mlua::{chunk, Function, Lua, RegistryKey, String as LuaString, UserData, UserDataMethods};
+use mlua::{chunk, Function, Lua, String as LuaString, UserData, UserDataMethods};
 
 struct LuaTcpStream(TcpStream);
 
@@ -33,14 +31,12 @@ impl UserData for LuaTcpStream {
     }
 }
 
-async fn run_server(lua: Lua, handler: RegistryKey) -> io::Result<()> {
+async fn run_server(handler: Function) -> io::Result<()> {
     let addr: SocketAddr = ([127, 0, 0, 1], 3000).into();
     let listener = TcpListener::bind(addr).await.expect("cannot bind addr");
 
     println!("Listening on {}", addr);
 
-    let lua = Rc::new(lua);
-    let handler = Rc::new(handler);
     loop {
         let (stream, _) = match listener.accept().await {
             Ok(res) => res,
@@ -48,11 +44,8 @@ async fn run_server(lua: Lua, handler: RegistryKey) -> io::Result<()> {
             Err(err) => return Err(err),
         };
 
-        let lua = lua.clone();
         let handler = handler.clone();
-        task::spawn_local(async move {
-            let handler: Function = lua.registry_value(&handler).expect("cannot get Lua handler");
-
+        tokio::task::spawn(async move {
             let stream = LuaTcpStream(stream);
             if let Err(err) = handler.call_async::<_, ()>(stream).await {
                 eprintln!("{}", err);
@@ -66,7 +59,7 @@ async fn main() {
     let lua = Lua::new();
 
     // Create Lua handler function
-    let handler_fn = lua
+    let handler = lua
         .load(chunk! {
             function(stream)
                 local peer_addr = stream:peer_addr()
@@ -88,15 +81,7 @@ async fn main() {
         .eval::<Function>()
         .expect("cannot create Lua handler");
 
-    // Store it in the Registry
-    let handler = lua
-        .create_registry_value(handler_fn)
-        .expect("cannot store Lua handler");
-
-    task::LocalSet::new()
-        .run_until(run_server(lua, handler))
-        .await
-        .expect("cannot run server")
+    run_server(handler).await.expect("cannot run server")
 }
 
 fn is_transient_error(e: &io::Error) -> bool {
