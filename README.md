@@ -17,9 +17,7 @@
 [Benchmarks]: https://github.com/khvzak/script-bench-rs
 [FAQ]: FAQ.md
 
-> **Note**
->
-> See v0.9 [release notes](https://github.com/khvzak/mlua/blob/main/docs/release_notes/v0.9.md).
+# The main branch is the v0.10, development version of `mlua`. Please see the [v0.9](https://github.com/mlua-rs/mlua/tree/v0.9) branch for the stable versions of `mlua`.
 
 `mlua` is bindings to [Lua](https://www.lua.org) programming language for Rust with a goal to provide
 _safe_ (as far as it's possible), high level, easy to use, practical and flexible API.
