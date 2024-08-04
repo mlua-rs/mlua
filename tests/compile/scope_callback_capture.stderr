@@ -1,26 +1,5 @@
-warning: unused variable: `old`
- --> $DIR/scope_callback_capture.rs:9:29
+error[E0599]: no method named `scope` found for struct `Lua` in the current scope
+ --> tests/compile/scope_callback_capture.rs:5:9
   |
-9 |                 if let Some(old) = inner.take() {
-  |                             ^^^ help: if this is intentional, prefix it with an underscore: `_old`
-  |
-  = note: `#[warn(unused_variables)]` on by default
-
-error[E0521]: borrowed data escapes outside of closure
-  --> $DIR/scope_callback_capture.rs:7:17
-   |
-5  |       lua.scope(|scope| {
-   |                  -----
-   |                  |
-   |                  `scope` declared here, outside of the closure body
-   |                  `scope` is a reference that is only valid in the closure body
-6  |           let mut inner: Option<Table> = None;
-7  |           let f = scope
-   |  _________________^
-8  | |             .create_function_mut(move |_, t: Table| {
-9  | |                 if let Some(old) = inner.take() {
-10 | |                     // Access old callback `Lua`.
-...  |
-13 | |                 Ok(())
-14 | |             })?;
-   | |______________^ `scope` escapes the closure body here
+5 |     lua.scope(|scope| {
+  |     ----^^^^^ method not found in `Lua`

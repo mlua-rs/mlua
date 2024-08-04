@@ -54,7 +54,7 @@ pub trait AnyUserDataExt: Sealed {
     /// passing `args` as function arguments.
     ///
     /// This is a shortcut for
-    /// `table.get::<_, Function>(key)?.call(args)`
+    /// `table.get::<Function>(key)?.call(args)`
     ///
     /// This might invoke the `__index` metamethod.
     fn call_function<R>(&self, name: &str, args: impl IntoLuaMulti) -> Result<R>

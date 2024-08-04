@@ -11,7 +11,7 @@ fn main() -> Result<()> {
     lua.create_function(move |_, ()| {
         Ok(data.get())
     })?
-    .call::<_, i32>(())?;
+    .call::<i32>(())?;
 
     Ok(())
 }

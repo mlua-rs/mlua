@@ -9,7 +9,7 @@ fn main() {
                 outer = Some(t);
                 Ok(())
             })?;
-        f.call::<_, ()>(lua.create_table()?)?;
+        f.call::<()>(lua.create_table()?)?;
         Ok(())
     });
 }

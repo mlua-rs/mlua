@@ -882,7 +882,7 @@ pub trait TableExt: Sealed {
     /// passing the table itself along with `args` as function arguments.
     ///
     /// This is a shortcut for
-    /// `table.get::<_, Function>(key)?.call((table.clone(), arg1, ..., argN))`
+    /// `table.get::<Function>(key)?.call((table.clone(), arg1, ..., argN))`
     ///
     /// This might invoke the `__index` metamethod.
     fn call_method<R>(&self, name: &str, args: impl IntoLuaMulti) -> Result<R>
@@ -893,7 +893,7 @@ pub trait TableExt: Sealed {
     /// passing `args` as function arguments.
     ///
     /// This is a shortcut for
-    /// `table.get::<_, Function>(key)?.call(args)`
+    /// `table.get::<Function>(key)?.call(args)`
     ///
     /// This might invoke the `__index` metamethod.
     fn call_function<R>(&self, name: &str, args: impl IntoLuaMulti) -> Result<R>

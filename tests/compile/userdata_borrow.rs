@@ -9,9 +9,9 @@ fn main() -> Result<()> {
     impl UserData for MyUserData {};
     let _userdata_ref;
     {
-        let touter = globals.get::<_, Table>("touter")?;
+        let touter = globals.get::<Table>("touter")?;
         touter.set("userdata", lua.create_userdata(MyUserData)?)?;
-        let userdata = touter.get::<_, AnyUserData>("userdata")?;
+        let userdata = touter.get::<AnyUserData>("userdata")?;
         _userdata_ref = userdata.borrow::<MyUserData>();
         //~^ error: `userdata` does not live long enough
     }

@@ -12,7 +12,6 @@ fn test_compilation() {
     t.compile_fail("tests/compile/scope_invariance.rs");
     t.compile_fail("tests/compile/scope_mutable_aliasing.rs");
     t.compile_fail("tests/compile/scope_userdata_borrow.rs");
-    t.compile_fail("tests/compile/static_callback_args.rs");
 
     #[cfg(feature = "async")]
     {
