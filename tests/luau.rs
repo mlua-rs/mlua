@@ -33,6 +33,17 @@ fn test_require() -> Result<()> {
 
     lua = Lua::new();
 
+    // Check that require() can load stdlib modules (including `package`)
+    lua.load(
+        r#"
+        local math = require("math")
+        assert(math == _G.math, "math module does not match _G.math")
+        local package = require("package")
+        assert(package == _G.package, "package module does not match _G.package")
+    "#,
+    )
+    .exec()?;
+
     let temp_dir = tempfile::tempdir().unwrap();
     fs::write(
         temp_dir.path().join("module.luau"),

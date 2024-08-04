@@ -9,7 +9,6 @@ use crate::chunk::ChunkMode;
 use crate::error::Result;
 use crate::state::Lua;
 use crate::table::Table;
-use crate::types::RegistryKey;
 use crate::value::{IntoLua, Value};
 
 #[cfg(unix)]
@@ -26,9 +25,6 @@ const TARGET_MLUA_LUAU_ABI_VERSION: u32 = 1;
 #[no_mangle]
 #[used]
 pub static MLUA_LUAU_ABI_VERSION: u32 = TARGET_MLUA_LUAU_ABI_VERSION;
-
-// We keep reference to the `package` table in registry under this key
-struct PackageKey(RegistryKey);
 
 // We keep reference to the loaded dylibs in application data
 #[cfg(unix)]
@@ -51,9 +47,8 @@ impl std::ops::DerefMut for LoadedDylibs {
 }
 
 pub(crate) fn register_package_module(lua: &Lua) -> Result<()> {
-    // Create the package table and store it in app_data for later use (bypassing globals lookup)
+    // Create the package table
     let package = lua.create_table()?;
-    lua.set_app_data(PackageKey(lua.create_registry_value(&package)?));
 
     // Set `package.path`
     let mut search_path = env::var("LUAU_PATH")
@@ -81,9 +76,15 @@ pub(crate) fn register_package_module(lua: &Lua) -> Result<()> {
     }
 
     // Set `package.loaded` (table with a list of loaded modules)
-    let loaded = lua.create_table()?;
-    package.raw_set("loaded", &loaded)?;
-    lua.set_named_registry_value("_LOADED", loaded)?;
+    let loaded = if let Ok(Some(loaded)) = lua.named_registry_value::<Option<Table>>("_LOADED") {
+        package.raw_set("loaded", &loaded)?;
+        loaded
+    } else {
+        let loaded = lua.create_table()?;
+        package.raw_set("loaded", &loaded)?;
+        lua.set_named_registry_value("_LOADED", &loaded)?;
+        loaded
+    };
 
     // Set `package.loaders`
     let loaders = lua.create_sequence_from([lua.create_function(lua_loader)?])?;
@@ -97,7 +98,8 @@ pub(crate) fn register_package_module(lua: &Lua) -> Result<()> {
 
     // Register the module and `require` function in globals
     let globals = lua.globals();
-    globals.raw_set("package", package)?;
+    globals.raw_set("package", &package)?;
+    loaded.raw_set("package", package)?;
     globals.raw_set("require", unsafe { lua.create_c_function(lua_require)? })?;
 
     Ok(())
@@ -191,8 +193,8 @@ fn package_searchpath(name: &str, search_path: &str, try_prefix: bool) -> Option
 /// Tries to load a lua (text) file
 fn lua_loader(lua: &Lua, modname: StdString) -> Result<Value> {
     let package = {
-        let key = lua.app_data_ref::<PackageKey>().unwrap();
-        lua.registry_value::<Table>(&key.0)
+        let loaded = lua.named_registry_value::<Table>("_LOADED")?;
+        loaded.raw_get::<Table>("package")
     }?;
     let search_path = package.get::<StdString>("path").unwrap_or_default();
 
@@ -219,8 +221,8 @@ fn lua_loader(lua: &Lua, modname: StdString) -> Result<Value> {
 #[cfg(unix)]
 fn dylib_loader(lua: &Lua, modname: StdString) -> Result<Value> {
     let package = {
-        let key = lua.app_data_ref::<PackageKey>().unwrap();
-        lua.registry_value::<Table>(&key.0)
+        let loaded = lua.named_registry_value::<Table>("_LOADED")?;
+        loaded.raw_get::<Table>("package")
     }?;
     let search_cpath = package.get::<StdString>("cpath").unwrap_or_default();
 
