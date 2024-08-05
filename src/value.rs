@@ -792,13 +792,13 @@ impl DerefMut for MultiValue {
 
 impl MultiValue {
     /// Creates an empty `MultiValue` containing no values.
+    #[inline]
     pub fn new() -> MultiValue {
         Self::with_capacity(0)
     }
 
-    /// Similar to `new` but can reuse previously used container with allocated capacity.
-    #[inline]
-    pub(crate) fn with_capacity(capacity: usize) -> MultiValue {
+    /// Creates an empty `MultiValue` container with space for at least `capacity` elements.
+    pub fn with_capacity(capacity: usize) -> MultiValue {
         let deque = MULTIVALUE_POOL.with_borrow_mut(|pool| {
             pool.pop().map_or_else(
                 || VecDeque::with_capacity(capacity),
