@@ -49,7 +49,7 @@ impl<E: IntoLua> IntoLuaMulti for StdResult<(), E> {
 impl<T: IntoLua> IntoLuaMulti for T {
     #[inline]
     fn into_lua_multi(self, lua: &Lua) -> Result<MultiValue> {
-        let mut v = MultiValue::with_lua_and_capacity(lua, 1);
+        let mut v = MultiValue::with_capacity(1);
         v.push_back(self.into_lua(lua)?);
         Ok(v)
     }
@@ -177,7 +177,7 @@ impl<T> DerefMut for Variadic<T> {
 impl<T: IntoLua> IntoLuaMulti for Variadic<T> {
     #[inline]
     fn into_lua_multi(self, lua: &Lua) -> Result<MultiValue> {
-        let mut values = MultiValue::with_lua_and_capacity(lua, self.0.len());
+        let mut values = MultiValue::with_capacity(self.0.len());
         values.extend_from_values(self.0.into_iter().map(|val| val.into_lua(lua)))?;
         Ok(values)
     }
@@ -198,8 +198,8 @@ macro_rules! impl_tuple {
     () => (
         impl IntoLuaMulti for () {
             #[inline]
-            fn into_lua_multi(self, lua: &Lua) -> Result<MultiValue> {
-                Ok(MultiValue::with_lua_and_capacity(lua, 0))
+            fn into_lua_multi(self, _: &Lua) -> Result<MultiValue> {
+                Ok(MultiValue::new())
             }
 
             #[inline]

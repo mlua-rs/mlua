@@ -8,7 +8,6 @@ use crate::state::{ExtraData, RawLua};
 use crate::util::{self, get_internal_metatable, WrappedFailure};
 
 const WRAPPED_FAILURE_POOL_SIZE: usize = 64;
-// const MULTIVALUE_POOL_SIZE: usize = 64;
 
 pub(super) struct StateGuard<'a>(&'a RawLua, *mut ffi::lua_State);
 

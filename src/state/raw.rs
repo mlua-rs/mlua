@@ -496,25 +496,6 @@ impl RawLua {
         false
     }
 
-    // FIXME
-    // #[inline]
-    // pub(crate) fn pop_multivalue_from_pool(&self) -> Option<VecDeque<Value>> {
-    //     let extra = unsafe { &mut *self.extra.get() };
-    //     extra.multivalue_pool.pop()
-    // }
-
-    // FIXME
-    // #[inline]
-    // pub(crate) fn push_multivalue_to_pool(&self, mut multivalue: VecDeque<Value>) {
-    //     let extra = unsafe { &mut *self.extra.get() };
-    //     if extra.multivalue_pool.len() < MULTIVALUE_POOL_SIZE {
-    //         multivalue.clear();
-    //         extra
-    //             .multivalue_pool
-    //             .push(unsafe { mem::transmute(multivalue) });
-    //     }
-    // }
-
     /// Pushes a value that implements `IntoLua` onto the Lua stack.
     ///
     /// Uses 2 stack spaces, does not call checkstack.

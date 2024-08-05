@@ -1,10 +1,9 @@
 use std::any::TypeId;
 use std::cell::UnsafeCell;
-use std::rc::Rc;
-// use std::collections::VecDeque;
 use std::mem::{self, MaybeUninit};
 use std::os::raw::{c_int, c_void};
 use std::ptr;
+use std::rc::Rc;
 use std::sync::Arc;
 
 use parking_lot::Mutex;
@@ -28,7 +27,6 @@ use super::{Lua, WeakLua};
 static EXTRA_REGISTRY_KEY: u8 = 0;
 
 const WRAPPED_FAILURE_POOL_SIZE: usize = 64;
-// const MULTIVALUE_POOL_SIZE: usize = 64;
 const REF_STACK_RESERVE: c_int = 1;
 
 /// Data associated with the Lua state.
@@ -61,8 +59,6 @@ pub(crate) struct ExtraData {
 
     // Pool of `WrappedFailure` enums in the ref thread (as userdata)
     pub(super) wrapped_failure_pool: Vec<c_int>,
-    // Pool of `MultiValue` containers
-    // multivalue_pool: Vec<VecDeque<Value>>,
     // Pool of `Thread`s (coroutines) for async execution
     #[cfg(feature = "async")]
     pub(super) thread_pool: Vec<c_int>,
@@ -162,7 +158,6 @@ impl ExtraData {
             ref_stack_top: ffi::lua_gettop(ref_thread),
             ref_free: Vec::new(),
             wrapped_failure_pool: Vec::with_capacity(WRAPPED_FAILURE_POOL_SIZE),
-            // multivalue_pool: Vec::with_capacity(MULTIVALUE_POOL_SIZE),
             #[cfg(feature = "async")]
             thread_pool: Vec::new(),
             wrapped_failure_mt_ptr,
