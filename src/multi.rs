@@ -177,9 +177,7 @@ impl<T> DerefMut for Variadic<T> {
 impl<T: IntoLua> IntoLuaMulti for Variadic<T> {
     #[inline]
     fn into_lua_multi(self, lua: &Lua) -> Result<MultiValue> {
-        let mut values = MultiValue::with_capacity(self.0.len());
-        values.extend_from_values(self.0.into_iter().map(|val| val.into_lua(lua)))?;
-        Ok(values)
+        MultiValue::from_lua_iter(lua, self)
     }
 }
 

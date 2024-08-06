@@ -814,11 +814,13 @@ impl MultiValue {
     }
 
     #[inline]
-    pub(crate) fn extend_from_values(&mut self, iter: impl IntoIterator<Item = Result<Value>>) -> Result<()> {
+    pub(crate) fn from_lua_iter<T: IntoLua>(lua: &Lua, iter: impl IntoIterator<Item = T>) -> Result<Self> {
+        let iter = iter.into_iter();
+        let mut multi_value = MultiValue::with_capacity(iter.size_hint().0);
         for value in iter {
-            self.push_back(value?);
+            multi_value.push_back(value.into_lua(lua)?);
         }
-        Ok(())
+        Ok(multi_value)
     }
 }
 
