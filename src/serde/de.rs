@@ -504,13 +504,8 @@ struct MapDeserializer<'a> {
     processed: usize,
 }
 
-impl<'de> de::MapAccess<'de> for MapDeserializer<'_> {
-    type Error = Error;
-
-    fn next_key_seed<T>(&mut self, seed: T) -> Result<Option<T::Value>>
-    where
-        T: de::DeserializeSeed<'de>,
-    {
+impl<'a> MapDeserializer<'a> {
+    fn next_key_deserializer(&mut self) -> Result<Option<Deserializer>> {
         loop {
             match self.pairs.next() {
                 Some(item) => {
@@ -526,10 +521,35 @@ impl<'de> de::MapAccess<'de> for MapDeserializer<'_> {
                     self.value = Some(value);
                     let visited = Rc::clone(&self.visited);
                     let key_de = Deserializer::from_parts(key, self.options, visited);
-                    return seed.deserialize(key_de).map(Some);
+                    return Ok(Some(key_de));
                 }
                 None => return Ok(None),
             }
+        }
+    }
+
+    fn next_value_deserializer(&mut self) -> Result<Deserializer> {
+        match self.value.take() {
+            Some(value) => {
+                let visited = Rc::clone(&self.visited);
+                Ok(Deserializer::from_parts(value, self.options, visited))
+            }
+            None => Err(de::Error::custom("value is missing")),
+        }
+    }
+}
+
+impl<'de> de::MapAccess<'de> for MapDeserializer<'_> {
+    type Error = Error;
+
+    fn next_key_seed<T>(&mut self, seed: T) -> Result<Option<T::Value>>
+    where
+        T: de::DeserializeSeed<'de>,
+    {
+        match self.next_key_deserializer() {
+            Ok(Some(key_de)) => seed.deserialize(key_de).map(Some),
+            Ok(None) => Ok(None),
+            Err(error) => Err(error),
         }
     }
 
@@ -537,12 +557,9 @@ impl<'de> de::MapAccess<'de> for MapDeserializer<'_> {
     where
         T: de::DeserializeSeed<'de>,
     {
-        match self.value.take() {
-            Some(value) => {
-                let visited = Rc::clone(&self.visited);
-                seed.deserialize(Deserializer::from_parts(value, self.options, visited))
-            }
-            None => Err(de::Error::custom("value is missing")),
+        match self.next_value_deserializer() {
+            Ok(value_de) => seed.deserialize(value_de),
+            Err(error) => Err(error),
         }
     }
 
