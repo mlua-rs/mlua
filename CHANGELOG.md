@@ -6,6 +6,7 @@
 - Removed `UserData` impl for Rc/Arc types ("any" userdata functions can be used instead)
 - `Lua::replace_registry_value` takes `&mut RegistryKey`
 - `Lua::scope` temporary disabled (will be re-added in the next release)
+- Reduced the compile time contribution of `next_key_seed` and `next_value_seed`.
 
 ## v0.9.9
 
