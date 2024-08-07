@@ -657,6 +657,61 @@ impl<'lua> IntoLua<'lua> for &uuid::Uuid {
 }
 
 
+#[cfg(feature = "ultraviolet")]
+impl<'lua> FromLua<'lua> for ultraviolet::Vec3 {
+    #[inline]
+    fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> Result<ultraviolet::Vec3> {
+        match value {
+            Value::Table(table) => {
+                let x: f32 = table.get("x")?;
+                let y: f32 = table.get("y")?;
+                let z: f32 = table.get("z")?;
+                Ok(ultraviolet::Vec3::new(x, y, z))
+            },
+            _ => Err(Error::FromLuaConversionError {
+                from: value.type_name(),
+                to: "Vec3",
+                message: Some("expected table with keys 'x', 'y', 'z'".to_string()),
+            })
+        }
+    }
+}
+
+#[cfg(feature = "ultraviolet")]
+impl<'lua> IntoLua<'lua> for ultraviolet::Vec3 {
+    #[inline]
+    fn into_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
+        let table = lua.create_table()?;
+        table.set("x", self.x)?;
+        table.set("y", self.y)?;
+        table.set("z", self.z)?;
+        Ok(Value::Table(table))
+    }
+}
+
+#[cfg(feature = "ultraviolet")]
+impl<'lua> IntoLua<'lua> for &ultraviolet::Vec3 {
+    #[inline]
+    fn into_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
+        let table = lua.create_table()?;
+        table.set("x", self.x)?;
+        table.set("y", self.y)?;
+        table.set("z", self.z)?;
+        Ok(Value::Table(table))
+    }
+
+    #[inline]
+    unsafe fn push_into_stack(self, lua: &'lua Lua) -> Result<()> {
+        let table = lua.create_table()?;
+        table.set("x", self.x)?;
+        table.set("y", self.y)?;
+        table.set("z", self.z)?;
+        lua.push_ref(&table.0);
+        Ok(())
+    }   
+}
+
+
 // impl<'lua> FromLua<'lua> for Value<'lua> {
 //     #[inline]
 //     fn from_lua(lua_value: Value<'lua>, _: &'lua Lua) -> Result<Self> {
