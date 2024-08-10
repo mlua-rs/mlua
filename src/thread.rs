@@ -388,16 +388,17 @@ impl<R> AsyncThread<R> {
 impl<R> Drop for AsyncThread<R> {
     fn drop(&mut self) {
         if self.recycle {
-            unsafe {
-                let lua = self.thread.0.lua.lock();
-                // For Lua 5.4 this also closes all pending to-be-closed variables
-                if !lua.recycle_thread(&mut self.thread) {
-                    #[cfg(feature = "lua54")]
-                    if self.thread.status_inner(&lua) == ThreadStatus::Error {
-                        #[cfg(not(feature = "vendored"))]
-                        ffi::lua_resetthread(self.thread.state());
-                        #[cfg(feature = "vendored")]
-                        ffi::lua_closethread(self.thread.state(), lua.state());
+            if let Some(lua) = self.thread.0.lua.try_lock() {
+                unsafe {
+                    // For Lua 5.4 this also closes all pending to-be-closed variables
+                    if !lua.recycle_thread(&mut self.thread) {
+                        #[cfg(feature = "lua54")]
+                        if self.thread.status_inner(&lua) == ThreadStatus::Error {
+                            #[cfg(not(feature = "vendored"))]
+                            ffi::lua_resetthread(self.thread.state());
+                            #[cfg(feature = "vendored")]
+                            ffi::lua_closethread(self.thread.state(), lua.state());
+                        }
                     }
                 }
             }
