@@ -287,7 +287,7 @@ pub trait UserDataMethods<'a, T> {
         T: 'static,
         M: Fn(&'a Lua, &'a T, A) -> MR + MaybeSend + 'static,
         A: FromLuaMulti,
-        MR: Future<Output = Result<R>> + 'a,
+        MR: Future<Output = Result<R>> + MaybeSend + 'a,
         R: IntoLuaMulti;
 
     /// Add an async method which accepts a `&mut T` as the first parameter and returns Future.
@@ -304,7 +304,7 @@ pub trait UserDataMethods<'a, T> {
         T: 'static,
         M: Fn(&'a Lua, &'a mut T, A) -> MR + MaybeSend + 'static,
         A: FromLuaMulti,
-        MR: Future<Output = Result<R>> + 'a,
+        MR: Future<Output = Result<R>> + MaybeSend + 'a,
         R: IntoLuaMulti;
 
     /// Add a regular method as a function which accepts generic arguments, the first argument will
@@ -348,7 +348,7 @@ pub trait UserDataMethods<'a, T> {
     where
         F: Fn(&'a Lua, A) -> FR + MaybeSend + 'static,
         A: FromLuaMulti,
-        FR: Future<Output = Result<R>> + 'a,
+        FR: Future<Output = Result<R>> + MaybeSend + 'a,
         R: IntoLuaMulti;
 
     /// Add a metamethod which accepts a `&T` as the first parameter.
@@ -393,7 +393,7 @@ pub trait UserDataMethods<'a, T> {
         T: 'static,
         M: Fn(&'a Lua, &'a T, A) -> MR + MaybeSend + 'static,
         A: FromLuaMulti,
-        MR: Future<Output = Result<R>> + 'a,
+        MR: Future<Output = Result<R>> + MaybeSend + 'a,
         R: IntoLuaMulti;
 
     /// Add an async metamethod which accepts a `&mut T` as the first parameter and returns Future.
@@ -410,7 +410,7 @@ pub trait UserDataMethods<'a, T> {
         T: 'static,
         M: Fn(&'a Lua, &'a mut T, A) -> MR + MaybeSend + 'static,
         A: FromLuaMulti,
-        MR: Future<Output = Result<R>> + 'a,
+        MR: Future<Output = Result<R>> + MaybeSend + 'a,
         R: IntoLuaMulti;
 
     /// Add a metamethod which accepts generic arguments.
@@ -448,7 +448,7 @@ pub trait UserDataMethods<'a, T> {
     where
         F: Fn(&'a Lua, A) -> FR + MaybeSend + 'static,
         A: FromLuaMulti,
-        FR: Future<Output = Result<R>> + 'a,
+        FR: Future<Output = Result<R>> + MaybeSend + 'a,
         R: IntoLuaMulti;
 }
 

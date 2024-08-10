@@ -528,4 +528,8 @@ mod assertions {
     static_assertions::assert_not_impl_any!(Thread: Send);
     #[cfg(feature = "send")]
     static_assertions::assert_impl_all!(Thread: Send, Sync);
+    #[cfg(all(feature = "async", not(feature = "send")))]
+    static_assertions::assert_not_impl_any!(AsyncThread<()>: Send);
+    #[cfg(all(feature = "async", feature = "send"))]
+    static_assertions::assert_impl_all!(AsyncThread<()>: Send, Sync);
 }

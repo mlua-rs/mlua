@@ -1092,7 +1092,7 @@ impl RawLua {
 
                 let args = MultiValue::from_stack_multi(nargs, rawlua)?;
                 let func = &*(*upvalue).data;
-                let fut = func(rawlua, args);
+                let fut = func(rawlua.lua(), args);
                 let extra = XRc::clone(&(*upvalue).extra);
                 let protect = !rawlua.unlikely_memory_error();
                 push_internal_userdata(state, AsyncPollUpvalue { data: fut, extra }, protect)?;

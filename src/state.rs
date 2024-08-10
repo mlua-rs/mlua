@@ -1,6 +1,5 @@
 use std::any::TypeId;
 use std::cell::RefCell;
-// use std::collections::VecDeque;
 use std::marker::PhantomData;
 use std::ops::Deref;
 use std::os::raw::{c_int, c_void};
@@ -1163,17 +1162,16 @@ impl Lua {
         'lua: 'a,
         F: Fn(&'a Lua, A) -> FR + MaybeSend + 'static,
         A: FromLuaMulti,
-        FR: Future<Output = Result<R>> + 'a,
+        FR: Future<Output = Result<R>> + MaybeSend + 'a,
         R: IntoLuaMulti,
     {
-        (self.lock()).create_async_callback(Box::new(move |rawlua, args| unsafe {
-            let lua = rawlua.lua();
+        (self.lock()).create_async_callback(Box::new(move |lua, args| unsafe {
             let args = match A::from_lua_args(args, 1, None, lua) {
                 Ok(args) => args,
                 Err(e) => return Box::pin(future::ready(Err(e))),
             };
             let fut = func(lua, args);
-            Box::pin(async move { fut.await?.push_into_stack_multi(rawlua) })
+            Box::pin(async move { fut.await?.push_into_stack_multi(lua.raw_lua()) })
         }))
     }
 
@@ -1839,6 +1837,14 @@ impl Lua {
     #[inline(always)]
     pub(crate) fn weak(&self) -> WeakLua {
         WeakLua(XRc::downgrade(&self.0))
+    }
+
+    /// Returns a handle to the unprotected Lua state without any synchronization.
+    ///
+    /// This is useful where we know that the lock is already held by the caller.
+    #[inline(always)]
+    pub(crate) unsafe fn raw_lua(&self) -> &RawLua {
+        &*self.0.data_ptr()
     }
 }
 

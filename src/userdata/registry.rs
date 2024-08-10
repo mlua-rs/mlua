@@ -132,7 +132,7 @@ impl<'a, T: 'static> UserDataRegistry<'a, T> {
     where
         M: Fn(&'a Lua, &'a T, A) -> MR + MaybeSend + 'static,
         A: FromLuaMulti,
-        MR: Future<Output = Result<R>> + 'a,
+        MR: Future<Output = Result<R>> + MaybeSend + 'a,
         R: IntoLuaMulti,
     {
         let name = get_function_name::<T>(name);
@@ -145,15 +145,14 @@ impl<'a, T: 'static> UserDataRegistry<'a, T> {
             };
         }
 
-        Box::new(move |rawlua, mut args| unsafe {
+        Box::new(move |lua, mut args| unsafe {
             let this = args
                 .pop_front()
                 .ok_or_else(|| Error::from_lua_conversion("missing argument", "userdata", None));
-            let lua = rawlua.lua();
             let this = try_self_arg!(AnyUserData::from_lua(try_self_arg!(this), lua));
             let args = A::from_lua_args(args, 2, Some(&name), lua);
 
-            let (ref_thread, index) = (rawlua.ref_thread(), this.0.index);
+            let (ref_thread, index) = (lua.raw_lua().ref_thread(), this.0.index);
             match try_self_arg!(this.type_id()) {
                 Some(id) if id == TypeId::of::<T>() => {
                     let ud = try_self_arg!(borrow_userdata_ref::<T>(ref_thread, index));
@@ -162,7 +161,7 @@ impl<'a, T: 'static> UserDataRegistry<'a, T> {
                         Err(e) => return Box::pin(future::ready(Err(e))),
                     };
                     let fut = method(lua, ud.get_ref(), args);
-                    Box::pin(async move { fut.await?.push_into_stack_multi(rawlua) })
+                    Box::pin(async move { fut.await?.push_into_stack_multi(lua.raw_lua()) })
                 }
                 _ => {
                     let err = Error::bad_self_argument(&name, Error::UserDataTypeMismatch);
@@ -177,7 +176,7 @@ impl<'a, T: 'static> UserDataRegistry<'a, T> {
     where
         M: Fn(&'a Lua, &'a mut T, A) -> MR + MaybeSend + 'static,
         A: FromLuaMulti,
-        MR: Future<Output = Result<R>> + 'a,
+        MR: Future<Output = Result<R>> + MaybeSend + 'a,
         R: IntoLuaMulti,
     {
         let name = get_function_name::<T>(name);
@@ -190,15 +189,14 @@ impl<'a, T: 'static> UserDataRegistry<'a, T> {
             };
         }
 
-        Box::new(move |rawlua, mut args| unsafe {
+        Box::new(move |lua, mut args| unsafe {
             let this = args
                 .pop_front()
                 .ok_or_else(|| Error::from_lua_conversion("missing argument", "userdata", None));
-            let lua = rawlua.lua();
             let this = try_self_arg!(AnyUserData::from_lua(try_self_arg!(this), lua));
             let args = A::from_lua_args(args, 2, Some(&name), lua);
 
-            let (ref_thread, index) = (rawlua.ref_thread(), this.0.index);
+            let (ref_thread, index) = (lua.raw_lua().ref_thread(), this.0.index);
             match try_self_arg!(this.type_id()) {
                 Some(id) if id == TypeId::of::<T>() => {
                     let mut ud = try_self_arg!(borrow_userdata_mut::<T>(ref_thread, index));
@@ -207,7 +205,7 @@ impl<'a, T: 'static> UserDataRegistry<'a, T> {
                         Err(e) => return Box::pin(future::ready(Err(e))),
                     };
                     let fut = method(lua, ud.get_mut(), args);
-                    Box::pin(async move { fut.await?.push_into_stack_multi(rawlua) })
+                    Box::pin(async move { fut.await?.push_into_stack_multi(lua.raw_lua()) })
                 }
                 _ => {
                     let err = Error::bad_self_argument(&name, Error::UserDataTypeMismatch);
@@ -252,18 +250,17 @@ impl<'a, T: 'static> UserDataRegistry<'a, T> {
     where
         F: Fn(&'a Lua, A) -> FR + MaybeSend + 'static,
         A: FromLuaMulti,
-        FR: Future<Output = Result<R>> + 'a,
+        FR: Future<Output = Result<R>> + MaybeSend + 'a,
         R: IntoLuaMulti,
     {
         let name = get_function_name::<T>(name);
-        Box::new(move |rawlua, args| unsafe {
-            let lua = rawlua.lua();
+        Box::new(move |lua, args| unsafe {
             let args = match A::from_lua_args(args, 1, Some(&name), lua) {
                 Ok(args) => args,
                 Err(e) => return Box::pin(future::ready(Err(e))),
             };
             let fut = function(lua, args);
-            Box::pin(async move { fut.await?.push_into_stack_multi(rawlua) })
+            Box::pin(async move { fut.await?.push_into_stack_multi(lua.raw_lua()) })
         })
     }
 
@@ -397,7 +394,7 @@ impl<'a, T: 'static> UserDataMethods<'a, T> for UserDataRegistry<'a, T> {
     where
         M: Fn(&'a Lua, &'a T, A) -> MR + MaybeSend + 'static,
         A: FromLuaMulti,
-        MR: Future<Output = Result<R>> + 'a,
+        MR: Future<Output = Result<R>> + MaybeSend + 'a,
         R: IntoLuaMulti,
     {
         let name = name.to_string();
@@ -410,7 +407,7 @@ impl<'a, T: 'static> UserDataMethods<'a, T> for UserDataRegistry<'a, T> {
     where
         M: Fn(&'a Lua, &'a mut T, A) -> MR + MaybeSend + 'static,
         A: FromLuaMulti,
-        MR: Future<Output = Result<R>> + 'a,
+        MR: Future<Output = Result<R>> + MaybeSend + 'a,
         R: IntoLuaMulti,
     {
         let name = name.to_string();
@@ -445,7 +442,7 @@ impl<'a, T: 'static> UserDataMethods<'a, T> for UserDataRegistry<'a, T> {
     where
         F: Fn(&'a Lua, A) -> FR + MaybeSend + 'static,
         A: FromLuaMulti,
-        FR: Future<Output = Result<R>> + 'a,
+        FR: Future<Output = Result<R>> + MaybeSend + 'a,
         R: IntoLuaMulti,
     {
         let name = name.to_string();
@@ -480,7 +477,7 @@ impl<'a, T: 'static> UserDataMethods<'a, T> for UserDataRegistry<'a, T> {
     where
         M: Fn(&'a Lua, &'a T, A) -> MR + MaybeSend + 'static,
         A: FromLuaMulti,
-        MR: Future<Output = Result<R>> + 'a,
+        MR: Future<Output = Result<R>> + MaybeSend + 'a,
         R: IntoLuaMulti,
     {
         let name = name.to_string();
@@ -493,7 +490,7 @@ impl<'a, T: 'static> UserDataMethods<'a, T> for UserDataRegistry<'a, T> {
     where
         M: Fn(&'a Lua, &'a mut T, A) -> MR + MaybeSend + 'static,
         A: FromLuaMulti,
-        MR: Future<Output = Result<R>> + 'a,
+        MR: Future<Output = Result<R>> + MaybeSend + 'a,
         R: IntoLuaMulti,
     {
         let name = name.to_string();
@@ -528,7 +525,7 @@ impl<'a, T: 'static> UserDataMethods<'a, T> for UserDataRegistry<'a, T> {
     where
         F: Fn(&'a Lua, A) -> FR + MaybeSend + 'static,
         A: FromLuaMulti,
-        FR: Future<Output = Result<R>> + 'a,
+        FR: Future<Output = Result<R>> + MaybeSend + 'a,
         R: IntoLuaMulti,
     {
         let name = name.to_string();

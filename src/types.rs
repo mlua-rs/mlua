@@ -13,7 +13,13 @@ use crate::hook::Debug;
 use crate::state::{ExtraData, Lua, RawLua, WeakLua};
 
 #[cfg(feature = "async")]
-use {crate::value::MultiValue, futures_util::future::LocalBoxFuture};
+use crate::value::MultiValue;
+
+#[cfg(all(feature = "async", feature = "send"))]
+pub(crate) type BoxFuture<'a, T> = futures_util::future::BoxFuture<'a, T>;
+
+#[cfg(all(feature = "async", not(feature = "send")))]
+pub(crate) type BoxFuture<'a, T> = futures_util::future::LocalBoxFuture<'a, T>;
 
 #[cfg(all(feature = "luau", feature = "serialize"))]
 use serde::ser::{Serialize, SerializeTupleStruct, Serializer};
@@ -57,13 +63,13 @@ pub(crate) type CallbackUpvalue = Upvalue<Callback<'static>>;
 
 #[cfg(feature = "async")]
 pub(crate) type AsyncCallback<'a> =
-    Box<dyn Fn(&'a RawLua, MultiValue) -> LocalBoxFuture<'a, Result<c_int>> + 'static>;
+    Box<dyn Fn(&'a Lua, MultiValue) -> BoxFuture<'a, Result<c_int>> + 'static>;
 
 #[cfg(feature = "async")]
 pub(crate) type AsyncCallbackUpvalue = Upvalue<AsyncCallback<'static>>;
 
 #[cfg(feature = "async")]
-pub(crate) type AsyncPollUpvalue = Upvalue<LocalBoxFuture<'static, Result<c_int>>>;
+pub(crate) type AsyncPollUpvalue = Upvalue<BoxFuture<'static, Result<c_int>>>;
 
 /// Type to set next Luau VM action after executing interrupt function.
 #[cfg(any(feature = "luau", doc))]
@@ -91,6 +97,7 @@ pub(crate) type WarnCallback = Box<dyn Fn(&Lua, &str, bool) -> Result<()> + Send
 #[cfg(all(not(feature = "send"), feature = "lua54"))]
 pub(crate) type WarnCallback = Box<dyn Fn(&Lua, &str, bool) -> Result<()>>;
 
+/// A trait that adds `Send` requirement if `send` feature is enabled.
 #[cfg(feature = "send")]
 pub trait MaybeSend: Send {}
 #[cfg(feature = "send")]

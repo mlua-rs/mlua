@@ -559,17 +559,15 @@ impl Function {
         A: FromLuaMulti,
         R: IntoLuaMulti,
         F: Fn(&Lua, A) -> FR + MaybeSend + 'static,
-        FR: Future<Output = Result<R>> + 'static,
+        FR: Future<Output = Result<R>> + MaybeSend + 'static,
     {
-        WrappedAsyncFunction(Box::new(move |rawlua, args| unsafe {
-            let lua = rawlua.lua();
+        WrappedAsyncFunction(Box::new(move |lua, args| unsafe {
             let args = match A::from_lua_args(args, 1, None, lua) {
                 Ok(args) => args,
                 Err(e) => return Box::pin(future::ready(Err(e))),
             };
             let fut = func(lua, args);
-            let weak = rawlua.weak().clone();
-            Box::pin(async move { fut.await?.push_into_stack_multi(&weak.lock()) })
+            Box::pin(async move { fut.await?.push_into_stack_multi(lua.raw_lua()) })
         }))
     }
 }

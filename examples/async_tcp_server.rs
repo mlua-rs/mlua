@@ -4,7 +4,7 @@ use std::net::SocketAddr;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 
-use mlua::{chunk, Function, Lua, String as LuaString, UserData, UserDataMethods};
+use mlua::{chunk, BString, Function, Lua, UserData, UserDataMethods};
 
 struct LuaTcpStream(TcpStream);
 
@@ -19,8 +19,8 @@ impl UserData for LuaTcpStream {
             lua.create_string(&buf)
         });
 
-        methods.add_async_method_mut("write", |_, this, data: LuaString| async move {
-            let n = this.0.write(&data.as_bytes()).await?;
+        methods.add_async_method_mut("write", |_, this, data: BString| async move {
+            let n = this.0.write(&data).await?;
             Ok(n)
         });
 

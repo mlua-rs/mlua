@@ -1,9 +1,10 @@
 #![cfg(feature = "async")]
 
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::Duration;
 
 use futures_util::stream::TryStreamExt;
+use tokio::sync::Mutex;
 
 use mlua::{
     AnyUserDataExt, Error, Function, Lua, LuaOptions, MultiValue, Result, StdLib, Table, TableExt, UserData,
@@ -504,7 +505,7 @@ async fn test_async_terminate() -> Result<()> {
     let func = lua.create_async_function(move |_, ()| {
         let mutex = mutex2.clone();
         async move {
-            let _guard = mutex.lock();
+            let _guard = mutex.lock().await;
             sleep_ms(100).await;
             Ok(())
         }

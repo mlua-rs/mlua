@@ -100,6 +100,7 @@ mod value;
 
 pub mod prelude;
 
+pub use bstr::BString;
 pub use ffi::{self, lua_CFunction, lua_State};
 
 pub use crate::chunk::{AsChunk, Chunk, ChunkMode};
@@ -113,7 +114,7 @@ pub use crate::stdlib::StdLib;
 pub use crate::string::{BorrowedBytes, BorrowedStr, String};
 pub use crate::table::{Table, TableExt, TablePairs, TableSequence};
 pub use crate::thread::{Thread, ThreadStatus};
-pub use crate::types::{AppDataRef, AppDataRefMut, Integer, LightUserData, Number, RegistryKey};
+pub use crate::types::{AppDataRef, AppDataRefMut, Integer, LightUserData, MaybeSend, Number, RegistryKey};
 pub use crate::userdata::{
     AnyUserData, AnyUserDataExt, MetaMethod, UserData, UserDataFields, UserDataMetatable, UserDataMethods,
     UserDataRef, UserDataRefMut, UserDataRegistry,
