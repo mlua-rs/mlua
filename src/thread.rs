@@ -129,7 +129,7 @@ impl Thread {
             let _sg = StackGuard::new(state);
             let _thread_sg = StackGuard::with_top(thread_state, 0);
 
-            let nresults = self.resume_inner(args)?;
+            let nresults = self.resume_inner(&lua, args)?;
             check_stack(state, nresults + 1)?;
             ffi::lua_xmove(thread_state, state, nresults);
 
@@ -140,8 +140,7 @@ impl Thread {
     /// Resumes execution of this thread.
     ///
     /// It's similar to `resume()` but leaves `nresults` values on the thread stack.
-    unsafe fn resume_inner(&self, args: impl IntoLuaMulti) -> Result<c_int> {
-        let lua = self.0.lua.lock();
+    unsafe fn resume_inner(&self, lua: &RawLua, args: impl IntoLuaMulti) -> Result<c_int> {
         let state = lua.state();
         let thread_state = self.state();
 
@@ -426,9 +425,9 @@ impl<R: FromLuaMulti> Stream for AsyncThread<R> {
             // This is safe as we are not moving the whole struct
             let this = self.get_unchecked_mut();
             let nresults = if let Some(args) = this.init_args.take() {
-                this.thread.resume_inner(args?)?
+                this.thread.resume_inner(&lua, args?)?
             } else {
-                this.thread.resume_inner(())?
+                this.thread.resume_inner(&lua, ())?
             };
 
             if nresults == 1 && is_poll_pending(thread_state) {
@@ -464,9 +463,9 @@ impl<R: FromLuaMulti> Future for AsyncThread<R> {
             // This is safe as we are not moving the whole struct
             let this = self.get_unchecked_mut();
             let nresults = if let Some(args) = this.init_args.take() {
-                this.thread.resume_inner(args?)?
+                this.thread.resume_inner(&lua, args?)?
             } else {
-                this.thread.resume_inner(())?
+                this.thread.resume_inner(&lua, ())?
             };
 
             if nresults == 1 && is_poll_pending(thread_state) {
