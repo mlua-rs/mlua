@@ -722,8 +722,8 @@ fn serde_userdata<V>(
     match serde_value::to_value(ud) {
         Ok(value) => match f(value) {
             Ok(r) => Ok(r),
-            Err(error) => Err(Error::SerializeError(error.to_string())),
+            Err(error) => Err(Error::DeserializeError(error.to_string())),
         },
-        Err(error) => Err(Error::DeserializeError(error.to_string())),
+        Err(error) => Err(Error::SerializeError(error.to_string())),
     }
 }
