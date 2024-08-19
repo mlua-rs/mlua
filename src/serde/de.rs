@@ -719,6 +719,11 @@ fn serde_userdata<V>(
     ud: AnyUserData,
     f: impl FnOnce(serde_value::Value) -> std::result::Result<V, serde_value::DeserializerError>,
 ) -> Result<V> {
-    let value = serde_value::to_value(ud).map_err(|err| Error::SerializeError(err.to_string()))?;
-    f(value).map_err(|err| Error::DeserializeError(err.to_string()))
+    match serde_value::to_value(ud) {
+        Ok(value) => match f(value) {
+            Ok(r) => Ok(r),
+            Err(error) => Err(Error::SerializeError(error.to_string())),
+        },
+        Err(error) => Err(Error::DeserializeError(error.to_string())),
+    }
 }
