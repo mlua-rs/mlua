@@ -129,27 +129,23 @@ Changes since v0.9.0-rc.3
 - Added `UserDataFields::add_field()` method to add static fields to UserData
 
 Breaking changes:
-
 - Require environment to be a `Table` instead of `Value` in Chunks.
 - `AsChunk::env()` renamed to `AsChunk::environment()`
 
 ## v0.9.0-beta.2
 
 New features:
-
 - Added `Thread::set_hook()` function to set hook on threads
 - Added pretty print to the Debug formatting to Lua `Value` and `Table`
 - ffi layer moved to `mlua-sys` crate
 - Added OwnedString (unstable)
 
 Breaking changes:
-
 - Refactor `HookTriggers` (make it const)
 
 ## v0.9.0-beta.1
 
 New features:
-
 - Owned Lua types (unstable feature flag)
 - New functions `Function::wrap`/`Function::wrap_mut`/`Function::wrap_async`
 - `Lua::register_userdata_type()` to register a custom userdata types (without requiring `UserData` trait)
@@ -158,12 +154,11 @@ New features:
 - Added `AnyUserDataExt` trait with auxiliary functions for `AnyUserData`
 - Added `UserDataRef` and `UserDataRefMut` type wrapped that implement `FromLua`
 - Improved error handling:
-  - Improved error reporting when calling Rust functions from Lua.
-  - Added `Error::BadArgument` to help identify bad argument position or name
-  - Added `ErrorContext` extension trait to attach additional context to `Error`
+  * Improved error reporting when calling Rust functions from Lua.
+  * Added `Error::BadArgument` to help identify bad argument position or name
+  * Added `ErrorContext` extension trait to attach additional context to `Error`
 
 Breaking changes:
-
 - Refactored `AsChunk` trait
 - `ToLua`/`ToLuaMulti` renamed to `IntoLua`/`IntoLuaMulti`
 - Renamed `to_lua_err` to `into_lua_err`
@@ -172,7 +167,6 @@ Breaking changes:
 - Added `&Lua` arg to Luau interrupt callback
 
 Other:
-
 - Better Debug for String
 - Allow deserializing values from serializable UserData using `Lua::from_value()` method
 - Added `Table::clear()` method
@@ -196,7 +190,7 @@ Other:
 ## v0.8.8
 
 - Fix potential deadlock when trying to reuse dropped registry keys.
-- Optimize userdata methods call when \_\_index and fields_getters are nil
+- Optimize userdata methods call when __index and fields_getters are nil
 
 ## v0.8.7
 
@@ -241,9 +235,7 @@ Other:
 - Bugfixes and improvements (#176 #179)
 
 ## v0.8.0
-
 Changes since 0.7.4
-
 - Roblox Luau support
 - Removed C glue
 - Added async support to `__index` and `__newindex` metamethods
@@ -254,7 +246,6 @@ Changes since 0.7.4
 - Performance improvements
 
 Breaking changes:
-
 - Refactored `AsChunk` trait (added implementation for `Path` and `PathBuf`).
 
 ## v0.8.0-beta.5
@@ -376,9 +367,7 @@ Breaking changes:
 - `once_cell` dependency lowered to 1.0
 
 ## v0.6.0
-
 Changes since 0.5.4
-
 - New `UserDataFields` API
 - Full access to `UserData` metatables with support of setting arbitrary fields.
 - Implement `UserData` for `Rc<RefCell<T>>`/`Arc<Mutex<T>>`/`Arc<RwLock<T>>` where `T: UserData`.
@@ -392,7 +381,6 @@ Changes since 0.5.4
 - Various bugfixes and improvements
 
 Breaking changes:
-
 - Errors are always `Send + Sync` to be compatible with the anyhow crate.
 - Removed `Result` from `LuaSerdeExt::null()` and `LuaSerdeExt::array_metatable()` (never fails)
 - Removed `Result` from `Function::dump()` (never fails)
