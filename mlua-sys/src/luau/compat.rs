@@ -326,6 +326,7 @@ pub unsafe fn luaL_loadbufferx(
     mut size: usize,
     name: *const c_char,
     mode: *const c_char,
+    env: c_int
 ) -> c_int {
     extern "C" {
         fn free(p: *mut c_void);
@@ -345,12 +346,12 @@ pub unsafe fn luaL_loadbufferx(
 
     if chunk_is_text {
         let data = luau_compile_(data, size, ptr::null_mut(), &mut size);
-        let ok = luau_load(L, name, data, size, 0) == 0;
+        let ok = luau_load(L, name, data, size, env) == 0;
         free(data as *mut c_void);
         if !ok {
             return LUA_ERRSYNTAX;
         }
-    } else if luau_load(L, name, data, size, 0) != 0 {
+    } else if luau_load(L, name, data, size, env) != 0 {
         return LUA_ERRSYNTAX;
     }
     LUA_OK
@@ -361,9 +362,9 @@ pub unsafe fn luaL_loadbuffer(
     L: *mut lua_State,
     data: *const c_char,
     size: usize,
-    name: *const c_char,
+    name: *const c_char
 ) -> c_int {
-    luaL_loadbufferx(L, data, size, name, ptr::null())
+    luaL_loadbufferx(L, data, size, name, ptr::null(), 0)
 }
 
 #[inline(always)]

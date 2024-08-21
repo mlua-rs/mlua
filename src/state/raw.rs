@@ -319,13 +319,22 @@ impl RawLua {
                 source.len(),
                 name.map(|n| n.as_ptr()).unwrap_or_else(ptr::null),
                 mode_str,
+                #[cfg(feature="luau")]
+                match &env {
+                    Some(env) => {
+                        self.push_ref(&env.0);
+                        -1
+                    }
+                    _ => 0
+                },
             ) {
                 ffi::LUA_OK => {
                     if let Some(env) = env {
+                        #[cfg(not(feature="luau"))]
                         self.push_ref(&env.0);
                         #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
                         ffi::lua_setupvalue(state, -2, 1);
-                        #[cfg(any(feature = "lua51", feature = "luajit", feature = "luau"))]
+                        #[cfg(any(feature = "lua51", feature = "luajit"))]
                         ffi::lua_setfenv(state, -2);
                     }
 
