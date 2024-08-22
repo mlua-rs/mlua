@@ -21,7 +21,7 @@ impl TypeKey for String {
 
 static CALLBACK_TYPE_KEY: u8 = 0;
 
-impl TypeKey for Callback<'static> {
+impl TypeKey for Callback {
     #[inline(always)]
     fn type_key() -> *const c_void {
         &CALLBACK_TYPE_KEY as *const u8 as *const c_void
@@ -41,7 +41,7 @@ impl TypeKey for CallbackUpvalue {
 static ASYNC_CALLBACK_TYPE_KEY: u8 = 0;
 
 #[cfg(feature = "async")]
-impl TypeKey for AsyncCallback<'static> {
+impl TypeKey for AsyncCallback {
     #[inline(always)]
     fn type_key() -> *const c_void {
         &ASYNC_CALLBACK_TYPE_KEY as *const u8 as *const c_void

@@ -39,7 +39,7 @@ fn test_methods() -> Result<()> {
     struct MyUserData(i64);
 
     impl UserData for MyUserData {
-        fn add_methods<'a, M: UserDataMethods<'a, Self>>(methods: &mut M) {
+        fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
             methods.add_method("get_value", |_, data, ()| Ok(data.0));
             methods.add_method_mut("set_value", |_, data, args| {
                 data.0 = args;
@@ -89,7 +89,7 @@ fn test_method_variadic() -> Result<()> {
     struct MyUserData(i64);
 
     impl UserData for MyUserData {
-        fn add_methods<'a, M: UserDataMethods<'a, Self>>(methods: &mut M) {
+        fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
             methods.add_method("get", |_, data, ()| Ok(data.0));
             methods.add_method_mut("add", |_, data, vals: Variadic<i64>| {
                 data.0 += vals.into_iter().sum::<i64>();
@@ -114,7 +114,7 @@ fn test_metamethods() -> Result<()> {
     struct MyUserData(i64);
 
     impl UserData for MyUserData {
-        fn add_methods<'a, M: UserDataMethods<'a, Self>>(methods: &mut M) {
+        fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
             methods.add_method("get", |_, data, ()| Ok(data.0));
             methods.add_meta_function(
                 MetaMethod::Add,
@@ -213,7 +213,7 @@ fn test_metamethod_close() -> Result<()> {
     struct MyUserData(Arc<AtomicI64>);
 
     impl UserData for MyUserData {
-        fn add_methods<'a, M: UserDataMethods<'a, Self>>(methods: &mut M) {
+        fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
             methods.add_method("get", |_, data, ()| Ok(data.0.load(Ordering::Relaxed)));
             methods.add_meta_method(MetaMethod::Close, |_, data, _err: Value| {
                 data.0.store(0, Ordering::Relaxed);
@@ -259,7 +259,7 @@ fn test_gc_userdata() -> Result<()> {
     }
 
     impl UserData for MyUserdata {
-        fn add_methods<'a, M: UserDataMethods<'a, Self>>(methods: &mut M) {
+        fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
             methods.add_method("access", |_, this, ()| {
                 assert!(this.id == 123);
                 Ok(())
@@ -298,7 +298,7 @@ fn test_userdata_take() -> Result<()> {
     struct MyUserdata(Arc<i64>);
 
     impl UserData for MyUserdata {
-        fn add_methods<'a, M: UserDataMethods<'a, Self>>(methods: &mut M) {
+        fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
             methods.add_method("num", |_, this, ()| Ok(*this.0))
         }
     }
@@ -433,7 +433,7 @@ fn test_functions() -> Result<()> {
     struct MyUserData(i64);
 
     impl UserData for MyUserData {
-        fn add_methods<'a, M: UserDataMethods<'a, Self>>(methods: &mut M) {
+        fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
             methods.add_function("get_value", |_, ud: AnyUserData| Ok(ud.borrow::<MyUserData>()?.0));
             methods.add_function_mut("set_value", |_, (ud, value): (AnyUserData, i64)| {
                 ud.borrow_mut::<MyUserData>()?.0 = value;
@@ -485,7 +485,7 @@ fn test_fields() -> Result<()> {
     struct MyUserData(i64);
 
     impl UserData for MyUserData {
-        fn add_fields<'a, F: UserDataFields<'a, Self>>(fields: &mut F) {
+        fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
             fields.add_field("static", "constant");
             fields.add_field_method_get("val", |_, data| Ok(data.0));
             fields.add_field_method_set("val", |_, data, val| {
@@ -531,12 +531,12 @@ fn test_fields() -> Result<()> {
     struct MyUserData2(i64);
 
     impl UserData for MyUserData2 {
-        fn add_fields<'a, F: UserDataFields<'a, Self>>(fields: &mut F) {
+        fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
             fields.add_field("z", 0);
             fields.add_field_method_get("x", |_, data| Ok(data.0));
         }
 
-        fn add_methods<'a, M: UserDataMethods<'a, Self>>(methods: &mut M) {
+        fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
             methods.add_meta_method(MetaMethod::Index, |_, _, name: StdString| match &*name {
                 "y" => Ok(Some(-1)),
                 _ => Ok(None),
@@ -563,7 +563,7 @@ fn test_metatable() -> Result<()> {
     struct MyUserData;
 
     impl UserData for MyUserData {
-        fn add_methods<'a, M: UserDataMethods<'a, Self>>(methods: &mut M) {
+        fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
             methods.add_function("my_type_name", |_, data: AnyUserData| {
                 let metatable = data.get_metatable()?;
                 metatable.get::<String>(MetaMethod::Type)
@@ -608,7 +608,7 @@ fn test_metatable() -> Result<()> {
     struct MyUserData2;
 
     impl UserData for MyUserData2 {
-        fn add_fields<'a, F: UserDataFields<'a, Self>>(fields: &mut F) {
+        fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
             fields.add_meta_field_with("__index", |_| Ok(1));
         }
     }
@@ -623,7 +623,7 @@ fn test_metatable() -> Result<()> {
     struct MyUserData3;
 
     impl UserData for MyUserData3 {
-        fn add_fields<'a, F: UserDataFields<'a, Self>>(fields: &mut F) {
+        fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
             fields.add_meta_field_with(MetaMethod::Type, |_| Ok("CustomName"));
         }
     }
@@ -640,12 +640,12 @@ fn test_userdata_proxy() -> Result<()> {
     struct MyUserData(i64);
 
     impl UserData for MyUserData {
-        fn add_fields<'a, F: UserDataFields<'a, Self>>(fields: &mut F) {
+        fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
             fields.add_field("static_field", 123);
             fields.add_field_method_get("n", |_, this| Ok(this.0));
         }
 
-        fn add_methods<'a, M: UserDataMethods<'a, Self>>(methods: &mut M) {
+        fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
             methods.add_function("new", |_, n| Ok(Self(n)));
 
             methods.add_method("plus", |_, this, n: i64| Ok(this.0 + n));
@@ -733,7 +733,7 @@ fn test_userdata_ext() -> Result<()> {
     struct MyUserData(u32);
 
     impl UserData for MyUserData {
-        fn add_fields<'a, F: UserDataFields<'a, Self>>(fields: &mut F) {
+        fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
             fields.add_field_method_get("n", |_, this| Ok(this.0));
             fields.add_field_method_set("n", |_, this, val| {
                 this.0 = val;
@@ -741,7 +741,7 @@ fn test_userdata_ext() -> Result<()> {
             });
         }
 
-        fn add_methods<'a, M: UserDataMethods<'a, Self>>(methods: &mut M) {
+        fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
             methods.add_meta_method(MetaMethod::Call, |_, _this, ()| Ok("called"));
             methods.add_method_mut("add", |_, this, x: u32| {
                 this.0 += x;
@@ -774,7 +774,7 @@ fn test_userdata_method_errors() -> Result<()> {
     struct MyUserData(i64);
 
     impl UserData for MyUserData {
-        fn add_methods<'a, M: UserDataMethods<'a, Self>>(methods: &mut M) {
+        fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
             methods.add_method("get_value", |_, data, ()| Ok(data.0));
         }
     }

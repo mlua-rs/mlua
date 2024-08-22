@@ -1053,7 +1053,6 @@ impl RawLua {
             let _sg = StackGuard::new(state);
             check_stack(state, 4)?;
 
-            let func = mem::transmute::<Callback, Callback<'static>>(func);
             let extra = XRc::clone(&self.extra);
             let protect = !self.unlikely_memory_error();
             push_internal_userdata(state, CallbackUpvalue { data: func, extra }, protect)?;
@@ -1090,9 +1089,8 @@ impl RawLua {
                 let rawlua = (*extra).raw_lua();
                 let _guard = StateGuard::new(rawlua, state);
 
-                let args = MultiValue::from_stack_multi(nargs, rawlua)?;
                 let func = &*(*upvalue).data;
-                let fut = func(rawlua.lua(), args);
+                let fut = func(rawlua, nargs);
                 let extra = XRc::clone(&(*upvalue).extra);
                 let protect = !rawlua.unlikely_memory_error();
                 push_internal_userdata(state, AsyncPollUpvalue { data: fut, extra }, protect)?;
@@ -1152,7 +1150,6 @@ impl RawLua {
             let _sg = StackGuard::new(state);
             check_stack(state, 4)?;
 
-            let func = mem::transmute::<AsyncCallback, AsyncCallback<'static>>(func);
             let extra = XRc::clone(&self.extra);
             let protect = !self.unlikely_memory_error();
             let upvalue = AsyncCallbackUpvalue { data: func, extra };

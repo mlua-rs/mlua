@@ -9,22 +9,22 @@ use mlua::{chunk, BString, Function, Lua, UserData, UserDataMethods};
 struct LuaTcpStream(TcpStream);
 
 impl UserData for LuaTcpStream {
-    fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
+    fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
         methods.add_method("peer_addr", |_, this, ()| Ok(this.0.peer_addr()?.to_string()));
 
-        methods.add_async_method_mut("read", |lua, this, size| async move {
+        methods.add_async_method_mut("read", |lua, mut this, size| async move {
             let mut buf = vec![0; size];
             let n = this.0.read(&mut buf).await?;
             buf.truncate(n);
             lua.create_string(&buf)
         });
 
-        methods.add_async_method_mut("write", |_, this, data: BString| async move {
+        methods.add_async_method_mut("write", |_, mut this, data: BString| async move {
             let n = this.0.write(&data).await?;
             Ok(n)
         });
 
-        methods.add_async_method_mut("close", |_, this, ()| async move {
+        methods.add_async_method_mut("close", |_, mut this, ()| async move {
             this.0.shutdown().await?;
             Ok(())
         });

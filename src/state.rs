@@ -137,13 +137,6 @@ impl LuaOptions {
     }
 }
 
-#[cfg(not(feature = "module"))]
-impl Drop for Lua {
-    fn drop(&mut self) {
-        let _ = self.gc_collect();
-    }
-}
-
 impl fmt::Debug for Lua {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "Lua({:p})", self.lock().state())
@@ -1138,7 +1131,7 @@ impl Lua {
     /// use std::time::Duration;
     /// use mlua::{Lua, Result};
     ///
-    /// async fn sleep(_lua: &Lua, n: u64) -> Result<&'static str> {
+    /// async fn sleep(_lua: Lua, n: u64) -> Result<&'static str> {
     ///     tokio::time::sleep(Duration::from_millis(n)).await;
     ///     Ok("done")
     /// }
@@ -1157,20 +1150,20 @@ impl Lua {
     /// [`AsyncThread`]: crate::AsyncThread
     #[cfg(feature = "async")]
     #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
-    pub fn create_async_function<'lua, 'a, F, A, FR, R>(&'lua self, func: F) -> Result<Function>
+    pub fn create_async_function<F, A, FR, R>(&self, func: F) -> Result<Function>
     where
-        'lua: 'a,
-        F: Fn(&'a Lua, A) -> FR + MaybeSend + 'static,
+        F: Fn(Lua, A) -> FR + MaybeSend + 'static,
         A: FromLuaMulti,
-        FR: Future<Output = Result<R>> + MaybeSend + 'a,
+        FR: Future<Output = Result<R>> + MaybeSend + 'static,
         R: IntoLuaMulti,
     {
-        (self.lock()).create_async_callback(Box::new(move |lua, args| unsafe {
-            let args = match A::from_lua_args(args, 1, None, lua) {
+        (self.lock()).create_async_callback(Box::new(move |rawlua, nargs| unsafe {
+            let args = match A::from_stack_args(nargs, 1, None, rawlua) {
                 Ok(args) => args,
                 Err(e) => return Box::pin(future::ready(Err(e))),
             };
-            let fut = func(lua, args);
+            let lua = rawlua.lua().clone();
+            let fut = func(lua.clone(), args);
             Box::pin(async move { fut.await?.push_into_stack_multi(lua.raw_lua()) })
         }))
     }
@@ -1274,11 +1267,11 @@ impl Lua {
     /// struct MyUserData(i32);
     ///
     /// impl UserData for MyUserData {
-    ///     fn add_fields<'a, F: UserDataFields<'a, Self>>(fields: &mut F) {
+    ///     fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
     ///         fields.add_field_method_get("val", |_, this| Ok(this.0));
     ///     }
     ///
-    ///     fn add_methods<'a, M: UserDataMethods<'a, Self>>(methods: &mut M) {
+    ///     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
     ///         methods.add_function("new", |_, value: i32| Ok(MyUserData(value)));
     ///     }
     /// }

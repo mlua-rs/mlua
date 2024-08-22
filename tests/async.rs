@@ -378,13 +378,13 @@ async fn test_async_userdata() -> Result<()> {
     struct MyUserData(u64);
 
     impl UserData for MyUserData {
-        fn add_methods<'a, M: UserDataMethods<'a, Self>>(methods: &mut M) {
+        fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
             methods.add_async_method("get_value", |_, data, ()| async move {
                 sleep_ms(10).await;
                 Ok(data.0)
             });
 
-            methods.add_async_method_mut("set_value", |_, data, n| async move {
+            methods.add_async_method_mut("set_value", |_, mut data, n| async move {
                 sleep_ms(10).await;
                 data.0 = n;
                 Ok(())
@@ -415,7 +415,7 @@ async fn test_async_userdata() -> Result<()> {
             #[cfg(not(any(feature = "lua51", feature = "luau")))]
             methods.add_async_meta_method_mut(
                 mlua::MetaMethod::NewIndex,
-                |_, data, (key, value): (String, f64)| async move {
+                |_, mut data, (key, value): (String, f64)| async move {
                     sleep_ms(10).await;
                     match key.as_str() {
                         "ms" => data.0 = value as u64,
@@ -477,7 +477,7 @@ async fn test_async_thread_error() -> Result<()> {
     struct MyUserData;
 
     impl UserData for MyUserData {
-        fn add_methods<'a, M: UserDataMethods<'a, Self>>(methods: &mut M) {
+        fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
             methods.add_meta_method("__tostring", |_, _this, ()| Ok("myuserdata error"))
         }
     }

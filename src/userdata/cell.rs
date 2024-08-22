@@ -1,34 +1,42 @@
 use std::any::{type_name, TypeId};
-use std::cell::{Cell, UnsafeCell};
+use std::cell::UnsafeCell;
 use std::fmt;
 use std::ops::{Deref, DerefMut};
 use std::os::raw::c_int;
-use std::rc::Rc;
 
 #[cfg(feature = "serialize")]
 use serde::ser::{Serialize, Serializer};
 
 use crate::error::{Error, Result};
-use crate::state::{Lua, LuaGuard, RawLua};
+use crate::state::{Lua, RawLua};
+use crate::types::{MaybeSend, XRc};
 use crate::userdata::AnyUserData;
 use crate::util::get_userdata;
 use crate::value::{FromLua, Value};
 
+use super::lock::{RawLock, UserDataLock};
+
+#[cfg(all(feature = "serialize", not(feature = "send")))]
+type DynSerialize = dyn erased_serde::Serialize;
+
+#[cfg(all(feature = "serialize", feature = "send"))]
+type DynSerialize = dyn erased_serde::Serialize + Send;
+
 // A enum for storing userdata values.
 // It's stored inside a Lua VM and protected by the outer `ReentrantMutex`.
 pub(crate) enum UserDataVariant<T> {
-    Default(Rc<InnerRefCell<T>>),
+    Default(XRc<UserDataCell<T>>),
     #[cfg(feature = "serialize")]
-    Serializable(Rc<InnerRefCell<Box<dyn erased_serde::Serialize>>>),
+    Serializable(XRc<UserDataCell<ForceSync<Box<DynSerialize>>>>),
 }
 
 impl<T> Clone for UserDataVariant<T> {
     #[inline]
     fn clone(&self) -> Self {
         match self {
-            Self::Default(inner) => Self::Default(Rc::clone(inner)),
+            Self::Default(inner) => Self::Default(XRc::clone(inner)),
             #[cfg(feature = "serialize")]
-            Self::Serializable(inner) => UserDataVariant::Serializable(Rc::clone(inner)),
+            Self::Serializable(inner) => Self::Serializable(XRc::clone(inner)),
         }
     }
 }
@@ -36,54 +44,56 @@ impl<T> Clone for UserDataVariant<T> {
 impl<T> UserDataVariant<T> {
     #[inline(always)]
     pub(crate) fn new(data: T) -> Self {
-        Self::Default(Rc::new(InnerRefCell::new(data)))
+        Self::Default(XRc::new(UserDataCell::new(data)))
     }
 
     // Immutably borrows the wrapped value in-place.
     #[inline(always)]
-    pub(crate) unsafe fn try_borrow(&self) -> Result<UserDataBorrowRef<T>> {
+    pub(crate) fn try_borrow(&self) -> Result<UserDataBorrowRef<T>> {
         UserDataBorrowRef::try_from(self)
     }
 
     // Immutably borrows the wrapped value and returns an owned reference.
     #[inline(always)]
-    pub(crate) fn try_make_ref(&self, guard: LuaGuard) -> Result<UserDataRef<T>> {
-        UserDataRef::try_from(self.clone(), guard)
+    pub(crate) fn try_borrow_owned(&self) -> Result<UserDataRef<T>> {
+        UserDataRef::try_from(self.clone())
     }
 
     // Mutably borrows the wrapped value in-place.
     #[inline(always)]
-    pub(crate) unsafe fn try_borrow_mut(&self) -> Result<UserDataBorrowMut<T>> {
+    pub(crate) fn try_borrow_mut(&self) -> Result<UserDataBorrowMut<T>> {
         UserDataBorrowMut::try_from(self)
     }
 
     // Mutably borrows the wrapped value and returns an owned reference.
     #[inline(always)]
-    pub(crate) fn try_make_mut_ref(&self, guard: LuaGuard) -> Result<UserDataRefMut<T>> {
-        UserDataRefMut::try_from(self.clone(), guard)
+    pub(crate) fn try_borrow_owned_mut(&self) -> Result<UserDataRefMut<T>> {
+        UserDataRefMut::try_from(self.clone())
     }
 
     // Returns the wrapped value.
     //
     // This method checks that we have exclusive access to the value.
     pub(crate) fn into_inner(self) -> Result<T> {
-        set_writing(self.flag())?;
+        if !self.raw_lock().try_lock_exclusive() {
+            return Err(Error::UserDataBorrowMutError);
+        }
         Ok(match self {
-            Self::Default(inner) => Rc::into_inner(inner).unwrap().value.into_inner(),
+            Self::Default(inner) => XRc::into_inner(inner).unwrap().value.into_inner(),
             #[cfg(feature = "serialize")]
             Self::Serializable(inner) => unsafe {
-                let raw = Box::into_raw(Rc::into_inner(inner).unwrap().value.into_inner());
+                let raw = Box::into_raw(XRc::into_inner(inner).unwrap().value.into_inner().0);
                 *Box::from_raw(raw as *mut T)
             },
         })
     }
 
     #[inline(always)]
-    fn flag(&self) -> &Cell<BorrowFlag> {
+    fn raw_lock(&self) -> &RawLock {
         match self {
-            Self::Default(inner) => &inner.borrow,
+            Self::Default(inner) => &inner.raw_lock,
             #[cfg(feature = "serialize")]
-            Self::Serializable(inner) => &inner.borrow,
+            Self::Serializable(inner) => &inner.raw_lock,
         }
     }
 
@@ -98,11 +108,12 @@ impl<T> UserDataVariant<T> {
 }
 
 #[cfg(feature = "serialize")]
-impl<T: Serialize + 'static> UserDataVariant<T> {
+impl<T: Serialize + MaybeSend + 'static> UserDataVariant<T> {
     #[inline(always)]
     pub(crate) fn new_ser(data: T) -> Self {
-        let data = Box::new(data) as Box<dyn erased_serde::Serialize>;
-        Self::Serializable(Rc::new(InnerRefCell::new(data)))
+        let data = Box::new(data) as Box<DynSerialize>;
+        let data = ForceSync(data);
+        Self::Serializable(XRc::new(UserDataCell::new(data)))
     }
 }
 
@@ -110,29 +121,34 @@ impl<T: Serialize + 'static> UserDataVariant<T> {
 impl Serialize for UserDataVariant<()> {
     fn serialize<S: Serializer>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error> {
         match self {
-            UserDataVariant::Default(_) => Err(serde::ser::Error::custom("cannot serialize <userdata>")),
-            UserDataVariant::Serializable(inner) => unsafe {
-                let _ = self.try_borrow().map_err(serde::ser::Error::custom)?;
-                (*inner.value.get()).serialize(serializer)
+            Self::Default(_) => Err(serde::ser::Error::custom("cannot serialize <userdata>")),
+            Self::Serializable(inner) => unsafe {
+                // We need to borrow the inner value exclusively to serialize it.
+                #[cfg(feature = "send")]
+                let _guard = self.try_borrow_mut().map_err(serde::ser::Error::custom)?;
+                // No need to do this if the `send` feature is disabled.
+                #[cfg(not(feature = "send"))]
+                let _guard = self.try_borrow().map_err(serde::ser::Error::custom)?;
+                (*inner.value.get()).0.serialize(serializer)
             },
         }
     }
 }
 
-//
-// Inspired by `std::cell::RefCell`` implementation
-//
-
-pub(crate) struct InnerRefCell<T> {
-    borrow: Cell<BorrowFlag>,
+/// A type that provides interior mutability for a userdata value (thread-safe).
+pub(crate) struct UserDataCell<T> {
+    raw_lock: RawLock,
     value: UnsafeCell<T>,
 }
 
-impl<T> InnerRefCell<T> {
+unsafe impl<T: Send> Send for UserDataCell<T> {}
+unsafe impl<T: Send + Sync> Sync for UserDataCell<T> {}
+
+impl<T> UserDataCell<T> {
     #[inline(always)]
     pub fn new(value: T) -> Self {
-        InnerRefCell {
-            borrow: Cell::new(UNUSED),
+        UserDataCell {
+            raw_lock: RawLock::INIT,
             value: UnsafeCell::new(value),
         }
     }
@@ -141,25 +157,21 @@ impl<T> InnerRefCell<T> {
 /// A wrapper type for a [`UserData`] value that provides read access.
 ///
 /// It implements [`FromLua`] and can be used to receive a typed userdata from Lua.
-pub struct UserDataRef<T> {
-    variant: UserDataVariant<T>,
-    #[allow(unused)]
-    guard: LuaGuard,
-}
+pub struct UserDataRef<T>(UserDataVariant<T>);
 
 impl<T> Deref for UserDataRef<T> {
     type Target = T;
 
     #[inline]
     fn deref(&self) -> &T {
-        unsafe { &*self.variant.as_ptr() }
+        unsafe { &*self.0.as_ptr() }
     }
 }
 
 impl<T> Drop for UserDataRef<T> {
     #[inline]
     fn drop(&mut self) {
-        unset_reading(self.variant.flag());
+        unsafe { self.0.raw_lock().unlock_shared() };
     }
 }
 
@@ -175,11 +187,15 @@ impl<T: fmt::Display> fmt::Display for UserDataRef<T> {
     }
 }
 
-impl<T> UserDataRef<T> {
+impl<T> TryFrom<UserDataVariant<T>> for UserDataRef<T> {
+    type Error = Error;
+
     #[inline]
-    fn try_from(variant: UserDataVariant<T>, guard: LuaGuard) -> Result<Self> {
-        set_reading(variant.flag())?;
-        Ok(UserDataRef { variant, guard })
+    fn try_from(variant: UserDataVariant<T>) -> Result<Self> {
+        if !variant.raw_lock().try_lock_shared() {
+            return Err(Error::UserDataBorrowError);
+        }
+        Ok(UserDataRef(variant))
     }
 }
 
@@ -192,8 +208,7 @@ impl<T: 'static> FromLua for UserDataRef<T> {
         let type_id = lua.get_userdata_type_id(idx)?;
         match type_id {
             Some(type_id) if type_id == TypeId::of::<T>() => {
-                let guard = lua.lua().lock_arc();
-                (*get_userdata::<UserDataVariant<T>>(lua.state(), idx)).try_make_ref(guard)
+                (*get_userdata::<UserDataVariant<T>>(lua.state(), idx)).try_borrow_owned()
             }
             _ => Err(Error::UserDataTypeMismatch),
         }
@@ -203,32 +218,28 @@ impl<T: 'static> FromLua for UserDataRef<T> {
 /// A wrapper type for a mutably borrowed value from a `AnyUserData`.
 ///
 /// It implements [`FromLua`] and can be used to receive a typed userdata from Lua.
-pub struct UserDataRefMut<T> {
-    variant: UserDataVariant<T>,
-    #[allow(unused)]
-    guard: LuaGuard,
-}
+pub struct UserDataRefMut<T>(UserDataVariant<T>);
 
 impl<T> Deref for UserDataRefMut<T> {
     type Target = T;
 
     #[inline]
     fn deref(&self) -> &Self::Target {
-        unsafe { &*self.variant.as_ptr() }
+        unsafe { &*self.0.as_ptr() }
     }
 }
 
 impl<T> DerefMut for UserDataRefMut<T> {
     #[inline]
     fn deref_mut(&mut self) -> &mut Self::Target {
-        unsafe { &mut *self.variant.as_ptr() }
+        unsafe { &mut *self.0.as_ptr() }
     }
 }
 
 impl<T> Drop for UserDataRefMut<T> {
     #[inline]
     fn drop(&mut self) {
-        unset_writing(self.variant.flag());
+        unsafe { self.0.raw_lock().unlock_exclusive() };
     }
 }
 
@@ -244,11 +255,15 @@ impl<T: fmt::Display> fmt::Display for UserDataRefMut<T> {
     }
 }
 
-impl<T> UserDataRefMut<T> {
-    fn try_from(variant: UserDataVariant<T>, guard: LuaGuard) -> Result<Self> {
-        // There must currently be no existing references
-        set_writing(variant.flag())?;
-        Ok(UserDataRefMut { variant, guard })
+impl<T> TryFrom<UserDataVariant<T>> for UserDataRefMut<T> {
+    type Error = Error;
+
+    #[inline]
+    fn try_from(variant: UserDataVariant<T>) -> Result<Self> {
+        if !variant.raw_lock().try_lock_exclusive() {
+            return Err(Error::UserDataBorrowMutError);
+        }
+        Ok(UserDataRefMut(variant))
     }
 }
 
@@ -261,73 +276,20 @@ impl<T: 'static> FromLua for UserDataRefMut<T> {
         let type_id = lua.get_userdata_type_id(idx)?;
         match type_id {
             Some(type_id) if type_id == TypeId::of::<T>() => {
-                let guard = lua.lua().lock_arc();
-                (*get_userdata::<UserDataVariant<T>>(lua.state(), idx)).try_make_mut_ref(guard)
+                (*get_userdata::<UserDataVariant<T>>(lua.state(), idx)).try_borrow_owned_mut()
             }
             _ => Err(Error::UserDataTypeMismatch),
         }
     }
 }
 
-// Positive values represent the number of `Ref` active. Negative values
-// represent the number of `RefMut` active. Multiple `RefMut`s can only be
-// active at a time if they refer to distinct, nonoverlapping components of a
-// `RefCell` (e.g., different ranges of a slice).
-type BorrowFlag = isize;
-const UNUSED: BorrowFlag = 0;
-
-#[inline(always)]
-fn is_writing(x: BorrowFlag) -> bool {
-    x < UNUSED
-}
-
-#[inline(always)]
-fn is_reading(x: BorrowFlag) -> bool {
-    x > UNUSED
-}
-
-#[inline(always)]
-fn set_writing(borrow: &Cell<BorrowFlag>) -> Result<()> {
-    let flag = borrow.get();
-    if flag != UNUSED {
-        return Err(Error::UserDataBorrowMutError);
-    }
-    borrow.set(UNUSED - 1);
-    Ok(())
-}
-
-#[inline(always)]
-fn set_reading(borrow: &Cell<BorrowFlag>) -> Result<()> {
-    let flag = borrow.get().wrapping_add(1);
-    if !is_reading(flag) {
-        return Err(Error::UserDataBorrowError);
-    }
-    borrow.set(flag);
-    Ok(())
-}
-
-#[inline(always)]
-#[track_caller]
-fn unset_writing(borrow: &Cell<BorrowFlag>) {
-    let flag = borrow.get();
-    debug_assert!(is_writing(flag));
-    borrow.set(flag + 1);
-}
-
-#[inline(always)]
-#[track_caller]
-fn unset_reading(borrow: &Cell<BorrowFlag>) {
-    let flag = borrow.get();
-    debug_assert!(is_reading(flag));
-    borrow.set(flag - 1);
-}
-
+/// A type that provides read access to a userdata value (borrowing the value).
 pub(crate) struct UserDataBorrowRef<'a, T>(&'a UserDataVariant<T>);
 
 impl<'a, T> Drop for UserDataBorrowRef<'a, T> {
     #[inline]
     fn drop(&mut self) {
-        unset_reading(self.0.flag());
+        unsafe { self.0.raw_lock().unlock_shared() };
     }
 }
 
@@ -336,6 +298,7 @@ impl<'a, T> Deref for UserDataBorrowRef<'a, T> {
 
     #[inline]
     fn deref(&self) -> &T {
+        // SAFETY: `UserDataBorrowRef` is only created with shared access to the value.
         unsafe { &*self.0.as_ptr() }
     }
 }
@@ -345,16 +308,10 @@ impl<'a, T> TryFrom<&'a UserDataVariant<T>> for UserDataBorrowRef<'a, T> {
 
     #[inline(always)]
     fn try_from(variant: &'a UserDataVariant<T>) -> Result<Self> {
-        set_reading(variant.flag())?;
+        if !variant.raw_lock().try_lock_shared() {
+            return Err(Error::UserDataBorrowError);
+        }
         Ok(UserDataBorrowRef(variant))
-    }
-}
-
-impl<'a, T> UserDataBorrowRef<'a, T> {
-    #[inline(always)]
-    pub(crate) fn get_ref(&self) -> &'a T {
-        // SAFETY: `UserDataBorrowRef` is only created when the borrow flag is set to reading.
-        unsafe { &*self.0.as_ptr() }
     }
 }
 
@@ -363,7 +320,7 @@ pub(crate) struct UserDataBorrowMut<'a, T>(&'a UserDataVariant<T>);
 impl<'a, T> Drop for UserDataBorrowMut<'a, T> {
     #[inline]
     fn drop(&mut self) {
-        unset_writing(self.0.flag());
+        unsafe { self.0.raw_lock().unlock_exclusive() };
     }
 }
 
@@ -388,18 +345,17 @@ impl<'a, T> TryFrom<&'a UserDataVariant<T>> for UserDataBorrowMut<'a, T> {
 
     #[inline(always)]
     fn try_from(variant: &'a UserDataVariant<T>) -> Result<Self> {
-        set_writing(variant.flag())?;
+        if !variant.raw_lock().try_lock_exclusive() {
+            return Err(Error::UserDataBorrowMutError);
+        }
         Ok(UserDataBorrowMut(variant))
     }
 }
 
-impl<'a, T> UserDataBorrowMut<'a, T> {
-    #[inline(always)]
-    pub(crate) fn get_mut(&mut self) -> &'a mut T {
-        // SAFETY: `UserDataBorrowMut` is only created when the borrow flag is set to writing.
-        unsafe { &mut *self.0.as_ptr() }
-    }
-}
+#[repr(transparent)]
+pub(crate) struct ForceSync<T>(T);
+
+unsafe impl<T: Send> Sync for ForceSync<T> {}
 
 #[inline]
 fn try_value_to_userdata<T>(value: Value) -> Result<AnyUserData> {
@@ -417,6 +373,25 @@ fn try_value_to_userdata<T>(value: Value) -> Result<AnyUserData> {
 mod assertions {
     use super::*;
 
-    static_assertions::assert_not_impl_all!(UserDataRef<()>: Sync, Send);
-    static_assertions::assert_not_impl_all!(UserDataRefMut<()>: Sync, Send);
+    #[cfg(feature = "send")]
+    static_assertions::assert_impl_all!(UserDataRef<()>: Send, Sync);
+    #[cfg(feature = "send")]
+    static_assertions::assert_not_impl_all!(UserDataRef<std::rc::Rc<()>>: Send, Sync);
+    #[cfg(feature = "send")]
+    static_assertions::assert_impl_all!(UserDataRefMut<()>: Sync, Send);
+    #[cfg(feature = "send")]
+    static_assertions::assert_not_impl_all!(UserDataRefMut<std::rc::Rc<()>>: Send, Sync);
+    #[cfg(feature = "send")]
+    static_assertions::assert_impl_all!(UserDataBorrowRef<'_, ()>: Send, Sync);
+    #[cfg(feature = "send")]
+    static_assertions::assert_impl_all!(UserDataBorrowMut<'_, ()>: Send, Sync);
+
+    #[cfg(not(feature = "send"))]
+    static_assertions::assert_not_impl_all!(UserDataRef<()>: Send, Sync);
+    #[cfg(not(feature = "send"))]
+    static_assertions::assert_not_impl_all!(UserDataRefMut<()>: Send, Sync);
+    #[cfg(not(feature = "send"))]
+    static_assertions::assert_not_impl_all!(UserDataBorrowRef<'_, ()>: Send, Sync);
+    #[cfg(not(feature = "send"))]
+    static_assertions::assert_not_impl_all!(UserDataBorrowMut<'_, ()>: Send, Sync);
 }

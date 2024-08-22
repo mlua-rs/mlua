@@ -297,7 +297,7 @@ fn userdata_create(c: &mut Criterion) {
 fn userdata_call_index(c: &mut Criterion) {
     struct UserData(#[allow(unused)] i64);
     impl LuaUserData for UserData {
-        fn add_methods<'a, M: LuaUserDataMethods<'a, Self>>(methods: &mut M) {
+        fn add_methods<M: LuaUserDataMethods<Self>>(methods: &mut M) {
             methods.add_meta_method(LuaMetaMethod::Index, move |_, _, key: LuaString| Ok(key));
         }
     }
@@ -323,7 +323,7 @@ fn userdata_call_index(c: &mut Criterion) {
 fn userdata_call_method(c: &mut Criterion) {
     struct UserData(i64);
     impl LuaUserData for UserData {
-        fn add_methods<'a, M: LuaUserDataMethods<'a, Self>>(methods: &mut M) {
+        fn add_methods<M: LuaUserDataMethods<Self>>(methods: &mut M) {
             methods.add_method("add", |_, this, i: i64| Ok(this.0 + i));
         }
     }
@@ -353,7 +353,7 @@ fn userdata_call_method(c: &mut Criterion) {
 fn userdata_async_call_method(c: &mut Criterion) {
     struct UserData(i64);
     impl LuaUserData for UserData {
-        fn add_methods<'a, M: LuaUserDataMethods<'a, Self>>(methods: &mut M) {
+        fn add_methods<M: LuaUserDataMethods<Self>>(methods: &mut M) {
             methods.add_async_method("add", |_, this, i: i64| async move {
                 task::yield_now().await;
                 Ok(this.0 + i)

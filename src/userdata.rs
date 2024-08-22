@@ -248,7 +248,7 @@ impl AsRef<str> for MetaMethod {
 /// Method registry for [`UserData`] implementors.
 ///
 /// [`UserData`]: crate::UserData
-pub trait UserDataMethods<'a, T> {
+pub trait UserDataMethods<T> {
     /// Add a regular method which accepts a `&T` as the first parameter.
     ///
     /// Regular methods are implemented by overriding the `__index` metamethod and returning the
@@ -258,7 +258,7 @@ pub trait UserDataMethods<'a, T> {
     /// be used as a fall-back if no regular method is found.
     fn add_method<M, A, R>(&mut self, name: impl ToString, method: M)
     where
-        M: Fn(&'a Lua, &T, A) -> Result<R> + MaybeSend + 'static,
+        M: Fn(&Lua, &T, A) -> Result<R> + MaybeSend + 'static,
         A: FromLuaMulti,
         R: IntoLuaMulti;
 
@@ -269,7 +269,7 @@ pub trait UserDataMethods<'a, T> {
     /// [`add_method`]: #method.add_method
     fn add_method_mut<M, A, R>(&mut self, name: impl ToString, method: M)
     where
-        M: FnMut(&'a Lua, &mut T, A) -> Result<R> + MaybeSend + 'static,
+        M: FnMut(&Lua, &mut T, A) -> Result<R> + MaybeSend + 'static,
         A: FromLuaMulti,
         R: IntoLuaMulti;
 
@@ -285,9 +285,9 @@ pub trait UserDataMethods<'a, T> {
     fn add_async_method<M, A, MR, R>(&mut self, name: impl ToString, method: M)
     where
         T: 'static,
-        M: Fn(&'a Lua, &'a T, A) -> MR + MaybeSend + 'static,
+        M: Fn(Lua, UserDataRef<T>, A) -> MR + MaybeSend + 'static,
         A: FromLuaMulti,
-        MR: Future<Output = Result<R>> + MaybeSend + 'a,
+        MR: Future<Output = Result<R>> + MaybeSend + 'static,
         R: IntoLuaMulti;
 
     /// Add an async method which accepts a `&mut T` as the first parameter and returns Future.
@@ -302,9 +302,9 @@ pub trait UserDataMethods<'a, T> {
     fn add_async_method_mut<M, A, MR, R>(&mut self, name: impl ToString, method: M)
     where
         T: 'static,
-        M: Fn(&'a Lua, &'a mut T, A) -> MR + MaybeSend + 'static,
+        M: Fn(Lua, UserDataRefMut<T>, A) -> MR + MaybeSend + 'static,
         A: FromLuaMulti,
-        MR: Future<Output = Result<R>> + MaybeSend + 'a,
+        MR: Future<Output = Result<R>> + MaybeSend + 'static,
         R: IntoLuaMulti;
 
     /// Add a regular method as a function which accepts generic arguments, the first argument will
@@ -319,7 +319,7 @@ pub trait UserDataMethods<'a, T> {
     /// [`add_method_mut`]: #method.add_method_mut
     fn add_function<F, A, R>(&mut self, name: impl ToString, function: F)
     where
-        F: Fn(&'a Lua, A) -> Result<R> + MaybeSend + 'static,
+        F: Fn(&Lua, A) -> Result<R> + MaybeSend + 'static,
         A: FromLuaMulti,
         R: IntoLuaMulti;
 
@@ -330,7 +330,7 @@ pub trait UserDataMethods<'a, T> {
     /// [`add_function`]: #method.add_function
     fn add_function_mut<F, A, R>(&mut self, name: impl ToString, function: F)
     where
-        F: FnMut(&'a Lua, A) -> Result<R> + MaybeSend + 'static,
+        F: FnMut(&Lua, A) -> Result<R> + MaybeSend + 'static,
         A: FromLuaMulti,
         R: IntoLuaMulti;
 
@@ -346,9 +346,9 @@ pub trait UserDataMethods<'a, T> {
     #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
     fn add_async_function<F, A, FR, R>(&mut self, name: impl ToString, function: F)
     where
-        F: Fn(&'a Lua, A) -> FR + MaybeSend + 'static,
+        F: Fn(Lua, A) -> FR + MaybeSend + 'static,
         A: FromLuaMulti,
-        FR: Future<Output = Result<R>> + MaybeSend + 'a,
+        FR: Future<Output = Result<R>> + MaybeSend + 'static,
         R: IntoLuaMulti;
 
     /// Add a metamethod which accepts a `&T` as the first parameter.
@@ -361,7 +361,7 @@ pub trait UserDataMethods<'a, T> {
     /// [`add_meta_function`]: #method.add_meta_function
     fn add_meta_method<M, A, R>(&mut self, name: impl ToString, method: M)
     where
-        M: Fn(&'a Lua, &T, A) -> Result<R> + MaybeSend + 'static,
+        M: Fn(&Lua, &T, A) -> Result<R> + MaybeSend + 'static,
         A: FromLuaMulti,
         R: IntoLuaMulti;
 
@@ -375,7 +375,7 @@ pub trait UserDataMethods<'a, T> {
     /// [`add_meta_function`]: #method.add_meta_function
     fn add_meta_method_mut<M, A, R>(&mut self, name: impl ToString, method: M)
     where
-        M: FnMut(&'a Lua, &mut T, A) -> Result<R> + MaybeSend + 'static,
+        M: FnMut(&Lua, &mut T, A) -> Result<R> + MaybeSend + 'static,
         A: FromLuaMulti,
         R: IntoLuaMulti;
 
@@ -391,9 +391,9 @@ pub trait UserDataMethods<'a, T> {
     fn add_async_meta_method<M, A, MR, R>(&mut self, name: impl ToString, method: M)
     where
         T: 'static,
-        M: Fn(&'a Lua, &'a T, A) -> MR + MaybeSend + 'static,
+        M: Fn(Lua, UserDataRef<T>, A) -> MR + MaybeSend + 'static,
         A: FromLuaMulti,
-        MR: Future<Output = Result<R>> + MaybeSend + 'a,
+        MR: Future<Output = Result<R>> + MaybeSend + 'static,
         R: IntoLuaMulti;
 
     /// Add an async metamethod which accepts a `&mut T` as the first parameter and returns Future.
@@ -408,9 +408,9 @@ pub trait UserDataMethods<'a, T> {
     fn add_async_meta_method_mut<M, A, MR, R>(&mut self, name: impl ToString, method: M)
     where
         T: 'static,
-        M: Fn(&'a Lua, &'a mut T, A) -> MR + MaybeSend + 'static,
+        M: Fn(Lua, UserDataRefMut<T>, A) -> MR + MaybeSend + 'static,
         A: FromLuaMulti,
-        MR: Future<Output = Result<R>> + MaybeSend + 'a,
+        MR: Future<Output = Result<R>> + MaybeSend + 'static,
         R: IntoLuaMulti;
 
     /// Add a metamethod which accepts generic arguments.
@@ -420,7 +420,7 @@ pub trait UserDataMethods<'a, T> {
     /// userdata of type `T`.
     fn add_meta_function<F, A, R>(&mut self, name: impl ToString, function: F)
     where
-        F: Fn(&'a Lua, A) -> Result<R> + MaybeSend + 'static,
+        F: Fn(&Lua, A) -> Result<R> + MaybeSend + 'static,
         A: FromLuaMulti,
         R: IntoLuaMulti;
 
@@ -431,7 +431,7 @@ pub trait UserDataMethods<'a, T> {
     /// [`add_meta_function`]: #method.add_meta_function
     fn add_meta_function_mut<F, A, R>(&mut self, name: impl ToString, function: F)
     where
-        F: FnMut(&'a Lua, A) -> Result<R> + MaybeSend + 'static,
+        F: FnMut(&Lua, A) -> Result<R> + MaybeSend + 'static,
         A: FromLuaMulti,
         R: IntoLuaMulti;
 
@@ -446,16 +446,16 @@ pub trait UserDataMethods<'a, T> {
     #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
     fn add_async_meta_function<F, A, FR, R>(&mut self, name: impl ToString, function: F)
     where
-        F: Fn(&'a Lua, A) -> FR + MaybeSend + 'static,
+        F: Fn(Lua, A) -> FR + MaybeSend + 'static,
         A: FromLuaMulti,
-        FR: Future<Output = Result<R>> + MaybeSend + 'a,
+        FR: Future<Output = Result<R>> + MaybeSend + 'static,
         R: IntoLuaMulti;
 }
 
 /// Field registry for [`UserData`] implementors.
 ///
 /// [`UserData`]: crate::UserData
-pub trait UserDataFields<'a, T> {
+pub trait UserDataFields<T> {
     /// Add a static field to the `UserData`.
     ///
     /// Static fields are implemented by updating the `__index` metamethod and returning the
@@ -478,7 +478,7 @@ pub trait UserDataFields<'a, T> {
     /// be used as a fall-back if no regular field or method are found.
     fn add_field_method_get<M, R>(&mut self, name: impl ToString, method: M)
     where
-        M: Fn(&'a Lua, &T) -> Result<R> + MaybeSend + 'static,
+        M: Fn(&Lua, &T) -> Result<R> + MaybeSend + 'static,
         R: IntoLua;
 
     /// Add a regular field setter as a method which accepts a `&mut T` as the first parameter.
@@ -491,7 +491,7 @@ pub trait UserDataFields<'a, T> {
     /// will be used as a fall-back if no regular field is found.
     fn add_field_method_set<M, A>(&mut self, name: impl ToString, method: M)
     where
-        M: FnMut(&'a Lua, &mut T, A) -> Result<()> + MaybeSend + 'static,
+        M: FnMut(&Lua, &mut T, A) -> Result<()> + MaybeSend + 'static,
         A: FromLua;
 
     /// Add a regular field getter as a function which accepts a generic [`AnyUserData`] of type `T`
@@ -503,7 +503,7 @@ pub trait UserDataFields<'a, T> {
     /// [`add_field_method_get`]: #method.add_field_method_get
     fn add_field_function_get<F, R>(&mut self, name: impl ToString, function: F)
     where
-        F: Fn(&'a Lua, AnyUserData) -> Result<R> + MaybeSend + 'static,
+        F: Fn(&Lua, AnyUserData) -> Result<R> + MaybeSend + 'static,
         R: IntoLua;
 
     /// Add a regular field setter as a function which accepts a generic [`AnyUserData`] of type `T`
@@ -515,7 +515,7 @@ pub trait UserDataFields<'a, T> {
     /// [`add_field_method_set`]: #method.add_field_method_set
     fn add_field_function_set<F, A>(&mut self, name: impl ToString, function: F)
     where
-        F: FnMut(&'a Lua, AnyUserData, A) -> Result<()> + MaybeSend + 'static,
+        F: FnMut(&Lua, AnyUserData, A) -> Result<()> + MaybeSend + 'static,
         A: FromLua;
 
     /// Add a metatable field.
@@ -540,7 +540,7 @@ pub trait UserDataFields<'a, T> {
     /// like `__gc` or `__metatable`.
     fn add_meta_field_with<F, R>(&mut self, name: impl ToString, f: F)
     where
-        F: Fn(&'a Lua) -> Result<R> + MaybeSend + 'static,
+        F: Fn(&Lua) -> Result<R> + MaybeSend + 'static,
         R: IntoLua;
 }
 
@@ -579,12 +579,12 @@ pub trait UserDataFields<'a, T> {
 /// struct MyUserData(i32);
 ///
 /// impl UserData for MyUserData {
-///     fn add_fields<'a, F: UserDataFields<'a, Self>>(fields: &mut F) {
+///     fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
 ///         fields.add_field_method_get("val", |_, this| Ok(this.0));
 ///     }
 ///
-///     fn add_methods<'a, M: UserDataMethods<'a, Self>>(methods: &mut M) {
-///         methods.add_method_mut("add", |_, this, value: i32| {
+///     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
+///         methods.add_method_mut("add", |_, mut this, value: i32| {
 ///             this.0 += value;
 ///             Ok(())
 ///         });
@@ -614,11 +614,11 @@ pub trait UserDataFields<'a, T> {
 pub trait UserData: Sized {
     /// Adds custom fields specific to this userdata.
     #[allow(unused_variables)]
-    fn add_fields<'a, F: UserDataFields<'a, Self>>(fields: &mut F) {}
+    fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {}
 
     /// Adds custom methods and operators specific to this userdata.
     #[allow(unused_variables)]
-    fn add_methods<'a, M: UserDataMethods<'a, Self>>(methods: &mut M) {}
+    fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {}
 
     /// Registers this type for use in Lua.
     ///
@@ -663,7 +663,7 @@ impl AnyUserData {
     /// `UserDataTypeMismatch` if the userdata is not of type `T`.
     #[inline]
     pub fn borrow<T: 'static>(&self) -> Result<UserDataRef<T>> {
-        self.inspect(|variant, guard| variant.try_make_ref(guard))
+        self.inspect(|variant, _| variant.try_borrow_owned())
     }
 
     /// Borrow this userdata mutably if it is of type `T`.
@@ -674,7 +674,7 @@ impl AnyUserData {
     /// Returns a `UserDataTypeMismatch` if the userdata is not of type `T`.
     #[inline]
     pub fn borrow_mut<T: 'static>(&self) -> Result<UserDataRefMut<T>> {
-        self.inspect(|variant, guard| variant.try_make_mut_ref(guard))
+        self.inspect(|variant, _| variant.try_borrow_owned_mut())
     }
 
     /// Takes the value out of this userdata.
@@ -940,13 +940,6 @@ impl AnyUserData {
         self.0.to_pointer()
     }
 
-    #[cfg(feature = "async")]
-    #[inline]
-    pub(crate) fn type_id(&self) -> Result<Option<TypeId>> {
-        let lua = self.0.lua.lock();
-        unsafe { lua.get_userdata_ref_type_id(&self.0) }
-    }
-
     /// Returns a type name of this `UserData` (from a metatable field).
     pub(crate) fn type_name(&self) -> Result<Option<StdString>> {
         match self.1 {
@@ -1182,6 +1175,7 @@ where
 
 mod cell;
 mod ext;
+mod lock;
 mod registry;
 
 #[cfg(test)]

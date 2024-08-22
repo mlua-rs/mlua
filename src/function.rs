@@ -513,10 +513,10 @@ impl PartialEq for Function {
     }
 }
 
-pub(crate) struct WrappedFunction(pub(crate) Callback<'static>);
+pub(crate) struct WrappedFunction(pub(crate) Callback);
 
 #[cfg(feature = "async")]
-pub(crate) struct WrappedAsyncFunction(pub(crate) AsyncCallback<'static>);
+pub(crate) struct WrappedAsyncFunction(pub(crate) AsyncCallback);
 
 impl Function {
     /// Wraps a Rust function or closure, returning an opaque type that implements [`IntoLua`]
@@ -558,15 +558,16 @@ impl Function {
     where
         A: FromLuaMulti,
         R: IntoLuaMulti,
-        F: Fn(&Lua, A) -> FR + MaybeSend + 'static,
+        F: Fn(Lua, A) -> FR + MaybeSend + 'static,
         FR: Future<Output = Result<R>> + MaybeSend + 'static,
     {
-        WrappedAsyncFunction(Box::new(move |lua, args| unsafe {
-            let args = match A::from_lua_args(args, 1, None, lua) {
+        WrappedAsyncFunction(Box::new(move |rawlua, nargs| unsafe {
+            let args = match A::from_stack_args(nargs, 1, None, rawlua) {
                 Ok(args) => args,
                 Err(e) => return Box::pin(future::ready(Err(e))),
             };
-            let fut = func(lua, args);
+            let lua = rawlua.lua().clone();
+            let fut = func(lua.clone(), args);
             Box::pin(async move { fut.await?.push_into_stack_multi(lua.raw_lua()) })
         }))
     }

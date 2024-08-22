@@ -12,9 +12,6 @@ use crate::error::Result;
 use crate::hook::Debug;
 use crate::state::{ExtraData, Lua, RawLua, WeakLua};
 
-#[cfg(feature = "async")]
-use crate::value::MultiValue;
-
 #[cfg(all(feature = "async", feature = "send"))]
 pub(crate) type BoxFuture<'a, T> = futures_util::future::BoxFuture<'a, T>;
 
@@ -52,21 +49,20 @@ unsafe impl Send for LightUserData {}
 #[cfg(feature = "send")]
 unsafe impl Sync for LightUserData {}
 
-pub(crate) type Callback<'a> = Box<dyn Fn(&'a RawLua, c_int) -> Result<c_int> + 'static>;
+pub(crate) type Callback = Box<dyn Fn(&RawLua, c_int) -> Result<c_int> + 'static>;
 
 pub(crate) struct Upvalue<T> {
     pub(crate) data: T,
     pub(crate) extra: XRc<UnsafeCell<ExtraData>>,
 }
 
-pub(crate) type CallbackUpvalue = Upvalue<Callback<'static>>;
+pub(crate) type CallbackUpvalue = Upvalue<Callback>;
 
 #[cfg(feature = "async")]
-pub(crate) type AsyncCallback<'a> =
-    Box<dyn Fn(&'a Lua, MultiValue) -> BoxFuture<'a, Result<c_int>> + 'static>;
+pub(crate) type AsyncCallback = Box<dyn Fn(&RawLua, c_int) -> BoxFuture<'static, Result<c_int>> + 'static>;
 
 #[cfg(feature = "async")]
-pub(crate) type AsyncCallbackUpvalue = Upvalue<AsyncCallback<'static>>;
+pub(crate) type AsyncCallbackUpvalue = Upvalue<AsyncCallback>;
 
 #[cfg(feature = "async")]
 pub(crate) type AsyncPollUpvalue = Upvalue<BoxFuture<'static, Result<c_int>>>;

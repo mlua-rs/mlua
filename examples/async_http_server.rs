@@ -17,7 +17,7 @@ use mlua::{chunk, Error as LuaError, Function, Lua, String as LuaString, Table, 
 struct LuaRequest(SocketAddr, Request<Incoming>);
 
 impl UserData for LuaRequest {
-    fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
+    fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
         methods.add_method("remote_addr", |_, req, ()| Ok((req.0).to_string()));
         methods.add_method("method", |_, req, ()| Ok((req.1).method().to_string()));
         methods.add_method("path", |_, req, ()| Ok(req.1.uri().path().to_string()));
