@@ -16,7 +16,6 @@ use crate::{
 
 #[cfg(feature = "async")]
 use {
-    crate::value::MultiValue,
     futures_util::stream::Stream,
     std::{
         future::Future,
@@ -60,9 +59,9 @@ unsafe impl Sync for Thread {}
 #[cfg(feature = "async")]
 #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
 #[must_use = "futures do nothing unless you `.await` or poll them"]
-pub struct AsyncThread<R> {
+pub struct AsyncThread<A, R> {
     thread: Thread,
-    init_args: Option<Result<MultiValue>>,
+    init_args: Option<A>,
     ret: PhantomData<R>,
     recycle: bool,
 }
@@ -299,12 +298,10 @@ impl Thread {
     /// ```
     #[cfg(feature = "async")]
     #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
-    pub fn into_async<R>(self, args: impl IntoLuaMulti) -> AsyncThread<R>
+    pub fn into_async<R>(self, args: impl IntoLuaMulti) -> AsyncThread<impl IntoLuaMulti, R>
     where
         R: FromLuaMulti,
     {
-        let lua = self.0.lua.lock();
-        let args = args.into_lua_multi(lua.lua());
         AsyncThread {
             thread: self,
             init_args: Some(args),
@@ -376,7 +373,7 @@ impl PartialEq for Thread {
 }
 
 #[cfg(feature = "async")]
-impl<R> AsyncThread<R> {
+impl<A, R> AsyncThread<A, R> {
     #[inline]
     pub(crate) fn set_recyclable(&mut self, recyclable: bool) {
         self.recycle = recyclable;
@@ -385,7 +382,7 @@ impl<R> AsyncThread<R> {
 
 #[cfg(feature = "async")]
 #[cfg(any(feature = "lua54", feature = "luau"))]
-impl<R> Drop for AsyncThread<R> {
+impl<A, R> Drop for AsyncThread<A, R> {
     fn drop(&mut self) {
         if self.recycle {
             if let Some(lua) = self.thread.0.lua.try_lock() {
@@ -407,7 +404,7 @@ impl<R> Drop for AsyncThread<R> {
 }
 
 #[cfg(feature = "async")]
-impl<R: FromLuaMulti> Stream for AsyncThread<R> {
+impl<A: IntoLuaMulti, R: FromLuaMulti> Stream for AsyncThread<A, R> {
     type Item = Result<R>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
@@ -426,7 +423,7 @@ impl<R: FromLuaMulti> Stream for AsyncThread<R> {
             // This is safe as we are not moving the whole struct
             let this = self.get_unchecked_mut();
             let nresults = if let Some(args) = this.init_args.take() {
-                this.thread.resume_inner(&lua, args?)?
+                this.thread.resume_inner(&lua, args)?
             } else {
                 this.thread.resume_inner(&lua, ())?
             };
@@ -445,7 +442,7 @@ impl<R: FromLuaMulti> Stream for AsyncThread<R> {
 }
 
 #[cfg(feature = "async")]
-impl<R: FromLuaMulti> Future for AsyncThread<R> {
+impl<A: IntoLuaMulti, R: FromLuaMulti> Future for AsyncThread<A, R> {
     type Output = Result<R>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
@@ -464,7 +461,7 @@ impl<R: FromLuaMulti> Future for AsyncThread<R> {
             // This is safe as we are not moving the whole struct
             let this = self.get_unchecked_mut();
             let nresults = if let Some(args) = this.init_args.take() {
-                this.thread.resume_inner(&lua, args?)?
+                this.thread.resume_inner(&lua, args)?
             } else {
                 this.thread.resume_inner(&lua, ())?
             };
@@ -529,7 +526,7 @@ mod assertions {
     #[cfg(feature = "send")]
     static_assertions::assert_impl_all!(Thread: Send, Sync);
     #[cfg(all(feature = "async", not(feature = "send")))]
-    static_assertions::assert_not_impl_any!(AsyncThread<()>: Send);
+    static_assertions::assert_not_impl_any!(AsyncThread<(), ()>: Send);
     #[cfg(all(feature = "async", feature = "send"))]
-    static_assertions::assert_impl_all!(AsyncThread<()>: Send, Sync);
+    static_assertions::assert_impl_all!(AsyncThread<(), ()>: Send, Sync);
 }
