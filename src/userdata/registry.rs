@@ -161,7 +161,7 @@ impl<T: 'static> UserDataRegistry<T> {
                 Ok(args) => args,
                 Err(e) => return Box::pin(future::ready(Err(e))),
             };
-            let lua = rawlua.lua().clone();
+            let lua = rawlua.lua();
             let fut = method(lua.clone(), self_ud, args);
             // Lua is locked when the future is polled
             Box::pin(async move { fut.await?.push_into_stack_multi(lua.raw_lua()) })
@@ -200,7 +200,7 @@ impl<T: 'static> UserDataRegistry<T> {
                 Ok(args) => args,
                 Err(e) => return Box::pin(future::ready(Err(e))),
             };
-            let lua = rawlua.lua().clone();
+            let lua = rawlua.lua();
             let fut = method(lua.clone(), self_ud, args);
             // Lua is locked when the future is polled
             Box::pin(async move { fut.await?.push_into_stack_multi(lua.raw_lua()) })
@@ -251,7 +251,7 @@ impl<T: 'static> UserDataRegistry<T> {
                 Ok(args) => args,
                 Err(e) => return Box::pin(future::ready(Err(e))),
             };
-            let lua = rawlua.lua().clone();
+            let lua = rawlua.lua();
             let fut = function(lua.clone(), args);
             Box::pin(async move { fut.await?.push_into_stack_multi(lua.raw_lua()) })
         })

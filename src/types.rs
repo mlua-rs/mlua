@@ -59,7 +59,8 @@ pub(crate) struct Upvalue<T> {
 pub(crate) type CallbackUpvalue = Upvalue<Callback>;
 
 #[cfg(feature = "async")]
-pub(crate) type AsyncCallback = Box<dyn Fn(&RawLua, c_int) -> BoxFuture<'static, Result<c_int>> + 'static>;
+pub(crate) type AsyncCallback =
+    Box<dyn for<'a> Fn(&'a RawLua, c_int) -> BoxFuture<'a, Result<c_int>> + 'static>;
 
 #[cfg(feature = "async")]
 pub(crate) type AsyncCallbackUpvalue = Upvalue<AsyncCallback>;
