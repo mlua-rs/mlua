@@ -62,32 +62,32 @@ mod lock_impl {
 
 #[cfg(feature = "send")]
 mod lock_impl {
-    use parking_lot::lock_api::RawRwLock;
+    use parking_lot::lock_api::RawMutex;
 
-    pub(crate) type RawLock = parking_lot::RawRwLock;
+    pub(crate) type RawLock = parking_lot::RawMutex;
 
     impl super::UserDataLock for RawLock {
         #[allow(clippy::declare_interior_mutable_const)]
-        const INIT: Self = <Self as parking_lot::lock_api::RawRwLock>::INIT;
+        const INIT: Self = <Self as parking_lot::lock_api::RawMutex>::INIT;
 
         #[inline(always)]
         fn try_lock_shared(&self) -> bool {
-            RawRwLock::try_lock_shared(self)
+            RawLock::try_lock(self)
         }
 
         #[inline(always)]
         fn try_lock_exclusive(&self) -> bool {
-            RawRwLock::try_lock_exclusive(self)
+            RawLock::try_lock(self)
         }
 
         #[inline(always)]
         unsafe fn unlock_shared(&self) {
-            RawRwLock::unlock_shared(self)
+            RawLock::unlock(self)
         }
 
         #[inline(always)]
         unsafe fn unlock_exclusive(&self) {
-            RawRwLock::unlock_exclusive(self)
+            RawLock::unlock(self)
         }
     }
 }

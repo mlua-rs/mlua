@@ -27,7 +27,7 @@ type DynSerialize = dyn erased_serde::Serialize + Send;
 pub(crate) enum UserDataVariant<T> {
     Default(XRc<UserDataCell<T>>),
     #[cfg(feature = "serialize")]
-    Serializable(XRc<UserDataCell<ForceSync<Box<DynSerialize>>>>),
+    Serializable(XRc<UserDataCell<Box<DynSerialize>>>),
 }
 
 impl<T> Clone for UserDataVariant<T> {
@@ -82,7 +82,7 @@ impl<T> UserDataVariant<T> {
             Self::Default(inner) => XRc::into_inner(inner).unwrap().value.into_inner(),
             #[cfg(feature = "serialize")]
             Self::Serializable(inner) => unsafe {
-                let raw = Box::into_raw(XRc::into_inner(inner).unwrap().value.into_inner().0);
+                let raw = Box::into_raw(XRc::into_inner(inner).unwrap().value.into_inner());
                 *Box::from_raw(raw as *mut T)
             },
         })
@@ -112,7 +112,6 @@ impl<T: Serialize + MaybeSend + 'static> UserDataVariant<T> {
     #[inline(always)]
     pub(crate) fn new_ser(data: T) -> Self {
         let data = Box::new(data) as Box<DynSerialize>;
-        let data = ForceSync(data);
         Self::Serializable(XRc::new(UserDataCell::new(data)))
     }
 }
@@ -129,7 +128,7 @@ impl Serialize for UserDataVariant<()> {
                 // No need to do this if the `send` feature is disabled.
                 #[cfg(not(feature = "send"))]
                 let _guard = self.try_borrow().map_err(serde::ser::Error::custom)?;
-                (*inner.value.get()).0.serialize(serializer)
+                (*inner.value.get()).serialize(serializer)
             },
         }
     }
@@ -142,7 +141,7 @@ pub(crate) struct UserDataCell<T> {
 }
 
 unsafe impl<T: Send> Send for UserDataCell<T> {}
-unsafe impl<T: Send + Sync> Sync for UserDataCell<T> {}
+unsafe impl<T: Send> Sync for UserDataCell<T> {}
 
 impl<T> UserDataCell<T> {
     #[inline(always)]
@@ -351,11 +350,6 @@ impl<'a, T> TryFrom<&'a UserDataVariant<T>> for UserDataBorrowMut<'a, T> {
         Ok(UserDataBorrowMut(variant))
     }
 }
-
-#[repr(transparent)]
-pub(crate) struct ForceSync<T>(T);
-
-unsafe impl<T: Send> Sync for ForceSync<T> {}
 
 #[inline]
 fn try_value_to_userdata<T>(value: Value) -> Result<AnyUserData> {
