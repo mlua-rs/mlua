@@ -845,3 +845,21 @@ fn test_userdata_derive() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn test_nested_userdata_gc() -> Result<()> {
+    let lua = Lua::new();
+
+    let counter = Arc::new(());
+    let arr = vec![lua.create_any_userdata(counter.clone())?];
+    let arr_ud = lua.create_any_userdata(arr)?;
+
+    assert_eq!(Arc::strong_count(&counter), 2);
+    drop(arr_ud);
+    // On first iteration Lua will destroy the array, on second - userdata
+    lua.gc_collect()?;
+    lua.gc_collect()?;
+    assert_eq!(Arc::strong_count(&counter), 1);
+
+    Ok(())
+}
