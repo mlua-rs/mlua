@@ -403,6 +403,25 @@ pub unsafe fn luaL_newmetatable(L: *mut lua_State, tname: *const c_char) -> c_in
     }
 }
 
+pub unsafe fn luaL_loadbufferenv(
+    L: *mut lua_State,
+    data: *const c_char,
+    size: usize,
+    name: *const c_char,
+    mode: *const c_char,
+    mut env: c_int,
+) -> c_int {
+    if env != 0 {
+        env = lua_absindex(L, env);
+    }
+    let status = luaL_loadbufferx(L, data, size, name, mode);
+    if status == LUA_OK && env != 0 {
+        lua_pushvalue(L, env);
+        lua_setfenv(L, -2);
+    }
+    status
+}
+
 #[inline(always)]
 pub unsafe fn luaL_loadbufferx(
     L: *mut lua_State,

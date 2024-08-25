@@ -305,7 +305,7 @@ impl RawLua {
         let state = self.state();
         unsafe {
             let _sg = StackGuard::new(state);
-            check_stack(state, 1)?;
+            check_stack(state, 2)?;
 
             let mode_str = match mode {
                 Some(ChunkMode::Binary) => cstr!("b"),
@@ -313,31 +313,21 @@ impl RawLua {
                 None => cstr!("bt"),
             };
 
-            match ffi::luaL_loadbufferx(
+            match ffi::luaL_loadbufferenv(
                 state,
                 source.as_ptr() as *const c_char,
                 source.len(),
                 name.map(|n| n.as_ptr()).unwrap_or_else(ptr::null),
                 mode_str,
-                #[cfg(feature="luau")]
-                match &env {
+                match env {
                     Some(env) => {
                         self.push_ref(&env.0);
                         -1
                     }
-                    _ => 0
+                    _ => 0,
                 },
             ) {
                 ffi::LUA_OK => {
-                    if let Some(env) = env {
-                        #[cfg(not(feature="luau"))]
-                        self.push_ref(&env.0);
-                        #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
-                        ffi::lua_setupvalue(state, -2, 1);
-                        #[cfg(any(feature = "lua51", feature = "luajit"))]
-                        ffi::lua_setfenv(state, -2);
-                    }
-
                     #[cfg(feature = "luau-jit")]
                     if (*self.extra.get()).enable_jit && ffi::luau_codegen_supported() != 0 {
                         ffi::luau_codegen_compile(state, -1);

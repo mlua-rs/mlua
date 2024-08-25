@@ -320,13 +320,13 @@ pub unsafe fn luaL_newmetatable(L: *mut lua_State, tname: *const c_char) -> c_in
     }
 }
 
-pub unsafe fn luaL_loadbufferx(
+pub unsafe fn luaL_loadbufferenv(
     L: *mut lua_State,
     data: *const c_char,
     mut size: usize,
     name: *const c_char,
     mode: *const c_char,
-    env: c_int
+    env: c_int,
 ) -> c_int {
     extern "C" {
         fn free(p: *mut c_void);
@@ -358,13 +358,24 @@ pub unsafe fn luaL_loadbufferx(
 }
 
 #[inline(always)]
+pub unsafe fn luaL_loadbufferx(
+    L: *mut lua_State,
+    data: *const c_char,
+    size: usize,
+    name: *const c_char,
+    mode: *const c_char,
+) -> c_int {
+    luaL_loadbufferenv(L, data, size, name, mode, 0)
+}
+
+#[inline(always)]
 pub unsafe fn luaL_loadbuffer(
     L: *mut lua_State,
     data: *const c_char,
     size: usize,
-    name: *const c_char
+    name: *const c_char,
 ) -> c_int {
-    luaL_loadbufferx(L, data, size, name, ptr::null(), 0)
+    luaL_loadbufferenv(L, data, size, name, ptr::null(), 0)
 }
 
 #[inline(always)]

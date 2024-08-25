@@ -169,6 +169,25 @@ pub unsafe fn luaL_loadbuffer(L: *mut lua_State, s: *const c_char, sz: usize, n:
     luaL_loadbufferx(L, s, sz, n, ptr::null())
 }
 
+pub unsafe fn luaL_loadbufferenv(
+    L: *mut lua_State,
+    data: *const c_char,
+    size: usize,
+    name: *const c_char,
+    mode: *const c_char,
+    mut env: c_int,
+) -> c_int {
+    if env != 0 {
+        env = lua::lua_absindex(L, env);
+    }
+    let status = luaL_loadbufferx(L, data, size, name, mode);
+    if status == lua::LUA_OK && env != 0 {
+        lua::lua_pushvalue(L, env);
+        lua::lua_setupvalue(L, -2, 1);
+    }
+    status
+}
+
 //
 // TODO: Generic Buffer Manipulation
 //
