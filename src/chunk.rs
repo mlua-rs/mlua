@@ -240,7 +240,9 @@ impl Compiler {
     }
 
     /// Compiles the `source` into bytecode.
-    pub fn compile(&self, source: impl AsRef<[u8]>) -> Vec<u8> {
+    ///
+    /// Returns `Error::SyntaxError` if the source code is invalid.
+    pub fn compile(&self, source: impl AsRef<[u8]>) -> Result<Vec<u8>> {
         use std::os::raw::c_int;
         use std::ptr;
 
@@ -274,7 +276,7 @@ impl Compiler {
         vec2cstring_ptr!(mutable_globals, mutable_globals_ptr);
         vec2cstring_ptr!(userdata_types, userdata_types_ptr);
 
-        unsafe {
+        let bytecode = unsafe {
             let mut options = ffi::lua_CompileOptions::default();
             options.optimizationLevel = self.optimization_level as c_int;
             options.debugLevel = self.debug_level as c_int;
@@ -286,7 +288,19 @@ impl Compiler {
             options.mutableGlobals = mutable_globals_ptr;
             options.userdataTypes = userdata_types_ptr;
             ffi::luau_compile(source.as_ref(), options)
+        };
+
+        if bytecode.first() == Some(&0) {
+            // The rest of the bytecode is the error message starting with `:`
+            // See https://github.com/luau-lang/luau/blob/0.640/Compiler/src/Compiler.cpp#L4336
+            let message = String::from_utf8_lossy(&bytecode[2..]).to_string();
+            return Err(Error::SyntaxError {
+                incomplete_input: message.ends_with("<eof>"),
+                message,
+            });
         }
+
+        Ok(bytecode)
     }
 }
 
@@ -443,13 +457,12 @@ impl<'a> Chunk<'a> {
 
     /// Compiles the chunk and changes mode to binary.
     ///
-    /// It does nothing if the chunk is already binary.
+    /// It does nothing if the chunk is already binary or invalid.
     fn compile(&mut self) {
         if let Ok(ref source) = self.source {
             if self.detect_mode() == ChunkMode::Text {
                 #[cfg(feature = "luau")]
-                {
-                    let data = self.compiler.get_or_insert_with(Default::default).compile(source);
+                if let Ok(data) = self.compiler.get_or_insert_with(Default::default).compile(source) {
                     self.source = Ok(Cow::Owned(data));
                     self.mode = Some(ChunkMode::Binary);
                 }
@@ -516,6 +529,7 @@ impl<'a> Chunk<'a> {
             .compiler
             .as_ref()
             .map(|c| c.compile(&source))
+            .transpose()?
             .unwrap_or(source);
 
         let name = Self::convert_name(self.name.clone())?;

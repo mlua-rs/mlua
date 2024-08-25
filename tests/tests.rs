@@ -147,7 +147,7 @@ fn test_load_mode() -> Result<()> {
     #[cfg(not(feature = "luau"))]
     let bytecode = lua.load("return 1 + 1").into_function()?.dump(true);
     #[cfg(feature = "luau")]
-    let bytecode = mlua::Compiler::new().compile("return 1 + 1");
+    let bytecode = mlua::Compiler::new().compile("return 1 + 1")?;
     assert_eq!(lua.load(&bytecode).eval::<i32>()?, 2);
     assert_eq!(lua.load(&bytecode).set_mode(ChunkMode::Binary).eval::<i32>()?, 2);
     match lua.load(&bytecode).set_mode(ChunkMode::Text).exec() {
