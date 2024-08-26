@@ -745,34 +745,9 @@ pub trait FromLua: Sized {
     }
 }
 
-// Per-thread size of the VecDeque pool for MultiValue container.
-const MULTIVALUE_POOL_SIZE: usize = 32;
-
-thread_local! {
-    static MULTIVALUE_POOL: RefCell<Vec<VecDeque<Value>>> = const { RefCell::new(Vec::new()) };
-}
-
 /// Multiple Lua values used for both argument passing and also for multiple return values.
-#[derive(Debug, Clone)]
+#[derive(Default, Debug, Clone)]
 pub struct MultiValue(VecDeque<Value>);
-
-impl Drop for MultiValue {
-    fn drop(&mut self) {
-        MULTIVALUE_POOL.with_borrow_mut(|pool| {
-            if pool.len() < MULTIVALUE_POOL_SIZE {
-                self.0.clear();
-                pool.push(mem::take(&mut self.0));
-            }
-        });
-    }
-}
-
-impl Default for MultiValue {
-    #[inline]
-    fn default() -> MultiValue {
-        MultiValue::new()
-    }
-}
 
 impl Deref for MultiValue {
     type Target = VecDeque<Value>;
@@ -793,24 +768,13 @@ impl DerefMut for MultiValue {
 impl MultiValue {
     /// Creates an empty `MultiValue` containing no values.
     #[inline]
-    pub fn new() -> MultiValue {
-        Self::with_capacity(0)
+    pub const fn new() -> MultiValue {
+        MultiValue(VecDeque::new())
     }
 
     /// Creates an empty `MultiValue` container with space for at least `capacity` elements.
     pub fn with_capacity(capacity: usize) -> MultiValue {
-        let deque = MULTIVALUE_POOL.with_borrow_mut(|pool| {
-            pool.pop().map_or_else(
-                || VecDeque::with_capacity(capacity),
-                |mut deque| {
-                    if capacity > 0 {
-                        deque.reserve(capacity);
-                    }
-                    deque
-                },
-            )
-        });
-        MultiValue(deque)
+        MultiValue(VecDeque::with_capacity(capacity))
     }
 
     #[inline]

@@ -32,7 +32,7 @@ impl<E: IntoLua> IntoLuaMulti for StdResult<(), E> {
     #[inline]
     fn into_lua_multi(self, lua: &Lua) -> Result<MultiValue> {
         match self {
-            Ok(_) => Ok(MultiValue::new()),
+            Ok(_) => const { Ok(MultiValue::new()) },
             Err(err) => (Nil, err).into_lua_multi(lua),
         }
     }
@@ -197,7 +197,7 @@ macro_rules! impl_tuple {
         impl IntoLuaMulti for () {
             #[inline]
             fn into_lua_multi(self, _: &Lua) -> Result<MultiValue> {
-                Ok(MultiValue::new())
+                const { Ok(MultiValue::new()) }
             }
 
             #[inline]
