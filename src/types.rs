@@ -115,7 +115,6 @@ pub(crate) struct DestructedUserdata;
 pub(crate) struct ValueRef {
     pub(crate) lua: WeakLua,
     pub(crate) index: c_int,
-    pub(crate) drop: bool,
 }
 
 impl ValueRef {
@@ -124,7 +123,6 @@ impl ValueRef {
         ValueRef {
             lua: lua.weak().clone(),
             index,
-            drop: true,
         }
     }
 
@@ -149,7 +147,7 @@ impl Clone for ValueRef {
 
 impl Drop for ValueRef {
     fn drop(&mut self) {
-        if self.drop {
+        if self.index > 0 {
             if let Some(lua) = self.lua.try_lock() {
                 unsafe { lua.drop_ref(self) };
             }
