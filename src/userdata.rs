@@ -467,7 +467,7 @@ pub trait UserDataFields<T> {
     /// be used as a fall-back if no regular field or method are found.
     fn add_field<V>(&mut self, name: impl ToString, value: V)
     where
-        V: IntoLua + Clone + 'static;
+        V: IntoLua + 'static;
 
     /// Add a regular field getter as a method which accepts a `&T` as the parameter.
     ///
@@ -528,7 +528,7 @@ pub trait UserDataFields<T> {
     /// like `__gc` or `__metatable`.
     fn add_meta_field<V>(&mut self, name: impl ToString, value: V)
     where
-        V: IntoLua + Clone + 'static;
+        V: IntoLua + 'static;
 
     /// Add a metatable field computed from `f`.
     ///
@@ -540,7 +540,7 @@ pub trait UserDataFields<T> {
     /// like `__gc` or `__metatable`.
     fn add_meta_field_with<F, R>(&mut self, name: impl ToString, f: F)
     where
-        F: Fn(&Lua) -> Result<R> + MaybeSend + 'static,
+        F: FnOnce(&Lua) -> Result<R> + 'static,
         R: IntoLua;
 }
 

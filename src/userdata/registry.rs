@@ -7,7 +7,7 @@ use std::os::raw::c_int;
 use std::string::String as StdString;
 
 use crate::error::{Error, Result};
-use crate::state::Lua;
+use crate::state::{Lua, RawLua};
 use crate::types::{Callback, MaybeSend};
 use crate::userdata::{
     AnyUserData, MetaMethod, UserData, UserDataFields, UserDataMethods, UserDataRef, UserDataRefMut,
@@ -23,13 +23,15 @@ use {
     std::future::{self, Future},
 };
 
+type StaticFieldCallback = Box<dyn FnOnce(&RawLua) -> Result<()> + 'static>;
+
 /// Handle to registry for userdata methods and metamethods.
 pub struct UserDataRegistry<T: 'static> {
     // Fields
-    pub(crate) fields: Vec<(String, Callback)>,
+    pub(crate) fields: Vec<(String, StaticFieldCallback)>,
     pub(crate) field_getters: Vec<(String, Callback)>,
     pub(crate) field_setters: Vec<(String, Callback)>,
-    pub(crate) meta_fields: Vec<(String, Callback)>,
+    pub(crate) meta_fields: Vec<(String, StaticFieldCallback)>,
 
     // Methods
     pub(crate) methods: Vec<(String, Callback)>,
@@ -283,11 +285,13 @@ fn get_function_name<T>(name: &str) -> StdString {
 impl<T: 'static> UserDataFields<T> for UserDataRegistry<T> {
     fn add_field<V>(&mut self, name: impl ToString, value: V)
     where
-        V: IntoLua + Clone + 'static,
+        V: IntoLua + 'static,
     {
         let name = name.to_string();
-        let callback: Callback = Box::new(move |lua, _| unsafe { value.clone().push_into_stack_multi(lua) });
-        self.fields.push((name, callback));
+        self.fields.push((
+            name,
+            Box::new(move |rawlua| unsafe { value.push_into_stack(rawlua) }),
+        ));
     }
 
     fn add_field_method_get<M, R>(&mut self, name: impl ToString, method: M)
@@ -332,28 +336,28 @@ impl<T: 'static> UserDataFields<T> for UserDataRegistry<T> {
 
     fn add_meta_field<V>(&mut self, name: impl ToString, value: V)
     where
-        V: IntoLua + Clone + 'static,
+        V: IntoLua + 'static,
     {
         let name = name.to_string();
         self.meta_fields.push((
             name.clone(),
-            Box::new(move |lua, _| unsafe {
-                Self::check_meta_field(lua.lua(), &name, value.clone())?.push_into_stack_multi(lua)
+            Box::new(move |rawlua| unsafe {
+                Self::check_meta_field(rawlua.lua(), &name, value)?.push_into_stack(rawlua)
             }),
         ));
     }
 
     fn add_meta_field_with<F, R>(&mut self, name: impl ToString, f: F)
     where
-        F: Fn(&Lua) -> Result<R> + MaybeSend + 'static,
+        F: FnOnce(&Lua) -> Result<R> + 'static,
         R: IntoLua,
     {
         let name = name.to_string();
         self.meta_fields.push((
             name.clone(),
-            Box::new(move |rawlua, _| unsafe {
+            Box::new(move |rawlua| unsafe {
                 let lua = rawlua.lua();
-                Self::check_meta_field(lua, &name, f(lua)?)?.push_into_stack_multi(rawlua)
+                Self::check_meta_field(lua, &name, f(lua)?)?.push_into_stack(rawlua)
             }),
         ));
     }

@@ -805,10 +805,9 @@ impl RawLua {
             rawset_field(state, -2, MetaMethod::validate(&k)?)?;
         }
         let mut has_name = false;
-        for (k, f) in registry.meta_fields {
+        for (k, push_field) in registry.meta_fields {
             has_name = has_name || k == MetaMethod::Type;
-            let rawlua = mem::transmute::<&RawLua, &RawLua>(self);
-            mlua_assert!(f(rawlua, 0)? == 1, "field function must return one value");
+            push_field(self)?;
             rawset_field(state, -2, MetaMethod::validate(&k)?)?;
         }
         // Set `__name/__type` if not provided
@@ -832,29 +831,36 @@ impl RawLua {
                         ffi::lua_pop(state, 1);
                         push_table(state, 0, fields_nrec, true)?;
                     }
-                    for (k, f) in registry.fields {
-                        let rawlua = mem::transmute::<&RawLua, &RawLua>(self);
-                        mlua_assert!(f(rawlua, 0)? == 1, "field function must return one value");
+                    for (k, push_field) in mem::take(&mut registry.fields) {
+                        push_field(self)?;
                         rawset_field(state, -2, &k)?;
                     }
                     rawset_field(state, metatable_index, "__index")?;
                 }
                 _ => {
                     ffi::lua_pop(state, 1);
-                    // Propagate fields to the field getters
-                    for (k, f) in registry.fields {
-                        registry.field_getters.push((k, f))
-                    }
+                    // Fields will be converted to functions and added to field getters
                 }
             }
         }
 
         let mut field_getters_index = None;
-        let field_getters_nrec = registry.field_getters.len();
+        let field_getters_nrec = registry.field_getters.len() + registry.fields.len();
         if field_getters_nrec > 0 {
             push_table(state, 0, field_getters_nrec, true)?;
             for (k, m) in registry.field_getters {
                 self.push(self.create_callback(m)?)?;
+                rawset_field(state, -2, &k)?;
+            }
+            for (k, push_field) in registry.fields {
+                unsafe extern "C-unwind" fn return_field(state: *mut ffi::lua_State) -> c_int {
+                    ffi::lua_pushvalue(state, ffi::lua_upvalueindex(1));
+                    1
+                }
+                push_field(self)?;
+                protect_lua!(state, 1, 1, fn(state) {
+                    ffi::lua_pushcclosure(state, return_field, 1);
+                })?;
                 rawset_field(state, -2, &k)?;
             }
             field_getters_index = Some(ffi::lua_absindex(state, -1));
