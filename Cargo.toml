@@ -16,7 +16,7 @@ with async/await features and support of writing native Lua modules in Rust.
 """
 
 [package.metadata.docs.rs]
-features = ["lua54", "vendored", "async", "send", "serialize", "macros", "unstable"]
+features = ["lua54", "vendored", "async", "send", "serialize", "macros"]
 rustdoc-args = ["--cfg", "docsrs"]
 
 [workspace]
@@ -41,7 +41,6 @@ async = ["dep:futures-util"]
 send = ["parking_lot/send_guard"]
 serialize = ["dep:serde", "dep:erased-serde", "dep:serde-value"]
 macros = ["mlua_derive/macros"]
-unstable = []
 
 [dependencies]
 mlua_derive = { version = "=0.9.3", optional = true, path = "mlua_derive" }

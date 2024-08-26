@@ -1,8 +1,8 @@
 [lua54_coverage]
-features = "lua54,vendored,async,serialize,macros,unstable"
+features = "lua54,vendored,async,serialize,macros"
 
 [lua51_coverage]
-features = "lua51,vendored,async,serialize,macros,unstable"
+features = "lua51,vendored,async,serialize,macros"
 
 [luau_coverage]
-features = "luau,async,serialize,macros,unstable"
+features = "luau,async,serialize,macros"

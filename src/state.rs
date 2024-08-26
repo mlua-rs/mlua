@@ -1292,12 +1292,12 @@ impl Lua {
     }
 
     /// Sets the metatable for a Luau builtin vector type.
-    #[cfg(any(all(feature = "luau", feature = "unstable"), doc))]
-    #[cfg_attr(docsrs, doc(cfg(all(feature = "luau", feature = "unstable"))))]
+    #[cfg(any(feature = "luau", doc))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
     pub fn set_vector_metatable(&self, metatable: Option<Table>) {
         let lua = self.lock();
+        let state = lua.state();
         unsafe {
-            let state = lua.state();
             let _sg = StackGuard::new(state);
             assert_stack(state, 2);
 

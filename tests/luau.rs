@@ -173,7 +173,7 @@ fn test_vectors() -> Result<()> {
     Ok(())
 }
 
-#[cfg(all(not(feature = "luau-vector4"), feature = "unstable"))]
+#[cfg(not(feature = "luau-vector4"))]
 #[test]
 fn test_vector_metatable() -> Result<()> {
     let lua = Lua::new();
