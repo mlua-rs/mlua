@@ -46,6 +46,10 @@ unsafe impl Send for LightUserData {}
 #[cfg(feature = "send")]
 unsafe impl Sync for LightUserData {}
 
+#[cfg(feature = "send")]
+pub(crate) type Callback = Box<dyn Fn(&RawLua, c_int) -> Result<c_int> + Send + 'static>;
+
+#[cfg(not(feature = "send"))]
 pub(crate) type Callback = Box<dyn Fn(&RawLua, c_int) -> Result<c_int> + 'static>;
 
 pub(crate) struct Upvalue<T> {
@@ -55,7 +59,11 @@ pub(crate) struct Upvalue<T> {
 
 pub(crate) type CallbackUpvalue = Upvalue<Callback>;
 
-#[cfg(feature = "async")]
+#[cfg(all(feature = "async", feature = "send"))]
+pub(crate) type AsyncCallback =
+    Box<dyn for<'a> Fn(&'a RawLua, c_int) -> BoxFuture<'a, Result<c_int>> + Send + 'static>;
+
+#[cfg(all(feature = "async", not(feature = "send")))]
 pub(crate) type AsyncCallback =
     Box<dyn for<'a> Fn(&'a RawLua, c_int) -> BoxFuture<'a, Result<c_int>> + 'static>;
 
