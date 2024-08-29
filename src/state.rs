@@ -104,7 +104,7 @@ pub struct LuaOptions {
 
 impl Default for LuaOptions {
     fn default() -> Self {
-        LuaOptions::new()
+        const { LuaOptions::new() }
     }
 }
 
@@ -1251,7 +1251,7 @@ impl Lua {
     ///
     /// This methods provides a way to add fields or methods to userdata objects of a type `T`.
     pub fn register_userdata_type<T: 'static>(&self, f: impl FnOnce(&mut UserDataRegistry<T>)) -> Result<()> {
-        let mut registry = UserDataRegistry::new();
+        let mut registry = const { UserDataRegistry::new() };
         f(&mut registry);
 
         let lua = self.lock();

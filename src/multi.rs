@@ -141,7 +141,7 @@ impl<T> Variadic<T> {
 
 impl<T> Default for Variadic<T> {
     fn default() -> Variadic<T> {
-        Variadic::new()
+        const { Variadic::new() }
     }
 }
 

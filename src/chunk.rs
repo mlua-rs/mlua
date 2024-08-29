@@ -134,7 +134,7 @@ pub struct Compiler {
 #[cfg(any(feature = "luau", doc))]
 impl Default for Compiler {
     fn default() -> Self {
-        Self::new()
+        const { Self::new() }
     }
 }
 
@@ -323,8 +323,8 @@ impl<'a> Chunk<'a> {
     /// necessary to populate the environment in order for scripts using custom environments to be
     /// useful.
     pub fn set_environment(mut self, env: impl IntoLua) -> Self {
-        let lua = self.lua.lock();
-        let lua = lua.lua();
+        let guard = self.lua.lock();
+        let lua = guard.lua();
         self.env = env
             .into_lua(lua)
             .and_then(|val| lua.unpack(val))
@@ -357,8 +357,7 @@ impl<'a> Chunk<'a> {
     ///
     /// This is equivalent to calling the chunk function with no arguments and no return values.
     pub fn exec(self) -> Result<()> {
-        self.call::<()>(())?;
-        Ok(())
+        self.call(())
     }
 
     /// Asynchronously execute this chunk of code.

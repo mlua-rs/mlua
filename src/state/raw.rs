@@ -723,7 +723,7 @@ impl RawLua {
             }
 
             // Create a new metatable from `UserData` definition
-            let mut registry = UserDataRegistry::new();
+            let mut registry = const { UserDataRegistry::new() };
             T::register(&mut registry);
 
             self.register_userdata_metatable(registry)
@@ -742,7 +742,7 @@ impl RawLua {
             }
 
             // Create an empty metatable
-            let registry = UserDataRegistry::new();
+            let registry = const { UserDataRegistry::new() };
             self.register_userdata_metatable::<T>(registry)
         })
     }
