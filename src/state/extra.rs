@@ -1,6 +1,6 @@
 use std::any::TypeId;
 use std::cell::UnsafeCell;
-use std::mem::{self, MaybeUninit};
+use std::mem::MaybeUninit;
 use std::os::raw::{c_int, c_void};
 use std::ptr;
 use std::rc::Rc;
@@ -12,7 +12,7 @@ use rustc_hash::FxHashMap;
 use crate::error::Result;
 use crate::state::RawLua;
 use crate::stdlib::StdLib;
-use crate::types::{AppData, ReentrantMutex, XRc, XWeak};
+use crate::types::{AppData, ReentrantMutex, XRc};
 use crate::util::{get_internal_metatable, push_internal_userdata, TypeKey, WrappedFailure};
 
 #[cfg(any(feature = "luau", doc))]
@@ -31,10 +31,8 @@ const REF_STACK_RESERVE: c_int = 1;
 
 /// Data associated with the Lua state.
 pub(crate) struct ExtraData {
-    // Same layout as `Lua`
-    pub(super) lua: MaybeUninit<XRc<ReentrantMutex<RawLua>>>,
-    // Same layout as `WeakLua`
-    pub(super) weak: MaybeUninit<XWeak<ReentrantMutex<RawLua>>>,
+    pub(super) lua: MaybeUninit<Lua>,
+    pub(super) weak: MaybeUninit<WeakLua>,
 
     pub(super) registered_userdata: FxHashMap<TypeId, c_int>,
     pub(super) registered_userdata_mt: FxHashMap<*const c_void, Option<TypeId>>,
@@ -185,12 +183,15 @@ impl ExtraData {
         extra
     }
 
-    pub(super) unsafe fn set_lua(&mut self, lua: &XRc<ReentrantMutex<RawLua>>) {
-        self.lua.write(XRc::clone(lua));
+    pub(super) unsafe fn set_lua(&mut self, raw: &XRc<ReentrantMutex<RawLua>>) {
+        self.lua.write(Lua {
+            raw: XRc::clone(raw),
+            collect_garbage: false,
+        });
         if cfg!(not(feature = "module")) {
-            XRc::decrement_strong_count(XRc::as_ptr(lua));
+            XRc::decrement_strong_count(XRc::as_ptr(raw));
         }
-        self.weak.write(XRc::downgrade(lua));
+        self.weak.write(WeakLua(XRc::downgrade(raw)));
     }
 
     pub(super) unsafe fn get(state: *mut ffi::lua_State) -> *mut Self {
@@ -228,16 +229,16 @@ impl ExtraData {
 
     #[inline(always)]
     pub(super) unsafe fn lua(&self) -> &Lua {
-        mem::transmute(self.lua.assume_init_ref())
+        self.lua.assume_init_ref()
     }
 
     #[inline(always)]
     pub(super) unsafe fn raw_lua(&self) -> &RawLua {
-        &*self.lua.assume_init_ref().data_ptr()
+        &*self.lua.assume_init_ref().raw.data_ptr()
     }
 
     #[inline(always)]
     pub(super) unsafe fn weak(&self) -> &WeakLua {
-        mem::transmute(self.weak.assume_init_ref())
+        self.weak.assume_init_ref()
     }
 }

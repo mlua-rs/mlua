@@ -219,10 +219,10 @@ impl RawLua {
         rawlua
     }
 
-    pub(super) unsafe fn try_from_ptr(state: *mut ffi::lua_State) -> Option<XRc<ReentrantMutex<Self>>> {
+    unsafe fn try_from_ptr(state: *mut ffi::lua_State) -> Option<XRc<ReentrantMutex<Self>>> {
         match ExtraData::get(state) {
             extra if extra.is_null() => None,
-            extra => Some(XRc::clone(&(*extra).lua().0)),
+            extra => Some(XRc::clone(&(*extra).lua().raw)),
         }
     }
 

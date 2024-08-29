@@ -498,21 +498,22 @@ async fn test_async_thread_error() -> Result<()> {
 
 #[tokio::test]
 async fn test_async_terminate() -> Result<()> {
-    let lua = Lua::new();
-
     let mutex = Arc::new(Mutex::new(0u32));
-    let mutex2 = mutex.clone();
-    let func = lua.create_async_function(move |_, ()| {
-        let mutex = mutex2.clone();
-        async move {
-            let _guard = mutex.lock().await;
-            sleep_ms(100).await;
-            Ok(())
-        }
-    })?;
+    {
+        let lua = Lua::new();
+        let mutex2 = mutex.clone();
+        let func = lua.create_async_function(move |lua, ()| {
+            let mutex = mutex2.clone();
+            async move {
+                let _guard = mutex.lock().await;
+                sleep_ms(100).await;
+                drop(lua); // Move Lua to the future to test drop
+                Ok(())
+            }
+        })?;
 
-    let _ = tokio::time::timeout(Duration::from_millis(30), func.call_async::<()>(())).await;
-    lua.gc_collect()?;
+        let _ = tokio::time::timeout(Duration::from_millis(30), func.call_async::<()>(())).await;
+    }
     assert!(mutex.try_lock().is_ok());
 
     Ok(())

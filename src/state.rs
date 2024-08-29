@@ -43,11 +43,13 @@ use util::{callback_error_ext, StateGuard};
 
 /// Top level Lua struct which represents an instance of Lua VM.
 #[derive(Clone)]
-#[repr(transparent)]
-pub struct Lua(XRc<ReentrantMutex<RawLua>>);
+pub struct Lua {
+    pub(self) raw: XRc<ReentrantMutex<RawLua>>,
+    // Controls whether garbage collection should be run on drop
+    pub(self) collect_garbage: bool,
+}
 
 #[derive(Clone)]
-#[repr(transparent)]
 pub(crate) struct WeakLua(XWeak<ReentrantMutex<RawLua>>);
 
 pub(crate) struct LuaGuard(ArcReentrantMutexGuard<RawLua>);
@@ -134,6 +136,14 @@ impl LuaOptions {
     pub const fn thread_pool_size(mut self, size: usize) -> Self {
         self.thread_pool_size = size;
         self
+    }
+}
+
+impl Drop for Lua {
+    fn drop(&mut self) {
+        if self.collect_garbage {
+            let _ = self.gc_collect();
+        }
     }
 }
 
@@ -242,7 +252,10 @@ impl Lua {
 
     /// Creates a new Lua state with required `libs` and `options`
     unsafe fn inner_new(libs: StdLib, options: LuaOptions) -> Lua {
-        let lua = Lua(RawLua::new(libs, options));
+        let lua = Lua {
+            raw: RawLua::new(libs, options),
+            collect_garbage: true,
+        };
 
         #[cfg(feature = "luau")]
         mlua_expect!(lua.configure_luau(), "Error configuring Luau");
@@ -257,7 +270,10 @@ impl Lua {
     #[allow(clippy::missing_safety_doc)]
     #[inline]
     pub unsafe fn init_from_ptr(state: *mut ffi::lua_State) -> Lua {
-        Lua(RawLua::init_from_ptr(state))
+        Lua {
+            raw: RawLua::init_from_ptr(state),
+            collect_garbage: true,
+        }
     }
 
     /// FIXME: Deprecated load_from_std_lib
@@ -1157,6 +1173,8 @@ impl Lua {
         FR: Future<Output = Result<R>> + MaybeSend + 'static,
         R: IntoLuaMulti,
     {
+        // In future we should switch to async closures when they are stable to capture `&Lua`
+        // See https://rust-lang.github.io/rfcs/3668-async-closures.html
         (self.lock()).create_async_callback(Box::new(move |rawlua, nargs| unsafe {
             let args = match A::from_stack_args(nargs, 1, None, rawlua) {
                 Ok(args) => args,
@@ -1819,17 +1837,17 @@ impl Lua {
 
     #[inline(always)]
     pub(crate) fn lock(&self) -> ReentrantMutexGuard<RawLua> {
-        self.0.lock()
+        self.raw.lock()
     }
 
     #[inline(always)]
     pub(crate) fn lock_arc(&self) -> LuaGuard {
-        LuaGuard(self.0.lock_arc())
+        LuaGuard(self.raw.lock_arc())
     }
 
     #[inline(always)]
     pub(crate) fn weak(&self) -> WeakLua {
-        WeakLua(XRc::downgrade(&self.0))
+        WeakLua(XRc::downgrade(&self.raw))
     }
 
     /// Returns a handle to the unprotected Lua state without any synchronization.
@@ -1837,7 +1855,7 @@ impl Lua {
     /// This is useful where we know that the lock is already held by the caller.
     #[inline(always)]
     pub(crate) unsafe fn raw_lua(&self) -> &RawLua {
-        &*self.0.data_ptr()
+        &*self.raw.data_ptr()
     }
 }
 
