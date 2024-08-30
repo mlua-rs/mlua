@@ -941,7 +941,7 @@ impl ObjectLike for Table {
 
     #[inline]
     fn to_string(&self) -> Result<StdString> {
-        Value::Table(self.clone()).to_string()
+        Value::Table(Table(self.0.copy())).to_string()
     }
 }
 

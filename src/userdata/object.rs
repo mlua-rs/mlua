@@ -88,6 +88,6 @@ impl ObjectLike for AnyUserData {
 
     #[inline]
     fn to_string(&self) -> Result<StdString> {
-        Value::UserData(self.clone()).to_string()
+        Value::UserData(AnyUserData(self.0.copy(), self.1)).to_string()
     }
 }
