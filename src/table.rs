@@ -2,6 +2,7 @@ use std::collections::HashSet;
 use std::fmt;
 use std::marker::PhantomData;
 use std::os::raw::c_void;
+use std::string::String as StdString;
 
 #[cfg(feature = "serialize")]
 use {
@@ -12,14 +13,14 @@ use {
 
 use crate::error::{Error, Result};
 use crate::function::Function;
-use crate::private::Sealed;
 use crate::state::{LuaGuard, RawLua};
+use crate::traits::ObjectLike;
 use crate::types::{Integer, ValueRef};
 use crate::util::{assert_stack, check_stack, StackGuard};
 use crate::value::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, Nil, Value};
 
 #[cfg(feature = "async")]
-use std::future::Future;
+use futures_util::future::{self, Either, Future};
 
 /// Handle to an internal Lua table.
 #[derive(Clone)]
@@ -60,11 +61,15 @@ impl Table {
     ///
     /// [`raw_set`]: #method.raw_set
     pub fn set(&self, key: impl IntoLua, value: impl IntoLua) -> Result<()> {
-        // Fast track
+        // Fast track (skip protected call)
         if !self.has_metatable() {
             return self.raw_set(key, value);
         }
 
+        self.set_protected(key, value)
+    }
+
+    pub(crate) fn set_protected(&self, key: impl IntoLua, value: impl IntoLua) -> Result<()> {
         let lua = self.0.lua.lock();
         let state = lua.state();
         unsafe {
@@ -103,11 +108,15 @@ impl Table {
     ///
     /// [`raw_get`]: #method.raw_get
     pub fn get<V: FromLua>(&self, key: impl IntoLua) -> Result<V> {
-        // Fast track
+        // Fast track (skip protected call)
         if !self.has_metatable() {
             return self.raw_get(key);
         }
 
+        self.get_protected(key)
+    }
+
+    pub(crate) fn get_protected<V: FromLua>(&self, key: impl IntoLua) -> Result<V> {
         let lua = self.0.lua.lock();
         let state = lua.state();
         unsafe {
@@ -133,7 +142,7 @@ impl Table {
     ///
     /// This might invoke the `__len` and `__newindex` metamethods.
     pub fn push(&self, value: impl IntoLua) -> Result<()> {
-        // Fast track
+        // Fast track (skip protected call)
         if !self.has_metatable() {
             return self.raw_push(value);
         }
@@ -158,7 +167,7 @@ impl Table {
     ///
     /// This might invoke the `__len` and `__newindex` metamethods.
     pub fn pop<V: FromLua>(&self) -> Result<V> {
-        // Fast track
+        // Fast track (skip protected call)
         if !self.has_metatable() {
             return self.raw_pop();
         }
@@ -433,7 +442,7 @@ impl Table {
     ///
     /// [`raw_len`]: #method.raw_len
     pub fn len(&self) -> Result<Integer> {
-        // Fast track
+        // Fast track (skip protected call)
         if !self.has_metatable() {
             return Ok(self.raw_len() as Integer);
         }
@@ -858,107 +867,41 @@ where
     }
 }
 
-/// An extension trait for `Table`s that provides a variety of convenient functionality.
-pub trait TableExt: Sealed {
-    /// Calls the table as function assuming it has `__call` metamethod.
-    ///
-    /// The metamethod is called with the table as its first argument, followed by the passed
-    /// arguments.
-    fn call<R>(&self, args: impl IntoLuaMulti) -> Result<R>
-    where
-        R: FromLuaMulti;
+impl ObjectLike for Table {
+    #[inline]
+    fn get<V: FromLua>(&self, key: impl IntoLua) -> Result<V> {
+        self.get(key)
+    }
 
-    /// Asynchronously calls the table as function assuming it has `__call` metamethod.
-    ///
-    /// The metamethod is called with the table as its first argument, followed by the passed
-    /// arguments.
-    #[cfg(feature = "async")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
-    fn call_async<R>(&self, args: impl IntoLuaMulti) -> impl Future<Output = Result<R>>
-    where
-        R: FromLuaMulti;
+    #[inline]
+    fn set(&self, key: impl IntoLua, value: impl IntoLua) -> Result<()> {
+        self.set(key, value)
+    }
 
-    /// Gets the function associated to `key` from the table and executes it,
-    /// passing the table itself along with `args` as function arguments.
-    ///
-    /// This is a shortcut for
-    /// `table.get::<Function>(key)?.call((table.clone(), arg1, ..., argN))`
-    ///
-    /// This might invoke the `__index` metamethod.
-    fn call_method<R>(&self, name: &str, args: impl IntoLuaMulti) -> Result<R>
-    where
-        R: FromLuaMulti;
-
-    /// Gets the function associated to `key` from the table and executes it,
-    /// passing `args` as function arguments.
-    ///
-    /// This is a shortcut for
-    /// `table.get::<Function>(key)?.call(args)`
-    ///
-    /// This might invoke the `__index` metamethod.
-    fn call_function<R>(&self, name: &str, args: impl IntoLuaMulti) -> Result<R>
-    where
-        R: FromLuaMulti;
-
-    /// Gets the function associated to `key` from the table and asynchronously executes it,
-    /// passing the table itself along with `args` as function arguments and returning Future.
-    ///
-    /// Requires `feature = "async"`
-    ///
-    /// This might invoke the `__index` metamethod.
-    #[cfg(feature = "async")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
-    fn call_async_method<R>(&self, name: &str, args: impl IntoLuaMulti) -> impl Future<Output = Result<R>>
-    where
-        R: FromLuaMulti;
-
-    /// Gets the function associated to `key` from the table and asynchronously executes it,
-    /// passing `args` as function arguments and returning Future.
-    ///
-    /// Requires `feature = "async"`
-    ///
-    /// This might invoke the `__index` metamethod.
-    #[cfg(feature = "async")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
-    fn call_async_function<R>(&self, name: &str, args: impl IntoLuaMulti) -> impl Future<Output = Result<R>>
-    where
-        R: FromLuaMulti;
-}
-
-impl TableExt for Table {
+    #[inline]
     fn call<R>(&self, args: impl IntoLuaMulti) -> Result<R>
     where
         R: FromLuaMulti,
     {
         // Convert table to a function and call via pcall that respects the `__call` metamethod.
-        Function(self.0.clone()).call(args)
+        Function(self.0.copy()).call(args)
     }
 
     #[cfg(feature = "async")]
+    #[inline]
     fn call_async<R>(&self, args: impl IntoLuaMulti) -> impl Future<Output = Result<R>>
     where
         R: FromLuaMulti,
     {
-        let lua = self.0.lua.lock();
-        let args = args.into_lua_multi(lua.lua());
-        async move {
-            let func = Function(self.0.clone());
-            func.call_async(args?).await
-        }
+        Function(self.0.copy()).call_async(args)
     }
 
+    #[inline]
     fn call_method<R>(&self, name: &str, args: impl IntoLuaMulti) -> Result<R>
     where
         R: FromLuaMulti,
     {
-        self.get::<Function>(name)?.call((self, args))
-    }
-
-    fn call_function<R>(&self, name: &str, args: impl IntoLuaMulti) -> Result<R>
-    where
-        R: FromLuaMulti,
-    {
-        self.get::<Function>(name)?.call(args)
+        self.call_function(name, (self, args))
     }
 
     #[cfg(feature = "async")]
@@ -969,17 +912,36 @@ impl TableExt for Table {
         self.call_async_function(name, (self, args))
     }
 
+    #[inline]
+    fn call_function<R: FromLuaMulti>(&self, name: &str, args: impl IntoLuaMulti) -> Result<R> {
+        match self.get(name)? {
+            Value::Function(func) => func.call(args),
+            val => {
+                let msg = format!("attempt to call a {} value (function '{name}')", val.type_name());
+                Err(Error::runtime(msg))
+            }
+        }
+    }
+
     #[cfg(feature = "async")]
+    #[inline]
     fn call_async_function<R>(&self, name: &str, args: impl IntoLuaMulti) -> impl Future<Output = Result<R>>
     where
         R: FromLuaMulti,
     {
-        let lua = self.0.lua.lock();
-        let args = args.into_lua_multi(lua.lua());
-        async move {
-            let func = self.get::<Function>(name)?;
-            func.call_async(args?).await
+        match self.get(name) {
+            Ok(Value::Function(func)) => Either::Left(func.call_async(args)),
+            Ok(val) => {
+                let msg = format!("attempt to call a {} value (function '{name}')", val.type_name());
+                Either::Right(future::ready(Err(Error::RuntimeError(msg))))
+            }
+            Err(err) => Either::Right(future::ready(Err(err))),
         }
+    }
+
+    #[inline]
+    fn to_string(&self) -> Result<StdString> {
+        Value::Table(self.clone()).to_string()
     }
 }
 
@@ -1050,7 +1012,7 @@ impl<'a> Serialize for SerializableTable<'a> {
                 seq.serialize_element(&SerializableValue::new(&value, options, Some(visited)))
                     .map_err(|err| {
                         serialize_err = Some(err);
-                        Error::SerializeError(String::new())
+                        Error::SerializeError(StdString::new())
                     })
             });
             convert_result(res, serialize_err)?;
@@ -1075,7 +1037,7 @@ impl<'a> Serialize for SerializableTable<'a> {
             )
             .map_err(|err| {
                 serialize_err = Some(err);
-                Error::SerializeError(String::new())
+                Error::SerializeError(StdString::new())
             })
         };
 

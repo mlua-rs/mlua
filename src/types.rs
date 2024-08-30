@@ -115,6 +115,7 @@ pub(crate) struct DestructedUserdata;
 pub(crate) struct ValueRef {
     pub(crate) lua: WeakLua,
     pub(crate) index: c_int,
+    pub(crate) drop: bool,
 }
 
 impl ValueRef {
@@ -123,6 +124,7 @@ impl ValueRef {
         ValueRef {
             lua: lua.weak().clone(),
             index,
+            drop: true,
         }
     }
 
@@ -130,6 +132,16 @@ impl ValueRef {
     pub(crate) fn to_pointer(&self) -> *const c_void {
         let lua = self.lua.lock();
         unsafe { ffi::lua_topointer(lua.ref_thread(), self.index) }
+    }
+
+    /// Returns a copy of the value, which is valid as long as the original value is held.
+    #[inline]
+    pub(crate) fn copy(&self) -> Self {
+        ValueRef {
+            lua: self.lua.clone(),
+            index: self.index,
+            drop: false,
+        }
     }
 }
 
@@ -147,7 +159,7 @@ impl Clone for ValueRef {
 
 impl Drop for ValueRef {
     fn drop(&mut self) {
-        if self.index > 0 {
+        if self.drop {
             if let Some(lua) = self.lua.try_lock() {
                 unsafe { lua.drop_ref(self) };
             }

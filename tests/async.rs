@@ -7,7 +7,7 @@ use futures_util::stream::TryStreamExt;
 use tokio::sync::Mutex;
 
 use mlua::{
-    AnyUserDataExt, Error, Function, Lua, LuaOptions, MultiValue, Result, StdLib, Table, TableExt, UserData,
+    Error, Function, Lua, LuaOptions, MultiValue, ObjectLike, Result, StdLib, Table, UserData,
     UserDataMethods, Value,
 };
 
@@ -315,7 +315,7 @@ fn test_async_thread_capture() -> Result<()> {
 }
 
 #[tokio::test]
-async fn test_async_table() -> Result<()> {
+async fn test_async_table_object_like() -> Result<()> {
     let options = LuaOptions::new().thread_pool_size(4);
     let lua = Lua::new_with(StdLib::ALL_SAFE, options)?;
 
@@ -334,19 +334,20 @@ async fn test_async_table() -> Result<()> {
     })?;
     table.set("set_value", set_value)?;
 
-    let sleep = lua.create_async_function(|_, n| async move {
-        sleep_ms(n).await;
-        Ok(format!("elapsed:{}ms", n))
-    })?;
-    table.set("sleep", sleep)?;
-
     assert_eq!(table.call_async_method::<i64>("get_value", ()).await?, 10);
     table.call_async_method::<()>("set_value", 15).await?;
     assert_eq!(table.call_async_method::<i64>("get_value", ()).await?, 15);
-    assert_eq!(
-        table.call_async_function::<String>("sleep", 7).await?,
-        "elapsed:7ms"
-    );
+
+    let metatable = lua.create_table()?;
+    metatable.set(
+        "__call",
+        lua.create_async_function(|_, table: Table| async move {
+            sleep_ms(10).await;
+            table.get::<i64>("val")
+        })?,
+    )?;
+    table.set_metatable(Some(metatable));
+    assert_eq!(table.call_async::<i64>(()).await.unwrap(), 15);
 
     Ok(())
 }
@@ -461,6 +462,7 @@ async fn test_async_userdata() -> Result<()> {
     .exec_async()
     .await?;
 
+    // ObjectLike methods
     userdata.call_async_method::<()>("set_value", 24).await?;
     let n: u64 = userdata.call_async_method("get_value", ()).await?;
     assert_eq!(n, 24);

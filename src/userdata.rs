@@ -26,7 +26,6 @@ use crate::value::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, Value};
 // Re-export for convenience
 pub(crate) use cell::UserDataVariant;
 pub use cell::{UserDataRef, UserDataRefMut};
-pub use ext::AnyUserDataExt;
 pub(crate) use registry::UserDataProxy;
 pub use registry::UserDataRegistry;
 
@@ -1174,8 +1173,8 @@ where
 }
 
 mod cell;
-mod ext;
 mod lock;
+mod object;
 mod registry;
 
 #[cfg(test)]

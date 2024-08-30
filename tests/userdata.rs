@@ -6,8 +6,8 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicI64, Ordering};
 
 use mlua::{
-    AnyUserData, AnyUserDataExt, Error, ExternalError, Function, Lua, MetaMethod, Nil, Result, String,
-    UserData, UserDataFields, UserDataMethods, UserDataRef, Value, Variadic,
+    AnyUserData, Error, ExternalError, Function, Lua, MetaMethod, Nil, ObjectLike, Result, String, UserData,
+    UserDataFields, UserDataMethods, UserDataRef, Value, Variadic,
 };
 
 #[test]
@@ -726,7 +726,7 @@ fn test_any_userdata_wrap() -> Result<()> {
 }
 
 #[test]
-fn test_userdata_ext() -> Result<()> {
+fn test_userdata_object_like() -> Result<()> {
     let lua = Lua::new();
 
     #[derive(Clone, Copy)]
@@ -765,6 +765,15 @@ fn test_userdata_ext() -> Result<()> {
 
     ud.call_method::<()>("add", 2)?;
     assert_eq!(ud.get::<u32>("n")?, 323);
+
+    match ud.call_method::<()>("non_existent", ()) {
+        Err(Error::RuntimeError(err)) => {
+            assert!(err.contains("attempt to call a nil value (function 'non_existent')"))
+        }
+        r => panic!("expected RuntimeError, got {r:?}"),
+    }
+
+    assert!(ud.to_string()?.starts_with("MyUserData"));
 
     Ok(())
 }

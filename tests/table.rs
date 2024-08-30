@@ -1,4 +1,4 @@
-use mlua::{Error, Lua, Nil, Result, Table, TableExt, Value};
+use mlua::{Error, Lua, Nil, ObjectLike, Result, Table, Value};
 
 #[test]
 fn test_globals_set_get() -> Result<()> {
@@ -399,7 +399,7 @@ fn test_table_error() -> Result<()> {
 }
 
 #[test]
-fn test_table_call() -> Result<()> {
+fn test_table_object_like() -> Result<()> {
     let lua = Lua::new();
 
     lua.load(
@@ -408,6 +408,10 @@ fn test_table_call() -> Result<()> {
         setmetatable(table, {
             __call = function(t, key)
                 return "call_"..t[key]
+            end,
+
+            __tostring = function()
+                return "table object"
             end
         })
 
@@ -424,9 +428,19 @@ fn test_table_call() -> Result<()> {
 
     let table: Table = lua.globals().get("table")?;
 
+    <Table as ObjectLike>::set(&table, "c", 3)?;
+    assert_eq!(<Table as ObjectLike>::get::<i32>(&table, "c")?, 3);
     assert_eq!(table.call::<String>("b")?, "call_2");
     assert_eq!(table.call_function::<String>("func", "a")?, "func_a");
     assert_eq!(table.call_method::<String>("method", "a")?, "method_1");
+    assert_eq!(table.to_string()?, "table object");
+
+    match table.call_method::<()>("non_existent", ()) {
+        Err(Error::RuntimeError(err)) => {
+            assert!(err.contains("attempt to call a nil value (function 'non_existent')"))
+        }
+        r => panic!("expected RuntimeError, got {r:?}"),
+    }
 
     // Test calling non-callable table
     let table2 = lua.create_table()?;

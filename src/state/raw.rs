@@ -489,7 +489,7 @@ impl RawLua {
             #[cfg(feature = "luau")]
             ffi::lua_resetthread(thread_state);
             extra.thread_pool.push(thread.0.index);
-            thread.0.index = 0; // Prevent reference from being dropped
+            thread.0.drop = false; // Prevent thread from being garbage collected
             return true;
         }
         false
