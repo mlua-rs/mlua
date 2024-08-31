@@ -84,8 +84,8 @@ fn test_c_function() -> Result<()> {
     let lua = Lua::new();
 
     unsafe extern "C-unwind" fn c_function(state: *mut mlua::lua_State) -> std::os::raw::c_int {
-        let lua = Lua::init_from_ptr(state);
-        lua.globals().set("c_function", true).unwrap();
+        ffi::lua_pushboolean(state, 1);
+        ffi::lua_setglobal(state, b"c_function\0" as *const _ as *const _);
         0
     }
 

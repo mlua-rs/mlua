@@ -33,6 +33,7 @@ const REF_STACK_RESERVE: c_int = 1;
 pub(crate) struct ExtraData {
     pub(super) lua: MaybeUninit<Lua>,
     pub(super) weak: MaybeUninit<WeakLua>,
+    pub(super) owned: bool,
 
     pub(super) registered_userdata: FxHashMap<TypeId, c_int>,
     pub(super) registered_userdata_mt: FxHashMap<*const c_void, Option<TypeId>>,
@@ -46,7 +47,7 @@ pub(crate) struct ExtraData {
 
     pub(super) safe: bool,
     pub(super) libs: StdLib,
-    #[cfg(feature = "module")]
+    // Used in module mode
     pub(super) skip_memory_check: bool,
 
     // Auxiliary thread to store references
@@ -88,8 +89,9 @@ pub(crate) struct ExtraData {
 impl Drop for ExtraData {
     fn drop(&mut self) {
         unsafe {
-            #[cfg(feature = "module")]
-            self.lua.assume_init_drop();
+            if !self.owned {
+                self.lua.assume_init_drop();
+            }
 
             self.weak.assume_init_drop();
         }
@@ -111,7 +113,7 @@ impl ExtraData {
     #[cfg(any(feature = "lua51", feature = "luajit", feature = "luau"))]
     pub(super) const ERROR_TRACEBACK_IDX: c_int = 1;
 
-    pub(super) unsafe fn init(state: *mut ffi::lua_State) -> XRc<UnsafeCell<Self>> {
+    pub(super) unsafe fn init(state: *mut ffi::lua_State, owned: bool) -> XRc<UnsafeCell<Self>> {
         // Create ref stack thread and place it in the registry to prevent it
         // from being garbage collected.
         let ref_thread = mlua_expect!(
@@ -141,6 +143,7 @@ impl ExtraData {
         let extra = XRc::new(UnsafeCell::new(ExtraData {
             lua: MaybeUninit::uninit(),
             weak: MaybeUninit::uninit(),
+            owned,
             registered_userdata: FxHashMap::default(),
             registered_userdata_mt: FxHashMap::default(),
             last_checked_userdata_mt: (ptr::null(), None),
@@ -148,7 +151,6 @@ impl ExtraData {
             app_data: AppData::default(),
             safe: false,
             libs: StdLib::NONE,
-            #[cfg(feature = "module")]
             skip_memory_check: false,
             ref_thread,
             // We need some reserved stack space to move values in and out of the ref stack.
@@ -188,7 +190,7 @@ impl ExtraData {
             raw: XRc::clone(raw),
             collect_garbage: false,
         });
-        if cfg!(not(feature = "module")) {
+        if self.owned {
             XRc::decrement_strong_count(XRc::as_ptr(raw));
         }
         self.weak.write(WeakLua(XRc::downgrade(raw)));

@@ -50,10 +50,13 @@ pub struct RawLua {
     pub(super) extra: XRc<UnsafeCell<ExtraData>>,
 }
 
-#[cfg(not(feature = "module"))]
 impl Drop for RawLua {
     fn drop(&mut self) {
         unsafe {
+            if !(*self.extra.get()).owned {
+                return;
+            }
+
             let mem_state = MemoryState::get(self.main_state);
 
             ffi::lua_close(self.main_state);
@@ -115,7 +118,7 @@ impl RawLua {
             ffi::luau_codegen_create(state);
         }
 
-        let rawlua = Self::init_from_ptr(state);
+        let rawlua = Self::init_from_ptr(state, true);
         let extra = rawlua.lock().extra.get();
 
         mlua_expect!(
@@ -154,7 +157,7 @@ impl RawLua {
         rawlua
     }
 
-    pub(super) unsafe fn init_from_ptr(state: *mut ffi::lua_State) -> XRc<ReentrantMutex<Self>> {
+    pub(super) unsafe fn init_from_ptr(state: *mut ffi::lua_State, owned: bool) -> XRc<ReentrantMutex<Self>> {
         assert!(!state.is_null(), "Lua state is NULL");
         if let Some(lua) = Self::try_from_ptr(state) {
             return lua;
@@ -191,7 +194,7 @@ impl RawLua {
         );
 
         // Init ExtraData
-        let extra = ExtraData::init(main_state);
+        let extra = ExtraData::init(main_state, owned);
 
         // Register `DestructedUserdata` type
         get_destructed_userdata_metatable(main_state);
@@ -704,10 +707,7 @@ impl RawLua {
         // MemoryInfo is empty in module mode so we cannot predict memory limits
         match MemoryState::get(self.main_state) {
             mem_state if !mem_state.is_null() => (*mem_state).memory_limit() == 0,
-            #[cfg(feature = "module")]
             _ => (*self.extra.get()).skip_memory_check, // Check the special flag (only for module mode)
-            #[cfg(not(feature = "module"))]
-            _ => false,
         }
     }
 

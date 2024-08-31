@@ -271,7 +271,7 @@ impl Lua {
     #[inline]
     pub unsafe fn init_from_ptr(state: *mut ffi::lua_State) -> Lua {
         Lua {
-            raw: RawLua::init_from_ptr(state),
+            raw: RawLua::init_from_ptr(state, false),
             collect_garbage: true,
         }
     }
