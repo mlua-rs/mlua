@@ -5,11 +5,11 @@ use std::io::Result as IoResult;
 use std::path::{Path, PathBuf};
 use std::string::String as StdString;
 
-use crate::error::{Error, ErrorContext, Result};
+use crate::error::{Error, Result};
 use crate::function::Function;
 use crate::state::{Lua, WeakLua};
 use crate::table::Table;
-use crate::value::{FromLuaMulti, IntoLua, IntoLuaMulti};
+use crate::value::{FromLuaMulti, IntoLuaMulti};
 
 /// Trait for types [loadable by Lua] and convertible to a [`Chunk`]
 ///
@@ -322,13 +322,8 @@ impl<'a> Chunk<'a> {
     /// All global variables (including the standard library!) are looked up in `_ENV`, so it may be
     /// necessary to populate the environment in order for scripts using custom environments to be
     /// useful.
-    pub fn set_environment(mut self, env: impl IntoLua) -> Self {
-        let guard = self.lua.lock();
-        let lua = guard.lua();
-        self.env = env
-            .into_lua(lua)
-            .and_then(|val| lua.unpack(val))
-            .context("bad environment value");
+    pub fn set_environment(mut self, env: Table) -> Self {
+        self.env = Ok(Some(env));
         self
     }
 
@@ -451,7 +446,7 @@ impl<'a> Chunk<'a> {
         let name = Self::convert_name(self.name)?;
         self.lua
             .lock()
-            .load_chunk(Some(&name), self.env?, self.mode, self.source?.as_ref())
+            .load_chunk(Some(&name), self.env?.as_ref(), self.mode, self.source?.as_ref())
     }
 
     /// Compiles the chunk and changes mode to binary.
@@ -532,9 +527,12 @@ impl<'a> Chunk<'a> {
             .unwrap_or(source);
 
         let name = Self::convert_name(self.name.clone())?;
-        self.lua
-            .lock()
-            .load_chunk(Some(&name), self.env.clone()?, None, &source)
+        let env = match &self.env {
+            Ok(Some(env)) => Some(env),
+            Ok(None) => None,
+            Err(err) => return Err(err.clone()),
+        };
+        self.lua.lock().load_chunk(Some(&name), env, None, &source)
     }
 
     fn detect_mode(&self) -> ChunkMode {

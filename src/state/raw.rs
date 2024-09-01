@@ -301,7 +301,7 @@ impl RawLua {
     pub(crate) fn load_chunk(
         &self,
         name: Option<&CStr>,
-        env: Option<Table>,
+        env: Option<&Table>,
         mode: Option<ChunkMode>,
         source: &[u8],
     ) -> Result<Function> {
