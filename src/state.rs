@@ -1127,8 +1127,8 @@ impl Lua {
 
     /// Wraps a Rust async function or closure, creating a callable Lua function handle to it.
     ///
-    /// While executing the function Rust will poll Future and if the result is not ready, call
-    /// `yield()` passing internal representation of a `Poll::Pending` value.
+    /// While executing the function Rust will poll the Future and if the result is not ready,
+    /// call `yield()` passing internal representation of a `Poll::Pending` value.
     ///
     /// The function must be called inside Lua coroutine ([`Thread`]) to be able to suspend its
     /// execution. An executor should be used to poll [`AsyncThread`] and mlua will take a

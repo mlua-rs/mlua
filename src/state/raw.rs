@@ -1075,6 +1075,7 @@ impl RawLua {
 
     #[cfg(feature = "async")]
     pub(crate) fn create_async_callback(&self, func: AsyncCallback) -> Result<Function> {
+        // Ensure that the coroutine library is loaded
         #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "luau"))]
         unsafe {
             if !(*self.extra.get()).libs.contains(StdLib::COROUTINE) {
@@ -1130,7 +1131,7 @@ impl RawLua {
                     }
                     Poll::Ready(nresults) => {
                         match nresults? {
-                            nresults @ 0..=2 => {
+                            nresults if nresults < 3 => {
                                 // Fast path for up to 2 results without creating a table
                                 ffi::lua_pushinteger(state, nresults as _);
                                 if nresults > 0 {
@@ -1182,13 +1183,11 @@ impl RawLua {
         let lua = self.lua();
         let coroutine = lua.globals().get::<Table>("coroutine")?;
 
+        // Prepare environment for the async poller
         let env = lua.create_table_with_capacity(0, 3)?;
         env.set("get_poll", get_poll)?;
-        // Cache `yield` function
         env.set("yield", coroutine.get::<Function>("yield")?)?;
-        unsafe {
-            env.set("unpack", lua.create_c_function(unpack)?)?;
-        }
+        env.set("unpack", unsafe { lua.create_c_function(unpack)? })?;
 
         lua.load(
             r#"

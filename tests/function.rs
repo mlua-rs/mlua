@@ -168,6 +168,13 @@ fn test_function_environment() -> Result<()> {
     lua.gc_collect()?;
     assert_eq!(lua_func2.call::<String>(())?, "local");
 
+    // Test getting environment set by chunk loader
+    let chunk = lua
+        .load("return hello")
+        .set_environment(lua.create_table_from([("hello", "chunk")])?)
+        .into_function()?;
+    assert_eq!(chunk.environment().unwrap().get::<String>("hello")?, "chunk");
+
     Ok(())
 }
 

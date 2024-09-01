@@ -75,7 +75,7 @@ async fn test_async_call() -> Result<()> {
 
     match hello.call::<()>("alex") {
         Err(Error::RuntimeError(_)) => {}
-        _ => panic!("non-async executing async function must fail on the yield stage with RuntimeError"),
+        err => panic!("expected `RuntimeError`, got {err:?}"),
     };
 
     assert_eq!(hello.call_async::<String>("alex").await?, "hello, alex!");
