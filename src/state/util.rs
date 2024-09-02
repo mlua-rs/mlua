@@ -32,7 +32,7 @@ pub(super) unsafe fn callback_error_ext<F, R>(
     f: F,
 ) -> R
 where
-    F: FnOnce(c_int) -> Result<R>,
+    F: FnOnce(*mut ExtraData, c_int) -> Result<R>,
 {
     if extra.is_null() {
         extra = ExtraData::get(state);
@@ -113,7 +113,7 @@ where
     // to store a wrapped failure (error or panic) *before* we proceed.
     let prealloc_failure = PreallocatedFailure::reserve(state, extra);
 
-    match catch_unwind(AssertUnwindSafe(|| f(nargs))) {
+    match catch_unwind(AssertUnwindSafe(|| f(extra, nargs))) {
         Ok(Ok(r)) => {
             // Return unused `WrappedFailure` to the pool
             prealloc_failure.release(state, extra);

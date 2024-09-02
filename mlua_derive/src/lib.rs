@@ -64,9 +64,10 @@ pub fn lua_module(attr: TokenStream, item: TokenStream) -> TokenStream {
 
         #[no_mangle]
         unsafe extern "C-unwind" fn #ext_entrypoint_name(state: *mut mlua::lua_State) -> ::std::os::raw::c_int {
-            let lua = mlua::Lua::init_from_ptr(state);
-            #skip_memory_check
-            lua.entrypoint1(state, #func_name)
+            mlua::Lua::entrypoint1(state, move |lua| {
+                #skip_memory_check
+                #func_name(lua)
+            })
         }
     };
 

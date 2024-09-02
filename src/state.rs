@@ -356,23 +356,24 @@ impl Lua {
     // The returned value then pushed onto the stack.
     #[doc(hidden)]
     #[cfg(not(tarpaulin_include))]
-    pub unsafe fn entrypoint<F, A, R>(self, state: *mut ffi::lua_State, func: F) -> c_int
+    pub unsafe fn entrypoint<F, A, R>(state: *mut ffi::lua_State, func: F) -> c_int
     where
-        F: Fn(&Lua, A) -> Result<R> + MaybeSend + 'static,
+        F: FnOnce(&Lua, A) -> Result<R>,
         A: FromLuaMulti,
         R: IntoLua,
     {
-        let extra = self.lock().extra.get();
-        // `self` is no longer needed and must be dropped at this point to avoid possible memory leak
+        // Make sure that Lua is initialized
+        let mut lua = Self::init_from_ptr(state);
+        lua.collect_garbage = false;
+        // `Lua` is no longer needed and must be dropped at this point to avoid possible memory leak
         // in case of possible longjmp (lua_error) below
-        drop(self);
+        drop(lua);
 
-        callback_error_ext(state, extra, move |nargs| {
-            let lua = (*extra).lua();
-            let rawlua = lua.lock();
-            let _guard = StateGuard::new(&rawlua, state);
-            let args = A::from_stack_args(nargs, 1, None, &rawlua)?;
-            func(lua, args)?.push_into_stack(&rawlua)?;
+        callback_error_ext(state, ptr::null_mut(), move |extra, nargs| {
+            let rawlua = (*extra).raw_lua();
+            let _guard = StateGuard::new(rawlua, state);
+            let args = A::from_stack_args(nargs, 1, None, rawlua)?;
+            func(rawlua.lua(), args)?.push_into_stack(rawlua)?;
             Ok(1)
         })
     }
@@ -380,12 +381,12 @@ impl Lua {
     // A simple module entrypoint without arguments
     #[doc(hidden)]
     #[cfg(not(tarpaulin_include))]
-    pub unsafe fn entrypoint1<R, F>(self, state: *mut ffi::lua_State, func: F) -> c_int
+    pub unsafe fn entrypoint1<F, R>(state: *mut ffi::lua_State, func: F) -> c_int
     where
+        F: FnOnce(&Lua) -> Result<R>,
         R: IntoLua,
-        F: Fn(&Lua) -> Result<R> + MaybeSend + 'static,
     {
-        self.entrypoint(state, move |lua, _: ()| func(lua))
+        Self::entrypoint(state, move |lua, _: ()| func(lua))
     }
 
     /// Skips memory checks for some operations.
@@ -575,8 +576,7 @@ impl Lua {
                 // We don't support GC interrupts since they cannot survive Lua exceptions
                 return;
             }
-            let extra = ExtraData::get(state);
-            let result = callback_error_ext(state, extra, move |_| {
+            let result = callback_error_ext(state, ptr::null_mut(), move |extra, _| {
                 let interrupt_cb = (*extra).interrupt_callback.clone();
                 let interrupt_cb = mlua_expect!(interrupt_cb, "no interrupt callback set in interrupt_proc");
                 if Rc::strong_count(&interrupt_cb) > 2 {
@@ -629,7 +629,7 @@ impl Lua {
 
         unsafe extern "C-unwind" fn warn_proc(ud: *mut c_void, msg: *const c_char, tocont: c_int) {
             let extra = ud as *mut ExtraData;
-            callback_error_ext((*extra).raw_lua().state(), extra, |_| {
+            callback_error_ext((*extra).raw_lua().state(), extra, |extra, _| {
                 let cb = mlua_expect!(
                     (*extra).warn_callback.as_ref(),
                     "no warning callback set in warn_proc"

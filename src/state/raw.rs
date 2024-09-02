@@ -360,7 +360,7 @@ impl RawLua {
                 ffi::lua_sethook(state, None, 0, 0);
                 return;
             }
-            callback_error_ext(state, extra, move |_| {
+            callback_error_ext(state, extra, move |extra, _| {
                 let hook_cb = (*extra).hook_callback.clone();
                 let hook_cb = mlua_expect!(hook_cb, "no hook callback set in hook_proc");
                 if std::rc::Rc::strong_count(&hook_cb) > 2 {
@@ -1038,7 +1038,7 @@ impl RawLua {
                 }
                 _ => (ptr::null_mut(), ptr::null_mut()),
             };
-            callback_error_ext(state, extra, |nargs| {
+            callback_error_ext(state, extra, |extra, nargs| {
                 // Lua ensures that `LUA_MINSTACK` stack spaces are available (after pushing arguments)
                 if upvalue.is_null() {
                     return Err(Error::CallbackDestructed);
@@ -1089,7 +1089,7 @@ impl RawLua {
             // so the first upvalue is always valid
             let upvalue = get_userdata::<AsyncCallbackUpvalue>(state, ffi::lua_upvalueindex(1));
             let extra = (*upvalue).extra.get();
-            callback_error_ext(state, extra, |nargs| {
+            callback_error_ext(state, extra, |extra, nargs| {
                 // Lua ensures that `LUA_MINSTACK` stack spaces are available (after pushing arguments)
                 // The lock must be already held as the callback is executed
                 let rawlua = (*extra).raw_lua();
@@ -1114,8 +1114,7 @@ impl RawLua {
 
         unsafe extern "C-unwind" fn poll_future(state: *mut ffi::lua_State) -> c_int {
             let upvalue = get_userdata::<AsyncPollUpvalue>(state, ffi::lua_upvalueindex(1));
-            let extra = (*upvalue).extra.get();
-            callback_error_ext(state, extra, |_| {
+            callback_error_ext(state, (*upvalue).extra.get(), |extra, _| {
                 // Lua ensures that `LUA_MINSTACK` stack spaces are available (after pushing arguments)
                 // The lock must be already held as the future is polled
                 let rawlua = (*extra).raw_lua();
