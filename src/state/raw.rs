@@ -1028,27 +1028,16 @@ impl RawLua {
 
     // Creates a Function out of a Callback containing a 'static Fn.
     pub(crate) fn create_callback(&self, func: Callback) -> Result<Function> {
+        // This is non-scoped version of the callback (upvalue is always valid)
+        // TODO: add a scoped version
         unsafe extern "C-unwind" fn call_callback(state: *mut ffi::lua_State) -> c_int {
-            // Normal functions can be scoped and therefore destroyed,
-            // so we need to check that the first upvalue is valid
-            let (upvalue, extra) = match ffi::lua_type(state, ffi::lua_upvalueindex(1)) {
-                ffi::LUA_TUSERDATA => {
-                    let upvalue = get_userdata::<CallbackUpvalue>(state, ffi::lua_upvalueindex(1));
-                    (upvalue, (*upvalue).extra.get())
-                }
-                _ => (ptr::null_mut(), ptr::null_mut()),
-            };
-            callback_error_ext(state, extra, |extra, nargs| {
+            let upvalue = get_userdata::<CallbackUpvalue>(state, ffi::lua_upvalueindex(1));
+            callback_error_ext(state, (*upvalue).extra.get(), |extra, nargs| {
                 // Lua ensures that `LUA_MINSTACK` stack spaces are available (after pushing arguments)
-                if upvalue.is_null() {
-                    return Err(Error::CallbackDestructed);
-                }
-
                 // The lock must be already held as the callback is executed
                 let rawlua = (*extra).raw_lua();
                 let _guard = StateGuard::new(rawlua, state);
                 let func = &*(*upvalue).data;
-
                 func(rawlua, nargs)
             })
         }
