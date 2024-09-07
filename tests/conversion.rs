@@ -43,6 +43,22 @@ fn test_string_into_lua() -> Result<()> {
 }
 
 #[test]
+fn test_string_from_lua() -> Result<()> {
+    let lua = Lua::new();
+
+    // From stack
+    let f = lua.create_function(|_, s: mlua::String| Ok(s))?;
+    let s = f.call::<String>("hello, world!")?;
+    assert_eq!(s, "hello, world!");
+
+    // Should fallback to default conversion
+    let s = f.call::<String>(42)?;
+    assert_eq!(s, "42");
+
+    Ok(())
+}
+
+#[test]
 fn test_table_into_lua() -> Result<()> {
     let lua = Lua::new();
 
@@ -153,6 +169,42 @@ fn test_registry_key_from_lua() -> Result<()> {
     let fkey = lua.load("function() return 1 end").eval::<RegistryKey>()?;
     let f = lua.registry_value::<Function>(&fkey)?;
     assert_eq!(f.call::<i32>(())?, 1);
+
+    Ok(())
+}
+
+#[test]
+fn test_integer_from_lua() -> Result<()> {
+    let lua = Lua::new();
+
+    // From stack
+    let f = lua.create_function(|_, i: i32| Ok(i))?;
+    assert_eq!(f.call::<i32>(42)?, 42);
+
+    // Out of range
+    let err = f.call::<i32>(i64::MAX).err().unwrap().to_string();
+    assert!(err.starts_with("bad argument #1: error converting Lua number to i32 (out of range)"));
+
+    // Should fallback to default conversion
+    assert_eq!(f.call::<i32>("42")?, 42);
+
+    Ok(())
+}
+
+#[test]
+fn test_float_from_lua() -> Result<()> {
+    let lua = Lua::new();
+
+    // From stack
+    let f = lua.create_function(|_, f: f32| Ok(f))?;
+    assert_eq!(f.call::<f32>(42.0)?, 42.0);
+
+    // Out of range (but never fails)
+    let val = f.call::<f32>(f64::MAX)?;
+    assert!(val.is_infinite());
+
+    // Should fallback to default conversion
+    assert_eq!(f.call::<f32>("42.0")?, 42.0);
 
     Ok(())
 }

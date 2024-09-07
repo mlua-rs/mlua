@@ -542,7 +542,7 @@ impl RawLua {
     ///
     /// Uses 2 stack spaces, does not call `checkstack`.
     pub(crate) unsafe fn pop_value(&self) -> Value {
-        let value = self.stack_value(-1);
+        let value = self.stack_value(-1, None);
         ffi::lua_pop(self.state(), 1);
         value
     }
@@ -550,9 +550,9 @@ impl RawLua {
     /// Returns value at given stack index without popping it.
     ///
     /// Uses 2 stack spaces, does not call checkstack.
-    pub(crate) unsafe fn stack_value(&self, idx: c_int) -> Value {
+    pub(crate) unsafe fn stack_value(&self, idx: c_int, type_hint: Option<c_int>) -> Value {
         let state = self.state();
-        match ffi::lua_type(state, idx) {
+        match type_hint.unwrap_or_else(|| ffi::lua_type(state, idx)) {
             ffi::LUA_TNIL => Nil,
 
             ffi::LUA_TBOOLEAN => Value::Boolean(ffi::lua_toboolean(state, idx) != 0),

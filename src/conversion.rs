@@ -76,6 +76,17 @@ impl FromLua for String {
                 message: Some("expected string or number".to_string()),
             })
     }
+
+    unsafe fn from_stack(idx: c_int, lua: &RawLua) -> Result<Self> {
+        let state = lua.state();
+        let type_id = ffi::lua_type(state, idx);
+        if type_id == ffi::LUA_TSTRING {
+            ffi::lua_xpush(state, lua.ref_thread(), idx);
+            return Ok(String(lua.pop_ref_thread()));
+        }
+        // Fallback to default
+        Self::from_lua(lua.stack_value(idx, Some(type_id)), lua.lua())
+    }
 }
 
 impl IntoLua for Table {
@@ -385,7 +396,8 @@ impl FromLua for StdString {
     #[inline]
     unsafe fn from_stack(idx: c_int, lua: &RawLua) -> Result<Self> {
         let state = lua.state();
-        if ffi::lua_type(state, idx) == ffi::LUA_TSTRING {
+        let type_id = ffi::lua_type(state, idx);
+        if type_id == ffi::LUA_TSTRING {
             let mut size = 0;
             let data = ffi::lua_tolstring(state, idx, &mut size);
             let bytes = slice::from_raw_parts(data as *const u8, size);
@@ -398,7 +410,7 @@ impl FromLua for StdString {
                 });
         }
         // Fallback to default
-        Self::from_lua(lua.stack_value(idx), lua.lua())
+        Self::from_lua(lua.stack_value(idx, Some(type_id)), lua.lua())
     }
 }
 
@@ -536,9 +548,9 @@ impl FromLua for BString {
                 mlua_assert!(!buf.is_null(), "invalid Luau buffer");
                 Ok(slice::from_raw_parts(buf as *const u8, size).into())
             }
-            _ => {
+            type_id => {
                 // Fallback to default
-                Self::from_lua(lua.stack_value(idx), lua.lua())
+                Self::from_lua(lua.stack_value(idx, Some(type_id)), lua.lua())
             }
         }
     }
@@ -622,6 +634,24 @@ macro_rules! lua_convert_int {
                     message: Some("out of range".to_owned()),
                 })
             }
+
+            unsafe fn from_stack(idx: c_int, lua: &RawLua) -> Result<Self> {
+                let state = lua.state();
+                let type_id = ffi::lua_type(state, idx);
+                if type_id == ffi::LUA_TNUMBER {
+                    let mut ok = 0;
+                    let i = ffi::lua_tointegerx(state, idx, &mut ok);
+                    if ok != 0 {
+                        return cast(i).ok_or_else(|| Error::FromLuaConversionError {
+                            from: "integer",
+                            to: stringify!($x),
+                            message: Some("out of range".to_owned()),
+                        });
+                    }
+                }
+                // Fallback to default
+                Self::from_lua(lua.stack_value(idx, Some(type_id)), lua.lua())
+            }
         }
     };
 }
@@ -671,6 +701,24 @@ macro_rules! lua_convert_float {
                             message: Some("number out of range".to_string()),
                         })
                     })
+            }
+
+            unsafe fn from_stack(idx: c_int, lua: &RawLua) -> Result<Self> {
+                let state = lua.state();
+                let type_id = ffi::lua_type(state, idx);
+                if type_id == ffi::LUA_TNUMBER {
+                    let mut ok = 0;
+                    let i = ffi::lua_tonumberx(state, idx, &mut ok);
+                    if ok != 0 {
+                        return cast(i).ok_or_else(|| Error::FromLuaConversionError {
+                            from: "number",
+                            to: stringify!($x),
+                            message: Some("out of range".to_owned()),
+                        });
+                    }
+                }
+                // Fallback to default
+                Self::from_lua(lua.stack_value(idx, Some(type_id)), lua.lua())
             }
         }
     };
@@ -893,10 +941,9 @@ impl<T: FromLua> FromLua for Option<T> {
 
     #[inline]
     unsafe fn from_stack(idx: c_int, lua: &RawLua) -> Result<Self> {
-        if ffi::lua_isnil(lua.state(), idx) != 0 {
-            Ok(None)
-        } else {
-            Ok(Some(T::from_stack(idx, lua)?))
+        match ffi::lua_type(lua.state(), idx) {
+            ffi::LUA_TNIL => Ok(None),
+            _ => Ok(Some(T::from_stack(idx, lua)?)),
         }
     }
 }
