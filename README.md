@@ -38,22 +38,21 @@ WebAssembly (WASM) is supported through `wasm32-unknown-emscripten` target for a
 `mlua` uses feature flags to reduce the amount of dependencies, compiled code and allow to choose only required set of features.
 Below is a list of the available feature flags. By default `mlua` does not enable any features.
 
-* `lua54`: activate Lua [5.4] support
-* `lua53`: activate Lua [5.3] support
-* `lua52`: activate Lua [5.2] support
-* `lua51`: activate Lua [5.1] support
-* `luajit`: activate [LuaJIT] support
-* `luajit52`: activate [LuaJIT] support with partial compatibility with Lua 5.2
-* `luau`: activate [Luau] support (auto vendored mode)
-* `luau-jit`: activate [Luau] support with JIT backend.
-* `luau-vector4`: activate [Luau] support with 4-dimensional vector.
+* `lua54`: enable Lua [5.4] support
+* `lua53`: enable Lua [5.3] support
+* `lua52`: enable Lua [5.2] support
+* `lua51`: enable Lua [5.1] support
+* `luajit`: enable [LuaJIT] support
+* `luajit52`: enable [LuaJIT] support with partial compatibility with Lua 5.2
+* `luau`: enable [Luau] support (auto vendored mode)
+* `luau-jit`: enable [Luau] support with JIT backend.
+* `luau-vector4`: enable [Luau] support with 4-dimensional vector.
 * `vendored`: build static Lua(JIT) library from sources during `mlua` compilation using [lua-src] or [luajit-src] crates
 * `module`: enable module mode (building loadable `cdylib` library for Lua)
 * `async`: enable async/await support (any executor can be used, eg. [tokio] or [async-std])
-* `send`: make `mlua::Lua` transferable across thread boundaries (adds [`Send`] requirement to `mlua::Function` and `mlua::UserData`)
+* `send`: make `mlua::Lua: Send + Sync` (adds [`Send`] requirement to `mlua::Function` and `mlua::UserData`)
 * `serialize`: add serialization and deserialization support to `mlua` types using [serde] framework
 * `macros`: enable procedural macros (such as `chunk!`)
-* `parking_lot`: support UserData types wrapped in [parking_lot]'s primitives (`Arc<Mutex>` and `Arc<RwLock>`)
 
 [5.4]: https://www.lua.org/manual/5.4/manual.html
 [5.3]: https://www.lua.org/manual/5.3/manual.html
@@ -67,7 +66,6 @@ Below is a list of the available feature flags. By default `mlua` does not enabl
 [async-std]: https://github.com/async-rs/async-std
 [`Send`]: https://doc.rust-lang.org/std/marker/trait.Send.html
 [serde]: https://github.com/serde-rs/serde
-[parking_lot]: https://github.com/Amanieu/parking_lot
 
 ### Async/await support
 
@@ -91,7 +89,7 @@ cargo run --example async_http_client --features=lua54,async,macros
 cargo run --example async_http_reqwest --features=lua54,async,macros,serialize
 
 # async http server
-cargo run --example async_http_server --features=lua54,async,macros
+cargo run --example async_http_server --features=lua54,async,macros,send
 curl -v http://localhost:3000
 ```
 
