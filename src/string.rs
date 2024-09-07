@@ -12,7 +12,7 @@ use {
 };
 
 use crate::error::{Error, Result};
-use crate::state::LuaGuard;
+use crate::state::Lua;
 use crate::types::ValueRef;
 
 /// Handle to an internal Lua string.
@@ -103,9 +103,10 @@ impl String {
         BorrowedBytes(bytes, guard)
     }
 
-    unsafe fn to_slice(&self) -> (&[u8], LuaGuard) {
-        let lua = self.0.lua.lock();
-        let ref_thread = lua.ref_thread();
+    unsafe fn to_slice(&self) -> (&[u8], Lua) {
+        let lua = self.0.lua.upgrade();
+        let rawlua = lua.lock();
+        let ref_thread = rawlua.ref_thread();
         unsafe {
             mlua_debug_assert!(
                 ffi::lua_type(ref_thread, self.0.index) == ffi::LUA_TSTRING,
@@ -117,6 +118,7 @@ impl String {
             // string type
             let data = ffi::lua_tolstring(ref_thread, self.0.index, &mut size);
 
+            drop(rawlua);
             (slice::from_raw_parts(data as *const u8, size + 1), lua)
         }
     }
@@ -211,7 +213,7 @@ impl Serialize for String {
 }
 
 /// A borrowed string (`&str`) that holds a strong reference to the Lua state.
-pub struct BorrowedStr<'a>(&'a str, #[allow(unused)] LuaGuard);
+pub struct BorrowedStr<'a>(&'a str, #[allow(unused)] Lua);
 
 impl Deref for BorrowedStr<'_> {
     type Target = str;
@@ -267,7 +269,7 @@ where
 }
 
 /// A borrowed byte slice (`&[u8]`) that holds a strong reference to the Lua state.
-pub struct BorrowedBytes<'a>(&'a [u8], #[allow(unused)] LuaGuard);
+pub struct BorrowedBytes<'a>(&'a [u8], #[allow(unused)] Lua);
 
 impl Deref for BorrowedBytes<'_> {
     type Target = [u8];
@@ -333,4 +335,8 @@ mod assertions {
     static_assertions::assert_not_impl_any!(String: Send);
     #[cfg(feature = "send")]
     static_assertions::assert_impl_all!(String: Send, Sync);
+    #[cfg(feature = "send")]
+    static_assertions::assert_impl_all!(BorrowedBytes: Send, Sync);
+    #[cfg(feature = "send")]
+    static_assertions::assert_impl_all!(BorrowedStr: Send, Sync);
 }

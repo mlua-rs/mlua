@@ -1870,6 +1870,15 @@ impl WeakLua {
     pub(crate) fn try_lock(&self) -> Option<LuaGuard> {
         Some(LuaGuard::new(self.0.upgrade()?))
     }
+
+    #[track_caller]
+    #[inline(always)]
+    pub(crate) fn upgrade(&self) -> Lua {
+        Lua {
+            raw: self.0.upgrade().expect("Lua instance is destroyed"),
+            collect_garbage: false,
+        }
+    }
 }
 
 impl PartialEq for WeakLua {
