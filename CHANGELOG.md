@@ -1,3 +1,20 @@
+## v0.10.0-beta.2
+
+- Updated `ThreadStatus` enum to include `Running` and `Finished` variants.
+- `Error::CoroutineInactive` renamed to `Error::CoroutineUnresumable`.
+- `IntoLua`/`IntoLuaMulti` now uses `impl trait` syntax for args (shorten from `a.get::<_, T>` to `a.get::<T>`).
+- Removed undocumented `Lua::into_static`/`from_static` methods.
+- Futures now require `Send` bound if `send` feature is enabled.
+- Dropped lifetime from `UserDataMethods` and `UserDataFields` traits.
+- `Compiler::compile()` now returns `Result` (Luau).
+- Removed `Clone` requirement from `UserDataFields::add_field()`.
+- `TableExt` and `AnyUserDataExt` traits were combined into `ObjectLike` trait.
+- Disabled `send` feature in module mode (since we don't have exclusive access to Lua).
+- `Chunk::set_environment()` takes `Table` instead of `IntoLua` type.
+- Reduced the compile time contribution of `next_key_seed` and `next_value_seed`.
+- Reduced the compile time contribution of `serde_userdata`.
+- Performance improvements.
+
 ## v0.10.0-beta.1
 
 - Dropped `'lua` lifetime (subtypes now store a weak reference to Lua)
@@ -6,8 +23,6 @@
 - Removed `UserData` impl for Rc/Arc types ("any" userdata functions can be used instead)
 - `Lua::replace_registry_value` takes `&mut RegistryKey`
 - `Lua::scope` temporary disabled (will be re-added in the next release)
-- Reduced the compile time contribution of `next_key_seed` and `next_value_seed`.
-- Reduced the compile time contribution of `serde_userdata`.
 
 ## v0.9.9
 
