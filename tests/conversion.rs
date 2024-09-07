@@ -182,8 +182,18 @@ fn test_integer_from_lua() -> Result<()> {
     assert_eq!(f.call::<i32>(42)?, 42);
 
     // Out of range
-    let err = f.call::<i32>(i64::MAX).err().unwrap().to_string();
-    assert!(err.starts_with("bad argument #1: error converting Lua number to i32 (out of range)"));
+    match f.call::<i32>(i64::MAX).err() {
+        Some(Error::CallbackError { cause, .. }) => match cause.as_ref() {
+            Error::BadArgument { cause, .. } => match cause.as_ref() {
+                Error::FromLuaConversionError { message, .. } => {
+                    assert_eq!(message.as_ref().unwrap(), "out of range");
+                }
+                err => panic!("expected Error::FromLuaConversionError, got {err:?}"),
+            },
+            err => panic!("expected Error::BadArgument, got {err:?}"),
+        },
+        err => panic!("expected Error::CallbackError, got {err:?}"),
+    }
 
     // Should fallback to default conversion
     assert_eq!(f.call::<i32>("42")?, 42);
