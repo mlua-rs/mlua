@@ -412,6 +412,15 @@ impl<T: 'static> UserDataStorage<T> {
         }
     }
 
+    #[allow(unused)]
+    #[inline(always)]
+    pub(crate) fn try_borrow(&self) -> Result<UserDataBorrowRef<T>> {
+        match self {
+            Self::Owned(data) => data.try_borrow(),
+            Self::Scoped(_) => Err(Error::UserDataTypeMismatch),
+        }
+    }
+
     #[inline(always)]
     pub(crate) fn try_borrow_mut(&self) -> Result<UserDataBorrowMut<T>> {
         match self {
