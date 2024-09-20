@@ -1,5 +1,5 @@
 use std::any::{type_name, TypeId};
-use std::cell::UnsafeCell;
+use std::cell::{RefCell, UnsafeCell};
 use std::fmt;
 use std::ops::{Deref, DerefMut};
 use std::os::raw::c_int;
@@ -22,6 +22,11 @@ type DynSerialize = dyn erased_serde::Serialize;
 #[cfg(all(feature = "serialize", feature = "send"))]
 type DynSerialize = dyn erased_serde::Serialize + Send;
 
+pub(crate) enum UserDataStorage<T> {
+    Owned(UserDataVariant<T>),
+    Scoped(ScopedUserDataVariant<T>),
+}
+
 // A enum for storing userdata values.
 // It's stored inside a Lua VM and protected by the outer `ReentrantMutex`.
 pub(crate) enum UserDataVariant<T> {
@@ -42,39 +47,34 @@ impl<T> Clone for UserDataVariant<T> {
 }
 
 impl<T> UserDataVariant<T> {
-    #[inline(always)]
-    pub(crate) fn new(data: T) -> Self {
-        Self::Default(XRc::new(UserDataCell::new(data)))
-    }
-
     // Immutably borrows the wrapped value in-place.
     #[inline(always)]
-    pub(crate) fn try_borrow(&self) -> Result<UserDataBorrowRef<T>> {
+    fn try_borrow(&self) -> Result<UserDataBorrowRef<T>> {
         UserDataBorrowRef::try_from(self)
     }
 
     // Immutably borrows the wrapped value and returns an owned reference.
     #[inline(always)]
-    pub(crate) fn try_borrow_owned(&self) -> Result<UserDataRef<T>> {
+    fn try_borrow_owned(&self) -> Result<UserDataRef<T>> {
         UserDataRef::try_from(self.clone())
     }
 
     // Mutably borrows the wrapped value in-place.
     #[inline(always)]
-    pub(crate) fn try_borrow_mut(&self) -> Result<UserDataBorrowMut<T>> {
+    fn try_borrow_mut(&self) -> Result<UserDataBorrowMut<T>> {
         UserDataBorrowMut::try_from(self)
     }
 
     // Mutably borrows the wrapped value and returns an owned reference.
     #[inline(always)]
-    pub(crate) fn try_borrow_owned_mut(&self) -> Result<UserDataRefMut<T>> {
+    fn try_borrow_owned_mut(&self) -> Result<UserDataRefMut<T>> {
         UserDataRefMut::try_from(self.clone())
     }
 
     // Returns the wrapped value.
     //
     // This method checks that we have exclusive access to the value.
-    pub(crate) fn into_inner(self) -> Result<T> {
+    fn into_inner(self) -> Result<T> {
         if !self.raw_lock().try_lock_exclusive() {
             return Err(Error::UserDataBorrowMutError);
         }
@@ -108,20 +108,10 @@ impl<T> UserDataVariant<T> {
 }
 
 #[cfg(feature = "serialize")]
-impl<T: Serialize + MaybeSend + 'static> UserDataVariant<T> {
-    #[inline(always)]
-    pub(crate) fn new_ser(data: T) -> Self {
-        let data = Box::new(data) as Box<DynSerialize>;
-        Self::Serializable(XRc::new(UserDataCell::new(data)))
-    }
-}
-
-#[cfg(feature = "serialize")]
-impl Serialize for UserDataVariant<()> {
+impl Serialize for UserDataStorage<()> {
     fn serialize<S: Serializer>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error> {
         match self {
-            Self::Default(_) => Err(serde::ser::Error::custom("cannot serialize <userdata>")),
-            Self::Serializable(inner) => unsafe {
+            Self::Owned(UserDataVariant::Serializable(inner)) => unsafe {
                 // We need to borrow the inner value exclusively to serialize it.
                 #[cfg(feature = "send")]
                 let _guard = self.try_borrow_mut().map_err(serde::ser::Error::custom)?;
@@ -130,6 +120,7 @@ impl Serialize for UserDataVariant<()> {
                 let _guard = self.try_borrow().map_err(serde::ser::Error::custom)?;
                 (*inner.value.get()).serialize(serializer)
             },
+            _ => Err(serde::ser::Error::custom("cannot serialize <userdata>")),
         }
     }
 }
@@ -145,7 +136,7 @@ unsafe impl<T: Send> Sync for UserDataCell<T> {}
 
 impl<T> UserDataCell<T> {
     #[inline(always)]
-    pub fn new(value: T) -> Self {
+    fn new(value: T) -> Self {
         UserDataCell {
             raw_lock: RawLock::INIT,
             value: UnsafeCell::new(value),
@@ -207,7 +198,7 @@ impl<T: 'static> FromLua for UserDataRef<T> {
         let type_id = lua.get_userdata_type_id(idx)?;
         match type_id {
             Some(type_id) if type_id == TypeId::of::<T>() => {
-                (*get_userdata::<UserDataVariant<T>>(lua.state(), idx)).try_borrow_owned()
+                (*get_userdata::<UserDataStorage<T>>(lua.state(), idx)).try_borrow_owned()
             }
             _ => Err(Error::UserDataTypeMismatch),
         }
@@ -275,7 +266,7 @@ impl<T: 'static> FromLua for UserDataRefMut<T> {
         let type_id = lua.get_userdata_type_id(idx)?;
         match type_id {
             Some(type_id) if type_id == TypeId::of::<T>() => {
-                (*get_userdata::<UserDataVariant<T>>(lua.state(), idx)).try_borrow_owned_mut()
+                (*get_userdata::<UserDataStorage<T>>(lua.state(), idx)).try_borrow_owned_mut()
             }
             _ => Err(Error::UserDataTypeMismatch),
         }
@@ -360,6 +351,124 @@ fn try_value_to_userdata<T>(value: Value) -> Result<AnyUserData> {
             to: "userdata",
             message: Some(format!("expected userdata of type {}", type_name::<T>())),
         }),
+    }
+}
+
+pub(crate) enum ScopedUserDataVariant<T> {
+    Ref(*const T),
+    RefMut(RefCell<*mut T>),
+    Boxed(RefCell<*mut T>),
+}
+
+impl<T> Drop for ScopedUserDataVariant<T> {
+    #[inline]
+    fn drop(&mut self) {
+        if let Self::Boxed(value) = self {
+            if let Ok(value) = value.try_borrow_mut() {
+                unsafe { drop(Box::from_raw(*value)) };
+            }
+        }
+    }
+}
+
+impl<T: 'static> UserDataStorage<T> {
+    #[inline(always)]
+    pub(crate) fn new(data: T) -> Self {
+        Self::Owned(UserDataVariant::Default(XRc::new(UserDataCell::new(data))))
+    }
+
+    #[inline(always)]
+    pub(crate) fn new_ref(data: &T) -> Self {
+        Self::Scoped(ScopedUserDataVariant::Ref(data))
+    }
+
+    #[inline(always)]
+    pub(crate) fn new_ref_mut(data: &mut T) -> Self {
+        Self::Scoped(ScopedUserDataVariant::RefMut(RefCell::new(data)))
+    }
+
+    #[cfg(feature = "serialize")]
+    #[inline(always)]
+    pub(crate) fn new_ser(data: T) -> Self
+    where
+        T: Serialize + MaybeSend,
+    {
+        let data = Box::new(data) as Box<DynSerialize>;
+        Self::Owned(UserDataVariant::Serializable(XRc::new(UserDataCell::new(data))))
+    }
+
+    #[cfg(feature = "serialize")]
+    #[inline(always)]
+    pub(crate) fn is_serializable(&self) -> bool {
+        matches!(self, Self::Owned(UserDataVariant::Serializable(_)))
+    }
+
+    // Immutably borrows the wrapped value and returns an owned reference.
+    #[inline(always)]
+    pub(crate) fn try_borrow_owned(&self) -> Result<UserDataRef<T>> {
+        match self {
+            Self::Owned(data) => data.try_borrow_owned(),
+            Self::Scoped(_) => Err(Error::UserDataTypeMismatch),
+        }
+    }
+
+    #[inline(always)]
+    pub(crate) fn try_borrow_mut(&self) -> Result<UserDataBorrowMut<T>> {
+        match self {
+            Self::Owned(data) => data.try_borrow_mut(),
+            Self::Scoped(_) => Err(Error::UserDataTypeMismatch),
+        }
+    }
+
+    // Mutably borrows the wrapped value and returns an owned reference.
+    #[inline(always)]
+    pub(crate) fn try_borrow_owned_mut(&self) -> Result<UserDataRefMut<T>> {
+        match self {
+            Self::Owned(data) => data.try_borrow_owned_mut(),
+            Self::Scoped(_) => Err(Error::UserDataTypeMismatch),
+        }
+    }
+
+    #[inline(always)]
+    pub(crate) fn into_inner(self) -> Result<T> {
+        match self {
+            Self::Owned(data) => data.into_inner(),
+            Self::Scoped(_) => Err(Error::UserDataTypeMismatch),
+        }
+    }
+}
+
+impl<T> UserDataStorage<T> {
+    #[inline(always)]
+    pub(crate) fn new_scoped(data: T) -> Self {
+        let data = Box::into_raw(Box::new(data));
+        Self::Scoped(ScopedUserDataVariant::Boxed(RefCell::new(data)))
+    }
+
+    #[inline]
+    pub(crate) fn try_borrow_scoped<R>(&self, f: impl FnOnce(&T) -> R) -> Result<R> {
+        match self {
+            Self::Owned(data) => Ok(f(&*data.try_borrow()?)),
+            Self::Scoped(ScopedUserDataVariant::Ref(value)) => Ok(f(unsafe { &**value })),
+            Self::Scoped(ScopedUserDataVariant::RefMut(value) | ScopedUserDataVariant::Boxed(value)) => {
+                let t = value.try_borrow().map_err(|_| Error::UserDataBorrowError)?;
+                Ok(f(unsafe { &**t }))
+            }
+        }
+    }
+
+    #[inline]
+    pub(crate) fn try_borrow_scoped_mut<R>(&self, f: impl FnOnce(&mut T) -> R) -> Result<R> {
+        match self {
+            Self::Owned(data) => Ok(f(&mut *data.try_borrow_mut()?)),
+            Self::Scoped(ScopedUserDataVariant::Ref(_)) => Err(Error::UserDataBorrowMutError),
+            Self::Scoped(ScopedUserDataVariant::RefMut(value) | ScopedUserDataVariant::Boxed(value)) => {
+                let mut t = value
+                    .try_borrow_mut()
+                    .map_err(|_| Error::UserDataBorrowMutError)?;
+                Ok(f(unsafe { &mut **t }))
+            }
+        }
     }
 }
 

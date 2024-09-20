@@ -12,7 +12,7 @@ use crate::error::{Error, Result};
 use crate::function::Function;
 use crate::hook::Debug;
 use crate::memory::MemoryState;
-// use crate::scope::Scope;
+use crate::scope::Scope;
 use crate::stdlib::StdLib;
 use crate::string::String;
 use crate::table::Table;
@@ -21,7 +21,7 @@ use crate::types::{
     AppDataRef, AppDataRefMut, ArcReentrantMutexGuard, Integer, LightUserData, MaybeSend, Number,
     ReentrantMutex, ReentrantMutexGuard, RegistryKey, XRc, XWeak,
 };
-use crate::userdata::{AnyUserData, UserData, UserDataProxy, UserDataRegistry, UserDataVariant};
+use crate::userdata::{AnyUserData, UserData, UserDataProxy, UserDataRegistry, UserDataStorage};
 use crate::util::{assert_stack, check_stack, push_string, push_table, rawset_field, StackGuard};
 use crate::value::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, MultiValue, Nil, Value};
 
@@ -1201,7 +1201,7 @@ impl Lua {
     where
         T: UserData + MaybeSend + 'static,
     {
-        unsafe { self.lock().make_userdata(UserDataVariant::new(data)) }
+        unsafe { self.lock().make_userdata(UserDataStorage::new(data)) }
     }
 
     /// Creates a Lua userdata object from a custom serializable userdata type.
@@ -1214,7 +1214,7 @@ impl Lua {
     where
         T: UserData + Serialize + MaybeSend + 'static,
     {
-        unsafe { self.lock().make_userdata(UserDataVariant::new_ser(data)) }
+        unsafe { self.lock().make_userdata(UserDataStorage::new_ser(data)) }
     }
 
     /// Creates a Lua userdata object from a custom Rust type.
@@ -1229,7 +1229,7 @@ impl Lua {
     where
         T: MaybeSend + 'static,
     {
-        unsafe { self.lock().make_any_userdata(UserDataVariant::new(data)) }
+        unsafe { self.lock().make_any_userdata(UserDataStorage::new(data)) }
     }
 
     /// Creates a Lua userdata object from a custom serializable Rust type.
@@ -1244,26 +1244,26 @@ impl Lua {
     where
         T: Serialize + MaybeSend + 'static,
     {
-        unsafe { (self.lock()).make_any_userdata(UserDataVariant::new_ser(data)) }
+        unsafe { (self.lock()).make_any_userdata(UserDataStorage::new_ser(data)) }
     }
 
     /// Registers a custom Rust type in Lua to use in userdata objects.
     ///
     /// This methods provides a way to add fields or methods to userdata objects of a type `T`.
     pub fn register_userdata_type<T: 'static>(&self, f: impl FnOnce(&mut UserDataRegistry<T>)) -> Result<()> {
-        let mut registry = const { UserDataRegistry::new() };
+        let type_id = TypeId::of::<T>();
+        let mut registry = UserDataRegistry::new(type_id);
         f(&mut registry);
 
         let lua = self.lock();
         unsafe {
             // Deregister the type if it already registered
-            let type_id = TypeId::of::<T>();
-            if let Some(&table_id) = (*lua.extra.get()).registered_userdata.get(&type_id) {
+            if let Some(&table_id) = (*lua.extra.get()).registered_userdata_t.get(&type_id) {
                 ffi::luaL_unref(lua.state(), ffi::LUA_REGISTRYINDEX, table_id);
             }
 
             // Register the type
-            lua.register_userdata_metatable(registry)?;
+            lua.create_userdata_metatable(registry)?;
         }
         Ok(())
     }
@@ -1306,7 +1306,7 @@ impl Lua {
         T: UserData + 'static,
     {
         let ud = UserDataProxy::<T>(PhantomData);
-        unsafe { self.lock().make_userdata(UserDataVariant::new(ud)) }
+        unsafe { self.lock().make_userdata(UserDataStorage::new(ud)) }
     }
 
     /// Sets the metatable for a Luau builtin vector type.
@@ -1380,15 +1380,12 @@ impl Lua {
     /// dropped. `Function` types will error when called, and `AnyUserData` will be typeless. It
     /// would be impossible to prevent handles to scoped values from escaping anyway, since you
     /// would always be able to smuggle them through Lua state.
-    // pub fn scope<'lua, 'scope, R>(
-    //     &'lua self,
-    //     f: impl FnOnce(&Scope<'lua, 'scope>) -> Result<R>,
-    // ) -> Result<R>
-    // where
-    //     'lua: 'scope,
-    // {
-    //     f(&Scope::new(self))
-    // }
+    pub fn scope<'env, R>(
+        &self,
+        f: impl for<'scope> FnOnce(&'scope mut Scope<'scope, 'env>) -> Result<R>,
+    ) -> Result<R> {
+        f(&mut Scope::new(self.lock_arc()))
+    }
 
     /// Attempts to coerce a Lua value into a String in a manner consistent with Lua's internal
     /// behavior.

@@ -83,46 +83,34 @@ pub(crate) unsafe fn get_internal_userdata<T: TypeKey>(
 
 // Internally uses 3 stack spaces, does not call checkstack.
 #[inline]
-pub(crate) unsafe fn push_userdata<T>(state: *mut ffi::lua_State, t: T, protect: bool) -> Result<()> {
-    #[cfg(not(feature = "luau"))]
-    let ud = if protect {
+#[cfg(not(feature = "luau"))]
+pub(crate) unsafe fn push_uninit_userdata<T>(state: *mut ffi::lua_State, protect: bool) -> Result<*mut T> {
+    if protect {
         protect_lua!(state, 0, 1, |state| {
             ffi::lua_newuserdata(state, std::mem::size_of::<T>()) as *mut T
-        })?
+        })
     } else {
-        ffi::lua_newuserdata(state, std::mem::size_of::<T>()) as *mut T
-    };
+        Ok(ffi::lua_newuserdata(state, std::mem::size_of::<T>()) as *mut T)
+    }
+}
+
+// Internally uses 3 stack spaces, does not call checkstack.
+#[inline]
+pub(crate) unsafe fn push_userdata<T>(state: *mut ffi::lua_State, t: T, protect: bool) -> Result<*mut T> {
+    #[cfg(not(feature = "luau"))]
+    let ud_ptr = push_uninit_userdata(state, protect)?;
     #[cfg(feature = "luau")]
-    let ud = if protect {
+    let ud_ptr = if protect {
         protect_lua!(state, 0, 1, |state| { ffi::lua_newuserdata_t::<T>(state) })?
     } else {
         ffi::lua_newuserdata_t::<T>(state)
     };
-    ptr::write(ud, t);
-    Ok(())
-}
-
-// Internally uses 3 stack spaces, does not call checkstack.
-#[cfg(feature = "lua54")]
-#[inline]
-pub(crate) unsafe fn push_userdata_uv<T>(
-    state: *mut ffi::lua_State,
-    t: T,
-    nuvalue: c_int,
-    protect: bool,
-) -> Result<()> {
-    let ud = if protect {
-        protect_lua!(state, 0, 1, |state| {
-            ffi::lua_newuserdatauv(state, std::mem::size_of::<T>(), nuvalue) as *mut T
-        })?
-    } else {
-        ffi::lua_newuserdatauv(state, std::mem::size_of::<T>(), nuvalue) as *mut T
-    };
-    ptr::write(ud, t);
-    Ok(())
+    ptr::write(ud_ptr, t);
+    Ok(ud_ptr)
 }
 
 #[inline]
+#[track_caller]
 pub(crate) unsafe fn get_userdata<T>(state: *mut ffi::lua_State, index: c_int) -> *mut T {
     let ud = ffi::lua_touserdata(state, index) as *mut T;
     mlua_debug_assert!(!ud.is_null(), "userdata pointer is null");

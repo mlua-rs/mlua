@@ -365,7 +365,7 @@ pub(crate) unsafe fn init_error_registry(state: *mut ffi::lua_State) -> Result<(
     // Create destructed userdata metatable
 
     unsafe extern "C-unwind" fn destructed_error(state: *mut ffi::lua_State) -> c_int {
-        callback_error(state, |_| Err(Error::CallbackDestructed))
+        callback_error(state, |_| Err(Error::UserDataDestructed))
     }
 
     push_table(state, 0, 26, true)?;

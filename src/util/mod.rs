@@ -17,10 +17,9 @@ pub(crate) use userdata::{
     DESTRUCTED_USERDATA_METATABLE,
 };
 
-#[cfg(not(feature = "lua54"))]
+#[cfg(not(feature = "luau"))]
+pub(crate) use userdata::push_uninit_userdata;
 pub(crate) use userdata::push_userdata;
-#[cfg(feature = "lua54")]
-pub(crate) use userdata::push_userdata_uv;
 
 #[cfg(not(feature = "luau"))]
 pub(crate) use userdata::userdata_destructor;

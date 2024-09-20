@@ -87,7 +87,7 @@ mod hook;
 mod luau;
 mod memory;
 mod multi;
-// mod scope;
+mod scope;
 mod state;
 mod stdlib;
 mod string;

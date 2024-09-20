@@ -1,5 +1,15 @@
-error[E0599]: no method named `scope` found for struct `Lua` in the current scope
-  --> tests/compile/scope_userdata_borrow.rs:11:9
+error[E0597]: `ibad` does not live long enough
+  --> tests/compile/scope_userdata_borrow.rs:15:46
    |
 11 |     lua.scope(|scope| {
-   |     ----^^^^^ method not found in `Lua`
+   |                ----- has type `&mut mlua::scope::Scope<'_, '1>`
+...
+14 |             let ibad = 42;
+   |                 ---- binding `ibad` declared here
+15 |             scope.create_userdata(MyUserData(&ibad)).unwrap();
+   |             ---------------------------------^^^^^--
+   |             |                                |
+   |             |                                borrowed value does not live long enough
+   |             argument requires that `ibad` is borrowed for `'1`
+16 |         };
+   |         - `ibad` dropped here while still borrowed

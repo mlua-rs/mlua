@@ -35,7 +35,7 @@ pub(crate) struct ExtraData {
     pub(super) weak: MaybeUninit<WeakLua>,
     pub(super) owned: bool,
 
-    pub(super) registered_userdata: FxHashMap<TypeId, c_int>,
+    pub(super) registered_userdata_t: FxHashMap<TypeId, c_int>,
     pub(super) registered_userdata_mt: FxHashMap<*const c_void, Option<TypeId>>,
     pub(super) last_checked_userdata_mt: (*const c_void, Option<TypeId>),
 
@@ -144,7 +144,7 @@ impl ExtraData {
             lua: MaybeUninit::uninit(),
             weak: MaybeUninit::uninit(),
             owned,
-            registered_userdata: FxHashMap::default(),
+            registered_userdata_t: FxHashMap::default(),
             registered_userdata_mt: FxHashMap::default(),
             last_checked_userdata_mt: (ptr::null(), None),
             registry_unref_list: Arc::new(Mutex::new(Some(Vec::new()))),

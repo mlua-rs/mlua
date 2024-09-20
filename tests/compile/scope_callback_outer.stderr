@@ -1,5 +1,0 @@
-error[E0599]: no method named `scope` found for struct `Lua` in the current scope
- --> tests/compile/scope_callback_outer.rs:6:9
-  |
-6 |     lua.scope(|scope| {
-  |     ----^^^^^ method not found in `Lua`

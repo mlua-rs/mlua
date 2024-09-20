@@ -336,8 +336,8 @@ fn test_userdata_take() -> Result<()> {
         }
         match lua.load("userdata:num()").exec() {
             Err(Error::CallbackError { ref cause, .. }) => match cause.as_ref() {
-                Error::CallbackDestructed => {}
-                err => panic!("expected `CallbackDestructed`, got {:?}", err),
+                Error::UserDataDestructed => {}
+                err => panic!("expected `UserDataDestructed`, got {:?}", err),
             },
             r => panic!("improper return for destructed userdata: {:?}", r),
         }

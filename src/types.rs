@@ -52,12 +52,14 @@ pub(crate) type Callback = Box<dyn Fn(&RawLua, c_int) -> Result<c_int> + Send + 
 #[cfg(not(feature = "send"))]
 pub(crate) type Callback = Box<dyn Fn(&RawLua, c_int) -> Result<c_int> + 'static>;
 
+pub(crate) type ScopedCallback<'s> = Box<dyn Fn(&RawLua, c_int) -> Result<c_int> + 's>;
+
 pub(crate) struct Upvalue<T> {
     pub(crate) data: T,
     pub(crate) extra: XRc<UnsafeCell<ExtraData>>,
 }
 
-pub(crate) type CallbackUpvalue = Upvalue<Callback>;
+pub(crate) type CallbackUpvalue = Upvalue<Option<Callback>>;
 
 #[cfg(all(feature = "async", feature = "send"))]
 pub(crate) type AsyncCallback =

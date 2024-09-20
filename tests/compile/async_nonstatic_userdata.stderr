@@ -1,11 +1,11 @@
 error: lifetime may not live long enough
   --> tests/compile/async_nonstatic_userdata.rs:9:13
    |
-7  |       impl<'a> UserData for MyUserData<'a> {
-   |            -- lifetime `'a` defined here
-8  |           fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
+7  |       impl UserData for MyUserData<'_> {
+   |                                    -- lifetime `'1` appears in the `impl`'s self type
+8  |           fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
 9  | /             methods.add_async_method("print", |_, data, ()| async move {
 10 | |                 println!("{}", data.0);
 11 | |                 Ok(())
 12 | |             });
-   | |______________^ requires that `'a` must outlive `'static`
+   | |______________^ requires that `'1` must outlive `'static`

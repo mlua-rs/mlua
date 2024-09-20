@@ -20,7 +20,7 @@ use crate::types::{
     AppDataRef, AppDataRefMut, Callback, CallbackUpvalue, DestructedUserdata, Integer, LightUserData,
     MaybeSend, ReentrantMutex, RegistryKey, SubtypeId, ValueRef, XRc,
 };
-use crate::userdata::{AnyUserData, MetaMethod, UserData, UserDataRegistry, UserDataVariant};
+use crate::userdata::{AnyUserData, MetaMethod, UserData, UserDataRegistry, UserDataStorage};
 use crate::util::{
     assert_stack, check_stack, get_destructed_userdata_metatable, get_internal_userdata, get_main_state,
     get_userdata, init_error_registry, init_internal_metatable, init_userdata_metatable, pop_error,
@@ -711,45 +711,45 @@ impl RawLua {
         }
     }
 
-    pub(crate) unsafe fn make_userdata<T>(&self, data: UserDataVariant<T>) -> Result<AnyUserData>
+    pub(crate) unsafe fn make_userdata<T>(&self, data: UserDataStorage<T>) -> Result<AnyUserData>
     where
         T: UserData + 'static,
     {
         self.make_userdata_with_metatable(data, || {
             // Check if userdata/metatable is already registered
             let type_id = TypeId::of::<T>();
-            if let Some(&table_id) = (*self.extra.get()).registered_userdata.get(&type_id) {
+            if let Some(&table_id) = (*self.extra.get()).registered_userdata_t.get(&type_id) {
                 return Ok(table_id as Integer);
             }
 
             // Create a new metatable from `UserData` definition
-            let mut registry = const { UserDataRegistry::new() };
+            let mut registry = UserDataRegistry::new(type_id);
             T::register(&mut registry);
 
-            self.register_userdata_metatable(registry)
+            self.create_userdata_metatable(registry)
         })
     }
 
-    pub(crate) unsafe fn make_any_userdata<T>(&self, data: UserDataVariant<T>) -> Result<AnyUserData>
+    pub(crate) unsafe fn make_any_userdata<T>(&self, data: UserDataStorage<T>) -> Result<AnyUserData>
     where
         T: 'static,
     {
         self.make_userdata_with_metatable(data, || {
             // Check if userdata/metatable is already registered
             let type_id = TypeId::of::<T>();
-            if let Some(&table_id) = (*self.extra.get()).registered_userdata.get(&type_id) {
+            if let Some(&table_id) = (*self.extra.get()).registered_userdata_t.get(&type_id) {
                 return Ok(table_id as Integer);
             }
 
             // Create an empty metatable
-            let registry = const { UserDataRegistry::new() };
-            self.register_userdata_metatable::<T>(registry)
+            let registry = UserDataRegistry::<T>::new(type_id);
+            self.create_userdata_metatable(registry)
         })
     }
 
     unsafe fn make_userdata_with_metatable<T>(
         &self,
-        data: UserDataVariant<T>,
+        data: UserDataStorage<T>,
         get_metatable_id: impl FnOnce() -> Result<Integer>,
     ) -> Result<AnyUserData> {
         let state = self.state();
@@ -760,10 +760,7 @@ impl RawLua {
         ffi::lua_pushnil(state);
         ffi::lua_rawgeti(state, ffi::LUA_REGISTRYINDEX, get_metatable_id()?);
         let protect = !self.unlikely_memory_error();
-        #[cfg(not(feature = "lua54"))]
         crate::util::push_userdata(state, data, protect)?;
-        #[cfg(feature = "lua54")]
-        crate::util::push_userdata_uv(state, data, crate::userdata::USER_VALUE_MAXSLOT as c_int, protect)?;
         ffi::lua_replace(state, -3);
         ffi::lua_setmetatable(state, -2);
 
@@ -782,12 +779,31 @@ impl RawLua {
         Ok(AnyUserData(self.pop_ref(), SubtypeId::None))
     }
 
-    pub(crate) unsafe fn register_userdata_metatable<T: 'static>(
+    pub(crate) unsafe fn create_userdata_metatable<T>(
         &self,
-        mut registry: UserDataRegistry<T>,
+        registry: UserDataRegistry<T>,
     ) -> Result<Integer> {
         let state = self.state();
-        let _sg = StackGuard::new(state);
+        let type_id = registry.type_id();
+
+        self.push_userdata_metatable(registry)?;
+
+        let mt_ptr = ffi::lua_topointer(state, -1);
+        let id = protect_lua!(state, 1, 0, |state| {
+            ffi::luaL_ref(state, ffi::LUA_REGISTRYINDEX)
+        })?;
+
+        if let Some(type_id) = type_id {
+            (*self.extra.get()).registered_userdata_t.insert(type_id, id);
+        }
+        self.register_userdata_metatable(mt_ptr, type_id);
+
+        Ok(id as Integer)
+    }
+
+    pub(crate) unsafe fn push_userdata_metatable<T>(&self, mut registry: UserDataRegistry<T>) -> Result<()> {
+        let state = self.state();
+        let _sg = StackGuard::with_top(state, ffi::lua_gettop(state) + 1);
         check_stack(state, 13)?;
 
         // Prepare metatable, add meta methods first and then meta fields
@@ -922,7 +938,7 @@ impl RawLua {
         let extra_init = None;
         #[cfg(not(feature = "luau"))]
         let extra_init: Option<fn(*mut ffi::lua_State) -> Result<()>> = Some(|state| {
-            ffi::lua_pushcfunction(state, crate::util::userdata_destructor::<UserDataVariant<T>>);
+            ffi::lua_pushcfunction(state, crate::util::userdata_destructor::<UserDataStorage<T>>);
             rawset_field(state, -2, "__gc")
         });
 
@@ -938,44 +954,21 @@ impl RawLua {
         // Pop extra tables to get metatable on top of the stack
         ffi::lua_pop(state, extra_tables_count);
 
-        let mt_ptr = ffi::lua_topointer(state, -1);
-        let id = protect_lua!(state, 1, 0, |state| {
-            ffi::luaL_ref(state, ffi::LUA_REGISTRYINDEX)
-        })?;
-
-        let type_id = TypeId::of::<T>();
-        (*self.extra.get()).registered_userdata.insert(type_id, id);
-        (*self.extra.get())
-            .registered_userdata_mt
-            .insert(mt_ptr, Some(type_id));
-
-        Ok(id as Integer)
+        Ok(())
     }
 
-    // #[inline]
-    // pub(crate) unsafe fn register_raw_userdata_metatable(
-    //     &self,
-    //     ptr: *const c_void,
-    //     type_id: Option<TypeId>,
-    // ) {
-    //     (*self.extra.get())
-    //         .registered_userdata_mt
-    //         .insert(ptr, type_id);
-    // }
+    #[inline(always)]
+    pub(crate) unsafe fn register_userdata_metatable(&self, mt_ptr: *const c_void, type_id: Option<TypeId>) {
+        (*self.extra.get()).registered_userdata_mt.insert(mt_ptr, type_id);
+    }
 
-    // #[inline]
-    // pub(crate) unsafe fn deregister_raw_userdata_metatable(&self, ptr: *const c_void) {
-    //     (*self.extra.get()).registered_userdata_mt.remove(&ptr);
-    //     if (*self.extra.get()).last_checked_userdata_mt.0 == ptr {
-    //         (*self.extra.get()).last_checked_userdata_mt = (ptr::null(), None);
-    //     }
-    // }
-
-    // #[inline(always)]
-    // pub(crate) unsafe fn get_userdata_ref<T: 'static>(&self, idx: c_int) -> Result<UserDataRef<T>> {
-    //     let guard = self.lua().lock_arc();
-    //     (*get_userdata::<UserDataVariant<T>>(self.state(), idx)).try_make_ref(guard)
-    // }
+    #[inline(always)]
+    pub(crate) unsafe fn deregister_userdata_metatable(&self, mt_ptr: *const c_void) {
+        (*self.extra.get()).registered_userdata_mt.remove(&mt_ptr);
+        if (*self.extra.get()).last_checked_userdata_mt.0 == mt_ptr {
+            (*self.extra.get()).last_checked_userdata_mt = (ptr::null(), None);
+        }
+    }
 
     // Returns `TypeId` for the userdata ref, checking that it's registered and not destructed.
     //
@@ -1028,8 +1021,6 @@ impl RawLua {
 
     // Creates a Function out of a Callback containing a 'static Fn.
     pub(crate) fn create_callback(&self, func: Callback) -> Result<Function> {
-        // This is non-scoped version of the callback (upvalue is always valid)
-        // TODO: add a scoped version
         unsafe extern "C-unwind" fn call_callback(state: *mut ffi::lua_State) -> c_int {
             let upvalue = get_userdata::<CallbackUpvalue>(state, ffi::lua_upvalueindex(1));
             callback_error_ext(state, (*upvalue).extra.get(), |extra, nargs| {
@@ -1037,8 +1028,10 @@ impl RawLua {
                 // The lock must be already held as the callback is executed
                 let rawlua = (*extra).raw_lua();
                 let _guard = StateGuard::new(rawlua, state);
-                let func = &*(*upvalue).data;
-                func(rawlua, nargs)
+                match (*upvalue).data {
+                    Some(ref func) => func(rawlua, nargs),
+                    None => Err(Error::CallbackDestructed),
+                }
             })
         }
 
@@ -1047,6 +1040,7 @@ impl RawLua {
             let _sg = StackGuard::new(state);
             check_stack(state, 4)?;
 
+            let func = Some(func);
             let extra = XRc::clone(&self.extra);
             let protect = !self.unlikely_memory_error();
             push_internal_userdata(state, CallbackUpvalue { data: func, extra }, protect)?;

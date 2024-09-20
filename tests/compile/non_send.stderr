@@ -1,28 +1,25 @@
 error[E0277]: `Rc<Cell<i32>>` cannot be sent between threads safely
   --> tests/compile/non_send.rs:11:25
    |
-11 |       lua.create_function(move |_, ()| {
-   |           --------------- ^-----------
-   |           |               |
-   |  _________|_______________within this `{closure@$DIR/tests/compile/non_send.rs:11:25: 11:37}`
-   | |         |
-   | |         required by a bound introduced by this call
-12 | |         Ok(data.get())
-13 | |     })?
-   | |_____^ `Rc<Cell<i32>>` cannot be sent between threads safely
+11 |     lua.create_function(move |_, ()| Ok(data.get()))?
+   |         --------------- ------------^^^^^^^^^^^^^^^
+   |         |               |
+   |         |               `Rc<Cell<i32>>` cannot be sent between threads safely
+   |         |               within this `{closure@$DIR/tests/compile/non_send.rs:11:25: 11:37}`
+   |         required by a bound introduced by this call
    |
-   = help: within `{closure@$DIR/tests/compile/non_send.rs:11:25: 11:37}`, the trait `Send` is not implemented for `Rc<Cell<i32>>`
+   = help: within `{closure@$DIR/tests/compile/non_send.rs:11:25: 11:37}`, the trait `Send` is not implemented for `Rc<Cell<i32>>`, which is required by `{closure@$DIR/tests/compile/non_send.rs:11:25: 11:37}: MaybeSend`
 note: required because it's used within this closure
   --> tests/compile/non_send.rs:11:25
    |
-11 |     lua.create_function(move |_, ()| {
+11 |     lua.create_function(move |_, ()| Ok(data.get()))?
    |                         ^^^^^^^^^^^^
-   = note: required for `{closure@$DIR/tests/compile/non_send.rs:11:25: 11:37}` to implement `mlua::types::MaybeSend`
+   = note: required for `{closure@$DIR/tests/compile/non_send.rs:11:25: 11:37}` to implement `MaybeSend`
 note: required by a bound in `Lua::create_function`
-  --> src/lua.rs
+  --> src/state.rs
    |
-   |     pub fn create_function<'lua, A, R, F>(&'lua self, func: F) -> Result<Function<'lua>>
+   |     pub fn create_function<F, A, R>(&self, func: F) -> Result<Function>
    |            --------------- required by a bound in this associated function
-...
-   |         F: Fn(&'lua Lua, A) -> Result<R> + MaybeSend + 'static,
-   |                                            ^^^^^^^^^ required by this bound in `Lua::create_function`
+   |     where
+   |         F: Fn(&Lua, A) -> Result<R> + MaybeSend + 'static,
+   |                                       ^^^^^^^^^ required by this bound in `Lua::create_function`

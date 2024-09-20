@@ -71,50 +71,6 @@ fn test_serialize() -> Result<(), Box<dyn StdError>> {
     Ok(())
 }
 
-// #[test]
-// fn test_serialize_in_scope() -> LuaResult<()> {
-//     #[derive(Serialize, Clone)]
-//     struct MyUserData(i64, String);
-
-//     impl UserData for MyUserData {}
-
-//     let lua = Lua::new();
-//     lua.scope(|scope| {
-//         let ud = scope.create_ser_userdata(MyUserData(-5, "test userdata".into()))?;
-//         assert_eq!(
-//             serde_json::to_value(&ud).unwrap(),
-//             serde_json::json!((-5, "test userdata"))
-//         );
-//         Ok(())
-//     })?;
-
-//     lua.scope(|scope| {
-//         let ud = scope.create_ser_userdata(MyUserData(-5, "test userdata".into()))?;
-//         lua.globals().set("ud", ud)
-//     })?;
-//     let val = lua.load("ud").eval::<Value>()?;
-//     match serde_json::to_value(&val) {
-//         Ok(v) => panic!("expected destructed error, got {}", v),
-//         Err(e) if e.to_string().contains("destructed") => {}
-//         Err(e) => panic!("expected destructed error, got {}", e),
-//     }
-
-//     struct MyUserDataRef<'a>(#[allow(unused)] &'a ());
-
-//     impl<'a> UserData for MyUserDataRef<'a> {}
-
-//     lua.scope(|scope| {
-//         let ud = scope.create_nonstatic_userdata(MyUserDataRef(&()))?;
-//         match serde_json::to_value(&ud) {
-//             Ok(v) => panic!("expected serialization error, got {}", v),
-//             Err(serde_json::Error { .. }) => {}
-//         };
-//         Ok(())
-//     })?;
-
-//     Ok(())
-// }
-
 #[test]
 fn test_serialize_any_userdata() -> Result<(), Box<dyn StdError>> {
     let lua = Lua::new();

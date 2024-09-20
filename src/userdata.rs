@@ -2,7 +2,7 @@ use std::any::TypeId;
 use std::ffi::CStr;
 use std::fmt;
 use std::hash::Hash;
-use std::os::raw::{c_char, c_int, c_void};
+use std::os::raw::{c_char, c_void};
 use std::string::String as StdString;
 
 #[cfg(feature = "async")]
@@ -16,7 +16,7 @@ use {
 
 use crate::error::{Error, Result};
 use crate::function::Function;
-use crate::state::{Lua, LuaGuard};
+use crate::state::Lua;
 use crate::string::String;
 use crate::table::{Table, TablePairs};
 use crate::types::{MaybeSend, SubtypeId, ValueRef};
@@ -24,13 +24,10 @@ use crate::util::{check_stack, get_userdata, take_userdata, StackGuard};
 use crate::value::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, Value};
 
 // Re-export for convenience
-pub(crate) use cell::UserDataVariant;
+pub(crate) use cell::UserDataStorage;
 pub use cell::{UserDataRef, UserDataRefMut};
 pub(crate) use registry::UserDataProxy;
 pub use registry::UserDataRegistry;
-
-#[cfg(feature = "lua54")]
-pub(crate) const USER_VALUE_MAXSLOT: usize = 8;
 
 /// Kinds of metamethods that can be overridden.
 ///
@@ -650,8 +647,9 @@ pub struct AnyUserData(pub(crate) ValueRef, pub(crate) SubtypeId);
 
 impl AnyUserData {
     /// Checks whether the type of this userdata is `T`.
+    #[inline]
     pub fn is<T: 'static>(&self) -> bool {
-        self.inspect::<T, _, _>(|_, _| Ok(())).is_ok()
+        self.inspect::<T, _, _>(|_| Ok(())).is_ok()
     }
 
     /// Borrow this userdata immutably if it is of type `T`.
@@ -659,10 +657,18 @@ impl AnyUserData {
     /// # Errors
     ///
     /// Returns a `UserDataBorrowError` if the userdata is already mutably borrowed. Returns a
-    /// `UserDataTypeMismatch` if the userdata is not of type `T`.
+    /// `UserDataTypeMismatch` if the userdata is not of type `T` or if it's scoped.
     #[inline]
     pub fn borrow<T: 'static>(&self) -> Result<UserDataRef<T>> {
-        self.inspect(|variant, _| variant.try_borrow_owned())
+        self.inspect(|ud| ud.try_borrow_owned())
+    }
+
+    /// Borrow this userdata immutably if it is of type `T`, passing the borrowed value
+    /// to the closure.
+    ///
+    /// This method is the only way to borrow scoped userdata (created inside [`Lua::scope`]).
+    pub fn borrow_scoped<T: 'static, R>(&self, f: impl FnOnce(&T) -> R) -> Result<R> {
+        self.inspect(|ud| ud.try_borrow_scoped(|ud| f(ud)))
     }
 
     /// Borrow this userdata mutably if it is of type `T`.
@@ -670,10 +676,18 @@ impl AnyUserData {
     /// # Errors
     ///
     /// Returns a `UserDataBorrowMutError` if the userdata cannot be mutably borrowed.
-    /// Returns a `UserDataTypeMismatch` if the userdata is not of type `T`.
+    /// Returns a `UserDataTypeMismatch` if the userdata is not of type `T` or if it's scoped.
     #[inline]
     pub fn borrow_mut<T: 'static>(&self) -> Result<UserDataRefMut<T>> {
-        self.inspect(|variant, _| variant.try_borrow_owned_mut())
+        self.inspect(|ud| ud.try_borrow_owned_mut())
+    }
+
+    /// Borrow this userdata mutably if it is of type `T`, passing the borrowed value
+    /// to the closure.
+    ///
+    /// This method is the only way to borrow scoped userdata (created inside [`Lua::scope`]).
+    pub fn borrow_mut_scoped<T: 'static, R>(&self, f: impl FnOnce(&mut T) -> R) -> Result<R> {
+        self.inspect(|ud| ud.try_borrow_scoped_mut(|ud| f(ud)))
     }
 
     /// Takes the value out of this userdata.
@@ -692,8 +706,8 @@ impl AnyUserData {
             match type_id {
                 Some(type_id) if type_id == TypeId::of::<T>() => {
                     // Try to borrow userdata exclusively
-                    let _ = (*get_userdata::<UserDataVariant<T>>(state, -1)).try_borrow_mut()?;
-                    take_userdata::<UserDataVariant<T>>(state).into_inner()
+                    let _ = (*get_userdata::<UserDataStorage<T>>(state, -1)).try_borrow_mut()?;
+                    take_userdata::<UserDataStorage<T>>(state).into_inner()
                 }
                 _ => Err(Error::UserDataTypeMismatch),
             }
@@ -754,29 +768,16 @@ impl AnyUserData {
             lua.push_userdata_ref(&self.0)?;
             lua.push(v)?;
 
-            #[cfg(feature = "lua54")]
-            if n < USER_VALUE_MAXSLOT {
-                ffi::lua_setiuservalue(state, -2, n as c_int);
-                return Ok(());
-            }
-
             // Multiple (extra) user values are emulated by storing them in a table
             protect_lua!(state, 2, 0, |state| {
-                if getuservalue_table(state, -2) != ffi::LUA_TTABLE {
+                if ffi::lua_getuservalue(state, -2) != ffi::LUA_TTABLE {
                     // Create a new table to use as uservalue
                     ffi::lua_pop(state, 1);
                     ffi::lua_newtable(state);
                     ffi::lua_pushvalue(state, -1);
-
-                    #[cfg(feature = "lua54")]
-                    ffi::lua_setiuservalue(state, -4, USER_VALUE_MAXSLOT as c_int);
-                    #[cfg(not(feature = "lua54"))]
                     ffi::lua_setuservalue(state, -4);
                 }
                 ffi::lua_pushvalue(state, -2);
-                #[cfg(feature = "lua54")]
-                ffi::lua_rawseti(state, -2, (n - USER_VALUE_MAXSLOT + 1) as ffi::lua_Integer);
-                #[cfg(not(feature = "lua54"))]
                 ffi::lua_rawseti(state, -2, n as ffi::lua_Integer);
             })?;
 
@@ -806,21 +807,12 @@ impl AnyUserData {
 
             lua.push_userdata_ref(&self.0)?;
 
-            #[cfg(feature = "lua54")]
-            if n < USER_VALUE_MAXSLOT {
-                ffi::lua_getiuservalue(state, -1, n as c_int);
-                return V::from_lua(lua.pop_value(), lua.lua());
-            }
-
             // Multiple (extra) user values are emulated by storing them in a table
             protect_lua!(state, 1, 1, |state| {
-                if getuservalue_table(state, -1) != ffi::LUA_TTABLE {
+                if ffi::lua_getuservalue(state, -1) != ffi::LUA_TTABLE {
                     ffi::lua_pushnil(state);
                     return;
                 }
-                #[cfg(feature = "lua54")]
-                ffi::lua_rawgeti(state, -1, (n - USER_VALUE_MAXSLOT + 1) as ffi::lua_Integer);
-                #[cfg(not(feature = "lua54"))]
                 ffi::lua_rawgeti(state, -1, n as ffi::lua_Integer);
             })?;
 
@@ -851,15 +843,11 @@ impl AnyUserData {
 
             // Multiple (extra) user values are emulated by storing them in a table
             protect_lua!(state, 2, 0, |state| {
-                if getuservalue_table(state, -2) != ffi::LUA_TTABLE {
+                if ffi::lua_getuservalue(state, -2) != ffi::LUA_TTABLE {
                     // Create a new table to use as uservalue
                     ffi::lua_pop(state, 1);
                     ffi::lua_newtable(state);
                     ffi::lua_pushvalue(state, -1);
-
-                    #[cfg(feature = "lua54")]
-                    ffi::lua_setiuservalue(state, -4, USER_VALUE_MAXSLOT as c_int);
-                    #[cfg(not(feature = "lua54"))]
                     ffi::lua_setuservalue(state, -4);
                 }
                 ffi::lua_pushlstring(state, name.as_ptr() as *const c_char, name.len());
@@ -885,7 +873,7 @@ impl AnyUserData {
 
             // Multiple (extra) user values are emulated by storing them in a table
             protect_lua!(state, 1, 1, |state| {
-                if getuservalue_table(state, -1) != ffi::LUA_TTABLE {
+                if ffi::lua_getuservalue(state, -1) != ffi::LUA_TTABLE {
                     ffi::lua_pushnil(state);
                     return;
                 }
@@ -998,29 +986,24 @@ impl AnyUserData {
         let is_serializable = || unsafe {
             // Userdata must be registered and not destructed
             let _ = lua.get_userdata_ref_type_id(&self.0)?;
-
-            let ud = &*get_userdata::<UserDataVariant<()>>(lua.ref_thread(), self.0.index);
-            match ud {
-                UserDataVariant::Serializable(..) => Result::Ok(true),
-                _ => Result::Ok(false),
-            }
+            let ud = &*get_userdata::<UserDataStorage<()>>(lua.ref_thread(), self.0.index);
+            Ok::<_, Error>((*ud).is_serializable())
         };
         is_serializable().unwrap_or(false)
     }
 
-    pub(crate) fn inspect<'a, T, F, R>(&'a self, func: F) -> Result<R>
+    pub(crate) fn inspect<T, F, R>(&self, func: F) -> Result<R>
     where
         T: 'static,
-        F: FnOnce(&'a UserDataVariant<T>, LuaGuard) -> Result<R>,
+        F: FnOnce(&UserDataStorage<T>) -> Result<R>,
     {
         let lua = self.0.lua.lock();
         unsafe {
             let type_id = lua.get_userdata_ref_type_id(&self.0)?;
             match type_id {
                 Some(type_id) if type_id == TypeId::of::<T>() => {
-                    let ref_thread = lua.ref_thread();
-                    let ud = get_userdata::<UserDataVariant<T>>(ref_thread, self.0.index);
-                    func(&*ud, lua)
+                    let ud = get_userdata::<UserDataStorage<T>>(lua.ref_thread(), self.0.index);
+                    func(&*ud)
                 }
                 _ => Err(Error::UserDataTypeMismatch),
             }
@@ -1039,13 +1022,6 @@ impl AsRef<AnyUserData> for AnyUserData {
     fn as_ref(&self) -> &Self {
         self
     }
-}
-
-unsafe fn getuservalue_table(state: *mut ffi::lua_State, idx: c_int) -> c_int {
-    #[cfg(feature = "lua54")]
-    return ffi::lua_getiuservalue(state, idx, USER_VALUE_MAXSLOT as c_int);
-    #[cfg(not(feature = "lua54"))]
-    return ffi::lua_getuservalue(state, idx);
 }
 
 /// Handle to a `UserData` metatable.
@@ -1146,7 +1122,7 @@ impl Serialize for AnyUserData {
             let _ = lua
                 .get_userdata_ref_type_id(&self.0)
                 .map_err(ser::Error::custom)?;
-            let ud = &*get_userdata::<UserDataVariant<()>>(lua.ref_thread(), self.0.index);
+            let ud = &*get_userdata::<UserDataStorage<()>>(lua.ref_thread(), self.0.index);
             ud.serialize(serializer)
         }
     }
