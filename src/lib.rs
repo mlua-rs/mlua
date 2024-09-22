@@ -116,7 +116,9 @@ pub use crate::string::{BorrowedBytes, BorrowedStr, String};
 pub use crate::table::{Table, TablePairs, TableSequence};
 pub use crate::thread::{Thread, ThreadStatus};
 pub use crate::traits::ObjectLike;
-pub use crate::types::{AppDataRef, AppDataRefMut, Integer, LightUserData, MaybeSend, Number, RegistryKey};
+pub use crate::types::{
+    AppDataRef, AppDataRefMut, Integer, LightUserData, MaybeSend, Number, RegistryKey, VmState,
+};
 pub use crate::userdata::{
     AnyUserData, MetaMethod, UserData, UserDataFields, UserDataMetatable, UserDataMethods, UserDataRef,
     UserDataRefMut, UserDataRegistry,
@@ -128,11 +130,7 @@ pub use crate::hook::HookTriggers;
 
 #[cfg(any(feature = "luau", doc))]
 #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
-pub use crate::{
-    chunk::Compiler,
-    function::CoverageInfo,
-    types::{Vector, VmState},
-};
+pub use crate::{chunk::Compiler, function::CoverageInfo, types::Vector};
 
 #[cfg(feature = "async")]
 pub use crate::thread::AsyncThread;

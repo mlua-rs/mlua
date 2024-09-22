@@ -12,7 +12,7 @@ pub use crate::{
     ThreadStatus as LuaThreadStatus, UserData as LuaUserData, UserDataFields as LuaUserDataFields,
     UserDataMetatable as LuaUserDataMetatable, UserDataMethods as LuaUserDataMethods,
     UserDataRef as LuaUserDataRef, UserDataRefMut as LuaUserDataRefMut,
-    UserDataRegistry as LuaUserDataRegistry, Value as LuaValue,
+    UserDataRegistry as LuaUserDataRegistry, Value as LuaValue, VmState as LuaVmState,
 };
 
 #[cfg(not(feature = "luau"))]
@@ -21,7 +21,7 @@ pub use crate::HookTriggers as LuaHookTriggers;
 
 #[cfg(feature = "luau")]
 #[doc(no_inline)]
-pub use crate::{CoverageInfo as LuaCoverageInfo, Vector as LuaVector, VmState as LuaVmState};
+pub use crate::{CoverageInfo as LuaCoverageInfo, Vector as LuaVector};
 
 #[cfg(feature = "async")]
 #[doc(no_inline)]

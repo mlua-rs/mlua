@@ -18,7 +18,7 @@ use crate::table::Table;
 use crate::thread::Thread;
 use crate::types::{
     AppDataRef, AppDataRefMut, Callback, CallbackUpvalue, DestructedUserdata, Integer, LightUserData,
-    MaybeSend, ReentrantMutex, RegistryKey, SubtypeId, ValueRef, XRc,
+    MaybeSend, ReentrantMutex, RegistryKey, SubtypeId, ValueRef, VmState, XRc,
 };
 use crate::userdata::{AnyUserData, MetaMethod, UserData, UserDataRegistry, UserDataStorage};
 use crate::util::{
@@ -356,7 +356,7 @@ impl RawLua {
         triggers: HookTriggers,
         callback: F,
     ) where
-        F: Fn(&Lua, Debug) -> Result<()> + MaybeSend + 'static,
+        F: Fn(&Lua, Debug) -> Result<VmState> + MaybeSend + 'static,
     {
         unsafe extern "C-unwind" fn hook_proc(state: *mut ffi::lua_State, ar: *mut ffi::lua_Debug) {
             let extra = ExtraData::get(state);
@@ -365,17 +365,34 @@ impl RawLua {
                 ffi::lua_sethook(state, None, 0, 0);
                 return;
             }
-            callback_error_ext(state, extra, move |extra, _| {
+            let result = callback_error_ext(state, extra, move |extra, _| {
                 let hook_cb = (*extra).hook_callback.clone();
                 let hook_cb = mlua_expect!(hook_cb, "no hook callback set in hook_proc");
                 if std::rc::Rc::strong_count(&hook_cb) > 2 {
-                    return Ok(()); // Don't allow recursion
+                    return Ok(VmState::Continue); // Don't allow recursion
                 }
                 let rawlua = (*extra).raw_lua();
                 let _guard = StateGuard::new(rawlua, state);
                 let debug = Debug::new(rawlua, ar);
                 hook_cb((*extra).lua(), debug)
-            })
+            });
+            match result {
+                VmState::Continue => {}
+                VmState::Yield => {
+                    // Only count and line events can yield
+                    if (*ar).event == ffi::LUA_HOOKCOUNT || (*ar).event == ffi::LUA_HOOKLINE {
+                        #[cfg(any(feature = "lua54", feature = "lua53"))]
+                        if ffi::lua_isyieldable(state) != 0 {
+                            ffi::lua_yield(state, 0);
+                        }
+                        #[cfg(any(feature = "lua52", feature = "lua51", feature = "luajit"))]
+                        {
+                            ffi::lua_pushliteral(state, "attempt to yield from a hook");
+                            ffi::lua_error(state);
+                        }
+                    }
+                }
+            }
         }
 
         (*self.extra.get()).hook_callback = Some(std::rc::Rc::new(callback));

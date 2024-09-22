@@ -19,7 +19,7 @@ use crate::table::Table;
 use crate::thread::Thread;
 use crate::types::{
     AppDataRef, AppDataRefMut, ArcReentrantMutexGuard, Integer, MaybeSend, Number, ReentrantMutex,
-    ReentrantMutexGuard, RegistryKey, XRc, XWeak,
+    ReentrantMutexGuard, RegistryKey, VmState, XRc, XWeak,
 };
 use crate::userdata::{AnyUserData, UserData, UserDataProxy, UserDataRegistry, UserDataStorage};
 use crate::util::{
@@ -31,7 +31,7 @@ use crate::value::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, MultiValue, Nil
 use crate::hook::HookTriggers;
 
 #[cfg(any(feature = "luau", doc))]
-use crate::{chunk::Compiler, types::VmState};
+use crate::chunk::Compiler;
 
 #[cfg(feature = "async")]
 use {
@@ -499,12 +499,12 @@ impl Lua {
     /// Shows each line number of code being executed by the Lua interpreter.
     ///
     /// ```
-    /// # use mlua::{Lua, HookTriggers, Result};
+    /// # use mlua::{Lua, HookTriggers, Result, VmState};
     /// # fn main() -> Result<()> {
     /// let lua = Lua::new();
     /// lua.set_hook(HookTriggers::EVERY_LINE, |_lua, debug| {
     ///     println!("line {}", debug.curr_line());
-    ///     Ok(())
+    ///     Ok(VmState::Continue)
     /// });
     ///
     /// lua.load(r#"
@@ -521,7 +521,7 @@ impl Lua {
     #[cfg_attr(docsrs, doc(cfg(not(feature = "luau"))))]
     pub fn set_hook<F>(&self, triggers: HookTriggers, callback: F)
     where
-        F: Fn(&Lua, Debug) -> Result<()> + MaybeSend + 'static,
+        F: Fn(&Lua, Debug) -> Result<VmState> + MaybeSend + 'static,
     {
         let lua = self.lock();
         unsafe { lua.set_thread_hook(lua.state(), triggers, callback) };

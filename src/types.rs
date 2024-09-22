@@ -76,18 +76,19 @@ pub(crate) type AsyncCallbackUpvalue = Upvalue<AsyncCallback>;
 pub(crate) type AsyncPollUpvalue = Upvalue<BoxFuture<'static, Result<c_int>>>;
 
 /// Type to set next Luau VM action after executing interrupt function.
-#[cfg(any(feature = "luau", doc))]
-#[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
 pub enum VmState {
     Continue,
+    /// Yield the current thread.
+    ///
+    /// Supported by Lua 5.3+ and Luau.
     Yield,
 }
 
 #[cfg(all(feature = "send", not(feature = "luau")))]
-pub(crate) type HookCallback = Rc<dyn Fn(&Lua, Debug) -> Result<()> + Send>;
+pub(crate) type HookCallback = Rc<dyn Fn(&Lua, Debug) -> Result<VmState> + Send>;
 
 #[cfg(all(not(feature = "send"), not(feature = "luau")))]
-pub(crate) type HookCallback = Rc<dyn Fn(&Lua, Debug) -> Result<()>>;
+pub(crate) type HookCallback = Rc<dyn Fn(&Lua, Debug) -> Result<VmState>>;
 
 #[cfg(all(feature = "send", feature = "luau"))]
 pub(crate) type InterruptCallback = Rc<dyn Fn(&Lua) -> Result<VmState> + Send>;
