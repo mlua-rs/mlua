@@ -725,6 +725,11 @@ impl RawLua {
 
     #[inline]
     pub(crate) unsafe fn unlikely_memory_error(&self) -> bool {
+        #[cfg(debug_assertions)]
+        if cfg!(force_memory_limit) {
+            return false;
+        }
+
         // MemoryInfo is empty in module mode so we cannot predict memory limits
         match MemoryState::get(self.main_state) {
             mem_state if !mem_state.is_null() => (*mem_state).memory_limit() == 0,
