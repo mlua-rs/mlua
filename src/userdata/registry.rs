@@ -9,16 +9,14 @@ use std::string::String as StdString;
 use crate::error::{Error, Result};
 use crate::state::{Lua, RawLua};
 use crate::types::{Callback, MaybeSend};
-use crate::userdata::{
-    AnyUserData, MetaMethod, UserData, UserDataFields, UserDataMethods, UserDataRef, UserDataRefMut,
-    UserDataStorage,
-};
+use crate::userdata::{AnyUserData, MetaMethod, UserData, UserDataFields, UserDataMethods, UserDataStorage};
 use crate::util::{get_userdata, short_type_name};
 use crate::value::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, Value};
 
 #[cfg(feature = "async")]
 use {
     crate::types::AsyncCallback,
+    crate::userdata::{UserDataRef, UserDataRefMut},
     std::future::{self, Future},
 };
 

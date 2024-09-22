@@ -2,7 +2,7 @@ use std::any::TypeId;
 use std::cell::RefCell;
 use std::marker::PhantomData;
 use std::ops::Deref;
-use std::os::raw::{c_int, c_void};
+use std::os::raw::c_int;
 use std::panic::Location;
 use std::result::Result as StdResult;
 use std::{fmt, mem, ptr};
@@ -18,8 +18,8 @@ use crate::string::String;
 use crate::table::Table;
 use crate::thread::Thread;
 use crate::types::{
-    AppDataRef, AppDataRefMut, ArcReentrantMutexGuard, Integer, LightUserData, MaybeSend, Number,
-    ReentrantMutex, ReentrantMutexGuard, RegistryKey, XRc, XWeak,
+    AppDataRef, AppDataRefMut, ArcReentrantMutexGuard, Integer, MaybeSend, Number, ReentrantMutex,
+    ReentrantMutexGuard, RegistryKey, XRc, XWeak,
 };
 use crate::userdata::{AnyUserData, UserData, UserDataProxy, UserDataRegistry, UserDataStorage};
 use crate::util::{
@@ -34,7 +34,10 @@ use crate::hook::HookTriggers;
 use crate::{chunk::Compiler, types::VmState};
 
 #[cfg(feature = "async")]
-use std::future::{self, Future};
+use {
+    crate::types::LightUserData,
+    std::future::{self, Future},
+};
 
 #[cfg(feature = "serialize")]
 use serde::Serialize;
@@ -284,6 +287,7 @@ impl Lua {
     ///
     /// This method ensures that the Lua instance is locked while the function is called
     /// and restores Lua stack after the function returns.
+    #[allow(clippy::missing_safety_doc)]
     pub unsafe fn with_raw_state<R: FromLuaMulti>(
         &self,
         args: impl IntoLuaMulti,
@@ -648,7 +652,7 @@ impl Lua {
         F: Fn(&Lua, &str, bool) -> Result<()> + MaybeSend + 'static,
     {
         use std::ffi::CStr;
-        use std::os::raw::c_char;
+        use std::os::raw::{c_char, c_void};
         use std::string::String as StdString;
 
         unsafe extern "C-unwind" fn warn_proc(ud: *mut c_void, msg: *const c_char, tocont: c_int) {
@@ -1825,7 +1829,7 @@ impl Lua {
     #[inline(always)]
     pub fn poll_pending() -> LightUserData {
         static ASYNC_POLL_PENDING: u8 = 0;
-        LightUserData(&ASYNC_POLL_PENDING as *const u8 as *mut c_void)
+        LightUserData(&ASYNC_POLL_PENDING as *const u8 as *mut std::os::raw::c_void)
     }
 
     // Luau version located in `luau/mod.rs`
@@ -1874,6 +1878,7 @@ impl Lua {
     /// Returns a handle to the unprotected Lua state without any synchronization.
     ///
     /// This is useful where we know that the lock is already held by the caller.
+    #[cfg(feature = "async")]
     #[inline(always)]
     pub(crate) unsafe fn raw_lua(&self) -> &RawLua {
         &*self.raw.data_ptr()

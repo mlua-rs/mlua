@@ -9,7 +9,7 @@ use serde::ser::{Serialize, Serializer};
 
 use crate::error::{Error, Result};
 use crate::state::{Lua, RawLua};
-use crate::types::{MaybeSend, XRc};
+use crate::types::XRc;
 use crate::userdata::AnyUserData;
 use crate::util::get_userdata;
 use crate::value::{FromLua, Value};
@@ -391,7 +391,7 @@ impl<T: 'static> UserDataStorage<T> {
     #[inline(always)]
     pub(crate) fn new_ser(data: T) -> Self
     where
-        T: Serialize + MaybeSend,
+        T: Serialize + crate::types::MaybeSend,
     {
         let data = Box::new(data) as Box<DynSerialize>;
         Self::Owned(UserDataVariant::Serializable(XRc::new(UserDataCell::new(data))))

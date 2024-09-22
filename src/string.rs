@@ -105,22 +105,22 @@ impl String {
 
     unsafe fn to_slice(&self) -> (&[u8], Lua) {
         let lua = self.0.lua.upgrade();
-        let rawlua = lua.lock();
-        let ref_thread = rawlua.ref_thread();
-        unsafe {
+        let slice = unsafe {
+            let rawlua = lua.lock();
+            let ref_thread = rawlua.ref_thread();
+
             mlua_debug_assert!(
                 ffi::lua_type(ref_thread, self.0.index) == ffi::LUA_TSTRING,
                 "string ref is not string type"
             );
 
-            let mut size = 0;
             // This will not trigger a 'm' error, because the reference is guaranteed to be of
             // string type
+            let mut size = 0;
             let data = ffi::lua_tolstring(ref_thread, self.0.index, &mut size);
-
-            drop(rawlua);
-            (slice::from_raw_parts(data as *const u8, size + 1), lua)
-        }
+            slice::from_raw_parts(data as *const u8, size + 1)
+        };
+        (slice, lua)
     }
 
     /// Converts this string to a generic C pointer.

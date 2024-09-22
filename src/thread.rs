@@ -143,7 +143,7 @@ impl Thread {
         let state = lua.state();
         let thread_state = self.state();
 
-        let nargs = args.push_into_stack_multi(&lua)?;
+        let nargs = args.push_into_stack_multi(lua)?;
         if nargs > 0 {
             check_stack(thread_state, nargs)?;
             ffi::lua_xmove(state, thread_state, nargs);
