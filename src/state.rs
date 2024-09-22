@@ -22,7 +22,9 @@ use crate::types::{
     ReentrantMutex, ReentrantMutexGuard, RegistryKey, XRc, XWeak,
 };
 use crate::userdata::{AnyUserData, UserData, UserDataProxy, UserDataRegistry, UserDataStorage};
-use crate::util::{assert_stack, check_stack, push_string, push_table, rawset_field, StackGuard};
+use crate::util::{
+    assert_stack, check_stack, protect_lua_closure, push_string, push_table, rawset_field, StackGuard,
+};
 use crate::value::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, MultiValue, Nil, Value};
 
 #[cfg(not(feature = "luau"))]
@@ -274,6 +276,28 @@ impl Lua {
             raw: RawLua::init_from_ptr(state, false),
             collect_garbage: true,
         }
+    }
+
+    /// Calls provided function passing a raw lua state.
+    ///
+    /// The arguments will be pushed onto the stack before calling the function.
+    ///
+    /// This method ensures that the Lua instance is locked while the function is called
+    /// and restores Lua stack after the function returns.
+    pub unsafe fn with_raw_state<R: FromLuaMulti>(
+        &self,
+        args: impl IntoLuaMulti,
+        f: impl FnOnce(*mut ffi::lua_State),
+    ) -> Result<R> {
+        let lua = self.lock();
+        let state = lua.state();
+        let _sg = StackGuard::new(state);
+        let stack_start = ffi::lua_gettop(state);
+        let nargs = args.push_into_stack_multi(&lua)?;
+        check_stack(state, 3)?;
+        protect_lua_closure::<_, ()>(state, nargs, ffi::LUA_MULTRET, f)?;
+        let nresults = ffi::lua_gettop(state) - stack_start;
+        R::from_stack_multi(nresults, &lua)
     }
 
     /// FIXME: Deprecated load_from_std_lib

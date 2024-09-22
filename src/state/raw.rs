@@ -43,6 +43,7 @@ use {
 };
 
 /// An inner Lua struct which holds a raw Lua state.
+#[doc(hidden)]
 pub struct RawLua {
     // The state is dynamic and depends on context
     pub(super) state: Cell<*mut ffi::lua_State>,
@@ -83,8 +84,11 @@ impl RawLua {
         unsafe { (*self.extra.get()).weak() }
     }
 
+    /// Returns a pointer to the current Lua state.
+    ///
+    /// The pointer refers to the active Lua coroutine and depends on the context.
     #[inline(always)]
-    pub(crate) fn state(&self) -> *mut ffi::lua_State {
+    pub fn state(&self) -> *mut ffi::lua_State {
         self.state.get()
     }
 
@@ -500,10 +504,9 @@ impl RawLua {
 
     /// Pushes a value that implements `IntoLua` onto the Lua stack.
     ///
-    /// Uses 2 stack spaces, does not call checkstack.
-    #[doc(hidden)]
+    /// Uses up to 2 stack spaces to push a single value, does not call `checkstack`.
     #[inline(always)]
-    pub unsafe fn push(&self, value: impl IntoLua) -> Result<()> {
+    pub(crate) unsafe fn push(&self, value: impl IntoLua) -> Result<()> {
         value.push_into_stack(self)
     }
 
