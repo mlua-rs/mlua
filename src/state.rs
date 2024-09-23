@@ -1856,15 +1856,6 @@ impl Lua {
         extra.app_data.remove()
     }
 
-    /// Pushes a value that implements `IntoLua` onto the Lua stack.
-    ///
-    /// Uses 2 stack spaces, does not call checkstack.
-    #[doc(hidden)]
-    #[inline(always)]
-    pub unsafe fn push(&self, value: impl IntoLua) -> Result<()> {
-        self.lock().push(value)
-    }
-
     /// Returns an internal `Poll::Pending` constant used for executing async callbacks.
     #[cfg(feature = "async")]
     #[doc(hidden)]
