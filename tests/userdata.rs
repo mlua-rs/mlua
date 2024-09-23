@@ -206,8 +206,8 @@ fn test_metamethods() -> Result<()> {
     Ok(())
 }
 
-#[test]
 #[cfg(feature = "lua54")]
+#[test]
 fn test_metamethod_close() -> Result<()> {
     #[derive(Clone)]
     struct MyUserData(Arc<AtomicI64>);
@@ -791,18 +791,27 @@ fn test_userdata_method_errors() -> Result<()> {
     let lua = Lua::new();
 
     let ud = lua.create_userdata(MyUserData(123))?;
-    let res = ud.call_function::<()>("get_value", ());
-    let Err(Error::CallbackError { cause, .. }) = res else {
-        panic!("expected CallbackError, got {res:?}");
-    };
-    assert!(matches!(
-        &*cause,
-        Error::BadArgument {
-            to,
-            name,
-            ..
-        } if to.as_deref() == Some("MyUserData.get_value") && name.as_deref() == Some("self")
-    ));
+    let res = ud.call_function::<()>("get_value", "not a userdata");
+    match res {
+        Err(Error::CallbackError { cause, .. }) => match cause.as_ref() {
+            Error::BadArgument {
+                to,
+                name,
+                cause: cause2,
+                ..
+            } => {
+                assert_eq!(to.as_deref(), Some("MyUserData.get_value"));
+                assert_eq!(name.as_deref(), Some("self"));
+                println!("{}", cause2.to_string());
+                assert_eq!(
+                    cause2.to_string(),
+                    "error converting Lua string to userdata (expected userdata of type 'MyUserData')"
+                );
+            }
+            err => panic!("expected BadArgument, got {err:?}"),
+        },
+        r => panic!("expected CallbackError, got {r:?}"),
+    }
 
     Ok(())
 }

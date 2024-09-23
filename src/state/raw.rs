@@ -1004,8 +1004,18 @@ impl RawLua {
     }
 
     // Same as `get_userdata_ref_type_id` but assumes the userdata is already on the stack.
-    pub(crate) unsafe fn get_userdata_type_id(&self, idx: c_int) -> Result<Option<TypeId>> {
-        self.get_userdata_type_id_inner(self.state(), idx)
+    pub(crate) unsafe fn get_userdata_type_id<T>(&self, idx: c_int) -> Result<Option<TypeId>> {
+        match self.get_userdata_type_id_inner(self.state(), idx) {
+            Ok(type_id) => Ok(type_id),
+            Err(Error::UserDataTypeMismatch) if ffi::lua_type(self.state(), idx) != ffi::LUA_TUSERDATA => {
+                // Report `FromLuaConversionError` instead
+                let idx_type_name = CStr::from_ptr(ffi::luaL_typename(self.state(), idx));
+                let idx_type_name = idx_type_name.to_str().unwrap();
+                let message = format!("expected userdata of type '{}'", short_type_name::<T>());
+                Err(Error::from_lua_conversion(idx_type_name, "userdata", message))
+            }
+            Err(err) => Err(err),
+        }
     }
 
     unsafe fn get_userdata_type_id_inner(

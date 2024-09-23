@@ -195,7 +195,7 @@ impl<T: 'static> FromLua for UserDataRef<T> {
     }
 
     unsafe fn from_stack(idx: c_int, lua: &RawLua) -> Result<Self> {
-        let type_id = lua.get_userdata_type_id(idx)?;
+        let type_id = lua.get_userdata_type_id::<T>(idx)?;
         match type_id {
             Some(type_id) if type_id == TypeId::of::<T>() => {
                 (*get_userdata::<UserDataStorage<T>>(lua.state(), idx)).try_borrow_owned()
@@ -263,7 +263,7 @@ impl<T: 'static> FromLua for UserDataRefMut<T> {
     }
 
     unsafe fn from_stack(idx: c_int, lua: &RawLua) -> Result<Self> {
-        let type_id = lua.get_userdata_type_id(idx)?;
+        let type_id = lua.get_userdata_type_id::<T>(idx)?;
         match type_id {
             Some(type_id) if type_id == TypeId::of::<T>() => {
                 (*get_userdata::<UserDataStorage<T>>(lua.state(), idx)).try_borrow_owned_mut()
