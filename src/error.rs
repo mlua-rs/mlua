@@ -205,17 +205,17 @@ pub type Result<T> = StdResult<T, Error>;
 #[cfg(not(tarpaulin_include))]
 impl fmt::Display for Error {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            Error::SyntaxError { ref message, .. } => write!(fmt, "syntax error: {message}"),
-            Error::RuntimeError(ref msg) => write!(fmt, "runtime error: {msg}"),
-            Error::MemoryError(ref msg) => {
+        match self {
+            Error::SyntaxError { message, .. } => write!(fmt, "syntax error: {message}"),
+            Error::RuntimeError(msg) => write!(fmt, "runtime error: {msg}"),
+            Error::MemoryError(msg) => {
                 write!(fmt, "memory error: {msg}")
             }
             #[cfg(any(feature = "lua53", feature = "lua52"))]
-            Error::GarbageCollectorError(ref msg) => {
+            Error::GarbageCollectorError(msg) => {
                 write!(fmt, "garbage collector error: {msg}")
             }
-            Error::SafetyError(ref msg) => {
+            Error::SafetyError(msg) => {
                 write!(fmt, "safety error: {msg}")
             },
             Error::MemoryLimitNotAvailable => {
@@ -234,7 +234,7 @@ impl fmt::Display for Error {
                 fmt,
                 "too many arguments to Function::bind"
             ),
-            Error::BadArgument { ref to, pos, ref name, ref cause } => {
+            Error::BadArgument { to, pos, name, cause } => {
                 if let Some(name) = name {
                     write!(fmt, "bad argument `{name}`")?;
                 } else {
@@ -245,18 +245,18 @@ impl fmt::Display for Error {
                 }
                 write!(fmt, ": {cause}")
             },
-            Error::ToLuaConversionError { from, to, ref message } => {
+            Error::ToLuaConversionError { from, to, message } => {
                 write!(fmt, "error converting {from} to Lua {to}")?;
-                match *message {
+                match message {
                     None => Ok(()),
-                    Some(ref message) => write!(fmt, " ({message})"),
+                    Some(message) => write!(fmt, " ({message})"),
                 }
             }
-            Error::FromLuaConversionError { from, to, ref message } => {
+            Error::FromLuaConversionError { from, to, message } => {
                 write!(fmt, "error converting Lua {from} to {to}")?;
-                match *message {
+                match message {
                     None => Ok(()),
-                    Some(ref message) => write!(fmt, " ({message})"),
+                    Some(message) => write!(fmt, " ({message})"),
                 }
             }
             Error::CoroutineUnresumable => write!(fmt, "coroutine is non-resumable"),
@@ -264,21 +264,21 @@ impl fmt::Display for Error {
             Error::UserDataDestructed => write!(fmt, "userdata has been destructed"),
             Error::UserDataBorrowError => write!(fmt, "error borrowing userdata"),
             Error::UserDataBorrowMutError => write!(fmt, "error mutably borrowing userdata"),
-            Error::MetaMethodRestricted(ref method) => write!(fmt, "metamethod {method} is restricted"),
-            Error::MetaMethodTypeError { ref method, type_name, ref message } => {
+            Error::MetaMethodRestricted(method) => write!(fmt, "metamethod {method} is restricted"),
+            Error::MetaMethodTypeError { method, type_name, message } => {
                 write!(fmt, "metamethod {method} has unsupported type {type_name}")?;
-                match *message {
+                match message {
                     None => Ok(()),
-                    Some(ref message) => write!(fmt, " ({message})"),
+                    Some(message) => write!(fmt, " ({message})"),
                 }
             }
             Error::MismatchedRegistryKey => {
                 write!(fmt, "RegistryKey used from different Lua state")
             }
-            Error::CallbackError { ref cause, ref traceback } => {
+            Error::CallbackError { cause, traceback } => {
                 // Trace errors down to the root
                 let (mut cause, mut full_traceback) = (cause, None);
-                while let Error::CallbackError { cause: ref cause2, traceback: ref traceback2 } = **cause {
+                while let Error::CallbackError { cause: cause2, traceback: traceback2 } = &**cause {
                     cause = cause2;
                     full_traceback = Some(traceback2);
                 }
@@ -302,15 +302,15 @@ impl fmt::Display for Error {
                 write!(fmt, "previously resumed panic returned again")
             }
             #[cfg(feature = "serialize")]
-            Error::SerializeError(ref err) => {
+            Error::SerializeError(err) => {
                 write!(fmt, "serialize error: {err}")
             },
             #[cfg(feature = "serialize")]
-            Error::DeserializeError(ref err) => {
+            Error::DeserializeError(err) => {
                 write!(fmt, "deserialize error: {err}")
             },
-            Error::ExternalError(ref err) => write!(fmt, "{err}"),
-            Error::WithContext { ref context, ref cause } => {
+            Error::ExternalError(err) => write!(fmt, "{err}"),
+            Error::WithContext { context, cause } => {
                 writeln!(fmt, "{context}")?;
                 write!(fmt, "{cause}")
             }
@@ -320,15 +320,15 @@ impl fmt::Display for Error {
 
 impl StdError for Error {
     fn source(&self) -> Option<&(dyn StdError + 'static)> {
-        match *self {
+        match self {
             // An error type with a source error should either return that error via source or
             // include that source's error message in its own Display output, but never both.
             // https://blog.rust-lang.org/inside-rust/2021/07/01/What-the-error-handling-project-group-is-working-towards.html
             // Given that we include source to fmt::Display implementation for `CallbackError`, this call
             // returns nothing.
             Error::CallbackError { .. } => None,
-            Error::ExternalError(ref err) => err.source(),
-            Error::WithContext { ref cause, .. } => match cause.as_ref() {
+            Error::ExternalError(err) => err.source(),
+            Error::WithContext { cause, .. } => match cause.as_ref() {
                 Error::ExternalError(err) => err.source(),
                 _ => None,
             },
@@ -374,15 +374,15 @@ impl Error {
         }
     }
 
-    pub(crate) fn from_lua_conversion<'a>(
+    pub(crate) fn from_lua_conversion(
         from: &'static str,
         to: &'static str,
-        message: impl Into<Option<&'a str>>,
+        message: impl Into<Option<String>>,
     ) -> Self {
         Error::FromLuaConversionError {
             from,
             to,
-            message: message.into().map(|s| s.into()),
+            message: message.into(),
         }
     }
 }
