@@ -1350,7 +1350,7 @@ impl Lua {
     /// # fn main() -> Result<()> {
     /// # let lua = Lua::new();
     /// let mt = lua.create_table()?;
-    /// mt.set("__tostring", lua.create_function(|_, b: bool| Ok(if b { 2 } else { 0 }))?)?;
+    /// mt.set("__tostring", lua.create_function(|_, b: bool| Ok(if b { "2" } else { "0" }))?)?;
     /// lua.set_type_metatable::<bool>(Some(mt));
     /// lua.load("assert(tostring(true) == '2')").exec()?;
     /// # Ok(())
