@@ -18,7 +18,7 @@ use crate::string::String;
 use crate::table::Table;
 use crate::thread::Thread;
 use crate::types::{
-    AppDataRef, AppDataRefMut, ArcReentrantMutexGuard, Integer, MaybeSend, Number, ReentrantMutex,
+    AppDataRef, AppDataRefMut, ArcReentrantMutexGuard, Integer, LuaType, MaybeSend, Number, ReentrantMutex,
     ReentrantMutexGuard, RegistryKey, VmState, XRc, XWeak,
 };
 use crate::userdata::{AnyUserData, UserData, UserDataProxy, UserDataRegistry, UserDataStorage};
@@ -1337,24 +1337,66 @@ impl Lua {
         unsafe { self.lock().make_userdata(UserDataStorage::new(ud)) }
     }
 
-    /// Sets the metatable for a Luau builtin vector type.
-    #[cfg(any(feature = "luau", doc))]
-    #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
-    pub fn set_vector_metatable(&self, metatable: Option<Table>) {
+    /// Sets the metatable for a Lua builtin type.
+    ///
+    /// The metatable will be shared by all values of the given type.
+    ///
+    /// # Examples
+    ///
+    /// Change metatable for Lua boolean type:
+    ///
+    /// ```
+    /// # use mlua::{Lua, Result, Function};
+    /// # fn main() -> Result<()> {
+    /// # let lua = Lua::new();
+    /// let mt = lua.create_table()?;
+    /// mt.set("__tostring", lua.create_function(|_, b: bool| Ok(if b { 2 } else { 0 }))?)?;
+    /// lua.set_type_metatable::<bool>(Some(mt));
+    /// lua.load("assert(tostring(true) == '2')").exec()?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    #[allow(private_bounds)]
+    pub fn set_type_metatable<T: LuaType>(&self, metatable: Option<Table>) {
         let lua = self.lock();
         let state = lua.state();
         unsafe {
             let _sg = StackGuard::new(state);
             assert_stack(state, 2);
 
-            #[cfg(not(feature = "luau-vector4"))]
-            ffi::lua_pushvector(state, 0., 0., 0.);
-            #[cfg(feature = "luau-vector4")]
-            ffi::lua_pushvector(state, 0., 0., 0., 0.);
+            match T::TYPE_ID {
+                ffi::LUA_TBOOLEAN => {
+                    ffi::lua_pushboolean(state, 0);
+                }
+                ffi::LUA_TLIGHTUSERDATA => {
+                    ffi::lua_pushlightuserdata(state, ptr::null_mut());
+                }
+                ffi::LUA_TNUMBER => {
+                    ffi::lua_pushnumber(state, 0.);
+                }
+                #[cfg(feature = "luau")]
+                ffi::LUA_TVECTOR => {
+                    #[cfg(not(feature = "luau-vector4"))]
+                    ffi::lua_pushvector(state, 0., 0., 0.);
+                    #[cfg(feature = "luau-vector4")]
+                    ffi::lua_pushvector(state, 0., 0., 0., 0.);
+                }
+                ffi::LUA_TSTRING => {
+                    ffi::lua_pushstring(state, b"\0" as *const u8 as *const _);
+                }
+                ffi::LUA_TFUNCTION => match self.load("function() end").eval::<Function>() {
+                    Ok(func) => lua.push_ref(&func.0),
+                    Err(_) => return,
+                },
+                ffi::LUA_TTHREAD => {
+                    ffi::lua_newthread(state);
+                }
+                _ => {}
+            }
             match metatable {
                 Some(metatable) => lua.push_ref(&metatable.0),
                 None => ffi::lua_pushnil(state),
-            };
+            }
             ffi::lua_setmetatable(state, -2);
         }
     }

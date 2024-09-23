@@ -27,7 +27,7 @@ pub type Integer = ffi::lua_Integer;
 /// Type of Lua floating point numbers.
 pub type Number = ffi::lua_Number;
 
-// Represents different subtypes wrapped to AnyUserData
+// Represents different subtypes wrapped in AnyUserData
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub(crate) enum SubtypeId {
     None,
@@ -114,6 +114,22 @@ pub trait MaybeSend {}
 impl<T> MaybeSend for T {}
 
 pub(crate) struct DestructedUserdata;
+
+pub(crate) trait LuaType {
+    const TYPE_ID: c_int;
+}
+
+impl LuaType for bool {
+    const TYPE_ID: c_int = ffi::LUA_TBOOLEAN;
+}
+
+impl LuaType for Number {
+    const TYPE_ID: c_int = ffi::LUA_TNUMBER;
+}
+
+impl LuaType for LightUserData {
+    const TYPE_ID: c_int = ffi::LUA_TLIGHTUSERDATA;
+}
 
 mod app_data;
 mod registry_key;

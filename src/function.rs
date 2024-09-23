@@ -5,7 +5,7 @@ use std::{mem, ptr, slice};
 use crate::error::{Error, Result};
 use crate::state::Lua;
 use crate::table::Table;
-use crate::types::{Callback, MaybeSend, ValueRef};
+use crate::types::{Callback, LuaType, MaybeSend, ValueRef};
 use crate::util::{
     assert_stack, check_stack, linenumber_to_usize, pop_error, ptr_to_lossy_str, ptr_to_str, StackGuard,
 };
@@ -586,6 +586,10 @@ impl IntoLua for WrappedAsyncFunction {
     fn into_lua(self, lua: &Lua) -> Result<Value> {
         lua.lock().create_async_callback(self.0).map(Value::Function)
     }
+}
+
+impl LuaType for Function {
+    const TYPE_ID: c_int = ffi::LUA_TFUNCTION;
 }
 
 #[cfg(test)]

@@ -1,7 +1,7 @@
 use std::borrow::Borrow;
 use std::hash::{Hash, Hasher};
 use std::ops::Deref;
-use std::os::raw::c_void;
+use std::os::raw::{c_int, c_void};
 use std::string::String as StdString;
 use std::{cmp, fmt, slice, str};
 
@@ -13,7 +13,7 @@ use {
 
 use crate::error::{Error, Result};
 use crate::state::Lua;
-use crate::types::ValueRef;
+use crate::types::{LuaType, ValueRef};
 
 /// Handle to an internal Lua string.
 ///
@@ -325,6 +325,10 @@ impl<'a> IntoIterator for BorrowedBytes<'a> {
     fn into_iter(self) -> Self::IntoIter {
         self.0.iter()
     }
+}
+
+impl LuaType for String {
+    const TYPE_ID: c_int = ffi::LUA_TSTRING;
 }
 
 #[cfg(test)]

@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 use std::fmt;
 use std::marker::PhantomData;
-use std::os::raw::c_void;
+use std::os::raw::{c_int, c_void};
 use std::string::String as StdString;
 
 #[cfg(feature = "serialize")]
@@ -15,7 +15,7 @@ use crate::error::{Error, Result};
 use crate::function::Function;
 use crate::state::{LuaGuard, RawLua};
 use crate::traits::ObjectLike;
-use crate::types::{Integer, ValueRef};
+use crate::types::{Integer, LuaType, ValueRef};
 use crate::util::{assert_stack, check_stack, StackGuard};
 use crate::value::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, Nil, Value};
 
@@ -959,6 +959,10 @@ impl Serialize for Table {
     fn serialize<S: Serializer>(&self, serializer: S) -> StdResult<S::Ok, S::Error> {
         SerializableTable::new(self, Default::default(), Default::default()).serialize(serializer)
     }
+}
+
+impl LuaType for Table {
+    const TYPE_ID: c_int = ffi::LUA_TTABLE;
 }
 
 #[cfg(feature = "serialize")]

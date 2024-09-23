@@ -4,7 +4,7 @@ use crate::error::{Error, Result};
 #[allow(unused)]
 use crate::state::Lua;
 use crate::state::RawLua;
-use crate::types::{ValueRef, VmState};
+use crate::types::{LuaType, ValueRef, VmState};
 use crate::util::{check_stack, error_traceback_thread, pop_error, StackGuard};
 use crate::value::{FromLuaMulti, IntoLuaMulti};
 
@@ -370,6 +370,10 @@ impl PartialEq for Thread {
     fn eq(&self, other: &Self) -> bool {
         self.0 == other.0
     }
+}
+
+impl LuaType for Thread {
+    const TYPE_ID: c_int = ffi::LUA_TTHREAD;
 }
 
 #[cfg(feature = "async")]
