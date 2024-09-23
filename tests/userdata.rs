@@ -198,10 +198,10 @@ fn test_metamethods() -> Result<()> {
     assert!(userdata2.equals(userdata3)?);
 
     let userdata1: AnyUserData = globals.get("userdata1")?;
-    assert!(userdata1.get_metatable()?.contains(MetaMethod::Add)?);
-    assert!(userdata1.get_metatable()?.contains(MetaMethod::Sub)?);
-    assert!(userdata1.get_metatable()?.contains(MetaMethod::Index)?);
-    assert!(!userdata1.get_metatable()?.contains(MetaMethod::Pow)?);
+    assert!(userdata1.metatable()?.contains(MetaMethod::Add)?);
+    assert!(userdata1.metatable()?.contains(MetaMethod::Sub)?);
+    assert!(userdata1.metatable()?.contains(MetaMethod::Index)?);
+    assert!(!userdata1.metatable()?.contains(MetaMethod::Pow)?);
 
     Ok(())
 }
@@ -565,7 +565,7 @@ fn test_metatable() -> Result<()> {
     impl UserData for MyUserData {
         fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
             methods.add_function("my_type_name", |_, data: AnyUserData| {
-                let metatable = data.get_metatable()?;
+                let metatable = data.metatable()?;
                 metatable.get::<String>(MetaMethod::Type)
             });
         }
@@ -583,7 +583,7 @@ fn test_metatable() -> Result<()> {
     lua.load(r#"assert(typeof(ud) == "MyUserData")"#).exec()?;
 
     let ud: AnyUserData = globals.get("ud")?;
-    let metatable = ud.get_metatable()?;
+    let metatable = ud.metatable()?;
 
     match metatable.get::<Value>("__gc") {
         Ok(_) => panic!("expected MetaMethodRestricted, got no error"),
@@ -629,7 +629,7 @@ fn test_metatable() -> Result<()> {
     }
 
     let ud = lua.create_userdata(MyUserData3)?;
-    let metatable = ud.get_metatable()?;
+    let metatable = ud.metatable()?;
     assert_eq!(metatable.get::<String>(MetaMethod::Type)?.to_str()?, "CustomName");
 
     Ok(())

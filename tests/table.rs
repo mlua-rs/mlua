@@ -181,7 +181,7 @@ fn test_table_clear() -> Result<()> {
     assert_eq!(t2.raw_len(), 0);
     assert!(t2.is_empty());
     assert_eq!(t2.raw_get::<Value>("a")?, Value::Nil);
-    assert_ne!(t2.get_metatable(), None);
+    assert_ne!(t2.metatable(), None);
 
     Ok(())
 }
