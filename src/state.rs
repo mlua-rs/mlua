@@ -288,7 +288,7 @@ impl Lua {
     /// This method ensures that the Lua instance is locked while the function is called
     /// and restores Lua stack after the function returns.
     #[allow(clippy::missing_safety_doc)]
-    pub unsafe fn with_raw_state<R: FromLuaMulti>(
+    pub unsafe fn exec_raw<R: FromLuaMulti>(
         &self,
         args: impl IntoLuaMulti,
         f: impl FnOnce(*mut ffi::lua_State),

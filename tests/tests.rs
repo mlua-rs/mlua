@@ -1291,7 +1291,7 @@ fn test_multi_thread() -> Result<()> {
 }
 
 #[test]
-fn test_with_raw_state() -> Result<()> {
+fn test_exec_raw() -> Result<()> {
     let lua = Lua::new();
 
     let sum = lua.create_function(|_, args: Variadic<i32>| {
@@ -1304,7 +1304,7 @@ fn test_with_raw_state() -> Result<()> {
     lua.globals().set("sum", sum)?;
 
     let n: i32 = unsafe {
-        lua.with_raw_state((), |state| {
+        lua.exec_raw((), |state| {
             ffi::lua_getglobal(state, b"sum\0".as_ptr() as _);
             ffi::lua_pushinteger(state, 1);
             ffi::lua_pushinteger(state, 7);
@@ -1315,7 +1315,7 @@ fn test_with_raw_state() -> Result<()> {
 
     // Test error handling
     let res: Result<()> = unsafe {
-        lua.with_raw_state("test error", |state| {
+        lua.exec_raw("test error", |state| {
             ffi::lua_error(state);
         })
     };
