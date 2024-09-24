@@ -365,6 +365,14 @@ impl Error {
         }
     }
 
+    /// An iterator over the chain of nested errors wrapped by this Error.
+    pub fn chain(&self) -> impl Iterator<Item = &(dyn StdError + 'static)> {
+        Chain {
+            root: self,
+            current: None,
+        }
+    }
+
     pub(crate) fn bad_self_argument(to: &str, cause: Error) -> Self {
         Error::BadArgument {
             to: Some(to.to_string()),
@@ -485,5 +493,46 @@ impl serde::ser::Error for Error {
 impl serde::de::Error for Error {
     fn custom<T: fmt::Display>(msg: T) -> Self {
         Self::DeserializeError(msg.to_string())
+    }
+}
+
+struct Chain<'a> {
+    root: &'a Error,
+    current: Option<&'a (dyn StdError + 'static)>,
+}
+
+impl<'a> Iterator for Chain<'a> {
+    type Item = &'a (dyn StdError + 'static);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            let error: Option<&dyn StdError> = match self.current {
+                None => {
+                    self.current = Some(self.root);
+                    self.current
+                }
+                Some(current) => match current.downcast_ref::<Error>()? {
+                    Error::BadArgument { cause, .. }
+                    | Error::CallbackError { cause, .. }
+                    | Error::WithContext { cause, .. } => {
+                        self.current = Some(&**cause);
+                        self.current
+                    }
+                    Error::ExternalError(err) => {
+                        self.current = Some(&**err);
+                        self.current
+                    }
+                    _ => None,
+                },
+            };
+
+            // Skip `ExternalError` as it only wraps the underlying error
+            // without meaningful context
+            if let Some(Error::ExternalError(_)) = error?.downcast_ref::<Error>() {
+                continue;
+            }
+
+            return self.current;
+        }
     }
 }
