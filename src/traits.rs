@@ -2,6 +2,7 @@ use std::string::String as StdString;
 
 use crate::error::Result;
 use crate::private::Sealed;
+use crate::types::MaybeSend;
 use crate::value::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti};
 
 #[cfg(feature = "async")]
@@ -76,3 +77,94 @@ pub trait ObjectLike: Sealed {
     /// This might invoke the `__tostring` metamethod.
     fn to_string(&self) -> Result<StdString>;
 }
+
+/// A trait for types that can be used as Lua functions.
+pub trait LuaNativeFn<A: FromLuaMulti> {
+    type Output: IntoLuaMulti;
+
+    fn call(&self, args: A) -> Self::Output;
+}
+
+/// A trait for types with mutable state that can be used as Lua functions.
+pub trait LuaNativeFnMut<A: FromLuaMulti> {
+    type Output: IntoLuaMulti;
+
+    fn call(&mut self, args: A) -> Self::Output;
+}
+
+/// A trait for types that returns a future and can be used as Lua functions.
+#[cfg(feature = "async")]
+pub trait LuaNativeAsyncFn<A: FromLuaMulti> {
+    type Output: IntoLuaMulti;
+
+    fn call(&self, args: A) -> impl Future<Output = Self::Output> + MaybeSend + 'static;
+}
+
+macro_rules! impl_lua_native_fn {
+    ($($A:ident),*) => {
+        impl<FN, $($A,)* R> LuaNativeFn<($($A,)*)> for FN
+        where
+            FN: Fn($($A,)*) -> R + MaybeSend + 'static,
+            ($($A,)*): FromLuaMulti,
+            R: IntoLuaMulti,
+        {
+            type Output = R;
+
+            #[allow(non_snake_case)]
+            fn call(&self, args: ($($A,)*)) -> Self::Output {
+                let ($($A,)*) = args;
+                self($($A,)*)
+            }
+        }
+
+        impl<FN, $($A,)* R> LuaNativeFnMut<($($A,)*)> for FN
+        where
+            FN: FnMut($($A,)*) -> R + MaybeSend + 'static,
+            ($($A,)*): FromLuaMulti,
+            R: IntoLuaMulti,
+        {
+            type Output = R;
+
+            #[allow(non_snake_case)]
+            fn call(&mut self, args: ($($A,)*)) -> Self::Output {
+                let ($($A,)*) = args;
+                self($($A,)*)
+            }
+        }
+
+        #[cfg(feature = "async")]
+        impl<FN, $($A,)* Fut, R> LuaNativeAsyncFn<($($A,)*)> for FN
+        where
+            FN: Fn($($A,)*) -> Fut + MaybeSend + 'static,
+            ($($A,)*): FromLuaMulti,
+            Fut: Future<Output = R> + MaybeSend + 'static,
+            R: IntoLuaMulti,
+        {
+            type Output = R;
+
+            #[allow(non_snake_case)]
+            fn call(&self, args: ($($A,)*)) -> impl Future<Output = Self::Output> + MaybeSend + 'static {
+                let ($($A,)*) = args;
+                self($($A,)*)
+            }
+        }
+    };
+}
+
+impl_lua_native_fn!();
+impl_lua_native_fn!(A);
+impl_lua_native_fn!(A, B);
+impl_lua_native_fn!(A, B, C);
+impl_lua_native_fn!(A, B, C, D);
+impl_lua_native_fn!(A, B, C, D, E);
+impl_lua_native_fn!(A, B, C, D, E, F);
+impl_lua_native_fn!(A, B, C, D, E, F, G);
+impl_lua_native_fn!(A, B, C, D, E, F, G, H);
+impl_lua_native_fn!(A, B, C, D, E, F, G, H, I);
+impl_lua_native_fn!(A, B, C, D, E, F, G, H, I, J);
+impl_lua_native_fn!(A, B, C, D, E, F, G, H, I, J, K);
+impl_lua_native_fn!(A, B, C, D, E, F, G, H, I, J, K, L);
+impl_lua_native_fn!(A, B, C, D, E, F, G, H, I, J, K, L, M);
+impl_lua_native_fn!(A, B, C, D, E, F, G, H, I, J, K, L, M, N);
+impl_lua_native_fn!(A, B, C, D, E, F, G, H, I, J, K, L, M, N, O);
+impl_lua_native_fn!(A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P);

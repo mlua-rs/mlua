@@ -30,7 +30,7 @@ fn test_boolean_type_metatable() -> Result<()> {
     let lua = Lua::new();
 
     let mt = lua.create_table()?;
-    mt.set("__add", Function::wrap(|_, (a, b): (bool, bool)| Ok(a || b)))?;
+    mt.set("__add", Function::wrap(|a, b| Ok(a || b)))?;
     lua.set_type_metatable::<bool>(Some(mt));
 
     lua.load(r#"assert(true + true == true)"#).exec().unwrap();
@@ -48,7 +48,7 @@ fn test_lightuserdata_type_metatable() -> Result<()> {
     let mt = lua.create_table()?;
     mt.set(
         "__add",
-        Function::wrap(|_, (a, b): (LightUserData, LightUserData)| {
+        Function::wrap(|a: LightUserData, b: LightUserData| {
             Ok(LightUserData((a.0 as usize + b.0 as usize) as *mut c_void))
         }),
     )?;
@@ -76,7 +76,7 @@ fn test_number_type_metatable() -> Result<()> {
     let lua = Lua::new();
 
     let mt = lua.create_table()?;
-    mt.set("__call", Function::wrap(|_, (n1, n2): (f64, f64)| Ok(n1 * n2)))?;
+    mt.set("__call", Function::wrap(|n1: f64, n2: f64| Ok(n1 * n2)))?;
     lua.set_type_metatable::<Number>(Some(mt));
     lua.load(r#"assert((1.5)(3.0) == 4.5)"#).exec().unwrap();
     lua.load(r#"assert((5)(5) == 25)"#).exec().unwrap();
@@ -91,7 +91,7 @@ fn test_string_type_metatable() -> Result<()> {
     let mt = lua.create_table()?;
     mt.set(
         "__add",
-        Function::wrap(|_, (a, b): (LuaString, LuaString)| Ok(format!("{}{}", a.to_str()?, b.to_str()?))),
+        Function::wrap(|a: String, b: String| Ok(format!("{a}{b}"))),
     )?;
     lua.set_type_metatable::<LuaString>(Some(mt));
 
@@ -107,7 +107,7 @@ fn test_function_type_metatable() -> Result<()> {
     let mt = lua.create_table()?;
     mt.set(
         "__index",
-        Function::wrap(|_, (_, key): (Function, String)| Ok(format!("function.{key}"))),
+        Function::wrap(|_: Function, key: String| Ok(format!("function.{key}"))),
     )?;
     lua.set_type_metatable::<Function>(Some(mt));
 
@@ -125,7 +125,7 @@ fn test_thread_type_metatable() -> Result<()> {
     let mt = lua.create_table()?;
     mt.set(
         "__index",
-        Function::wrap(|_, (_, key): (Thread, String)| Ok(format!("thread.{key}"))),
+        Function::wrap(|_: Thread, key: String| Ok(format!("thread.{key}"))),
     )?;
     lua.set_type_metatable::<Thread>(Some(mt));
 

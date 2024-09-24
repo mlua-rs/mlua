@@ -1,5 +1,6 @@
 #![cfg(feature = "async")]
 
+use std::string::String as StdString;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -39,11 +40,37 @@ async fn test_async_function() -> Result<()> {
 async fn test_async_function_wrap() -> Result<()> {
     let lua = Lua::new();
 
-    let f = Function::wrap_async(|_, s: String| async move { Ok(s) });
+    let f = Function::wrap_async(|s: StdString| async move {
+        tokio::task::yield_now().await;
+        Ok(s)
+    });
     lua.globals().set("f", f)?;
-
     let res: String = lua.load(r#"f("hello")"#).eval_async().await?;
     assert_eq!(res, "hello");
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_async_function_wrap_raw() -> Result<()> {
+    let lua = Lua::new();
+
+    let f = Function::wrap_raw_async(|s: StdString| async move {
+        tokio::task::yield_now().await;
+        s
+    });
+    lua.globals().set("f", f)?;
+    let res: String = lua.load(r#"f("hello")"#).eval_async().await?;
+    assert_eq!(res, "hello");
+
+    // Return error
+    let ferr = Function::wrap_raw_async(|| async move {
+        tokio::task::yield_now().await;
+        Err::<(), _>("some error")
+    });
+    lua.globals().set("ferr", ferr)?;
+    let (_, err): (Value, String) = lua.load(r#"ferr()"#).eval_async().await?;
+    assert_eq!(err, "some error");
 
     Ok(())
 }

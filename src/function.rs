@@ -5,6 +5,7 @@ use std::{mem, ptr, slice};
 use crate::error::{Error, Result};
 use crate::state::Lua;
 use crate::table::Table;
+use crate::traits::{LuaNativeFn, LuaNativeFnMut};
 use crate::types::{Callback, LuaType, MaybeSend, ValueRef};
 use crate::util::{
     assert_stack, check_stack, linenumber_to_usize, pop_error, ptr_to_lossy_str, ptr_to_str, StackGuard,
@@ -13,6 +14,7 @@ use crate::value::{FromLuaMulti, IntoLua, IntoLuaMulti, Value};
 
 #[cfg(feature = "async")]
 use {
+    crate::traits::LuaNativeAsyncFn,
     crate::types::AsyncCallback,
     std::future::{self, Future},
 };
@@ -522,31 +524,56 @@ impl Function {
     /// Wraps a Rust function or closure, returning an opaque type that implements [`IntoLua`]
     /// trait.
     #[inline]
-    pub fn wrap<A, R, F>(func: F) -> impl IntoLua
+    pub fn wrap<F, A, R>(func: F) -> impl IntoLua
     where
+        F: LuaNativeFn<A, Output = Result<R>> + MaybeSend + 'static,
         A: FromLuaMulti,
         R: IntoLuaMulti,
-        F: Fn(&Lua, A) -> Result<R> + MaybeSend + 'static,
     {
         WrappedFunction(Box::new(move |lua, nargs| unsafe {
             let args = A::from_stack_args(nargs, 1, None, lua)?;
-            func(lua.lua(), args)?.push_into_stack_multi(lua)
+            func.call(args)?.push_into_stack_multi(lua)
         }))
     }
 
     /// Wraps a Rust mutable closure, returning an opaque type that implements [`IntoLua`] trait.
-    #[inline]
-    pub fn wrap_mut<A, R, F>(func: F) -> impl IntoLua
+    pub fn wrap_mut<F, A, R>(func: F) -> impl IntoLua
     where
+        F: LuaNativeFnMut<A, Output = Result<R>> + MaybeSend + 'static,
         A: FromLuaMulti,
         R: IntoLuaMulti,
-        F: FnMut(&Lua, A) -> Result<R> + MaybeSend + 'static,
     {
         let func = RefCell::new(func);
         WrappedFunction(Box::new(move |lua, nargs| unsafe {
             let mut func = func.try_borrow_mut().map_err(|_| Error::RecursiveMutCallback)?;
             let args = A::from_stack_args(nargs, 1, None, lua)?;
-            func(lua.lua(), args)?.push_into_stack_multi(lua)
+            func.call(args)?.push_into_stack_multi(lua)
+        }))
+    }
+
+    #[inline]
+    pub fn wrap_raw<F, A>(func: F) -> impl IntoLua
+    where
+        F: LuaNativeFn<A> + MaybeSend + 'static,
+        A: FromLuaMulti,
+    {
+        WrappedFunction(Box::new(move |lua, nargs| unsafe {
+            let args = A::from_stack_args(nargs, 1, None, lua)?;
+            func.call(args).push_into_stack_multi(lua)
+        }))
+    }
+
+    #[inline]
+    pub fn wrap_raw_mut<F, A>(func: F) -> impl IntoLua
+    where
+        F: LuaNativeFnMut<A> + MaybeSend + 'static,
+        A: FromLuaMulti,
+    {
+        let func = RefCell::new(func);
+        WrappedFunction(Box::new(move |lua, nargs| unsafe {
+            let mut func = func.try_borrow_mut().map_err(|_| Error::RecursiveMutCallback)?;
+            let args = A::from_stack_args(nargs, 1, None, lua)?;
+            func.call(args).push_into_stack_multi(lua)
         }))
     }
 
@@ -554,21 +581,38 @@ impl Function {
     /// trait.
     #[cfg(feature = "async")]
     #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
-    pub fn wrap_async<A, R, F, FR>(func: F) -> impl IntoLua
+    pub fn wrap_async<F, A, R>(func: F) -> impl IntoLua
     where
+        F: LuaNativeAsyncFn<A, Output = Result<R>> + MaybeSend + 'static,
         A: FromLuaMulti,
         R: IntoLuaMulti,
-        F: Fn(Lua, A) -> FR + MaybeSend + 'static,
-        FR: Future<Output = Result<R>> + MaybeSend + 'static,
     {
         WrappedAsyncFunction(Box::new(move |rawlua, nargs| unsafe {
             let args = match A::from_stack_args(nargs, 1, None, rawlua) {
                 Ok(args) => args,
                 Err(e) => return Box::pin(future::ready(Err(e))),
             };
-            let lua = rawlua.lua().clone();
-            let fut = func(lua.clone(), args);
+            let lua = rawlua.lua();
+            let fut = func.call(args);
             Box::pin(async move { fut.await?.push_into_stack_multi(lua.raw_lua()) })
+        }))
+    }
+
+    #[cfg(feature = "async")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
+    pub fn wrap_raw_async<F, A>(func: F) -> impl IntoLua
+    where
+        F: LuaNativeAsyncFn<A> + MaybeSend + 'static,
+        A: FromLuaMulti,
+    {
+        WrappedAsyncFunction(Box::new(move |rawlua, nargs| unsafe {
+            let args = match A::from_stack_args(nargs, 1, None, rawlua) {
+                Ok(args) => args,
+                Err(e) => return Box::pin(future::ready(Err(e))),
+            };
+            let lua = rawlua.lua();
+            let fut = func.call(args);
+            Box::pin(async move { fut.await.push_into_stack_multi(lua.raw_lua()) })
         }))
     }
 }

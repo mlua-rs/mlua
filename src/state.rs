@@ -1553,6 +1553,12 @@ impl Lua {
         T::from_lua(value, self)
     }
 
+    /// Converts a value that implements `IntoLua` into a `FromLua` variant.
+    #[inline]
+    pub fn convert<U: FromLua>(&self, value: impl IntoLua) -> Result<U> {
+        U::from_lua(value.into_lua(self)?, self)
+    }
+
     /// Converts a value that implements `IntoLuaMulti` into a `MultiValue` instance.
     #[inline]
     pub fn pack_multi(&self, t: impl IntoLuaMulti) -> Result<MultiValue> {

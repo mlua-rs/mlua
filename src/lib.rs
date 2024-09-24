@@ -115,7 +115,7 @@ pub use crate::stdlib::StdLib;
 pub use crate::string::{BorrowedBytes, BorrowedStr, String};
 pub use crate::table::{Table, TablePairs, TableSequence};
 pub use crate::thread::{Thread, ThreadStatus};
-pub use crate::traits::ObjectLike;
+pub use crate::traits::{LuaNativeFn, LuaNativeFnMut, ObjectLike};
 pub use crate::types::{
     AppDataRef, AppDataRefMut, Integer, LightUserData, MaybeSend, Number, RegistryKey, VmState,
 };
@@ -133,7 +133,7 @@ pub use crate::hook::HookTriggers;
 pub use crate::{chunk::Compiler, function::CoverageInfo, types::Vector};
 
 #[cfg(feature = "async")]
-pub use crate::thread::AsyncThread;
+pub use crate::{thread::AsyncThread, traits::LuaNativeAsyncFn};
 
 #[cfg(feature = "serialize")]
 #[doc(inline)]
