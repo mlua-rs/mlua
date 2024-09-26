@@ -143,23 +143,8 @@ impl fmt::Debug for String {
         }
 
         // Format as bytes
-        write!(f, "b\"")?;
-        for &b in bytes {
-            // https://doc.rust-lang.org/reference/tokens.html#byte-escapes
-            match b {
-                b'\n' => write!(f, "\\n")?,
-                b'\r' => write!(f, "\\r")?,
-                b'\t' => write!(f, "\\t")?,
-                b'\\' | b'"' => write!(f, "\\{}", b as char)?,
-                b'\0' => write!(f, "\\0")?,
-                // ASCII printable
-                0x20..=0x7e => write!(f, "{}", b as char)?,
-                _ => write!(f, "\\x{b:02x}")?,
-            }
-        }
-        write!(f, "\"")?;
-
-        Ok(())
+        write!(f, "b")?;
+        <bstr::BStr as fmt::Debug>::fmt(bstr::BStr::new(&bytes), f)
     }
 }
 
