@@ -15,6 +15,7 @@ use crate::state::{Lua, RawLua};
 use crate::string::String;
 use crate::table::Table;
 use crate::thread::Thread;
+use crate::traits::ShortTypeName as _;
 use crate::types::{LightUserData, MaybeSend, RegistryKey};
 use crate::userdata::{AnyUserData, UserData};
 use crate::value::{FromLua, IntoLua, Nil, Value};
@@ -72,7 +73,7 @@ impl FromLua for String {
         lua.coerce_string(value)?
             .ok_or_else(|| Error::FromLuaConversionError {
                 from: ty,
-                to: "string",
+                to: "string".to_string(),
                 message: Some("expected string or number".to_string()),
             })
     }
@@ -116,7 +117,7 @@ impl FromLua for Table {
             Value::Table(table) => Ok(table),
             _ => Err(Error::FromLuaConversionError {
                 from: value.type_name(),
-                to: "table",
+                to: "table".to_string(),
                 message: None,
             }),
         }
@@ -150,7 +151,7 @@ impl FromLua for Function {
             Value::Function(table) => Ok(table),
             _ => Err(Error::FromLuaConversionError {
                 from: value.type_name(),
-                to: "function",
+                to: "function".to_string(),
                 message: None,
             }),
         }
@@ -184,7 +185,7 @@ impl FromLua for Thread {
             Value::Thread(t) => Ok(t),
             _ => Err(Error::FromLuaConversionError {
                 from: value.type_name(),
-                to: "thread",
+                to: "thread".to_string(),
                 message: None,
             }),
         }
@@ -218,7 +219,7 @@ impl FromLua for AnyUserData {
             Value::UserData(ud) => Ok(ud),
             _ => Err(Error::FromLuaConversionError {
                 from: value.type_name(),
-                to: "userdata",
+                to: "userdata".to_string(),
                 message: None,
             }),
         }
@@ -336,7 +337,7 @@ impl FromLua for LightUserData {
             Value::LightUserData(ud) => Ok(ud),
             _ => Err(Error::FromLuaConversionError {
                 from: value.type_name(),
-                to: "light userdata",
+                to: "lightuserdata".to_string(),
                 message: None,
             }),
         }
@@ -359,7 +360,7 @@ impl FromLua for crate::types::Vector {
             Value::Vector(v) => Ok(v),
             _ => Err(Error::FromLuaConversionError {
                 from: value.type_name(),
-                to: "vector",
+                to: "vector".to_string(),
                 message: None,
             }),
         }
@@ -386,7 +387,7 @@ impl FromLua for StdString {
             .coerce_string(value)?
             .ok_or_else(|| Error::FromLuaConversionError {
                 from: ty,
-                to: "String",
+                to: Self::type_name(),
                 message: Some("expected string or number".to_string()),
             })?
             .to_str()?
@@ -405,7 +406,7 @@ impl FromLua for StdString {
                 .map(|s| s.to_owned())
                 .map_err(|e| Error::FromLuaConversionError {
                     from: "string",
-                    to: "String",
+                    to: Self::type_name(),
                     message: Some(e.to_string()),
                 });
         }
@@ -448,7 +449,7 @@ impl FromLua for Box<str> {
             .coerce_string(value)?
             .ok_or_else(|| Error::FromLuaConversionError {
                 from: ty,
-                to: "Box<str>",
+                to: Self::type_name(),
                 message: Some("expected string or number".to_string()),
             })?
             .to_str()?
@@ -472,7 +473,7 @@ impl FromLua for CString {
             .coerce_string(value)?
             .ok_or_else(|| Error::FromLuaConversionError {
                 from: ty,
-                to: "CString",
+                to: Self::type_name(),
                 message: Some("expected string or number".to_string()),
             })?;
 
@@ -480,7 +481,7 @@ impl FromLua for CString {
             Ok(s) => Ok(s.into()),
             Err(_) => Err(Error::FromLuaConversionError {
                 from: ty,
-                to: "CString",
+                to: Self::type_name(),
                 message: Some("invalid C-style string".to_string()),
             }),
         }
@@ -525,7 +526,7 @@ impl FromLua for BString {
                 .coerce_string(value)?
                 .ok_or_else(|| Error::FromLuaConversionError {
                     from: ty,
-                    to: "BString",
+                    to: Self::type_name(),
                     message: Some("expected string or number".to_string()),
                 })?
                 .as_bytes())
@@ -588,7 +589,7 @@ macro_rules! lua_convert_int {
                     .or_else(|| cast(self).map(Value::Number))
                     // This is impossible error because conversion to Number never fails
                     .ok_or_else(|| Error::ToLuaConversionError {
-                        from: stringify!($x),
+                        from: stringify!($x).to_string(),
                         to: "number",
                         message: Some("out of range".to_owned()),
                     })
@@ -619,7 +620,7 @@ macro_rules! lua_convert_int {
                                 lua.coerce_number(value)?
                                     .ok_or_else(|| Error::FromLuaConversionError {
                                         from: ty,
-                                        to: stringify!($x),
+                                        to: stringify!($x).to_string(),
                                         message: Some(
                                             "expected number or string coercible to number".to_string(),
                                         ),
@@ -630,7 +631,7 @@ macro_rules! lua_convert_int {
                 })
                 .ok_or_else(|| Error::FromLuaConversionError {
                     from: ty,
-                    to: stringify!($x),
+                    to: stringify!($x).to_string(),
                     message: Some("out of range".to_owned()),
                 })
             }
@@ -644,7 +645,7 @@ macro_rules! lua_convert_int {
                     if ok != 0 {
                         return cast(i).ok_or_else(|| Error::FromLuaConversionError {
                             from: "integer",
-                            to: stringify!($x),
+                            to: stringify!($x).to_string(),
                             message: Some("out of range".to_owned()),
                         });
                     }
@@ -676,7 +677,7 @@ macro_rules! lua_convert_float {
             fn into_lua(self, _: &Lua) -> Result<Value> {
                 cast(self)
                     .ok_or_else(|| Error::ToLuaConversionError {
-                        from: stringify!($x),
+                        from: stringify!($x).to_string(),
                         to: "number",
                         message: Some("out of range".to_string()),
                     })
@@ -691,13 +692,13 @@ macro_rules! lua_convert_float {
                 lua.coerce_number(value)?
                     .ok_or_else(|| Error::FromLuaConversionError {
                         from: ty,
-                        to: stringify!($x),
+                        to: stringify!($x).to_string(),
                         message: Some("expected number or string coercible to number".to_string()),
                     })
                     .and_then(|n| {
                         cast(n).ok_or_else(|| Error::FromLuaConversionError {
                             from: ty,
-                            to: stringify!($x),
+                            to: stringify!($x).to_string(),
                             message: Some("number out of range".to_string()),
                         })
                     })
@@ -712,7 +713,7 @@ macro_rules! lua_convert_float {
                     if ok != 0 {
                         return cast(i).ok_or_else(|| Error::FromLuaConversionError {
                             from: "number",
-                            to: stringify!($x),
+                            to: stringify!($x).to_string(),
                             message: Some("out of range".to_owned()),
                         });
                     }
@@ -771,13 +772,13 @@ where
                 vec.try_into()
                     .map_err(|vec: Vec<T>| Error::FromLuaConversionError {
                         from: "table",
-                        to: "Array",
-                        message: Some(format!("expected table of length {}, got {}", N, vec.len())),
+                        to: Self::type_name(),
+                        message: Some(format!("expected table of length {N}, got {}", vec.len())),
                     })
             }
             _ => Err(Error::FromLuaConversionError {
                 from: value.type_name(),
-                to: "Array",
+                to: Self::type_name(),
                 message: Some("expected table".to_string()),
             }),
         }
@@ -812,7 +813,7 @@ impl<T: FromLua> FromLua for Vec<T> {
             Value::Table(table) => table.sequence_values().collect(),
             _ => Err(Error::FromLuaConversionError {
                 from: value.type_name(),
-                to: "Vec",
+                to: Self::type_name(),
                 message: Some("expected table".to_string()),
             }),
         }
@@ -834,7 +835,7 @@ impl<K: Eq + Hash + FromLua, V: FromLua, S: BuildHasher + Default> FromLua for H
         } else {
             Err(Error::FromLuaConversionError {
                 from: value.type_name(),
-                to: "HashMap",
+                to: Self::type_name(),
                 message: Some("expected table".to_string()),
             })
         }
@@ -856,7 +857,7 @@ impl<K: Ord + FromLua, V: FromLua> FromLua for BTreeMap<K, V> {
         } else {
             Err(Error::FromLuaConversionError {
                 from: value.type_name(),
-                to: "BTreeMap",
+                to: Self::type_name(),
                 message: Some("expected table".to_string()),
             })
         }
@@ -880,7 +881,7 @@ impl<T: Eq + Hash + FromLua, S: BuildHasher + Default> FromLua for HashSet<T, S>
             Value::Table(table) => table.pairs::<T, Value>().map(|res| res.map(|(k, _)| k)).collect(),
             _ => Err(Error::FromLuaConversionError {
                 from: value.type_name(),
-                to: "HashSet",
+                to: Self::type_name(),
                 message: Some("expected table".to_string()),
             }),
         }
@@ -904,7 +905,7 @@ impl<T: Ord + FromLua> FromLua for BTreeSet<T> {
             Value::Table(table) => table.pairs::<T, Value>().map(|res| res.map(|(k, _)| k)).collect(),
             _ => Err(Error::FromLuaConversionError {
                 from: value.type_name(),
-                to: "BTreeSet",
+                to: Self::type_name(),
                 message: Some("expected table".to_string()),
             }),
         }

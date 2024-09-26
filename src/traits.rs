@@ -3,10 +3,20 @@ use std::string::String as StdString;
 use crate::error::Result;
 use crate::private::Sealed;
 use crate::types::MaybeSend;
+use crate::util::short_type_name;
 use crate::value::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti};
 
 #[cfg(feature = "async")]
 use std::future::Future;
+
+pub(crate) trait ShortTypeName {
+    #[inline(always)]
+    fn type_name() -> StdString {
+        short_type_name::<Self>()
+    }
+}
+
+impl<T> ShortTypeName for T {}
 
 /// A trait for types that can be used as Lua objects (usually table and userdata).
 pub trait ObjectLike: Sealed {

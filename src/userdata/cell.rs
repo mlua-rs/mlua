@@ -348,7 +348,7 @@ fn try_value_to_userdata<T>(value: Value) -> Result<AnyUserData> {
         Value::UserData(ud) => Ok(ud),
         _ => Err(Error::FromLuaConversionError {
             from: value.type_name(),
-            to: "userdata",
+            to: "userdata".to_string(),
             message: Some(format!("expected userdata of type {}", type_name::<T>())),
         }),
     }

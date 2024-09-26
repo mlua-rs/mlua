@@ -17,6 +17,7 @@ pub(crate) type BoxFuture<'a, T> = futures_util::future::BoxFuture<'a, T>;
 pub(crate) type BoxFuture<'a, T> = futures_util::future::LocalBoxFuture<'a, T>;
 
 pub use app_data::{AppData, AppDataRef, AppDataRefMut};
+pub use either::Either;
 pub use registry_key::RegistryKey;
 pub(crate) use value_ref::ValueRef;
 #[cfg(any(feature = "luau", doc))]
@@ -132,6 +133,7 @@ impl LuaType for LightUserData {
 }
 
 mod app_data;
+mod either;
 mod registry_key;
 mod sync;
 mod value_ref;

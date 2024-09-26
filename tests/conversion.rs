@@ -5,7 +5,8 @@ use std::ffi::{CStr, CString};
 use bstr::BString;
 use maplit::{btreemap, btreeset, hashmap, hashset};
 use mlua::{
-    AnyUserData, Error, Function, IntoLua, Lua, RegistryKey, Result, Table, Thread, UserDataRef, Value,
+    AnyUserData, Either, Error, Function, IntoLua, Lua, RegistryKey, Result, Table, Thread, UserDataRef,
+    Value,
 };
 
 #[test]
@@ -410,6 +411,88 @@ fn test_option_into_from_lua() -> Result<()> {
     assert_eq!(f.call::<Option<i32>>(Some(42))?, Some(42));
     assert_eq!(f.call::<Option<i32>>(Option::<i32>::None)?, None);
     assert_eq!(f.call::<Option<i32>>(())?, None);
+
+    Ok(())
+}
+
+#[test]
+fn test_either_enum() -> Result<()> {
+    // Left
+    let mut either = Either::<_, String>::Left(42);
+    assert!(either.is_left());
+    assert_eq!(*either.as_ref().left().unwrap(), 42);
+    *either.as_mut().left().unwrap() = 44;
+    assert_eq!(*either.as_ref().left().unwrap(), 44);
+    assert_eq!(format!("{either}"), "44");
+
+    // Right
+    either = Either::Right("hello".to_string());
+    assert!(either.is_right());
+    assert_eq!(*either.as_ref().right().unwrap(), "hello");
+    *either.as_mut().right().unwrap() = "world".to_string();
+    assert_eq!(*either.as_ref().right().unwrap(), "world");
+    assert_eq!(format!("{either}"), "world");
+
+    Ok(())
+}
+
+#[test]
+fn test_either_into_lua() -> Result<()> {
+    let lua = Lua::new();
+
+    // Direct conversion
+    let mut either = Either::<i32, &Table>::Left(42);
+    let value = either.into_lua(&lua)?;
+    assert_eq!(value, Value::Integer(42));
+
+    // Push into stack
+    let f =
+        lua.create_function(|_, either: Either<i32, Table>| either.right().unwrap().set("hello", "world"))?;
+    let t = lua.create_table()?;
+    either = Either::Right(&t);
+    f.call::<()>(either)?;
+    assert_eq!(t.get::<String>("hello")?, "world");
+
+    let f = lua.create_function(|_, either: Either<i32, Table>| Ok(either.left().unwrap() + 1))?;
+    either = Either::Left(42);
+    assert_eq!(f.call::<i32>(either)?, 43);
+
+    Ok(())
+}
+
+#[test]
+fn test_either_from_lua() -> Result<()> {
+    let lua = Lua::new();
+
+    // From stack
+    let f = lua.create_function(|_, either: Either<i32, Table>| Ok(either))?;
+    let either = f.call::<Either<i32, Table>>(42)?;
+    assert!(either.is_left());
+    assert_eq!(*either.as_ref().left().unwrap(), 42);
+
+    let either = f.call::<Either<i32, Table>>([5; 5])?;
+    assert!(either.is_right());
+    assert_eq!(either.as_ref().right().unwrap(), &[5; 5]);
+
+    // Check error message
+    match f.call::<Value>("hello") {
+        Ok(_) => panic!("expected error, got Ok"),
+        Err(ref err @ Error::CallbackError { ref cause, .. }) => {
+            match cause.as_ref() {
+                Error::BadArgument { cause, .. } => match cause.as_ref() {
+                    Error::FromLuaConversionError { to, .. } => {
+                        assert_eq!(to, "Either<i32, Table>")
+                    }
+                    err => panic!("expected `Error::FromLuaConversionError`, got {err:?}"),
+                },
+                err => panic!("expected `Error::BadArgument`, got {err:?}"),
+            }
+            assert!(err
+                .to_string()
+                .starts_with("bad argument #1: error converting Lua string to Either<i32, Table>"),);
+        }
+        err => panic!("expected `Error::CallbackError`, got {err:?}"),
+    }
 
     Ok(())
 }

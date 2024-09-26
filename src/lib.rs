@@ -117,7 +117,7 @@ pub use crate::table::{Table, TablePairs, TableSequence};
 pub use crate::thread::{Thread, ThreadStatus};
 pub use crate::traits::{LuaNativeFn, LuaNativeFnMut, ObjectLike};
 pub use crate::types::{
-    AppDataRef, AppDataRefMut, Integer, LightUserData, MaybeSend, Number, RegistryKey, VmState,
+    AppDataRef, AppDataRefMut, Either, Integer, LightUserData, MaybeSend, Number, RegistryKey, VmState,
 };
 pub use crate::userdata::{
     AnyUserData, MetaMethod, UserData, UserDataFields, UserDataMetatable, UserDataMethods, UserDataRef,

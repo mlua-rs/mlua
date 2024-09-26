@@ -45,7 +45,7 @@ impl String {
         let BorrowedBytes(bytes, guard) = self.as_bytes();
         let s = str::from_utf8(bytes).map_err(|e| Error::FromLuaConversionError {
             from: "string",
-            to: "&str",
+            to: "&str".to_string(),
             message: Some(e.to_string()),
         })?;
         Ok(BorrowedStr(s, guard))

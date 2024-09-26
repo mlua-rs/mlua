@@ -83,7 +83,7 @@ pub enum Error {
     /// A Rust value could not be converted to a Lua value.
     ToLuaConversionError {
         /// Name of the Rust type that could not be converted.
-        from: &'static str,
+        from: String,
         /// Name of the Lua type that could not be created.
         to: &'static str,
         /// A message indicating why the conversion failed in more detail.
@@ -94,7 +94,7 @@ pub enum Error {
         /// Name of the Lua type that could not be converted.
         from: &'static str,
         /// Name of the Rust type that could not be created.
-        to: &'static str,
+        to: String,
         /// A string containing more detailed error information.
         message: Option<StdString>,
     },
@@ -384,12 +384,12 @@ impl Error {
 
     pub(crate) fn from_lua_conversion(
         from: &'static str,
-        to: &'static str,
+        to: impl ToString,
         message: impl Into<Option<String>>,
     ) -> Self {
         Error::FromLuaConversionError {
             from,
-            to,
+            to: to.to_string(),
             message: message.into(),
         }
     }
