@@ -900,8 +900,14 @@ impl AnyUserData {
     ///
     /// [`UserDataMetatable`]: crate::UserDataMetatable
     #[inline]
-    pub fn get_metatable(&self) -> Result<UserDataMetatable> {
+    pub fn metatable(&self) -> Result<UserDataMetatable> {
         self.get_raw_metatable().map(UserDataMetatable)
+    }
+
+    #[doc(hidden)]
+    #[deprecated(since = "0.10.0", note = "please use `metatable` instead")]
+    pub fn get_metatable(&self) -> Result<UserDataMetatable> {
+        self.metatable()
     }
 
     fn get_raw_metatable(&self) -> Result<Table> {

@@ -3,6 +3,8 @@ use std::fmt;
 #[cfg(all(any(feature = "luau", doc), feature = "serialize"))]
 use serde::ser::{Serialize, SerializeTupleStruct, Serializer};
 
+use super::LuaType;
+
 /// A Luau vector type.
 ///
 /// By default vectors are 3-dimensional, but can be 4-dimensional
@@ -83,4 +85,13 @@ impl PartialEq<[f32; Self::SIZE]> for Vector {
     fn eq(&self, other: &[f32; Self::SIZE]) -> bool {
         self.0 == *other
     }
+}
+
+impl LuaType for Vector {
+    #[cfg(feature = "luau")]
+    const TYPE_ID: i32 = ffi::LUA_TVECTOR;
+
+    // This is a dummy value, as `Vector` is supported only by Luau
+    #[cfg(not(feature = "luau"))]
+    const TYPE_ID: i32 = ffi::LUA_TNONE;
 }

@@ -1,4 +1,3 @@
-use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::collections::{vec_deque, HashSet, VecDeque};
 use std::ops::{Deref, DerefMut};
@@ -24,12 +23,14 @@ use {
     crate::table::SerializableTable,
     rustc_hash::FxHashSet,
     serde::ser::{self, Serialize, Serializer},
-    std::{rc::Rc, result::Result as StdResult},
+    std::{cell::RefCell, rc::Rc, result::Result as StdResult},
 };
 
-/// A dynamically typed Lua value. The `String`, `Table`, `Function`, `Thread`, and `UserData`
-/// variants contain handle types into the internal Lua state. It is a logic error to mix handle
-/// types between separate `Lua` instances, and doing so will result in a panic.
+/// A dynamically typed Lua value.
+///
+/// The `String`, `Table`, `Function`, `Thread`, and `UserData` variants contain handle types
+/// into the internal Lua state. It is a logic error to mix handle types between separate
+/// `Lua` instances, and doing so will result in a panic.
 #[derive(Clone)]
 pub enum Value {
     /// The Lua value `nil`.

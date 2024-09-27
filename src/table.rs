@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 use std::fmt;
 use std::marker::PhantomData;
-use std::os::raw::c_void;
+use std::os::raw::{c_int, c_void};
 use std::string::String as StdString;
 
 #[cfg(feature = "serialize")]
@@ -15,7 +15,7 @@ use crate::error::{Error, Result};
 use crate::function::Function;
 use crate::state::{LuaGuard, RawLua};
 use crate::traits::ObjectLike;
-use crate::types::{Integer, ValueRef};
+use crate::types::{Integer, LuaType, ValueRef};
 use crate::util::{assert_stack, check_stack, StackGuard};
 use crate::value::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, Nil, Value};
 
@@ -227,12 +227,12 @@ impl Table {
         // Compare using __eq metamethod if exists
         // First, check the self for the metamethod.
         // If self does not define it, then check the other table.
-        if let Some(mt) = self.get_metatable() {
+        if let Some(mt) = self.metatable() {
             if mt.contains_key("__eq")? {
                 return mt.get::<Function>("__eq")?.call((self, other));
             }
         }
-        if let Some(mt) = other.get_metatable() {
+        if let Some(mt) = other.metatable() {
             if mt.contains_key("__eq")? {
                 return mt.get::<Function>("__eq")?.call((self, other));
             }
@@ -493,7 +493,7 @@ impl Table {
     /// Returns a reference to the metatable of this table, or `None` if no metatable is set.
     ///
     /// Unlike the `getmetatable` Lua function, this method ignores the `__metatable` field.
-    pub fn get_metatable(&self) -> Option<Table> {
+    pub fn metatable(&self) -> Option<Table> {
         let lua = self.0.lua.lock();
         let state = lua.state();
         unsafe {
@@ -507,6 +507,12 @@ impl Table {
                 Some(Table(lua.pop_ref()))
             }
         }
+    }
+
+    #[doc(hidden)]
+    #[deprecated(since = "0.10.0", note = "please use `metatable` instead")]
+    pub fn get_metatable(&self) -> Option<Table> {
+        self.metatable()
     }
 
     /// Sets or removes the metatable of this table.
@@ -959,6 +965,10 @@ impl Serialize for Table {
     fn serialize<S: Serializer>(&self, serializer: S) -> StdResult<S::Ok, S::Error> {
         SerializableTable::new(self, Default::default(), Default::default()).serialize(serializer)
     }
+}
+
+impl LuaType for Table {
+    const TYPE_ID: c_int = ffi::LUA_TTABLE;
 }
 
 #[cfg(feature = "serialize")]

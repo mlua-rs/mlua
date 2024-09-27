@@ -69,6 +69,7 @@ impl StackGuard {
 }
 
 impl Drop for StackGuard {
+    #[track_caller]
     fn drop(&mut self) {
         unsafe {
             let top = ffi::lua_gettop(self.state);

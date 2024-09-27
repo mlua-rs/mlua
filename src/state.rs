@@ -2,7 +2,7 @@ use std::any::TypeId;
 use std::cell::RefCell;
 use std::marker::PhantomData;
 use std::ops::Deref;
-use std::os::raw::{c_int, c_void};
+use std::os::raw::c_int;
 use std::panic::Location;
 use std::result::Result as StdResult;
 use std::{fmt, mem, ptr};
@@ -18,21 +18,26 @@ use crate::string::String;
 use crate::table::Table;
 use crate::thread::Thread;
 use crate::types::{
-    AppDataRef, AppDataRefMut, ArcReentrantMutexGuard, Integer, LightUserData, MaybeSend, Number,
-    ReentrantMutex, ReentrantMutexGuard, RegistryKey, XRc, XWeak,
+    AppDataRef, AppDataRefMut, ArcReentrantMutexGuard, Integer, LuaType, MaybeSend, Number, ReentrantMutex,
+    ReentrantMutexGuard, RegistryKey, VmState, XRc, XWeak,
 };
 use crate::userdata::{AnyUserData, UserData, UserDataProxy, UserDataRegistry, UserDataStorage};
-use crate::util::{assert_stack, check_stack, push_string, push_table, rawset_field, StackGuard};
+use crate::util::{
+    assert_stack, check_stack, protect_lua_closure, push_string, push_table, rawset_field, StackGuard,
+};
 use crate::value::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, MultiValue, Nil, Value};
 
 #[cfg(not(feature = "luau"))]
 use crate::hook::HookTriggers;
 
 #[cfg(any(feature = "luau", doc))]
-use crate::{chunk::Compiler, types::VmState};
+use crate::chunk::Compiler;
 
 #[cfg(feature = "async")]
-use std::future::{self, Future};
+use {
+    crate::types::LightUserData,
+    std::future::{self, Future},
+};
 
 #[cfg(feature = "serialize")]
 use serde::Serialize;
@@ -276,6 +281,29 @@ impl Lua {
         }
     }
 
+    /// Calls provided function passing a raw lua state.
+    ///
+    /// The arguments will be pushed onto the stack before calling the function.
+    ///
+    /// This method ensures that the Lua instance is locked while the function is called
+    /// and restores Lua stack after the function returns.
+    #[allow(clippy::missing_safety_doc)]
+    pub unsafe fn exec_raw<R: FromLuaMulti>(
+        &self,
+        args: impl IntoLuaMulti,
+        f: impl FnOnce(*mut ffi::lua_State),
+    ) -> Result<R> {
+        let lua = self.lock();
+        let state = lua.state();
+        let _sg = StackGuard::new(state);
+        let stack_start = ffi::lua_gettop(state);
+        let nargs = args.push_into_stack_multi(&lua)?;
+        check_stack(state, 3)?;
+        protect_lua_closure::<_, ()>(state, nargs, ffi::LUA_MULTRET, f)?;
+        let nresults = ffi::lua_gettop(state) - stack_start;
+        R::from_stack_multi(nresults, &lua)
+    }
+
     /// FIXME: Deprecated load_from_std_lib
 
     /// Loads the specified subset of the standard libraries into an existing Lua state.
@@ -471,12 +499,12 @@ impl Lua {
     /// Shows each line number of code being executed by the Lua interpreter.
     ///
     /// ```
-    /// # use mlua::{Lua, HookTriggers, Result};
+    /// # use mlua::{Lua, HookTriggers, Result, VmState};
     /// # fn main() -> Result<()> {
     /// let lua = Lua::new();
     /// lua.set_hook(HookTriggers::EVERY_LINE, |_lua, debug| {
     ///     println!("line {}", debug.curr_line());
-    ///     Ok(())
+    ///     Ok(VmState::Continue)
     /// });
     ///
     /// lua.load(r#"
@@ -493,7 +521,7 @@ impl Lua {
     #[cfg_attr(docsrs, doc(cfg(not(feature = "luau"))))]
     pub fn set_hook<F>(&self, triggers: HookTriggers, callback: F)
     where
-        F: Fn(&Lua, Debug) -> Result<()> + MaybeSend + 'static,
+        F: Fn(&Lua, Debug) -> Result<VmState> + MaybeSend + 'static,
     {
         let lua = self.lock();
         unsafe { lua.set_thread_hook(lua.state(), triggers, callback) };
@@ -624,7 +652,7 @@ impl Lua {
         F: Fn(&Lua, &str, bool) -> Result<()> + MaybeSend + 'static,
     {
         use std::ffi::CStr;
-        use std::os::raw::c_char;
+        use std::os::raw::{c_char, c_void};
         use std::string::String as StdString;
 
         unsafe extern "C-unwind" fn warn_proc(ud: *mut c_void, msg: *const c_char, tocont: c_int) {
@@ -1309,24 +1337,66 @@ impl Lua {
         unsafe { self.lock().make_userdata(UserDataStorage::new(ud)) }
     }
 
-    /// Sets the metatable for a Luau builtin vector type.
-    #[cfg(any(feature = "luau", doc))]
-    #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
-    pub fn set_vector_metatable(&self, metatable: Option<Table>) {
+    /// Sets the metatable for a Lua builtin type.
+    ///
+    /// The metatable will be shared by all values of the given type.
+    ///
+    /// # Examples
+    ///
+    /// Change metatable for Lua boolean type:
+    ///
+    /// ```
+    /// # use mlua::{Lua, Result, Function};
+    /// # fn main() -> Result<()> {
+    /// # let lua = Lua::new();
+    /// let mt = lua.create_table()?;
+    /// mt.set("__tostring", lua.create_function(|_, b: bool| Ok(if b { "2" } else { "0" }))?)?;
+    /// lua.set_type_metatable::<bool>(Some(mt));
+    /// lua.load("assert(tostring(true) == '2')").exec()?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    #[allow(private_bounds)]
+    pub fn set_type_metatable<T: LuaType>(&self, metatable: Option<Table>) {
         let lua = self.lock();
         let state = lua.state();
         unsafe {
             let _sg = StackGuard::new(state);
             assert_stack(state, 2);
 
-            #[cfg(not(feature = "luau-vector4"))]
-            ffi::lua_pushvector(state, 0., 0., 0.);
-            #[cfg(feature = "luau-vector4")]
-            ffi::lua_pushvector(state, 0., 0., 0., 0.);
+            match T::TYPE_ID {
+                ffi::LUA_TBOOLEAN => {
+                    ffi::lua_pushboolean(state, 0);
+                }
+                ffi::LUA_TLIGHTUSERDATA => {
+                    ffi::lua_pushlightuserdata(state, ptr::null_mut());
+                }
+                ffi::LUA_TNUMBER => {
+                    ffi::lua_pushnumber(state, 0.);
+                }
+                #[cfg(feature = "luau")]
+                ffi::LUA_TVECTOR => {
+                    #[cfg(not(feature = "luau-vector4"))]
+                    ffi::lua_pushvector(state, 0., 0., 0.);
+                    #[cfg(feature = "luau-vector4")]
+                    ffi::lua_pushvector(state, 0., 0., 0., 0.);
+                }
+                ffi::LUA_TSTRING => {
+                    ffi::lua_pushstring(state, b"\0" as *const u8 as *const _);
+                }
+                ffi::LUA_TFUNCTION => match self.load("function() end").eval::<Function>() {
+                    Ok(func) => lua.push_ref(&func.0),
+                    Err(_) => return,
+                },
+                ffi::LUA_TTHREAD => {
+                    ffi::lua_newthread(state);
+                }
+                _ => {}
+            }
             match metatable {
                 Some(metatable) => lua.push_ref(&metatable.0),
                 None => ffi::lua_pushnil(state),
-            };
+            }
             ffi::lua_setmetatable(state, -2);
         }
     }
@@ -1481,6 +1551,12 @@ impl Lua {
     #[inline]
     pub fn unpack<T: FromLua>(&self, value: Value) -> Result<T> {
         T::from_lua(value, self)
+    }
+
+    /// Converts a value that implements `IntoLua` into a `FromLua` variant.
+    #[inline]
+    pub fn convert<U: FromLua>(&self, value: impl IntoLua) -> Result<U> {
+        U::from_lua(value.into_lua(self)?, self)
     }
 
     /// Converts a value that implements `IntoLuaMulti` into a `MultiValue` instance.
@@ -1786,22 +1862,13 @@ impl Lua {
         extra.app_data.remove()
     }
 
-    /// Pushes a value that implements `IntoLua` onto the Lua stack.
-    ///
-    /// Uses 2 stack spaces, does not call checkstack.
-    #[doc(hidden)]
-    #[inline(always)]
-    pub unsafe fn push(&self, value: impl IntoLua) -> Result<()> {
-        self.lock().push(value)
-    }
-
     /// Returns an internal `Poll::Pending` constant used for executing async callbacks.
     #[cfg(feature = "async")]
     #[doc(hidden)]
     #[inline(always)]
     pub fn poll_pending() -> LightUserData {
         static ASYNC_POLL_PENDING: u8 = 0;
-        LightUserData(&ASYNC_POLL_PENDING as *const u8 as *mut c_void)
+        LightUserData(&ASYNC_POLL_PENDING as *const u8 as *mut std::os::raw::c_void)
     }
 
     // Luau version located in `luau/mod.rs`
@@ -1850,6 +1917,7 @@ impl Lua {
     /// Returns a handle to the unprotected Lua state without any synchronization.
     ///
     /// This is useful where we know that the lock is already held by the caller.
+    #[cfg(feature = "async")]
     #[inline(always)]
     pub(crate) unsafe fn raw_lua(&self) -> &RawLua {
         &*self.raw.data_ptr()

@@ -9,7 +9,7 @@ use serde::ser::{Serialize, Serializer};
 
 use crate::error::{Error, Result};
 use crate::state::{Lua, RawLua};
-use crate::types::{MaybeSend, XRc};
+use crate::types::XRc;
 use crate::userdata::AnyUserData;
 use crate::util::get_userdata;
 use crate::value::{FromLua, Value};
@@ -195,7 +195,7 @@ impl<T: 'static> FromLua for UserDataRef<T> {
     }
 
     unsafe fn from_stack(idx: c_int, lua: &RawLua) -> Result<Self> {
-        let type_id = lua.get_userdata_type_id(idx)?;
+        let type_id = lua.get_userdata_type_id::<T>(idx)?;
         match type_id {
             Some(type_id) if type_id == TypeId::of::<T>() => {
                 (*get_userdata::<UserDataStorage<T>>(lua.state(), idx)).try_borrow_owned()
@@ -263,7 +263,7 @@ impl<T: 'static> FromLua for UserDataRefMut<T> {
     }
 
     unsafe fn from_stack(idx: c_int, lua: &RawLua) -> Result<Self> {
-        let type_id = lua.get_userdata_type_id(idx)?;
+        let type_id = lua.get_userdata_type_id::<T>(idx)?;
         match type_id {
             Some(type_id) if type_id == TypeId::of::<T>() => {
                 (*get_userdata::<UserDataStorage<T>>(lua.state(), idx)).try_borrow_owned_mut()
@@ -348,7 +348,7 @@ fn try_value_to_userdata<T>(value: Value) -> Result<AnyUserData> {
         Value::UserData(ud) => Ok(ud),
         _ => Err(Error::FromLuaConversionError {
             from: value.type_name(),
-            to: "userdata",
+            to: "userdata".to_string(),
             message: Some(format!("expected userdata of type {}", type_name::<T>())),
         }),
     }
@@ -391,7 +391,7 @@ impl<T: 'static> UserDataStorage<T> {
     #[inline(always)]
     pub(crate) fn new_ser(data: T) -> Self
     where
-        T: Serialize + MaybeSend,
+        T: Serialize + crate::types::MaybeSend,
     {
         let data = Box::new(data) as Box<DynSerialize>;
         Self::Owned(UserDataVariant::Serializable(XRc::new(UserDataCell::new(data))))

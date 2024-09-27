@@ -1,4 +1,4 @@
-use mlua::{Function, Lua, Result, String, Table};
+use mlua::{Error, Function, Lua, Result, String, Table};
 
 #[test]
 fn test_function() -> Result<()> {
@@ -271,31 +271,101 @@ fn test_function_deep_clone() -> Result<()> {
 
 #[test]
 fn test_function_wrap() -> Result<()> {
-    use mlua::Error;
-
     let lua = Lua::new();
 
-    lua.globals().set("f", Function::wrap(|_, s: String| Ok(s)))?;
-    lua.load(r#"assert(f("hello") == "hello")"#).exec().unwrap();
+    let f = Function::wrap(|s: String, n| Ok(s.to_str().unwrap().repeat(n)));
+    lua.globals().set("f", f)?;
+    lua.load(r#"assert(f("hello", 2) == "hellohello")"#)
+        .exec()
+        .unwrap();
 
-    let mut _i = false;
-    lua.globals().set(
-        "f",
-        Function::wrap_mut(move |lua, ()| {
-            _i = true;
-            lua.globals().get::<Function>("f")?.call::<()>(())
-        }),
-    )?;
-    match lua.globals().get::<Function>("f")?.call::<()>(()) {
-        Err(Error::CallbackError { ref cause, .. }) => match *cause.as_ref() {
-            Error::CallbackError { ref cause, .. } => match *cause.as_ref() {
-                Error::RecursiveMutCallback { .. } => {}
-                ref other => panic!("incorrect result: {other:?}"),
-            },
-            ref other => panic!("incorrect result: {other:?}"),
+    // Return error
+    let ferr = Function::wrap(|| Err::<(), _>(Error::runtime("some error")));
+    lua.globals().set("ferr", ferr)?;
+    lua.load(
+        r#"
+        local ok, err = pcall(ferr)
+        assert(not ok and tostring(err):find("some error"))
+    "#,
+    )
+    .exec()
+    .unwrap();
+
+    // Mutable callback
+    let mut i = 0;
+    let fmut = Function::wrap_mut(move || {
+        i += 1;
+        Ok(i)
+    });
+    lua.globals().set("fmut", fmut)?;
+    lua.load(r#"fmut(); fmut(); assert(fmut() == 3)"#).exec().unwrap();
+
+    // Check mutable callback with error
+    let fmut_err = Function::wrap_mut(|| Err::<(), _>(Error::runtime("some error")));
+    lua.globals().set("fmut_err", fmut_err)?;
+    lua.load(
+        r#"
+        local ok, err = pcall(fmut_err)
+        assert(not ok and tostring(err):find("some error"))
+    "#,
+    )
+    .exec()
+    .unwrap();
+
+    // Check recursive mut callback error
+    let fmut = Function::wrap_mut(|f: Function| match f.call::<()>(&f) {
+        Err(Error::CallbackError { cause, .. }) => match cause.as_ref() {
+            Error::RecursiveMutCallback { .. } => Ok(()),
+            other => panic!("incorrect result: {other:?}"),
         },
         other => panic!("incorrect result: {other:?}"),
-    };
+    });
+    let fmut = lua.convert::<Function>(fmut)?;
+    assert!(fmut.call::<()>(&fmut).is_ok());
+
+    Ok(())
+}
+
+#[test]
+fn test_function_wrap_raw() -> Result<()> {
+    let lua = Lua::new();
+
+    let f = Function::wrap_raw(|| "hello");
+    lua.globals().set("f", f)?;
+    lua.load(r#"assert(f() == "hello")"#).exec().unwrap();
+
+    // Return error
+    let ferr = Function::wrap_raw(|| Err::<(), _>("some error"));
+    lua.globals().set("ferr", ferr)?;
+    lua.load(
+        r#"
+        local _, err = ferr()
+        assert(err == "some error")
+    "#,
+    )
+    .exec()
+    .unwrap();
+
+    // Mutable callback
+    let mut i = 0;
+    let fmut = Function::wrap_raw_mut(move || {
+        i += 1;
+        i
+    });
+    lua.globals().set("fmut", fmut)?;
+    lua.load(r#"fmut(); fmut(); assert(fmut() == 3)"#).exec().unwrap();
+
+    // Check mutable callback with error
+    let fmut_err = Function::wrap_raw_mut(|| Err::<(), _>("some error"));
+    lua.globals().set("fmut_err", fmut_err)?;
+    lua.load(
+        r#"
+        local _, err = fmut_err()
+        assert(err == "some error")
+    "#,
+    )
+    .exec()
+    .unwrap();
 
     Ok(())
 }

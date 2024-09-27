@@ -300,7 +300,7 @@ fn test_scope_userdata_drop() -> Result<()> {
         Err(Error::UserDataDestructed) => {}
         Err(err) => panic!("improper borrow error for destructed userdata: {err:?}"),
     }
-    match ud.get_metatable() {
+    match ud.metatable() {
         Ok(_) => panic!("successful metatable retrieval of destructed userdata"),
         Err(Error::UserDataDestructed) => {}
         Err(err) => panic!("improper metatable error for destructed userdata: {err:?}"),

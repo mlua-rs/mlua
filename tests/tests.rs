@@ -1289,3 +1289,37 @@ fn test_multi_thread() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn test_exec_raw() -> Result<()> {
+    let lua = Lua::new();
+
+    let sum = lua.create_function(|_, args: Variadic<i32>| {
+        let mut sum = 0;
+        for i in args {
+            sum += i;
+        }
+        Ok(sum)
+    })?;
+    lua.globals().set("sum", sum)?;
+
+    let n: i32 = unsafe {
+        lua.exec_raw((), |state| {
+            ffi::lua_getglobal(state, b"sum\0".as_ptr() as _);
+            ffi::lua_pushinteger(state, 1);
+            ffi::lua_pushinteger(state, 7);
+            ffi::lua_call(state, 2, 1);
+        })
+    }?;
+    assert_eq!(n, 8);
+
+    // Test error handling
+    let res: Result<()> = unsafe {
+        lua.exec_raw("test error", |state| {
+            ffi::lua_error(state);
+        })
+    };
+    assert!(matches!(res, Err(Error::RuntimeError(err)) if err.contains("test error")));
+
+    Ok(())
+}

@@ -4,7 +4,7 @@ use crate::error::{Error, Result};
 #[allow(unused)]
 use crate::state::Lua;
 use crate::state::RawLua;
-use crate::types::ValueRef;
+use crate::types::{LuaType, ValueRef, VmState};
 use crate::util::{check_stack, error_traceback_thread, pop_error, StackGuard};
 use crate::value::{FromLuaMulti, IntoLuaMulti};
 
@@ -143,7 +143,7 @@ impl Thread {
         let state = lua.state();
         let thread_state = self.state();
 
-        let nargs = args.push_into_stack_multi(&lua)?;
+        let nargs = args.push_into_stack_multi(lua)?;
         if nargs > 0 {
             check_stack(thread_state, nargs)?;
             ffi::lua_xmove(state, thread_state, nargs);
@@ -194,7 +194,7 @@ impl Thread {
     #[cfg_attr(docsrs, doc(cfg(not(feature = "luau"))))]
     pub fn set_hook<F>(&self, triggers: HookTriggers, callback: F)
     where
-        F: Fn(&Lua, Debug) -> Result<()> + MaybeSend + 'static,
+        F: Fn(&Lua, Debug) -> Result<VmState> + MaybeSend + 'static,
     {
         let lua = self.0.lua.lock();
         unsafe {
@@ -370,6 +370,10 @@ impl PartialEq for Thread {
     fn eq(&self, other: &Self) -> bool {
         self.0 == other.0
     }
+}
+
+impl LuaType for Thread {
+    const TYPE_ID: c_int = ffi::LUA_TTHREAD;
 }
 
 #[cfg(feature = "async")]

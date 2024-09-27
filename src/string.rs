@@ -1,7 +1,7 @@
 use std::borrow::Borrow;
 use std::hash::{Hash, Hasher};
 use std::ops::Deref;
-use std::os::raw::c_void;
+use std::os::raw::{c_int, c_void};
 use std::string::String as StdString;
 use std::{cmp, fmt, slice, str};
 
@@ -13,7 +13,7 @@ use {
 
 use crate::error::{Error, Result};
 use crate::state::Lua;
-use crate::types::ValueRef;
+use crate::types::{LuaType, ValueRef};
 
 /// Handle to an internal Lua string.
 ///
@@ -45,7 +45,7 @@ impl String {
         let BorrowedBytes(bytes, guard) = self.as_bytes();
         let s = str::from_utf8(bytes).map_err(|e| Error::FromLuaConversionError {
             from: "string",
-            to: "&str",
+            to: "&str".to_string(),
             message: Some(e.to_string()),
         })?;
         Ok(BorrowedStr(s, guard))
@@ -105,22 +105,22 @@ impl String {
 
     unsafe fn to_slice(&self) -> (&[u8], Lua) {
         let lua = self.0.lua.upgrade();
-        let rawlua = lua.lock();
-        let ref_thread = rawlua.ref_thread();
-        unsafe {
+        let slice = unsafe {
+            let rawlua = lua.lock();
+            let ref_thread = rawlua.ref_thread();
+
             mlua_debug_assert!(
                 ffi::lua_type(ref_thread, self.0.index) == ffi::LUA_TSTRING,
                 "string ref is not string type"
             );
 
-            let mut size = 0;
             // This will not trigger a 'm' error, because the reference is guaranteed to be of
             // string type
+            let mut size = 0;
             let data = ffi::lua_tolstring(ref_thread, self.0.index, &mut size);
-
-            drop(rawlua);
-            (slice::from_raw_parts(data as *const u8, size + 1), lua)
-        }
+            slice::from_raw_parts(data as *const u8, size + 1)
+        };
+        (slice, lua)
     }
 
     /// Converts this string to a generic C pointer.
@@ -143,23 +143,8 @@ impl fmt::Debug for String {
         }
 
         // Format as bytes
-        write!(f, "b\"")?;
-        for &b in bytes {
-            // https://doc.rust-lang.org/reference/tokens.html#byte-escapes
-            match b {
-                b'\n' => write!(f, "\\n")?,
-                b'\r' => write!(f, "\\r")?,
-                b'\t' => write!(f, "\\t")?,
-                b'\\' | b'"' => write!(f, "\\{}", b as char)?,
-                b'\0' => write!(f, "\\0")?,
-                // ASCII printable
-                0x20..=0x7e => write!(f, "{}", b as char)?,
-                _ => write!(f, "\\x{b:02x}")?,
-            }
-        }
-        write!(f, "\"")?;
-
-        Ok(())
+        write!(f, "b")?;
+        <bstr::BStr as fmt::Debug>::fmt(bstr::BStr::new(&bytes), f)
     }
 }
 
@@ -325,6 +310,10 @@ impl<'a> IntoIterator for BorrowedBytes<'a> {
     fn into_iter(self) -> Self::IntoIter {
         self.0.iter()
     }
+}
+
+impl LuaType for String {
+    const TYPE_ID: c_int = ffi::LUA_TSTRING;
 }
 
 #[cfg(test)]

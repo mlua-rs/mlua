@@ -204,24 +204,25 @@ pub(crate) unsafe fn protect_lua_closure<F, R>(
     f: F,
 ) -> Result<R>
 where
-    F: Fn(*mut ffi::lua_State) -> R,
+    F: FnOnce(*mut ffi::lua_State) -> R,
     R: Copy,
 {
     struct Params<F, R: Copy> {
-        function: F,
+        function: Option<F>,
         result: MaybeUninit<R>,
         nresults: c_int,
     }
 
     unsafe extern "C-unwind" fn do_call<F, R>(state: *mut ffi::lua_State) -> c_int
     where
-        F: Fn(*mut ffi::lua_State) -> R,
+        F: FnOnce(*mut ffi::lua_State) -> R,
         R: Copy,
     {
         let params = ffi::lua_touserdata(state, -1) as *mut Params<F, R>;
         ffi::lua_pop(state, 1);
 
-        (*params).result.write(((*params).function)(state));
+        let f = (*params).function.take().unwrap();
+        (*params).result.write(f(state));
 
         if (*params).nresults == ffi::LUA_MULTRET {
             ffi::lua_gettop(state)
@@ -241,7 +242,7 @@ where
     }
 
     let mut params = Params {
-        function: f,
+        function: Some(f),
         result: MaybeUninit::uninit(),
         nresults,
     };

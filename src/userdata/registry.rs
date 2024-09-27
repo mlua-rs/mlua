@@ -9,16 +9,14 @@ use std::string::String as StdString;
 use crate::error::{Error, Result};
 use crate::state::{Lua, RawLua};
 use crate::types::{Callback, MaybeSend};
-use crate::userdata::{
-    AnyUserData, MetaMethod, UserData, UserDataFields, UserDataMethods, UserDataRef, UserDataRefMut,
-    UserDataStorage,
-};
+use crate::userdata::{AnyUserData, MetaMethod, UserData, UserDataFields, UserDataMethods, UserDataStorage};
 use crate::util::{get_userdata, short_type_name};
 use crate::value::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, Value};
 
 #[cfg(feature = "async")]
 use {
     crate::types::AsyncCallback,
+    crate::userdata::{UserDataRef, UserDataRefMut},
     std::future::{self, Future},
 };
 
@@ -123,7 +121,7 @@ impl<T> UserDataRegistry<T> {
             match target_type_id {
                 // This branch is for `'static` userdata that share type metatable
                 UserDataTypeId::Shared(target_type_id) => {
-                    match try_self_arg!(rawlua.get_userdata_type_id(self_index)) {
+                    match try_self_arg!(rawlua.get_userdata_type_id::<T>(self_index)) {
                         Some(self_type_id) if self_type_id == target_type_id => {
                             let ud = get_userdata::<UserDataStorage<T>>(state, self_index);
                             try_self_arg!((*ud).try_borrow_scoped(|ud| {
@@ -177,7 +175,7 @@ impl<T> UserDataRegistry<T> {
             match target_type_id {
                 // This branch is for `'static` userdata that share type metatable
                 UserDataTypeId::Shared(target_type_id) => {
-                    match try_self_arg!(rawlua.get_userdata_type_id(self_index)) {
+                    match try_self_arg!(rawlua.get_userdata_type_id::<T>(self_index)) {
                         Some(self_type_id) if self_type_id == target_type_id => {
                             let ud = get_userdata::<UserDataStorage<T>>(state, self_index);
                             try_self_arg!((*ud).try_borrow_scoped_mut(|ud| {

@@ -108,7 +108,7 @@ pub unsafe fn lua_rotate(L: *mut lua_State, mut idx: c_int, mut n: c_int) {
 #[inline(always)]
 pub unsafe fn lua_copy(L: *mut lua_State, fromidx: c_int, toidx: c_int) {
     let abs_to = lua_absindex(L, toidx);
-    luaL_checkstack(L, 1, cstr!("not enough stack slots"));
+    luaL_checkstack(L, 1, cstr!("not enough stack slots available"));
     lua_pushvalue(L, fromidx);
     lua_replace(L, abs_to);
 }
@@ -217,7 +217,7 @@ pub unsafe fn lua_rawseti(L: *mut lua_State, idx: c_int, n: lua_Integer) {
 #[inline(always)]
 pub unsafe fn lua_rawsetp(L: *mut lua_State, idx: c_int, p: *const c_void) {
     let abs_i = lua_absindex(L, idx);
-    luaL_checkstack(L, 1, cstr!("not enough stack slots"));
+    luaL_checkstack(L, 1, cstr!("not enough stack slots available"));
     lua_pushlightuserdata(L, p as *mut c_void);
     lua_insert(L, -2);
     lua_rawset(L, abs_i);
@@ -381,7 +381,7 @@ pub unsafe fn luaL_loadbuffer(
 #[inline(always)]
 pub unsafe fn luaL_len(L: *mut lua_State, idx: c_int) -> lua_Integer {
     let mut isnum = 0;
-    luaL_checkstack(L, 1, cstr!("not enough stack slots"));
+    luaL_checkstack(L, 1, cstr!("not enough stack slots available"));
     lua_len(L, idx);
     let res = lua_tointegerx(L, -1, &mut isnum);
     lua_pop(L, 1);
@@ -463,14 +463,14 @@ pub unsafe fn luaL_tolstring(L: *mut lua_State, mut idx: c_int, len: *mut usize)
 
 #[inline(always)]
 pub unsafe fn luaL_setmetatable(L: *mut lua_State, tname: *const c_char) {
-    luaL_checkstack(L, 1, cstr!("not enough stack slots"));
+    luaL_checkstack(L, 1, cstr!("not enough stack slots available"));
     luaL_getmetatable(L, tname);
     lua_setmetatable(L, -2);
 }
 
 pub unsafe fn luaL_getsubtable(L: *mut lua_State, idx: c_int, fname: *const c_char) -> c_int {
     let abs_i = lua_absindex(L, idx);
-    luaL_checkstack(L, 3, cstr!("not enough stack slots"));
+    luaL_checkstack(L, 3, cstr!("not enough stack slots available"));
     lua_pushstring_(L, fname);
     if lua_gettable(L, abs_i) == LUA_TTABLE {
         return 1;

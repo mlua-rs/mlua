@@ -7,18 +7,18 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-22.04, macos-latest, windows-latest]
+        os: [ubuntu-latest, macos-latest, windows-latest]
         rust: [stable]
         lua: [lua54, lua53, lua52, lua51, luajit, luau, luau-jit, luau-vector4]
         include:
-          - os: ubuntu-22.04
+          - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
           - os: macos-latest
             target: x86_64-apple-darwin
           - os: windows-latest
             target: x86_64-pc-windows-msvc
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@main
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: ${{ matrix.rust }}
@@ -31,7 +31,7 @@ jobs:
           cargo build --features "${{ matrix.lua }},vendored,async,serialize,macros,send"
         shell: bash
       - name: Build ${{ matrix.lua }} pkg-config
-        if: ${{ matrix.os == 'ubuntu-22.04' }}
+        if: ${{ matrix.os == 'ubuntu-latest' }}
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends liblua5.4-dev liblua5.3-dev liblua5.2-dev liblua5.1-0-dev libluajit-5.1-dev
@@ -45,7 +45,7 @@ jobs:
       matrix:
         lua: [lua54, lua53, lua52, lua51, luajit]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@main
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
@@ -55,13 +55,13 @@ jobs:
 
   build_aarch64_cross_ubuntu:
     name: Cross-compile to aarch64-unknown-linux-gnu
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     needs: build
     strategy:
       matrix:
         lua: [lua54, lua53, lua52, lua51, luajit]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@main
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
@@ -77,13 +77,13 @@ jobs:
 
   build_armv7_cross_ubuntu:
     name: Cross-compile to armv7-unknown-linux-gnueabihf
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     needs: build
     strategy:
       matrix:
         lua: [lua54, lua53, lua52, lua51]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@main
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
@@ -103,18 +103,18 @@ jobs:
     needs: build
     strategy:
       matrix:
-        os: [ubuntu-22.04, macos-latest, windows-latest]
+        os: [ubuntu-latest, macos-latest, windows-latest]
         rust: [stable, nightly]
         lua: [lua54, lua53, lua52, lua51, luajit, luajit52, luau, luau-jit, luau-vector4]
         include:
-          - os: ubuntu-22.04
+          - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
           - os: macos-latest
             target: x86_64-apple-darwin
           - os: windows-latest
             target: x86_64-pc-windows-msvc
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@main
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: ${{ matrix.rust }}
@@ -139,14 +139,14 @@ jobs:
     needs: build
     strategy:
       matrix:
-        os: [ubuntu-22.04]
+        os: [ubuntu-latest]
         rust: [nightly]
         lua: [lua54, lua53, lua52, lua51, luajit, luau, luau-jit, luau-vector4]
         include:
-          - os: ubuntu-22.04
+          - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@main
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: ${{ matrix.rust }}
@@ -160,22 +160,48 @@ jobs:
         env:
           RUSTFLAGS: -Z sanitizer=address
 
+  test_with_memory_limit:
+    name: Test with memory limit
+    runs-on: ${{ matrix.os }}
+    needs: build
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+        rust: [nightly]
+        lua: [lua54, lua53, lua52, lua51, luajit, luau, luau-jit, luau-vector4]
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+    steps:
+      - uses: actions/checkout@main
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ matrix.rust }}
+          target: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+      - name: Run ${{ matrix.lua }} tests with forced memory limit
+        run: |
+          cargo test --tests --features "${{ matrix.lua }},vendored,async,send,serialize,macros"
+        shell: bash
+        env:
+          RUSTFLAGS: --cfg=force_memory_limit
+
   test_modules:
     name: Test modules
     runs-on: ${{ matrix.os }}
     needs: build
     strategy:
       matrix:
-        os: [ubuntu-22.04, macos-latest]
+        os: [ubuntu-latest, macos-latest]
         rust: [stable]
         lua: [lua54, lua53, lua52, lua51, luajit, luau]
         include:
-          - os: ubuntu-22.04
+          - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
           - os: macos-latest
             target: x86_64-apple-darwin
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@main
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: ${{ matrix.rust }}
@@ -199,7 +225,7 @@ jobs:
         shell: msys2 {0}
     steps:
       - uses: msys2/setup-msys2@v2
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@main
       - name: Install Rust & Lua
         run: |
           pacman -S --noconfirm mingw-w64-x86_64-rust mingw-w64-x86_64-lua mingw-w64-x86_64-luajit mingw-w64-x86_64-pkg-config
@@ -210,13 +236,13 @@ jobs:
 
   test_wasm32_emscripten:
     name: Test on wasm32-unknown-emscripten
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     needs: build
     strategy:
       matrix:
         lua: [lua54, lua53, lua52, lua51, luau]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@main
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
@@ -232,9 +258,9 @@ jobs:
 
   rustfmt:
     name: Rustfmt
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@main
       - uses: dtolnay/rust-toolchain@nightly
         with:
           components: rustfmt
@@ -242,12 +268,12 @@ jobs:
 
   clippy:
     name: Clippy
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     strategy:
       matrix:
         lua: [lua54, lua53, lua52, lua51, luajit, luau, luau-jit, luau-vector4]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@main
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: nightly

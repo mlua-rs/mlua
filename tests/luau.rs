@@ -194,7 +194,7 @@ fn test_vector_metatable() -> Result<()> {
         )
         .eval::<Table>()?;
     vector_mt.set_metatable(Some(vector_mt.clone()));
-    lua.set_vector_metatable(Some(vector_mt.clone()));
+    lua.set_type_metatable::<Vector>(Some(vector_mt.clone()));
     lua.globals().set("Vector3", vector_mt)?;
 
     let compiler = Compiler::new().set_vector_lib("Vector3").set_vector_ctor("new");

@@ -42,7 +42,7 @@ fn test_chunk_macro() -> Result<()> {
     data.raw_set("num", 1)?;
 
     let ud = mlua::AnyUserData::wrap("hello");
-    let f = mlua::Function::wrap(|_lua, ()| Ok(()));
+    let f = mlua::Function::wrap(|| Ok(()));
 
     lua.globals().set("g", 123)?;
 

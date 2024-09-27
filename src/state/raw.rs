@@ -18,7 +18,7 @@ use crate::table::Table;
 use crate::thread::Thread;
 use crate::types::{
     AppDataRef, AppDataRefMut, Callback, CallbackUpvalue, DestructedUserdata, Integer, LightUserData,
-    MaybeSend, ReentrantMutex, RegistryKey, SubtypeId, ValueRef, XRc,
+    MaybeSend, ReentrantMutex, RegistryKey, SubtypeId, ValueRef, VmState, XRc,
 };
 use crate::userdata::{AnyUserData, MetaMethod, UserData, UserDataRegistry, UserDataStorage};
 use crate::util::{
@@ -27,7 +27,7 @@ use crate::util::{
     push_internal_userdata, push_string, push_table, rawset_field, safe_pcall, safe_xpcall, short_type_name,
     StackGuard, WrappedFailure,
 };
-use crate::value::{FromLuaMulti, IntoLua, MultiValue, Nil, Value};
+use crate::value::{IntoLua, Nil, Value};
 
 use super::extra::ExtraData;
 use super::{Lua, LuaOptions, WeakLua};
@@ -38,11 +38,13 @@ use crate::hook::{Debug, HookTriggers};
 #[cfg(feature = "async")]
 use {
     crate::types::{AsyncCallback, AsyncCallbackUpvalue, AsyncPollUpvalue},
+    crate::value::{FromLuaMulti, MultiValue},
     std::ptr::NonNull,
     std::task::{Context, Poll, Waker},
 };
 
 /// An inner Lua struct which holds a raw Lua state.
+#[doc(hidden)]
 pub struct RawLua {
     // The state is dynamic and depends on context
     pub(super) state: Cell<*mut ffi::lua_State>,
@@ -83,8 +85,11 @@ impl RawLua {
         unsafe { (*self.extra.get()).weak() }
     }
 
+    /// Returns a pointer to the current Lua state.
+    ///
+    /// The pointer refers to the active Lua coroutine and depends on the context.
     #[inline(always)]
-    pub(crate) fn state(&self) -> *mut ffi::lua_State {
+    pub fn state(&self) -> *mut ffi::lua_State {
         self.state.get()
     }
 
@@ -351,7 +356,7 @@ impl RawLua {
         triggers: HookTriggers,
         callback: F,
     ) where
-        F: Fn(&Lua, Debug) -> Result<()> + MaybeSend + 'static,
+        F: Fn(&Lua, Debug) -> Result<VmState> + MaybeSend + 'static,
     {
         unsafe extern "C-unwind" fn hook_proc(state: *mut ffi::lua_State, ar: *mut ffi::lua_Debug) {
             let extra = ExtraData::get(state);
@@ -360,17 +365,34 @@ impl RawLua {
                 ffi::lua_sethook(state, None, 0, 0);
                 return;
             }
-            callback_error_ext(state, extra, move |extra, _| {
+            let result = callback_error_ext(state, extra, move |extra, _| {
                 let hook_cb = (*extra).hook_callback.clone();
                 let hook_cb = mlua_expect!(hook_cb, "no hook callback set in hook_proc");
                 if std::rc::Rc::strong_count(&hook_cb) > 2 {
-                    return Ok(()); // Don't allow recursion
+                    return Ok(VmState::Continue); // Don't allow recursion
                 }
                 let rawlua = (*extra).raw_lua();
                 let _guard = StateGuard::new(rawlua, state);
                 let debug = Debug::new(rawlua, ar);
                 hook_cb((*extra).lua(), debug)
-            })
+            });
+            match result {
+                VmState::Continue => {}
+                VmState::Yield => {
+                    // Only count and line events can yield
+                    if (*ar).event == ffi::LUA_HOOKCOUNT || (*ar).event == ffi::LUA_HOOKLINE {
+                        #[cfg(any(feature = "lua54", feature = "lua53"))]
+                        if ffi::lua_isyieldable(state) != 0 {
+                            ffi::lua_yield(state, 0);
+                        }
+                        #[cfg(any(feature = "lua52", feature = "lua51", feature = "luajit"))]
+                        {
+                            ffi::lua_pushliteral(state, "attempt to yield from a hook");
+                            ffi::lua_error(state);
+                        }
+                    }
+                }
+            }
         }
 
         (*self.extra.get()).hook_callback = Some(std::rc::Rc::new(callback));
@@ -500,10 +522,9 @@ impl RawLua {
 
     /// Pushes a value that implements `IntoLua` onto the Lua stack.
     ///
-    /// Uses 2 stack spaces, does not call checkstack.
-    #[doc(hidden)]
+    /// Uses up to 2 stack spaces to push a single value, does not call `checkstack`.
     #[inline(always)]
-    pub unsafe fn push(&self, value: impl IntoLua) -> Result<()> {
+    pub(crate) unsafe fn push(&self, value: impl IntoLua) -> Result<()> {
         value.push_into_stack(self)
     }
 
@@ -704,6 +725,11 @@ impl RawLua {
 
     #[inline]
     pub(crate) unsafe fn unlikely_memory_error(&self) -> bool {
+        #[cfg(debug_assertions)]
+        if cfg!(force_memory_limit) {
+            return false;
+        }
+
         // MemoryInfo is empty in module mode so we cannot predict memory limits
         match MemoryState::get(self.main_state) {
             mem_state if !mem_state.is_null() => (*mem_state).memory_limit() == 0,
@@ -978,8 +1004,18 @@ impl RawLua {
     }
 
     // Same as `get_userdata_ref_type_id` but assumes the userdata is already on the stack.
-    pub(crate) unsafe fn get_userdata_type_id(&self, idx: c_int) -> Result<Option<TypeId>> {
-        self.get_userdata_type_id_inner(self.state(), idx)
+    pub(crate) unsafe fn get_userdata_type_id<T>(&self, idx: c_int) -> Result<Option<TypeId>> {
+        match self.get_userdata_type_id_inner(self.state(), idx) {
+            Ok(type_id) => Ok(type_id),
+            Err(Error::UserDataTypeMismatch) if ffi::lua_type(self.state(), idx) != ffi::LUA_TUSERDATA => {
+                // Report `FromLuaConversionError` instead
+                let idx_type_name = CStr::from_ptr(ffi::luaL_typename(self.state(), idx));
+                let idx_type_name = idx_type_name.to_str().unwrap();
+                let message = format!("expected userdata of type '{}'", short_type_name::<T>());
+                Err(Error::from_lua_conversion(idx_type_name, "userdata", message))
+            }
+            Err(err) => Err(err),
+        }
     }
 
     unsafe fn get_userdata_type_id_inner(

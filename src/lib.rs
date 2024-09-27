@@ -109,14 +109,16 @@ pub use crate::error::{Error, ErrorContext, ExternalError, ExternalResult, Resul
 pub use crate::function::{Function, FunctionInfo};
 pub use crate::hook::{Debug, DebugEvent, DebugNames, DebugSource, DebugStack};
 pub use crate::multi::Variadic;
+pub use crate::scope::Scope;
 pub use crate::state::{GCMode, Lua, LuaOptions};
-// pub use crate::scope::Scope;
 pub use crate::stdlib::StdLib;
 pub use crate::string::{BorrowedBytes, BorrowedStr, String};
 pub use crate::table::{Table, TablePairs, TableSequence};
 pub use crate::thread::{Thread, ThreadStatus};
-pub use crate::traits::ObjectLike;
-pub use crate::types::{AppDataRef, AppDataRefMut, Integer, LightUserData, MaybeSend, Number, RegistryKey};
+pub use crate::traits::{LuaNativeFn, LuaNativeFnMut, ObjectLike};
+pub use crate::types::{
+    AppDataRef, AppDataRefMut, Either, Integer, LightUserData, MaybeSend, Number, RegistryKey, VmState,
+};
 pub use crate::userdata::{
     AnyUserData, MetaMethod, UserData, UserDataFields, UserDataMetatable, UserDataMethods, UserDataRef,
     UserDataRefMut, UserDataRegistry,
@@ -128,14 +130,10 @@ pub use crate::hook::HookTriggers;
 
 #[cfg(any(feature = "luau", doc))]
 #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
-pub use crate::{
-    chunk::Compiler,
-    function::CoverageInfo,
-    types::{Vector, VmState},
-};
+pub use crate::{chunk::Compiler, function::CoverageInfo, types::Vector};
 
 #[cfg(feature = "async")]
-pub use crate::thread::AsyncThread;
+pub use crate::{thread::AsyncThread, traits::LuaNativeAsyncFn};
 
 #[cfg(feature = "serialize")]
 #[doc(inline)]

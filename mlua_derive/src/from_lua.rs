@@ -20,7 +20,7 @@ pub fn from_lua(input: TokenStream) -> TokenStream {
             ::mlua::Value::UserData(ud) => Ok(ud.borrow::<Self>()?.clone()),
             _ => Err(::mlua::Error::FromLuaConversionError {
                 from: value.type_name(),
-                to: #ident_str,
+                to: #ident_str.to_string(),
                 message: None,
             }),
           }
