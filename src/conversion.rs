@@ -570,7 +570,7 @@ impl IntoLua for OsString {
     fn into_lua(self, lua: &Lua) -> Result<Value> {
         BString::from(
             Vec::from_os_string(self).map_err(|val| Error::ToLuaConversionError {
-                from: "OsString",
+                from: "OsString".into(),
                 to: "string",
                 message: Some(format!("Invalid encoding: {:?}", val)),
             })?,
@@ -588,7 +588,7 @@ impl FromLua for OsString {
             .into_os_string()
             .map_err(|err| Error::FromLuaConversionError {
                 from: ty,
-                to: "OsString",
+                to: "OsString".into(),
                 message: Some(format!("{}", err)),
             })
     }
