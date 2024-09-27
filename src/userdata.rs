@@ -679,6 +679,14 @@ impl AnyUserData {
         matches!(type_id, Some(type_id) if type_id == TypeId::of::<T>())
     }
 
+    /// Checks whether the type of this userdata is a [proxy object] for `T`.
+    ///
+    /// [proxy object]: crate::Lua::create_proxy
+    #[inline]
+    pub fn is_proxy<T: 'static>(&self) -> bool {
+        self.is::<UserDataProxy<T>>()
+    }
+
     /// Borrow this userdata immutably if it is of type `T`.
     ///
     /// # Errors
