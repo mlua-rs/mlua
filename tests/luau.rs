@@ -466,32 +466,6 @@ fn test_coverage() -> Result<()> {
 }
 
 #[test]
-fn test_buffer() -> Result<()> {
-    let lua = Lua::new();
-
-    let buf1 = lua
-        .load(
-            r#"
-        local buf = buffer.fromstring("hello")
-        assert(buffer.len(buf) == 5)
-        return buf
-    "#,
-        )
-        .eval::<Value>()?;
-    assert!(buf1.is_userdata() && buf1.is_buffer());
-    assert_eq!(buf1.type_name(), "buffer");
-
-    let buf2 = lua.load("buffer.fromstring('hello')").eval::<Value>()?;
-    assert_ne!(buf1, buf2);
-
-    // Check that we can pass buffer type to Lua
-    let func = lua.create_function(|_, buf: Value| return buf.to_string())?;
-    assert!(func.call::<String>(buf1)?.starts_with("buffer:"));
-
-    Ok(())
-}
-
-#[test]
 fn test_fflags() {
     // We cannot really on any particular feature flag to be present
     assert!(Lua::set_fflag("UnknownFlag", true).is_err());

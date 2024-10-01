@@ -384,8 +384,8 @@ fn test_bstring_from_lua() -> Result<()> {
 fn test_bstring_from_lua_buffer() -> Result<()> {
     let lua = Lua::new();
 
-    let b = lua.create_buffer("hello, world")?;
-    let bstr = lua.unpack::<BString>(Value::UserData(b))?;
+    let buf = lua.create_buffer("hello, world")?;
+    let bstr = lua.convert::<BString>(buf)?;
     assert_eq!(bstr, "hello, world");
 
     // Test from stack

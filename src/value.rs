@@ -48,7 +48,7 @@ pub enum Value {
     /// A Luau vector.
     #[cfg(any(feature = "luau", doc))]
     #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
-    Vector(crate::types::Vector),
+    Vector(crate::Vector),
     /// An interned string, managed by Lua.
     ///
     /// Unlike Rust strings, Lua strings may not be valid UTF-8.
@@ -60,8 +60,13 @@ pub enum Value {
     /// Reference to a Lua thread (or coroutine).
     Thread(Thread),
     /// Reference to a userdata object that holds a custom type which implements `UserData`.
+    ///
     /// Special builtin userdata types will be represented as other `Value` variants.
     UserData(AnyUserData),
+    /// A Luau buffer.
+    #[cfg(any(feature = "luau", doc))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
+    Buffer(crate::Buffer),
     /// `Error` is a special builtin userdata type. When received from Lua it is implicitly cloned.
     Error(Box<Error>),
 }
@@ -89,10 +94,10 @@ impl Value {
             Value::Function(_) => "function",
             Value::Thread(_) => "thread",
             Value::UserData(AnyUserData(_, SubtypeId::None)) => "userdata",
-            #[cfg(feature = "luau")]
-            Value::UserData(AnyUserData(_, SubtypeId::Buffer)) => "buffer",
             #[cfg(feature = "luajit")]
             Value::UserData(AnyUserData(_, SubtypeId::CData)) => "cdata",
+            #[cfg(feature = "luau")]
+            Value::Buffer(_) => "buffer",
             Value::Error(_) => "error",
         }
     }
@@ -131,6 +136,8 @@ impl Value {
             | Value::Function(Function(r))
             | Value::Thread(Thread(r, ..))
             | Value::UserData(AnyUserData(r, ..)) => r.to_pointer(),
+            #[cfg(feature = "luau")]
+            Value::Buffer(crate::Buffer(r)) => r.to_pointer(),
             _ => ptr::null(),
         }
     }
@@ -165,6 +172,8 @@ impl Value {
                 })?;
                 Ok(String(lua.pop_ref()).to_str()?.to_string())
             },
+            #[cfg(feature = "luau")]
+            Value::Buffer(buf) => StdString::from_utf8(buf.to_vec()).map_err(Error::external),
             Value::Error(err) => Ok(err.to_string()),
         }
     }
@@ -416,15 +425,25 @@ impl Value {
         }
     }
 
-    /// Returns `true` if the value is a Buffer wrapped in [`AnyUserData`].
+    /// Cast the value to a `Buffer`.
+    ///
+    /// If the value is `Buffer`, returns it or `None` otherwise.
     #[cfg(any(feature = "luau", doc))]
     #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
-    #[doc(hidden)]
+    #[inline]
+    pub fn as_buffer(&self) -> Option<&crate::Buffer> {
+        match self {
+            Value::Buffer(b) => Some(b),
+            _ => None,
+        }
+    }
+
+    /// Returns `true` if the value is a `Buffer`.
+    #[cfg(any(feature = "luau", doc))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
     #[inline]
     pub fn is_buffer(&self) -> bool {
-        self.as_userdata()
-            .map(|ud| ud.1 == SubtypeId::Buffer)
-            .unwrap_or_default()
+        self.as_buffer().is_some()
     }
 
     /// Returns `true` if the value is a CData wrapped in [`AnyUserData`].
@@ -450,7 +469,7 @@ impl Value {
 
     // Compares two values.
     // Used to sort values for Debug printing.
-    pub(crate) fn cmp(&self, other: &Self) -> Ordering {
+    pub(crate) fn sort_cmp(&self, other: &Self) -> Ordering {
         fn cmp_num(a: Number, b: Number) -> Ordering {
             match (a, b) {
                 _ if a < b => Ordering::Less,
@@ -479,11 +498,14 @@ impl Value {
             (&Value::Number(a), &Value::Number(b)) => cmp_num(a, b),
             (Value::Integer(_) | Value::Number(_), _) => Ordering::Less,
             (_, Value::Integer(_) | Value::Number(_)) => Ordering::Greater,
+            // Vector (Luau)
+            #[cfg(feature = "luau")]
+            (Value::Vector(a), Value::Vector(b)) => a.partial_cmp(b).unwrap_or(Ordering::Equal),
             // String
             (Value::String(a), Value::String(b)) => a.as_bytes().cmp(&b.as_bytes()),
             (Value::String(_), _) => Ordering::Less,
             (_, Value::String(_)) => Ordering::Greater,
-            // Other variants can be randomly ordered
+            // Other variants can be ordered by their pointer
             (a, b) => a.to_pointer().cmp(&b.to_pointer()),
         }
     }
@@ -520,6 +542,8 @@ impl Value {
                     .unwrap_or_else(|| format!("userdata: {:?}", u.to_pointer()));
                 write!(fmt, "{s}")
             }
+            #[cfg(feature = "luau")]
+            buf @ Value::Buffer(_) => write!(fmt, "buffer: {:?}", buf.to_pointer()),
             Value::Error(e) if recursive => write!(fmt, "{e:?}"),
             Value::Error(_) => write!(fmt, "error"),
         }
@@ -531,6 +555,7 @@ impl fmt::Debug for Value {
         if fmt.alternate() {
             return self.fmt_pretty(fmt, true, 0, &mut HashSet::new());
         }
+
         match self {
             Value::Nil => write!(fmt, "Nil"),
             Value::Boolean(b) => write!(fmt, "Boolean({b})"),
@@ -544,6 +569,8 @@ impl fmt::Debug for Value {
             Value::Function(f) => write!(fmt, "{f:?}"),
             Value::Thread(t) => write!(fmt, "{t:?}"),
             Value::UserData(ud) => write!(fmt, "{ud:?}"),
+            #[cfg(feature = "luau")]
+            Value::Buffer(buf) => write!(fmt, "{buf:?}"),
             Value::Error(e) => write!(fmt, "Error({e:?})"),
         }
     }
@@ -566,6 +593,8 @@ impl PartialEq for Value {
             (Value::Function(a), Value::Function(b)) => a == b,
             (Value::Thread(a), Value::Thread(b)) => a == b,
             (Value::UserData(a), Value::UserData(b)) => a == b,
+            #[cfg(feature = "luau")]
+            (Value::Buffer(a), Value::Buffer(b)) => a == b,
             _ => false,
         }
     }
@@ -674,6 +703,8 @@ impl<'a> Serialize for SerializableValue<'a> {
             Value::UserData(ud) if ud.is_serializable() || self.options.deny_unsupported_types => {
                 ud.serialize(serializer)
             }
+            #[cfg(feature = "luau")]
+            Value::Buffer(buf) => buf.serialize(serializer),
             Value::Function(_)
             | Value::Thread(_)
             | Value::UserData(_)

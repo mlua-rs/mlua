@@ -551,6 +551,8 @@ impl RawLua {
             Value::Function(f) => self.push_ref(&f.0),
             Value::Thread(t) => self.push_ref(&t.0),
             Value::UserData(ud) => self.push_ref(&ud.0),
+            #[cfg(feature = "luau")]
+            Value::Buffer(buf) => self.push_ref(&buf.0),
             Value::Error(err) => {
                 let protect = !self.unlikely_memory_error();
                 push_internal_userdata(state, WrappedFailure::Error(*err.clone()), protect)?;
@@ -652,9 +654,8 @@ impl RawLua {
 
             #[cfg(feature = "luau")]
             ffi::LUA_TBUFFER => {
-                // Buffer is represented as a userdata type
                 ffi::lua_xpush(state, self.ref_thread(), idx);
-                Value::UserData(AnyUserData(self.pop_ref_thread(), SubtypeId::Buffer))
+                Value::Buffer(crate::Buffer(self.pop_ref_thread()))
             }
 
             #[cfg(feature = "luajit")]

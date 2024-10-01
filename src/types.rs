@@ -32,8 +32,6 @@ pub type Number = ffi::lua_Number;
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub(crate) enum SubtypeId {
     None,
-    #[cfg(feature = "luau")]
-    Buffer,
     #[cfg(feature = "luajit")]
     CData,
 }

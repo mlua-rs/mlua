@@ -367,6 +367,43 @@ impl FromLua for crate::types::Vector {
     }
 }
 
+#[cfg(feature = "luau")]
+impl IntoLua for crate::Buffer {
+    #[inline]
+    fn into_lua(self, _: &Lua) -> Result<Value> {
+        Ok(Value::Buffer(self))
+    }
+}
+
+#[cfg(feature = "luau")]
+impl IntoLua for &crate::Buffer {
+    #[inline]
+    fn into_lua(self, _: &Lua) -> Result<Value> {
+        Ok(Value::Buffer(self.clone()))
+    }
+
+    #[inline]
+    unsafe fn push_into_stack(self, lua: &RawLua) -> Result<()> {
+        lua.push_ref(&self.0);
+        Ok(())
+    }
+}
+
+#[cfg(feature = "luau")]
+impl FromLua for crate::Buffer {
+    #[inline]
+    fn from_lua(value: Value, _: &Lua) -> Result<Self> {
+        match value {
+            Value::Buffer(buf) => Ok(buf),
+            _ => Err(Error::FromLuaConversionError {
+                from: value.type_name(),
+                to: "buffer".to_string(),
+                message: None,
+            }),
+        }
+    }
+}
+
 impl IntoLua for StdString {
     #[inline]
     fn into_lua(self, lua: &Lua) -> Result<Value> {
@@ -515,13 +552,7 @@ impl FromLua for BString {
         match value {
             Value::String(s) => Ok((*s.as_bytes()).into()),
             #[cfg(feature = "luau")]
-            Value::UserData(ud) if ud.1 == crate::types::SubtypeId::Buffer => unsafe {
-                let lua = ud.0.lua.lock();
-                let mut size = 0usize;
-                let buf = ffi::lua_tobuffer(lua.ref_thread(), ud.0.index, &mut size);
-                mlua_assert!(!buf.is_null(), "invalid Luau buffer");
-                Ok(slice::from_raw_parts(buf as *const u8, size).into())
-            },
+            Value::Buffer(buf) => unsafe { Ok(buf.as_slice().into()) },
             _ => Ok((*lua
                 .coerce_string(value)?
                 .ok_or_else(|| Error::FromLuaConversionError {

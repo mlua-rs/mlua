@@ -78,6 +78,7 @@
 #[macro_use]
 mod macros;
 
+mod buffer;
 mod chunk;
 mod conversion;
 mod error;
@@ -130,7 +131,7 @@ pub use crate::hook::HookTriggers;
 
 #[cfg(any(feature = "luau", doc))]
 #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
-pub use crate::{chunk::Compiler, function::CoverageInfo, types::Vector};
+pub use crate::{buffer::Buffer, chunk::Compiler, function::CoverageInfo, types::Vector};
 
 #[cfg(feature = "async")]
 pub use crate::{thread::AsyncThread, traits::LuaNativeAsyncFn};

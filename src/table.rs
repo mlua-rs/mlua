@@ -785,7 +785,7 @@ impl Table {
         // Collect key/value pairs into a vector so we can sort them
         let mut pairs = self.pairs::<Value, Value>().flatten().collect::<Vec<_>>();
         // Sort keys
-        pairs.sort_by(|(a, _), (b, _)| a.cmp(b));
+        pairs.sort_by(|(a, _), (b, _)| a.sort_cmp(b));
         if pairs.is_empty() {
             return write!(fmt, "{{}}");
         }

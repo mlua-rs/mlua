@@ -717,27 +717,29 @@ fn test_arbitrary_precision() {
 
 #[cfg(feature = "luau")]
 #[test]
-fn test_buffer_serialize() {
+fn test_buffer_serialize() -> LuaResult<()> {
     let lua = Lua::new();
 
-    let buf = lua.create_buffer(&[1, 2, 3, 4]).unwrap();
+    let buf = lua.create_buffer(&[1, 2, 3, 4])?;
     let val = serde_value::to_value(&buf).unwrap();
     assert_eq!(val, serde_value::Value::Bytes(vec![1, 2, 3, 4]));
 
     // Try empty buffer
-    let buf = lua.create_buffer(&[]).unwrap();
+    let buf = lua.create_buffer(&[])?;
     let val = serde_value::to_value(&buf).unwrap();
     assert_eq!(val, serde_value::Value::Bytes(vec![]));
+
+    Ok(())
 }
 
 #[cfg(feature = "luau")]
 #[test]
-fn test_buffer_from_value() {
+fn test_buffer_from_value() -> LuaResult<()> {
     let lua = Lua::new();
 
-    let buf = lua.create_buffer(&[1, 2, 3, 4]).unwrap();
-    let val = lua
-        .from_value::<serde_value::Value>(Value::UserData(buf))
-        .unwrap();
+    let buf = lua.create_buffer(&[1, 2, 3, 4])?;
+    let val = lua.from_value::<serde_value::Value>(Value::Buffer(buf)).unwrap();
     assert_eq!(val, serde_value::Value::Bytes(vec![1, 2, 3, 4]));
+
+    Ok(())
 }

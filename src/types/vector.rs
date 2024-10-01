@@ -10,7 +10,7 @@ use super::LuaType;
 /// By default vectors are 3-dimensional, but can be 4-dimensional
 /// if the `luau-vector4` feature is enabled.
 #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
-#[derive(Debug, Default, Clone, Copy, PartialEq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, PartialOrd)]
 pub struct Vector(pub(crate) [f32; Self::SIZE]);
 
 impl fmt::Display for Vector {

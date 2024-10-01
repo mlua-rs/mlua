@@ -937,8 +937,6 @@ impl AnyUserData {
     pub(crate) fn type_name(&self) -> Result<Option<StdString>> {
         match self.1 {
             SubtypeId::None => {}
-            #[cfg(feature = "luau")]
-            SubtypeId::Buffer => return Ok(Some("buffer".to_owned())),
             #[cfg(feature = "luajit")]
             SubtypeId::CData => return Ok(Some("cdata".to_owned())),
         }
@@ -1111,19 +1109,6 @@ impl Serialize for AnyUserData {
         S: Serializer,
     {
         let lua = self.0.lua.lock();
-
-        // Special case for Luau buffer type
-        #[cfg(feature = "luau")]
-        if self.1 == SubtypeId::Buffer {
-            let buf = unsafe {
-                let mut size = 0usize;
-                let buf = ffi::lua_tobuffer(lua.ref_thread(), self.0.index, &mut size);
-                mlua_assert!(!buf.is_null(), "invalid Luau buffer");
-                std::slice::from_raw_parts(buf as *const u8, size)
-            };
-            return serializer.serialize_bytes(buf);
-        }
-
         unsafe {
             let _ = lua
                 .get_userdata_ref_type_id(&self.0)

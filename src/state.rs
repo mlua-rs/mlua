@@ -31,7 +31,7 @@ use crate::value::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, MultiValue, Nil
 use crate::hook::HookTriggers;
 
 #[cfg(any(feature = "luau", doc))]
-use crate::chunk::Compiler;
+use crate::{buffer::Buffer, chunk::Compiler};
 
 #[cfg(feature = "async")]
 use {
@@ -996,22 +996,21 @@ impl Lua {
     /// Requires `feature = "luau"`
     ///
     /// [buffer]: https://luau-lang.org/library#buffer-library
-    #[cfg(feature = "luau")]
-    pub fn create_buffer(&self, buf: impl AsRef<[u8]>) -> Result<AnyUserData> {
-        use crate::types::SubtypeId;
-
+    #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
+    #[cfg(any(feature = "luau", doc))]
+    pub fn create_buffer(&self, buf: impl AsRef<[u8]>) -> Result<Buffer> {
         let lua = self.lock();
         let state = lua.state();
         unsafe {
             if lua.unlikely_memory_error() {
                 crate::util::push_buffer(lua.ref_thread(), buf.as_ref(), false)?;
-                return Ok(AnyUserData(lua.pop_ref_thread(), SubtypeId::Buffer));
+                return Ok(Buffer(lua.pop_ref_thread()));
             }
 
             let _sg = StackGuard::new(state);
             check_stack(state, 4)?;
             crate::util::push_buffer(state, buf.as_ref(), true)?;
-            Ok(AnyUserData(lua.pop_ref(), SubtypeId::Buffer))
+            Ok(Buffer(lua.pop_ref()))
         }
     }
 
