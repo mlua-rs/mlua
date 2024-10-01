@@ -4,7 +4,7 @@ use crate::error::{Error, Result};
 #[allow(unused)]
 use crate::state::Lua;
 use crate::state::RawLua;
-use crate::types::{LuaType, ValueRef, VmState};
+use crate::types::{LuaType, ValueRef};
 use crate::util::{check_stack, error_traceback_thread, pop_error, StackGuard};
 use crate::value::{FromLuaMulti, IntoLuaMulti};
 
@@ -194,7 +194,7 @@ impl Thread {
     #[cfg_attr(docsrs, doc(cfg(not(feature = "luau"))))]
     pub fn set_hook<F>(&self, triggers: HookTriggers, callback: F)
     where
-        F: Fn(&Lua, Debug) -> Result<VmState> + MaybeSend + 'static,
+        F: Fn(&Lua, Debug) -> Result<crate::VmState> + MaybeSend + 'static,
     {
         let lua = self.0.lua.lock();
         unsafe {

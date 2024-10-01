@@ -18,7 +18,7 @@ use crate::table::Table;
 use crate::thread::Thread;
 use crate::types::{
     AppDataRef, AppDataRefMut, Callback, CallbackUpvalue, DestructedUserdata, Integer, LightUserData,
-    MaybeSend, ReentrantMutex, RegistryKey, SubtypeId, ValueRef, VmState, XRc,
+    MaybeSend, ReentrantMutex, RegistryKey, SubtypeId, ValueRef, XRc,
 };
 use crate::userdata::{AnyUserData, MetaMethod, UserData, UserDataRegistry, UserDataStorage};
 use crate::util::{
@@ -356,8 +356,11 @@ impl RawLua {
         triggers: HookTriggers,
         callback: F,
     ) where
-        F: Fn(&Lua, Debug) -> Result<VmState> + MaybeSend + 'static,
+        F: Fn(&Lua, Debug) -> Result<crate::VmState> + MaybeSend + 'static,
     {
+        use crate::types::VmState;
+        use std::rc::Rc;
+
         unsafe extern "C-unwind" fn hook_proc(state: *mut ffi::lua_State, ar: *mut ffi::lua_Debug) {
             let extra = ExtraData::get(state);
             if (*extra).hook_thread != state {
@@ -368,7 +371,7 @@ impl RawLua {
             let result = callback_error_ext(state, extra, move |extra, _| {
                 let hook_cb = (*extra).hook_callback.clone();
                 let hook_cb = mlua_expect!(hook_cb, "no hook callback set in hook_proc");
-                if std::rc::Rc::strong_count(&hook_cb) > 2 {
+                if Rc::strong_count(&hook_cb) > 2 {
                     return Ok(VmState::Continue); // Don't allow recursion
                 }
                 let rawlua = (*extra).raw_lua();
@@ -395,7 +398,7 @@ impl RawLua {
             }
         }
 
-        (*self.extra.get()).hook_callback = Some(std::rc::Rc::new(callback));
+        (*self.extra.get()).hook_callback = Some(Rc::new(callback));
         (*self.extra.get()).hook_thread = state; // Mark for what thread the hook is set
         ffi::lua_sethook(state, Some(hook_proc), triggers.mask(), triggers.count());
     }
