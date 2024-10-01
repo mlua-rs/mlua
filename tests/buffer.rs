@@ -24,7 +24,7 @@ fn test_buffer() -> Result<()> {
     // Check that we can pass buffer type to Lua
     let buf1 = buf1.as_buffer().unwrap();
     let func = lua.create_function(|_, buf: Value| return buf.to_string())?;
-    assert_eq!(func.call::<String>(buf1)?, "hello");
+    assert!(func.call::<String>(buf1)?.starts_with("buffer:"));
 
     // Check buffer methods
     assert_eq!(buf1.len(), 5);

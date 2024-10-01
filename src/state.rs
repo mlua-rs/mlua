@@ -1390,7 +1390,11 @@ impl Lua {
                 ffi::LUA_TTHREAD => {
                     ffi::lua_newthread(state);
                 }
-                _ => {}
+                #[cfg(feature = "luau")]
+                ffi::LUA_TBUFFER => {
+                    ffi::lua_newbuffer(state, 0);
+                }
+                _ => return,
             }
             match metatable {
                 Some(metatable) => lua.push_ref(&metatable.0),

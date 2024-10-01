@@ -140,6 +140,17 @@ fn test_value_to_string() -> Result<()> {
     let err = Value::Error(Box::new(Error::runtime("test error")));
     assert_eq!(err.to_string()?, "runtime error: test error");
 
+    #[cfg(feature = "luau")]
+    {
+        let buf = Value::Buffer(lua.create_buffer(b"hello")?);
+        assert!(buf.to_string()?.starts_with("buffer:"));
+
+        // Set `__tostring` metamethod for buffer
+        let mt = lua.load("{__tostring = buffer.tostring}").eval()?;
+        lua.set_type_metatable::<mlua::Buffer>(mt);
+        assert_eq!(buf.to_string()?, "hello");
+    }
+
     Ok(())
 }
 

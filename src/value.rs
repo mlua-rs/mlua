@@ -14,7 +14,7 @@ use crate::state::{Lua, RawLua};
 use crate::string::{BorrowedStr, String};
 use crate::table::Table;
 use crate::thread::Thread;
-use crate::types::{Integer, LightUserData, Number, SubtypeId};
+use crate::types::{Integer, LightUserData, Number, SubtypeId, ValueRef};
 use crate::userdata::AnyUserData;
 use crate::util::{check_stack, StackGuard};
 
@@ -131,22 +131,35 @@ impl Value {
     pub fn to_pointer(&self) -> *const c_void {
         match self {
             Value::LightUserData(ud) => ud.0,
-            Value::String(String(r))
-            | Value::Table(Table(r))
-            | Value::Function(Function(r))
-            | Value::Thread(Thread(r, ..))
-            | Value::UserData(AnyUserData(r, ..)) => r.to_pointer(),
+            Value::String(String(vref))
+            | Value::Table(Table(vref))
+            | Value::Function(Function(vref))
+            | Value::Thread(Thread(vref, ..))
+            | Value::UserData(AnyUserData(vref, ..)) => vref.to_pointer(),
             #[cfg(feature = "luau")]
-            Value::Buffer(crate::Buffer(r)) => r.to_pointer(),
+            Value::Buffer(crate::Buffer(vref)) => vref.to_pointer(),
             _ => ptr::null(),
         }
     }
 
     /// Converts the value to a string.
     ///
-    /// If the value has a metatable with a `__tostring` method, then it will be called to get the
-    /// result.
+    /// This might invoke the `__tostring` metamethod for non-primitive types (eg. tables,
+    /// functions).
     pub fn to_string(&self) -> Result<StdString> {
+        unsafe fn invoke_to_string(vref: &ValueRef) -> Result<StdString> {
+            let lua = vref.lua.lock();
+            let state = lua.state();
+            let _guard = StackGuard::new(state);
+            check_stack(state, 3)?;
+
+            lua.push_ref(vref);
+            protect_lua!(state, 1, 1, fn(state) {
+                ffi::luaL_tolstring(state, -1, ptr::null_mut());
+            })?;
+            Ok(String(lua.pop_ref()).to_str()?.to_string())
+        }
+
         match self {
             Value::Nil => Ok("nil".to_string()),
             Value::Boolean(b) => Ok(b.to_string()),
@@ -157,23 +170,12 @@ impl Value {
             #[cfg(feature = "luau")]
             Value::Vector(v) => Ok(v.to_string()),
             Value::String(s) => Ok(s.to_str()?.to_string()),
-            Value::Table(Table(r))
-            | Value::Function(Function(r))
-            | Value::Thread(Thread(r, ..))
-            | Value::UserData(AnyUserData(r, ..)) => unsafe {
-                let lua = r.lua.lock();
-                let state = lua.state();
-                let _guard = StackGuard::new(state);
-                check_stack(state, 3)?;
-
-                lua.push_ref(r);
-                protect_lua!(state, 1, 1, fn(state) {
-                    ffi::luaL_tolstring(state, -1, ptr::null_mut());
-                })?;
-                Ok(String(lua.pop_ref()).to_str()?.to_string())
-            },
+            Value::Table(Table(vref))
+            | Value::Function(Function(vref))
+            | Value::Thread(Thread(vref, ..))
+            | Value::UserData(AnyUserData(vref, ..)) => unsafe { invoke_to_string(vref) },
             #[cfg(feature = "luau")]
-            Value::Buffer(buf) => StdString::from_utf8(buf.to_vec()).map_err(Error::external),
+            Value::Buffer(crate::Buffer(vref)) => unsafe { invoke_to_string(vref) },
             Value::Error(err) => Ok(err.to_string()),
         }
     }
