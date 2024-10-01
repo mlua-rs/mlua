@@ -33,7 +33,7 @@ fn test_string_into_lua() -> Result<()> {
     // Direct conversion
     let s = lua.create_string("hello, world!")?;
     let s2 = (&s).into_lua(&lua)?;
-    assert_eq!(s, s2.as_string().unwrap());
+    assert_eq!(s, *s2.as_string().unwrap());
 
     // Push into stack
     let table = lua.create_table()?;

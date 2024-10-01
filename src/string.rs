@@ -164,19 +164,25 @@ where
     }
 }
 
-impl PartialEq<String> for String {
+impl PartialEq for String {
     fn eq(&self, other: &String) -> bool {
         self.as_bytes() == other.as_bytes()
     }
 }
 
-impl PartialEq<&String> for String {
-    fn eq(&self, other: &&String) -> bool {
-        self.as_bytes() == other.as_bytes()
+impl Eq for String {}
+
+impl PartialOrd for String {
+    fn partial_cmp(&self, other: &String) -> Option<cmp::Ordering> {
+        self.as_bytes().partial_cmp(&other.as_bytes())
     }
 }
 
-impl Eq for String {}
+impl Ord for String {
+    fn cmp(&self, other: &String) -> cmp::Ordering {
+        self.as_bytes().cmp(&other.as_bytes())
+    }
+}
 
 impl Hash for String {
     fn hash<H: Hasher>(&self, state: &mut H) {
@@ -244,12 +250,20 @@ where
     }
 }
 
+impl Eq for BorrowedStr<'_> {}
+
 impl<T> PartialOrd<T> for BorrowedStr<'_>
 where
     T: AsRef<str>,
 {
     fn partial_cmp(&self, other: &T) -> Option<cmp::Ordering> {
         self.0.partial_cmp(other.as_ref())
+    }
+}
+
+impl Ord for BorrowedStr<'_> {
+    fn cmp(&self, other: &Self) -> cmp::Ordering {
+        self.0.cmp(other.0)
     }
 }
 
@@ -294,12 +308,20 @@ where
     }
 }
 
+impl Eq for BorrowedBytes<'_> {}
+
 impl<T> PartialOrd<T> for BorrowedBytes<'_>
 where
     T: AsRef<[u8]>,
 {
     fn partial_cmp(&self, other: &T) -> Option<cmp::Ordering> {
         self.0.partial_cmp(other.as_ref())
+    }
+}
+
+impl Ord for BorrowedBytes<'_> {
+    fn cmp(&self, other: &Self) -> cmp::Ordering {
+        self.0.cmp(other.0)
     }
 }
 
