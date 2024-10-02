@@ -128,7 +128,7 @@ pub enum MetaMethod {
     ///
     /// Executed when a variable, that marked as to-be-closed, goes out of scope.
     ///
-    /// More information about to-be-closed variabled can be found in the Lua 5.4
+    /// More information about to-be-closed variables can be found in the Lua 5.4
     /// [documentation][lua_doc].
     ///
     /// Requires `feature = "lua54"`
@@ -642,7 +642,7 @@ pub trait UserData: Sized {
 /// [`UserData`]: crate::UserData
 /// [`is`]: crate::AnyUserData::is
 /// [`borrow`]: crate::AnyUserData::borrow
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct AnyUserData(pub(crate) ValueRef);
 
 impl AnyUserData {
@@ -1006,12 +1006,6 @@ impl AnyUserData {
                 _ => Err(Error::UserDataTypeMismatch),
             }
         }
-    }
-}
-
-impl PartialEq for AnyUserData {
-    fn eq(&self, other: &Self) -> bool {
-        self.0 == other.0
     }
 }
 

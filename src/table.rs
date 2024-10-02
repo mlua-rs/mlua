@@ -23,7 +23,7 @@ use crate::value::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, Nil, Value};
 use futures_util::future::{self, Either, Future};
 
 /// Handle to an internal Lua table.
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub struct Table(pub(crate) ValueRef);
 
 impl Table {
@@ -806,13 +806,7 @@ impl fmt::Debug for Table {
         if fmt.alternate() {
             return self.fmt_pretty(fmt, 0, &mut HashSet::new());
         }
-        fmt.write_fmt(format_args!("Table({:?})", self.0))
-    }
-}
-
-impl PartialEq for Table {
-    fn eq(&self, other: &Self) -> bool {
-        self.0 == other.0
+        fmt.debug_tuple("Table").field(&self.0).finish()
     }
 }
 

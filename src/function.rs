@@ -20,7 +20,7 @@ use {
 };
 
 /// Handle to an internal Lua function.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Function(pub(crate) ValueRef);
 
 /// Contains information about a function.
@@ -506,12 +506,6 @@ impl Function {
             ffi::lua_clonefunction(ref_thread, self.0.index);
             Function(lua.pop_ref_thread())
         }
-    }
-}
-
-impl PartialEq for Function {
-    fn eq(&self, other: &Self) -> bool {
-        self.0 == other.0
     }
 }
 

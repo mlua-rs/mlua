@@ -1,3 +1,4 @@
+use std::fmt;
 use std::os::raw::{c_int, c_void};
 
 use crate::error::{Error, Result};
@@ -42,7 +43,7 @@ pub enum ThreadStatus {
 }
 
 /// Handle to an internal Lua thread (coroutine).
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct Thread(pub(crate) ValueRef, pub(crate) *mut ffi::lua_State);
 
 #[cfg(feature = "send")]
@@ -363,6 +364,12 @@ impl Thread {
     #[inline]
     pub fn to_pointer(&self) -> *const c_void {
         self.0.to_pointer()
+    }
+}
+
+impl fmt::Debug for Thread {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt.debug_tuple("Thread").field(&self.0).finish()
     }
 }
 
