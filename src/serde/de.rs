@@ -150,7 +150,8 @@ impl<'de> serde::Deserializer<'de> for Deserializer {
             | Value::Thread(_)
             | Value::UserData(_)
             | Value::LightUserData(_)
-            | Value::Error(_) => {
+            | Value::Error(_)
+            | Value::Other(_) => {
                 if self.options.deny_unsupported_types {
                     let msg = format!("unsupported value type `{}`", self.value.type_name());
                     Err(de::Error::custom(msg))

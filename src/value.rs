@@ -14,7 +14,7 @@ use crate::state::{Lua, RawLua};
 use crate::string::{BorrowedStr, String};
 use crate::table::Table;
 use crate::thread::Thread;
-use crate::types::{Integer, LightUserData, Number, SubtypeId, ValueRef};
+use crate::types::{Integer, LightUserData, Number, ValueRef};
 use crate::userdata::AnyUserData;
 use crate::util::{check_stack, StackGuard};
 
@@ -28,7 +28,7 @@ use {
 
 /// A dynamically typed Lua value.
 ///
-/// The `String`, `Table`, `Function`, `Thread`, and `UserData` variants contain handle types
+/// The non-primitive variants (eg. string/table/function/thread/userdata) contain handle types
 /// into the internal Lua state. It is a logic error to mix handle types between separate
 /// `Lua` instances, and doing so will result in a panic.
 #[derive(Clone)]
@@ -69,6 +69,9 @@ pub enum Value {
     Buffer(crate::Buffer),
     /// `Error` is a special builtin userdata type. When received from Lua it is implicitly cloned.
     Error(Box<Error>),
+    /// Any other value not known to mlua (eg. LuaJIT CData).
+    #[allow(private_interfaces)]
+    Other(ValueRef),
 }
 
 pub use self::Value::Nil;
@@ -93,12 +96,11 @@ impl Value {
             Value::Table(_) => "table",
             Value::Function(_) => "function",
             Value::Thread(_) => "thread",
-            Value::UserData(AnyUserData(_, SubtypeId::None)) => "userdata",
-            #[cfg(feature = "luajit")]
-            Value::UserData(AnyUserData(_, SubtypeId::CData)) => "cdata",
+            Value::UserData(_) => "userdata",
             #[cfg(feature = "luau")]
             Value::Buffer(_) => "buffer",
             Value::Error(_) => "error",
+            Value::Other(_) => "other",
         }
     }
 
@@ -173,7 +175,8 @@ impl Value {
             Value::Table(Table(vref))
             | Value::Function(Function(vref))
             | Value::Thread(Thread(vref, ..))
-            | Value::UserData(AnyUserData(vref, ..)) => unsafe { invoke_to_string(vref) },
+            | Value::UserData(AnyUserData(vref))
+            | Value::Other(vref) => unsafe { invoke_to_string(vref) },
             #[cfg(feature = "luau")]
             Value::Buffer(crate::Buffer(vref)) => unsafe { invoke_to_string(vref) },
             Value::Error(err) => Ok(err.to_string()),
@@ -448,17 +451,6 @@ impl Value {
         self.as_buffer().is_some()
     }
 
-    /// Returns `true` if the value is a CData wrapped in [`AnyUserData`].
-    #[cfg(any(feature = "luajit", doc))]
-    #[cfg_attr(docsrs, doc(cfg(feature = "luajit")))]
-    #[doc(hidden)]
-    #[inline]
-    pub fn is_cdata(&self) -> bool {
-        self.as_userdata()
-            .map(|ud| ud.1 == SubtypeId::CData)
-            .unwrap_or_default()
-    }
-
     /// Wrap reference to this Value into [`SerializableValue`].
     ///
     /// This allows customizing serialization behavior using serde.
@@ -548,6 +540,7 @@ impl Value {
             buf @ Value::Buffer(_) => write!(fmt, "buffer: {:?}", buf.to_pointer()),
             Value::Error(e) if recursive => write!(fmt, "{e:?}"),
             Value::Error(_) => write!(fmt, "error"),
+            Value::Other(v) => write!(fmt, "other: {:?}", v.to_pointer()),
         }
     }
 }
@@ -574,6 +567,7 @@ impl fmt::Debug for Value {
             #[cfg(feature = "luau")]
             Value::Buffer(buf) => write!(fmt, "{buf:?}"),
             Value::Error(e) => write!(fmt, "Error({e:?})"),
+            Value::Other(v) => write!(fmt, "Other({v:?})"),
         }
     }
 }
@@ -711,7 +705,8 @@ impl<'a> Serialize for SerializableValue<'a> {
             | Value::Thread(_)
             | Value::UserData(_)
             | Value::LightUserData(_)
-            | Value::Error(_) => {
+            | Value::Error(_)
+            | Value::Other(_) => {
                 if self.options.deny_unsupported_types {
                     let msg = format!("cannot serialize <{}>", self.value.type_name());
                     Err(ser::Error::custom(msg))

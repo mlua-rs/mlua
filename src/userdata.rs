@@ -19,7 +19,7 @@ use crate::function::Function;
 use crate::state::Lua;
 use crate::string::String;
 use crate::table::{Table, TablePairs};
-use crate::types::{MaybeSend, SubtypeId, ValueRef};
+use crate::types::{MaybeSend, ValueRef};
 use crate::util::{check_stack, get_userdata, take_userdata, StackGuard};
 use crate::value::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, Value};
 
@@ -643,7 +643,7 @@ pub trait UserData: Sized {
 /// [`is`]: crate::AnyUserData::is
 /// [`borrow`]: crate::AnyUserData::borrow
 #[derive(Clone, Debug)]
-pub struct AnyUserData(pub(crate) ValueRef, pub(crate) SubtypeId);
+pub struct AnyUserData(pub(crate) ValueRef);
 
 impl AnyUserData {
     /// Checks whether the type of this userdata is `T`.
@@ -935,12 +935,6 @@ impl AnyUserData {
 
     /// Returns a type name of this `UserData` (from a metatable field).
     pub(crate) fn type_name(&self) -> Result<Option<StdString>> {
-        match self.1 {
-            SubtypeId::None => {}
-            #[cfg(feature = "luajit")]
-            SubtypeId::CData => return Ok(Some("cdata".to_owned())),
-        }
-
         let lua = self.0.lua.lock();
         let state = lua.state();
         unsafe {

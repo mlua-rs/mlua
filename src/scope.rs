@@ -6,7 +6,7 @@ use std::os::raw::c_void;
 use crate::error::{Error, Result};
 use crate::function::Function;
 use crate::state::{Lua, LuaGuard, RawLua};
-use crate::types::{Callback, CallbackUpvalue, ScopedCallback, SubtypeId, ValueRef};
+use crate::types::{Callback, CallbackUpvalue, ScopedCallback, ValueRef};
 use crate::userdata::{AnyUserData, UserData, UserDataRegistry, UserDataStorage};
 use crate::util::{self, assert_stack, check_stack, get_userdata, take_userdata, StackGuard};
 use crate::value::{FromLuaMulti, IntoLuaMulti};
@@ -186,7 +186,7 @@ impl<'scope, 'env: 'scope> Scope<'scope, 'env> {
             std::ptr::write(ud_ptr, UserDataStorage::new_scoped(data));
             ffi::lua_setmetatable(state, -2);
 
-            let ud = AnyUserData(self.lua.pop_ref(), SubtypeId::None);
+            let ud = AnyUserData(self.lua.pop_ref());
 
             let destructor: DestructorCallback = Box::new(|rawlua, vref| {
                 let state = rawlua.state();

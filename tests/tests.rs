@@ -1256,8 +1256,7 @@ fn test_luajit_cdata() -> Result<()> {
     "#,
         )
         .eval::<Value>()?;
-    assert!(cdata.is_userdata() && cdata.is_cdata());
-    assert_eq!(cdata.type_name(), "cdata");
+    assert_eq!(cdata.type_name(), "other");
     assert!(cdata.to_string()?.starts_with("cdata<void *>:"));
 
     Ok(())

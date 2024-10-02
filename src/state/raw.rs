@@ -18,7 +18,7 @@ use crate::table::Table;
 use crate::thread::Thread;
 use crate::types::{
     AppDataRef, AppDataRefMut, Callback, CallbackUpvalue, DestructedUserdata, Integer, LightUserData,
-    MaybeSend, ReentrantMutex, RegistryKey, SubtypeId, ValueRef, XRc,
+    MaybeSend, ReentrantMutex, RegistryKey, ValueRef, XRc,
 };
 use crate::userdata::{AnyUserData, MetaMethod, UserData, UserDataRegistry, UserDataStorage};
 use crate::util::{
@@ -560,6 +560,7 @@ impl RawLua {
                 let protect = !self.unlikely_memory_error();
                 push_internal_userdata(state, WrappedFailure::Error(*err.clone()), protect)?;
             }
+            Value::Other(vref) => self.push_ref(vref),
         }
         Ok(())
     }
@@ -644,7 +645,7 @@ impl RawLua {
                     }
                     _ => {
                         ffi::lua_xpush(state, self.ref_thread(), idx);
-                        Value::UserData(AnyUserData(self.pop_ref_thread(), SubtypeId::None))
+                        Value::UserData(AnyUserData(self.pop_ref_thread()))
                     }
                 }
             }
@@ -661,14 +662,10 @@ impl RawLua {
                 Value::Buffer(crate::Buffer(self.pop_ref_thread()))
             }
 
-            #[cfg(feature = "luajit")]
-            ffi::LUA_TCDATA => {
-                // CData is represented as a userdata type
+            _ => {
                 ffi::lua_xpush(state, self.ref_thread(), idx);
-                Value::UserData(AnyUserData(self.pop_ref_thread(), SubtypeId::CData))
+                Value::Other(self.pop_ref_thread())
             }
-
-            _ => mlua_panic!("unexpected value type on stack"),
         }
     }
 
@@ -806,7 +803,7 @@ impl RawLua {
             ffi::lua_setuservalue(state, -2);
         }
 
-        Ok(AnyUserData(self.pop_ref(), SubtypeId::None))
+        Ok(AnyUserData(self.pop_ref()))
     }
 
     pub(crate) unsafe fn create_userdata_metatable<T>(
