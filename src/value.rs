@@ -451,6 +451,22 @@ impl Value {
         self.as_buffer().is_some()
     }
 
+    /// Returns `true` if the value is an [`Error`].
+    #[inline]
+    pub fn is_error(&self) -> bool {
+        self.as_error().is_some()
+    }
+
+    /// Cast the value to [`Error`].
+    ///
+    /// If the value is an [`Error`], returns it or `None` otherwise.
+    pub fn as_error(&self) -> Option<&Error> {
+        match self {
+            Value::Error(e) => Some(e),
+            _ => None,
+        }
+    }
+
     /// Wrap reference to this Value into [`SerializableValue`].
     ///
     /// This allows customizing serialization behavior using serde.

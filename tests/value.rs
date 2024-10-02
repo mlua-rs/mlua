@@ -231,5 +231,13 @@ fn test_value_conversions() -> Result<()> {
         Some(&"hello")
     );
 
+    assert!(Value::Error(Box::new(Error::runtime("some error"))).is_error());
+    assert_eq!(
+        (Value::Error(Box::new(Error::runtime("some error"))).as_error())
+            .unwrap()
+            .to_string(),
+        "runtime error: some error"
+    );
+
     Ok(())
 }
