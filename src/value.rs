@@ -137,7 +137,8 @@ impl Value {
             | Value::Table(Table(vref))
             | Value::Function(Function(vref))
             | Value::Thread(Thread(vref, ..))
-            | Value::UserData(AnyUserData(vref, ..)) => vref.to_pointer(),
+            | Value::UserData(AnyUserData(vref))
+            | Value::Other(vref) => vref.to_pointer(),
             #[cfg(feature = "luau")]
             Value::Buffer(crate::Buffer(vref)) => vref.to_pointer(),
             _ => ptr::null(),
