@@ -545,6 +545,11 @@ impl Function {
         }))
     }
 
+    /// Wraps a Rust function or closure, returning an opaque type that implements [`IntoLua`]
+    /// trait.
+    ///
+    /// This function is similar to [`Function::wrap`] but any returned `Result` will be converted
+    /// to a `ok, err` tuple without throwing an exception.
     #[inline]
     pub fn wrap_raw<F, A>(func: F) -> impl IntoLua
     where
@@ -557,6 +562,10 @@ impl Function {
         }))
     }
 
+    /// Wraps a Rust mutable closure, returning an opaque type that implements [`IntoLua`] trait.
+    ///
+    /// This function is similar to [`Function::wrap_mut`] but any returned `Result` will be
+    /// converted to a `ok, err` tuple without throwing an exception.
     #[inline]
     pub fn wrap_raw_mut<F, A>(func: F) -> impl IntoLua
     where
@@ -592,6 +601,11 @@ impl Function {
         }))
     }
 
+    /// Wraps a Rust async function or closure, returning an opaque type that implements [`IntoLua`]
+    /// trait.
+    ///
+    /// This function is similar to [`Function::wrap_async`] but any returned `Result` will be
+    /// converted to a `ok, err` tuple without throwing an exception.
     #[cfg(feature = "async")]
     #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
     pub fn wrap_raw_async<F, A>(func: F) -> impl IntoLua
