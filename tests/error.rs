@@ -72,3 +72,26 @@ fn test_error_chain() -> Result<()> {
 
     Ok(())
 }
+
+#[cfg(feature = "anyhow")]
+#[test]
+fn test_error_anyhow() -> Result<()> {
+    use mlua::IntoLua;
+
+    let lua = Lua::new();
+
+    let err = anyhow::Error::msg("anyhow error");
+    let val = err.into_lua(&lua)?;
+    assert!(val.is_error());
+    assert_eq!(val.as_error().unwrap().to_string(), "anyhow error");
+
+    // Try Error -> anyhow::Error -> Error roundtrip
+    let err = Error::runtime("runtime error");
+    let err = anyhow::Error::new(err);
+    let err = err.into_lua(&lua)?;
+    assert!(err.is_error());
+    let err = err.as_error().unwrap();
+    assert!(matches!(err, Error::RuntimeError(msg) if msg == "runtime error"));
+
+    Ok(())
+}

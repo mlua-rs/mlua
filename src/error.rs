@@ -454,7 +454,7 @@ impl ErrorContext for Error {
     }
 }
 
-impl<T> ErrorContext for StdResult<T, Error> {
+impl<T> ErrorContext for Result<T> {
     fn context<C: fmt::Display>(self, context: C) -> Self {
         self.map_err(|err| err.context(context))
     }
@@ -493,6 +493,16 @@ impl serde::ser::Error for Error {
 impl serde::de::Error for Error {
     fn custom<T: fmt::Display>(msg: T) -> Self {
         Self::DeserializeError(msg.to_string())
+    }
+}
+
+#[cfg(feature = "anyhow")]
+impl From<anyhow::Error> for Error {
+    fn from(err: anyhow::Error) -> Self {
+        match err.downcast::<Self>() {
+            Ok(err) => err,
+            Err(err) => Error::external(err),
+        }
     }
 }
 

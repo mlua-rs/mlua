@@ -254,6 +254,14 @@ impl FromLua for Error {
     }
 }
 
+#[cfg(feature = "anyhow")]
+impl IntoLua for anyhow::Error {
+    #[inline]
+    fn into_lua(self, _: &Lua) -> Result<Value> {
+        Ok(Value::Error(Box::new(Error::from(self))))
+    }
+}
+
 impl IntoLua for RegistryKey {
     #[inline]
     fn into_lua(self, lua: &Lua) -> Result<Value> {
