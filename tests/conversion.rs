@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
-use std::ffi::{CStr, CString, OsStr, OsString};
-use std::path::{Path, PathBuf};
+use std::ffi::{CStr, CString, OsString};
+use std::path::PathBuf;
 
 use bstr::BString;
 use maplit::{btreemap, btreeset, hashmap, hashset};

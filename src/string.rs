@@ -174,7 +174,7 @@ impl Eq for String {}
 
 impl PartialOrd for String {
     fn partial_cmp(&self, other: &String) -> Option<cmp::Ordering> {
-        self.as_bytes().partial_cmp(&other.as_bytes())
+        Some(self.cmp(other))
     }
 }
 
