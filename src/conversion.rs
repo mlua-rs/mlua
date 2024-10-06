@@ -1,12 +1,13 @@
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
-use std::ffi::{CStr, CString};
+use std::ffi::{CStr, CString, OsStr, OsString};
 use std::hash::{BuildHasher, Hash};
 use std::os::raw::c_int;
+use std::path::{Path, PathBuf};
 use std::string::String as StdString;
 use std::{slice, str};
 
-use bstr::{BStr, BString};
+use bstr::{BStr, BString, ByteVec};
 use num_traits::cast;
 
 use crate::error::{Error, Result};
@@ -600,6 +601,63 @@ impl IntoLua for &BStr {
     #[inline]
     fn into_lua(self, lua: &Lua) -> Result<Value> {
         Ok(Value::String(lua.create_string(self)?))
+    }
+}
+
+impl IntoLua for OsString {
+    #[inline]
+    fn into_lua(self, lua: &Lua) -> Result<Value> {
+        BString::from(
+            Vec::from_os_string(self).map_err(|val| Error::ToLuaConversionError {
+                from: "OsString".into(),
+                to: "string",
+                message: Some(format!("Invalid encoding: {:?}", val)),
+            })?,
+        )
+        .into_lua(lua)
+    }
+}
+
+impl FromLua for OsString {
+    #[inline]
+    fn from_lua(value: Value, lua: &Lua) -> Result<Self> {
+        let ty = value.type_name();
+        let bs = BString::from_lua(value, lua)?;
+        Vec::from(bs)
+            .into_os_string()
+            .map_err(|err| Error::FromLuaConversionError {
+                from: ty,
+                to: "OsString".into(),
+                message: Some(format!("{}", err)),
+            })
+    }
+}
+
+impl IntoLua for &OsStr {
+    #[inline]
+    fn into_lua(self, lua: &Lua) -> Result<Value> {
+        OsString::from(self).into_lua(lua)
+    }
+}
+
+impl IntoLua for PathBuf {
+    #[inline]
+    fn into_lua(self, lua: &Lua) -> Result<Value> {
+        self.into_os_string().into_lua(lua)
+    }
+}
+
+impl FromLua for PathBuf {
+    #[inline]
+    fn from_lua(value: Value, lua: &Lua) -> Result<Self> {
+        OsString::from_lua(value, lua).map(PathBuf::from)
+    }
+}
+
+impl IntoLua for &Path {
+    #[inline]
+    fn into_lua(self, lua: &Lua) -> Result<Value> {
+        PathBuf::from(self).into_lua(lua)
     }
 }
 

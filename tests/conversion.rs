@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
-use std::ffi::{CStr, CString};
+use std::ffi::{CStr, CString, OsStr, OsString};
+use std::path::{Path, PathBuf};
 
 use bstr::BString;
 use maplit::{btreemap, btreeset, hashmap, hashset};
@@ -393,6 +394,55 @@ fn test_bstring_from_lua_buffer() -> Result<()> {
     let buf = lua.create_buffer("hello, world")?;
     let bstr = f.call::<BString>(buf)?;
     assert_eq!(bstr, "hello, world");
+
+    Ok(())
+}
+
+#[test]
+fn test_osstring_into_from_lua() -> Result<()> {
+    let lua = Lua::new();
+
+    let s = OsString::from("hello, world");
+
+    let v = lua.pack(s.as_os_str())?;
+    assert!(v.is_string());
+    assert_eq!(v.as_str().unwrap(), "hello, world");
+
+    let v = lua.pack(s)?;
+    assert!(v.is_string());
+    assert_eq!(v.as_str().unwrap(), "hello, world");
+
+    let s = lua.create_string("hello, world")?;
+    let bstr = lua.unpack::<OsString>(Value::String(s))?;
+    assert_eq!(bstr, "hello, world");
+
+    let bstr = lua.unpack::<OsString>(Value::Integer(123))?;
+    assert_eq!(bstr, "123");
+
+    let bstr = lua.unpack::<OsString>(Value::Number(-123.55))?;
+    assert_eq!(bstr, "-123.55");
+
+    Ok(())
+}
+
+#[test]
+fn test_pathbuf_into_from_lua() -> Result<()> {
+    let lua = Lua::new();
+
+    let pb = PathBuf::from(env!("CARGO_TARGET_TMPDIR"));
+    let pb_str = pb.to_str().unwrap();
+
+    let v = lua.pack(pb.as_path())?;
+    assert!(v.is_string());
+    assert_eq!(v.as_str().unwrap(), pb_str);
+
+    let v = lua.pack(pb.clone())?;
+    assert!(v.is_string());
+    assert_eq!(v.as_str().unwrap(), pb_str);
+
+    let s = lua.create_string(pb_str)?;
+    let bstr = lua.unpack::<PathBuf>(Value::String(s))?;
+    assert_eq!(bstr, pb);
 
     Ok(())
 }
