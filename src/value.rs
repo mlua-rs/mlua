@@ -83,7 +83,7 @@ impl Value {
     pub const NULL: Value = Value::LightUserData(LightUserData(ptr::null_mut()));
 
     /// Returns type name of this value.
-    pub const fn type_name(&self) -> &'static str {
+    pub fn type_name(&self) -> &'static str {
         match *self {
             Value::Nil => "nil",
             Value::Boolean(_) => "boolean",
