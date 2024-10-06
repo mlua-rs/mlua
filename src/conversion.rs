@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use std::string::String as StdString;
 use std::{slice, str};
 
-use bstr::{BStr, BString, ByteVec};
+use bstr::{BStr, BString, ByteSlice, ByteVec};
 use num_traits::cast;
 
 use crate::error::{Error, Result};
@@ -607,14 +607,7 @@ impl IntoLua for &BStr {
 impl IntoLua for OsString {
     #[inline]
     fn into_lua(self, lua: &Lua) -> Result<Value> {
-        BString::from(
-            Vec::from_os_string(self).map_err(|val| Error::ToLuaConversionError {
-                from: "OsString".into(),
-                to: "string",
-                message: Some(format!("Invalid encoding: {:?}", val)),
-            })?,
-        )
-        .into_lua(lua)
+        self.as_os_str().into_lua(lua)
     }
 }
 
@@ -628,7 +621,7 @@ impl FromLua for OsString {
             .map_err(|err| Error::FromLuaConversionError {
                 from: ty,
                 to: "OsString".into(),
-                message: Some(format!("{}", err)),
+                message: Some(err.to_string()),
             })
     }
 }
@@ -636,14 +629,19 @@ impl FromLua for OsString {
 impl IntoLua for &OsStr {
     #[inline]
     fn into_lua(self, lua: &Lua) -> Result<Value> {
-        OsString::from(self).into_lua(lua)
+        let s = <[u8]>::from_os_str(self).ok_or_else(|| Error::ToLuaConversionError {
+            from: "OsStr".into(),
+            to: "string",
+            message: Some("invalid utf-8 encoding".into()),
+        })?;
+        Ok(Value::String(lua.create_string(s)?))
     }
 }
 
 impl IntoLua for PathBuf {
     #[inline]
     fn into_lua(self, lua: &Lua) -> Result<Value> {
-        self.into_os_string().into_lua(lua)
+        self.as_os_str().into_lua(lua)
     }
 }
 
@@ -657,7 +655,7 @@ impl FromLua for PathBuf {
 impl IntoLua for &Path {
     #[inline]
     fn into_lua(self, lua: &Lua) -> Result<Value> {
-        PathBuf::from(self).into_lua(lua)
+        self.as_os_str().into_lua(lua)
     }
 }
 
