@@ -1116,6 +1116,16 @@ impl AnyUserData {
     pub fn wrap<T: MaybeSend + 'static>(data: T) -> impl IntoLua {
         WrappedUserdata(move |lua| lua.create_any_userdata(data))
     }
+
+    /// Wraps any Rust type that implements [`Serialize`], returning an opaque type that implements
+    /// [`IntoLua`] trait.
+    ///
+    /// This function uses [`Lua::create_ser_any_userdata()`] under the hood.
+    #[cfg(feature = "serialize")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "serialize")))]
+    pub fn wrap_ser<T: Serialize + MaybeSend + 'static>(data: T) -> impl IntoLua {
+        WrappedUserdata(move |lua| lua.create_ser_any_userdata(data))
+    }
 }
 
 impl<F> IntoLua for WrappedUserdata<F>
