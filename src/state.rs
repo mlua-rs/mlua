@@ -17,6 +17,7 @@ use crate::stdlib::StdLib;
 use crate::string::String;
 use crate::table::Table;
 use crate::thread::Thread;
+use crate::traits::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti};
 use crate::types::{
     AppDataRef, AppDataRefMut, ArcReentrantMutexGuard, Integer, LuaType, MaybeSend, Number, ReentrantMutex,
     ReentrantMutexGuard, RegistryKey, VmState, XRc, XWeak,
@@ -25,7 +26,7 @@ use crate::userdata::{AnyUserData, UserData, UserDataProxy, UserDataRegistry, Us
 use crate::util::{
     assert_stack, check_stack, protect_lua_closure, push_string, push_table, rawset_field, StackGuard,
 };
-use crate::value::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, MultiValue, Nil, Value};
+use crate::value::{MultiValue, Nil, Value};
 
 #[cfg(not(feature = "luau"))]
 use crate::hook::HookTriggers;

@@ -16,6 +16,7 @@ use crate::stdlib::StdLib;
 use crate::string::String;
 use crate::table::Table;
 use crate::thread::Thread;
+use crate::traits::IntoLua;
 use crate::types::{
     AppDataRef, AppDataRefMut, Callback, CallbackUpvalue, DestructedUserdata, Integer, LightUserData,
     MaybeSend, ReentrantMutex, RegistryKey, ValueRef, XRc,
@@ -27,7 +28,7 @@ use crate::util::{
     push_internal_userdata, push_string, push_table, rawset_field, safe_pcall, safe_xpcall, short_type_name,
     StackGuard, WrappedFailure,
 };
-use crate::value::{IntoLua, Nil, Value};
+use crate::value::{Nil, Value};
 
 use super::extra::ExtraData;
 use super::{Lua, LuaOptions, WeakLua};
@@ -37,8 +38,9 @@ use crate::hook::{Debug, HookTriggers};
 
 #[cfg(feature = "async")]
 use {
+    crate::traits::FromLuaMulti,
     crate::types::{AsyncCallback, AsyncCallbackUpvalue, AsyncPollUpvalue},
-    crate::value::{FromLuaMulti, MultiValue},
+    crate::value::MultiValue,
     std::ptr::NonNull,
     std::task::{Context, Poll, Waker},
 };

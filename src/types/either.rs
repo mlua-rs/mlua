@@ -5,8 +5,8 @@ use std::os::raw::c_int;
 
 use crate::error::{Error, Result};
 use crate::state::{Lua, RawLua};
-use crate::traits::ShortTypeName as _;
-use crate::value::{FromLua, IntoLua, Value};
+use crate::traits::{FromLua, IntoLua, ShortTypeName as _};
+use crate::value::Value;
 
 /// Combination of two types into a single one.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]

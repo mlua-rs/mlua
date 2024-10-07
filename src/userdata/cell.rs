@@ -9,10 +9,11 @@ use serde::ser::{Serialize, Serializer};
 
 use crate::error::{Error, Result};
 use crate::state::{Lua, RawLua};
+use crate::traits::FromLua;
 use crate::types::XRc;
 use crate::userdata::AnyUserData;
 use crate::util::get_userdata;
-use crate::value::{FromLua, Value};
+use crate::value::Value;
 
 use super::lock::{RawLock, UserDataLock};
 

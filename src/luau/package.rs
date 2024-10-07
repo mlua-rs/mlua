@@ -9,7 +9,8 @@ use crate::chunk::ChunkMode;
 use crate::error::Result;
 use crate::state::Lua;
 use crate::table::Table;
-use crate::value::{IntoLua, Value};
+use crate::traits::IntoLua;
+use crate::value::Value;
 
 #[cfg(unix)]
 use {libloading::Library, rustc_hash::FxHashMap};

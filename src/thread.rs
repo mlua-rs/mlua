@@ -5,9 +5,9 @@ use crate::error::{Error, Result};
 #[allow(unused)]
 use crate::state::Lua;
 use crate::state::RawLua;
+use crate::traits::{FromLuaMulti, IntoLuaMulti};
 use crate::types::{LuaType, ValueRef};
 use crate::util::{check_stack, error_traceback_thread, pop_error, StackGuard};
-use crate::value::{FromLuaMulti, IntoLuaMulti};
 
 #[cfg(not(feature = "luau"))]
 use crate::{

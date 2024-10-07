@@ -116,7 +116,9 @@ pub use crate::stdlib::StdLib;
 pub use crate::string::{BorrowedBytes, BorrowedStr, String};
 pub use crate::table::{Table, TablePairs, TableSequence};
 pub use crate::thread::{Thread, ThreadStatus};
-pub use crate::traits::{LuaNativeFn, LuaNativeFnMut, ObjectLike};
+pub use crate::traits::{
+    FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, LuaNativeFn, LuaNativeFnMut, ObjectLike,
+};
 pub use crate::types::{
     AppDataRef, AppDataRefMut, Either, Integer, LightUserData, MaybeSend, Number, RegistryKey, VmState,
 };
@@ -124,7 +126,7 @@ pub use crate::userdata::{
     AnyUserData, MetaMethod, UserData, UserDataFields, UserDataMetatable, UserDataMethods, UserDataRef,
     UserDataRefMut, UserDataRegistry,
 };
-pub use crate::value::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, MultiValue, Nil, Value};
+pub use crate::value::{MultiValue, Nil, Value};
 
 #[cfg(not(feature = "luau"))]
 pub use crate::hook::HookTriggers;

@@ -2,9 +2,9 @@ use std::string::String as StdString;
 
 use crate::error::{Error, Result};
 use crate::table::Table;
-use crate::traits::ObjectLike;
+use crate::traits::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, ObjectLike};
 use crate::userdata::AnyUserData;
-use crate::value::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, Value};
+use crate::value::Value;
 use crate::Function;
 
 #[cfg(feature = "async")]

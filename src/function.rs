@@ -5,12 +5,12 @@ use std::{mem, ptr, slice};
 use crate::error::{Error, Result};
 use crate::state::Lua;
 use crate::table::Table;
-use crate::traits::{LuaNativeFn, LuaNativeFnMut};
+use crate::traits::{FromLuaMulti, IntoLua, IntoLuaMulti, LuaNativeFn, LuaNativeFnMut};
 use crate::types::{Callback, LuaType, MaybeSend, ValueRef};
 use crate::util::{
     assert_stack, check_stack, linenumber_to_usize, pop_error, ptr_to_lossy_str, ptr_to_str, StackGuard,
 };
-use crate::value::{FromLuaMulti, IntoLua, IntoLuaMulti, Value};
+use crate::value::Value;
 
 #[cfg(feature = "async")]
 use {

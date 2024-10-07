@@ -9,7 +9,7 @@ use crate::error::{Error, Result};
 use crate::function::Function;
 use crate::state::{Lua, WeakLua};
 use crate::table::Table;
-use crate::value::{FromLuaMulti, IntoLuaMulti};
+use crate::traits::{FromLuaMulti, IntoLuaMulti};
 
 /// Trait for types [loadable by Lua] and convertible to a [`Chunk`]
 ///

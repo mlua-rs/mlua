@@ -14,10 +14,10 @@ use {
 use crate::error::{Error, Result};
 use crate::function::Function;
 use crate::state::{LuaGuard, RawLua};
-use crate::traits::ObjectLike;
+use crate::traits::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, ObjectLike};
 use crate::types::{Integer, LuaType, ValueRef};
 use crate::util::{assert_stack, check_stack, StackGuard};
-use crate::value::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, Nil, Value};
+use crate::value::{Nil, Value};
 
 #[cfg(feature = "async")]
 use futures_util::future::{self, Either, Future};

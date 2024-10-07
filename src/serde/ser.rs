@@ -4,7 +4,8 @@ use super::LuaSerdeExt;
 use crate::error::{Error, Result};
 use crate::state::Lua;
 use crate::table::Table;
-use crate::value::{IntoLua, Value};
+use crate::traits::IntoLua;
+use crate::value::Value;
 
 /// A struct for serializing Rust values into Lua values.
 #[derive(Debug)]

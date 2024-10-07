@@ -16,10 +16,10 @@ use crate::state::{Lua, RawLua};
 use crate::string::String;
 use crate::table::Table;
 use crate::thread::Thread;
-use crate::traits::ShortTypeName as _;
+use crate::traits::{FromLua, IntoLua, ShortTypeName as _};
 use crate::types::{LightUserData, MaybeSend, RegistryKey};
 use crate::userdata::{AnyUserData, UserData};
-use crate::value::{FromLua, IntoLua, Nil, Value};
+use crate::value::{Nil, Value};
 
 impl IntoLua for Value {
     #[inline]

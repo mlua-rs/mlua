@@ -5,8 +5,9 @@ use std::result::Result as StdResult;
 
 use crate::error::Result;
 use crate::state::{Lua, RawLua};
+use crate::traits::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti};
 use crate::util::check_stack;
-use crate::value::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, MultiValue, Nil};
+use crate::value::{MultiValue, Nil};
 
 /// Result is convertible to `MultiValue` following the common Lua idiom of returning the result
 /// on success, or in the case of an error, returning `nil` and an error message.

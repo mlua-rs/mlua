@@ -8,10 +8,11 @@ use std::string::String as StdString;
 
 use crate::error::{Error, Result};
 use crate::state::{Lua, RawLua};
+use crate::traits::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti};
 use crate::types::{Callback, MaybeSend};
 use crate::userdata::{AnyUserData, MetaMethod, UserData, UserDataFields, UserDataMethods, UserDataStorage};
 use crate::util::{get_userdata, short_type_name};
-use crate::value::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, Value};
+use crate::value::Value;
 
 #[cfg(feature = "async")]
 use {

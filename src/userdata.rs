@@ -19,9 +19,10 @@ use crate::function::Function;
 use crate::state::Lua;
 use crate::string::String;
 use crate::table::{Table, TablePairs};
+use crate::traits::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti};
 use crate::types::{MaybeSend, ValueRef};
 use crate::util::{check_stack, get_userdata, take_userdata, StackGuard};
-use crate::value::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, Value};
+use crate::value::Value;
 
 // Re-export for convenience
 pub(crate) use cell::UserDataStorage;
