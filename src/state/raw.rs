@@ -285,7 +285,7 @@ impl RawLua {
     /// See [`Lua::app_data_ref`]
     #[track_caller]
     #[inline]
-    pub(crate) fn app_data_ref<T: 'static>(&self) -> Option<AppDataRef<T>> {
+    pub(crate) fn app_data_ref_unguarded<T: 'static>(&self) -> Option<AppDataRef<T>> {
         let extra = unsafe { &*self.extra.get() };
         extra.app_data.borrow(None)
     }
@@ -293,7 +293,7 @@ impl RawLua {
     /// See [`Lua::app_data_mut`]
     #[track_caller]
     #[inline]
-    pub(crate) fn app_data_mut<T: 'static>(&self) -> Option<AppDataRefMut<T>> {
+    pub(crate) fn app_data_mut_unguarded<T: 'static>(&self) -> Option<AppDataRefMut<T>> {
         let extra = unsafe { &*self.extra.get() };
         extra.app_data.borrow_mut(None)
     }

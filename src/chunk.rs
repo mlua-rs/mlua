@@ -481,7 +481,7 @@ impl<'a> Chunk<'a> {
         if let Ok(ref source) = self.source {
             if self.detect_mode() == ChunkMode::Text {
                 let lua = self.lua.lock();
-                if let Some(cache) = lua.app_data_ref::<ChunksCache>() {
+                if let Some(cache) = lua.app_data_ref_unguarded::<ChunksCache>() {
                     if let Some(data) = cache.0.get(source.as_ref()) {
                         self.source = Ok(Cow::Owned(data.clone()));
                         self.mode = Some(ChunkMode::Binary);
@@ -498,7 +498,7 @@ impl<'a> Chunk<'a> {
             if let Ok(ref binary_source) = self.source {
                 if self.detect_mode() == ChunkMode::Binary {
                     let lua = self.lua.lock();
-                    if let Some(mut cache) = lua.app_data_mut::<ChunksCache>() {
+                    if let Some(mut cache) = lua.app_data_mut_unguarded::<ChunksCache>() {
                         cache.0.insert(text_source, binary_source.as_ref().to_vec());
                     } else {
                         let mut cache = ChunksCache(HashMap::new());
