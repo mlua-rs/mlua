@@ -3,11 +3,12 @@ use std::string::String as StdString;
 use std::sync::Arc;
 
 use crate::error::{Error, Result};
+use crate::multi::MultiValue;
 use crate::private::Sealed;
 use crate::state::{Lua, RawLua};
 use crate::types::MaybeSend;
 use crate::util::{check_stack, short_type_name};
-use crate::value::{MultiValue, Value};
+use crate::value::Value;
 
 #[cfg(feature = "async")]
 use std::future::Future;

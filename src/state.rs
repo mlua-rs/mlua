@@ -12,6 +12,7 @@ use crate::error::{Error, Result};
 use crate::function::Function;
 use crate::hook::Debug;
 use crate::memory::MemoryState;
+use crate::multi::MultiValue;
 use crate::scope::Scope;
 use crate::stdlib::StdLib;
 use crate::string::String;
@@ -26,7 +27,7 @@ use crate::userdata::{AnyUserData, UserData, UserDataProxy, UserDataRegistry, Us
 use crate::util::{
     assert_stack, check_stack, protect_lua_closure, push_string, push_table, rawset_field, StackGuard,
 };
-use crate::value::{MultiValue, Nil, Value};
+use crate::value::{Nil, Value};
 
 #[cfg(not(feature = "luau"))]
 use crate::hook::HookTriggers;

@@ -1,19 +1,16 @@
 use std::cmp::Ordering;
-use std::collections::{vec_deque, HashSet, VecDeque};
-use std::ops::{Deref, DerefMut};
+use std::collections::HashSet;
 use std::os::raw::c_void;
 use std::string::String as StdString;
-use std::{fmt, mem, ptr, str};
+use std::{fmt, ptr, str};
 
 use num_traits::FromPrimitive;
 
 use crate::error::{Error, Result};
 use crate::function::Function;
-use crate::state::Lua;
 use crate::string::{BorrowedStr, String};
 use crate::table::Table;
 use crate::thread::Thread;
-use crate::traits::IntoLua;
 use crate::types::{Integer, LightUserData, Number, ValueRef};
 use crate::userdata::AnyUserData;
 use crate::util::{check_stack, StackGuard};
@@ -735,91 +732,12 @@ impl<'a> Serialize for SerializableValue<'a> {
     }
 }
 
-/// Multiple Lua values used for both argument passing and also for multiple return values.
-#[derive(Default, Debug, Clone)]
-pub struct MultiValue(VecDeque<Value>);
-
-impl Deref for MultiValue {
-    type Target = VecDeque<Value>;
-
-    #[inline]
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl DerefMut for MultiValue {
-    #[inline]
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
-
-impl MultiValue {
-    /// Creates an empty `MultiValue` containing no values.
-    #[inline]
-    pub const fn new() -> MultiValue {
-        MultiValue(VecDeque::new())
-    }
-
-    /// Creates an empty `MultiValue` container with space for at least `capacity` elements.
-    pub fn with_capacity(capacity: usize) -> MultiValue {
-        MultiValue(VecDeque::with_capacity(capacity))
-    }
-
-    #[inline]
-    pub(crate) fn from_lua_iter<T: IntoLua>(lua: &Lua, iter: impl IntoIterator<Item = T>) -> Result<Self> {
-        let iter = iter.into_iter();
-        let mut multi_value = MultiValue::with_capacity(iter.size_hint().0);
-        for value in iter {
-            multi_value.push_back(value.into_lua(lua)?);
-        }
-        Ok(multi_value)
-    }
-}
-
-impl FromIterator<Value> for MultiValue {
-    #[inline]
-    fn from_iter<I: IntoIterator<Item = Value>>(iter: I) -> Self {
-        let mut multi_value = MultiValue::new();
-        multi_value.extend(iter);
-        multi_value
-    }
-}
-
-impl IntoIterator for MultiValue {
-    type Item = Value;
-    type IntoIter = vec_deque::IntoIter<Value>;
-
-    #[inline]
-    fn into_iter(mut self) -> Self::IntoIter {
-        let deque = mem::take(&mut self.0);
-        mem::forget(self);
-        deque.into_iter()
-    }
-}
-
-impl<'a> IntoIterator for &'a MultiValue {
-    type Item = &'a Value;
-    type IntoIter = vec_deque::Iter<'a, Value>;
-
-    #[inline]
-    fn into_iter(self) -> Self::IntoIter {
-        self.0.iter()
-    }
-}
-
 #[cfg(test)]
 mod assertions {
     use super::*;
 
     #[cfg(not(feature = "send"))]
     static_assertions::assert_not_impl_any!(Value: Send);
-    #[cfg(not(feature = "send"))]
-    static_assertions::assert_not_impl_any!(MultiValue: Send);
-
     #[cfg(feature = "send")]
     static_assertions::assert_impl_all!(Value: Send, Sync);
-    #[cfg(feature = "send")]
-    static_assertions::assert_impl_all!(MultiValue: Send, Sync);
 }

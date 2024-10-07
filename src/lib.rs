@@ -109,7 +109,7 @@ pub use crate::chunk::{AsChunk, Chunk, ChunkMode};
 pub use crate::error::{Error, ErrorContext, ExternalError, ExternalResult, Result};
 pub use crate::function::{Function, FunctionInfo};
 pub use crate::hook::{Debug, DebugEvent, DebugNames, DebugSource, DebugStack};
-pub use crate::multi::Variadic;
+pub use crate::multi::{MultiValue, Variadic};
 pub use crate::scope::Scope;
 pub use crate::state::{GCMode, Lua, LuaOptions};
 pub use crate::stdlib::StdLib;
@@ -126,7 +126,7 @@ pub use crate::userdata::{
     AnyUserData, MetaMethod, UserData, UserDataFields, UserDataMetatable, UserDataMethods, UserDataRef,
     UserDataRefMut, UserDataRegistry,
 };
-pub use crate::value::{MultiValue, Nil, Value};
+pub use crate::value::{Nil, Value};
 
 #[cfg(not(feature = "luau"))]
 pub use crate::hook::HookTriggers;

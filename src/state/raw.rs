@@ -38,9 +38,9 @@ use crate::hook::{Debug, HookTriggers};
 
 #[cfg(feature = "async")]
 use {
+    crate::multi::MultiValue,
     crate::traits::FromLuaMulti,
     crate::types::{AsyncCallback, AsyncCallbackUpvalue, AsyncPollUpvalue},
-    crate::value::MultiValue,
     std::ptr::NonNull,
     std::task::{Context, Poll, Waker},
 };
