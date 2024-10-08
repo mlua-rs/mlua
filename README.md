@@ -19,6 +19,10 @@
 
 # The main branch is the v0.10, development version of `mlua`. Please see the [v0.9](https://github.com/mlua-rs/mlua/tree/v0.9) branch for the stable versions of `mlua`.
 
+> **Note**
+>
+> See (upcoming) v0.10 [release notes](https://github.com/khvzak/mlua/blob/main/docs/release_notes/v0.10.md).
+
 `mlua` is bindings to [Lua](https://www.lua.org) programming language for Rust with a goal to provide
 _safe_ (as far as it's possible), high level, easy to use, practical and flexible API.
 
@@ -53,6 +57,7 @@ Below is a list of the available feature flags. By default `mlua` does not enabl
 * `send`: make `mlua::Lua: Send + Sync` (adds [`Send`] requirement to `mlua::Function` and `mlua::UserData`)
 * `serialize`: add serialization and deserialization support to `mlua` types using [serde] framework
 * `macros`: enable procedural macros (such as `chunk!`)
+* `anyhow`: enable `anyhow::Error` conversion into Lua
 
 [5.4]: https://www.lua.org/manual/5.4/manual.html
 [5.3]: https://www.lua.org/manual/5.3/manual.html
@@ -128,7 +133,7 @@ Add to `Cargo.toml` :
 
 ``` toml
 [dependencies]
-mlua = { version = "0.9.9", features = ["lua54", "vendored"] }
+mlua = { version = "0.10.0-rc.1", features = ["lua54", "vendored"] }
 ```
 
 `main.rs`
@@ -163,7 +168,7 @@ Add to `Cargo.toml` :
 crate-type = ["cdylib"]
 
 [dependencies]
-mlua = { version = "0.9.9", features = ["lua54", "module"] }
+mlua = { version = "0.10.0-rc.1", features = ["lua54", "module"] }
 ```
 
 `lib.rs` :
