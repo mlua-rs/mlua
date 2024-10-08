@@ -1030,11 +1030,10 @@ impl Lua {
     }
 
     /// Creates a table and fills it with values from an iterator.
-    pub fn create_table_from<K, V, I>(&self, iter: I) -> Result<Table>
+    pub fn create_table_from<K, V>(&self, iter: impl IntoIterator<Item = (K, V)>) -> Result<Table>
     where
         K: IntoLua,
         V: IntoLua,
-        I: IntoIterator<Item = (K, V)>,
     {
         let lua = self.lock();
         let state = lua.state();
@@ -1061,10 +1060,9 @@ impl Lua {
     }
 
     /// Creates a table from an iterator of values, using `1..` as the keys.
-    pub fn create_sequence_from<T, I>(&self, iter: I) -> Result<Table>
+    pub fn create_sequence_from<T>(&self, iter: impl IntoIterator<Item = T>) -> Result<Table>
     where
         T: IntoLua,
-        I: IntoIterator<Item = T>,
     {
         unsafe { self.lock().create_sequence_from(iter) }
     }
