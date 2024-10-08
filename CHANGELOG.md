@@ -1,3 +1,18 @@
+## v0.10.0-rc.1
+
+- `Lua::scope` is back
+- Support yielding from hooks for Lua 5.3+
+- Support setting metatable for Lua builtin types (number/string/function/etc)
+- Added `LuaNativeFn`/`LuaNativeFnMut`/`LuaNativeAsyncFn` traits for using in `Function::wrap`
+- Added `Error::chain` method to return iterator over nested errors
+- Added `Lua::exec_raw` helper to execute low-level Lua C API code
+- Added `Either<L, R>` enum to combine two types into a single one
+- Added a new `Buffer` type for Luau
+- Added `Value::is_error` and `Value::as_error` helpers
+- Added `Value::Other` variant to represent unknown Lua types (eg LuaJIT CDATA)
+- Added (optional) `anyhow` feature to implement `IntoLua` for `anyhow::Error`
+- Added `IntoLua`/`FromLua` for `OsString`/`OsStr` and `PathBuf`/`Path`
+
 ## v0.10.0-beta.2
 
 - Updated `ThreadStatus` enum to include `Running` and `Finished` variants.
