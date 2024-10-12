@@ -526,6 +526,9 @@ pub struct lua_Callbacks {
     pub debuginterrupt: Option<unsafe extern "C-unwind" fn(L: *mut lua_State, ar: *mut lua_Debug)>,
     /// gets called when protected call results in an error
     pub debugprotectederror: Option<unsafe extern "C-unwind" fn(L: *mut lua_State)>,
+
+    /// gets called when memory is allocated
+    pub onallocate: Option<unsafe extern "C-unwind" fn(L: *mut lua_State, osize: usize, nsize: usize)>,
 }
 
 extern "C" {
@@ -535,4 +538,5 @@ extern "C" {
 // Functions from customization lib
 extern "C" {
     pub fn luau_setfflag(name: *const c_char, value: c_int) -> c_int;
+    pub fn lua_getmetatablepointer(L: *mut lua_State, idx: c_int) -> *const c_void;
 }
