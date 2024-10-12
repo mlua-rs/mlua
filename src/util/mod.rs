@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 use std::ffi::CStr;
-use std::os::raw::{c_char, c_int};
+use std::os::raw::{c_char, c_int, c_void};
 use std::{ptr, slice, str};
 
 use crate::error::{Error, Result};
@@ -279,6 +279,21 @@ pub(crate) unsafe fn to_string(state: *mut ffi::lua_State, index: c_int) -> Stri
             let type_name = CStr::from_ptr(ffi::lua_typename(state, type_id)).to_string_lossy();
             format!("<{type_name} {:?}>", ffi::lua_topointer(state, index))
         }
+    }
+}
+
+#[inline(always)]
+pub(crate) unsafe fn get_metatable_ptr(state: *mut ffi::lua_State, index: c_int) -> *const c_void {
+    #[cfg(feature = "luau")]
+    return ffi::lua_getmetatablepointer(state, index);
+
+    #[cfg(not(feature = "luau"))]
+    if ffi::lua_getmetatable(state, index) == 0 {
+        ptr::null()
+    } else {
+        let p = ffi::lua_topointer(state, -1);
+        ffi::lua_pop(state, 1);
+        p
     }
 }
 

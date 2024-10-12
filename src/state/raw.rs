@@ -24,9 +24,9 @@ use crate::types::{
 use crate::userdata::{AnyUserData, MetaMethod, UserData, UserDataRegistry, UserDataStorage};
 use crate::util::{
     assert_stack, check_stack, get_destructed_userdata_metatable, get_internal_userdata, get_main_state,
-    get_userdata, init_error_registry, init_internal_metatable, init_userdata_metatable, pop_error,
-    push_internal_userdata, push_string, push_table, rawset_field, safe_pcall, safe_xpcall, short_type_name,
-    StackGuard, WrappedFailure,
+    get_metatable_ptr, get_userdata, init_error_registry, init_internal_metatable, init_userdata_metatable,
+    pop_error, push_internal_userdata, push_string, push_table, rawset_field, safe_pcall, safe_xpcall,
+    short_type_name, StackGuard, WrappedFailure,
 };
 use crate::value::{Nil, Value};
 
@@ -1026,11 +1026,10 @@ impl RawLua {
         state: *mut ffi::lua_State,
         idx: c_int,
     ) -> Result<Option<TypeId>> {
-        if ffi::lua_getmetatable(state, idx) == 0 {
+        let mt_ptr = get_metatable_ptr(state, idx);
+        if mt_ptr.is_null() {
             return Err(Error::UserDataTypeMismatch);
         }
-        let mt_ptr = ffi::lua_topointer(state, -1);
-        ffi::lua_pop(state, 1);
 
         // Fast path to skip looking up the metatable in the map
         let (last_mt, last_type_id) = (*self.extra.get()).last_checked_userdata_mt;

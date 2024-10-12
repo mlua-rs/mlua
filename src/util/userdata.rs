@@ -3,7 +3,7 @@ use std::os::raw::{c_int, c_void};
 use std::{ptr, str};
 
 use crate::error::Result;
-use crate::util::{check_stack, push_string, push_table, rawset_field, TypeKey};
+use crate::util::{check_stack, get_metatable_ptr, push_string, push_table, rawset_field, TypeKey};
 
 // Pushes the userdata and attaches a metatable with __gc method.
 // Internally uses 3 stack spaces, does not call checkstack.
@@ -58,25 +58,20 @@ pub(crate) unsafe fn init_internal_metatable<T: TypeKey>(
 pub(crate) unsafe fn get_internal_userdata<T: TypeKey>(
     state: *mut ffi::lua_State,
     index: c_int,
-    type_mt_ptr: *const c_void,
+    mut type_mt_ptr: *const c_void,
 ) -> *mut T {
     let ud = ffi::lua_touserdata(state, index) as *mut T;
-    if ud.is_null() || ffi::lua_getmetatable(state, index) == 0 {
+    if ud.is_null() {
         return ptr::null_mut();
     }
-    if !type_mt_ptr.is_null() {
-        let ud_mt_ptr = ffi::lua_topointer(state, -1);
-        ffi::lua_pop(state, 1);
-        if ud_mt_ptr != type_mt_ptr {
-            return ptr::null_mut();
-        }
-    } else {
+    let mt_ptr = get_metatable_ptr(state, index);
+    if type_mt_ptr.is_null() {
         get_internal_metatable::<T>(state);
-        let res = ffi::lua_rawequal(state, -1, -2);
-        ffi::lua_pop(state, 2);
-        if res == 0 {
-            return ptr::null_mut();
-        }
+        type_mt_ptr = ffi::lua_topointer(state, -1);
+        ffi::lua_pop(state, 1);
+    }
+    if mt_ptr != type_mt_ptr {
+        return ptr::null_mut();
     }
     ud
 }

@@ -9,7 +9,9 @@ use crate::state::{Lua, LuaGuard, RawLua};
 use crate::traits::{FromLuaMulti, IntoLuaMulti};
 use crate::types::{Callback, CallbackUpvalue, ScopedCallback, ValueRef};
 use crate::userdata::{AnyUserData, UserData, UserDataRegistry, UserDataStorage};
-use crate::util::{self, assert_stack, check_stack, get_userdata, take_userdata, StackGuard};
+use crate::util::{
+    self, assert_stack, check_stack, get_metatable_ptr, get_userdata, take_userdata, StackGuard,
+};
 
 /// Constructed by the [`Lua::scope`] method, allows temporarily creating Lua userdata and
 /// callbacks that are not required to be `Send` or `'static`.
@@ -199,9 +201,7 @@ impl<'scope, 'env: 'scope> Scope<'scope, 'env> {
                 }
 
                 // Deregister metatable
-                ffi::lua_getmetatable(state, -1);
-                let mt_ptr = ffi::lua_topointer(state, -1);
-                ffi::lua_pop(state, 1);
+                let mt_ptr = get_metatable_ptr(state, -1);
                 rawlua.deregister_userdata_metatable(mt_ptr);
 
                 let ud = take_userdata::<UserDataStorage<T>>(state);
