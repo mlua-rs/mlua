@@ -309,7 +309,7 @@ impl fmt::Display for Error {
             Error::DeserializeError(err) => {
                 write!(fmt, "deserialize error: {err}")
             },
-            Error::ExternalError(err) => write!(fmt, "{err}"),
+            Error::ExternalError(err) => err.fmt(fmt),
             Error::WithContext { context, cause } => {
                 writeln!(fmt, "{context}")?;
                 write!(fmt, "{cause}")
@@ -328,10 +328,7 @@ impl StdError for Error {
             // returns nothing.
             Error::CallbackError { .. } => None,
             Error::ExternalError(err) => err.source(),
-            Error::WithContext { cause, .. } => match cause.as_ref() {
-                Error::ExternalError(err) => err.source(),
-                _ => None,
-            },
+            Error::WithContext { cause, .. } => Self::source(&cause),
             _ => None,
         }
     }
@@ -357,10 +354,7 @@ impl Error {
     {
         match self {
             Error::ExternalError(err) => err.downcast_ref(),
-            Error::WithContext { cause, .. } => match cause.as_ref() {
-                Error::ExternalError(err) => err.downcast_ref(),
-                _ => None,
-            },
+            Error::WithContext { cause, .. } => Self::downcast_ref(&cause),
             _ => None,
         }
     }
@@ -370,6 +364,16 @@ impl Error {
         Chain {
             root: self,
             current: None,
+        }
+    }
+
+    /// Returns the parent of this error.
+    #[doc(hidden)]
+    pub fn parent(&self) -> Option<&Error> {
+        match self {
+            Error::CallbackError { cause, .. } => Some(cause.as_ref()),
+            Error::WithContext { cause, .. } => Some(cause.as_ref()),
+            _ => None,
         }
     }
 

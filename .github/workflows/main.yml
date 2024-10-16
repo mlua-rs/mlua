@@ -27,8 +27,8 @@ jobs:
       - name: Build ${{ matrix.lua }} vendored
         run: |
           cargo build --features "${{ matrix.lua }},vendored"
-          cargo build --features "${{ matrix.lua }},vendored,async,serialize,macros"
-          cargo build --features "${{ matrix.lua }},vendored,async,serialize,macros,send"
+          cargo build --features "${{ matrix.lua }},vendored,async,serialize,macros,anyhow"
+          cargo build --features "${{ matrix.lua }},vendored,async,serialize,macros,anyhow,send"
         shell: bash
       - name: Build ${{ matrix.lua }} pkg-config
         if: ${{ matrix.os == 'ubuntu-latest' }}
@@ -123,8 +123,8 @@ jobs:
       - name: Run ${{ matrix.lua }} tests
         run: |
           cargo test --features "${{ matrix.lua }},vendored"
-          cargo test --features "${{ matrix.lua }},vendored,async,serialize,macros"
-          cargo test --features "${{ matrix.lua }},vendored,async,serialize,macros,send"
+          cargo test --features "${{ matrix.lua }},vendored,async,serialize,macros,anyhow"
+          cargo test --features "${{ matrix.lua }},vendored,async,serialize,macros,anyhow,send"
         shell: bash
       - name: Run compile tests (macos lua54)
         if: ${{ matrix.os == 'macos-latest' && matrix.lua == 'lua54' }}
@@ -281,4 +281,4 @@ jobs:
       - uses: giraffate/clippy-action@v1
         with:
           reporter: 'github-pr-review'
-          clippy_flags: --features "${{ matrix.lua }},vendored,async,send,serialize,macros"
+          clippy_flags: --features "${{ matrix.lua }},vendored,async,send,serialize,macros,anyhow"

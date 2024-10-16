@@ -1,4 +1,5 @@
-use std::io;
+use std::error::Error as _;
+use std::{fmt, io};
 
 use mlua::{Error, ErrorContext, Lua, Result};
 
@@ -27,7 +28,6 @@ fn test_error_context() -> Result<()> {
         .load("local _, err = pcall(func2); return tostring(err)")
         .eval::<String>()?;
     assert!(msg2.contains("failed to find global"));
-    println!("{msg2}");
     assert!(msg2.contains("error converting Lua nil to String"));
 
     // Rewrite context message and test `downcast_ref`
@@ -36,13 +36,12 @@ fn test_error_context() -> Result<()> {
             .context("some context")
             .context("some new context")
     })?;
-    let res = func3.call::<()>(()).err().unwrap();
-    let Error::CallbackError { cause, .. } = &res else {
-        unreachable!()
-    };
-    assert!(!res.to_string().contains("some context"));
-    assert!(res.to_string().contains("some new context"));
-    assert!(cause.downcast_ref::<io::Error>().is_some());
+    let err = func3.call::<()>(()).unwrap_err();
+    let err = err.parent().unwrap();
+    assert!(!err.to_string().contains("some context"));
+    assert!(err.to_string().contains("some new context"));
+    assert!(err.downcast_ref::<io::Error>().is_some());
+    assert!(err.downcast_ref::<fmt::Error>().is_none());
 
     Ok(())
 }
@@ -59,7 +58,7 @@ fn test_error_chain() -> Result<()> {
         let err = Error::external(io::Error::new(io::ErrorKind::Other, "other")).context("io error");
         Err::<(), _>(err)
     })?;
-    let err = func.call::<()>(()).err().unwrap();
+    let err = func.call::<()>(()).unwrap_err();
     assert_eq!(err.chain().count(), 3);
     for (i, err) in err.chain().enumerate() {
         match i {
@@ -69,6 +68,11 @@ fn test_error_chain() -> Result<()> {
             _ => unreachable!(),
         }
     }
+
+    let err = err.parent().unwrap();
+    assert!(err.source().is_none()); // The source is included to the `Display` output
+    assert!(err.to_string().contains("io error"));
+    assert!(err.to_string().contains("other"));
 
     Ok(())
 }
