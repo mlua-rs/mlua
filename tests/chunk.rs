@@ -42,7 +42,7 @@ fn test_chunk_impls() -> Result<()> {
 
     // StdString
     assert_eq!(lua.load(String::from("1")).eval::<i32>()?, 1);
-    assert_eq!(lua.load(&*String::from("2")).eval::<i32>()?, 2);
+    assert_eq!(lua.load(&String::from("2")).eval::<i32>()?, 2);
 
     // &[u8]
     assert_eq!(lua.load(&b"3"[..]).eval::<i32>()?, 3);
