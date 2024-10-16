@@ -203,7 +203,7 @@ fn lua_loader(lua: &Lua, modname: StdString) -> Result<Value> {
         match fs::read(&file_path) {
             Ok(buf) => {
                 return lua
-                    .load(&buf)
+                    .load(buf)
                     .set_name(format!("={}", file_path.display()))
                     .set_mode(ChunkMode::Text)
                     .into_function()
