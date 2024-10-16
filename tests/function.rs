@@ -1,27 +1,34 @@
-use mlua::{Error, Function, Lua, Result, String, Table};
+use mlua::{Error, Function, Lua, Result, String, Table, Variadic};
 
 #[test]
-fn test_function() -> Result<()> {
+fn test_function_call() -> Result<()> {
     let lua = Lua::new();
 
-    let globals = lua.globals();
-    lua.load(
-        r#"
-        function concat(arg1, arg2)
-            return arg1 .. arg2
-        end
-    "#,
-    )
-    .exec()?;
-
-    let concat = globals.get::<Function>("concat")?;
+    let concat = lua
+        .load(r#"function(arg1, arg2) return arg1 .. arg2 end"#)
+        .eval::<Function>()?;
     assert_eq!(concat.call::<String>(("foo", "bar"))?, "foobar");
 
     Ok(())
 }
 
 #[test]
-fn test_bind() -> Result<()> {
+fn test_function_call_error() -> Result<()> {
+    let lua = Lua::new();
+
+    let concat_err = lua
+        .load(r#"function(arg1, arg2) error("concat error") end"#)
+        .eval::<Function>()?;
+    match concat_err.call::<String>(("foo", "bar")) {
+        Err(Error::RuntimeError(msg)) if msg.contains("concat error") => {}
+        other => panic!("unexpected result: {other:?}"),
+    }
+
+    Ok(())
+}
+
+#[test]
+fn test_function_bind() -> Result<()> {
     let lua = Lua::new();
 
     let globals = lua.globals();
@@ -54,59 +61,13 @@ fn test_bind() -> Result<()> {
 }
 
 #[test]
-fn test_rust_function() -> Result<()> {
+#[cfg(not(target_arch = "wasm32"))]
+fn test_function_bind_error() -> Result<()> {
     let lua = Lua::new();
 
-    let globals = lua.globals();
-    lua.load(
-        r#"
-        function lua_function()
-            return rust_function()
-        end
-
-        -- Test to make sure chunk return is ignored
-        return 1
-    "#,
-    )
-    .exec()?;
-
-    let lua_function = globals.get::<Function>("lua_function")?;
-    let rust_function = lua.create_function(|_, ()| Ok("hello"))?;
-
-    globals.set("rust_function", rust_function)?;
-    assert_eq!(lua_function.call::<String>(())?, "hello");
-
-    Ok(())
-}
-
-#[test]
-fn test_c_function() -> Result<()> {
-    let lua = Lua::new();
-
-    unsafe extern "C-unwind" fn c_function(state: *mut mlua::lua_State) -> std::os::raw::c_int {
-        ffi::lua_pushboolean(state, 1);
-        ffi::lua_setglobal(state, b"c_function\0" as *const _ as *const _);
-        0
-    }
-
-    let func = unsafe { lua.create_c_function(c_function)? };
-    func.call::<()>(())?;
-    assert_eq!(lua.globals().get::<bool>("c_function")?, true);
-
-    Ok(())
-}
-
-#[cfg(not(feature = "luau"))]
-#[test]
-fn test_dump() -> Result<()> {
-    let lua = unsafe { Lua::unsafe_new() };
-
-    let concat_lua = lua
-        .load(r#"function(arg1, arg2) return arg1 .. arg2 end"#)
-        .eval::<Function>()?;
-    let concat = lua.load(&concat_lua.dump(false)).into_function()?;
-
-    assert_eq!(concat.call::<String>(("foo", "bar"))?, "foobar");
+    let func = lua.load(r#"function(...) end"#).eval::<Function>()?;
+    assert!(func.bind(Variadic::from_iter(1..1000000)).is_err());
+    assert!(func.call::<()>(Variadic::from_iter(1..1000000)).is_err());
 
     Ok(())
 }
@@ -114,14 +75,15 @@ fn test_dump() -> Result<()> {
 #[test]
 fn test_function_environment() -> Result<()> {
     let lua = Lua::new();
+    let globals = lua.globals();
 
     // We must not get or set environment for C functions
     let rust_func = lua.create_function(|_, ()| Ok("hello"))?;
     assert_eq!(rust_func.environment(), None);
-    assert_eq!(rust_func.set_environment(lua.globals()).ok(), Some(false));
+    assert_eq!(rust_func.set_environment(globals.clone()).ok(), Some(false));
 
     // Test getting Lua function environment
-    lua.globals().set("hello", "global")?;
+    globals.set("hello", "global")?;
     let lua_func = lua
         .load(
             r#"
@@ -135,7 +97,7 @@ fn test_function_environment() -> Result<()> {
         .eval::<Function>()?;
     let lua_func2 = lua.load("return hello").into_function()?;
     assert_eq!(lua_func.call::<String>(())?, "global");
-    assert_eq!(lua_func.environment(), Some(lua.globals()));
+    assert_eq!(lua_func.environment().as_ref(), Some(&globals));
 
     // Test changing the environment
     let env = lua.create_table_from([("hello", "local")])?;
@@ -154,9 +116,9 @@ fn test_function_environment() -> Result<()> {
     "#,
     )
     .exec()?;
-    let lucky = lua.globals().get::<Function>("lucky")?;
+    let lucky = globals.get::<Function>("lucky")?;
     assert_eq!(lucky.call::<String>(())?, "number is 15");
-    let new_env = lua.globals().get::<Table>("new_env")?;
+    let new_env = globals.get::<Table>("new_env")?;
     lucky.set_environment(new_env)?;
     assert_eq!(lucky.call::<String>(())?, "15");
 
@@ -231,6 +193,95 @@ fn test_function_info() -> Result<()> {
     assert_eq!(print_info.source.as_deref(), Some("=[C]"));
     assert_eq!(print_info.what, "C");
     assert_eq!(print_info.line_defined, None);
+
+    Ok(())
+}
+
+#[cfg(not(feature = "luau"))]
+#[test]
+fn test_function_dump() -> Result<()> {
+    let lua = unsafe { Lua::unsafe_new() };
+
+    let concat_lua = lua
+        .load(r#"function(arg1, arg2) return arg1 .. arg2 end"#)
+        .eval::<Function>()?;
+    let concat = lua.load(&concat_lua.dump(false)).into_function()?;
+
+    assert_eq!(concat.call::<String>(("foo", "bar"))?, "foobar");
+
+    Ok(())
+}
+
+#[cfg(feature = "luau")]
+#[test]
+fn test_finction_coverage() -> Result<()> {
+    let lua = Lua::new();
+
+    lua.set_compiler(mlua::Compiler::default().set_coverage_level(1));
+
+    let f = lua
+        .load(
+            r#"local s = "abc"
+        assert(#s == 3)
+
+        function abc(i)
+            if i < 5 then
+                return 0
+            else
+                return 1
+            end
+        end
+
+        (function()
+            (function() abc(10) end)()
+        end)()
+        "#,
+        )
+        .into_function()?;
+
+    f.call::<()>(())?;
+
+    let mut report = Vec::new();
+    f.coverage(|cov| {
+        report.push(cov);
+    });
+
+    assert_eq!(
+        report[0],
+        mlua::CoverageInfo {
+            function: None,
+            line_defined: 1,
+            depth: 0,
+            hits: vec![-1, 1, 1, -1, 1, -1, -1, -1, -1, -1, -1, -1, 1, -1, -1, -1],
+        }
+    );
+    assert_eq!(
+        report[1],
+        mlua::CoverageInfo {
+            function: Some("abc".into()),
+            line_defined: 4,
+            depth: 1,
+            hits: vec![-1, -1, -1, -1, -1, 1, 0, -1, 1, -1, -1, -1, -1, -1, -1, -1],
+        }
+    );
+    assert_eq!(
+        report[2],
+        mlua::CoverageInfo {
+            function: None,
+            line_defined: 12,
+            depth: 1,
+            hits: vec![-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 1, -1, -1],
+        }
+    );
+    assert_eq!(
+        report[3],
+        mlua::CoverageInfo {
+            function: None,
+            line_defined: 13,
+            depth: 2,
+            hits: vec![-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 1, -1, -1],
+        }
+    );
 
     Ok(())
 }

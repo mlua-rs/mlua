@@ -927,26 +927,6 @@ fn test_too_many_recursions() -> Result<()> {
 
 #[test]
 #[cfg(not(target_arch = "wasm32"))]
-fn test_too_many_binds() -> Result<()> {
-    let lua = Lua::new();
-    let globals = lua.globals();
-    lua.load(
-        r#"
-        function f(...)
-        end
-    "#,
-    )
-    .exec()?;
-
-    let concat = globals.get::<Function>("f")?;
-    assert!(concat.bind(Variadic::from_iter(1..1000000)).is_err());
-    assert!(concat.call::<()>(Variadic::from_iter(1..1000000)).is_err());
-
-    Ok(())
-}
-
-#[test]
-#[cfg(not(target_arch = "wasm32"))]
 fn test_ref_stack_exhaustion() {
     match catch_unwind(AssertUnwindSafe(|| -> Result<()> {
         let lua = Lua::new();

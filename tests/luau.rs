@@ -6,10 +6,7 @@ use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
-use mlua::{
-    Compiler, CoverageInfo, Error, Lua, LuaOptions, Result, StdLib, Table, ThreadStatus, Value, Vector,
-    VmState,
-};
+use mlua::{Compiler, Error, Lua, LuaOptions, Result, StdLib, Table, ThreadStatus, Value, Vector, VmState};
 
 #[test]
 fn test_version() -> Result<()> {
@@ -388,79 +385,6 @@ fn test_interrupts() -> Result<()> {
     }
 
     lua.remove_interrupt();
-
-    Ok(())
-}
-
-#[test]
-fn test_coverage() -> Result<()> {
-    let lua = Lua::new();
-
-    lua.set_compiler(Compiler::default().set_coverage_level(1));
-
-    let f = lua
-        .load(
-            r#"local s = "abc"
-        assert(#s == 3)
-
-        function abc(i)
-            if i < 5 then
-                return 0
-            else
-                return 1
-            end
-        end
-
-        (function()
-            (function() abc(10) end)()
-        end)()
-        "#,
-        )
-        .into_function()?;
-
-    f.call::<()>(())?;
-
-    let mut report = Vec::new();
-    f.coverage(|cov| {
-        report.push(cov);
-    });
-
-    assert_eq!(
-        report[0],
-        CoverageInfo {
-            function: None,
-            line_defined: 1,
-            depth: 0,
-            hits: vec![-1, 1, 1, -1, 1, -1, -1, -1, -1, -1, -1, -1, 1, -1, -1, -1],
-        }
-    );
-    assert_eq!(
-        report[1],
-        CoverageInfo {
-            function: Some("abc".into()),
-            line_defined: 4,
-            depth: 1,
-            hits: vec![-1, -1, -1, -1, -1, 1, 0, -1, 1, -1, -1, -1, -1, -1, -1, -1],
-        }
-    );
-    assert_eq!(
-        report[2],
-        CoverageInfo {
-            function: None,
-            line_defined: 12,
-            depth: 1,
-            hits: vec![-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 1, -1, -1],
-        }
-    );
-    assert_eq!(
-        report[3],
-        CoverageInfo {
-            function: None,
-            line_defined: 13,
-            depth: 2,
-            hits: vec![-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 1, -1, -1],
-        }
-    );
 
     Ok(())
 }
