@@ -104,15 +104,15 @@ impl Value {
     /// Compares two values for equality.
     ///
     /// Equality comparisons do not convert strings to numbers or vice versa.
-    /// Tables, Functions, Threads, and Userdata are compared by reference:
+    /// Tables, Functions, Threads, and UserData are compared by reference:
     /// two objects are considered equal only if they are the same object.
     ///
-    /// If Tables or Userdata have `__eq` metamethod then mlua will try to invoke it.
+    /// If Tables or UserData have `__eq` metamethod then mlua will try to invoke it.
     /// The first value is checked first. If that value does not define a metamethod
     /// for `__eq`, then mlua will check the second value.
     /// Then mlua calls the metamethod with the two values as arguments, if found.
-    pub fn equals<T: AsRef<Self>>(&self, other: T) -> Result<bool> {
-        match (self, other.as_ref()) {
+    pub fn equals(&self, other: &Self) -> Result<bool> {
+        match (self, other) {
             (Value::Table(a), Value::Table(b)) => a.equals(b),
             (Value::UserData(a), Value::UserData(b)) => a.equals(b),
             (a, b) => Ok(a == b),
@@ -607,13 +607,6 @@ impl PartialEq for Value {
             (Value::Buffer(a), Value::Buffer(b)) => a == b,
             _ => false,
         }
-    }
-}
-
-impl AsRef<Value> for Value {
-    #[inline]
-    fn as_ref(&self) -> &Self {
-        self
     }
 }
 

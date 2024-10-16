@@ -52,7 +52,7 @@ fn test_value_eq() -> Result<()> {
     assert!(string1 == string2);
     assert!(string1.equals(&string2)?);
     assert!(num1 == num2);
-    assert!(num1.equals(num2)?);
+    assert!(num1.equals(&num2)?);
     assert!(num1 != num3);
     assert!(func1 == func2);
     assert!(func1 != func3);

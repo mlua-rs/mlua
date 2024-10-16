@@ -902,7 +902,7 @@ impl AnyUserData {
     /// [`UserDataMetatable`]: crate::UserDataMetatable
     #[inline]
     pub fn metatable(&self) -> Result<UserDataMetatable> {
-        self.get_raw_metatable().map(UserDataMetatable)
+        self.raw_metatable().map(UserDataMetatable)
     }
 
     #[doc(hidden)]
@@ -911,7 +911,7 @@ impl AnyUserData {
         self.metatable()
     }
 
-    fn get_raw_metatable(&self) -> Result<Table> {
+    fn raw_metatable(&self) -> Result<Table> {
         let lua = self.0.lua.lock();
         let state = lua.state();
         unsafe {
@@ -958,15 +958,14 @@ impl AnyUserData {
         }
     }
 
-    pub(crate) fn equals<T: AsRef<Self>>(&self, other: T) -> Result<bool> {
-        let other = other.as_ref();
+    pub(crate) fn equals(&self, other: &Self) -> Result<bool> {
         // Uses lua_rawequal() under the hood
         if self == other {
             return Ok(true);
         }
 
-        let mt = self.get_raw_metatable()?;
-        if mt != other.get_raw_metatable()? {
+        let mt = self.raw_metatable()?;
+        if mt != other.raw_metatable()? {
             return Ok(false);
         }
 
@@ -1007,13 +1006,6 @@ impl AnyUserData {
                 _ => Err(Error::UserDataTypeMismatch),
             }
         }
-    }
-}
-
-impl AsRef<AnyUserData> for AnyUserData {
-    #[inline]
-    fn as_ref(&self) -> &Self {
-        self
     }
 }
 

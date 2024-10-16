@@ -218,13 +218,12 @@ impl Table {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn equals<T: AsRef<Self>>(&self, other: T) -> Result<bool> {
-        let other = other.as_ref();
+    pub fn equals(&self, other: &Self) -> Result<bool> {
         if self == other {
             return Ok(true);
         }
 
-        // Compare using __eq metamethod if exists
+        // Compare using `__eq` metamethod if exists
         // First, check the self for the metamethod.
         // If self does not define it, then check the other table.
         if let Some(mt) = self.metatable() {
@@ -808,13 +807,6 @@ impl fmt::Debug for Table {
             return self.fmt_pretty(fmt, 0, &mut HashSet::new());
         }
         fmt.debug_tuple("Table").field(&self.0).finish()
-    }
-}
-
-impl AsRef<Table> for Table {
-    #[inline]
-    fn as_ref(&self) -> &Self {
-        self
     }
 }
 
