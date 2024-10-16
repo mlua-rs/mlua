@@ -17,6 +17,15 @@ fn test_string_compare() {
     with_str("teststring", |t| assert_eq!(t, t)); // mlua::String
     with_str("teststring", |t| assert_eq!(t, Cow::from(b"teststring".as_ref()))); // Cow (borrowed)
     with_str("bla", |t| assert_eq!(t, Cow::from(b"bla".to_vec()))); // Cow (owned)
+
+    // Test ordering
+    with_str("a", |a| {
+        assert!(!(a < a));
+        assert!(!(a > a));
+    });
+    with_str("a", |a| assert!(a < "b"));
+    with_str("a", |a| assert!(a < b"b"));
+    with_str("a", |a| with_str("b", |b| assert!(a < b)));
 }
 
 #[test]
@@ -52,7 +61,7 @@ fn test_string_views() -> Result<()> {
 }
 
 #[test]
-fn test_raw_string() -> Result<()> {
+fn test_string_from_bytes() -> Result<()> {
     let lua = Lua::new();
 
     let rs = lua.create_string(&[0, 1, 2, 3, 0, 1, 2, 3])?;
@@ -77,12 +86,14 @@ fn test_string_hash() -> Result<()> {
 }
 
 #[test]
-fn test_string_debug() -> Result<()> {
+fn test_string_fmt_debug() -> Result<()> {
     let lua = Lua::new();
 
     // Valid utf8
     let s = lua.create_string("hello")?;
     assert_eq!(format!("{s:?}"), r#""hello""#);
+    assert_eq!(format!("{:?}", s.to_str()?), r#""hello""#);
+    assert_eq!(format!("{:?}", s.as_bytes()), "[104, 101, 108, 108, 111]");
 
     // Invalid utf8
     let s = lua.create_string(b"hello\0world\r\n\t\xF0\x90\x80")?;

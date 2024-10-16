@@ -172,6 +172,15 @@ impl PartialEq for String {
 
 impl Eq for String {}
 
+impl<T> PartialOrd<T> for String
+where
+    T: AsRef<[u8]> + ?Sized,
+{
+    fn partial_cmp(&self, other: &T) -> Option<cmp::Ordering> {
+        self.as_bytes().partial_cmp(&other.as_ref())
+    }
+}
+
 impl PartialOrd for String {
     fn partial_cmp(&self, other: &String) -> Option<cmp::Ordering> {
         Some(self.cmp(other))
