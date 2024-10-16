@@ -1,4 +1,4 @@
-use mlua::{Error, Lua, Nil, ObjectLike, Result, Table, Value};
+use mlua::{Error, Lua, ObjectLike, Result, Table, Value};
 
 #[test]
 fn test_globals_set_get() -> Result<()> {
@@ -10,6 +10,8 @@ fn test_globals_set_get() -> Result<()> {
     assert_eq!(globals.get::<String>("foo")?, "bar");
     assert_eq!(globals.get::<String>("baz")?, "baf");
 
+    lua.load(r#"assert(foo == "bar")"#).exec().unwrap();
+
     Ok(())
 }
 
@@ -18,16 +20,6 @@ fn test_table() -> Result<()> {
     let lua = Lua::new();
 
     let globals = lua.globals();
-
-    globals.set("table", lua.create_table()?)?;
-    let table1: Table = globals.get("table")?;
-    let table2: Table = globals.get("table")?;
-
-    table1.set("foo", "bar")?;
-    table2.set("baz", "baf")?;
-
-    assert_eq!(table2.get::<String>("foo")?, "bar");
-    assert_eq!(table1.get::<String>("baz")?, "baf");
 
     lua.load(
         r#"
@@ -39,54 +31,31 @@ fn test_table() -> Result<()> {
     .exec()?;
 
     let table1 = globals.get::<Table>("table1")?;
-    let table2 = globals.get::<Table>("table2")?;
-    let table3 = globals.get::<Table>("table3")?;
-
     assert_eq!(table1.len()?, 5);
     assert!(!table1.is_empty());
     assert_eq!(
-        table1.clone().pairs().collect::<Result<Vec<(i64, i64)>>>()?,
+        table1.pairs().collect::<Result<Vec<(i64, i64)>>>()?,
         vec![(1, 1), (2, 2), (3, 3), (4, 4), (5, 5)]
     );
     assert_eq!(
-        table1.clone().sequence_values().collect::<Result<Vec<i64>>>()?,
+        table1.sequence_values().collect::<Result<Vec<i64>>>()?,
         vec![1, 2, 3, 4, 5]
     );
     assert_eq!(table1, [1, 2, 3, 4, 5]);
+    assert_eq!(table1, [1, 2, 3, 4, 5].as_slice());
 
+    let table2 = globals.get::<Table>("table2")?;
     assert_eq!(table2.len()?, 0);
     assert!(table2.is_empty());
-    assert_eq!(
-        table2.clone().pairs().collect::<Result<Vec<(i64, i64)>>>()?,
-        vec![]
-    );
+    assert_eq!(table2.pairs().collect::<Result<Vec<(i64, i64)>>>()?, vec![]);
     assert_eq!(table2, [0; 0]);
 
+    let table3 = globals.get::<Table>("table3")?;
     // sequence_values should only iterate until the first border
     assert_eq!(table3, [1, 2]);
     assert_eq!(
         table3.sequence_values().collect::<Result<Vec<i64>>>()?,
         vec![1, 2]
-    );
-
-    globals.set("table4", lua.create_sequence_from(vec![1, 2, 3, 4, 5])?)?;
-    let table4 = globals.get::<Table>("table4")?;
-    assert_eq!(
-        table4.clone().pairs().collect::<Result<Vec<(i64, i64)>>>()?,
-        vec![(1, 1), (2, 2), (3, 3), (4, 4), (5, 5)]
-    );
-
-    table4.raw_insert(4, 35)?;
-    table4.raw_insert(7, 7)?;
-    assert_eq!(
-        table4.clone().pairs().collect::<Result<Vec<(i64, i64)>>>()?,
-        vec![(1, 1), (2, 2), (3, 3), (4, 35), (5, 4), (6, 5), (7, 7)]
-    );
-
-    table4.raw_remove(1)?;
-    assert_eq!(
-        table4.clone().pairs().collect::<Result<Vec<(i64, i64)>>>()?,
-        vec![(1, 2), (2, 3), (3, 35), (4, 4), (5, 5), (6, 7)]
     );
 
     Ok(())
@@ -97,7 +66,7 @@ fn test_table_push_pop() -> Result<()> {
     let lua = Lua::new();
 
     // Test raw access
-    let table1 = lua.create_sequence_from(vec![123])?;
+    let table1 = lua.create_sequence_from([123])?;
     table1.raw_push(321)?;
     assert_eq!(table1, [123, 321]);
     assert_eq!(table1.raw_pop::<i64>()?, 321);
@@ -123,10 +92,7 @@ fn test_table_push_pop() -> Result<()> {
     table2.push(345)?;
     assert_eq!(table2.len()?, 2);
     assert_eq!(
-        table2
-            .clone()
-            .sequence_values::<i64>()
-            .collect::<Result<Vec<_>>>()?,
+        table2.sequence_values::<i64>().collect::<Result<Vec<_>>>()?,
         vec![]
     );
     assert_eq!(table2.pop::<i64>()?, 345);
@@ -138,21 +104,52 @@ fn test_table_push_pop() -> Result<()> {
 }
 
 #[test]
+fn test_table_insert_remove() -> Result<()> {
+    let lua = Lua::new();
+
+    let globals = lua.globals();
+
+    globals.set("table4", [1, 2, 3, 4, 5])?;
+    let table4 = globals.get::<Table>("table4")?;
+    assert_eq!(
+        table4.pairs().collect::<Result<Vec<(i64, i64)>>>()?,
+        vec![(1, 1), (2, 2), (3, 3), (4, 4), (5, 5)]
+    );
+    table4.raw_insert(4, 35)?;
+    table4.raw_insert(7, 7)?;
+    assert_eq!(
+        table4.pairs().collect::<Result<Vec<(i64, i64)>>>()?,
+        vec![(1, 1), (2, 2), (3, 3), (4, 35), (5, 4), (6, 5), (7, 7)]
+    );
+    table4.raw_remove(1)?;
+    assert_eq!(
+        table4.pairs().collect::<Result<Vec<(i64, i64)>>>()?,
+        vec![(1, 2), (2, 3), (3, 35), (4, 4), (5, 5), (6, 7)]
+    );
+
+    // Wrong index, tables are 1-indexed
+    assert!(table4.raw_insert(0, "123").is_err());
+
+    Ok(())
+}
+
+#[test]
 fn test_table_clear() -> Result<()> {
     let lua = Lua::new();
+
+    let t = lua.create_table()?;
 
     // Check readonly error
     #[cfg(feature = "luau")]
     {
-        let t = lua.create_table()?;
         t.set_readonly(true);
         assert!(matches!(
             t.clear(),
             Err(Error::RuntimeError(err)) if err.contains("attempt to modify a readonly table")
         ));
+        t.set_readonly(false);
     }
 
-    let t = lua.create_table()?;
     // Set array and hash parts
     t.push("abc")?;
     t.push("bcd")?;
@@ -217,15 +214,14 @@ fn test_table_pairs() -> Result<()> {
         )
         .eval::<Table>()?;
 
-    let table2 = table.clone();
     for (i, kv) in table.pairs::<String, Value>().enumerate() {
         let (k, _v) = kv.unwrap();
         match i {
             // Try to add a new key
-            0 => table2.set("new_key", "new_value")?,
+            0 => table.set("new_key", "new_value")?,
             // Try to delete the 2nd key
             1 => {
-                table2.set(k, Value::Nil)?;
+                table.set(k, Value::Nil)?;
                 lua.gc_collect()?;
             }
             _ => {}
@@ -304,21 +300,15 @@ fn test_metatable() -> Result<()> {
     metatable.set("__index", lua.create_function(|_, ()| Ok("index_value"))?)?;
     table.set_metatable(Some(metatable));
     assert_eq!(table.get::<String>("any_key")?, "index_value");
-    match table.raw_get::<Value>("any_key")? {
-        Nil => {}
-        _ => panic!(),
-    }
+    assert_eq!(table.raw_get::<Value>("any_key")?, Value::Nil);
     table.set_metatable(None);
-    match table.get::<Value>("any_key")? {
-        Nil => {}
-        _ => panic!(),
-    };
+    assert_eq!(table.get::<Value>("any_key")?, Value::Nil);
 
     Ok(())
 }
 
 #[test]
-fn test_table_eq() -> Result<()> {
+fn test_table_equals() -> Result<()> {
     let lua = Lua::new();
     let globals = lua.globals();
 
@@ -358,6 +348,7 @@ fn test_table_pointer() -> Result<()> {
     let table1 = lua.create_table()?;
     let table2 = lua.create_table()?;
 
+    // Clone should not create a new table
     assert_eq!(table1.to_pointer(), table1.clone().to_pointer());
     assert_ne!(table1.to_pointer(), table2.to_pointer());
 
@@ -394,6 +385,21 @@ fn test_table_error() -> Result<()> {
     assert!(bad_table.raw_set(1, 1).is_ok());
     assert!(bad_table.raw_get::<i32>(1).is_ok());
     assert_eq!(bad_table.raw_len(), 1);
+
+    Ok(())
+}
+
+#[test]
+fn test_table_fmt() -> Result<()> {
+    let lua = Lua::new();
+
+    let table = lua.load(r#"{1, 2, 3, a = 5, b = { 6 }}"#).eval::<Table>()?;
+    // assert_eq!(format!("{:?}", table), "{1, 2, 3, a = 5, b = {6}}");
+    assert!(format!("{table:?}").starts_with("Table(Ref("));
+    assert_eq!(
+        format!("{table:#?}"),
+        "{\n  [1] = 1,\n  [2] = 2,\n  [3] = 3,\n  [\"a\"] = 5,\n  [\"b\"] = {\n    [1] = 6,\n  },\n}"
+    );
 
     Ok(())
 }
