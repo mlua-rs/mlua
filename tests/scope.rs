@@ -332,7 +332,15 @@ fn test_scope_userdata_ref() -> Result<()> {
     let data = MyUserData(Cell::new(1));
     lua.scope(|scope| {
         let ud = scope.create_userdata_ref(&data)?;
-        modify_userdata(&lua, ud)
+        modify_userdata(&lua, &ud)?;
+
+        // We can only borrow userdata scoped
+        assert!((matches!(ud.borrow::<MyUserData>(), Err(Error::UserDataTypeMismatch))));
+        ud.borrow_scoped::<MyUserData, ()>(|ud_inst| {
+            assert_eq!(ud_inst.0.get(), 2);
+        })?;
+
+        Ok(())
     })?;
     assert_eq!(data.0.get(), 2);
 
@@ -362,9 +370,16 @@ fn test_scope_userdata_ref_mut() -> Result<()> {
     let mut data = MyUserData(1);
     lua.scope(|scope| {
         let ud = scope.create_userdata_ref_mut(&mut data)?;
-        modify_userdata(&lua, ud)
+        modify_userdata(&lua, &ud)?;
+
+        assert!((matches!(ud.borrow_mut::<MyUserData>(), Err(Error::UserDataTypeMismatch))));
+        ud.borrow_mut_scoped::<MyUserData, ()>(|ud_inst| {
+            ud_inst.0 += 10;
+        })?;
+
+        Ok(())
     })?;
-    assert_eq!(data.0, 2);
+    assert_eq!(data.0, 12);
 
     Ok(())
 }
@@ -415,27 +430,47 @@ fn test_scope_any_userdata_ref() -> Result<()> {
     let data = Cell::new(1i64);
     lua.scope(|scope| {
         let ud = scope.create_any_userdata_ref(&data)?;
-        modify_userdata(&lua, ud)
+        modify_userdata(&lua, &ud)
     })?;
     assert_eq!(data.get(), 2);
 
     Ok(())
 }
 
-fn modify_userdata(lua: &Lua, ud: AnyUserData) -> Result<()> {
-    let f: Function = lua
-        .load(
-            r#"
-    function(u)
-        u:inc()
-        u:dec()
-        u:inc()
-    end
-"#,
-        )
-        .eval()?;
+#[test]
+fn test_scope_any_userdata_ref_mut() -> Result<()> {
+    let lua = Lua::new();
 
-    f.call::<()>(ud)?;
+    lua.register_userdata_type::<i64>(|reg| {
+        reg.add_method_mut("inc", |_, data, ()| {
+            *data += 1;
+            Ok(())
+        });
+
+        reg.add_method_mut("dec", |_, data, ()| {
+            *data -= 1;
+            Ok(())
+        });
+    })?;
+
+    let mut data = 1i64;
+    lua.scope(|scope| {
+        let ud = scope.create_any_userdata_ref_mut(&mut data)?;
+        modify_userdata(&lua, &ud)
+    })?;
+    assert_eq!(data, 2);
 
     Ok(())
+}
+
+fn modify_userdata(lua: &Lua, ud: &AnyUserData) -> Result<()> {
+    lua.load(
+        r#"
+    local u = ...
+    u:inc()
+    u:dec()
+    u:inc()
+"#,
+    )
+    .call(ud)
 }
