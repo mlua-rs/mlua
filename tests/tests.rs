@@ -106,7 +106,6 @@ fn test_exec() -> Result<()> {
         "#,
         )
         .eval()?;
-    println!("checkpoint");
     assert!(module.contains_key("func")?);
     assert_eq!(module.get::<Function>("func")?.call::<String>(())?, "hello");
 
@@ -631,8 +630,7 @@ fn test_recursive_mut_callback_error() -> Result<()> {
             // Whoops, this will recurse into the function and produce another mutable reference!
             lua.globals().get::<Function>("f")?.call::<()>(true)?;
             println!("Should not get here, mutable aliasing has occurred!");
-            println!("value at {:p}", r as *mut _);
-            println!("value is {}", r);
+            println!("value at {:p} is {r}", r as *mut _);
         }
 
         Ok(())
@@ -1134,6 +1132,13 @@ fn test_inspect_stack() -> Result<()> {
     })?;
     lua.globals().set("logline", logline)?;
 
+    let stack_info = lua.create_function(|lua, ()| {
+        let debug = lua.inspect_stack(1).unwrap(); // caller
+        let stack_info = debug.stack();
+        Ok(format!("{stack_info:?}"))
+    })?;
+    lua.globals().set("stack_info", stack_info)?;
+
     lua.load(
         r#"
         local function foo()
@@ -1143,10 +1148,18 @@ fn test_inspect_stack() -> Result<()> {
         local function bar()
             return foo()
         end
+        local stack_info = stack_info
+        local function baz(a, b, c, ...)
+            return stack_info()
+        end
 
         assert(foo() == '[string "chunk"]:3 hello')
         assert(bar() == '[string "chunk"]:3 hello')
-        assert(logline("world") == '[string "chunk"]:12 world')
+        assert(logline("world") == '[string "chunk"]:16 world')
+        assert(
+            baz() == 'DebugStack { num_ups: 1, num_params: 3, is_vararg: true }' or
+            baz() == 'DebugStack { num_ups: 1 }'
+        )
     "#,
     )
     .set_name("chunk")

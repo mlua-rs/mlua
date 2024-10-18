@@ -184,8 +184,8 @@ impl<'a> Debug<'a> {
             );
             #[cfg(feature = "luau")]
             mlua_assert!(
-                ffi::lua_getinfo(self.lua.state(), self.level, cstr!("a"), self.ar.get()) != 0,
-                "lua_getinfo failed with `a`"
+                ffi::lua_getinfo(self.lua.state(), self.level, cstr!("au"), self.ar.get()) != 0,
+                "lua_getinfo failed with `au`"
             );
 
             #[cfg(not(feature = "luau"))]
@@ -198,8 +198,8 @@ impl<'a> Debug<'a> {
             };
             #[cfg(feature = "luau")]
             let stack = DebugStack {
-                num_ups: (*self.ar.get()).nupvals as i32,
-                num_params: (*self.ar.get()).nparams as i32,
+                num_ups: (*self.ar.get()).nupvals,
+                num_params: (*self.ar.get()).nparams,
                 is_vararg: (*self.ar.get()).isvararg != 0,
             };
             stack
@@ -262,10 +262,15 @@ pub struct DebugSource<'a> {
 
 #[derive(Copy, Clone, Debug)]
 pub struct DebugStack {
-    pub num_ups: i32,
+    /// Number of upvalues.
+    pub num_ups: u8,
+    /// Number of parameters.
+    ///
     /// Requires `feature = "lua54/lua53/lua52/luau"`
     #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "luau"))]
-    pub num_params: i32,
+    pub num_params: u8,
+    /// Whether the function is a vararg function.
+    ///
     /// Requires `feature = "lua54/lua53/lua52/luau"`
     #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "luau"))]
     pub is_vararg: bool,
