@@ -69,7 +69,7 @@ pub struct AsyncThread<A, R> {
 
 impl Thread {
     #[inline(always)]
-    const fn state(&self) -> *mut ffi::lua_State {
+    fn state(&self) -> *mut ffi::lua_State {
         self.1
     }
 
