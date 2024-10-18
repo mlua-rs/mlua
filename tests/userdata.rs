@@ -418,6 +418,7 @@ fn test_user_values() -> Result<()> {
     assert!(ud.nth_user_value::<Value>(65536).is_err());
 
     // Named user values
+    let ud = lua.create_userdata(MyUserData)?;
     ud.set_named_user_value("name", "alex")?;
     ud.set_named_user_value("age", 10)?;
 

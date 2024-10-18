@@ -11,6 +11,7 @@ pub(crate) trait UserDataLock {
 pub(crate) use lock_impl::RawLock;
 
 #[cfg(not(feature = "send"))]
+#[cfg(not(tarpaulin_include))]
 mod lock_impl {
     use std::cell::Cell;
 

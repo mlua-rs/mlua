@@ -21,7 +21,7 @@ use crate::string::String;
 use crate::table::{Table, TablePairs};
 use crate::traits::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti};
 use crate::types::{MaybeSend, ValueRef};
-use crate::util::{check_stack, get_userdata, take_userdata, StackGuard};
+use crate::util::{check_stack, get_userdata, push_string, take_userdata, StackGuard};
 use crate::value::Value;
 
 // Re-export for convenience
@@ -809,13 +809,10 @@ impl AnyUserData {
             lua.push_userdata_ref(&self.0)?;
 
             // Multiple (extra) user values are emulated by storing them in a table
-            protect_lua!(state, 1, 1, |state| {
-                if ffi::lua_getuservalue(state, -1) != ffi::LUA_TTABLE {
-                    ffi::lua_pushnil(state);
-                    return;
-                }
-                ffi::lua_rawgeti(state, -1, n as ffi::lua_Integer);
-            })?;
+            if ffi::lua_getuservalue(state, -1) != ffi::LUA_TTABLE {
+                return V::from_lua(Value::Nil, lua.lua());
+            }
+            ffi::lua_rawgeti(state, -1, n as ffi::lua_Integer);
 
             V::from_lua(lua.pop_value(), lua.lua())
         }
@@ -873,16 +870,13 @@ impl AnyUserData {
             lua.push_userdata_ref(&self.0)?;
 
             // Multiple (extra) user values are emulated by storing them in a table
-            protect_lua!(state, 1, 1, |state| {
-                if ffi::lua_getuservalue(state, -1) != ffi::LUA_TTABLE {
-                    ffi::lua_pushnil(state);
-                    return;
-                }
-                ffi::lua_pushlstring(state, name.as_ptr() as *const c_char, name.len());
-                ffi::lua_rawget(state, -2);
-            })?;
+            if ffi::lua_getuservalue(state, -1) != ffi::LUA_TTABLE {
+                return V::from_lua(Value::Nil, lua.lua());
+            }
+            push_string(state, name.as_bytes(), !lua.unlikely_memory_error())?;
+            ffi::lua_rawget(state, -2);
 
-            V::from_lua(lua.pop_value(), lua.lua())
+            V::from_stack(-1, &lua)
         }
     }
 
