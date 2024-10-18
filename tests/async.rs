@@ -48,6 +48,19 @@ async fn test_async_function_wrap() -> Result<()> {
     let res: String = lua.load(r#"f("hello")"#).eval_async().await?;
     assert_eq!(res, "hello");
 
+    // Return error
+    let ferr = Function::wrap_async(|| async move { Err::<(), _>(Error::runtime("some async error")) });
+    lua.globals().set("ferr", ferr)?;
+    lua.load(
+        r#"
+        local ok, err = pcall(ferr)
+        assert(not ok and tostring(err):find("some async error"))
+    "#,
+    )
+    .exec_async()
+    .await
+    .unwrap();
+
     Ok(())
 }
 
@@ -375,6 +388,13 @@ async fn test_async_table_object_like() -> Result<()> {
     )?;
     table.set_metatable(Some(metatable));
     assert_eq!(table.call_async::<i64>(()).await.unwrap(), 15);
+
+    match table.call_async_method::<()>("non_existent", ()).await {
+        Err(Error::RuntimeError(err)) => {
+            assert!(err.contains("attempt to call a nil value (function 'non_existent')"))
+        }
+        r => panic!("expected RuntimeError, got {r:?}"),
+    }
 
     Ok(())
 }
