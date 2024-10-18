@@ -803,7 +803,6 @@ fn test_userdata_method_errors() -> Result<()> {
             } => {
                 assert_eq!(to.as_deref(), Some("MyUserData.get_value"));
                 assert_eq!(name.as_deref(), Some("self"));
-                println!("{}", cause2.to_string());
                 assert_eq!(
                     cause2.to_string(),
                     "error converting Lua string to userdata (expected userdata of type 'MyUserData')"

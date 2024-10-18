@@ -393,12 +393,24 @@ fn test_table_error() -> Result<()> {
 fn test_table_fmt() -> Result<()> {
     let lua = Lua::new();
 
-    let table = lua.load(r#"{1, 2, 3, a = 5, b = { 6 }}"#).eval::<Table>()?;
-    // assert_eq!(format!("{:?}", table), "{1, 2, 3, a = 5, b = {6}}");
+    let table = lua
+        .load(
+            r#"
+        local t = {1, 2, 3, a = 5, b = { 6 }}
+        t[9.2] = 9.2
+        t[1.99] = 1.99
+        t[true] = true
+        t[false] = false
+        return t
+    "#,
+        )
+        .eval::<Table>()?;
     assert!(format!("{table:?}").starts_with("Table(Ref("));
+
+    // Pretty print
     assert_eq!(
         format!("{table:#?}"),
-        "{\n  [1] = 1,\n  [2] = 2,\n  [3] = 3,\n  [\"a\"] = 5,\n  [\"b\"] = {\n    [1] = 6,\n  },\n}"
+        "{\n  [false] = false,\n  [true] = true,\n  [1] = 1,\n  [1.99] = 1.99,\n  [2] = 2,\n  [3] = 3,\n  [9.2] = 9.2,\n  [\"a\"] = 5,\n  [\"b\"] = {\n    [1] = 6,\n  },\n}"
     );
 
     Ok(())
