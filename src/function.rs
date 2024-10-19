@@ -389,9 +389,9 @@ impl Function {
     /// If `strip` is true, the binary representation may not include all debug information
     /// about the function, to save space.
     ///
-    /// For Luau a [Compiler] can be used to compile Lua chunks to bytecode.
+    /// For Luau a [`Compiler`] can be used to compile Lua chunks to bytecode.
     ///
-    /// [Compiler]: crate::chunk::Compiler
+    /// [`Compiler`]: crate::chunk::Compiler
     #[cfg(not(feature = "luau"))]
     #[cfg_attr(docsrs, doc(cfg(not(feature = "luau"))))]
     pub fn dump(&self, strip: bool) -> Vec<u8> {
@@ -490,10 +490,10 @@ impl Function {
     ///
     /// Copies the function prototype and all its upvalues to the
     /// newly created function.
-    ///
     /// This function returns shallow clone (same handle) for Rust/C functions.
+    ///
     /// Requires `feature = "luau"`
-    #[cfg(feature = "luau")]
+    #[cfg(any(feature = "luau", doc))]
     #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
     pub fn deep_clone(&self) -> Self {
         let lua = self.0.lua.lock();

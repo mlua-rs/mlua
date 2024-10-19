@@ -171,12 +171,10 @@ impl Lua {
     /// Creates a new Lua state and loads the **safe** subset of the standard libraries.
     ///
     /// # Safety
-    /// The created Lua state would have _some_ safety guarantees and would not allow to load unsafe
+    /// The created Lua state will have _some_ safety guarantees and will not allow to load unsafe
     /// standard libraries or C modules.
     ///
     /// See [`StdLib`] documentation for a list of unsafe modules that cannot be loaded.
-    ///
-    /// [`StdLib`]: crate::StdLib
     pub fn new() -> Lua {
         mlua_expect!(
             Self::new_with(StdLib::ALL_SAFE, LuaOptions::default()),
@@ -187,7 +185,7 @@ impl Lua {
     /// Creates a new Lua state and loads all the standard libraries.
     ///
     /// # Safety
-    /// The created Lua state would not have safety guarantees and would allow to load C modules.
+    /// The created Lua state will not have safety guarantees and will allow to load C modules.
     pub unsafe fn unsafe_new() -> Lua {
         Self::unsafe_new_with(StdLib::ALL, LuaOptions::default())
     }
@@ -197,12 +195,10 @@ impl Lua {
     /// Use the [`StdLib`] flags to specify the libraries you want to load.
     ///
     /// # Safety
-    /// The created Lua state would have _some_ safety guarantees and would not allow to load unsafe
+    /// The created Lua state will have _some_ safety guarantees and will not allow to load unsafe
     /// standard libraries or C modules.
     ///
     /// See [`StdLib`] documentation for a list of unsafe modules that cannot be loaded.
-    ///
-    /// [`StdLib`]: crate::StdLib
     pub fn new_with(libs: StdLib, options: LuaOptions) -> Result<Lua> {
         #[cfg(not(feature = "luau"))]
         if libs.contains(StdLib::DEBUG) {
@@ -222,7 +218,7 @@ impl Lua {
         if libs.contains(StdLib::PACKAGE) {
             mlua_expect!(lua.disable_c_modules(), "Error disabling C modules");
         }
-        unsafe { lua.lock().set_safe() };
+        lua.lock().mark_safe();
 
         Ok(lua)
     }
@@ -233,8 +229,6 @@ impl Lua {
     ///
     /// # Safety
     /// The created Lua state will not have safety guarantees and allow to load C modules.
-    ///
-    /// [`StdLib`]: crate::StdLib
     pub unsafe fn unsafe_new_with(libs: StdLib, options: LuaOptions) -> Lua {
         // Workaround to avoid stripping a few unused Lua symbols that could be imported
         // by C modules in unsafe mode
@@ -289,6 +283,28 @@ impl Lua {
     ///
     /// This method ensures that the Lua instance is locked while the function is called
     /// and restores Lua stack after the function returns.
+    ///
+    /// # Example
+    /// ```
+    /// # use mlua::{Lua, Result};
+    /// # fn main() -> Result<()> {
+    /// let lua = Lua::new();
+    /// let n: i32 = unsafe {
+    ///     let nums = (3, 4, 5);
+    ///     lua.exec_raw(nums, |state| {
+    ///         let n = ffi::lua_gettop(state);
+    ///         let mut sum = 0;
+    ///         for i in 1..=n {
+    ///             sum += ffi::lua_tointeger(state, i);
+    ///         }
+    ///         ffi::lua_pop(state, n);
+    ///         ffi::lua_pushinteger(state, sum);
+    ///     })
+    /// }?;
+    /// assert_eq!(n, 12);
+    /// # Ok(())
+    /// # }
+    /// ```
     #[allow(clippy::missing_safety_doc)]
     pub unsafe fn exec_raw<R: FromLuaMulti>(
         &self,
@@ -399,7 +415,7 @@ impl Lua {
         // Make sure that Lua is initialized
         let mut lua = Self::init_from_ptr(state);
         lua.collect_garbage = false;
-        // `Lua` is no longer needed and must be dropped at this point to avoid possible memory leak
+        // `Lua` is no longer needed and must be dropped at this point to avoid memory leak
         // in case of possible longjmp (lua_error) below
         drop(lua);
 
@@ -444,6 +460,7 @@ impl Lua {
     ///
     /// ```
     /// # use mlua::{Lua, Result};
+    /// # #[cfg(feature = "luau")]
     /// # fn main() -> Result<()> {
     /// let lua = Lua::new();
     ///
@@ -456,10 +473,13 @@ impl Lua {
     /// assert_eq!(lua.globals().get::<Option<u32>>("var")?, None);
     /// # Ok(())
     /// # }
+    ///
+    /// # #[cfg(not(feature = "luau"))]
+    /// # fn main() {}
     /// ```
     ///
     /// Requires `feature = "luau"`
-    #[cfg(any(feature = "luau", docsrs))]
+    #[cfg(any(feature = "luau", doc))]
     #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
     pub fn sandbox(&self, enabled: bool) -> Result<()> {
         let lua = self.lock();
@@ -484,7 +504,7 @@ impl Lua {
         }
     }
 
-    /// Sets a 'hook' function that will periodically be called as Lua code executes.
+    /// Sets a hook function that will periodically be called as Lua code executes.
     ///
     /// When exactly the hook function is called depends on the contents of the `triggers`
     /// parameter, see [`HookTriggers`] for more details.
@@ -496,7 +516,7 @@ impl Lua {
     ///
     /// This method sets a hook function for the current thread of this Lua instance.
     /// If you want to set a hook function for another thread (coroutine), use
-    /// [`Thread::set_hook()`] instead.
+    /// [`Thread::set_hook`] instead.
     ///
     /// Please note you cannot have more than one hook function set at a time for this Lua instance.
     ///
@@ -521,7 +541,6 @@ impl Lua {
     /// # }
     /// ```
     ///
-    /// [`HookTriggers`]: crate::HookTriggers
     /// [`HookTriggers.every_nth_instruction`]: crate::HookTriggers::every_nth_instruction
     #[cfg(not(feature = "luau"))]
     #[cfg_attr(docsrs, doc(cfg(not(feature = "luau"))))]
@@ -533,7 +552,7 @@ impl Lua {
         unsafe { lua.set_thread_hook(lua.state(), triggers, callback) };
     }
 
-    /// Removes any hook previously set by [`Lua::set_hook()`] or [`Thread::set_hook()`].
+    /// Removes any hook previously set by [`Lua::set_hook`] or [`Thread::set_hook`].
     ///
     /// This function has no effect if a hook was not previously set.
     #[cfg(not(feature = "luau"))]
@@ -555,7 +574,7 @@ impl Lua {
         }
     }
 
-    /// Sets an 'interrupt' function that will periodically be called by Luau VM.
+    /// Sets an interrupt function that will periodically be called by Luau VM.
     ///
     /// Any Luau code is guaranteed to call this handler "eventually"
     /// (in practice this can happen at any function call or at any loop iteration).
@@ -574,6 +593,7 @@ impl Lua {
     /// ```
     /// # use std::sync::{Arc, atomic::{AtomicU64, Ordering}};
     /// # use mlua::{Lua, Result, ThreadStatus, VmState};
+    /// # #[cfg(feature = "luau")]
     /// # fn main() -> Result<()> {
     /// let lua = Lua::new();
     /// let count = Arc::new(AtomicU64::new(0));
@@ -596,8 +616,11 @@ impl Lua {
     /// }
     /// # Ok(())
     /// # }
+    ///
+    /// # #[cfg(not(feature = "luau"))]
+    /// # fn main() {}
     /// ```
-    #[cfg(any(feature = "luau", docsrs))]
+    #[cfg(any(feature = "luau", doc))]
     #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
     pub fn set_interrupt<F>(&self, callback: F)
     where
@@ -635,10 +658,10 @@ impl Lua {
         }
     }
 
-    /// Removes any 'interrupt' previously set by `set_interrupt`.
+    /// Removes any interrupt function previously set by `set_interrupt`.
     ///
     /// This function has no effect if an 'interrupt' was not previously set.
-    #[cfg(any(feature = "luau", docsrs))]
+    #[cfg(any(feature = "luau", doc))]
     #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
     pub fn remove_interrupt(&self) {
         let lua = self.lock();
@@ -759,8 +782,8 @@ impl Lua {
 
     /// Sets a memory limit (in bytes) on this Lua state.
     ///
-    /// Once an allocation occurs that would pass this memory limit,
-    /// a `Error::MemoryError` is generated instead.
+    /// Once an allocation occurs that would pass this memory limit, a `Error::MemoryError` is
+    /// generated instead.
     /// Returns previous limit (zero means no limit).
     ///
     /// Does not work in module mode where Lua state is managed externally.
@@ -774,7 +797,7 @@ impl Lua {
         }
     }
 
-    /// Returns true if the garbage collector is currently running automatically.
+    /// Returns `true` if the garbage collector is currently running automatically.
     ///
     /// Requires `feature = "lua54/lua53/lua52/luau"`
     #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "luau"))]
@@ -809,7 +832,7 @@ impl Lua {
 
     /// Steps the garbage collector one indivisible step.
     ///
-    /// Returns true if this has finished a collection cycle.
+    /// Returns `true` if this has finished a collection cycle.
     pub fn gc_step(&self) -> Result<bool> {
         self.gc_step_kbytes(0)
     }
@@ -828,9 +851,9 @@ impl Lua {
         }
     }
 
-    /// Sets the 'pause' value of the collector.
+    /// Sets the `pause` value of the collector.
     ///
-    /// Returns the previous value of 'pause'. More information can be found in the Lua
+    /// Returns the previous value of `pause`. More information can be found in the Lua
     /// [documentation].
     ///
     /// For Luau this parameter sets GC goal
@@ -846,9 +869,9 @@ impl Lua {
         }
     }
 
-    /// Sets the 'step multiplier' value of the collector.
+    /// Sets the `step multiplier` value of the collector.
     ///
-    /// Returns the previous value of the 'step multiplier'. More information can be found in the
+    /// Returns the previous value of the `step multiplier`. More information can be found in the
     /// Lua [documentation].
     ///
     /// [documentation]: https://www.lua.org/manual/5.4/manual.html#2.5
@@ -989,9 +1012,10 @@ impl Lua {
         }
     }
 
-    /// Create and return an interned Lua string. Lua strings can be arbitrary `[u8]` data including
-    /// embedded nulls, so in addition to `&str` and `&String`, you can also pass plain `&[u8]`
-    /// here.
+    /// Create and return an interned Lua string.
+    ///
+    /// Lua strings can be arbitrary `[u8]` data including embedded nulls, so in addition to `&str`
+    /// and `&String`, you can also pass plain `&[u8]` here.
     #[inline]
     pub fn create_string(&self, s: impl AsRef<[u8]>) -> Result<String> {
         unsafe { self.lock().create_string(s) }
@@ -1002,8 +1026,8 @@ impl Lua {
     /// Requires `feature = "luau"`
     ///
     /// [buffer]: https://luau-lang.org/library#buffer-library
-    #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
     #[cfg(any(feature = "luau", doc))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
     pub fn create_buffer(&self, buf: impl AsRef<[u8]>) -> Result<Buffer> {
         let lua = self.lock();
         let state = lua.state();
@@ -1014,20 +1038,23 @@ impl Lua {
             }
 
             let _sg = StackGuard::new(state);
-            check_stack(state, 4)?;
+            check_stack(state, 3)?;
             crate::util::push_buffer(state, buf.as_ref(), true)?;
             Ok(Buffer(lua.pop_ref()))
         }
     }
 
     /// Creates and returns a new empty table.
+    #[inline]
     pub fn create_table(&self) -> Result<Table> {
         self.create_table_with_capacity(0, 0)
     }
 
     /// Creates and returns a new empty table, with the specified capacity.
-    /// `narr` is a hint for how many elements the table will have as a sequence;
-    /// `nrec` is a hint for how many other elements the table will have.
+    ///
+    /// - `narr` is a hint for how many elements the table will have as a sequence.
+    /// - `nrec` is a hint for how many other elements the table will have.
+    ///
     /// Lua may use these hints to preallocate memory for the new table.
     pub fn create_table_with_capacity(&self, narr: usize, nrec: usize) -> Result<Table> {
         unsafe { self.lock().create_table_with_capacity(narr, nrec) }
@@ -1113,9 +1140,6 @@ impl Lua {
     /// # Ok(())
     /// # }
     /// ```
-    ///
-    /// [`IntoLua`]: crate::IntoLua
-    /// [`IntoLuaMulti`]: crate::IntoLuaMulti
     pub fn create_function<F, A, R>(&self, func: F) -> Result<Function>
     where
         F: Fn(&Lua, A) -> Result<R> + MaybeSend + 'static,
@@ -1130,10 +1154,7 @@ impl Lua {
 
     /// Wraps a Rust mutable closure, creating a callable Lua function handle to it.
     ///
-    /// This is a version of [`create_function`] that accepts a FnMut argument. Refer to
-    /// [`create_function`] for more information about the implementation.
-    ///
-    /// [`create_function`]: #method.create_function
+    /// This is a version of [`Lua::create_function`] that accepts a `FnMut` argument.
     pub fn create_function_mut<F, A, R>(&self, func: F) -> Result<Function>
     where
         F: FnMut(&Lua, A) -> Result<R> + MaybeSend + 'static,
@@ -1162,9 +1183,9 @@ impl Lua {
     /// call `yield()` passing internal representation of a `Poll::Pending` value.
     ///
     /// The function must be called inside Lua coroutine ([`Thread`]) to be able to suspend its
-    /// execution. An executor should be used to poll [`AsyncThread`] and mlua will take a
-    /// provided Waker in that case. Otherwise noop waker will be used if try to call the
-    /// function outside of Rust executors.
+    /// execution. An executor should be used to poll [`AsyncThread`] and mlua will take a provided
+    /// Waker in that case. Otherwise noop waker will be used if try to call the function outside of
+    /// Rust executors.
     ///
     /// The family of `call_async()` functions takes care about creating [`Thread`].
     ///
@@ -1193,7 +1214,6 @@ impl Lua {
     /// }
     /// ```
     ///
-    /// [`Thread`]: crate::Thread
     /// [`AsyncThread`]: crate::AsyncThread
     #[cfg(feature = "async")]
     #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
@@ -1250,7 +1270,7 @@ impl Lua {
 
     /// Creates a Lua userdata object from a custom Rust type.
     ///
-    /// You can register the type using [`Lua::register_userdata_type()`] to add fields or methods
+    /// You can register the type using [`Lua::register_userdata_type`] to add fields or methods
     /// _before_ calling this method.
     /// Otherwise, the userdata object will have an empty metatable.
     ///
@@ -1265,7 +1285,7 @@ impl Lua {
 
     /// Creates a Lua userdata object from a custom serializable Rust type.
     ///
-    /// See [`Lua::create_any_userdata()`] for more details.
+    /// See [`Lua::create_any_userdata`] for more details.
     ///
     /// Requires `feature = "serialize"`
     #[cfg(feature = "serialize")]
@@ -1423,9 +1443,10 @@ impl Lua {
         }
     }
 
-    /// Returns a handle to the active `Thread`. For calls to `Lua` this will be the main Lua
-    /// thread, for parameters given to a callback, this will be whatever Lua thread called the
-    /// callback.
+    /// Returns a handle to the active `Thread`.
+    ///
+    /// For calls to `Lua` this will be the main Lua thread, for parameters given to a callback,
+    /// this will be whatever Lua thread called the callback.
     pub fn current_thread(&self) -> Thread {
         let lua = self.lock();
         let state = lua.state();
@@ -1437,26 +1458,16 @@ impl Lua {
         }
     }
 
-    /// Calls the given function with a `Scope` parameter, giving the function the ability to create
-    /// userdata and callbacks from rust types that are !Send or non-'static.
+    /// Calls the given function with a [`Scope`] parameter, giving the function the ability to
+    /// create userdata and callbacks from Rust types that are `!Send`` or non-`'static`.
     ///
-    /// The lifetime of any function or userdata created through `Scope` lasts only until the
+    /// The lifetime of any function or userdata created through [`Scope`] lasts only until the
     /// completion of this method call, on completion all such created values are automatically
     /// dropped and Lua references to them are invalidated. If a script accesses a value created
-    /// through `Scope` outside of this method, a Lua error will result. Since we can ensure the
-    /// lifetime of values created through `Scope`, and we know that `Lua` cannot be sent to another
-    /// thread while `Scope` is live, it is safe to allow !Send datatypes and whose lifetimes only
-    /// outlive the scope lifetime.
-    ///
-    /// Inside the scope callback, all handles created through Scope will share the same unique 'lua
-    /// lifetime of the parent `Lua`. This allows scoped and non-scoped values to be mixed in
-    /// API calls, which is very useful (e.g. passing a scoped userdata to a non-scoped function).
-    /// However, this also enables handles to scoped values to be trivially leaked from the given
-    /// callback. This is not dangerous, though!  After the callback returns, all scoped values are
-    /// invalidated, which means that though references may exist, the Rust types backing them have
-    /// dropped. `Function` types will error when called, and `AnyUserData` will be typeless. It
-    /// would be impossible to prevent handles to scoped values from escaping anyway, since you
-    /// would always be able to smuggle them through Lua state.
+    /// through [`Scope`] outside of this method, a Lua error will result. Since we can ensure the
+    /// lifetime of values created through [`Scope`], and we know that [`Lua`] cannot be sent to
+    /// another thread while [`Scope`] is live, it is safe to allow `!Send` data types and whose
+    /// lifetimes only outlive the scope lifetime.
     pub fn scope<'env, R>(
         &self,
         f: impl for<'scope> FnOnce(&'scope mut Scope<'scope, 'env>) -> Result<R>,
@@ -1548,41 +1559,41 @@ impl Lua {
         })
     }
 
-    /// Converts a value that implements `IntoLua` into a `Value` instance.
+    /// Converts a value that implements [`IntoLua`] into a [`Value`] instance.
     #[inline]
     pub fn pack(&self, t: impl IntoLua) -> Result<Value> {
         t.into_lua(self)
     }
 
-    /// Converts a `Value` instance into a value that implements `FromLua`.
+    /// Converts a [`Value`] instance into a value that implements [`FromLua`].
     #[inline]
     pub fn unpack<T: FromLua>(&self, value: Value) -> Result<T> {
         T::from_lua(value, self)
     }
 
-    /// Converts a value that implements `IntoLua` into a `FromLua` variant.
+    /// Converts a value that implements [`IntoLua`] into a [`FromLua`] variant.
     #[inline]
     pub fn convert<U: FromLua>(&self, value: impl IntoLua) -> Result<U> {
         U::from_lua(value.into_lua(self)?, self)
     }
 
-    /// Converts a value that implements `IntoLuaMulti` into a `MultiValue` instance.
+    /// Converts a value that implements [`IntoLuaMulti`] into a [`MultiValue`] instance.
     #[inline]
     pub fn pack_multi(&self, t: impl IntoLuaMulti) -> Result<MultiValue> {
         t.into_lua_multi(self)
     }
 
-    /// Converts a `MultiValue` instance into a value that implements `FromLuaMulti`.
+    /// Converts a [`MultiValue`] instance into a value that implements [`FromLuaMulti`].
     #[inline]
     pub fn unpack_multi<T: FromLuaMulti>(&self, value: MultiValue) -> Result<T> {
         T::from_lua_multi(value, self)
     }
 
-    /// Set a value in the Lua registry based on a string name.
+    /// Set a value in the Lua registry based on a string key.
     ///
-    /// This value will be available to rust from all `Lua` instances which share the same main
+    /// This value will be available to Rust from all Lua instances which share the same main
     /// state.
-    pub fn set_named_registry_value(&self, name: &str, t: impl IntoLua) -> Result<()> {
+    pub fn set_named_registry_value(&self, key: &str, t: impl IntoLua) -> Result<()> {
         let lua = self.lock();
         let state = lua.state();
         unsafe {
@@ -1590,15 +1601,15 @@ impl Lua {
             check_stack(state, 5)?;
 
             lua.push(t)?;
-            rawset_field(state, ffi::LUA_REGISTRYINDEX, name)
+            rawset_field(state, ffi::LUA_REGISTRYINDEX, key)
         }
     }
 
-    /// Get a value from the Lua registry based on a string name.
+    /// Get a value from the Lua registry based on a string key.
     ///
     /// Any Lua instance which shares the underlying main state may call this method to
     /// get a value previously set by [`Lua::set_named_registry_value`].
-    pub fn named_registry_value<T>(&self, name: &str) -> Result<T>
+    pub fn named_registry_value<T>(&self, key: &str) -> Result<T>
     where
         T: FromLua,
     {
@@ -1609,7 +1620,7 @@ impl Lua {
             check_stack(state, 3)?;
 
             let protect = !lua.unlikely_memory_error();
-            push_string(state, name.as_bytes(), protect)?;
+            push_string(state, key.as_bytes(), protect)?;
             ffi::lua_rawget(state, ffi::LUA_REGISTRYINDEX);
 
             T::from_stack(-1, &lua)
@@ -1618,14 +1629,15 @@ impl Lua {
 
     /// Removes a named value in the Lua registry.
     ///
-    /// Equivalent to calling [`Lua::set_named_registry_value`] with a value of Nil.
-    pub fn unset_named_registry_value(&self, name: &str) -> Result<()> {
-        self.set_named_registry_value(name, Nil)
+    /// Equivalent to calling [`Lua::set_named_registry_value`] with a value of [`Nil`].
+    #[inline]
+    pub fn unset_named_registry_value(&self, key: &str) -> Result<()> {
+        self.set_named_registry_value(key, Nil)
     }
 
     /// Place a value in the Lua registry with an auto-generated key.
     ///
-    /// This value will be available to Rust from all `Lua` instances which share the same main
+    /// This value will be available to Rust from all Lua instances which share the same main
     /// state.
     ///
     /// Be warned, garbage collection of values held inside the registry is not automatic, see
@@ -1667,7 +1679,7 @@ impl Lua {
         }
     }
 
-    /// Get a value from the Lua registry by its `RegistryKey`
+    /// Get a value from the Lua registry by its [`RegistryKey`]
     ///
     /// Any Lua instance which shares the underlying main state may call this method to get a value
     /// previously placed by [`Lua::create_registry_value`].
@@ -1702,9 +1714,7 @@ impl Lua {
             return Err(Error::MismatchedRegistryKey);
         }
 
-        unsafe {
-            ffi::luaL_unref(lua.state(), ffi::LUA_REGISTRYINDEX, key.take());
-        }
+        unsafe { ffi::luaL_unref(lua.state(), ffi::LUA_REGISTRYINDEX, key.take()) };
         Ok(())
     }
 
@@ -1750,8 +1760,8 @@ impl Lua {
         Ok(())
     }
 
-    /// Returns true if the given [`RegistryKey`] was created by a [`Lua`] which shares the
-    /// underlying main state with this [`Lua`] instance.
+    /// Returns true if the given [`RegistryKey`] was created by a Lua which shares the
+    /// underlying main state with this Lua instance.
     ///
     /// Other than this, methods that accept a [`RegistryKey`] will return
     /// [`Error::MismatchedRegistryKey`] if passed a [`RegistryKey`] that was not created with a
@@ -1823,14 +1833,14 @@ impl Lua {
     /// - `Err(data)` if the data object of type `T` was not inserted because the container is
     ///   currently borrowed.
     ///
-    /// See [`Lua::set_app_data()`] for examples.
+    /// See [`Lua::set_app_data`] for examples.
     pub fn try_set_app_data<T: MaybeSend + 'static>(&self, data: T) -> StdResult<Option<T>, T> {
         let lua = self.lock();
         let extra = unsafe { &*lua.extra.get() };
         extra.app_data.try_insert(data)
     }
 
-    /// Gets a reference to an application data object stored by [`Lua::set_app_data()`] of type
+    /// Gets a reference to an application data object stored by [`Lua::set_app_data`] of type
     /// `T`.
     ///
     /// # Panics
@@ -1844,7 +1854,7 @@ impl Lua {
         extra.app_data.borrow(Some(guard))
     }
 
-    /// Gets a mutable reference to an application data object stored by [`Lua::set_app_data()`] of
+    /// Gets a mutable reference to an application data object stored by [`Lua::set_app_data`] of
     /// type `T`.
     ///
     /// # Panics

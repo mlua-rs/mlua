@@ -61,10 +61,12 @@ pub enum Error {
     ///
     /// Due to the way `mlua` works, it should not be directly possible to run out of stack space
     /// during normal use. The only way that this error can be triggered is if a `Function` is
-    /// called with a huge number of arguments, or a rust callback returns a huge number of return
+    /// called with a huge number of arguments, or a Rust callback returns a huge number of return
     /// values.
     StackError,
-    /// Too many arguments to `Function::bind`.
+    /// Too many arguments to [`Function::bind`].
+    ///
+    /// [`Function::bind`]: crate::Function::bind
     BindError,
     /// Bad argument received from Lua (usually when calling a function).
     ///

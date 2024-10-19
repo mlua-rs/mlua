@@ -14,7 +14,6 @@ use crate::traits::{FromLuaMulti, IntoLuaMulti};
 /// Trait for types [loadable by Lua] and convertible to a [`Chunk`]
 ///
 /// [loadable by Lua]: https://www.lua.org/manual/5.4/manual.html#3.3.2
-/// [`Chunk`]: crate::Chunk
 pub trait AsChunk<'a> {
     /// Returns optional chunk name
     fn name(&self) -> Option<StdString> {
@@ -95,8 +94,6 @@ impl AsChunk<'static> for PathBuf {
 }
 
 /// Returned from [`Lua::load`] and is used to finalize loading and executing Lua main chunks.
-///
-/// [`Lua::load`]: crate::Lua::load
 #[must_use = "`Chunk`s do nothing unless one of `exec`, `eval`, `call`, or `into_function` are called on them"]
 pub struct Chunk<'a> {
     pub(crate) lua: WeakLua,
@@ -241,7 +238,7 @@ impl Compiler {
 
     /// Compiles the `source` into bytecode.
     ///
-    /// Returns `Error::SyntaxError` if the source code is invalid.
+    /// Returns [`Error::SyntaxError`] if the source code is invalid.
     pub fn compile(&self, source: impl AsRef<[u8]>) -> Result<Vec<u8>> {
         use std::os::raw::c_int;
         use std::ptr;
@@ -361,7 +358,7 @@ impl<'a> Chunk<'a> {
     ///
     /// Requires `feature = "async"`
     ///
-    /// [`exec`]: #method.exec
+    /// [`exec`]: Chunk::exec
     #[cfg(feature = "async")]
     #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
     pub async fn exec_async(self) -> Result<()> {
@@ -393,7 +390,7 @@ impl<'a> Chunk<'a> {
     ///
     /// Requires `feature = "async"`
     ///
-    /// [`eval`]: #method.eval
+    /// [`eval`]: Chunk::eval
     #[cfg(feature = "async")]
     #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
     pub async fn eval_async<R>(self) -> Result<R>
@@ -422,7 +419,7 @@ impl<'a> Chunk<'a> {
     ///
     /// Requires `feature = "async"`
     ///
-    /// [`call`]: #method.call
+    /// [`call`]: Chunk::call
     #[cfg(feature = "async")]
     #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
     pub async fn call_async<R>(self, args: impl IntoLuaMulti) -> Result<R>
@@ -432,7 +429,7 @@ impl<'a> Chunk<'a> {
         self.into_function()?.call_async(args).await
     }
 
-    /// Load this chunk into a regular `Function`.
+    /// Load this chunk into a regular [`Function`].
     ///
     /// This simply compiles the chunk without actually executing it.
     #[cfg_attr(not(feature = "luau"), allow(unused_mut))]

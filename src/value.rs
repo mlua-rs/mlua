@@ -104,10 +104,10 @@ impl Value {
     /// Compares two values for equality.
     ///
     /// Equality comparisons do not convert strings to numbers or vice versa.
-    /// Tables, Functions, Threads, and UserData are compared by reference:
+    /// Tables, functions, threads, and userdata are compared by reference:
     /// two objects are considered equal only if they are the same object.
     ///
-    /// If Tables or UserData have `__eq` metamethod then mlua will try to invoke it.
+    /// If table or userdata have `__eq` metamethod then mlua will try to invoke it.
     /// The first value is checked first. If that value does not define a metamethod
     /// for `__eq`, then mlua will check the second value.
     /// Then mlua calls the metamethod with the two values as arguments, if found.
@@ -193,6 +193,8 @@ impl Value {
     }
 
     /// Returns `true` if the value is a [`NULL`].
+    ///
+    /// [`NULL`]: Value::NULL
     #[inline]
     pub fn is_null(&self) -> bool {
         self == &Self::NULL
@@ -433,9 +435,11 @@ impl Value {
         }
     }
 
-    /// Cast the value to a `Buffer`.
+    /// Cast the value to a [`Buffer`].
     ///
-    /// If the value is `Buffer`, returns it or `None` otherwise.
+    /// If the value is [`Buffer`], returns it or `None` otherwise.
+    ///
+    /// [`Buffer`]: crate::Buffer
     #[cfg(any(feature = "luau", doc))]
     #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
     #[inline]
@@ -446,7 +450,9 @@ impl Value {
         }
     }
 
-    /// Returns `true` if the value is a `Buffer`.
+    /// Returns `true` if the value is a [`Buffer`].
+    ///
+    /// [`Buffer`]: crate::Buffer
     #[cfg(any(feature = "luau", doc))]
     #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
     #[inline]

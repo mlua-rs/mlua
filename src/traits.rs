@@ -13,7 +13,7 @@ use crate::value::Value;
 #[cfg(feature = "async")]
 use std::future::Future;
 
-/// Trait for types convertible to `Value`.
+/// Trait for types convertible to [`Value`].
 pub trait IntoLua: Sized {
     /// Performs the conversion.
     fn into_lua(self, lua: &Lua) -> Result<Value>;
@@ -29,7 +29,7 @@ pub trait IntoLua: Sized {
     }
 }
 
-/// Trait for types convertible from `Value`.
+/// Trait for types convertible from [`Value`].
 pub trait FromLua: Sized {
     /// Performs the conversion.
     fn from_lua(value: Value, lua: &Lua) -> Result<Self>;
@@ -71,8 +71,8 @@ pub trait FromLua: Sized {
 
 /// Trait for types convertible to any number of Lua values.
 ///
-/// This is a generalization of `IntoLua`, allowing any number of resulting Lua values instead of
-/// just one. Any type that implements `IntoLua` will automatically implement this trait.
+/// This is a generalization of [`IntoLua`], allowing any number of resulting Lua values instead of
+/// just one. Any type that implements [`IntoLua`] will automatically implement this trait.
 pub trait IntoLuaMulti: Sized {
     /// Performs the conversion.
     fn into_lua_multi(self, lua: &Lua) -> Result<MultiValue>;
@@ -97,8 +97,9 @@ pub trait IntoLuaMulti: Sized {
 
 /// Trait for types that can be created from an arbitrary number of Lua values.
 ///
-/// This is a generalization of `FromLua`, allowing an arbitrary number of Lua values to participate
-/// in the conversion. Any type that implements `FromLua` will automatically implement this trait.
+/// This is a generalization of [`FromLua`], allowing an arbitrary number of Lua values to
+/// participate in the conversion. Any type that implements [`FromLua`] will automatically
+/// implement this trait.
 pub trait FromLuaMulti: Sized {
     /// Performs the conversion.
     ///

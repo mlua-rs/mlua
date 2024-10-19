@@ -129,7 +129,7 @@ impl RawLua {
         let extra = rawlua.lock().extra.get();
 
         mlua_expect!(
-            load_from_std_lib(state, libs),
+            load_std_libs(state, libs),
             "Error during loading standard libraries"
         );
         (*extra).libs |= libs;
@@ -238,8 +238,8 @@ impl RawLua {
 
     /// Marks the Lua state as safe.
     #[inline(always)]
-    pub(super) unsafe fn set_safe(&self) {
-        (*self.extra.get()).safe = true;
+    pub(super) fn mark_safe(&self) {
+        unsafe { (*self.extra.get()).safe = true };
     }
 
     /// Loads the specified subset of the standard libraries into an existing Lua state.
@@ -263,7 +263,7 @@ impl RawLua {
             ));
         }
 
-        let res = load_from_std_lib(self.main_state, libs);
+        let res = load_std_libs(self.main_state, libs);
 
         // If `package` library loaded into a safe lua state then disable C modules
         let curr_libs = (*self.extra.get()).libs;
@@ -1100,7 +1100,7 @@ impl RawLua {
         #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "luau"))]
         unsafe {
             if !(*self.extra.get()).libs.contains(StdLib::COROUTINE) {
-                load_from_std_lib(self.main_state, StdLib::COROUTINE)?;
+                load_std_libs(self.main_state, StdLib::COROUTINE)?;
                 (*self.extra.get()).libs |= StdLib::COROUTINE;
             }
         }
@@ -1249,7 +1249,7 @@ impl RawLua {
 }
 
 // Uses 3 stack spaces
-unsafe fn load_from_std_lib(state: *mut ffi::lua_State, libs: StdLib) -> Result<()> {
+unsafe fn load_std_libs(state: *mut ffi::lua_State, libs: StdLib) -> Result<()> {
     #[inline(always)]
     pub unsafe fn requiref(
         state: *mut ffi::lua_State,

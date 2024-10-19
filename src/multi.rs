@@ -11,7 +11,7 @@ use crate::traits::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti};
 use crate::util::check_stack;
 use crate::value::{Nil, Value};
 
-/// Result is convertible to `MultiValue` following the common Lua idiom of returning the result
+/// Result is convertible to [`MultiValue`] following the common Lua idiom of returning the result
 /// on success, or in the case of an error, returning `nil` and an error message.
 impl<T: IntoLua, E: IntoLua> IntoLuaMulti for StdResult<T, E> {
     #[inline]
@@ -203,9 +203,6 @@ impl FromLuaMulti for MultiValue {
 /// # Ok(())
 /// # }
 /// ```
-///
-/// [`FromLua`]: crate::FromLua
-/// [`MultiValue`]: crate::MultiValue
 #[derive(Debug, Clone)]
 pub struct Variadic<T>(Vec<T>);
 

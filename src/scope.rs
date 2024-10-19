@@ -148,14 +148,15 @@ impl<'scope, 'env: 'scope> Scope<'scope, 'env> {
     /// [`Lua::scope`] for more details.
     ///
     /// The main limitation that comes from using non-'static userdata is that the produced userdata
-    /// will no longer have a `TypeId` associated with it, because `TypeId` can only work for
+    /// will no longer have a [`TypeId`] associated with it, because [`TypeId`] can only work for
     /// `'static` types. This means that it is impossible, once the userdata is created, to get a
-    /// reference to it back *out* of an `AnyUserData` handle. This also implies that the
+    /// reference to it back *out* of an [`AnyUserData`] handle. This also implies that the
     /// "function" type methods that can be added via [`UserDataMethods`] (the ones that accept
-    /// `AnyUserData` as a first parameter) are vastly less useful. Also, there is no way to re-use
+    /// [`AnyUserData`] as a first parameter) are vastly less useful. Also, there is no way to re-use
     /// a single metatable for multiple non-'static types, so there is a higher cost associated with
     /// creating the userdata metatable each time a new userdata is created.
     ///
+    /// [`TypeId`]: std::any::TypeId
     /// [`UserDataMethods`]: crate::UserDataMethods
     pub fn create_userdata<T>(&'scope self, data: T) -> Result<AnyUserData>
     where

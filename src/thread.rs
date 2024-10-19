@@ -75,17 +75,17 @@ impl Thread {
 
     /// Resumes execution of this thread.
     ///
-    /// Equivalent to `coroutine.resume`.
+    /// Equivalent to [`coroutine.resume`].
     ///
-    /// Passes `args` as arguments to the thread. If the coroutine has called `coroutine.yield`, it
-    /// will return these arguments. Otherwise, the coroutine wasn't yet started, so the arguments
-    /// are passed to its main function.
+    /// Passes `args` as arguments to the thread. If the coroutine has called [`coroutine.yield`],
+    /// it will return these arguments. Otherwise, the coroutine wasn't yet started, so the
+    /// arguments are passed to its main function.
     ///
-    /// If the thread is no longer in `Active` state (meaning it has finished execution or
-    /// encountered an error), this will return `Err(CoroutineInactive)`, otherwise will return `Ok`
-    /// as follows:
+    /// If the thread is no longer resumable (meaning it has finished execution or encountered an
+    /// error), this will return [`Error::CoroutineUnresumable`], otherwise will return `Ok` as
+    /// follows:
     ///
-    /// If the thread calls `coroutine.yield`, returns the values passed to `yield`. If the thread
+    /// If the thread calls [`coroutine.yield`], returns the values passed to `yield`. If the thread
     /// `return`s values from its main function, returns those.
     ///
     /// # Examples
@@ -114,6 +114,9 @@ impl Thread {
     /// # Ok(())
     /// # }
     /// ```
+    ///
+    /// [`coroutine.resume`]: https://www.lua.org/manual/5.4/manual.html#pdf-coroutine.resume
+    /// [`coroutine.yield`]: https://www.lua.org/manual/5.4/manual.html#pdf-coroutine.yield
     pub fn resume<R>(&self, args: impl IntoLuaMulti) -> Result<R>
     where
         R: FromLuaMulti,
@@ -187,10 +190,10 @@ impl Thread {
         }
     }
 
-    /// Sets a 'hook' function that will periodically be called as Lua code executes.
+    /// Sets a hook function that will periodically be called as Lua code executes.
     ///
-    /// This function is similar or [`Lua::set_hook()`] except that it sets for the thread.
-    /// To remove a hook call [`Lua::remove_hook()`].
+    /// This function is similar or [`Lua::set_hook`] except that it sets for the thread.
+    /// To remove a hook call [`Lua::remove_hook`].
     #[cfg(not(feature = "luau"))]
     #[cfg_attr(docsrs, doc(cfg(not(feature = "luau"))))]
     pub fn set_hook<F>(&self, triggers: HookTriggers, callback: F)
@@ -252,21 +255,22 @@ impl Thread {
         }
     }
 
-    /// Converts Thread to an AsyncThread which implements [`Future`] and [`Stream`] traits.
+    /// Converts [`Thread`] to an [`AsyncThread`] which implements [`Future`] and [`Stream`] traits.
     ///
     /// `args` are passed as arguments to the thread function for first call.
-    /// The object calls [`resume()`] while polling and also allows to run rust futures
+    /// The object calls [`resume`] while polling and also allow to run Rust futures
     /// to completion using an executor.
     ///
-    /// Using AsyncThread as a Stream allows to iterate through `coroutine.yield()`
-    /// values whereas Future version discards that values and poll until the final
+    /// Using [`AsyncThread`] as a [`Stream`] allow to iterate through [`coroutine.yield`]
+    /// values whereas [`Future`] version discards that values and poll until the final
     /// one (returned from the thread function).
     ///
     /// Requires `feature = "async"`
     ///
     /// [`Future`]: std::future::Future
     /// [`Stream`]: futures_util::stream::Stream
-    /// [`resume()`]: https://www.lua.org/manual/5.4/manual.html#lua_resume
+    /// [`resume`]: https://www.lua.org/manual/5.4/manual.html#lua_resume
+    /// [`coroutine.yield`]: https://www.lua.org/manual/5.4/manual.html#pdf-coroutine.yield
     ///
     /// # Examples
     ///
@@ -316,7 +320,7 @@ impl Thread {
     /// Under the hood replaces the global environment table with a new table,
     /// that performs writes locally and proxies reads to caller's global environment.
     ///
-    /// This mode ideally should be used together with the global sandbox mode [`Lua::sandbox()`].
+    /// This mode ideally should be used together with the global sandbox mode [`Lua::sandbox`].
     ///
     /// Please note that Luau links environment table with chunk when loading it into Lua state.
     /// Therefore you need to load chunks into a thread to link with the thread environment.
@@ -325,6 +329,7 @@ impl Thread {
     ///
     /// ```
     /// # use mlua::{Lua, Result};
+    /// # #[cfg(feature = "luau")]
     /// # fn main() -> Result<()> {
     /// let lua = Lua::new();
     /// let thread = lua.create_thread(lua.create_function(|lua2, ()| {
@@ -339,10 +344,13 @@ impl Thread {
     /// assert_eq!(lua.globals().get::<Option<u32>>("var")?, None);
     /// # Ok(())
     /// # }
+    ///
+    /// # #[cfg(not(feature = "luau"))]
+    /// # fn main() { }
     /// ```
     ///
     /// Requires `feature = "luau"`
-    #[cfg(any(feature = "luau", docsrs))]
+    #[cfg(any(feature = "luau", doc))]
     #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
     #[doc(hidden)]
     pub fn sandbox(&self) -> Result<()> {

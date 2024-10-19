@@ -16,9 +16,9 @@ use crate::util::{linenumber_to_usize, ptr_to_lossy_str, ptr_to_str};
 /// The `Debug` structure is provided as a parameter to the hook function set with
 /// [`Lua::set_hook`]. You may call the methods on this structure to retrieve information about the
 /// Lua code executing at the time that the hook function was called. Further information can be
-/// found in the Lua [documentation][lua_doc].
+/// found in the Lua [documentation].
 ///
-/// [lua_doc]: https://www.lua.org/manual/5.4/manual.html#lua_Debug
+/// [documentation]: https://www.lua.org/manual/5.4/manual.html#lua_Debug
 /// [`Lua::set_hook`]: crate::Lua::set_hook
 pub struct Debug<'a> {
     lua: EitherLua<'a>,
@@ -66,7 +66,7 @@ impl<'a> Debug<'a> {
 
     /// Returns the specific event that triggered the hook.
     ///
-    /// For [Lua 5.1] `DebugEvent::TailCall` is used for return events to indicate a return
+    /// For [Lua 5.1] [`DebugEvent::TailCall`] is used for return events to indicate a return
     /// from a function that did a tail call.
     ///
     /// [Lua 5.1]: https://www.lua.org/manual/5.1/manual.html#pdf-LUA_HOOKTAILRET

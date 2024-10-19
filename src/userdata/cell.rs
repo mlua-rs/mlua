@@ -145,7 +145,7 @@ impl<T> UserDataCell<T> {
     }
 }
 
-/// A wrapper type for a [`UserData`] value that provides read access.
+/// A wrapper type for a userdata value that provides read access.
 ///
 /// It implements [`FromLua`] and can be used to receive a typed userdata from Lua.
 pub struct UserDataRef<T>(UserDataVariant<T>);
@@ -206,7 +206,7 @@ impl<T: 'static> FromLua for UserDataRef<T> {
     }
 }
 
-/// A wrapper type for a mutably borrowed value from a `AnyUserData`.
+/// A wrapper type for a userdata value that provides read and write access.
 ///
 /// It implements [`FromLua`] and can be used to receive a typed userdata from Lua.
 pub struct UserDataRefMut<T>(UserDataVariant<T>);

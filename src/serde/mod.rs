@@ -106,8 +106,6 @@ pub trait LuaSerdeExt: Sealed {
     ///
     /// Requires `feature = "serialize"`
     ///
-    /// [`Value`]: crate::Value
-    ///
     /// # Example
     ///
     /// ```
@@ -132,8 +130,6 @@ pub trait LuaSerdeExt: Sealed {
     /// Deserializes a [`Value`] into any serde deserializable object.
     ///
     /// Requires `feature = "serialize"`
-    ///
-    /// [`Value`]: crate::Value
     ///
     /// # Example
     ///
@@ -163,8 +159,6 @@ pub trait LuaSerdeExt: Sealed {
     /// Deserializes a [`Value`] into any serde deserializable object with options.
     ///
     /// Requires `feature = "serialize"`
-    ///
-    /// [`Value`]: crate::Value
     ///
     /// # Example
     ///

@@ -94,12 +94,12 @@ impl Options {
 }
 
 impl Deserializer {
-    /// Creates a new Lua Deserializer for the `Value`.
+    /// Creates a new Lua Deserializer for the [`Value`].
     pub fn new(value: Value) -> Self {
         Self::new_with_options(value, Options::default())
     }
 
-    /// Creates a new Lua Deserializer for the `Value` with custom options.
+    /// Creates a new Lua Deserializer for the [`Value`] with custom options.
     pub fn new_with_options(value: Value, options: Options) -> Self {
         Deserializer {
             value,

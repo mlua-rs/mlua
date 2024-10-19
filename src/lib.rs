@@ -32,41 +32,32 @@
 //! [`serde::Serialize`] or [`serde::Deserialize`] can be converted.
 //! For convenience, additional functionality to handle `NULL` values and arrays is provided.
 //!
-//! The [`Value`] enum implements [`serde::Serialize`] trait to support serializing Lua values
-//! (including [`UserData`]) into Rust values.
+//! The [`Value`] enum and other types implement [`serde::Serialize`] trait to support serializing
+//! Lua values into Rust values.
 //!
 //! Requires `feature = "serialize"`.
 //!
 //! # Async/await support
 //!
-//! The [`create_async_function`] allows creating non-blocking functions that returns [`Future`].
-//! Lua code with async capabilities can be executed by [`call_async`] family of functions or
-//! polling [`AsyncThread`] using any runtime (eg. Tokio).
+//! The [`Lua::create_async_function`] allows creating non-blocking functions that returns
+//! [`Future`]. Lua code with async capabilities can be executed by [`Function::call_async`] family
+//! of functions or polling [`AsyncThread`] using any runtime (eg. Tokio).
 //!
 //! Requires `feature = "async"`.
 //!
-//! # `Send` requirement
+//! # `Send` and `Sync` support
+//!
 //! By default `mlua` is `!Send`. This can be changed by enabling `feature = "send"` that adds
-//! `Send` requirement to [`Function`]s and [`UserData`].
+//! `Send` requirement to Rust functions and [`UserData`] types.
+//!
+//! In this case [`Lua`] object and their types can be send or used from other threads. Internally
+//! access to Lua VM is synchronized using a reentrant mutex that can be locked many times within
+//! the same thread.
 //!
 //! [Lua programming language]: https://www.lua.org/
-//! [`Lua`]: crate::Lua
 //! [executing]: crate::Chunk::exec
 //! [evaluating]: crate::Chunk::eval
 //! [globals]: crate::Lua::globals
-//! [`IntoLua`]: crate::IntoLua
-//! [`FromLua`]: crate::FromLua
-//! [`IntoLuaMulti`]: crate::IntoLuaMulti
-//! [`FromLuaMulti`]: crate::FromLuaMulti
-//! [`Function`]: crate::Function
-//! [`UserData`]: crate::UserData
-//! [`UserDataFields`]: crate::UserDataFields
-//! [`UserDataMethods`]: crate::UserDataMethods
-//! [`LuaSerdeExt`]: crate::LuaSerdeExt
-//! [`Value`]: crate::Value
-//! [`create_async_function`]: crate::Lua::create_async_function
-//! [`call_async`]: crate::Function::call_async
-//! [`AsyncThread`]: crate::AsyncThread
 //! [`Future`]: std::future::Future
 //! [`serde::Serialize`]: https://docs.serde.rs/serde/ser/trait.Serialize.html
 //! [`serde::Deserialize`]: https://docs.serde.rs/serde/de/trait.Deserialize.html
@@ -199,10 +190,6 @@ extern crate mlua_derive;
 /// - The `//` (floor division) operator is unusable, as its start a comment.
 ///
 /// Everything else should work.
-///
-/// [`AsChunk`]: crate::AsChunk
-/// [`UserData`]: crate::UserData
-/// [`IntoLua`]: crate::IntoLua
 #[cfg(feature = "macros")]
 #[cfg_attr(docsrs, doc(cfg(feature = "macros")))]
 pub use mlua_derive::chunk;

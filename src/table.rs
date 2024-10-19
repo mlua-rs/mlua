@@ -4,13 +4,6 @@ use std::marker::PhantomData;
 use std::os::raw::{c_int, c_void};
 use std::string::String as StdString;
 
-#[cfg(feature = "serialize")]
-use {
-    rustc_hash::FxHashSet,
-    serde::ser::{Serialize, SerializeMap, SerializeSeq, Serializer},
-    std::{cell::RefCell, rc::Rc, result::Result as StdResult},
-};
-
 use crate::error::{Error, Result};
 use crate::function::Function;
 use crate::state::{LuaGuard, RawLua};
@@ -21,6 +14,13 @@ use crate::value::{Nil, Value};
 
 #[cfg(feature = "async")]
 use futures_util::future::{self, Either, Future};
+
+#[cfg(feature = "serialize")]
+use {
+    rustc_hash::FxHashSet,
+    serde::ser::{Serialize, SerializeMap, SerializeSeq, Serializer},
+    std::{cell::RefCell, rc::Rc, result::Result as StdResult},
+};
 
 /// Handle to an internal Lua table.
 #[derive(Clone, PartialEq)]
@@ -59,7 +59,7 @@ impl Table {
     /// # }
     /// ```
     ///
-    /// [`raw_set`]: #method.raw_set
+    /// [`raw_set`]: Table::raw_set
     pub fn set(&self, key: impl IntoLua, value: impl IntoLua) -> Result<()> {
         // Fast track (skip protected call)
         if !self.has_metatable() {
@@ -106,7 +106,7 @@ impl Table {
     /// # }
     /// ```
     ///
-    /// [`raw_get`]: #method.raw_get
+    /// [`raw_get`]: Table::raw_get
     pub fn get<V: FromLua>(&self, key: impl IntoLua) -> Result<V> {
         // Fast track (skip protected call)
         if !self.has_metatable() {
@@ -282,7 +282,9 @@ impl Table {
     }
 
     /// Inserts element value at position `idx` to the table, shifting up the elements from
-    /// `table[idx]`. The worst case complexity is O(n), where n is the table length.
+    /// `table[idx]`.
+    ///
+    /// The worst case complexity is O(n), where n is the table length.
     pub fn raw_insert(&self, idx: Integer, value: impl IntoLua) -> Result<()> {
         let size = self.raw_len() as Integer;
         if idx < 1 || idx > size + 1 {
@@ -361,8 +363,8 @@ impl Table {
     /// Removes a key from the table.
     ///
     /// If `key` is an integer, mlua shifts down the elements from `table[key+1]`,
-    /// and erases element `table[key]`. The complexity is O(n) in the worst case,
-    /// where n is the table length.
+    /// and erases element `table[key]`. The complexity is `O(n)` in the worst case,
+    /// where `n` is the table length.
     ///
     /// For other key types this is equivalent to setting `table[key] = nil`.
     pub fn raw_remove(&self, key: impl IntoLua) -> Result<()> {
@@ -437,9 +439,8 @@ impl Table {
 
     /// Returns the result of the Lua `#` operator.
     ///
-    /// This might invoke the `__len` metamethod. Use the [`raw_len`] method if that is not desired.
-    ///
-    /// [`raw_len`]: #method.raw_len
+    /// This might invoke the `__len` metamethod. Use the [`Table::raw_len`] method if that is not
+    /// desired.
     pub fn len(&self) -> Result<Integer> {
         // Fast track (skip protected call)
         if !self.has_metatable() {
@@ -491,7 +492,9 @@ impl Table {
 
     /// Returns a reference to the metatable of this table, or `None` if no metatable is set.
     ///
-    /// Unlike the `getmetatable` Lua function, this method ignores the `__metatable` field.
+    /// Unlike the [`getmetatable`] Lua function, this method ignores the `__metatable` field.
+    ///
+    /// [`getmetatable`]: https://www.lua.org/manual/5.4/manual.html#pdf-getmetatable
     pub fn metatable(&self) -> Option<Table> {
         let lua = self.0.lua.lock();
         let state = lua.state();
@@ -621,7 +624,6 @@ impl Table {
     /// # }
     /// ```
     ///
-    /// [`Result`]: crate::Result
     /// [Lua manual]: http://www.lua.org/manual/5.4/manual.html#pdf-next
     pub fn pairs<K: FromLua, V: FromLua>(&self) -> TablePairs<K, V> {
         TablePairs {
@@ -688,10 +690,6 @@ impl Table {
     /// # Ok(())
     /// # }
     /// ```
-    ///
-    /// [`pairs`]: #method.pairs
-    /// [`Result`]: crate::Result
-    /// [Lua manual]: http://www.lua.org/manual/5.4/manual.html#pdf-next
     pub fn sequence_values<V: FromLua>(&self) -> TableSequence<V> {
         TableSequence {
             guard: self.0.lua.lock(),
@@ -701,7 +699,7 @@ impl Table {
         }
     }
 
-    #[cfg(feature = "serialize")]
+    /// Iterates over the sequence part of the table, invoking the given closure on each value.
     pub(crate) fn for_each_value<V>(&self, mut f: impl FnMut(V) -> Result<()>) -> Result<()>
     where
         V: FromLua,
@@ -860,6 +858,10 @@ where
     }
 }
 
+impl LuaType for Table {
+    const TYPE_ID: c_int = ffi::LUA_TTABLE;
+}
+
 impl ObjectLike for Table {
     #[inline]
     fn get<V: FromLua>(&self, key: impl IntoLua) -> Result<V> {
@@ -952,10 +954,6 @@ impl Serialize for Table {
     fn serialize<S: Serializer>(&self, serializer: S) -> StdResult<S::Ok, S::Error> {
         SerializableTable::new(self, Default::default(), Default::default()).serialize(serializer)
     }
-}
-
-impl LuaType for Table {
-    const TYPE_ID: c_int = ffi::LUA_TTABLE;
 }
 
 #[cfg(feature = "serialize")]

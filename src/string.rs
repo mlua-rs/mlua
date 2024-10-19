@@ -5,15 +5,15 @@ use std::os::raw::{c_int, c_void};
 use std::string::String as StdString;
 use std::{cmp, fmt, slice, str};
 
+use crate::error::{Error, Result};
+use crate::state::Lua;
+use crate::types::{LuaType, ValueRef};
+
 #[cfg(feature = "serialize")]
 use {
     serde::ser::{Serialize, Serializer},
     std::result::Result as StdResult,
 };
-
-use crate::error::{Error, Result};
-use crate::state::Lua;
-use crate::types::{LuaType, ValueRef};
 
 /// Handle to an internal Lua string.
 ///
@@ -148,7 +148,7 @@ impl fmt::Debug for String {
     }
 }
 
-// Lua strings are basically &[u8] slices, so implement PartialEq for anything resembling that.
+// Lua strings are basically `&[u8]` slices, so implement `PartialEq` for anything resembling that.
 //
 // This makes our `String` comparable with `Vec<u8>`, `[u8]`, `&str` and `String`.
 //

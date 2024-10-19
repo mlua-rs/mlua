@@ -66,7 +66,7 @@ pub(crate) type AsyncCallbackUpvalue = Upvalue<AsyncCallback>;
 #[cfg(feature = "async")]
 pub(crate) type AsyncPollUpvalue = Upvalue<BoxFuture<'static, Result<c_int>>>;
 
-/// Type to set next Luau VM action after executing interrupt function.
+/// Type to set next Lua VM action after executing interrupt or hook function.
 pub enum VmState {
     Continue,
     /// Yield the current thread.
