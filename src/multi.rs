@@ -287,10 +287,7 @@ macro_rules! impl_tuple {
             }
 
             #[inline]
-            unsafe fn from_stack_multi(nvals: c_int, lua: &RawLua) -> Result<Self> {
-                if nvals > 0 {
-                    ffi::lua_pop(lua.state(), nvals);
-                }
+            unsafe fn from_stack_multi(_nvals: c_int, _lua: &RawLua) -> Result<Self> {
                 Ok(())
             }
         }

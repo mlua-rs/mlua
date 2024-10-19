@@ -128,10 +128,6 @@ pub trait FromLuaMulti: Sized {
         for idx in 0..nvals {
             values.push_back(lua.stack_value(-nvals + idx, None));
         }
-        if nvals > 0 {
-            // It's safe to clear the stack as all references moved to ref thread
-            ffi::lua_pop(lua.state(), nvals);
-        }
         Self::from_lua_multi(values, lua.lua())
     }
 
