@@ -9,7 +9,7 @@ use crate::function::Function;
 use crate::state::{LuaGuard, RawLua};
 use crate::traits::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, ObjectLike};
 use crate::types::{Integer, LuaType, ValueRef};
-use crate::util::{assert_stack, check_stack, StackGuard};
+use crate::util::{assert_stack, check_stack, get_metatable_ptr, StackGuard};
 use crate::value::{Nil, Value};
 
 #[cfg(feature = "async")]
@@ -242,12 +242,12 @@ impl Table {
 
     /// Sets a key-value pair without invoking metamethods.
     pub fn raw_set(&self, key: impl IntoLua, value: impl IntoLua) -> Result<()> {
-        #[cfg(feature = "luau")]
-        self.check_readonly_write()?;
-
         let lua = self.0.lua.lock();
         let state = lua.state();
         unsafe {
+            #[cfg(feature = "luau")]
+            self.check_readonly_write(&lua)?;
+
             let _sg = StackGuard::new(state);
             check_stack(state, 5)?;
 
@@ -312,12 +312,12 @@ impl Table {
 
     /// Appends a value to the back of the table without invoking metamethods.
     pub fn raw_push(&self, value: impl IntoLua) -> Result<()> {
-        #[cfg(feature = "luau")]
-        self.check_readonly_write()?;
-
         let lua = self.0.lua.lock();
         let state = lua.state();
         unsafe {
+            #[cfg(feature = "luau")]
+            self.check_readonly_write(&lua)?;
+
             let _sg = StackGuard::new(state);
             check_stack(state, 4)?;
 
@@ -340,12 +340,12 @@ impl Table {
 
     /// Removes the last element from the table and returns it, without invoking metamethods.
     pub fn raw_pop<V: FromLua>(&self) -> Result<V> {
-        #[cfg(feature = "luau")]
-        self.check_readonly_write()?;
-
         let lua = self.0.lua.lock();
         let state = lua.state();
         unsafe {
+            #[cfg(feature = "luau")]
+            self.check_readonly_write(&lua)?;
+
             let _sg = StackGuard::new(state);
             check_stack(state, 3)?;
 
@@ -401,13 +401,13 @@ impl Table {
     ///
     /// This method is useful to clear the table while keeping its capacity.
     pub fn clear(&self) -> Result<()> {
-        #[cfg(feature = "luau")]
-        self.check_readonly_write()?;
-
         let lua = self.0.lua.lock();
         unsafe {
             #[cfg(feature = "luau")]
-            ffi::lua_cleartable(lua.ref_thread(), self.0.index);
+            {
+                self.check_readonly_write(&lua)?;
+                ffi::lua_cleartable(lua.ref_thread(), self.0.index);
+            }
 
             #[cfg(not(feature = "luau"))]
             {
@@ -550,14 +550,7 @@ impl Table {
     #[inline]
     pub fn has_metatable(&self) -> bool {
         let lua = self.0.lua.lock();
-        let ref_thread = lua.ref_thread();
-        unsafe {
-            if ffi::lua_getmetatable(ref_thread, self.0.index) != 0 {
-                ffi::lua_pop(ref_thread, 1);
-                return true;
-            }
-        }
-        false
+        unsafe { !get_metatable_ptr(lua.ref_thread(), self.0.index).is_null() }
     }
 
     /// Sets `readonly` attribute on the table.
@@ -724,12 +717,12 @@ impl Table {
     /// Sets element value at position `idx` without invoking metamethods.
     #[doc(hidden)]
     pub fn raw_seti(&self, idx: usize, value: impl IntoLua) -> Result<()> {
-        #[cfg(feature = "luau")]
-        self.check_readonly_write()?;
-
         let lua = self.0.lua.lock();
         let state = lua.state();
         unsafe {
+            #[cfg(feature = "luau")]
+            self.check_readonly_write(&lua)?;
+
             let _sg = StackGuard::new(state);
             check_stack(state, 5)?;
 
@@ -765,8 +758,8 @@ impl Table {
 
     #[cfg(feature = "luau")]
     #[inline(always)]
-    pub(crate) fn check_readonly_write(&self) -> Result<()> {
-        if self.is_readonly() {
+    fn check_readonly_write(&self, lua: &RawLua) -> Result<()> {
+        if unsafe { ffi::lua_getreadonly(lua.ref_thread(), self.0.index) != 0 } {
             return Err(Error::runtime("attempt to modify a readonly table"));
         }
         Ok(())
