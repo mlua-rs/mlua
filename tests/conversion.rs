@@ -474,6 +474,7 @@ fn test_either_enum() -> Result<()> {
     *either.as_mut().left().unwrap() = 44;
     assert_eq!(*either.as_ref().left().unwrap(), 44);
     assert_eq!(format!("{either}"), "44");
+    assert_eq!(either.right(), None);
 
     // Right
     either = Either::Right("hello".to_string());
@@ -482,6 +483,7 @@ fn test_either_enum() -> Result<()> {
     *either.as_mut().right().unwrap() = "world".to_string();
     assert_eq!(*either.as_ref().right().unwrap(), "world");
     assert_eq!(format!("{either}"), "world");
+    assert_eq!(either.left(), None);
 
     Ok(())
 }
@@ -492,8 +494,10 @@ fn test_either_into_lua() -> Result<()> {
 
     // Direct conversion
     let mut either = Either::<i32, &Table>::Left(42);
-    let value = either.into_lua(&lua)?;
-    assert_eq!(value, Value::Integer(42));
+    assert_eq!(either.into_lua(&lua)?, Value::Integer(42));
+    let t = lua.create_table()?;
+    either = Either::Right(&t);
+    assert!(matches!(either.into_lua(&lua)?, Value::Table(_)));
 
     // Push into stack
     let f =
@@ -513,6 +517,19 @@ fn test_either_into_lua() -> Result<()> {
 #[test]
 fn test_either_from_lua() -> Result<()> {
     let lua = Lua::new();
+
+    // From value
+    let mut either = lua.unpack::<Either<i32, Table>>(Value::Integer(42))?;
+    assert!(either.is_left());
+    assert_eq!(*either.as_ref().left().unwrap(), 42);
+    let t = lua.create_table()?;
+    either = lua.unpack::<Either<i32, Table>>(Value::Table(t.clone()))?;
+    assert!(either.is_right());
+    assert_eq!(either.as_ref().right().unwrap(), &t);
+    match lua.unpack::<Either<i32, Table>>(Value::String(lua.create_string("abc")?)) {
+        Err(Error::FromLuaConversionError { to, .. }) => assert_eq!(to, "Either<i32, Table>"),
+        _ => panic!("expected `Error::FromLuaConversionError`"),
+    }
 
     // From stack
     let f = lua.create_function(|_, either: Either<i32, Table>| Ok(either))?;
