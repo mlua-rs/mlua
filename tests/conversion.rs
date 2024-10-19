@@ -95,6 +95,21 @@ fn test_function_into_lua() -> Result<()> {
 }
 
 #[test]
+fn test_function_from_lua() -> Result<()> {
+    let lua = Lua::new();
+
+    assert!(lua.globals().get::<Function>("print").is_ok());
+    match lua.globals().get::<Function>("math") {
+        Err(err @ Error::FromLuaConversionError { .. }) => {
+            assert_eq!(err.to_string(), "error converting Lua table to function");
+        }
+        _ => panic!("expected `Error::FromLuaConversionError`"),
+    }
+
+    Ok(())
+}
+
+#[test]
 fn test_thread_into_lua() -> Result<()> {
     let lua = Lua::new();
 
@@ -108,6 +123,20 @@ fn test_thread_into_lua() -> Result<()> {
     let table = lua.create_table()?;
     table.set("th", &th)?;
     assert_eq!(th, table.get::<Thread>("th")?);
+
+    Ok(())
+}
+
+#[test]
+fn test_thread_from_lua() -> Result<()> {
+    let lua = Lua::new();
+
+    match lua.globals().get::<Thread>("print") {
+        Err(err @ Error::FromLuaConversionError { .. }) => {
+            assert_eq!(err.to_string(), "error converting Lua function to thread");
+        }
+        _ => panic!("expected `Error::FromLuaConversionError`"),
+    }
 
     Ok(())
 }
@@ -131,6 +160,45 @@ fn test_anyuserdata_into_lua() -> Result<()> {
 }
 
 #[test]
+fn test_anyuserdata_from_lua() -> Result<()> {
+    let lua = Lua::new();
+
+    match lua.globals().get::<AnyUserData>("print") {
+        Err(err @ Error::FromLuaConversionError { .. }) => {
+            assert_eq!(err.to_string(), "error converting Lua function to userdata");
+        }
+        _ => panic!("expected `Error::FromLuaConversionError`"),
+    }
+
+    Ok(())
+}
+
+#[test]
+fn test_error_conversion() -> Result<()> {
+    let lua = Lua::new();
+
+    // Any Lua value can be converted to `Error`
+    match lua.convert::<Error>(Error::external("external error")) {
+        Ok(Error::ExternalError(msg)) => assert_eq!(msg.to_string(), "external error"),
+        res => panic!("expected `Error::ExternalError`, got {res:?}"),
+    }
+    match lua.convert::<Error>("abc") {
+        Ok(Error::RuntimeError(msg)) => assert_eq!(msg, "abc"),
+        res => panic!("expected `Error::RuntimeError`, got {res:?}"),
+    }
+    match lua.convert::<Error>(true) {
+        Ok(Error::RuntimeError(msg)) => assert_eq!(msg, "true"),
+        res => panic!("expected `Error::RuntimeError`, got {res:?}"),
+    }
+    match lua.convert::<Error>(lua.globals()) {
+        Ok(Error::RuntimeError(msg)) => assert!(msg.starts_with("table:")),
+        res => panic!("expected `Error::RuntimeError`, got {res:?}"),
+    }
+
+    Ok(())
+}
+
+#[test]
 fn test_registry_value_into_lua() -> Result<()> {
     let lua = Lua::new();
 
@@ -140,7 +208,7 @@ fn test_registry_value_into_lua() -> Result<()> {
     let value1 = lua.pack(&r)?;
     let value2 = lua.pack(r)?;
     assert_eq!(value1.as_str().as_deref(), Some("hello, world"));
-    assert_eq!(value2.to_pointer(), value2.to_pointer());
+    assert_eq!(value1.to_pointer(), value2.to_pointer());
 
     // Push into stack
     let t = lua.create_table()?;
@@ -171,6 +239,32 @@ fn test_registry_key_from_lua() -> Result<()> {
     let fkey = lua.load("function() return 1 end").eval::<RegistryKey>()?;
     let f = lua.registry_value::<Function>(&fkey)?;
     assert_eq!(f.call::<i32>(())?, 1);
+
+    Ok(())
+}
+
+#[test]
+fn test_bool_into_lua() -> Result<()> {
+    let lua = Lua::new();
+
+    // Direct conversion
+    assert!(true.into_lua(&lua)?.is_boolean());
+
+    // Push into stack
+    let table = lua.create_table()?;
+    table.set("b", true)?;
+    assert_eq!(true, table.get::<bool>("b")?);
+
+    Ok(())
+}
+
+#[test]
+fn test_bool_from_lua() -> Result<()> {
+    let lua = Lua::new();
+
+    assert!(lua.globals().get::<bool>("print")?);
+    assert!(lua.convert::<bool>(123)?);
+    assert!(!lua.convert::<bool>(Value::Nil)?);
 
     Ok(())
 }

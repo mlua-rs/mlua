@@ -243,14 +243,10 @@ impl IntoLua for Error {
 
 impl FromLua for Error {
     #[inline]
-    fn from_lua(value: Value, lua: &Lua) -> Result<Error> {
+    fn from_lua(value: Value, _: &Lua) -> Result<Error> {
         match value {
             Value::Error(err) => Ok(*err),
-            val => Ok(Error::runtime(
-                lua.coerce_string(val)?
-                    .and_then(|s| Some(s.to_str().ok()?.to_owned()))
-                    .unwrap_or_else(|| "<unprintable error>".to_owned()),
-            )),
+            val => Ok(Error::runtime(val.to_string()?)),
         }
     }
 }
