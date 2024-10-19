@@ -739,12 +739,6 @@ impl AnyUserData {
         self.nth_user_value(1)
     }
 
-    #[doc(hidden)]
-    #[deprecated(since = "0.9.0", note = "please use `user_value` instead")]
-    pub fn get_user_value<V: FromLua>(&self) -> Result<V> {
-        self.nth_user_value(1)
-    }
-
     /// Sets an associated `n`th value to this `AnyUserData`.
     ///
     /// The value may be any Lua value whatsoever, and can be retrieved with [`nth_user_value`].
@@ -818,12 +812,6 @@ impl AnyUserData {
         }
     }
 
-    #[doc(hidden)]
-    #[deprecated(since = "0.9.0", note = "please use `nth_user_value` instead")]
-    pub fn get_nth_user_value<V: FromLua>(&self, n: usize) -> Result<V> {
-        self.nth_user_value(n)
-    }
-
     /// Sets an associated value to this `AnyUserData` by name.
     ///
     /// The value can be retrieved with [`named_user_value`].
@@ -878,12 +866,6 @@ impl AnyUserData {
 
             V::from_stack(-1, &lua)
         }
-    }
-
-    #[doc(hidden)]
-    #[deprecated(since = "0.9.0", note = "please use `named_user_value` instead")]
-    pub fn get_named_user_value<V: FromLua>(&self, name: &str) -> Result<V> {
-        self.named_user_value(name)
     }
 
     /// Returns a metatable of this `UserData`.
