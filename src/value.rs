@@ -689,7 +689,7 @@ impl<'a> SerializableValue<'a> {
 }
 
 #[cfg(feature = "serialize")]
-impl<'a> Serialize for SerializableValue<'a> {
+impl Serialize for SerializableValue<'_> {
     fn serialize<S>(&self, serializer: S) -> StdResult<S::Ok, S::Error>
     where
         S: Serializer,

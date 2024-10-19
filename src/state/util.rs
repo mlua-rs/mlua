@@ -18,7 +18,7 @@ impl<'a> StateGuard<'a> {
     }
 }
 
-impl<'a> Drop for StateGuard<'a> {
+impl Drop for StateGuard<'_> {
     fn drop(&mut self) {
         self.0.state.set(self.1);
     }

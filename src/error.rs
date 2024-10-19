@@ -328,7 +328,7 @@ impl StdError for Error {
             // returns nothing.
             Error::CallbackError { .. } => None,
             Error::ExternalError(err) => err.source(),
-            Error::WithContext { cause, .. } => Self::source(&cause),
+            Error::WithContext { cause, .. } => Self::source(cause),
             _ => None,
         }
     }
@@ -354,7 +354,7 @@ impl Error {
     {
         match self {
             Error::ExternalError(err) => err.downcast_ref(),
-            Error::WithContext { cause, .. } => Self::downcast_ref(&cause),
+            Error::WithContext { cause, .. } => Self::downcast_ref(cause),
             _ => None,
         }
     }

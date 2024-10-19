@@ -975,7 +975,7 @@ impl<'a> SerializableTable<'a> {
 }
 
 #[cfg(feature = "serialize")]
-impl<'a> Serialize for SerializableTable<'a> {
+impl Serialize for SerializableTable<'_> {
     fn serialize<S>(&self, serializer: S) -> StdResult<S::Ok, S::Error>
     where
         S: Serializer,
@@ -1066,7 +1066,7 @@ pub struct TablePairs<'a, K, V> {
     _phantom: PhantomData<(K, V)>,
 }
 
-impl<'a, K, V> Iterator for TablePairs<'a, K, V>
+impl<K, V> Iterator for TablePairs<'_, K, V>
 where
     K: FromLua,
     V: FromLua,
@@ -1126,7 +1126,7 @@ pub struct TableSequence<'a, V> {
     _phantom: PhantomData<V>,
 }
 
-impl<'a, V> Iterator for TableSequence<'a, V>
+impl<V> Iterator for TableSequence<'_, V>
 where
     V: FromLua,
 {

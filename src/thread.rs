@@ -522,7 +522,7 @@ impl<'lua, 'a> WakerGuard<'lua, 'a> {
 }
 
 #[cfg(feature = "async")]
-impl<'lua, 'a> Drop for WakerGuard<'lua, 'a> {
+impl Drop for WakerGuard<'_, '_> {
     fn drop(&mut self) {
         unsafe { self.lua.set_waker(self.prev) };
     }

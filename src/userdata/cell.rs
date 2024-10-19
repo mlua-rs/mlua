@@ -277,14 +277,14 @@ impl<T: 'static> FromLua for UserDataRefMut<T> {
 /// A type that provides read access to a userdata value (borrowing the value).
 pub(crate) struct UserDataBorrowRef<'a, T>(&'a UserDataVariant<T>);
 
-impl<'a, T> Drop for UserDataBorrowRef<'a, T> {
+impl<T> Drop for UserDataBorrowRef<'_, T> {
     #[inline]
     fn drop(&mut self) {
         unsafe { self.0.raw_lock().unlock_shared() };
     }
 }
 
-impl<'a, T> Deref for UserDataBorrowRef<'a, T> {
+impl<T> Deref for UserDataBorrowRef<'_, T> {
     type Target = T;
 
     #[inline]
@@ -308,14 +308,14 @@ impl<'a, T> TryFrom<&'a UserDataVariant<T>> for UserDataBorrowRef<'a, T> {
 
 pub(crate) struct UserDataBorrowMut<'a, T>(&'a UserDataVariant<T>);
 
-impl<'a, T> Drop for UserDataBorrowMut<'a, T> {
+impl<T> Drop for UserDataBorrowMut<'_, T> {
     #[inline]
     fn drop(&mut self) {
         unsafe { self.0.raw_lock().unlock_exclusive() };
     }
 }
 
-impl<'a, T> Deref for UserDataBorrowMut<'a, T> {
+impl<T> Deref for UserDataBorrowMut<'_, T> {
     type Target = T;
 
     #[inline]
@@ -324,7 +324,7 @@ impl<'a, T> Deref for UserDataBorrowMut<'a, T> {
     }
 }
 
-impl<'a, T> DerefMut for UserDataBorrowMut<'a, T> {
+impl<T> DerefMut for UserDataBorrowMut<'_, T> {
     #[inline]
     fn deref_mut(&mut self) -> &mut T {
         unsafe { &mut *self.0.as_ptr() }

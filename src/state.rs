@@ -306,7 +306,7 @@ impl Lua {
         R::from_stack_multi(nresults, &lua)
     }
 
-    /// FIXME: Deprecated load_from_std_lib
+    // FIXME: Deprecated load_from_std_lib
 
     /// Loads the specified subset of the standard libraries into an existing Lua state.
     ///

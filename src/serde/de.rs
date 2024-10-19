@@ -498,7 +498,7 @@ struct MapDeserializer<'a> {
     processed: usize,
 }
 
-impl<'a> MapDeserializer<'a> {
+impl MapDeserializer<'_> {
     fn next_key_deserializer(&mut self) -> Result<Option<Deserializer>> {
         loop {
             match self.pairs.next() {

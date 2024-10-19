@@ -1056,7 +1056,7 @@ impl UserDataMetatable {
 /// [`UserDataMetatable::pairs`]: crate::UserDataMetatable::method.pairs
 pub struct UserDataMetatablePairs<'a, V>(TablePairs<'a, StdString, V>);
 
-impl<'a, V> Iterator for UserDataMetatablePairs<'a, V>
+impl<V> Iterator for UserDataMetatablePairs<'_, V>
 where
     V: FromLua,
 {
