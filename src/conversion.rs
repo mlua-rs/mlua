@@ -17,7 +17,7 @@ use crate::string::String;
 use crate::table::Table;
 use crate::thread::Thread;
 use crate::traits::{FromLua, IntoLua, ShortTypeName as _};
-use crate::types::{LightUserData, MaybeSend, RegistryKey};
+use crate::types::{Either, LightUserData, MaybeSend, RegistryKey};
 use crate::userdata::{AnyUserData, UserData};
 use crate::value::{Nil, Value};
 
@@ -1036,6 +1036,62 @@ impl<T: FromLua> FromLua for Option<T> {
         match ffi::lua_type(lua.state(), idx) {
             ffi::LUA_TNIL => Ok(None),
             _ => Ok(Some(T::from_stack(idx, lua)?)),
+        }
+    }
+}
+
+impl<L: IntoLua, R: IntoLua> IntoLua for Either<L, R> {
+    #[inline]
+    fn into_lua(self, lua: &Lua) -> Result<Value> {
+        match self {
+            Either::Left(l) => l.into_lua(lua),
+            Either::Right(r) => r.into_lua(lua),
+        }
+    }
+
+    #[inline]
+    unsafe fn push_into_stack(self, lua: &RawLua) -> Result<()> {
+        match self {
+            Either::Left(l) => l.push_into_stack(lua),
+            Either::Right(r) => r.push_into_stack(lua),
+        }
+    }
+}
+
+impl<L: FromLua, R: FromLua> FromLua for Either<L, R> {
+    #[inline]
+    fn from_lua(value: Value, lua: &Lua) -> Result<Self> {
+        let value_type_name = value.type_name();
+        // Try the left type first
+        match L::from_lua(value.clone(), lua) {
+            Ok(l) => Ok(Either::Left(l)),
+            // Try the right type
+            Err(_) => match R::from_lua(value, lua).map(Either::Right) {
+                Ok(r) => Ok(r),
+                Err(_) => Err(Error::FromLuaConversionError {
+                    from: value_type_name,
+                    to: Self::type_name(),
+                    message: None,
+                }),
+            },
+        }
+    }
+
+    #[inline]
+    unsafe fn from_stack(idx: c_int, lua: &RawLua) -> Result<Self> {
+        match L::from_stack(idx, lua) {
+            Ok(l) => Ok(Either::Left(l)),
+            Err(_) => match R::from_stack(idx, lua).map(Either::Right) {
+                Ok(r) => Ok(r),
+                Err(_) => {
+                    let value_type_name = CStr::from_ptr(ffi::luaL_typename(lua.state(), idx));
+                    Err(Error::FromLuaConversionError {
+                        from: value_type_name.to_str().unwrap(),
+                        to: Self::type_name(),
+                        message: None,
+                    })
+                }
+            },
         }
     }
 }

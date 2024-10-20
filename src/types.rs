@@ -123,7 +123,6 @@ impl LuaType for LightUserData {
 }
 
 mod app_data;
-mod either;
 mod registry_key;
 mod sync;
 mod value_ref;

@@ -46,6 +46,7 @@ anyhow = ["dep:anyhow"]
 [dependencies]
 mlua_derive = { version = "=0.10.0-rc.1", optional = true, path = "mlua_derive" }
 bstr = { version = "1.0", features = ["std"], default-features = false }
+either = "1.0"
 num-traits = { version = "0.2.14" }
 rustc-hash = "2.0"
 futures-util = { version = "0.3", optional = true, default-features = false, features = ["std"] }
