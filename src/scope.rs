@@ -152,9 +152,9 @@ impl<'scope, 'env: 'scope> Scope<'scope, 'env> {
     /// `'static` types. This means that it is impossible, once the userdata is created, to get a
     /// reference to it back *out* of an [`AnyUserData`] handle. This also implies that the
     /// "function" type methods that can be added via [`UserDataMethods`] (the ones that accept
-    /// [`AnyUserData`] as a first parameter) are vastly less useful. Also, there is no way to re-use
-    /// a single metatable for multiple non-'static types, so there is a higher cost associated with
-    /// creating the userdata metatable each time a new userdata is created.
+    /// [`AnyUserData`] as a first parameter) are vastly less useful. Also, there is no way to
+    /// re-use a single metatable for multiple non-'static types, so there is a higher cost
+    /// associated with creating the userdata metatable each time a new userdata is created.
     ///
     /// [`TypeId`]: std::any::TypeId
     /// [`UserDataMethods`]: crate::UserDataMethods
