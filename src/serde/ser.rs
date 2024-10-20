@@ -1,3 +1,5 @@
+//! Serialize a Rust data structure into Lua value.
+
 use serde::{ser, Serialize};
 
 use super::LuaSerdeExt;

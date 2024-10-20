@@ -1,3 +1,5 @@
+//! Deserialize Lua values to a Rust data structure.
+
 use std::cell::RefCell;
 use std::os::raw::c_void;
 use std::rc::Rc;
