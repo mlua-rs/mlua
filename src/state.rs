@@ -792,7 +792,7 @@ impl Lua {
         unsafe {
             match MemoryState::get(lua.main_state) {
                 mem_state if !mem_state.is_null() => Ok((*mem_state).set_memory_limit(limit)),
-                _ => Err(Error::MemoryLimitNotAvailable),
+                _ => Err(Error::MemoryControlNotAvailable),
             }
         }
     }

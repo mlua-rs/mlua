@@ -42,11 +42,11 @@ pub enum Error {
     GarbageCollectorError(StdString),
     /// Potentially unsafe action in safe mode.
     SafetyError(StdString),
-    /// Setting memory limit is not available.
+    /// Memory control is not available.
     ///
     /// This error can only happen when Lua state was not created by us and does not have the
     /// custom allocator attached.
-    MemoryLimitNotAvailable,
+    MemoryControlNotAvailable,
     /// A mutable callback has triggered Lua code that has called the same mutable callback again.
     ///
     /// This is an error because a mutable callback can only be borrowed mutably once.
@@ -220,8 +220,8 @@ impl fmt::Display for Error {
             Error::SafetyError(msg) => {
                 write!(fmt, "safety error: {msg}")
             },
-            Error::MemoryLimitNotAvailable => {
-                write!(fmt, "setting memory limit is not available")
+            Error::MemoryControlNotAvailable => {
+                write!(fmt, "memory control is not available")
             }
             Error::RecursiveMutCallback => write!(fmt, "mutable callback called recursively"),
             Error::CallbackDestructed => write!(
