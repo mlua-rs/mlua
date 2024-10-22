@@ -20,8 +20,6 @@ pub use app_data::{AppData, AppDataRef, AppDataRefMut};
 pub use either::Either;
 pub use registry_key::RegistryKey;
 pub(crate) use value_ref::ValueRef;
-#[cfg(any(feature = "luau", doc))]
-pub use vector::Vector;
 
 /// Type of Lua integer numbers.
 pub type Integer = ffi::lua_Integer;
@@ -126,9 +124,6 @@ mod app_data;
 mod registry_key;
 mod sync;
 mod value_ref;
-
-#[cfg(any(feature = "luau", doc))]
-mod vector;
 
 #[cfg(test)]
 mod assertions {

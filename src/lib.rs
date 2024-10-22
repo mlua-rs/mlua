@@ -90,6 +90,7 @@ mod types;
 mod userdata;
 mod util;
 mod value;
+mod vector;
 
 pub mod prelude;
 
@@ -124,7 +125,7 @@ pub use crate::hook::HookTriggers;
 
 #[cfg(any(feature = "luau", doc))]
 #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
-pub use crate::{buffer::Buffer, chunk::Compiler, function::CoverageInfo, types::Vector};
+pub use crate::{buffer::Buffer, chunk::Compiler, function::CoverageInfo, vector::Vector};
 
 #[cfg(feature = "async")]
 pub use crate::{thread::AsyncThread, traits::LuaNativeAsyncFn};

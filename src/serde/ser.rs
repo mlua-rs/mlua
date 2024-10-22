@@ -269,7 +269,7 @@ impl<'a> ser::Serializer for Serializer<'a> {
     #[inline]
     fn serialize_tuple_struct(self, name: &'static str, len: usize) -> Result<Self::SerializeTupleStruct> {
         #[cfg(feature = "luau")]
-        if name == "Vector" && len == crate::types::Vector::SIZE {
+        if name == "Vector" && len == crate::Vector::SIZE {
             return Ok(SerializeSeq::new_vector(self.lua, self.options));
         }
         _ = name;
@@ -343,7 +343,7 @@ impl<'a> ser::Serializer for Serializer<'a> {
 pub struct SerializeSeq<'a> {
     lua: &'a Lua,
     #[cfg(feature = "luau")]
-    vector: Option<crate::types::Vector>,
+    vector: Option<crate::Vector>,
     table: Option<Table>,
     next: usize,
     options: Options,
@@ -365,7 +365,7 @@ impl<'a> SerializeSeq<'a> {
     const fn new_vector(lua: &'a Lua, options: Options) -> Self {
         Self {
             lua,
-            vector: Some(crate::types::Vector::zero()),
+            vector: Some(crate::Vector::zero()),
             table: None,
             next: 0,
             options,

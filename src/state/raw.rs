@@ -613,9 +613,9 @@ impl RawLua {
                 let v = ffi::lua_tovector(state, idx);
                 mlua_debug_assert!(!v.is_null(), "vector is null");
                 #[cfg(not(feature = "luau-vector4"))]
-                return Value::Vector(crate::types::Vector([*v, *v.add(1), *v.add(2)]));
+                return Value::Vector(crate::Vector([*v, *v.add(1), *v.add(2)]));
                 #[cfg(feature = "luau-vector4")]
-                return Value::Vector(crate::types::Vector([*v, *v.add(1), *v.add(2), *v.add(3)]));
+                return Value::Vector(crate::Vector([*v, *v.add(1), *v.add(2), *v.add(3)]));
             }
 
             ffi::LUA_TSTRING => {

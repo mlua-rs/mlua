@@ -1,9 +1,7 @@
 use std::fmt;
 
-#[cfg(all(any(feature = "luau", doc), feature = "serialize"))]
+#[cfg(feature = "serialize")]
 use serde::ser::{Serialize, SerializeTupleStruct, Serializer};
-
-use super::LuaType;
 
 /// A Luau vector type.
 ///
@@ -23,6 +21,7 @@ impl fmt::Display for Vector {
     }
 }
 
+#[cfg_attr(not(feature = "luau"), allow(unused))]
 impl Vector {
     pub(crate) const SIZE: usize = if cfg!(feature = "luau-vector4") { 4 } else { 3 };
 
@@ -67,7 +66,7 @@ impl Vector {
     }
 }
 
-#[cfg(all(any(feature = "luau", doc), feature = "serialize"))]
+#[cfg(feature = "serialize")]
 impl Serialize for Vector {
     fn serialize<S: Serializer>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error> {
         let mut ts = serializer.serialize_tuple_struct("Vector", Self::SIZE)?;
@@ -87,11 +86,7 @@ impl PartialEq<[f32; Self::SIZE]> for Vector {
     }
 }
 
-impl LuaType for Vector {
-    #[cfg(feature = "luau")]
-    const TYPE_ID: i32 = ffi::LUA_TVECTOR;
-
-    // This is a dummy value, as `Vector` is supported only by Luau
-    #[cfg(not(feature = "luau"))]
-    const TYPE_ID: i32 = ffi::LUA_TNONE;
+#[cfg(feature = "luau")]
+impl crate::types::LuaType for Vector {
+    const TYPE_ID: std::os::raw::c_int = ffi::LUA_TVECTOR;
 }

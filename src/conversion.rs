@@ -350,7 +350,7 @@ impl FromLua for LightUserData {
 }
 
 #[cfg(feature = "luau")]
-impl IntoLua for crate::types::Vector {
+impl IntoLua for crate::Vector {
     #[inline]
     fn into_lua(self, _: &Lua) -> Result<Value> {
         Ok(Value::Vector(self))
@@ -358,7 +358,7 @@ impl IntoLua for crate::types::Vector {
 }
 
 #[cfg(feature = "luau")]
-impl FromLua for crate::types::Vector {
+impl FromLua for crate::Vector {
     #[inline]
     fn from_lua(value: Value, _: &Lua) -> Result<Self> {
         match value {
@@ -848,7 +848,7 @@ where
         match value {
             #[cfg(feature = "luau")]
             #[rustfmt::skip]
-            Value::Vector(v) if N == crate::types::Vector::SIZE => unsafe {
+            Value::Vector(v) if N == crate::Vector::SIZE => unsafe {
                 use std::{mem, ptr};
                 let mut arr: [mem::MaybeUninit<T>; N] = mem::MaybeUninit::uninit().assume_init();
                 ptr::write(arr[0].as_mut_ptr() , T::from_lua(Value::Number(v.x() as _), _lua)?);

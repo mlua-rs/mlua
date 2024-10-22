@@ -420,7 +420,7 @@ impl<'de> de::SeqAccess<'de> for SeqDeserializer<'_> {
 
 #[cfg(feature = "luau")]
 struct VecDeserializer {
-    vec: crate::types::Vector,
+    vec: crate::Vector,
     next: usize,
     options: Options,
     visited: Rc<RefCell<FxHashSet<*const c_void>>>,
@@ -446,7 +446,7 @@ impl<'de> de::SeqAccess<'de> for VecDeserializer {
     }
 
     fn size_hint(&self) -> Option<usize> {
-        Some(crate::types::Vector::SIZE)
+        Some(crate::Vector::SIZE)
     }
 }
 
