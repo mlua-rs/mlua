@@ -15,7 +15,7 @@ use {
     crate::table::SerializableTable,
     rustc_hash::FxHashSet,
     serde::ser::{self, Serialize, Serializer},
-    std::{cell::RefCell, rc::Rc, result::Result as StdResult},
+    std::{cell::RefCell, result::Result as StdResult},
 };
 
 use crate::error::{Error, Result};
@@ -582,7 +582,7 @@ pub struct SerializableValue<'a, 'lua> {
     value: &'a Value<'lua>,
     options: crate::serde::de::Options,
     // In many cases we don't need `visited` map, so don't allocate memory by default
-    visited: Option<Rc<RefCell<FxHashSet<*const c_void>>>>,
+    visited: Option<Arc<RefCell<FxHashSet<*const c_void>>>>,
 }
 
 #[cfg(feature = "serialize")]
@@ -599,7 +599,7 @@ impl<'a, 'lua> SerializableValue<'a, 'lua> {
     pub(crate) fn new(
         value: &'a Value<'lua>,
         options: crate::serde::de::Options,
-        visited: Option<&Rc<RefCell<FxHashSet<*const c_void>>>>,
+        visited: Option<&Arc<RefCell<FxHashSet<*const c_void>>>>,
     ) -> Self {
         if let Value::Table(_) = value {
             return Self {

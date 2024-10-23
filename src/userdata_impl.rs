@@ -16,9 +16,6 @@ use crate::userdata::{
 use crate::util::{get_userdata, short_type_name};
 use crate::value::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, Value};
 
-#[cfg(not(feature = "send"))]
-use std::rc::Rc;
-
 #[cfg(feature = "async")]
 use {crate::types::AsyncCallback, futures_util::future, std::future::Future};
 
@@ -91,13 +88,13 @@ impl<'lua, T: 'static> UserDataRegistry<'lua, T> {
                     method(lua, &ud, args?)?.push_into_stack_multi(lua)
                 }
                 #[cfg(not(feature = "send"))]
-                Some(id) if id == TypeId::of::<Rc<T>>() => {
-                    let ud = try_self_arg!(get_userdata_ref::<Rc<T>>(state, index));
+                Some(id) if id == TypeId::of::<Arc<T>>() => {
+                    let ud = try_self_arg!(get_userdata_ref::<Arc<T>>(state, index));
                     method(lua, &ud, args?)?.push_into_stack_multi(lua)
                 }
                 #[cfg(not(feature = "send"))]
-                Some(id) if id == TypeId::of::<Rc<RefCell<T>>>() => {
-                    let ud = try_self_arg!(get_userdata_ref::<Rc<RefCell<T>>>(state, index));
+                Some(id) if id == TypeId::of::<Arc<RefCell<T>>>() => {
+                    let ud = try_self_arg!(get_userdata_ref::<Arc<RefCell<T>>>(state, index));
                     let ud = try_self_arg!(ud.try_borrow(), Error::UserDataBorrowError);
                     method(lua, &ud, args?)?.push_into_stack_multi(lua)
                 }
@@ -171,10 +168,10 @@ impl<'lua, T: 'static> UserDataRegistry<'lua, T> {
                     method(lua, &mut ud, args?)?.push_into_stack_multi(lua)
                 }
                 #[cfg(not(feature = "send"))]
-                Some(id) if id == TypeId::of::<Rc<T>>() => Err(Error::UserDataBorrowMutError),
+                Some(id) if id == TypeId::of::<Arc<T>>() => Err(Error::UserDataBorrowMutError),
                 #[cfg(not(feature = "send"))]
-                Some(id) if id == TypeId::of::<Rc<RefCell<T>>>() => {
-                    let ud = try_self_arg!(get_userdata_mut::<Rc<RefCell<T>>>(state, index));
+                Some(id) if id == TypeId::of::<Arc<RefCell<T>>>() => {
+                    let ud = try_self_arg!(get_userdata_mut::<Arc<RefCell<T>>>(state, index));
                     let mut ud = try_self_arg!(ud.try_borrow_mut(), Error::UserDataBorrowMutError);
                     method(lua, &mut ud, args?)?.push_into_stack_multi(lua)
                 }
@@ -248,15 +245,15 @@ impl<'lua, T: 'static> UserDataRegistry<'lua, T> {
                         method(lua, ud, args?).await?.push_into_stack_multi(lua)
                     }
                     #[cfg(not(feature = "send"))]
-                    Some(id) if id == TypeId::of::<Rc<T>>() => {
-                        let ud = try_self_arg!(get_userdata_ref::<Rc<T>>(ref_thread, index));
+                    Some(id) if id == TypeId::of::<Arc<T>>() => {
+                        let ud = try_self_arg!(get_userdata_ref::<Arc<T>>(ref_thread, index));
                         let ud = std::mem::transmute::<&T, &T>(&ud);
                         method(lua, ud, args?).await?.push_into_stack_multi(lua)
                     }
                     #[cfg(not(feature = "send"))]
-                    Some(id) if id == TypeId::of::<Rc<RefCell<T>>>() => {
+                    Some(id) if id == TypeId::of::<Arc<RefCell<T>>>() => {
                         let ud =
-                            try_self_arg!(get_userdata_ref::<Rc<RefCell<T>>>(ref_thread, index));
+                            try_self_arg!(get_userdata_ref::<Arc<RefCell<T>>>(ref_thread, index));
                         let ud = try_self_arg!(ud.try_borrow(), Error::UserDataBorrowError);
                         let ud = std::mem::transmute::<&T, &T>(&ud);
                         method(lua, ud, args?).await?.push_into_stack_multi(lua)
@@ -342,13 +339,13 @@ impl<'lua, T: 'static> UserDataRegistry<'lua, T> {
                         method(lua, ud, args?).await?.push_into_stack_multi(lua)
                     }
                     #[cfg(not(feature = "send"))]
-                    Some(id) if id == TypeId::of::<Rc<RefCell<T>>>() => {
+                    Some(id) if id == TypeId::of::<Arc<RefCell<T>>>() => {
                         Err(Error::UserDataBorrowMutError)
                     }
                     #[cfg(not(feature = "send"))]
-                    Some(id) if id == TypeId::of::<Rc<RefCell<T>>>() => {
+                    Some(id) if id == TypeId::of::<Arc<RefCell<T>>>() => {
                         let ud =
-                            try_self_arg!(get_userdata_mut::<Rc<RefCell<T>>>(ref_thread, index));
+                            try_self_arg!(get_userdata_mut::<Arc<RefCell<T>>>(ref_thread, index));
                         let mut ud =
                             try_self_arg!(ud.try_borrow_mut(), Error::UserDataBorrowMutError);
                         let ud = std::mem::transmute::<&mut T, &mut T>(&mut ud);
@@ -779,9 +776,7 @@ macro_rules! lua_userdata_impl {
 }
 
 #[cfg(not(feature = "send"))]
-lua_userdata_impl!(Rc<T>);
-#[cfg(not(feature = "send"))]
-lua_userdata_impl!(Rc<RefCell<T>>);
+lua_userdata_impl!(Arc<RefCell<T>>);
 
 lua_userdata_impl!(Arc<T>);
 lua_userdata_impl!(Arc<Mutex<T>>);

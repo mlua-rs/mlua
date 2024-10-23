@@ -1,8 +1,8 @@
 use std::cell::RefCell;
 use std::os::raw::c_void;
-use std::rc::Rc;
 use std::result::Result as StdResult;
 use std::string::String as StdString;
+use std::sync::Arc;
 
 use rustc_hash::FxHashSet;
 use serde::de::{self, IntoDeserializer};
@@ -17,7 +17,7 @@ use crate::value::Value;
 pub struct Deserializer<'lua> {
     value: Value<'lua>,
     options: Options,
-    visited: Rc<RefCell<FxHashSet<*const c_void>>>,
+    visited: Arc<RefCell<FxHashSet<*const c_void>>>,
 }
 
 /// A struct with options to change default deserializer behavior.
@@ -104,14 +104,14 @@ impl<'lua> Deserializer<'lua> {
         Deserializer {
             value,
             options,
-            visited: Rc::new(RefCell::new(FxHashSet::default())),
+            visited: Arc::new(RefCell::new(FxHashSet::default())),
         }
     }
 
     fn from_parts(
         value: Value<'lua>,
         options: Options,
-        visited: Rc<RefCell<FxHashSet<*const c_void>>>,
+        visited: Arc<RefCell<FxHashSet<*const c_void>>>,
     ) -> Self {
         Deserializer {
             value,
@@ -397,7 +397,7 @@ impl<'lua, 'de> serde::Deserializer<'de> for Deserializer<'lua> {
 struct SeqDeserializer<'lua> {
     seq: TableSequence<'lua, Value<'lua>>,
     options: Options,
-    visited: Rc<RefCell<FxHashSet<*const c_void>>>,
+    visited: Arc<RefCell<FxHashSet<*const c_void>>>,
 }
 
 impl<'lua, 'de> de::SeqAccess<'de> for SeqDeserializer<'lua> {
@@ -416,7 +416,7 @@ impl<'lua, 'de> de::SeqAccess<'de> for SeqDeserializer<'lua> {
                     if skip {
                         continue;
                     }
-                    let visited = Rc::clone(&self.visited);
+                    let visited = Arc::clone(&self.visited);
                     let deserializer = Deserializer::from_parts(value, self.options, visited);
                     return seed.deserialize(deserializer).map(Some);
                 }
@@ -438,7 +438,7 @@ struct VecDeserializer {
     vec: crate::types::Vector,
     next: usize,
     options: Options,
-    visited: Rc<RefCell<FxHashSet<*const c_void>>>,
+    visited: Arc<RefCell<FxHashSet<*const c_void>>>,
 }
 
 #[cfg(feature = "luau")]
@@ -452,7 +452,7 @@ impl<'de> de::SeqAccess<'de> for VecDeserializer {
         match self.vec.0.get(self.next) {
             Some(&n) => {
                 self.next += 1;
-                let visited = Rc::clone(&self.visited);
+                let visited = Arc::clone(&self.visited);
                 let deserializer =
                     Deserializer::from_parts(Value::Number(n as _), self.options, visited);
                 seed.deserialize(deserializer).map(Some)
@@ -512,7 +512,7 @@ struct MapDeserializer<'lua> {
     pairs: MapPairs<'lua>,
     value: Option<Value<'lua>>,
     options: Options,
-    visited: Rc<RefCell<FxHashSet<*const c_void>>>,
+    visited: Arc<RefCell<FxHashSet<*const c_void>>>,
     processed: usize,
 }
 
@@ -536,7 +536,7 @@ impl<'lua, 'de> de::MapAccess<'de> for MapDeserializer<'lua> {
                     }
                     self.processed += 1;
                     self.value = Some(value);
-                    let visited = Rc::clone(&self.visited);
+                    let visited = Arc::clone(&self.visited);
                     let key_de = Deserializer::from_parts(key, self.options, visited);
                     return seed.deserialize(key_de).map(Some);
                 }
@@ -551,7 +551,7 @@ impl<'lua, 'de> de::MapAccess<'de> for MapDeserializer<'lua> {
     {
         match self.value.take() {
             Some(value) => {
-                let visited = Rc::clone(&self.visited);
+                let visited = Arc::clone(&self.visited);
                 seed.deserialize(Deserializer::from_parts(value, self.options, visited))
             }
             None => Err(de::Error::custom("value is missing")),
@@ -570,7 +570,7 @@ struct EnumDeserializer<'lua> {
     variant: StdString,
     value: Option<Value<'lua>>,
     options: Options,
-    visited: Rc<RefCell<FxHashSet<*const c_void>>>,
+    visited: Arc<RefCell<FxHashSet<*const c_void>>>,
 }
 
 impl<'lua, 'de> de::EnumAccess<'de> for EnumDeserializer<'lua> {
@@ -594,7 +594,7 @@ impl<'lua, 'de> de::EnumAccess<'de> for EnumDeserializer<'lua> {
 struct VariantDeserializer<'lua> {
     value: Option<Value<'lua>>,
     options: Options,
-    visited: Rc<RefCell<FxHashSet<*const c_void>>>,
+    visited: Arc<RefCell<FxHashSet<*const c_void>>>,
 }
 
 impl<'lua, 'de> de::VariantAccess<'de> for VariantDeserializer<'lua> {
@@ -662,13 +662,13 @@ impl<'lua, 'de> de::VariantAccess<'de> for VariantDeserializer<'lua> {
 // Used to track recursive tables but allow to traverse same tables multiple times
 pub(crate) struct RecursionGuard {
     ptr: *const c_void,
-    visited: Rc<RefCell<FxHashSet<*const c_void>>>,
+    visited: Arc<RefCell<FxHashSet<*const c_void>>>,
 }
 
 impl RecursionGuard {
     #[inline]
-    pub(crate) fn new(table: &Table, visited: &Rc<RefCell<FxHashSet<*const c_void>>>) -> Self {
-        let visited = Rc::clone(visited);
+    pub(crate) fn new(table: &Table, visited: &Arc<RefCell<FxHashSet<*const c_void>>>) -> Self {
+        let visited = Arc::clone(visited);
         let ptr = table.to_pointer();
         visited.borrow_mut().insert(ptr);
         RecursionGuard { ptr, visited }

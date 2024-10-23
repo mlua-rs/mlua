@@ -77,6 +77,9 @@ pub struct LuaInner {
     extra: Arc<UnsafeCell<ExtraData>>,
 }
 
+unsafe impl Send for LuaInner {}
+unsafe impl Sync for LuaInner {}
+
 // Data associated with the Lua.
 pub(crate) struct ExtraData {
     // Same layout as `Lua`

@@ -7,7 +7,7 @@ use std::os::raw::c_void;
 use {
     rustc_hash::FxHashSet,
     serde::ser::{Serialize, SerializeMap, SerializeSeq, Serializer},
-    std::{cell::RefCell, rc::Rc, result::Result as StdResult},
+    std::{cell::RefCell, result::Result as StdResult, sync::Arc},
 };
 
 use crate::error::{Error, Result};
@@ -1056,7 +1056,7 @@ impl<'lua> TableExt<'lua> for Table<'lua> {
 pub(crate) struct SerializableTable<'a, 'lua> {
     table: &'a Table<'lua>,
     options: crate::serde::de::Options,
-    visited: Rc<RefCell<FxHashSet<*const c_void>>>,
+    visited: Arc<RefCell<FxHashSet<*const c_void>>>,
 }
 
 #[cfg(feature = "serialize")]
@@ -1073,7 +1073,7 @@ impl<'a, 'lua> SerializableTable<'a, 'lua> {
     pub(crate) fn new(
         table: &'a Table<'lua>,
         options: crate::serde::de::Options,
-        visited: Rc<RefCell<FxHashSet<*const c_void>>>,
+        visited: Arc<RefCell<FxHashSet<*const c_void>>>,
     ) -> Self {
         Self {
             table,

@@ -44,6 +44,9 @@ pub struct lua_State {
     _marker: PhantomData<(*mut u8, PhantomPinned)>,
 }
 
+unsafe impl Send for lua_State {}
+unsafe impl Sync for lua_State {}
+
 //
 // Basic types
 //
