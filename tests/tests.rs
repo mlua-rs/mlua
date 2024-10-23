@@ -873,6 +873,49 @@ fn test_application_data() -> Result<()> {
 }
 
 #[test]
+fn test_rust_function() -> Result<()> {
+    let lua = Lua::new();
+
+    let globals = lua.globals();
+    lua.load(
+        r#"
+        function lua_function()
+            return rust_function()
+        end
+
+        -- Test to make sure chunk return is ignored
+        return 1
+    "#,
+    )
+    .exec()?;
+
+    let lua_function = globals.get::<Function>("lua_function")?;
+    let rust_function = lua.create_function(|_, ()| Ok("hello"))?;
+
+    globals.set("rust_function", rust_function)?;
+    assert_eq!(lua_function.call::<String>(())?, "hello");
+
+    Ok(())
+}
+
+#[test]
+fn test_c_function() -> Result<()> {
+    let lua = Lua::new();
+
+    unsafe extern "C-unwind" fn c_function(state: *mut mlua::lua_State) -> std::os::raw::c_int {
+        ffi::lua_pushboolean(state, 1);
+        ffi::lua_setglobal(state, b"c_function\0" as *const _ as *const _);
+        0
+    }
+
+    let func = unsafe { lua.create_c_function(c_function)? };
+    func.call::<()>(())?;
+    assert_eq!(lua.globals().get::<bool>("c_function")?, true);
+
+    Ok(())
+}
+
+#[test]
 #[cfg(not(target_arch = "wasm32"))]
 fn test_recursion() -> Result<()> {
     let lua = Lua::new();
