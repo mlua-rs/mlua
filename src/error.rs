@@ -9,6 +9,12 @@ use std::sync::Arc;
 
 use crate::private::Sealed;
 
+#[cfg(feature = "error-send")]
+type DynStdError = dyn StdError + Send + Sync;
+
+#[cfg(not(feature = "error-send"))]
+type DynStdError = dyn StdError;
+
 /// Error type returned by `mlua` methods.
 #[derive(Debug, Clone)]
 #[non_exhaustive]
@@ -191,7 +197,7 @@ pub enum Error {
     /// Returning `Err(ExternalError(...))` from a Rust callback will raise the error as a Lua
     /// error. The Rust code that originally invoked the Lua code then receives a `CallbackError`,
     /// from which the original error (and a stack traceback) can be recovered.
-    ExternalError(Arc<dyn StdError + Send + Sync>),
+    ExternalError(Arc<DynStdError>),
     /// An error with additional context.
     WithContext {
         /// A string containing additional context.
@@ -345,7 +351,7 @@ impl Error {
 
     /// Wraps an external error object.
     #[inline]
-    pub fn external<T: Into<Box<dyn StdError + Send + Sync>>>(err: T) -> Self {
+    pub fn external<T: Into<Box<DynStdError>>>(err: T) -> Self {
         Error::ExternalError(err.into().into())
     }
 
@@ -406,7 +412,7 @@ pub trait ExternalError {
     fn into_lua_err(self) -> Error;
 }
 
-impl<E: Into<Box<dyn StdError + Send + Sync>>> ExternalError for E {
+impl<E: Into<Box<DynStdError>>> ExternalError for E {
     fn into_lua_err(self) -> Error {
         Error::external(self)
     }
@@ -551,4 +557,14 @@ impl<'a> Iterator for Chain<'a> {
             return self.current;
         }
     }
+}
+
+#[cfg(test)]
+mod assertions {
+    use super::*;
+
+    #[cfg(not(feature = "error-send"))]
+    static_assertions::assert_not_impl_any!(Error: Send, Sync);
+    #[cfg(feature = "send")]
+    static_assertions::assert_impl_all!(Error: Send, Sync);
 }

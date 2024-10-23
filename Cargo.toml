@@ -38,10 +38,11 @@ luau-vector4 = ["luau", "ffi/luau-vector4"]
 vendored = ["ffi/vendored"]
 module = ["dep:mlua_derive", "ffi/module"]
 async = ["dep:futures-util"]
-send = ["parking_lot/send_guard"]
+send = ["parking_lot/send_guard", "error-send"]
+error-send = []
 serialize = ["dep:serde", "dep:erased-serde", "dep:serde-value"]
 macros = ["mlua_derive/macros"]
-anyhow = ["dep:anyhow"]
+anyhow = ["dep:anyhow", "error-send"]
 
 [dependencies]
 mlua_derive = { version = "=0.10.0-rc.1", optional = true, path = "mlua_derive" }
