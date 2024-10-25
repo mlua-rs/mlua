@@ -128,6 +128,7 @@ pub use crate::hook::HookTriggers;
 pub use crate::{buffer::Buffer, chunk::Compiler, function::CoverageInfo, vector::Vector};
 
 #[cfg(feature = "async")]
+#[cfg_attr(docsrs, doc(cfg(feature = "async")))]
 pub use crate::{thread::AsyncThread, traits::LuaNativeAsyncFn};
 
 #[cfg(feature = "serialize")]

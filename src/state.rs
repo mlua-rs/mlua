@@ -1459,7 +1459,7 @@ impl Lua {
     }
 
     /// Calls the given function with a [`Scope`] parameter, giving the function the ability to
-    /// create userdata and callbacks from Rust types that are `!Send`` or non-`'static`.
+    /// create userdata and callbacks from Rust types that are `!Send` or non-`'static`.
     ///
     /// The lifetime of any function or userdata created through [`Scope`] lasts only until the
     /// completion of this method call, on completion all such created values are automatically
