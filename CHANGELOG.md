@@ -1,3 +1,10 @@
+## v0.10.0 (Oct 25th, 2024)
+
+Changes since v0.10.0-rc.1
+
+- Added `error-send` feature flag (disabled by default) to require `Send + Sync` for `Error`
+- Some performance improvements
+
 ## v0.10.0-rc.1
 
 - `Lua::scope` is back
