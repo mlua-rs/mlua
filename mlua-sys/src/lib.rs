@@ -54,10 +54,7 @@ pub const LUA_TRACEBACK_STACK: c_int = 11;
     target_arch = "sparc",
     target_arch = "wasm32",
     target_arch = "hexagon",
-    all(
-        target_arch = "riscv32",
-        not(any(target_os = "espidf", target_os = "zkvm"))
-    ),
+    all(target_arch = "riscv32", not(any(target_os = "espidf", target_os = "zkvm"))),
     all(target_arch = "xtensa", not(target_os = "espidf")),
 ))]
 #[doc(hidden)]

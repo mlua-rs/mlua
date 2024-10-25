@@ -157,22 +157,12 @@ pub unsafe fn lua_rawseti(L: *mut lua_State, idx: c_int, n: lua_Integer) {
 }
 
 #[inline(always)]
-pub unsafe fn lua_dump(
-    L: *mut lua_State,
-    writer: lua_Writer,
-    data: *mut c_void,
-    _strip: c_int,
-) -> c_int {
+pub unsafe fn lua_dump(L: *mut lua_State, writer: lua_Writer, data: *mut c_void, _strip: c_int) -> c_int {
     lua_dump_(L, writer, data)
 }
 
 #[inline(always)]
-pub unsafe fn lua_resume(
-    L: *mut lua_State,
-    from: *mut lua_State,
-    narg: c_int,
-    nres: *mut c_int,
-) -> c_int {
+pub unsafe fn lua_resume(L: *mut lua_State, from: *mut lua_State, narg: c_int, nres: *mut c_int) -> c_int {
     let ret = lua_resume_(L, from, narg);
     if (ret == LUA_OK || ret == LUA_YIELD) && !(nres.is_null()) {
         *nres = lua_gettop(L);
@@ -240,12 +230,7 @@ pub unsafe fn luaL_tolstring(L: *mut lua_State, mut idx: c_int, len: *mut usize)
     lua_tolstring(L, -1, len)
 }
 
-pub unsafe fn luaL_requiref(
-    L: *mut lua_State,
-    modname: *const c_char,
-    openf: lua_CFunction,
-    glb: c_int,
-) {
+pub unsafe fn luaL_requiref(L: *mut lua_State, modname: *const c_char, openf: lua_CFunction, glb: c_int) {
     luaL_checkstack(L, 3, cstr!("not enough stack slots available"));
     luaL_getsubtable(L, LUA_REGISTRYINDEX, cstr!("_LOADED"));
     if lua_getfield(L, -1, modname) == LUA_TNIL {
@@ -261,4 +246,23 @@ pub unsafe fn luaL_requiref(
         lua_setglobal(L, modname);
     }
     lua_replace(L, -2);
+}
+
+pub unsafe fn luaL_loadbufferenv(
+    L: *mut lua_State,
+    data: *const c_char,
+    size: usize,
+    name: *const c_char,
+    mode: *const c_char,
+    mut env: c_int,
+) -> c_int {
+    if env != 0 {
+        env = lua_absindex(L, env);
+    }
+    let status = luaL_loadbufferx(L, data, size, name, mode);
+    if status == LUA_OK && env != 0 {
+        lua_pushvalue(L, env);
+        lua_setupvalue(L, -2, 1);
+    }
+    status
 }

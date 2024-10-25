@@ -1,28 +1,47 @@
-error: lifetime may not live long enough
-  --> tests/compile/async_any_userdata_method.rs:9:58
+error[E0596]: cannot borrow `s` as mutable, as it is a captured variable in a `Fn` closure
+  --> tests/compile/async_any_userdata_method.rs:9:49
    |
-9  |           reg.add_async_method("t", |_, this: &String, ()| async {
-   |  ___________________________________----------------------_^
-   | |                                   |                    |
-   | |                                   |                    return type of closure `{async block@$DIR/tests/compile/async_any_userdata_method.rs:9:58: 12:10}` contains a lifetime `'2`
+9  |         reg.add_async_method("t", |_, this, ()| async {
+   |                                                 ^^^^^ cannot borrow as mutable
+10 |             s = &*this;
+   |             - mutable borrow occurs due to use of `s` in closure
+
+error[E0373]: async block may outlive the current function, but it borrows `this`, which is owned by the current function
+  --> tests/compile/async_any_userdata_method.rs:9:49
+   |
+9  |         reg.add_async_method("t", |_, this, ()| async {
+   |                                                 ^^^^^ may outlive borrowed value `this`
+10 |             s = &*this;
+   |                   ---- `this` is borrowed here
+   |
+note: async block is returned here
+  --> tests/compile/async_any_userdata_method.rs:9:49
+   |
+9  |           reg.add_async_method("t", |_, this, ()| async {
+   |  _________________________________________________^
+10 | |             s = &*this;
+11 | |             Ok(())
+12 | |         });
+   | |_________^
+help: to force the async block to take ownership of `this` (and any other referenced variables), use the `move` keyword
+   |
+9  |         reg.add_async_method("t", |_, this, ()| async move {
+   |                                                       ++++
+
+error: lifetime may not live long enough
+  --> tests/compile/async_any_userdata_method.rs:9:49
+   |
+9  |           reg.add_async_method("t", |_, this, ()| async {
+   |  ___________________________________-------------_^
+   | |                                   |           |
+   | |                                   |           return type of closure `{async block@$DIR/tests/compile/async_any_userdata_method.rs:9:49: 9:54}` contains a lifetime `'2`
    | |                                   lifetime `'1` represents this closure's body
-10 | |             s = this;
+10 | |             s = &*this;
 11 | |             Ok(())
 12 | |         });
    | |_________^ returning this value requires that `'1` must outlive `'2`
    |
    = note: closure implements `Fn`, so references to captured variables can't escape the closure
-
-error[E0596]: cannot borrow `s` as mutable, as it is a captured variable in a `Fn` closure
-  --> tests/compile/async_any_userdata_method.rs:9:58
-   |
-9  |           reg.add_async_method("t", |_, this: &String, ()| async {
-   |  __________________________________________________________^
-10 | |             s = this;
-   | |             - mutable borrow occurs due to use of `s` in closure
-11 | |             Ok(())
-12 | |         });
-   | |_________^ cannot borrow as mutable
 
 error[E0597]: `s` does not live long enough
   --> tests/compile/async_any_userdata_method.rs:8:21
@@ -31,53 +50,31 @@ error[E0597]: `s` does not live long enough
    |               - binding `s` declared here
 8  |           let mut s = &s;
    |                       ^^ borrowed value does not live long enough
-9  | /         reg.add_async_method("t", |_, this: &String, ()| async {
-10 | |             s = this;
+9  | /         reg.add_async_method("t", |_, this, ()| async {
+10 | |             s = &*this;
 11 | |             Ok(())
 12 | |         });
    | |__________- argument requires that `s` is borrowed for `'static`
-13 |       }).unwrap();
+13 |       })
    |       - `s` dropped here while still borrowed
-
-error[E0521]: borrowed data escapes outside of closure
-  --> tests/compile/async_any_userdata_method.rs:9:9
-   |
-6  |       lua.register_userdata_type::<String>(|reg| {
-   |                                             ---
-   |                                             |
-   |                                             `reg` is a reference that is only valid in the closure body
-   |                                             has type `&mut LuaUserDataRegistry<'1, std::string::String>`
-...
-9  | /         reg.add_async_method("t", |_, this: &String, ()| async {
-10 | |             s = this;
-11 | |             Ok(())
-12 | |         });
-   | |          ^
-   | |          |
-   | |__________`reg` escapes the closure body here
-   |            argument requires that `'1` must outlive `'static`
-   |
-   = note: requirement occurs because of a mutable reference to `LuaUserDataRegistry<'_, std::string::String>`
-   = note: mutable references are invariant over their type parameter
-   = help: see <https://doc.rust-lang.org/nomicon/subtyping.html> for more information about variance
 
 error[E0373]: closure may outlive the current function, but it borrows `s`, which is owned by the current function
   --> tests/compile/async_any_userdata_method.rs:9:35
    |
-9  |         reg.add_async_method("t", |_, this: &String, ()| async {
-   |                                   ^^^^^^^^^^^^^^^^^^^^^^ may outlive borrowed value `s`
-10 |             s = this;
+9  |         reg.add_async_method("t", |_, this, ()| async {
+   |                                   ^^^^^^^^^^^^^ may outlive borrowed value `s`
+10 |             s = &*this;
    |             - `s` is borrowed here
    |
 note: function requires argument type to outlive `'static`
   --> tests/compile/async_any_userdata_method.rs:9:9
    |
-9  | /         reg.add_async_method("t", |_, this: &String, ()| async {
-10 | |             s = this;
+9  | /         reg.add_async_method("t", |_, this, ()| async {
+10 | |             s = &*this;
 11 | |             Ok(())
 12 | |         });
    | |__________^
 help: to force the closure to take ownership of `s` (and any other referenced variables), use the `move` keyword
    |
-9  |         reg.add_async_method("t", move |_, this: &String, ()| async {
+9  |         reg.add_async_method("t", move |_, this, ()| async {
    |                                   ++++

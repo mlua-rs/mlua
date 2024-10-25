@@ -1,5 +1,4 @@
-use std::fs;
-use std::io;
+use std::{fs, io};
 
 use mlua::{Lua, Result};
 
@@ -20,13 +19,37 @@ fn test_chunk_path() -> Result<()> {
         return 321
     "#,
     )?;
-    let i: i32 = lua.load(&*temp_dir.path().join("module.lua")).eval()?;
+    let i: i32 = lua.load(temp_dir.path().join("module.lua")).eval()?;
     assert_eq!(i, 321);
 
     match lua.load(&*temp_dir.path().join("module2.lua")).exec() {
         Err(err) if err.downcast_ref::<io::Error>().unwrap().kind() == io::ErrorKind::NotFound => {}
         res => panic!("expected io::Error, got {:?}", res),
     };
+
+    // &Path
+    assert_eq!(
+        (lua.load(&*temp_dir.path().join("module.lua").as_path())).eval::<i32>()?,
+        321
+    );
+
+    Ok(())
+}
+
+#[test]
+fn test_chunk_impls() -> Result<()> {
+    let lua = Lua::new();
+
+    // StdString
+    assert_eq!(lua.load(String::from("1")).eval::<i32>()?, 1);
+    assert_eq!(lua.load(&String::from("2")).eval::<i32>()?, 2);
+
+    // &[u8]
+    assert_eq!(lua.load(&b"3"[..]).eval::<i32>()?, 3);
+
+    // Vec<u8>
+    assert_eq!(lua.load(b"4".to_vec()).eval::<i32>()?, 4);
+    assert_eq!(lua.load(&b"5".to_vec()).eval::<i32>()?, 5);
 
     Ok(())
 }
@@ -43,7 +66,7 @@ fn test_chunk_macro() -> Result<()> {
     data.raw_set("num", 1)?;
 
     let ud = mlua::AnyUserData::wrap("hello");
-    let f = mlua::Function::wrap(|_lua, ()| Ok(()));
+    let f = mlua::Function::wrap(|| Ok(()));
 
     lua.globals().set("g", 123)?;
 
@@ -65,7 +88,36 @@ fn test_chunk_macro() -> Result<()> {
     })
     .exec()?;
 
-    assert_eq!(lua.globals().get::<_, i32>("s")?, 321);
+    assert_eq!(lua.globals().get::<i32>("s")?, 321);
+
+    Ok(())
+}
+
+#[cfg(feature = "luau")]
+#[test]
+fn test_compiler() -> Result<()> {
+    use std::vec;
+
+    let compiler = mlua::Compiler::new()
+        .set_optimization_level(2)
+        .set_debug_level(2)
+        .set_type_info_level(1)
+        .set_coverage_level(2)
+        .set_vector_lib("vector")
+        .set_vector_ctor("new")
+        .set_vector_type("vector")
+        .set_mutable_globals(vec!["mutable_global".into()])
+        .set_userdata_types(vec!["MyUserdata".into()]);
+
+    assert!(compiler.compile("return vector.new(1, 2, 3)").is_ok());
+
+    // Error
+    match compiler.compile("%") {
+        Err(mlua::Error::SyntaxError { ref message, .. }) => {
+            assert!(message.contains("Expected identifier when parsing expression, got '%'"),);
+        }
+        res => panic!("expected result: {res:?}"),
+    }
 
     Ok(())
 }

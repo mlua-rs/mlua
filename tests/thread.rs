@@ -22,16 +22,16 @@ fn test_thread() -> Result<()> {
     )?;
 
     assert_eq!(thread.status(), ThreadStatus::Resumable);
-    assert_eq!(thread.resume::<_, i64>(0)?, 0);
+    assert_eq!(thread.resume::<i64>(0)?, 0);
     assert_eq!(thread.status(), ThreadStatus::Resumable);
-    assert_eq!(thread.resume::<_, i64>(1)?, 1);
+    assert_eq!(thread.resume::<i64>(1)?, 1);
     assert_eq!(thread.status(), ThreadStatus::Resumable);
-    assert_eq!(thread.resume::<_, i64>(2)?, 3);
+    assert_eq!(thread.resume::<i64>(2)?, 3);
     assert_eq!(thread.status(), ThreadStatus::Resumable);
-    assert_eq!(thread.resume::<_, i64>(3)?, 6);
+    assert_eq!(thread.resume::<i64>(3)?, 6);
     assert_eq!(thread.status(), ThreadStatus::Resumable);
-    assert_eq!(thread.resume::<_, i64>(4)?, 10);
-    assert_eq!(thread.status(), ThreadStatus::Unresumable);
+    assert_eq!(thread.resume::<i64>(4)?, 10);
+    assert_eq!(thread.status(), ThreadStatus::Finished);
 
     let accumulate = lua.create_thread(
         lua.load(
@@ -47,11 +47,11 @@ fn test_thread() -> Result<()> {
     )?;
 
     for i in 0..4 {
-        accumulate.resume::<_, ()>(i)?;
+        accumulate.resume::<()>(i)?;
     }
-    assert_eq!(accumulate.resume::<_, i64>(4)?, 10);
+    assert_eq!(accumulate.resume::<i64>(4)?, 10);
     assert_eq!(accumulate.status(), ThreadStatus::Resumable);
-    assert!(accumulate.resume::<_, ()>("error").is_err());
+    assert!(accumulate.resume::<()>("error").is_err());
     assert_eq!(accumulate.status(), ThreadStatus::Error);
 
     let thread = lua
@@ -66,7 +66,7 @@ fn test_thread() -> Result<()> {
         )
         .eval::<Thread>()?;
     assert_eq!(thread.status(), ThreadStatus::Resumable);
-    assert_eq!(thread.resume::<_, i64>(())?, 42);
+    assert_eq!(thread.resume::<i64>(())?, 42);
 
     let thread: Thread = lua
         .load(
@@ -81,26 +81,26 @@ fn test_thread() -> Result<()> {
         )
         .eval()?;
 
-    assert_eq!(thread.resume::<_, u32>(42)?, 123);
-    assert_eq!(thread.resume::<_, u32>(43)?, 987);
+    assert_eq!(thread.resume::<u32>(42)?, 123);
+    assert_eq!(thread.resume::<u32>(43)?, 987);
 
-    match thread.resume::<_, u32>(()) {
-        Err(Error::CoroutineInactive) => {}
+    match thread.resume::<u32>(()) {
+        Err(Error::CoroutineUnresumable) => {}
         Err(_) => panic!("resuming dead coroutine error is not CoroutineInactive kind"),
         _ => panic!("resuming dead coroutine did not return error"),
     }
 
     // Already running thread must be unresumable
     let thread = lua.create_thread(lua.create_function(|lua, ()| {
-        assert_eq!(lua.current_thread().status(), ThreadStatus::Unresumable);
-        let result = lua.current_thread().resume::<_, ()>(());
+        assert_eq!(lua.current_thread().status(), ThreadStatus::Running);
+        let result = lua.current_thread().resume::<()>(());
         assert!(
-            matches!(result, Err(Error::CoroutineInactive)),
+            matches!(result, Err(Error::CoroutineUnresumable)),
             "unexpected result: {result:?}",
         );
         Ok(())
     })?)?;
-    let result = thread.resume::<_, ()>(());
+    let result = thread.resume::<()>(());
     assert!(result.is_ok(), "unexpected result: {result:?}");
 
     Ok(())
@@ -124,11 +124,11 @@ fn test_thread_reset() -> Result<()> {
 
     for _ in 0..2 {
         assert_eq!(thread.status(), ThreadStatus::Resumable);
-        let _ = thread.resume::<_, AnyUserData>(MyUserData(arc.clone()))?;
+        let _ = thread.resume::<AnyUserData>(MyUserData(arc.clone()))?;
         assert_eq!(thread.status(), ThreadStatus::Resumable);
         assert_eq!(Arc::strong_count(&arc), 2);
-        thread.resume::<_, ()>(())?;
-        assert_eq!(thread.status(), ThreadStatus::Unresumable);
+        thread.resume::<()>(())?;
+        assert_eq!(thread.status(), ThreadStatus::Finished);
         thread.reset(func.clone())?;
         lua.gc_collect()?;
         assert_eq!(Arc::strong_count(&arc), 1);
@@ -137,7 +137,7 @@ fn test_thread_reset() -> Result<()> {
     // Check for errors
     let func: Function = lua.load(r#"function(ud) error("test error") end"#).eval()?;
     let thread = lua.create_thread(func.clone())?;
-    let _ = thread.resume::<_, AnyUserData>(MyUserData(arc.clone()));
+    let _ = thread.resume::<AnyUserData>(MyUserData(arc.clone()));
     assert_eq!(thread.status(), ThreadStatus::Error);
     assert_eq!(Arc::strong_count(&arc), 2);
     #[cfg(feature = "lua54")]
@@ -147,11 +147,11 @@ fn test_thread_reset() -> Result<()> {
         // It's became possible to force reset thread by popping error object
         assert!(matches!(
             thread.status(),
-            ThreadStatus::Unresumable | ThreadStatus::Error
+            ThreadStatus::Finished | ThreadStatus::Error
         ));
         // Would pass in 5.4.4
-        // assert!(thread.reset(func.clone()).is_ok());
-        // assert_eq!(thread.status(), ThreadStatus::Resumable);
+        assert!(thread.reset(func.clone()).is_ok());
+        assert_eq!(thread.status(), ThreadStatus::Resumable);
     }
     #[cfg(any(feature = "lua54", feature = "luau"))]
     {
@@ -165,7 +165,7 @@ fn test_thread_reset() -> Result<()> {
         this.reset(lua.create_function(|_, ()| Ok(()))?)?;
         Ok(())
     })?)?;
-    let result = thread.resume::<_, ()>(());
+    let result = thread.resume::<()>(());
     assert!(
         matches!(result, Err(Error::CallbackError{ ref cause, ..})
             if matches!(cause.as_ref(), Error::RuntimeError(ref err)
@@ -197,7 +197,7 @@ fn test_coroutine_from_closure() -> Result<()> {
         .load("coroutine.create(function(...) return main(unpack(arg)) end)")
         .eval()?;
 
-    thrd.resume::<_, ()>(())?;
+    thrd.resume::<()>(())?;
 
     Ok(())
 }
@@ -228,37 +228,6 @@ fn test_thread_pointer() -> Result<()> {
 
     assert_eq!(thread.to_pointer(), thread.clone().to_pointer());
     assert_ne!(thread.to_pointer(), lua.current_thread().to_pointer());
-
-    Ok(())
-}
-
-#[cfg(all(feature = "unstable", not(feature = "send")))]
-#[test]
-fn test_owned_thread() -> Result<()> {
-    let lua = Lua::new();
-
-    let accumulate = lua
-        .create_thread(
-            lua.load(
-                r#"
-            function (sum)
-                while true do
-                    sum = sum + coroutine.yield(sum)
-                end
-            end
-            "#,
-            )
-            .eval::<Function>()?,
-        )?
-        .into_owned();
-
-    for i in 0..4 {
-        accumulate.resume::<_, ()>(i)?;
-    }
-    assert_eq!(accumulate.resume::<_, i64>(4)?, 10);
-    assert_eq!(accumulate.status(), ThreadStatus::Resumable);
-    assert!(accumulate.resume::<_, ()>("error").is_err());
-    assert_eq!(accumulate.status(), ThreadStatus::Error);
 
     Ok(())
 }

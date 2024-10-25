@@ -6,7 +6,5 @@ fn main() {
     let test = Test(0);
 
     let lua = Lua::new();
-    let _ = lua.create_function(|_, ()| -> Result<i32> {
-        Ok(test.0)
-    });
+    let _ = lua.create_function(|_, ()| -> Result<i32> { Ok(test.0) });
 }

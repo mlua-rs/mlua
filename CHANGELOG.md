@@ -1,3 +1,51 @@
+## v0.10.0 (Oct 25th, 2024)
+
+Changes since v0.10.0-rc.1
+
+- Added `error-send` feature flag (disabled by default) to require `Send + Sync` for `Error`
+- Some performance improvements
+
+## v0.10.0-rc.1
+
+- `Lua::scope` is back
+- Support yielding from hooks for Lua 5.3+
+- Support setting metatable for Lua builtin types (number/string/function/etc)
+- Added `LuaNativeFn`/`LuaNativeFnMut`/`LuaNativeAsyncFn` traits for using in `Function::wrap`
+- Added `Error::chain` method to return iterator over nested errors
+- Added `Lua::exec_raw` helper to execute low-level Lua C API code
+- Added `Either<L, R>` enum to combine two types into a single one
+- Added a new `Buffer` type for Luau
+- Added `Value::is_error` and `Value::as_error` helpers
+- Added `Value::Other` variant to represent unknown Lua types (eg LuaJIT CDATA)
+- Added (optional) `anyhow` feature to implement `IntoLua` for `anyhow::Error`
+- Added `IntoLua`/`FromLua` for `OsString`/`OsStr` and `PathBuf`/`Path`
+
+## v0.10.0-beta.2
+
+- Updated `ThreadStatus` enum to include `Running` and `Finished` variants.
+- `Error::CoroutineInactive` renamed to `Error::CoroutineUnresumable`.
+- `IntoLua`/`IntoLuaMulti` now uses `impl trait` syntax for args (shorten from `a.get::<_, T>` to `a.get::<T>`).
+- Removed undocumented `Lua::into_static`/`from_static` methods.
+- Futures now require `Send` bound if `send` feature is enabled.
+- Dropped lifetime from `UserDataMethods` and `UserDataFields` traits.
+- `Compiler::compile()` now returns `Result` (Luau).
+- Removed `Clone` requirement from `UserDataFields::add_field()`.
+- `TableExt` and `AnyUserDataExt` traits were combined into `ObjectLike` trait.
+- Disabled `send` feature in module mode (since we don't have exclusive access to Lua).
+- `Chunk::set_environment()` takes `Table` instead of `IntoLua` type.
+- Reduced the compile time contribution of `next_key_seed` and `next_value_seed`.
+- Reduced the compile time contribution of `serde_userdata`.
+- Performance improvements.
+
+## v0.10.0-beta.1
+
+- Dropped `'lua` lifetime (subtypes now store a weak reference to Lua)
+- Removed (experimental) owned types (they no longer needed)
+- Make Lua types truly `Send` and `Sync` (when enabling `send` feature flag)
+- Removed `UserData` impl for Rc/Arc types ("any" userdata functions can be used instead)
+- `Lua::replace_registry_value` takes `&mut RegistryKey`
+- `Lua::scope` temporary disabled (will be re-added in the next release)
+
 ## v0.9.9
 
 - Minimal Luau updated to 0.629

@@ -4,7 +4,7 @@ use std::ops::Deref;
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::{Arc, Mutex};
 
-use mlua::{DebugEvent, Error, HookTriggers, Lua, Result, Value};
+use mlua::{DebugEvent, Error, HookTriggers, Lua, Result, ThreadStatus, Value, VmState};
 
 #[test]
 fn test_hook_triggers() {
@@ -26,7 +26,7 @@ fn test_line_counts() -> Result<()> {
     lua.set_hook(HookTriggers::EVERY_LINE, move |_lua, debug| {
         assert_eq!(debug.event(), DebugEvent::Line);
         hook_output.lock().unwrap().push(debug.curr_line());
-        Ok(())
+        Ok(VmState::Continue)
     });
     lua.load(
         r#"
@@ -61,7 +61,7 @@ fn test_function_calls() -> Result<()> {
         let source = debug.source();
         let name = names.name.map(|s| s.into_owned());
         hook_output.lock().unwrap().push((name, source.what));
-        Ok(())
+        Ok(VmState::Continue)
     });
 
     lua.load(
@@ -75,15 +75,9 @@ fn test_function_calls() -> Result<()> {
 
     let output = output.lock().unwrap();
     if cfg!(feature = "luajit") && lua.load("jit.version_num").eval::<i64>()? >= 20100 {
-        assert_eq!(
-            *output,
-            vec![(None, "main"), (Some("len".to_string()), "Lua")]
-        );
+        assert_eq!(*output, vec![(None, "main"), (Some("len".to_string()), "Lua")]);
     } else {
-        assert_eq!(
-            *output,
-            vec![(None, "main"), (Some("len".to_string()), "C")]
-        );
+        assert_eq!(*output, vec![(None, "main"), (Some("len".to_string()), "C")]);
     }
 
     Ok(())
@@ -97,10 +91,7 @@ fn test_error_within_hook() -> Result<()> {
         Err(Error::runtime("Something happened in there!"))
     });
 
-    let err = lua
-        .load("x = 1")
-        .exec()
-        .expect_err("panic didn't propagate");
+    let err = lua.load("x = 1").exec().expect_err("panic didn't propagate");
 
     match err {
         Error::CallbackError { cause, .. } => match cause.deref() {
@@ -129,7 +120,7 @@ fn test_limit_execution_instructions() -> Result<()> {
             if max_instructions.fetch_sub(30, Ordering::Relaxed) <= 30 {
                 Err(Error::runtime("time's up"))
             } else {
-                Ok(())
+                Ok(VmState::Continue)
             }
         },
     );
@@ -153,14 +144,9 @@ fn test_limit_execution_instructions() -> Result<()> {
 fn test_hook_removal() -> Result<()> {
     let lua = Lua::new();
 
-    lua.set_hook(
-        HookTriggers::new().every_nth_instruction(1),
-        |_lua, _debug| {
-            Err(Error::runtime(
-                "this hook should've been removed by this time",
-            ))
-        },
-    );
+    lua.set_hook(HookTriggers::new().every_nth_instruction(1), |_lua, _debug| {
+        Err(Error::runtime("this hook should've been removed by this time"))
+    });
 
     assert!(lua.load("local x = 1").exec().is_err());
     lua.remove_hook();
@@ -189,9 +175,10 @@ fn test_hook_swap_within_hook() -> Result<()> {
             .set_hook(HookTriggers::EVERY_LINE, move |lua, _debug| {
                 lua.globals().set("ok", 1i64)?;
                 TL_LUA.with(|tl| {
-                    tl.borrow().as_ref().unwrap().set_hook(
-                        HookTriggers::EVERY_LINE,
-                        move |lua, _debug| {
+                    tl.borrow()
+                        .as_ref()
+                        .unwrap()
+                        .set_hook(HookTriggers::EVERY_LINE, move |lua, _debug| {
                             lua.load(
                                 r#"
                                     if ok ~= nil then
@@ -204,11 +191,10 @@ fn test_hook_swap_within_hook() -> Result<()> {
                             TL_LUA.with(|tl| {
                                 tl.borrow().as_ref().unwrap().remove_hook();
                             });
-                            Ok(())
-                        },
-                    )
+                            Ok(VmState::Continue)
+                        })
                 });
-                Ok(())
+                Ok(VmState::Continue)
             })
     });
 
@@ -223,7 +209,7 @@ fn test_hook_swap_within_hook() -> Result<()> {
             "#,
         )
         .exec()?;
-        assert_eq!(lua.globals().get::<_, i64>("ok")?, 2);
+        assert_eq!(lua.globals().get::<i64>("ok")?, 2);
         Ok(())
     })
 }
@@ -248,10 +234,10 @@ fn test_hook_threads() -> Result<()> {
     co.set_hook(HookTriggers::EVERY_LINE, move |_lua, debug| {
         assert_eq!(debug.event(), DebugEvent::Line);
         hook_output.lock().unwrap().push(debug.curr_line());
-        Ok(())
+        Ok(VmState::Continue)
     });
 
-    co.resume(())?;
+    co.resume::<()>(())?;
     lua.remove_hook();
 
     let output = output.lock().unwrap();
@@ -259,6 +245,42 @@ fn test_hook_threads() -> Result<()> {
         assert_eq!(*output, vec![2, 3, 4, 0, 4]);
     } else {
         assert_eq!(*output, vec![2, 3, 4]);
+    }
+
+    Ok(())
+}
+
+#[test]
+fn test_hook_yield() -> Result<()> {
+    let lua = Lua::new();
+
+    let func = lua
+        .load(
+            r#"
+            local x = 2 + 3
+            local y = x * 63
+            local z = string.len(x..", "..y)
+        "#,
+        )
+        .into_function()?;
+    let co = lua.create_thread(func)?;
+
+    co.set_hook(HookTriggers::EVERY_LINE, move |_lua, _debug| Ok(VmState::Yield));
+
+    #[cfg(any(feature = "lua54", feature = "lua53"))]
+    {
+        assert!(co.resume::<()>(()).is_ok());
+        assert!(co.resume::<()>(()).is_ok());
+        assert!(co.resume::<()>(()).is_ok());
+        assert!(co.resume::<()>(()).is_ok());
+        assert!(co.status() == ThreadStatus::Finished);
+    }
+    #[cfg(any(feature = "lua51", feature = "lua52", feature = "luajit"))]
+    {
+        assert!(
+            matches!(co.resume::<()>(()), Err(Error::RuntimeError(err)) if err.contains("attempt to yield from a hook"))
+        );
+        assert!(co.status() == ThreadStatus::Error);
     }
 
     Ok(())

@@ -1,69 +1,110 @@
-error[E0277]: the type `UnsafeCell<mlua::lua::ExtraData>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+error[E0277]: the type `UnsafeCell<mlua::state::raw::RawLua>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
  --> tests/compile/ref_nounwindsafe.rs:8:18
   |
 8 |     catch_unwind(move || table.set("a", "b").unwrap());
-  |     ------------ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `UnsafeCell<mlua::lua::ExtraData>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+  |     ------------ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `UnsafeCell<mlua::state::raw::RawLua>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
   |     |
   |     required by a bound introduced by this call
   |
-  = help: within `Lua`, the trait `RefUnwindSafe` is not implemented for `UnsafeCell<mlua::lua::ExtraData>`
-note: required because it appears within the type `ArcInner<UnsafeCell<ExtraData>>`
+  = help: within `alloc::sync::ArcInner<lock_api::remutex::ReentrantMutex<parking_lot::raw_mutex::RawMutex, parking_lot::remutex::RawThreadId, mlua::state::raw::RawLua>>`, the trait `RefUnwindSafe` is not implemented for `UnsafeCell<mlua::state::raw::RawLua>`, which is required by `{closure@$DIR/tests/compile/ref_nounwindsafe.rs:8:18: 8:25}: UnwindSafe`
+note: required because it appears within the type `lock_api::remutex::ReentrantMutex<parking_lot::raw_mutex::RawMutex, parking_lot::remutex::RawThreadId, mlua::state::raw::RawLua>`
+ --> $CARGO/lock_api-0.4.12/src/remutex.rs
+  |
+  | pub struct ReentrantMutex<R, G, T: ?Sized> {
+  |            ^^^^^^^^^^^^^^
+note: required because it appears within the type `alloc::sync::ArcInner<lock_api::remutex::ReentrantMutex<parking_lot::raw_mutex::RawMutex, parking_lot::remutex::RawThreadId, mlua::state::raw::RawLua>>`
  --> $RUST/alloc/src/sync.rs
   |
   | struct ArcInner<T: ?Sized> {
   |        ^^^^^^^^
-note: required because it appears within the type `PhantomData<ArcInner<UnsafeCell<ExtraData>>>`
- --> $RUST/core/src/marker.rs
-  |
-  | pub struct PhantomData<T: ?Sized>;
-  |            ^^^^^^^^^^^
-note: required because it appears within the type `Arc<UnsafeCell<ExtraData>>`
+  = note: required for `NonNull<alloc::sync::ArcInner<lock_api::remutex::ReentrantMutex<parking_lot::raw_mutex::RawMutex, parking_lot::remutex::RawThreadId, mlua::state::raw::RawLua>>>` to implement `UnwindSafe`
+note: required because it appears within the type `std::sync::Weak<lock_api::remutex::ReentrantMutex<parking_lot::raw_mutex::RawMutex, parking_lot::remutex::RawThreadId, mlua::state::raw::RawLua>>`
  --> $RUST/alloc/src/sync.rs
   |
-  | pub struct Arc<
-  |            ^^^
-note: required because it appears within the type `LuaInner`
- --> src/lua.rs
+  | pub struct Weak<
+  |            ^^^^
+note: required because it appears within the type `mlua::state::WeakLua`
+ --> src/state.rs
   |
-  | pub struct LuaInner {
-  |            ^^^^^^^^
-note: required because it appears within the type `ArcInner<LuaInner>`
- --> $RUST/alloc/src/sync.rs
-  |
-  | struct ArcInner<T: ?Sized> {
-  |        ^^^^^^^^
-note: required because it appears within the type `PhantomData<ArcInner<LuaInner>>`
- --> $RUST/core/src/marker.rs
-  |
-  | pub struct PhantomData<T: ?Sized>;
-  |            ^^^^^^^^^^^
-note: required because it appears within the type `Arc<LuaInner>`
- --> $RUST/alloc/src/sync.rs
-  |
-  | pub struct Arc<
-  |            ^^^
-note: required because it appears within the type `Lua`
- --> src/lua.rs
-  |
-  | pub struct Lua(Arc<LuaInner>);
-  |            ^^^
-  = note: required for `&Lua` to implement `UnwindSafe`
-note: required because it appears within the type `LuaRef<'_>`
+  | pub(crate) struct WeakLua(XWeak<ReentrantMutex<RawLua>>);
+  |                   ^^^^^^^
+note: required because it appears within the type `mlua::types::ValueRef`
  --> src/types.rs
   |
-  | pub(crate) struct LuaRef<'lua> {
-  |                   ^^^^^^
-note: required because it appears within the type `Table<'_>`
+  | pub(crate) struct ValueRef {
+  |                   ^^^^^^^^
+note: required because it appears within the type `LuaTable`
  --> src/table.rs
   |
-  | pub struct Table<'lua>(pub(crate) LuaRef<'lua>);
+  | pub struct Table(pub(crate) ValueRef);
   |            ^^^^^
 note: required because it's used within this closure
  --> tests/compile/ref_nounwindsafe.rs:8:18
   |
 8 |     catch_unwind(move || table.set("a", "b").unwrap());
   |                  ^^^^^^^
-note: required by a bound in `catch_unwind`
+note: required by a bound in `std::panic::catch_unwind`
+ --> $RUST/std/src/panic.rs
+  |
+  | pub fn catch_unwind<F: FnOnce() -> R + UnwindSafe, R>(f: F) -> Result<R> {
+  |                                        ^^^^^^^^^^ required by this bound in `catch_unwind`
+
+error[E0277]: the type `UnsafeCell<usize>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+ --> tests/compile/ref_nounwindsafe.rs:8:18
+  |
+8 |     catch_unwind(move || table.set("a", "b").unwrap());
+  |     ------------ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `UnsafeCell<usize>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+  |     |
+  |     required by a bound introduced by this call
+  |
+  = help: within `alloc::sync::ArcInner<lock_api::remutex::ReentrantMutex<parking_lot::raw_mutex::RawMutex, parking_lot::remutex::RawThreadId, mlua::state::raw::RawLua>>`, the trait `RefUnwindSafe` is not implemented for `UnsafeCell<usize>`, which is required by `{closure@$DIR/tests/compile/ref_nounwindsafe.rs:8:18: 8:25}: UnwindSafe`
+note: required because it appears within the type `Cell<usize>`
+ --> $RUST/core/src/cell.rs
+  |
+  | pub struct Cell<T: ?Sized> {
+  |            ^^^^
+note: required because it appears within the type `lock_api::remutex::RawReentrantMutex<parking_lot::raw_mutex::RawMutex, parking_lot::remutex::RawThreadId>`
+ --> $CARGO/lock_api-0.4.12/src/remutex.rs
+  |
+  | pub struct RawReentrantMutex<R, G> {
+  |            ^^^^^^^^^^^^^^^^^
+note: required because it appears within the type `lock_api::remutex::ReentrantMutex<parking_lot::raw_mutex::RawMutex, parking_lot::remutex::RawThreadId, mlua::state::raw::RawLua>`
+ --> $CARGO/lock_api-0.4.12/src/remutex.rs
+  |
+  | pub struct ReentrantMutex<R, G, T: ?Sized> {
+  |            ^^^^^^^^^^^^^^
+note: required because it appears within the type `alloc::sync::ArcInner<lock_api::remutex::ReentrantMutex<parking_lot::raw_mutex::RawMutex, parking_lot::remutex::RawThreadId, mlua::state::raw::RawLua>>`
+ --> $RUST/alloc/src/sync.rs
+  |
+  | struct ArcInner<T: ?Sized> {
+  |        ^^^^^^^^
+  = note: required for `NonNull<alloc::sync::ArcInner<lock_api::remutex::ReentrantMutex<parking_lot::raw_mutex::RawMutex, parking_lot::remutex::RawThreadId, mlua::state::raw::RawLua>>>` to implement `UnwindSafe`
+note: required because it appears within the type `std::sync::Weak<lock_api::remutex::ReentrantMutex<parking_lot::raw_mutex::RawMutex, parking_lot::remutex::RawThreadId, mlua::state::raw::RawLua>>`
+ --> $RUST/alloc/src/sync.rs
+  |
+  | pub struct Weak<
+  |            ^^^^
+note: required because it appears within the type `mlua::state::WeakLua`
+ --> src/state.rs
+  |
+  | pub(crate) struct WeakLua(XWeak<ReentrantMutex<RawLua>>);
+  |                   ^^^^^^^
+note: required because it appears within the type `mlua::types::ValueRef`
+ --> src/types.rs
+  |
+  | pub(crate) struct ValueRef {
+  |                   ^^^^^^^^
+note: required because it appears within the type `LuaTable`
+ --> src/table.rs
+  |
+  | pub struct Table(pub(crate) ValueRef);
+  |            ^^^^^
+note: required because it's used within this closure
+ --> tests/compile/ref_nounwindsafe.rs:8:18
+  |
+8 |     catch_unwind(move || table.set("a", "b").unwrap());
+  |                  ^^^^^^^
+note: required by a bound in `std::panic::catch_unwind`
  --> $RUST/std/src/panic.rs
   |
   | pub fn catch_unwind<F: FnOnce() -> R + UnwindSafe, R>(f: F) -> Result<R> {

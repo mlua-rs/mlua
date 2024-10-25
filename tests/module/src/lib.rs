@@ -34,6 +34,18 @@ fn test_module2(lua: &Lua) -> LuaResult<LuaTable> {
 }
 
 #[mlua::lua_module]
+fn test_module_new_vm(lua: &Lua) -> LuaResult<LuaTable> {
+    let eval = lua.create_function(|_, prog: String| {
+        let lua = Lua::new();
+        lua.load(prog).eval::<Option<String>>()
+    })?;
+
+    let exports = lua.create_table()?;
+    exports.set("eval", eval)?;
+    Ok(exports)
+}
+
+#[mlua::lua_module]
 fn test_module_error(_: &Lua) -> LuaResult<LuaTable> {
     Err("custom module error".into_lua_err())
 }

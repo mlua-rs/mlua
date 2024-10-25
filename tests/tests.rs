@@ -8,8 +8,8 @@ use std::sync::Arc;
 use std::{error, f32, f64, fmt};
 
 use mlua::{
-    ChunkMode, Error, ExternalError, Function, Lua, LuaOptions, Nil, Result, StdLib, String, Table,
-    UserData, Value, Variadic,
+    ChunkMode, Error, ExternalError, Function, Lua, LuaOptions, Nil, Result, StdLib, String, Table, UserData,
+    Value, Variadic,
 };
 
 #[cfg(not(feature = "luau"))]
@@ -17,7 +17,7 @@ use mlua::{
 fn test_safety() -> Result<()> {
     let lua = Lua::new();
     assert!(lua.load(r#"require "debug""#).exec().is_err());
-    match lua.load_from_std_lib(StdLib::DEBUG) {
+    match lua.load_std_libs(StdLib::DEBUG) {
         Err(Error::SafetyError(_)) => {}
         Err(e) => panic!("expected SafetyError, got {:?}", e),
         Ok(_) => panic!("expected SafetyError, got no error"),
@@ -52,8 +52,8 @@ fn test_safety() -> Result<()> {
 
     // Test safety rules after dynamically loading `package` library
     let lua = Lua::new_with(StdLib::NONE, LuaOptions::default())?;
-    assert!(lua.globals().get::<_, Option<Value>>("require")?.is_none());
-    lua.load_from_std_lib(StdLib::PACKAGE)?;
+    assert!(lua.globals().get::<Option<Value>>("require")?.is_none());
+    lua.load_std_libs(StdLib::PACKAGE)?;
     match lua.load(r#"package.loadlib()"#).exec() {
         Err(Error::CallbackError { ref cause, .. }) => match cause.as_ref() {
             Error::SafetyError(_) => {}
@@ -91,7 +91,7 @@ fn test_exec() -> Result<()> {
     "#,
     )
     .exec()?;
-    assert_eq!(globals.get::<_, String>("res")?, "foobar");
+    assert_eq!(globals.get::<String>("res")?, "foobar");
 
     let module: Table = lua
         .load(
@@ -106,12 +106,8 @@ fn test_exec() -> Result<()> {
         "#,
         )
         .eval()?;
-    println!("checkpoint");
     assert!(module.contains_key("func")?);
-    assert_eq!(
-        module.get::<_, Function>("func")?.call::<_, String>(())?,
-        "hello"
-    );
+    assert_eq!(module.get::<Function>("func")?.call::<String>(())?, "hello");
 
     Ok(())
 }
@@ -128,10 +124,7 @@ fn test_eval() -> Result<()> {
             incomplete_input: true,
             ..
         }) => {}
-        r => panic!(
-            "expected SyntaxError with incomplete_input=true, got {:?}",
-            r
-        ),
+        r => panic!("expected SyntaxError with incomplete_input=true, got {:?}", r),
     }
 
     Ok(())
@@ -141,10 +134,7 @@ fn test_eval() -> Result<()> {
 fn test_load_mode() -> Result<()> {
     let lua = unsafe { Lua::unsafe_new() };
 
-    assert_eq!(
-        lua.load("1 + 1").set_mode(ChunkMode::Text).eval::<i32>()?,
-        2
-    );
+    assert_eq!(lua.load("1 + 1").set_mode(ChunkMode::Text).eval::<i32>()?, 2);
     match lua.load("1 + 1").set_mode(ChunkMode::Binary).exec() {
         Ok(_) => panic!("expected SyntaxError, got no error"),
         Err(Error::SyntaxError { message: msg, .. }) => {
@@ -156,14 +146,9 @@ fn test_load_mode() -> Result<()> {
     #[cfg(not(feature = "luau"))]
     let bytecode = lua.load("return 1 + 1").into_function()?.dump(true);
     #[cfg(feature = "luau")]
-    let bytecode = mlua::Compiler::new().compile("return 1 + 1");
+    let bytecode = mlua::Compiler::new().compile("return 1 + 1")?;
     assert_eq!(lua.load(&bytecode).eval::<i32>()?, 2);
-    assert_eq!(
-        lua.load(&bytecode)
-            .set_mode(ChunkMode::Binary)
-            .eval::<i32>()?,
-        2
-    );
+    assert_eq!(lua.load(&bytecode).set_mode(ChunkMode::Binary).eval::<i32>()?, 2);
     match lua.load(&bytecode).set_mode(ChunkMode::Text).exec() {
         Ok(_) => panic!("expected SyntaxError, got no error"),
         Err(Error::SyntaxError { message: msg, .. }) => {
@@ -193,13 +178,13 @@ fn test_lua_multi() -> Result<()> {
     .exec()?;
 
     let globals = lua.globals();
-    let concat = globals.get::<_, Function>("concat")?;
-    let mreturn = globals.get::<_, Function>("mreturn")?;
+    let concat = globals.get::<Function>("concat")?;
+    let mreturn = globals.get::<Function>("mreturn")?;
 
-    assert_eq!(concat.call::<_, String>(("foo", "bar"))?, "foobar");
-    let (a, b) = mreturn.call::<_, (u64, u64)>(())?;
+    assert_eq!(concat.call::<String>(("foo", "bar"))?, "foobar");
+    let (a, b) = mreturn.call::<(u64, u64)>(())?;
     assert_eq!((a, b), (1, 2));
-    let (a, b, v) = mreturn.call::<_, (u64, u64, Variadic<u64>)>(())?;
+    let (a, b, v) = mreturn.call::<(u64, u64, Variadic<u64>)>(())?;
     assert_eq!((a, b), (1, 2));
     assert_eq!(v[..], [3, 4, 5, 6]);
 
@@ -221,10 +206,10 @@ fn test_coercion() -> Result<()> {
     .exec()?;
 
     let globals = lua.globals();
-    assert_eq!(globals.get::<_, String>("int")?, "123");
-    assert_eq!(globals.get::<_, i32>("str")?, 123);
-    assert_eq!(globals.get::<_, i32>("num")?, 123);
-    assert!(globals.get::<_, String>("func").is_err());
+    assert_eq!(globals.get::<String>("int")?, "123");
+    assert_eq!(globals.get::<i32>("str")?, 123);
+    assert_eq!(globals.get::<i32>("num")?, 123);
+    assert!(globals.get::<String>("func").is_err());
 
     Ok(())
 }
@@ -308,40 +293,36 @@ fn test_error() -> Result<()> {
     )
     .exec()?;
 
-    let rust_error_function =
-        lua.create_function(|_, ()| -> Result<()> { Err(TestError.into_lua_err()) })?;
+    let rust_error_function = lua.create_function(|_, ()| -> Result<()> { Err(TestError.into_lua_err()) })?;
     globals.set("rust_error_function", rust_error_function)?;
 
-    let no_error = globals.get::<_, Function>("no_error")?;
-    assert!(no_error.call::<_, ()>(()).is_ok());
+    let no_error = globals.get::<Function>("no_error")?;
+    assert!(no_error.call::<()>(()).is_ok());
 
-    let lua_error = globals.get::<_, Function>("lua_error")?;
-    match lua_error.call::<_, ()>(()) {
+    let lua_error = globals.get::<Function>("lua_error")?;
+    match lua_error.call::<()>(()) {
         Err(Error::RuntimeError(_)) => {}
         Err(e) => panic!("error is not RuntimeError kind, got {:?}", e),
         _ => panic!("error not returned"),
     }
 
-    let rust_error = globals.get::<_, Function>("rust_error")?;
-    match rust_error.call::<_, ()>(()) {
+    let rust_error = globals.get::<Function>("rust_error")?;
+    match rust_error.call::<()>(()) {
         Err(Error::CallbackError { .. }) => {}
         Err(e) => panic!("error is not CallbackError kind, got {:?}", e),
         _ => panic!("error not returned"),
     }
 
-    let return_error = globals.get::<_, Function>("return_error")?;
-    match return_error.call::<_, Value>(()) {
+    let return_error = globals.get::<Function>("return_error")?;
+    match return_error.call::<Value>(()) {
         Ok(Value::Error(_)) => {}
         _ => panic!("Value::Error not returned"),
     }
 
-    let return_string_error = globals.get::<_, Function>("return_string_error")?;
-    assert!(return_string_error.call::<_, Error>(()).is_ok());
+    let return_string_error = globals.get::<Function>("return_string_error")?;
+    assert!(return_string_error.call::<Error>(()).is_ok());
 
-    match lua
-        .load("if youre happy and you know it syntax error")
-        .exec()
-    {
+    match lua.load("if youre happy and you know it syntax error").exec() {
         Err(Error::SyntaxError {
             incomplete_input: false,
             ..
@@ -358,13 +339,13 @@ fn test_error() -> Result<()> {
         _ => panic!("error not returned"),
     }
 
-    let test_pcall = globals.get::<_, Function>("test_pcall")?;
-    test_pcall.call::<_, ()>(())?;
+    let test_pcall = globals.get::<Function>("test_pcall")?;
+    test_pcall.call::<()>(())?;
 
     #[cfg(not(target_arch = "wasm32"))]
     {
-        let understand_recursion = globals.get::<_, Function>("understand_recursion")?;
-        assert!(understand_recursion.call::<_, ()>(()).is_err());
+        let understand_recursion = globals.get::<Function>("understand_recursion")?;
+        assert!(understand_recursion.call::<()>(()).is_err());
     }
 
     Ok(())
@@ -374,15 +355,13 @@ fn test_error() -> Result<()> {
 fn test_panic() -> Result<()> {
     fn make_lua(options: LuaOptions) -> Result<Lua> {
         let lua = Lua::new_with(StdLib::ALL_SAFE, options)?;
-        let rust_panic_function =
-            lua.create_function(|_, msg: Option<StdString>| -> Result<()> {
-                if let Some(msg) = msg {
-                    panic!("{}", msg)
-                }
-                panic!("rust panic")
-            })?;
-        lua.globals()
-            .set("rust_panic_function", rust_panic_function)?;
+        let rust_panic_function = lua.create_function(|_, msg: Option<StdString>| -> Result<()> {
+            if let Some(msg) = msg {
+                panic!("{}", msg)
+            }
+            panic!("rust panic")
+        })?;
+        lua.globals().set("rust_panic_function", rust_panic_function)?;
         Ok(lua)
     }
 
@@ -431,7 +410,7 @@ fn test_panic() -> Result<()> {
             Err(_) => {}
         };
 
-        assert!(lua.globals().get::<_, Value>("err")? == Value::Nil);
+        assert!(lua.globals().get::<Value>("err")? == Value::Nil);
         match lua.load("tostring(err)").exec() {
             Ok(_) => panic!("no error was detected"),
             Err(Error::CallbackError { ref cause, .. }) => match cause.as_ref() {
@@ -538,12 +517,7 @@ fn test_num_conversion() -> Result<()> {
     assert_eq!(lua.load("1.0").eval::<f64>()?, 1.0);
     #[cfg(any(feature = "lua54", feature = "lua53"))]
     assert_eq!(lua.load("1.0").eval::<String>()?, "1.0");
-    #[cfg(any(
-        feature = "lua52",
-        feature = "lua51",
-        feature = "luajit",
-        feature = "luau"
-    ))]
+    #[cfg(any(feature = "lua52", feature = "lua51", feature = "luajit", feature = "luau"))]
     assert_eq!(lua.load("1.0").eval::<String>()?, "1");
 
     assert_eq!(lua.load("1.5").eval::<i64>()?, 1);
@@ -616,23 +590,15 @@ fn test_pcall_xpcall() -> Result<()> {
     )
     .exec()?;
 
-    assert_eq!(globals.get::<_, bool>("pcall_status")?, false);
-    assert_eq!(globals.get::<_, String>("pcall_error")?, "testerror");
+    assert_eq!(globals.get::<bool>("pcall_status")?, false);
+    assert_eq!(globals.get::<String>("pcall_error")?, "testerror");
 
-    assert_eq!(globals.get::<_, bool>("xpcall_statusr")?, false);
-    #[cfg(any(
-        feature = "lua54",
-        feature = "lua53",
-        feature = "lua52",
-        feature = "luajit"
-    ))]
-    assert_eq!(
-        globals.get::<_, std::string::String>("xpcall_error")?,
-        "testerror"
-    );
+    assert_eq!(globals.get::<bool>("xpcall_statusr")?, false);
+    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "luajit"))]
+    assert_eq!(globals.get::<std::string::String>("xpcall_error")?, "testerror");
     #[cfg(feature = "lua51")]
     assert!(globals
-        .get::<_, String>("xpcall_error")?
+        .get::<String>("xpcall_error")?
         .to_str()?
         .ends_with(": testerror"));
 
@@ -645,9 +611,7 @@ fn test_pcall_xpcall() -> Result<()> {
     "#,
     )
     .exec()?;
-    let _ = globals
-        .get::<_, Function>("xpcall_recursion")?
-        .call::<_, ()>(());
+    let _ = globals.get::<Function>("xpcall_recursion")?.call::<()>(());
 
     Ok(())
 }
@@ -657,23 +621,22 @@ fn test_recursive_mut_callback_error() -> Result<()> {
     let lua = Lua::new();
 
     let mut v = Some(Box::new(123));
-    let f = lua.create_function_mut::<_, (), _>(move |lua, mutate: bool| {
+    let f = lua.create_function_mut(move |lua, mutate: bool| {
         if mutate {
             v = None;
         } else {
             // Produce a mutable reference
             let r = v.as_mut().unwrap();
             // Whoops, this will recurse into the function and produce another mutable reference!
-            lua.globals().get::<_, Function>("f")?.call::<_, ()>(true)?;
+            lua.globals().get::<Function>("f")?.call::<()>(true)?;
             println!("Should not get here, mutable aliasing has occurred!");
-            println!("value at {:p}", r as *mut _);
-            println!("value is {}", r);
+            println!("value at {:p} is {r}", r as *mut _);
         }
 
         Ok(())
     })?;
     lua.globals().set("f", f)?;
-    match lua.globals().get::<_, Function>("f")?.call::<_, ()>(false) {
+    match lua.globals().get::<Function>("f")?.call::<()>(false) {
         Err(Error::CallbackError { ref cause, .. }) => match *cause.as_ref() {
             Error::CallbackError { ref cause, .. } => match *cause.as_ref() {
                 Error::RecursiveMutCallback { .. } => {}
@@ -704,13 +667,13 @@ fn test_set_metatable_nil() -> Result<()> {
 fn test_named_registry_value() -> Result<()> {
     let lua = Lua::new();
 
-    lua.set_named_registry_value::<i32>("test", 42)?;
+    lua.set_named_registry_value("test", 42)?;
     let f = lua.create_function(move |lua, ()| {
         assert_eq!(lua.named_registry_value::<i32>("test")?, 42);
         Ok(())
     })?;
 
-    f.call::<_, ()>(())?;
+    f.call::<()>(())?;
 
     lua.unset_named_registry_value("test")?;
     match lua.named_registry_value("test")? {
@@ -725,7 +688,7 @@ fn test_named_registry_value() -> Result<()> {
 fn test_registry_value() -> Result<()> {
     let lua = Lua::new();
 
-    let mut r = Some(lua.create_registry_value::<i32>(42)?);
+    let mut r = Some(lua.create_registry_value(42)?);
     let f = lua.create_function_mut(move |lua, ()| {
         if let Some(r) = r.take() {
             assert_eq!(lua.registry_value::<i32>(&r)?, 42);
@@ -736,7 +699,7 @@ fn test_registry_value() -> Result<()> {
         Ok(())
     })?;
 
-    f.call::<_, ()>(())?;
+    f.call::<()>(())?;
 
     Ok(())
 }
@@ -767,18 +730,18 @@ fn test_drop_registry_value() -> Result<()> {
 fn test_replace_registry_value() -> Result<()> {
     let lua = Lua::new();
 
-    let key = lua.create_registry_value::<i32>(42)?;
-    lua.replace_registry_value(&key, "new value")?;
+    let mut key = lua.create_registry_value(42)?;
+    lua.replace_registry_value(&mut key, "new value")?;
     assert_eq!(lua.registry_value::<String>(&key)?, "new value");
-    lua.replace_registry_value(&key, Value::Nil)?;
+    lua.replace_registry_value(&mut key, Value::Nil)?;
     assert_eq!(lua.registry_value::<Value>(&key)?, Value::Nil);
-    lua.replace_registry_value(&key, 123)?;
+    lua.replace_registry_value(&mut key, 123)?;
     assert_eq!(lua.registry_value::<i32>(&key)?, 123);
 
-    let key2 = lua.create_registry_value(Value::Nil)?;
-    lua.replace_registry_value(&key2, Value::Nil)?;
+    let mut key2 = lua.create_registry_value(Value::Nil)?;
+    lua.replace_registry_value(&mut key2, Value::Nil)?;
     assert_eq!(lua.registry_value::<Value>(&key2)?, Value::Nil);
-    lua.replace_registry_value(&key2, "abc")?;
+    lua.replace_registry_value(&mut key2, "abc")?;
     assert_eq!(lua.registry_value::<String>(&key2)?, "abc");
 
     Ok(())
@@ -898,16 +861,56 @@ fn test_application_data() -> Result<()> {
 
         Ok(())
     })?;
-    f.call(())?;
+    f.call::<()>(())?;
 
     assert_eq!(*lua.app_data_ref::<&str>().unwrap(), "test4");
-    assert_eq!(
-        *lua.app_data_ref::<Vec<&str>>().unwrap(),
-        vec!["test2", "test3"]
-    );
+    assert_eq!(*lua.app_data_ref::<Vec<&str>>().unwrap(), vec!["test2", "test3"]);
 
     lua.remove_app_data::<Vec<&str>>();
     assert!(matches!(lua.app_data_ref::<Vec<&str>>(), None));
+
+    Ok(())
+}
+
+#[test]
+fn test_rust_function() -> Result<()> {
+    let lua = Lua::new();
+
+    let globals = lua.globals();
+    lua.load(
+        r#"
+        function lua_function()
+            return rust_function()
+        end
+
+        -- Test to make sure chunk return is ignored
+        return 1
+    "#,
+    )
+    .exec()?;
+
+    let lua_function = globals.get::<Function>("lua_function")?;
+    let rust_function = lua.create_function(|_, ()| Ok("hello"))?;
+
+    globals.set("rust_function", rust_function)?;
+    assert_eq!(lua_function.call::<String>(())?, "hello");
+
+    Ok(())
+}
+
+#[test]
+fn test_c_function() -> Result<()> {
+    let lua = Lua::new();
+
+    unsafe extern "C-unwind" fn c_function(state: *mut mlua::lua_State) -> std::os::raw::c_int {
+        ffi::lua_pushboolean(state, 1);
+        ffi::lua_setglobal(state, b"c_function\0" as *const _ as *const _);
+        0
+    }
+
+    let func = unsafe { lua.create_c_function(c_function)? };
+    func.call::<()>(())?;
+    assert_eq!(lua.globals().get::<bool>("c_function")?, true);
 
     Ok(())
 }
@@ -919,15 +922,13 @@ fn test_recursion() -> Result<()> {
 
     let f = lua.create_function(move |lua, i: i32| {
         if i < 64 {
-            lua.globals()
-                .get::<_, Function>("f")?
-                .call::<_, ()>(i + 1)?;
+            lua.globals().get::<Function>("f")?.call::<()>(i + 1)?;
         }
         Ok(())
     })?;
 
     lua.globals().set("f", &f)?;
-    f.call::<_, ()>(1)?;
+    f.call::<()>(1)?;
 
     Ok(())
 }
@@ -937,7 +938,7 @@ fn test_recursion() -> Result<()> {
 fn test_too_many_returns() -> Result<()> {
     let lua = Lua::new();
     let f = lua.create_function(|_, ()| Ok(Variadic::from_iter(1..1000000)))?;
-    assert!(f.call::<_, Variadic<u32>>(()).is_err());
+    assert!(f.call::<Variadic<u32>>(()).is_err());
     Ok(())
 }
 
@@ -947,11 +948,7 @@ fn test_too_many_arguments() -> Result<()> {
     let lua = Lua::new();
     lua.load("function test(...) end").exec()?;
     let args = Variadic::from_iter(1..1000000);
-    assert!(lua
-        .globals()
-        .get::<_, Function>("test")?
-        .call::<_, ()>(args)
-        .is_err());
+    assert!(lua.globals().get::<Function>("test")?.call::<()>(args).is_err());
     Ok(())
 }
 
@@ -961,33 +958,10 @@ fn test_too_many_arguments() -> Result<()> {
 fn test_too_many_recursions() -> Result<()> {
     let lua = Lua::new();
 
-    let f = lua
-        .create_function(move |lua, ()| lua.globals().get::<_, Function>("f")?.call::<_, ()>(()))?;
+    let f = lua.create_function(move |lua, ()| lua.globals().get::<Function>("f")?.call::<()>(()))?;
 
     lua.globals().set("f", &f)?;
-    assert!(f.call::<_, ()>(()).is_err());
-
-    Ok(())
-}
-
-#[test]
-#[cfg(not(target_arch = "wasm32"))]
-fn test_too_many_binds() -> Result<()> {
-    let lua = Lua::new();
-    let globals = lua.globals();
-    lua.load(
-        r#"
-        function f(...)
-        end
-    "#,
-    )
-    .exec()?;
-
-    let concat = globals.get::<_, Function>("f")?;
-    assert!(concat.bind(Variadic::from_iter(1..1000000)).is_err());
-    assert!(concat
-        .call::<_, ()>(Variadic::from_iter(1..1000000))
-        .is_err());
+    assert!(f.call::<()>(()).is_err());
 
     Ok(())
 }
@@ -1038,10 +1012,7 @@ fn test_large_args() -> Result<()> {
         )
         .eval()?;
 
-    assert_eq!(
-        f.call::<_, usize>((0..100).collect::<Variadic<usize>>())?,
-        4950
-    );
+    assert_eq!(f.call::<usize>((0..100).collect::<Variadic<usize>>())?, 4950);
 
     Ok(())
 }
@@ -1057,7 +1028,7 @@ fn test_large_args_ref() -> Result<()> {
         Ok(())
     })?;
 
-    f.call::<_, ()>((0..100).map(|i| i.to_string()).collect::<Variadic<_>>())?;
+    f.call::<()>((0..100).map(|i| i.to_string()).collect::<Variadic<_>>())?;
 
     Ok(())
 }
@@ -1110,20 +1081,15 @@ fn test_context_thread() -> Result<()> {
         )
         .into_function()?;
 
-    #[cfg(any(
-        feature = "lua54",
-        feature = "lua53",
-        feature = "lua52",
-        feature = "luajit52"
-    ))]
-    f.call::<_, ()>(lua.current_thread())?;
+    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "luajit52"))]
+    f.call::<()>(lua.current_thread())?;
 
     #[cfg(any(
         feature = "lua51",
         all(feature = "luajit", not(feature = "luajit52")),
         feature = "luau"
     ))]
-    f.call::<_, ()>(Nil)?;
+    f.call::<()>(Nil)?;
 
     Ok(())
 }
@@ -1144,7 +1110,7 @@ fn test_context_thread_51() -> Result<()> {
         .eval()?,
     )?;
 
-    thread.resume::<_, ()>(thread.clone())?;
+    thread.resume::<()>(thread.clone())?;
 
     Ok(())
 }
@@ -1154,10 +1120,7 @@ fn test_context_thread_51() -> Result<()> {
 fn test_jit_version() -> Result<()> {
     let lua = Lua::new();
     let jit: Table = lua.globals().get("jit")?;
-    assert!(jit
-        .get::<_, String>("version")?
-        .to_str()?
-        .contains("LuaJIT"));
+    assert!(jit.get::<String>("version")?.to_str()?.contains("LuaJIT"));
     Ok(())
 }
 
@@ -1175,7 +1138,7 @@ fn test_load_from_function() -> Result<()> {
     })?;
 
     let t: Table = lua.load_from_function("my_module", func.clone())?;
-    assert_eq!(t.get::<_, String>("__name")?, "my_module");
+    assert_eq!(t.get::<String>("__name")?, "my_module");
     assert_eq!(i.load(Ordering::Relaxed), 1);
 
     let _: Value = lua.load_from_function("my_module", func.clone())?;
@@ -1230,6 +1193,38 @@ fn test_inspect_stack() -> Result<()> {
     .set_name("chunk")
     .exec()?;
 
+    let stack_info = lua.create_function(|lua, ()| {
+        let debug = lua.inspect_stack(1).unwrap(); // caller
+        let stack_info = debug.stack();
+        Ok(format!("{stack_info:?}"))
+    })?;
+    lua.globals().set("stack_info", stack_info)?;
+
+    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "luau"))]
+    lua.load(
+        r#"
+        local stack_info = stack_info
+        local function baz(a, b, c, ...)
+            return stack_info()
+        end
+        assert(baz() == 'DebugStack { num_ups: 1, num_params: 3, is_vararg: true }')
+    "#,
+    )
+    .exec()?;
+
+    // LuaJIT does not pass this test for some reason
+    #[cfg(feature = "lua51")]
+    lua.load(
+        r#"
+        local stack_info = stack_info
+        local function baz(a, b, c, ...)
+            return stack_info()
+        end
+        assert(baz() == 'DebugStack { num_ups: 1 }')
+    "#,
+    )
+    .exec()?;
+
     Ok(())
 }
 
@@ -1239,7 +1234,7 @@ fn test_multi_states() -> Result<()> {
 
     let f = lua.create_function(|_, g: Option<Function>| {
         if let Some(g) = g {
-            g.call(())?;
+            g.call::<()>(())?;
         }
         Ok(())
     })?;
@@ -1314,8 +1309,7 @@ fn test_luajit_cdata() -> Result<()> {
     "#,
         )
         .eval::<Value>()?;
-    assert!(cdata.is_userdata() && cdata.is_cdata());
-    assert_eq!(cdata.type_name(), "cdata");
+    assert_eq!(cdata.type_name(), "other");
     assert!(cdata.to_string()?.starts_with("cdata<void *>:"));
 
     Ok(())
@@ -1324,11 +1318,60 @@ fn test_luajit_cdata() -> Result<()> {
 #[test]
 #[cfg(feature = "send")]
 #[cfg(not(target_arch = "wasm32"))]
-fn test_send() {
+fn test_multi_thread() -> Result<()> {
     let lua = Lua::new();
-    std::thread::spawn(move || {
-        let _lua = lua;
-    })
-    .join()
-    .unwrap();
+
+    lua.globals().set("i", 0)?;
+    let func = lua.load("i = i + 1").into_function()?;
+
+    std::thread::scope(|s| {
+        s.spawn(|| {
+            for _ in 0..5 {
+                func.call::<()>(()).unwrap();
+            }
+        });
+        s.spawn(|| {
+            for _ in 0..5 {
+                func.call::<()>(()).unwrap();
+            }
+        });
+    });
+
+    assert_eq!(lua.globals().get::<i32>("i")?, 10);
+
+    Ok(())
+}
+
+#[test]
+fn test_exec_raw() -> Result<()> {
+    let lua = Lua::new();
+
+    let sum = lua.create_function(|_, args: Variadic<i32>| {
+        let mut sum = 0;
+        for i in args {
+            sum += i;
+        }
+        Ok(sum)
+    })?;
+    lua.globals().set("sum", sum)?;
+
+    let n: i32 = unsafe {
+        lua.exec_raw((), |state| {
+            ffi::lua_getglobal(state, b"sum\0".as_ptr() as _);
+            ffi::lua_pushinteger(state, 1);
+            ffi::lua_pushinteger(state, 7);
+            ffi::lua_call(state, 2, 1);
+        })
+    }?;
+    assert_eq!(n, 8);
+
+    // Test error handling
+    let res: Result<()> = unsafe {
+        lua.exec_raw("test error", |state| {
+            ffi::lua_error(state);
+        })
+    };
+    assert!(matches!(res, Err(Error::RuntimeError(err)) if err.contains("test error")));
+
+    Ok(())
 }

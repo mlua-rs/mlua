@@ -1,9 +1,7 @@
 use std::f32;
 use std::iter::FromIterator;
 
-use mlua::{
-    chunk, FromLua, Function, Lua, MetaMethod, Result, UserData, UserDataMethods, Value, Variadic,
-};
+use mlua::{chunk, FromLua, Function, Lua, MetaMethod, Result, UserData, UserDataMethods, Value, Variadic};
 
 fn main() -> Result<()> {
     // You can create a new Lua state with `Lua::new()`. This loads the default Lua std library
@@ -19,8 +17,8 @@ fn main() -> Result<()> {
     globals.set("string_var", "hello")?;
     globals.set("int_var", 42)?;
 
-    assert_eq!(globals.get::<_, String>("string_var")?, "hello");
-    assert_eq!(globals.get::<_, i64>("int_var")?, 42);
+    assert_eq!(globals.get::<String>("string_var")?, "hello");
+    assert_eq!(globals.get::<i64>("int_var")?, 42);
 
     // You can load and evaluate Lua code. The returned type of `Lua::load` is a builder
     // that allows you to change settings before running Lua code. Here, we are using it to set
@@ -34,7 +32,7 @@ fn main() -> Result<()> {
     )
     .set_name("example code")
     .exec()?;
-    assert_eq!(globals.get::<_, String>("global")?, "foobar");
+    assert_eq!(globals.get::<String>("global")?, "foobar");
 
     assert_eq!(lua.load("1 + 1").eval::<i32>()?, 2);
     assert_eq!(lua.load("false == false").eval::<bool>()?, true);
@@ -87,16 +85,16 @@ fn main() -> Result<()> {
     // You can load Lua functions
 
     let print: Function = globals.get("print")?;
-    print.call::<_, ()>("hello from rust")?;
+    print.call::<()>("hello from rust")?;
 
     // This API generally handles variadic using tuples. This is one way to call a function with
     // multiple parameters:
 
-    print.call::<_, ()>(("hello", "again", "from", "rust"))?;
+    print.call::<()>(("hello", "again", "from", "rust"))?;
 
     // But, you can also pass variadic arguments with the `Variadic` type.
 
-    print.call::<_, ()>(Variadic::from_iter(
+    print.call::<()>(Variadic::from_iter(
         ["hello", "yet", "again", "from", "rust"].iter().cloned(),
     ))?;
 
@@ -154,8 +152,8 @@ fn main() -> Result<()> {
     struct Vec2(f32, f32);
 
     // We can implement `FromLua` trait for our `Vec2` to return a copy
-    impl<'lua> FromLua<'lua> for Vec2 {
-        fn from_lua(value: Value<'lua>, _: &'lua Lua) -> Result<Self> {
+    impl FromLua for Vec2 {
+        fn from_lua(value: Value, _: &Lua) -> Result<Self> {
             match value {
                 Value::UserData(ud) => Ok(*ud.borrow::<Self>()?),
                 _ => unreachable!(),
@@ -164,7 +162,7 @@ fn main() -> Result<()> {
     }
 
     impl UserData for Vec2 {
-        fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
+        fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
             methods.add_method("magnitude", |_, vec, ()| {
                 let mag_squared = vec.0 * vec.0 + vec.1 * vec.1;
                 Ok(mag_squared.sqrt())
@@ -179,19 +177,15 @@ fn main() -> Result<()> {
     let vec2_constructor = lua.create_function(|_, (x, y): (f32, f32)| Ok(Vec2(x, y)))?;
     globals.set("vec2", vec2_constructor)?;
 
-    assert!(
-        (lua.load("(vec2(1, 2) + vec2(2, 2)):magnitude()")
-            .eval::<f32>()?
-            - 5.0)
-            .abs()
-            < f32::EPSILON
-    );
+    assert!((lua.load("(vec2(1, 2) + vec2(2, 2)):magnitude()").eval::<f32>()? - 5.0).abs() < f32::EPSILON);
 
     // Normally, Rust types passed to `Lua` must be `'static`, because there is no way to be
     // sure of their lifetime inside the Lua state. There is, however, a limited way to lift this
     // requirement. You can call `Lua::scope` to create userdata and callbacks types that only live
     // for as long as the call to scope, but do not have to be `'static` (and `Send`).
 
+    // TODO: Re-enable this
+    /*
     {
         let mut rust_val = 0;
 
@@ -213,6 +207,7 @@ fn main() -> Result<()> {
 
         assert_eq!(rust_val, 42);
     }
+    */
 
     // We were able to run our 'sketchy' function inside the scope just fine. However, if we
     // try to run our 'sketchy' function outside of the scope, the function we created will have

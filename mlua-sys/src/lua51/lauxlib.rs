@@ -63,12 +63,7 @@ extern "C-unwind" {
     pub fn luaL_unref(L: *mut lua_State, t: c_int, r#ref: c_int);
 
     pub fn luaL_loadfile(L: *mut lua_State, filename: *const c_char) -> c_int;
-    pub fn luaL_loadbuffer(
-        L: *mut lua_State,
-        buff: *const c_char,
-        sz: usize,
-        name: *const c_char,
-    ) -> c_int;
+    pub fn luaL_loadbuffer(L: *mut lua_State, buff: *const c_char, sz: usize, name: *const c_char) -> c_int;
     pub fn luaL_loadstring(L: *mut lua_State, s: *const c_char) -> c_int;
 
     pub fn luaL_newstate() -> *mut lua_State;

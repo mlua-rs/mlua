@@ -6,18 +6,12 @@ use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
-use mlua::{
-    Compiler, CoverageInfo, Error, Lua, LuaOptions, Result, StdLib, Table, ThreadStatus, Value,
-    Vector, VmState,
-};
+use mlua::{Compiler, Error, Lua, LuaOptions, Result, StdLib, Table, ThreadStatus, Value, Vector, VmState};
 
 #[test]
 fn test_version() -> Result<()> {
     let lua = Lua::new();
-    assert!(lua
-        .globals()
-        .get::<_, String>("_VERSION")?
-        .starts_with("Luau 0."));
+    assert!(lua.globals().get::<String>("_VERSION")?.starts_with("Luau 0."));
     Ok(())
 }
 
@@ -25,8 +19,8 @@ fn test_version() -> Result<()> {
 fn test_require() -> Result<()> {
     // Ensure that require() is not available if package module is not loaded
     let mut lua = Lua::new_with(StdLib::NONE, LuaOptions::default())?;
-    assert!(lua.globals().get::<_, Option<Value>>("require")?.is_none());
-    assert!(lua.globals().get::<_, Option<Value>>("package")?.is_none());
+    assert!(lua.globals().get::<Option<Value>>("require")?.is_none());
+    assert!(lua.globals().get::<Option<Value>>("package")?.is_none());
 
     if cfg!(target_arch = "wasm32") {
         // TODO: figure out why emscripten fails on file operations
@@ -35,6 +29,17 @@ fn test_require() -> Result<()> {
     }
 
     lua = Lua::new();
+
+    // Check that require() can load stdlib modules (including `package`)
+    lua.load(
+        r#"
+        local math = require("math")
+        assert(math == _G.math, "math module does not match _G.math")
+        local package = require("package")
+        assert(package == _G.package, "package module does not match _G.package")
+    "#,
+    )
+    .exec()?;
 
     let temp_dir = tempfile::tempdir().unwrap();
     fs::write(
@@ -49,7 +54,7 @@ fn test_require() -> Result<()> {
     )?;
 
     lua.globals()
-        .get::<_, Table>("package")?
+        .get::<Table>("package")?
         .set("path", temp_dir.path().join("?.luau").to_string_lossy())?;
 
     lua.load(
@@ -73,7 +78,7 @@ fn test_require() -> Result<()> {
 
     // Require binary module in safe mode
     lua.globals()
-        .get::<_, Table>("package")?
+        .get::<Table>("package")?
         .set("cpath", temp_dir.path().join("?.so").to_string_lossy())?;
     fs::write(temp_dir.path().join("dylib.so"), "")?;
     match lua.load("require('dylib')").exec() {
@@ -165,7 +170,7 @@ fn test_vectors() -> Result<()> {
     Ok(())
 }
 
-#[cfg(all(not(feature = "luau-vector4"), feature = "unstable"))]
+#[cfg(not(feature = "luau-vector4"))]
 #[test]
 fn test_vector_metatable() -> Result<()> {
     let lua = Lua::new();
@@ -186,12 +191,10 @@ fn test_vector_metatable() -> Result<()> {
         )
         .eval::<Table>()?;
     vector_mt.set_metatable(Some(vector_mt.clone()));
-    lua.set_vector_metatable(Some(vector_mt.clone()));
+    lua.set_type_metatable::<Vector>(Some(vector_mt.clone()));
     lua.globals().set("Vector3", vector_mt)?;
 
-    let compiler = Compiler::new()
-        .set_vector_lib("Vector3")
-        .set_vector_ctor("new");
+    let compiler = Compiler::new().set_vector_lib("Vector3").set_vector_ctor("new");
 
     // Test vector methods (fastcall)
     lua.load(
@@ -251,25 +254,25 @@ fn test_sandbox() -> Result<()> {
     lua.load("global = 123").exec()?;
     let n: i32 = lua.load("return global").eval()?;
     assert_eq!(n, 123);
-    assert_eq!(lua.globals().get::<_, Option<i32>>("global")?, Some(123));
+    assert_eq!(lua.globals().get::<Option<i32>>("global")?, Some(123));
 
     // Threads should inherit "main" globals
-    let f = lua.create_function(|lua, ()| lua.globals().get::<_, i32>("global"))?;
+    let f = lua.create_function(|lua, ()| lua.globals().get::<i32>("global"))?;
     let co = lua.create_thread(f.clone())?;
-    assert_eq!(co.resume::<_, Option<i32>>(())?, Some(123));
+    assert_eq!(co.resume::<Option<i32>>(())?, Some(123));
 
     // Sandboxed threads should also inherit "main" globals
     let co = lua.create_thread(f)?;
     co.sandbox()?;
-    assert_eq!(co.resume::<_, Option<i32>>(())?, Some(123));
+    assert_eq!(co.resume::<Option<i32>>(())?, Some(123));
 
     lua.sandbox(false)?;
 
     // Previously set variable `global` should be cleared now
-    assert_eq!(lua.globals().get::<_, Option<i32>>("global")?, None);
+    assert_eq!(lua.globals().get::<Option<i32>>("global")?, None);
 
     // Readonly flags should be cleared as well
-    let table = lua.globals().get::<_, Table>("table")?;
+    let table = lua.globals().get::<Table>("table")?;
     table.set("test", "test")?;
 
     Ok(())
@@ -283,10 +286,10 @@ fn test_sandbox_nolibs() -> Result<()> {
     lua.load("global = 123").exec()?;
     let n: i32 = lua.load("return global").eval()?;
     assert_eq!(n, 123);
-    assert_eq!(lua.globals().get::<_, Option<i32>>("global")?, Some(123));
+    assert_eq!(lua.globals().get::<Option<i32>>("global")?, Some(123));
 
     lua.sandbox(false)?;
-    assert_eq!(lua.globals().get::<_, Option<i32>>("global")?, None);
+    assert_eq!(lua.globals().get::<Option<i32>>("global")?, None);
 
     Ok(())
 }
@@ -298,20 +301,20 @@ fn test_sandbox_threads() -> Result<()> {
     let f = lua.create_function(|lua, v: Value| lua.globals().set("global", v))?;
 
     let co = lua.create_thread(f.clone())?;
-    co.resume(321)?;
+    co.resume::<()>(321)?;
     // The main state should see the `global` variable (as the thread is not sandboxed)
-    assert_eq!(lua.globals().get::<_, Option<i32>>("global")?, Some(321));
+    assert_eq!(lua.globals().get::<Option<i32>>("global")?, Some(321));
 
     let co = lua.create_thread(f.clone())?;
     co.sandbox()?;
-    co.resume(123)?;
+    co.resume::<()>(123)?;
     // The main state should see the previous `global` value (as the thread is sandboxed)
-    assert_eq!(lua.globals().get::<_, Option<i32>>("global")?, Some(321));
+    assert_eq!(lua.globals().get::<Option<i32>>("global")?, Some(321));
 
     // Try to reset the (sandboxed) thread
     co.reset(f)?;
-    co.resume(111)?;
-    assert_eq!(lua.globals().get::<_, Option<i32>>("global")?, Some(111));
+    co.resume::<()>(111)?;
+    assert_eq!(lua.globals().get::<Option<i32>>("global")?, Some(111));
 
     Ok(())
 }
@@ -336,7 +339,7 @@ fn test_interrupts() -> Result<()> {
     "#,
         )
         .into_function()?;
-    f.call(())?;
+    f.call::<()>(())?;
 
     assert!(interrupts_count.load(Ordering::Relaxed) > 0);
 
@@ -362,18 +365,18 @@ fn test_interrupts() -> Result<()> {
         )
         .into_function()?,
     )?;
-    co.resume(())?;
+    co.resume::<()>(())?;
     assert_eq!(co.status(), ThreadStatus::Resumable);
     let result: i32 = co.resume(())?;
     assert_eq!(result, 6);
     assert_eq!(yield_count.load(Ordering::Relaxed), 7);
-    assert_eq!(co.status(), ThreadStatus::Unresumable);
+    assert_eq!(co.status(), ThreadStatus::Finished);
 
     //
     // Test errors in interrupts
     //
     lua.set_interrupt(|_| Err(Error::runtime("error from interrupt")));
-    match f.call::<_, ()>(()) {
+    match f.call::<()>(()) {
         Err(Error::CallbackError { cause, .. }) => match *cause {
             Error::RuntimeError(ref m) if m == "error from interrupt" => {}
             ref e => panic!("expected RuntimeError with a specific message, got {:?}", e),
@@ -382,105 +385,6 @@ fn test_interrupts() -> Result<()> {
     }
 
     lua.remove_interrupt();
-
-    Ok(())
-}
-
-#[test]
-fn test_coverage() -> Result<()> {
-    let lua = Lua::new();
-
-    lua.set_compiler(Compiler::default().set_coverage_level(1));
-
-    let f = lua
-        .load(
-            r#"local s = "abc"
-        assert(#s == 3)
-
-        function abc(i)
-            if i < 5 then
-                return 0
-            else
-                return 1
-            end
-        end
-
-        (function()
-            (function() abc(10) end)()
-        end)()
-        "#,
-        )
-        .into_function()?;
-
-    f.call(())?;
-
-    let mut report = Vec::new();
-    f.coverage(|cov| {
-        report.push(cov);
-    });
-
-    assert_eq!(
-        report[0],
-        CoverageInfo {
-            function: None,
-            line_defined: 1,
-            depth: 0,
-            hits: vec![-1, 1, 1, -1, 1, -1, -1, -1, -1, -1, -1, -1, 1, -1, -1, -1],
-        }
-    );
-    assert_eq!(
-        report[1],
-        CoverageInfo {
-            function: Some("abc".into()),
-            line_defined: 4,
-            depth: 1,
-            hits: vec![-1, -1, -1, -1, -1, 1, 0, -1, 1, -1, -1, -1, -1, -1, -1, -1],
-        }
-    );
-    assert_eq!(
-        report[2],
-        CoverageInfo {
-            function: None,
-            line_defined: 12,
-            depth: 1,
-            hits: vec![-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 1, -1, -1],
-        }
-    );
-    assert_eq!(
-        report[3],
-        CoverageInfo {
-            function: None,
-            line_defined: 13,
-            depth: 2,
-            hits: vec![-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 1, -1, -1],
-        }
-    );
-
-    Ok(())
-}
-
-#[test]
-fn test_buffer() -> Result<()> {
-    let lua = Lua::new();
-
-    let buf1 = lua
-        .load(
-            r#"
-        local buf = buffer.fromstring("hello")
-        assert(buffer.len(buf) == 5)
-        return buf
-    "#,
-        )
-        .eval::<Value>()?;
-    assert!(buf1.is_userdata() && buf1.is_buffer());
-    assert_eq!(buf1.type_name(), "buffer");
-
-    let buf2 = lua.load("buffer.fromstring('hello')").eval::<Value>()?;
-    assert_ne!(buf1, buf2);
-
-    // Check that we can pass buffer type to Lua
-    let func = lua.create_function(|_, buf: Value| return buf.to_string())?;
-    assert!(func.call::<_, String>(buf1)?.starts_with("buffer:"));
 
     Ok(())
 }

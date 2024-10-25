@@ -15,10 +15,17 @@ fn test_string_compare() {
     with_str("teststring", |t| assert_eq!(t, b"teststring".to_vec())); // Vec<u8>
     with_str("teststring", |t| assert_eq!(t, "teststring".to_string())); // String
     with_str("teststring", |t| assert_eq!(t, t)); // mlua::String
-    with_str("teststring", |t| {
-        assert_eq!(t, Cow::from(b"teststring".as_ref()))
-    }); // Cow (borrowed)
+    with_str("teststring", |t| assert_eq!(t, Cow::from(b"teststring".as_ref()))); // Cow (borrowed)
     with_str("bla", |t| assert_eq!(t, Cow::from(b"bla".to_vec()))); // Cow (owned)
+
+    // Test ordering
+    with_str("a", |a| {
+        assert!(!(a < a));
+        assert!(!(a > a));
+    });
+    with_str("a", |a| assert!(a < "b"));
+    with_str("a", |a| assert!(a < b"b"));
+    with_str("a", |a| with_str("b", |b| assert!(a < b)));
 }
 
 #[test]
@@ -40,14 +47,8 @@ fn test_string_views() -> Result<()> {
     let empty: String = globals.get("empty")?;
 
     assert_eq!(ok.to_str()?, "null bytes are valid utf-8, wh\0 knew?");
-    assert_eq!(
-        ok.to_string_lossy(),
-        "null bytes are valid utf-8, wh\0 knew?"
-    );
-    assert_eq!(
-        ok.as_bytes(),
-        &b"null bytes are valid utf-8, wh\0 knew?"[..]
-    );
+    assert_eq!(ok.to_string_lossy(), "null bytes are valid utf-8, wh\0 knew?");
+    assert_eq!(ok.as_bytes(), &b"null bytes are valid utf-8, wh\0 knew?"[..]);
 
     assert!(err.to_str().is_err());
     assert_eq!(err.as_bytes(), &b"but \xff isn't :("[..]);
@@ -60,7 +61,7 @@ fn test_string_views() -> Result<()> {
 }
 
 #[test]
-fn test_raw_string() -> Result<()> {
+fn test_string_from_bytes() -> Result<()> {
     let lua = Lua::new();
 
     let rs = lua.create_string(&[0, 1, 2, 3, 0, 1, 2, 3])?;
@@ -75,26 +76,28 @@ fn test_string_hash() -> Result<()> {
 
     let set: HashSet<String> = lua.load(r#"{"hello", "world", "abc", 321}"#).eval()?;
     assert_eq!(set.len(), 4);
-    assert!(set.contains(b"hello".as_ref()));
-    assert!(set.contains(b"world".as_ref()));
-    assert!(set.contains(b"abc".as_ref()));
-    assert!(set.contains(b"321".as_ref()));
-    assert!(!set.contains(b"Hello".as_ref()));
+    assert!(set.contains(&lua.create_string("hello")?));
+    assert!(set.contains(&lua.create_string("world")?));
+    assert!(set.contains(&lua.create_string("abc")?));
+    assert!(set.contains(&lua.create_string("321")?));
+    assert!(!set.contains(&lua.create_string("Hello")?));
 
     Ok(())
 }
 
 #[test]
-fn test_string_debug() -> Result<()> {
+fn test_string_fmt_debug() -> Result<()> {
     let lua = Lua::new();
 
     // Valid utf8
     let s = lua.create_string("hello")?;
     assert_eq!(format!("{s:?}"), r#""hello""#);
+    assert_eq!(format!("{:?}", s.to_str()?), r#""hello""#);
+    assert_eq!(format!("{:?}", s.as_bytes()), "[104, 101, 108, 108, 111]");
 
     // Invalid utf8
     let s = lua.create_string(b"hello\0world\r\n\t\xF0\x90\x80")?;
-    assert_eq!(format!("{s:?}"), r#"b"hello\0world\r\n\t\xf0\x90\x80""#);
+    assert_eq!(format!("{s:?}"), r#"b"hello\0world\r\n\t\xF0\x90\x80""#);
 
     Ok(())
 }
@@ -108,25 +111,6 @@ fn test_string_pointer() -> Result<()> {
 
     // Lua uses string interning, so these should be the same
     assert_eq!(str1.to_pointer(), str2.to_pointer());
-
-    Ok(())
-}
-
-#[cfg(all(feature = "unstable", not(feature = "send")))]
-#[test]
-fn test_owned_string() -> Result<()> {
-    let lua = Lua::new();
-
-    let s = lua.create_string("hello, world!")?.into_owned();
-    drop(lua);
-
-    // Shortcuts
-    assert_eq!(s.as_bytes(), b"hello, world!");
-    assert_eq!(s.to_str()?, "hello, world!");
-    assert_eq!(format!("{s:?}"), "\"hello, world!\"");
-
-    // Access via reference
-    assert_eq!(s.to_ref().to_string_lossy(), "hello, world!");
 
     Ok(())
 }

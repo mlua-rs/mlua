@@ -1,9 +1,8 @@
 //! Contains definitions from `lua.h`.
 
 use std::marker::{PhantomData, PhantomPinned};
-use std::mem;
 use std::os::raw::{c_char, c_double, c_int, c_uchar, c_void};
-use std::ptr;
+use std::{mem, ptr};
 
 // Mark for precompiled code (`<esc>Lua`)
 pub const LUA_SIGNATURE: &[u8] = b"\x1bLua";
@@ -251,12 +250,7 @@ extern "C-unwind" {
         mode: *const c_char,
     ) -> c_int;
 
-    pub fn lua_dump(
-        L: *mut lua_State,
-        writer: lua_Writer,
-        data: *mut c_void,
-        strip: c_int,
-    ) -> c_int;
+    pub fn lua_dump(L: *mut lua_State, writer: lua_Writer, data: *mut c_void, strip: c_int) -> c_int;
 }
 
 #[inline(always)]

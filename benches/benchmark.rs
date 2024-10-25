@@ -74,7 +74,7 @@ fn table_get_set(c: &mut Criterion) {
                     .enumerate()
                 {
                     table.raw_set(s, i).unwrap();
-                    assert_eq!(table.raw_get::<_, usize>(s).unwrap(), i);
+                    assert_eq!(table.raw_get::<usize>(s).unwrap(), i);
                 }
             },
             BatchSize::SmallInput,
@@ -153,7 +153,7 @@ fn function_call_sum(c: &mut Criterion) {
         b.iter_batched(
             || collect_gc_twice(&lua),
             |_| {
-                assert_eq!(sum.call::<_, i64>((10, 20, 30)).unwrap(), 0);
+                assert_eq!(sum.call::<i64>((10, 20, 30)).unwrap(), 0);
             },
             BatchSize::SmallInput,
         );
@@ -172,7 +172,7 @@ fn function_call_lua_sum(c: &mut Criterion) {
         b.iter_batched(
             || collect_gc_twice(&lua),
             |_| {
-                assert_eq!(sum.call::<_, i64>((10, 20, 30)).unwrap(), 0);
+                assert_eq!(sum.call::<i64>((10, 20, 30)).unwrap(), 0);
             },
             BatchSize::SmallInput,
         );
@@ -183,9 +183,7 @@ fn function_call_concat(c: &mut Criterion) {
     let lua = Lua::new();
 
     let concat = lua
-        .create_function(|_, (a, b): (LuaString, LuaString)| {
-            Ok(format!("{}{}", a.to_str()?, b.to_str()?))
-        })
+        .create_function(|_, (a, b): (LuaString, LuaString)| Ok(format!("{}{}", a.to_str()?, b.to_str()?)))
         .unwrap();
     let i = AtomicUsize::new(0);
 
@@ -196,10 +194,7 @@ fn function_call_concat(c: &mut Criterion) {
                 i.fetch_add(1, Ordering::Relaxed)
             },
             |i| {
-                assert_eq!(
-                    concat.call::<_, LuaString>(("num:", i)).unwrap(),
-                    format!("num:{i}")
-                );
+                assert_eq!(concat.call::<LuaString>(("num:", i)).unwrap(), format!("num:{i}"));
             },
             BatchSize::SmallInput,
         );
@@ -222,10 +217,7 @@ fn function_call_lua_concat(c: &mut Criterion) {
                 i.fetch_add(1, Ordering::Relaxed)
             },
             |i| {
-                assert_eq!(
-                    concat.call::<_, LuaString>(("num:", i)).unwrap(),
-                    format!("num:{i}")
-                );
+                assert_eq!(concat.call::<LuaString>(("num:", i)).unwrap(), format!("num:{i}"));
             },
             BatchSize::SmallInput,
         );
@@ -248,7 +240,7 @@ fn function_async_call_sum(c: &mut Criterion) {
         b.to_async(rt).iter_batched(
             || collect_gc_twice(&lua),
             |_| async {
-                assert_eq!(sum.call_async::<_, i64>((10, 20, 30)).await.unwrap(), 0);
+                assert_eq!(sum.call_async::<i64>((10, 20, 30)).await.unwrap(), 0);
             },
             BatchSize::SmallInput,
         );
@@ -305,7 +297,7 @@ fn userdata_create(c: &mut Criterion) {
 fn userdata_call_index(c: &mut Criterion) {
     struct UserData(#[allow(unused)] i64);
     impl LuaUserData for UserData {
-        fn add_methods<'lua, M: LuaUserDataMethods<'lua, Self>>(methods: &mut M) {
+        fn add_methods<M: LuaUserDataMethods<Self>>(methods: &mut M) {
             methods.add_meta_method(LuaMetaMethod::Index, move |_, _, key: LuaString| Ok(key));
         }
     }
@@ -321,7 +313,7 @@ fn userdata_call_index(c: &mut Criterion) {
         b.iter_batched(
             || collect_gc_twice(&lua),
             |_| {
-                assert_eq!(index.call::<_, LuaString>(&ud).unwrap(), "test");
+                assert_eq!(index.call::<LuaString>(&ud).unwrap(), "test");
             },
             BatchSize::SmallInput,
         );
@@ -331,7 +323,7 @@ fn userdata_call_index(c: &mut Criterion) {
 fn userdata_call_method(c: &mut Criterion) {
     struct UserData(i64);
     impl LuaUserData for UserData {
-        fn add_methods<'lua, M: LuaUserDataMethods<'lua, Self>>(methods: &mut M) {
+        fn add_methods<M: LuaUserDataMethods<Self>>(methods: &mut M) {
             methods.add_method("add", |_, this, i: i64| Ok(this.0 + i));
         }
     }
@@ -351,7 +343,7 @@ fn userdata_call_method(c: &mut Criterion) {
                 i.fetch_add(1, Ordering::Relaxed)
             },
             |i| {
-                assert_eq!(method.call::<_, usize>((&ud, i)).unwrap(), 123 + i);
+                assert_eq!(method.call::<usize>((&ud, i)).unwrap(), 123 + i);
             },
             BatchSize::SmallInput,
         );
@@ -361,7 +353,7 @@ fn userdata_call_method(c: &mut Criterion) {
 fn userdata_async_call_method(c: &mut Criterion) {
     struct UserData(i64);
     impl LuaUserData for UserData {
-        fn add_methods<'lua, M: LuaUserDataMethods<'lua, Self>>(methods: &mut M) {
+        fn add_methods<M: LuaUserDataMethods<Self>>(methods: &mut M) {
             methods.add_async_method("add", |_, this, i: i64| async move {
                 task::yield_now().await;
                 Ok(this.0 + i)
@@ -383,17 +375,10 @@ fn userdata_async_call_method(c: &mut Criterion) {
         b.to_async(rt).iter_batched(
             || {
                 collect_gc_twice(&lua);
-                (
-                    method.clone(),
-                    ud.clone(),
-                    i.fetch_add(1, Ordering::Relaxed),
-                )
+                (method.clone(), ud.clone(), i.fetch_add(1, Ordering::Relaxed))
             },
             |(method, ud, i)| async move {
-                assert_eq!(
-                    method.call_async::<_, usize>((ud, i)).await.unwrap(),
-                    123 + i
-                );
+                assert_eq!(method.call_async::<usize>((ud, i)).await.unwrap(), 123 + i);
             },
             BatchSize::SmallInput,
         );
