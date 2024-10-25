@@ -1,12 +1,14 @@
 use std::borrow::Cow;
 use std::cell::UnsafeCell;
+use std::ops::Deref;
 #[cfg(not(feature = "luau"))]
 use std::ops::{BitOr, BitOrAssign};
 use std::os::raw::c_int;
 
 use ffi::lua_Debug;
 
-use crate::lua::Lua;
+use crate::state::RawLua;
+use crate::types::ReentrantMutexGuard;
 use crate::util::{linenumber_to_usize, ptr_to_lossy_str, ptr_to_str};
 
 /// Contains information about currently executing Lua code.
@@ -14,29 +16,48 @@ use crate::util::{linenumber_to_usize, ptr_to_lossy_str, ptr_to_str};
 /// The `Debug` structure is provided as a parameter to the hook function set with
 /// [`Lua::set_hook`]. You may call the methods on this structure to retrieve information about the
 /// Lua code executing at the time that the hook function was called. Further information can be
-/// found in the Lua [documentation][lua_doc].
+/// found in the Lua [documentation].
 ///
-/// [lua_doc]: https://www.lua.org/manual/5.4/manual.html#lua_Debug
+/// [documentation]: https://www.lua.org/manual/5.4/manual.html#lua_Debug
 /// [`Lua::set_hook`]: crate::Lua::set_hook
-pub struct Debug<'lua> {
-    lua: &'lua Lua,
+pub struct Debug<'a> {
+    lua: EitherLua<'a>,
     ar: ActivationRecord,
     #[cfg(feature = "luau")]
     level: c_int,
 }
 
-impl<'lua> Debug<'lua> {
+enum EitherLua<'a> {
+    Owned(ReentrantMutexGuard<'a, RawLua>),
     #[cfg(not(feature = "luau"))]
-    pub(crate) fn new(lua: &'lua Lua, ar: *mut lua_Debug) -> Self {
+    Borrowed(&'a RawLua),
+}
+
+impl Deref for EitherLua<'_> {
+    type Target = RawLua;
+
+    fn deref(&self) -> &Self::Target {
+        match self {
+            EitherLua::Owned(guard) => guard,
+            #[cfg(not(feature = "luau"))]
+            EitherLua::Borrowed(lua) => lua,
+        }
+    }
+}
+
+impl<'a> Debug<'a> {
+    // We assume the lock is held when this function is called.
+    #[cfg(not(feature = "luau"))]
+    pub(crate) fn new(lua: &'a RawLua, ar: *mut lua_Debug) -> Self {
         Debug {
-            lua,
+            lua: EitherLua::Borrowed(lua),
             ar: ActivationRecord::Borrowed(ar),
         }
     }
 
-    pub(crate) fn new_owned(lua: &'lua Lua, _level: c_int, ar: lua_Debug) -> Self {
+    pub(crate) fn new_owned(guard: ReentrantMutexGuard<'a, RawLua>, _level: c_int, ar: lua_Debug) -> Self {
         Debug {
-            lua,
+            lua: EitherLua::Owned(guard),
             ar: ActivationRecord::Owned(UnsafeCell::new(ar)),
             #[cfg(feature = "luau")]
             level: _level,
@@ -45,7 +66,7 @@ impl<'lua> Debug<'lua> {
 
     /// Returns the specific event that triggered the hook.
     ///
-    /// For [Lua 5.1] `DebugEvent::TailCall` is used for return events to indicate a return
+    /// For [Lua 5.1] [`DebugEvent::TailCall`] is used for return events to indicate a return
     /// from a function that did a tail call.
     ///
     /// [Lua 5.1]: https://www.lua.org/manual/5.1/manual.html#pdf-LUA_HOOKTAILRET
@@ -163,8 +184,8 @@ impl<'lua> Debug<'lua> {
             );
             #[cfg(feature = "luau")]
             mlua_assert!(
-                ffi::lua_getinfo(self.lua.state(), self.level, cstr!("a"), self.ar.get()) != 0,
-                "lua_getinfo failed with `a`"
+                ffi::lua_getinfo(self.lua.state(), self.level, cstr!("au"), self.ar.get()) != 0,
+                "lua_getinfo failed with `au`"
             );
 
             #[cfg(not(feature = "luau"))]
@@ -177,8 +198,8 @@ impl<'lua> Debug<'lua> {
             };
             #[cfg(feature = "luau")]
             let stack = DebugStack {
-                num_ups: (*self.ar.get()).nupvals as i32,
-                num_params: (*self.ar.get()).nparams as i32,
+                num_ups: (*self.ar.get()).nupvals,
+                num_params: (*self.ar.get()).nparams,
                 is_vararg: (*self.ar.get()).isvararg != 0,
             };
             stack
@@ -234,28 +255,24 @@ pub struct DebugSource<'a> {
     pub line_defined: Option<usize>,
     /// The line number where the definition of the function ends (not set by Luau).
     pub last_line_defined: Option<usize>,
-    /// A string `Lua` if the function is a Lua function, `C` if it is a C function, `main` if it is the main part of a chunk.
+    /// A string `Lua` if the function is a Lua function, `C` if it is a C function, `main` if it is
+    /// the main part of a chunk.
     pub what: &'static str,
 }
 
 #[derive(Copy, Clone, Debug)]
 pub struct DebugStack {
-    pub num_ups: i32,
+    /// Number of upvalues.
+    pub num_ups: u8,
+    /// Number of parameters.
+    ///
     /// Requires `feature = "lua54/lua53/lua52/luau"`
-    #[cfg(any(
-        feature = "lua54",
-        feature = "lua53",
-        feature = "lua52",
-        feature = "luau"
-    ))]
-    pub num_params: i32,
+    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "luau"))]
+    pub num_params: u8,
+    /// Whether the function is a vararg function.
+    ///
     /// Requires `feature = "lua54/lua53/lua52/luau"`
-    #[cfg(any(
-        feature = "lua54",
-        feature = "lua53",
-        feature = "lua52",
-        feature = "luau"
-    ))]
+    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "luau"))]
     pub is_vararg: bool,
 }
 

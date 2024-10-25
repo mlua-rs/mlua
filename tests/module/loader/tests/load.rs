@@ -92,6 +92,18 @@ fn test_module_multi_from_thread() -> Result<()> {
     .exec()
 }
 
+#[test]
+fn test_module_new_vm() -> Result<()> {
+    let lua = make_lua()?;
+    lua.load(
+        r#"
+        local mod = require("test_module.new_vm")
+        assert(mod.eval("return \"hello, world\"") == "hello, world")
+    "#,
+    )
+    .exec()
+}
+
 fn make_lua() -> Result<Lua> {
     let (dylib_path, dylib_ext, separator);
     if cfg!(target_os = "macos") {

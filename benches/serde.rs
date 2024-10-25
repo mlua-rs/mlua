@@ -37,7 +37,7 @@ fn encode_json(c: &mut Criterion) {
         b.iter_batched(
             || collect_gc_twice(&lua),
             |_| {
-                encode.call::<_, LuaString>(&table).unwrap();
+                encode.call::<LuaString>(&table).unwrap();
             },
             BatchSize::SmallInput,
         );
@@ -69,7 +69,7 @@ fn decode_json(c: &mut Criterion) {
         b.iter_batched(
             || collect_gc_twice(&lua),
             |_| {
-                decode.call::<_, LuaTable>(json).unwrap();
+                decode.call::<LuaTable>(json).unwrap();
             },
             BatchSize::SmallInput,
         );

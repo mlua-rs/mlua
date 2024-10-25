@@ -27,123 +27,113 @@
 //!
 //! # Serde support
 //!
-//! The [`LuaSerdeExt`] trait implemented for [`Lua`] allows conversion from Rust types to Lua values
-//! and vice versa using serde. Any user defined data type that implements [`serde::Serialize`] or
-//! [`serde::Deserialize`] can be converted.
+//! The [`LuaSerdeExt`] trait implemented for [`Lua`] allows conversion from Rust types to Lua
+//! values and vice versa using serde. Any user defined data type that implements
+//! [`serde::Serialize`] or [`serde::Deserialize`] can be converted.
 //! For convenience, additional functionality to handle `NULL` values and arrays is provided.
 //!
-//! The [`Value`] enum implements [`serde::Serialize`] trait to support serializing Lua values
-//! (including [`UserData`]) into Rust values.
+//! The [`Value`] enum and other types implement [`serde::Serialize`] trait to support serializing
+//! Lua values into Rust values.
 //!
 //! Requires `feature = "serialize"`.
 //!
 //! # Async/await support
 //!
-//! The [`create_async_function`] allows creating non-blocking functions that returns [`Future`].
-//! Lua code with async capabilities can be executed by [`call_async`] family of functions or polling
-//! [`AsyncThread`] using any runtime (eg. Tokio).
+//! The [`Lua::create_async_function`] allows creating non-blocking functions that returns
+//! [`Future`]. Lua code with async capabilities can be executed by [`Function::call_async`] family
+//! of functions or polling [`AsyncThread`] using any runtime (eg. Tokio).
 //!
 //! Requires `feature = "async"`.
 //!
-//! # `Send` requirement
-//! By default `mlua` is `!Send`. This can be changed by enabling `feature = "send"` that adds `Send` requirement
-//! to [`Function`]s and [`UserData`].
+//! # `Send` and `Sync` support
+//!
+//! By default `mlua` is `!Send`. This can be changed by enabling `feature = "send"` that adds
+//! `Send` requirement to Rust functions and [`UserData`] types.
+//!
+//! In this case [`Lua`] object and their types can be send or used from other threads. Internally
+//! access to Lua VM is synchronized using a reentrant mutex that can be locked many times within
+//! the same thread.
 //!
 //! [Lua programming language]: https://www.lua.org/
-//! [`Lua`]: crate::Lua
 //! [executing]: crate::Chunk::exec
 //! [evaluating]: crate::Chunk::eval
 //! [globals]: crate::Lua::globals
-//! [`IntoLua`]: crate::IntoLua
-//! [`FromLua`]: crate::FromLua
-//! [`IntoLuaMulti`]: crate::IntoLuaMulti
-//! [`FromLuaMulti`]: crate::FromLuaMulti
-//! [`Function`]: crate::Function
-//! [`UserData`]: crate::UserData
-//! [`UserDataFields`]: crate::UserDataFields
-//! [`UserDataMethods`]: crate::UserDataMethods
-//! [`LuaSerdeExt`]: crate::LuaSerdeExt
-//! [`Value`]: crate::Value
-//! [`create_async_function`]: crate::Lua::create_async_function
-//! [`call_async`]: crate::Function::call_async
-//! [`AsyncThread`]: crate::AsyncThread
 //! [`Future`]: std::future::Future
 //! [`serde::Serialize`]: https://docs.serde.rs/serde/ser/trait.Serialize.html
 //! [`serde::Deserialize`]: https://docs.serde.rs/serde/de/trait.Deserialize.html
 
 // Deny warnings inside doc tests / examples. When this isn't present, rustdoc doesn't show *any*
 // warnings at all.
-#![doc(test(attr(warn(warnings))))] // FIXME: Remove this when rust-lang/rust#123748 is fixed
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
 #[macro_use]
 mod macros;
 
+mod buffer;
 mod chunk;
 mod conversion;
 mod error;
 mod function;
 mod hook;
-mod lua;
 #[cfg(feature = "luau")]
 mod luau;
 mod memory;
 mod multi;
 mod scope;
+mod state;
 mod stdlib;
 mod string;
 mod table;
 mod thread;
+mod traits;
 mod types;
 mod userdata;
-mod userdata_ext;
-mod userdata_impl;
 mod util;
 mod value;
+mod vector;
 
 pub mod prelude;
 
+pub use bstr::BString;
 pub use ffi::{self, lua_CFunction, lua_State};
 
 pub use crate::chunk::{AsChunk, Chunk, ChunkMode};
 pub use crate::error::{Error, ErrorContext, ExternalError, ExternalResult, Result};
 pub use crate::function::{Function, FunctionInfo};
 pub use crate::hook::{Debug, DebugEvent, DebugNames, DebugSource, DebugStack};
-pub use crate::lua::{GCMode, Lua, LuaOptions};
-pub use crate::multi::Variadic;
+pub use crate::multi::{MultiValue, Variadic};
 pub use crate::scope::Scope;
+pub use crate::state::{GCMode, Lua, LuaOptions};
 pub use crate::stdlib::StdLib;
-pub use crate::string::String;
-pub use crate::table::{Table, TableExt, TablePairs, TableSequence};
+pub use crate::string::{BorrowedBytes, BorrowedStr, String};
+pub use crate::table::{Table, TablePairs, TableSequence};
 pub use crate::thread::{Thread, ThreadStatus};
-pub use crate::types::{AppDataRef, AppDataRefMut, Integer, LightUserData, Number, RegistryKey};
-pub use crate::userdata::{
-    AnyUserData, MetaMethod, UserData, UserDataFields, UserDataMetatable, UserDataMethods,
-    UserDataRef, UserDataRefMut,
+pub use crate::traits::{
+    FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, LuaNativeFn, LuaNativeFnMut, ObjectLike,
 };
-pub use crate::userdata_ext::AnyUserDataExt;
-pub use crate::userdata_impl::UserDataRegistry;
-pub use crate::value::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, MultiValue, Nil, Value};
+pub use crate::types::{
+    AppDataRef, AppDataRefMut, Either, Integer, LightUserData, MaybeSend, Number, RegistryKey, VmState,
+};
+pub use crate::userdata::{
+    AnyUserData, MetaMethod, UserData, UserDataFields, UserDataMetatable, UserDataMethods, UserDataRef,
+    UserDataRefMut, UserDataRegistry,
+};
+pub use crate::value::{Nil, Value};
 
 #[cfg(not(feature = "luau"))]
 pub use crate::hook::HookTriggers;
 
 #[cfg(any(feature = "luau", doc))]
 #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
-pub use crate::{
-    chunk::Compiler,
-    function::CoverageInfo,
-    types::{Vector, VmState},
-};
+pub use crate::{buffer::Buffer, chunk::Compiler, function::CoverageInfo, vector::Vector};
 
 #[cfg(feature = "async")]
-pub use crate::thread::AsyncThread;
+#[cfg_attr(docsrs, doc(cfg(feature = "async")))]
+pub use crate::{thread::AsyncThread, traits::LuaNativeAsyncFn};
 
 #[cfg(feature = "serialize")]
 #[doc(inline)]
-pub use crate::serde::{
-    de::Options as DeserializeOptions, ser::Options as SerializeOptions, LuaSerdeExt,
-};
+pub use crate::serde::{de::Options as DeserializeOptions, ser::Options as SerializeOptions, LuaSerdeExt};
 
 #[cfg(feature = "serialize")]
 #[cfg_attr(docsrs, doc(cfg(feature = "serialize")))]
@@ -153,13 +143,6 @@ pub mod serde;
 #[allow(unused_imports)]
 #[macro_use]
 extern crate mlua_derive;
-
-// Unstable features
-#[cfg(feature = "unstable")]
-pub use crate::{
-    function::OwnedFunction, string::OwnedString, table::OwnedTable, thread::OwnedThread,
-    userdata::OwnedAnyUserData,
-};
 
 /// Create a type that implements [`AsChunk`] and can capture Rust variables.
 ///
@@ -201,18 +184,14 @@ pub use crate::{
 ///
 /// Other minor limitations:
 ///
-/// - Certain escape codes in string literals don't work.
-///   (Specifically: `\a`, `\b`, `\f`, `\v`, `\123` (octal escape codes), `\u`, and `\U`).
+/// - Certain escape codes in string literals don't work. (Specifically: `\a`, `\b`, `\f`, `\v`,
+///   `\123` (octal escape codes), `\u`, and `\U`).
 ///
 ///   These are accepted: : `\\`, `\n`, `\t`, `\r`, `\xAB` (hex escape codes), and `\0`.
 ///
 /// - The `//` (floor division) operator is unusable, as its start a comment.
 ///
 /// Everything else should work.
-///
-/// [`AsChunk`]: crate::AsChunk
-/// [`UserData`]: crate::UserData
-/// [`IntoLua`]: crate::IntoLua
 #[cfg(feature = "macros")]
 #[cfg_attr(docsrs, doc(cfg(feature = "macros")))]
 pub use mlua_derive::chunk;
@@ -281,10 +260,12 @@ pub use mlua_derive::FromLuaTable;
 ///     ...
 /// }
 /// ```
-///
 #[cfg(any(feature = "module", docsrs))]
 #[cfg_attr(docsrs, doc(cfg(feature = "module")))]
 pub use mlua_derive::lua_module;
+
+#[cfg(all(feature = "module", feature = "send"))]
+compile_error!("`send` feature is not supported in module mode");
 
 pub(crate) mod private {
     use super::*;
@@ -294,6 +275,6 @@ pub(crate) mod private {
     impl Sealed for Error {}
     impl<T> Sealed for std::result::Result<T, Error> {}
     impl Sealed for Lua {}
-    impl Sealed for Table<'_> {}
-    impl Sealed for AnyUserData<'_> {}
+    impl Sealed for Table {}
+    impl Sealed for AnyUserData {}
 }

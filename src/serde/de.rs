@@ -1,3 +1,5 @@
+//! Deserialize Lua values to a Rust data structure.
+
 use std::cell::RefCell;
 use std::os::raw::c_void;
 use std::rc::Rc;
@@ -14,8 +16,8 @@ use crate::value::Value;
 
 /// A struct for deserializing Lua values into Rust values.
 #[derive(Debug)]
-pub struct Deserializer<'lua> {
-    value: Value<'lua>,
+pub struct Deserializer {
+    value: Value,
     options: Options,
     visited: Rc<RefCell<FxHashSet<*const c_void>>>,
 }
@@ -51,7 +53,7 @@ pub struct Options {
 
 impl Default for Options {
     fn default() -> Self {
-        Self::new()
+        const { Self::new() }
     }
 }
 
@@ -93,14 +95,14 @@ impl Options {
     }
 }
 
-impl<'lua> Deserializer<'lua> {
-    /// Creates a new Lua Deserializer for the `Value`.
-    pub fn new(value: Value<'lua>) -> Self {
+impl Deserializer {
+    /// Creates a new Lua Deserializer for the [`Value`].
+    pub fn new(value: Value) -> Self {
         Self::new_with_options(value, Options::default())
     }
 
-    /// Creates a new Lua Deserializer for the `Value` with custom options.
-    pub fn new_with_options(value: Value<'lua>, options: Options) -> Self {
+    /// Creates a new Lua Deserializer for the [`Value`] with custom options.
+    pub fn new_with_options(value: Value, options: Options) -> Self {
         Deserializer {
             value,
             options,
@@ -108,11 +110,7 @@ impl<'lua> Deserializer<'lua> {
         }
     }
 
-    fn from_parts(
-        value: Value<'lua>,
-        options: Options,
-        visited: Rc<RefCell<FxHashSet<*const c_void>>>,
-    ) -> Self {
+    fn from_parts(value: Value, options: Options, visited: Rc<RefCell<FxHashSet<*const c_void>>>) -> Self {
         Deserializer {
             value,
             options,
@@ -121,7 +119,7 @@ impl<'lua> Deserializer<'lua> {
     }
 }
 
-impl<'lua, 'de> serde::Deserializer<'de> for Deserializer<'lua> {
+impl<'de> serde::Deserializer<'de> for Deserializer {
     type Error = Error;
 
     #[inline]
@@ -139,8 +137,8 @@ impl<'lua, 'de> serde::Deserializer<'de> for Deserializer<'lua> {
             #[cfg(feature = "luau")]
             Value::Vector(_) => self.deserialize_seq(visitor),
             Value::String(s) => match s.to_str() {
-                Ok(s) => visitor.visit_str(s),
-                Err(_) => visitor.visit_bytes(s.as_bytes()),
+                Ok(s) => visitor.visit_str(&s),
+                Err(_) => visitor.visit_bytes(&s.as_bytes()),
             },
             Value::Table(ref t) if t.raw_len() > 0 || t.is_array() => self.deserialize_seq(visitor),
             Value::Table(_) => self.deserialize_map(visitor),
@@ -149,18 +147,13 @@ impl<'lua, 'de> serde::Deserializer<'de> for Deserializer<'lua> {
                 serde_userdata(ud, |value| value.deserialize_any(visitor))
             }
             #[cfg(feature = "luau")]
-            Value::UserData(ud) if ud.1 == crate::types::SubtypeId::Buffer => unsafe {
-                let mut size = 0usize;
-                let buf = ffi::lua_tobuffer(ud.0.lua.ref_thread(), ud.0.index, &mut size);
-                mlua_assert!(!buf.is_null(), "invalid Luau buffer");
-                let buf = std::slice::from_raw_parts(buf as *const u8, size);
-                visitor.visit_bytes(buf)
-            },
+            Value::Buffer(buf) => visitor.visit_bytes(unsafe { buf.as_slice() }),
             Value::Function(_)
             | Value::Thread(_)
             | Value::UserData(_)
             | Value::LightUserData(_)
-            | Value::Error(_) => {
+            | Value::Error(_)
+            | Value::Other(_) => {
                 if self.options.deny_unsupported_types {
                     let msg = format!("unsupported value type `{}`", self.value.type_name());
                     Err(de::Error::custom(msg))
@@ -266,10 +259,7 @@ impl<'lua, 'de> serde::Deserializer<'de> for Deserializer<'lua> {
                 if deserializer.seq.count() == 0 {
                     Ok(seq)
                 } else {
-                    Err(de::Error::invalid_length(
-                        len,
-                        &"fewer elements in the table",
-                    ))
+                    Err(de::Error::invalid_length(len, &"fewer elements in the table"))
                 }
             }
             Value::UserData(ud) if ud.is_serializable() => {
@@ -291,12 +281,7 @@ impl<'lua, 'de> serde::Deserializer<'de> for Deserializer<'lua> {
     }
 
     #[inline]
-    fn deserialize_tuple_struct<V>(
-        self,
-        _name: &'static str,
-        _len: usize,
-        visitor: V,
-    ) -> Result<V::Value>
+    fn deserialize_tuple_struct<V>(self, _name: &'static str, _len: usize, visitor: V) -> Result<V::Value>
     where
         V: de::Visitor<'de>,
     {
@@ -313,7 +298,7 @@ impl<'lua, 'de> serde::Deserializer<'de> for Deserializer<'lua> {
                 let _guard = RecursionGuard::new(&t, &self.visited);
 
                 let mut deserializer = MapDeserializer {
-                    pairs: MapPairs::new(t, self.options.sort_keys)?,
+                    pairs: MapPairs::new(&t, self.options.sort_keys)?,
                     value: None,
                     options: self.options,
                     visited: self.visited,
@@ -394,13 +379,13 @@ impl<'lua, 'de> serde::Deserializer<'de> for Deserializer<'lua> {
     }
 }
 
-struct SeqDeserializer<'lua> {
-    seq: TableSequence<'lua, Value<'lua>>,
+struct SeqDeserializer<'a> {
+    seq: TableSequence<'a, Value>,
     options: Options,
     visited: Rc<RefCell<FxHashSet<*const c_void>>>,
 }
 
-impl<'lua, 'de> de::SeqAccess<'de> for SeqDeserializer<'lua> {
+impl<'de> de::SeqAccess<'de> for SeqDeserializer<'_> {
     type Error = Error;
 
     fn next_element_seed<T>(&mut self, seed: T) -> Result<Option<T::Value>>
@@ -435,7 +420,7 @@ impl<'lua, 'de> de::SeqAccess<'de> for SeqDeserializer<'lua> {
 
 #[cfg(feature = "luau")]
 struct VecDeserializer {
-    vec: crate::types::Vector,
+    vec: crate::Vector,
     next: usize,
     options: Options,
     visited: Rc<RefCell<FxHashSet<*const c_void>>>,
@@ -453,8 +438,7 @@ impl<'de> de::SeqAccess<'de> for VecDeserializer {
             Some(&n) => {
                 self.next += 1;
                 let visited = Rc::clone(&self.visited);
-                let deserializer =
-                    Deserializer::from_parts(Value::Number(n as _), self.options, visited);
+                let deserializer = Deserializer::from_parts(Value::Number(n as _), self.options, visited);
                 seed.deserialize(deserializer).map(Some)
             }
             None => Ok(None),
@@ -462,20 +446,20 @@ impl<'de> de::SeqAccess<'de> for VecDeserializer {
     }
 
     fn size_hint(&self) -> Option<usize> {
-        Some(crate::types::Vector::SIZE)
+        Some(crate::Vector::SIZE)
     }
 }
 
-pub(crate) enum MapPairs<'lua> {
-    Iter(TablePairs<'lua, Value<'lua>, Value<'lua>>),
-    Vec(Vec<(Value<'lua>, Value<'lua>)>),
+pub(crate) enum MapPairs<'a> {
+    Iter(TablePairs<'a, Value, Value>),
+    Vec(Vec<(Value, Value)>),
 }
 
-impl<'lua> MapPairs<'lua> {
-    pub(crate) fn new(t: Table<'lua>, sort_keys: bool) -> Result<Self> {
+impl<'a> MapPairs<'a> {
+    pub(crate) fn new(t: &'a Table, sort_keys: bool) -> Result<Self> {
         if sort_keys {
             let mut pairs = t.pairs::<Value, Value>().collect::<Result<Vec<_>>>()?;
-            pairs.sort_by(|(a, _), (b, _)| b.cmp(a)); // reverse order as we pop values from the end
+            pairs.sort_by(|(a, _), (b, _)| b.sort_cmp(a)); // reverse order as we pop values from the end
             Ok(MapPairs::Vec(pairs))
         } else {
             Ok(MapPairs::Iter(t.pairs::<Value, Value>()))
@@ -497,8 +481,8 @@ impl<'lua> MapPairs<'lua> {
     }
 }
 
-impl<'lua> Iterator for MapPairs<'lua> {
-    type Item = Result<(Value<'lua>, Value<'lua>)>;
+impl Iterator for MapPairs<'_> {
+    type Item = Result<(Value, Value)>;
 
     fn next(&mut self) -> Option<Self::Item> {
         match self {
@@ -508,21 +492,16 @@ impl<'lua> Iterator for MapPairs<'lua> {
     }
 }
 
-struct MapDeserializer<'lua> {
-    pairs: MapPairs<'lua>,
-    value: Option<Value<'lua>>,
+struct MapDeserializer<'a> {
+    pairs: MapPairs<'a>,
+    value: Option<Value>,
     options: Options,
     visited: Rc<RefCell<FxHashSet<*const c_void>>>,
     processed: usize,
 }
 
-impl<'lua, 'de> de::MapAccess<'de> for MapDeserializer<'lua> {
-    type Error = Error;
-
-    fn next_key_seed<T>(&mut self, seed: T) -> Result<Option<T::Value>>
-    where
-        T: de::DeserializeSeed<'de>,
-    {
+impl MapDeserializer<'_> {
+    fn next_key_deserializer(&mut self) -> Result<Option<Deserializer>> {
         loop {
             match self.pairs.next() {
                 Some(item) => {
@@ -538,10 +517,35 @@ impl<'lua, 'de> de::MapAccess<'de> for MapDeserializer<'lua> {
                     self.value = Some(value);
                     let visited = Rc::clone(&self.visited);
                     let key_de = Deserializer::from_parts(key, self.options, visited);
-                    return seed.deserialize(key_de).map(Some);
+                    return Ok(Some(key_de));
                 }
                 None => return Ok(None),
             }
+        }
+    }
+
+    fn next_value_deserializer(&mut self) -> Result<Deserializer> {
+        match self.value.take() {
+            Some(value) => {
+                let visited = Rc::clone(&self.visited);
+                Ok(Deserializer::from_parts(value, self.options, visited))
+            }
+            None => Err(de::Error::custom("value is missing")),
+        }
+    }
+}
+
+impl<'de> de::MapAccess<'de> for MapDeserializer<'_> {
+    type Error = Error;
+
+    fn next_key_seed<T>(&mut self, seed: T) -> Result<Option<T::Value>>
+    where
+        T: de::DeserializeSeed<'de>,
+    {
+        match self.next_key_deserializer() {
+            Ok(Some(key_de)) => seed.deserialize(key_de).map(Some),
+            Ok(None) => Ok(None),
+            Err(error) => Err(error),
         }
     }
 
@@ -549,12 +553,9 @@ impl<'lua, 'de> de::MapAccess<'de> for MapDeserializer<'lua> {
     where
         T: de::DeserializeSeed<'de>,
     {
-        match self.value.take() {
-            Some(value) => {
-                let visited = Rc::clone(&self.visited);
-                seed.deserialize(Deserializer::from_parts(value, self.options, visited))
-            }
-            None => Err(de::Error::custom("value is missing")),
+        match self.next_value_deserializer() {
+            Ok(value_de) => seed.deserialize(value_de),
+            Err(error) => Err(error),
         }
     }
 
@@ -566,16 +567,16 @@ impl<'lua, 'de> de::MapAccess<'de> for MapDeserializer<'lua> {
     }
 }
 
-struct EnumDeserializer<'lua> {
+struct EnumDeserializer {
     variant: StdString,
-    value: Option<Value<'lua>>,
+    value: Option<Value>,
     options: Options,
     visited: Rc<RefCell<FxHashSet<*const c_void>>>,
 }
 
-impl<'lua, 'de> de::EnumAccess<'de> for EnumDeserializer<'lua> {
+impl<'de> de::EnumAccess<'de> for EnumDeserializer {
     type Error = Error;
-    type Variant = VariantDeserializer<'lua>;
+    type Variant = VariantDeserializer;
 
     fn variant_seed<T>(self, seed: T) -> Result<(T::Value, Self::Variant)>
     where
@@ -591,13 +592,13 @@ impl<'lua, 'de> de::EnumAccess<'de> for EnumDeserializer<'lua> {
     }
 }
 
-struct VariantDeserializer<'lua> {
-    value: Option<Value<'lua>>,
+struct VariantDeserializer {
+    value: Option<Value>,
     options: Options,
     visited: Rc<RefCell<FxHashSet<*const c_void>>>,
 }
 
-impl<'lua, 'de> de::VariantAccess<'de> for VariantDeserializer<'lua> {
+impl<'de> de::VariantAccess<'de> for VariantDeserializer {
     type Error = Error;
 
     fn unit_variant(self) -> Result<()> {
@@ -615,9 +616,7 @@ impl<'lua, 'de> de::VariantAccess<'de> for VariantDeserializer<'lua> {
         T: de::DeserializeSeed<'de>,
     {
         match self.value {
-            Some(value) => {
-                seed.deserialize(Deserializer::from_parts(value, self.options, self.visited))
-            }
+            Some(value) => seed.deserialize(Deserializer::from_parts(value, self.options, self.visited)),
             None => Err(de::Error::invalid_type(
                 de::Unexpected::UnitVariant,
                 &"newtype variant",
@@ -716,6 +715,11 @@ fn serde_userdata<V>(
     ud: AnyUserData,
     f: impl FnOnce(serde_value::Value) -> std::result::Result<V, serde_value::DeserializerError>,
 ) -> Result<V> {
-    let value = serde_value::to_value(ud).map_err(|err| Error::SerializeError(err.to_string()))?;
-    f(value).map_err(|err| Error::DeserializeError(err.to_string()))
+    match serde_value::to_value(ud) {
+        Ok(value) => match f(value) {
+            Ok(r) => Ok(r),
+            Err(error) => Err(Error::DeserializeError(error.to_string())),
+        },
+        Err(error) => Err(Error::SerializeError(error.to_string())),
+    }
 }

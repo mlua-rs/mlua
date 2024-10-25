@@ -3,9 +3,8 @@
 //! Based on github.com/keplerproject/lua-compat-5.3
 
 use std::ffi::CStr;
-use std::mem;
 use std::os::raw::{c_char, c_int, c_void};
-use std::ptr;
+use std::{mem, ptr};
 
 use super::lauxlib::*;
 use super::lua::*;
@@ -53,11 +52,7 @@ unsafe fn compat53_findfield(L: *mut lua_State, objidx: c_int, level: c_int) -> 
     0 // not found
 }
 
-unsafe fn compat53_pushglobalfuncname(
-    L: *mut lua_State,
-    level: c_int,
-    ar: *mut lua_Debug,
-) -> c_int {
+unsafe fn compat53_pushglobalfuncname(L: *mut lua_State, level: c_int, ar: *mut lua_Debug) -> c_int {
     let top = lua_gettop(L);
     // push function
     lua_getinfo(L, level, cstr!("f"), ar);
@@ -113,7 +108,7 @@ pub unsafe fn lua_rotate(L: *mut lua_State, mut idx: c_int, mut n: c_int) {
 #[inline(always)]
 pub unsafe fn lua_copy(L: *mut lua_State, fromidx: c_int, toidx: c_int) {
     let abs_to = lua_absindex(L, toidx);
-    luaL_checkstack(L, 1, cstr!("not enough stack slots"));
+    luaL_checkstack(L, 1, cstr!("not enough stack slots available"));
     lua_pushvalue(L, fromidx);
     lua_replace(L, abs_to);
 }
@@ -222,7 +217,7 @@ pub unsafe fn lua_rawseti(L: *mut lua_State, idx: c_int, n: lua_Integer) {
 #[inline(always)]
 pub unsafe fn lua_rawsetp(L: *mut lua_State, idx: c_int, p: *const c_void) {
     let abs_i = lua_absindex(L, idx);
-    luaL_checkstack(L, 1, cstr!("not enough stack slots"));
+    luaL_checkstack(L, 1, cstr!("not enough stack slots available"));
     lua_pushlightuserdata(L, p as *mut c_void);
     lua_insert(L, -2);
     lua_rawset(L, abs_i);
@@ -281,12 +276,7 @@ pub unsafe fn lua_pushglobaltable(L: *mut lua_State) {
 }
 
 #[inline(always)]
-pub unsafe fn lua_resume(
-    L: *mut lua_State,
-    from: *mut lua_State,
-    narg: c_int,
-    nres: *mut c_int,
-) -> c_int {
+pub unsafe fn lua_resume(L: *mut lua_State, from: *mut lua_State, narg: c_int, nres: *mut c_int) -> c_int {
     let ret = lua_resume_(L, from, narg);
     if (ret == LUA_OK || ret == LUA_YIELD) && !(nres.is_null()) {
         *nres = lua_gettop(L);
@@ -330,12 +320,13 @@ pub unsafe fn luaL_newmetatable(L: *mut lua_State, tname: *const c_char) -> c_in
     }
 }
 
-pub unsafe fn luaL_loadbufferx(
+pub unsafe fn luaL_loadbufferenv(
     L: *mut lua_State,
     data: *const c_char,
     mut size: usize,
     name: *const c_char,
     mode: *const c_char,
+    env: c_int,
 ) -> c_int {
     extern "C" {
         fn free(p: *mut c_void);
@@ -345,33 +336,36 @@ pub unsafe fn luaL_loadbufferx(
     if !mode.is_null() {
         let modeb = CStr::from_ptr(mode).to_bytes();
         if !chunk_is_text && !modeb.contains(&b'b') {
-            lua_pushfstring(
-                L,
-                cstr!("attempt to load a binary chunk (mode is '%s')"),
-                mode,
-            );
+            lua_pushfstring(L, cstr!("attempt to load a binary chunk (mode is '%s')"), mode);
             return LUA_ERRSYNTAX;
         } else if chunk_is_text && !modeb.contains(&b't') {
-            lua_pushfstring(
-                L,
-                cstr!("attempt to load a text chunk (mode is '%s')"),
-                mode,
-            );
+            lua_pushfstring(L, cstr!("attempt to load a text chunk (mode is '%s')"), mode);
             return LUA_ERRSYNTAX;
         }
     }
 
     if chunk_is_text {
         let data = luau_compile_(data, size, ptr::null_mut(), &mut size);
-        let ok = luau_load(L, name, data, size, 0) == 0;
+        let ok = luau_load(L, name, data, size, env) == 0;
         free(data as *mut c_void);
         if !ok {
             return LUA_ERRSYNTAX;
         }
-    } else if luau_load(L, name, data, size, 0) != 0 {
+    } else if luau_load(L, name, data, size, env) != 0 {
         return LUA_ERRSYNTAX;
     }
     LUA_OK
+}
+
+#[inline(always)]
+pub unsafe fn luaL_loadbufferx(
+    L: *mut lua_State,
+    data: *const c_char,
+    size: usize,
+    name: *const c_char,
+    mode: *const c_char,
+) -> c_int {
+    luaL_loadbufferenv(L, data, size, name, mode, 0)
 }
 
 #[inline(always)]
@@ -381,13 +375,13 @@ pub unsafe fn luaL_loadbuffer(
     size: usize,
     name: *const c_char,
 ) -> c_int {
-    luaL_loadbufferx(L, data, size, name, ptr::null())
+    luaL_loadbufferenv(L, data, size, name, ptr::null(), 0)
 }
 
 #[inline(always)]
 pub unsafe fn luaL_len(L: *mut lua_State, idx: c_int) -> lua_Integer {
     let mut isnum = 0;
-    luaL_checkstack(L, 1, cstr!("not enough stack slots"));
+    luaL_checkstack(L, 1, cstr!("not enough stack slots available"));
     lua_len(L, idx);
     let res = lua_tointegerx(L, -1, &mut isnum);
     lua_pop(L, 1);
@@ -397,12 +391,7 @@ pub unsafe fn luaL_len(L: *mut lua_State, idx: c_int) -> lua_Integer {
     res
 }
 
-pub unsafe fn luaL_traceback(
-    L: *mut lua_State,
-    L1: *mut lua_State,
-    msg: *const c_char,
-    mut level: c_int,
-) {
+pub unsafe fn luaL_traceback(L: *mut lua_State, L1: *mut lua_State, msg: *const c_char, mut level: c_int) {
     let mut ar: lua_Debug = mem::zeroed();
     let top = lua_gettop(L);
     let numlevels = lua_stackdepth(L);
@@ -474,14 +463,14 @@ pub unsafe fn luaL_tolstring(L: *mut lua_State, mut idx: c_int, len: *mut usize)
 
 #[inline(always)]
 pub unsafe fn luaL_setmetatable(L: *mut lua_State, tname: *const c_char) {
-    luaL_checkstack(L, 1, cstr!("not enough stack slots"));
+    luaL_checkstack(L, 1, cstr!("not enough stack slots available"));
     luaL_getmetatable(L, tname);
     lua_setmetatable(L, -2);
 }
 
 pub unsafe fn luaL_getsubtable(L: *mut lua_State, idx: c_int, fname: *const c_char) -> c_int {
     let abs_i = lua_absindex(L, idx);
-    luaL_checkstack(L, 3, cstr!("not enough stack slots"));
+    luaL_checkstack(L, 3, cstr!("not enough stack slots available"));
     lua_pushstring_(L, fname);
     if lua_gettable(L, abs_i) == LUA_TTABLE {
         return 1;
@@ -494,12 +483,7 @@ pub unsafe fn luaL_getsubtable(L: *mut lua_State, idx: c_int, fname: *const c_ch
     0
 }
 
-pub unsafe fn luaL_requiref(
-    L: *mut lua_State,
-    modname: *const c_char,
-    openf: lua_CFunction,
-    glb: c_int,
-) {
+pub unsafe fn luaL_requiref(L: *mut lua_State, modname: *const c_char, openf: lua_CFunction, glb: c_int) {
     luaL_checkstack(L, 3, cstr!("not enough stack slots available"));
     luaL_getsubtable(L, LUA_REGISTRYINDEX, cstr!("_LOADED"));
     if lua_getfield(L, -1, modname) == LUA_TNIL {

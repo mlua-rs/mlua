@@ -1,21 +1,13 @@
 use std::collections::HashMap;
 use std::string::String as StdString;
 use std::sync::Arc;
-#[cfg(not(feature = "parking_lot"))]
-use std::sync::{Mutex, RwLock};
-
-#[cfg(feature = "parking_lot")]
-use parking_lot::{Mutex, RwLock};
-
-#[cfg(not(feature = "send"))]
-use std::{cell::RefCell, rc::Rc};
 
 #[cfg(feature = "lua54")]
 use std::sync::atomic::{AtomicI64, Ordering};
 
 use mlua::{
-    AnyUserData, AnyUserDataExt, Error, ExternalError, Function, Lua, MetaMethod, Nil, Result,
-    String, UserData, UserDataFields, UserDataMethods, UserDataRef, Value, Variadic,
+    AnyUserData, Error, ExternalError, Function, Lua, MetaMethod, Nil, ObjectLike, Result, String, UserData,
+    UserDataFields, UserDataMethods, UserDataRef, Value, Variadic,
 };
 
 #[test]
@@ -47,7 +39,7 @@ fn test_methods() -> Result<()> {
     struct MyUserData(i64);
 
     impl UserData for MyUserData {
-        fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
+        fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
             methods.add_method("get_value", |_, data, ()| Ok(data.0));
             methods.add_method_mut("set_value", |_, data, args| {
                 data.0 = args;
@@ -71,13 +63,13 @@ fn test_methods() -> Result<()> {
         "#,
         )
         .exec()?;
-        let get = globals.get::<_, Function>("get_it")?;
-        let set = globals.get::<_, Function>("set_it")?;
-        assert_eq!(get.call::<_, i64>(())?, 42);
+        let get = globals.get::<Function>("get_it")?;
+        let set = globals.get::<Function>("set_it")?;
+        assert_eq!(get.call::<i64>(())?, 42);
         userdata.borrow_mut::<MyUserData>()?.0 = 64;
-        assert_eq!(get.call::<_, i64>(())?, 64);
-        set.call::<_, ()>(100)?;
-        assert_eq!(get.call::<_, i64>(())?, 100);
+        assert_eq!(get.call::<i64>(())?, 64);
+        set.call::<()>(100)?;
+        assert_eq!(get.call::<i64>(())?, 100);
         Ok(())
     }
 
@@ -97,7 +89,7 @@ fn test_method_variadic() -> Result<()> {
     struct MyUserData(i64);
 
     impl UserData for MyUserData {
-        fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
+        fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
             methods.add_method("get", |_, data, ()| Ok(data.0));
             methods.add_method_mut("add", |_, data, vals: Variadic<i64>| {
                 data.0 += vals.into_iter().sum::<i64>();
@@ -122,19 +114,15 @@ fn test_metamethods() -> Result<()> {
     struct MyUserData(i64);
 
     impl UserData for MyUserData {
-        fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
+        fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
             methods.add_method("get", |_, data, ()| Ok(data.0));
             methods.add_meta_function(
                 MetaMethod::Add,
-                |_, (lhs, rhs): (UserDataRef<Self>, UserDataRef<Self>)| {
-                    Ok(MyUserData(lhs.0 + rhs.0))
-                },
+                |_, (lhs, rhs): (UserDataRef<Self>, UserDataRef<Self>)| Ok(MyUserData(lhs.0 + rhs.0)),
             );
             methods.add_meta_function(
                 MetaMethod::Sub,
-                |_, (lhs, rhs): (UserDataRef<Self>, UserDataRef<Self>)| {
-                    Ok(MyUserData(lhs.0 - rhs.0))
-                },
+                |_, (lhs, rhs): (UserDataRef<Self>, UserDataRef<Self>)| Ok(MyUserData(lhs.0 - rhs.0)),
             );
             methods.add_meta_function(
                 MetaMethod::Eq,
@@ -147,22 +135,16 @@ fn test_metamethods() -> Result<()> {
                     Err("no such custom index".into_lua_err())
                 }
             });
-            #[cfg(any(
-                feature = "lua54",
-                feature = "lua53",
-                feature = "lua52",
-                feature = "luajit52"
-            ))]
+            #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "luajit52"))]
             methods.add_meta_method(MetaMethod::Pairs, |lua, data, ()| {
                 use std::iter::FromIterator;
-                let stateless_iter =
-                    lua.create_function(|_, (data, i): (UserDataRef<Self>, i64)| {
-                        let i = i + 1;
-                        if i <= data.0 {
-                            return Ok(mlua::Variadic::from_iter(vec![i, i]));
-                        }
-                        return Ok(mlua::Variadic::new());
-                    })?;
+                let stateless_iter = lua.create_function(|_, (data, i): (UserDataRef<Self>, i64)| {
+                    let i = i + 1;
+                    if i <= data.0 {
+                        return Ok(mlua::Variadic::from_iter(vec![i, i]));
+                    }
+                    return Ok(mlua::Variadic::new());
+                })?;
                 Ok((stateless_iter, data.clone(), 0))
             });
         }
@@ -180,12 +162,7 @@ fn test_metamethods() -> Result<()> {
         10
     );
 
-    #[cfg(any(
-        feature = "lua54",
-        feature = "lua53",
-        feature = "lua52",
-        feature = "luajit52"
-    ))]
+    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "luajit52"))]
     let pairs_it = lua
         .load(
             r#"
@@ -210,38 +187,33 @@ fn test_metamethods() -> Result<()> {
     assert_eq!(lua.load("userdata2.inner").eval::<i64>()?, 3);
     assert!(lua.load("userdata2.nonexist_field").eval::<()>().is_err());
 
-    #[cfg(any(
-        feature = "lua54",
-        feature = "lua53",
-        feature = "lua52",
-        feature = "luajit52"
-    ))]
-    assert_eq!(pairs_it.call::<_, i64>(())?, 28);
+    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "luajit52"))]
+    assert_eq!(pairs_it.call::<i64>(())?, 28);
 
     let userdata2: Value = globals.get("userdata2")?;
     let userdata3: Value = globals.get("userdata3")?;
 
     assert!(lua.load("userdata2 == userdata3").eval::<bool>()?);
     assert!(userdata2 != userdata3); // because references are differ
-    assert!(userdata2.equals(userdata3)?);
+    assert!(userdata2.equals(&userdata3)?);
 
     let userdata1: AnyUserData = globals.get("userdata1")?;
-    assert!(userdata1.get_metatable()?.contains(MetaMethod::Add)?);
-    assert!(userdata1.get_metatable()?.contains(MetaMethod::Sub)?);
-    assert!(userdata1.get_metatable()?.contains(MetaMethod::Index)?);
-    assert!(!userdata1.get_metatable()?.contains(MetaMethod::Pow)?);
+    assert!(userdata1.metatable()?.contains(MetaMethod::Add)?);
+    assert!(userdata1.metatable()?.contains(MetaMethod::Sub)?);
+    assert!(userdata1.metatable()?.contains(MetaMethod::Index)?);
+    assert!(!userdata1.metatable()?.contains(MetaMethod::Pow)?);
 
     Ok(())
 }
 
-#[test]
 #[cfg(feature = "lua54")]
+#[test]
 fn test_metamethod_close() -> Result<()> {
     #[derive(Clone)]
     struct MyUserData(Arc<AtomicI64>);
 
     impl UserData for MyUserData {
-        fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
+        fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
             methods.add_method("get", |_, data, ()| Ok(data.0.load(Ordering::Relaxed)));
             methods.add_meta_method(MetaMethod::Close, |_, data, _err: Value| {
                 data.0.store(0, Ordering::Relaxed);
@@ -287,7 +259,7 @@ fn test_gc_userdata() -> Result<()> {
     }
 
     impl UserData for MyUserdata {
-        fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
+        fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
             methods.add_method("access", |_, this, ()| {
                 assert!(this.id == 123);
                 Ok(())
@@ -326,7 +298,7 @@ fn test_userdata_take() -> Result<()> {
     struct MyUserdata(Arc<i64>);
 
     impl UserData for MyUserdata {
-        fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
+        fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
             methods.add_method("num", |_, this, ()| Ok(*this.0))
         }
     }
@@ -364,8 +336,8 @@ fn test_userdata_take() -> Result<()> {
         }
         match lua.load("userdata:num()").exec() {
             Err(Error::CallbackError { ref cause, .. }) => match cause.as_ref() {
-                Error::CallbackDestructed => {}
-                err => panic!("expected `CallbackDestructed`, got {:?}", err),
+                Error::UserDataDestructed => {}
+                err => panic!("expected `UserDataDestructed`, got {:?}", err),
             },
             r => panic!("improper return for destructed userdata: {:?}", r),
         }
@@ -446,6 +418,7 @@ fn test_user_values() -> Result<()> {
     assert!(ud.nth_user_value::<Value>(65536).is_err());
 
     // Named user values
+    let ud = lua.create_userdata(MyUserData)?;
     ud.set_named_user_value("name", "alex")?;
     ud.set_named_user_value("age", 10)?;
 
@@ -461,10 +434,8 @@ fn test_functions() -> Result<()> {
     struct MyUserData(i64);
 
     impl UserData for MyUserData {
-        fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
-            methods.add_function("get_value", |_, ud: AnyUserData| {
-                Ok(ud.borrow::<MyUserData>()?.0)
-            });
+        fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
+            methods.add_function("get_value", |_, ud: AnyUserData| Ok(ud.borrow::<MyUserData>()?.0));
             methods.add_function_mut("set_value", |_, (ud, value): (AnyUserData, i64)| {
                 ud.borrow_mut::<MyUserData>()?.0 = value;
                 Ok(())
@@ -493,15 +464,15 @@ fn test_functions() -> Result<()> {
     "#,
     )
     .exec()?;
-    let get = globals.get::<_, Function>("get_it")?;
-    let set = globals.get::<_, Function>("set_it")?;
-    let get_constant = globals.get::<_, Function>("get_constant")?;
-    assert_eq!(get.call::<_, i64>(())?, 42);
+    let get = globals.get::<Function>("get_it")?;
+    let set = globals.get::<Function>("set_it")?;
+    let get_constant = globals.get::<Function>("get_constant")?;
+    assert_eq!(get.call::<i64>(())?, 42);
     userdata.borrow_mut::<MyUserData>()?.0 = 64;
-    assert_eq!(get.call::<_, i64>(())?, 64);
-    set.call::<_, ()>(100)?;
-    assert_eq!(get.call::<_, i64>(())?, 100);
-    assert_eq!(get_constant.call::<_, i64>(())?, 7);
+    assert_eq!(get.call::<i64>(())?, 64);
+    set.call::<()>(100)?;
+    assert_eq!(get.call::<i64>(())?, 100);
+    assert_eq!(get_constant.call::<i64>(())?, 7);
 
     Ok(())
 }
@@ -515,7 +486,7 @@ fn test_fields() -> Result<()> {
     struct MyUserData(i64);
 
     impl UserData for MyUserData {
-        fn add_fields<'lua, F: UserDataFields<'lua, Self>>(fields: &mut F) {
+        fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
             fields.add_field("static", "constant");
             fields.add_field_method_get("val", |_, data| Ok(data.0));
             fields.add_field_method_set("val", |_, data, val| {
@@ -525,8 +496,7 @@ fn test_fields() -> Result<()> {
 
             // Use userdata "uservalue" storage
             fields.add_field_function_get("uval", |_, ud| ud.user_value::<Option<String>>());
-            fields
-                .add_field_function_set("uval", |_, ud, s| ud.set_user_value::<Option<String>>(s));
+            fields.add_field_function_set("uval", |_, ud, s: Option<String>| ud.set_user_value(s));
 
             fields.add_meta_field(MetaMethod::Index, HashMap::from([("f", 321)]));
             fields.add_meta_field_with(MetaMethod::NewIndex, |lua| {
@@ -562,12 +532,12 @@ fn test_fields() -> Result<()> {
     struct MyUserData2(i64);
 
     impl UserData for MyUserData2 {
-        fn add_fields<'lua, F: UserDataFields<'lua, Self>>(fields: &mut F) {
+        fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
             fields.add_field("z", 0);
             fields.add_field_method_get("x", |_, data| Ok(data.0));
         }
 
-        fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
+        fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
             methods.add_meta_method(MetaMethod::Index, |_, _, name: StdString| match &*name {
                 "y" => Ok(Some(-1)),
                 _ => Ok(None),
@@ -594,9 +564,9 @@ fn test_metatable() -> Result<()> {
     struct MyUserData;
 
     impl UserData for MyUserData {
-        fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
+        fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
             methods.add_function("my_type_name", |_, data: AnyUserData| {
-                let metatable = data.get_metatable()?;
+                let metatable = data.metatable()?;
                 metatable.get::<String>(MetaMethod::Type)
             });
         }
@@ -605,8 +575,7 @@ fn test_metatable() -> Result<()> {
     let lua = Lua::new();
     let globals = lua.globals();
     globals.set("ud", MyUserData)?;
-    lua.load(r#"assert(ud:my_type_name() == "MyUserData")"#)
-        .exec()?;
+    lua.load(r#"assert(ud:my_type_name() == "MyUserData")"#).exec()?;
 
     #[cfg(any(feature = "lua54", feature = "lua53", feature = "luau"))]
     lua.load(r#"assert(tostring(ud):sub(1, 11) == "MyUserData:")"#)
@@ -615,7 +584,7 @@ fn test_metatable() -> Result<()> {
     lua.load(r#"assert(typeof(ud) == "MyUserData")"#).exec()?;
 
     let ud: AnyUserData = globals.get("ud")?;
-    let metatable = ud.get_metatable()?;
+    let metatable = ud.metatable()?;
 
     match metatable.get::<Value>("__gc") {
         Ok(_) => panic!("expected MetaMethodRestricted, got no error"),
@@ -640,7 +609,7 @@ fn test_metatable() -> Result<()> {
     struct MyUserData2;
 
     impl UserData for MyUserData2 {
-        fn add_fields<'lua, F: UserDataFields<'lua, Self>>(fields: &mut F) {
+        fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
             fields.add_meta_field_with("__index", |_| Ok(1));
         }
     }
@@ -655,136 +624,14 @@ fn test_metatable() -> Result<()> {
     struct MyUserData3;
 
     impl UserData for MyUserData3 {
-        fn add_fields<'lua, F: UserDataFields<'lua, Self>>(fields: &mut F) {
+        fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
             fields.add_meta_field_with(MetaMethod::Type, |_| Ok("CustomName"));
         }
     }
 
     let ud = lua.create_userdata(MyUserData3)?;
-    let metatable = ud.get_metatable()?;
-    assert_eq!(
-        metatable.get::<String>(MetaMethod::Type)?.to_str()?,
-        "CustomName"
-    );
-
-    Ok(())
-}
-
-#[test]
-fn test_userdata_wrapped() -> Result<()> {
-    struct MyUserData(i64);
-
-    impl UserData for MyUserData {
-        fn add_fields<'lua, F: UserDataFields<'lua, Self>>(fields: &mut F) {
-            fields.add_field("static", "constant");
-            fields.add_field_method_get("data", |_, this| Ok(this.0));
-            fields.add_field_method_set("data", |_, this, val| {
-                this.0 = val;
-                Ok(())
-            })
-        }
-    }
-
-    let lua = Lua::new();
-    let globals = lua.globals();
-
-    // Rc<T>
-    #[cfg(not(feature = "send"))]
-    {
-        let ud = Rc::new(MyUserData(1));
-        globals.set("rc_ud", ud.clone())?;
-        lua.load(
-            r#"
-            assert(rc_ud.static == "constant")
-            local ok, err = pcall(function() rc_ud.data = 2 end)
-            assert(
-                tostring(err):sub(1, 32) == "error mutably borrowing userdata",
-                "expected error mutably borrowing userdata, got " .. tostring(err)
-            )
-            assert(rc_ud.data == 1)
-        "#,
-        )
-        .exec()?;
-        globals.set("rc_ud", Nil)?;
-        lua.gc_collect()?;
-        assert_eq!(Rc::strong_count(&ud), 1);
-    }
-
-    // Rc<RefCell<T>>
-    #[cfg(not(feature = "send"))]
-    {
-        let ud = Rc::new(RefCell::new(MyUserData(1)));
-        globals.set("rc_refcell_ud", ud.clone())?;
-        lua.load(
-            r#"
-            assert(rc_refcell_ud.static == "constant")
-            rc_refcell_ud.data = rc_refcell_ud.data + 1
-            assert(rc_refcell_ud.data == 2)
-        "#,
-        )
-        .exec()?;
-        assert_eq!(ud.borrow().0, 2);
-        globals.set("rc_refcell_ud", Nil)?;
-        lua.gc_collect()?;
-        assert_eq!(Rc::strong_count(&ud), 1);
-    }
-
-    // Arc<T>
-    let ud1 = Arc::new(MyUserData(2));
-    globals.set("arc_ud", ud1.clone())?;
-    lua.load(
-        r#"
-        assert(arc_ud.static == "constant")
-        local ok, err = pcall(function() arc_ud.data = 3 end)
-        assert(
-            tostring(err):sub(1, 32) == "error mutably borrowing userdata",
-            "expected error mutably borrowing userdata, got " .. tostring(err)
-        )
-        assert(arc_ud.data == 2)
-    "#,
-    )
-    .exec()?;
-    globals.set("arc_ud", Nil)?;
-    lua.gc_collect()?;
-    assert_eq!(Arc::strong_count(&ud1), 1);
-
-    // Arc<Mutex<T>>
-    let ud2 = Arc::new(Mutex::new(MyUserData(2)));
-    globals.set("arc_mutex_ud", ud2.clone())?;
-    lua.load(
-        r#"
-        assert(arc_mutex_ud.static == "constant")
-        arc_mutex_ud.data = arc_mutex_ud.data + 1
-        assert(arc_mutex_ud.data == 3)
-    "#,
-    )
-    .exec()?;
-    #[cfg(not(feature = "parking_lot"))]
-    assert_eq!(ud2.lock().unwrap().0, 3);
-    #[cfg(feature = "parking_lot")]
-    assert_eq!(ud2.lock().0, 3);
-    globals.set("arc_mutex_ud", Nil)?;
-    lua.gc_collect()?;
-    assert_eq!(Arc::strong_count(&ud2), 1);
-
-    // Arc<RwLock<T>>
-    let ud3 = Arc::new(RwLock::new(MyUserData(3)));
-    globals.set("arc_rwlock_ud", ud3.clone())?;
-    lua.load(
-        r#"
-        assert(arc_rwlock_ud.static == "constant")
-        arc_rwlock_ud.data = arc_rwlock_ud.data + 1
-        assert(arc_rwlock_ud.data == 4)
-    "#,
-    )
-    .exec()?;
-    #[cfg(not(feature = "parking_lot"))]
-    assert_eq!(ud3.read().unwrap().0, 4);
-    #[cfg(feature = "parking_lot")]
-    assert_eq!(ud3.read().0, 4);
-    globals.set("arc_rwlock_ud", Nil)?;
-    lua.gc_collect()?;
-    assert_eq!(Arc::strong_count(&ud3), 1);
+    let metatable = ud.metatable()?;
+    assert_eq!(metatable.get::<String>(MetaMethod::Type)?.to_str()?, "CustomName");
 
     Ok(())
 }
@@ -794,12 +641,12 @@ fn test_userdata_proxy() -> Result<()> {
     struct MyUserData(i64);
 
     impl UserData for MyUserData {
-        fn add_fields<'lua, F: UserDataFields<'lua, Self>>(fields: &mut F) {
+        fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
             fields.add_field("static_field", 123);
             fields.add_field_method_get("n", |_, this| Ok(this.0));
         }
 
-        fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
+        fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
             methods.add_function("new", |_, n| Ok(Self(n)));
 
             methods.add_method("plus", |_, this, n: i64| Ok(this.0 + n));
@@ -867,8 +714,7 @@ fn test_any_userdata_wrap() -> Result<()> {
         reg.add_method("get", |_, this, ()| Ok(this.clone()));
     })?;
 
-    lua.globals()
-        .set("s", AnyUserData::wrap("hello".to_string()))?;
+    lua.globals().set("s", AnyUserData::wrap("hello".to_string()))?;
     lua.load(
         r#"
         assert(s:get() == "hello")
@@ -881,14 +727,14 @@ fn test_any_userdata_wrap() -> Result<()> {
 }
 
 #[test]
-fn test_userdata_ext() -> Result<()> {
+fn test_userdata_object_like() -> Result<()> {
     let lua = Lua::new();
 
     #[derive(Clone, Copy)]
     struct MyUserData(u32);
 
     impl UserData for MyUserData {
-        fn add_fields<'lua, F: UserDataFields<'lua, Self>>(fields: &mut F) {
+        fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
             fields.add_field_method_get("n", |_, this| Ok(this.0));
             fields.add_field_method_set("n", |_, this, val| {
                 this.0 = val;
@@ -896,7 +742,7 @@ fn test_userdata_ext() -> Result<()> {
             });
         }
 
-        fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
+        fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
             methods.add_meta_method(MetaMethod::Call, |_, _this, ()| Ok("called"));
             methods.add_method_mut("add", |_, this, x: u32| {
                 this.0 += x;
@@ -907,19 +753,28 @@ fn test_userdata_ext() -> Result<()> {
 
     let ud = lua.create_userdata(MyUserData(123))?;
 
-    assert_eq!(ud.get::<_, u32>("n")?, 123);
+    assert_eq!(ud.get::<u32>("n")?, 123);
     ud.set("n", 321)?;
-    assert_eq!(ud.get::<_, u32>("n")?, 321);
-    assert_eq!(ud.get::<_, Option<u32>>("non-existent")?, None);
-    match ud.set::<_, u32>("non-existent", 123) {
+    assert_eq!(ud.get::<u32>("n")?, 321);
+    assert_eq!(ud.get::<Option<u32>>("non-existent")?, None);
+    match ud.set("non-existent", 123) {
         Err(Error::RuntimeError(_)) => {}
         r => panic!("expected RuntimeError, got {r:?}"),
     }
 
-    assert_eq!(ud.call::<_, String>(())?, "called");
+    assert_eq!(ud.call::<String>(())?, "called");
 
-    ud.call_method("add", 2)?;
-    assert_eq!(ud.get::<_, u32>("n")?, 323);
+    ud.call_method::<()>("add", 2)?;
+    assert_eq!(ud.get::<u32>("n")?, 323);
+
+    match ud.call_method::<()>("non_existent", ()) {
+        Err(Error::RuntimeError(err)) => {
+            assert!(err.contains("attempt to call a nil value (function 'non_existent')"))
+        }
+        r => panic!("expected RuntimeError, got {r:?}"),
+    }
+
+    assert!(ud.to_string()?.starts_with("MyUserData"));
 
     Ok(())
 }
@@ -929,7 +784,7 @@ fn test_userdata_method_errors() -> Result<()> {
     struct MyUserData(i64);
 
     impl UserData for MyUserData {
-        fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
+        fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
             methods.add_method("get_value", |_, data, ()| Ok(data.0));
         }
     }
@@ -937,18 +792,26 @@ fn test_userdata_method_errors() -> Result<()> {
     let lua = Lua::new();
 
     let ud = lua.create_userdata(MyUserData(123))?;
-    let res = ud.call_function::<_, ()>("get_value", ());
-    let Err(Error::CallbackError { cause, .. }) = res else {
-        panic!("expected CallbackError, got {res:?}");
-    };
-    assert!(matches!(
-        &*cause,
-        Error::BadArgument {
-            to,
-            name,
-            ..
-        } if to.as_deref() == Some("MyUserData.get_value") && name.as_deref() == Some("self")
-    ));
+    let res = ud.call_function::<()>("get_value", "not a userdata");
+    match res {
+        Err(Error::CallbackError { cause, .. }) => match cause.as_ref() {
+            Error::BadArgument {
+                to,
+                name,
+                cause: cause2,
+                ..
+            } => {
+                assert_eq!(to.as_deref(), Some("MyUserData.get_value"));
+                assert_eq!(name.as_deref(), Some("self"));
+                assert_eq!(
+                    cause2.to_string(),
+                    "error converting Lua string to userdata (expected userdata of type 'MyUserData')"
+                );
+            }
+            err => panic!("expected BadArgument, got {err:?}"),
+        },
+        r => panic!("expected CallbackError, got {r:?}"),
+    }
 
     Ok(())
 }
@@ -967,25 +830,6 @@ fn test_userdata_pointer() -> Result<()> {
     Ok(())
 }
 
-#[cfg(all(feature = "unstable", not(feature = "send")))]
-#[test]
-fn test_owned_userdata() -> Result<()> {
-    let lua = Lua::new();
-
-    let ud = lua.create_any_userdata("abc")?.into_owned();
-    drop(lua);
-
-    assert_eq!(*ud.borrow::<&str>()?, "abc");
-    *ud.borrow_mut()? = "cba";
-    assert!(matches!(
-        ud.borrow::<i64>(),
-        Err(Error::UserDataTypeMismatch)
-    ));
-    assert_eq!(ud.take::<&str>()?, "cba");
-
-    Ok(())
-}
-
 #[cfg(feature = "macros")]
 #[test]
 fn test_userdata_derive() -> Result<()> {
@@ -1000,8 +844,7 @@ fn test_userdata_derive() -> Result<()> {
         reg.add_function("val", |_, this: MyUserData| Ok(this.0));
     })?;
 
-    lua.globals()
-        .set("ud", AnyUserData::wrap(MyUserData(123)))?;
+    lua.globals().set("ud", AnyUserData::wrap(MyUserData(123)))?;
     lua.load("assert(ud:val() == 123)").exec()?;
 
     // More complex struct where generics and where clause
@@ -1015,9 +858,26 @@ fn test_userdata_derive() -> Result<()> {
         reg.add_function("val", |_, this: MyUserData2<'static, i32>| Ok(*this.0));
     })?;
 
-    lua.globals()
-        .set("ud", AnyUserData::wrap(MyUserData2(&321)))?;
+    lua.globals().set("ud", AnyUserData::wrap(MyUserData2(&321)))?;
     lua.load("assert(ud:val() == 321)").exec()?;
+
+    Ok(())
+}
+
+#[test]
+fn test_nested_userdata_gc() -> Result<()> {
+    let lua = Lua::new();
+
+    let counter = Arc::new(());
+    let arr = vec![lua.create_any_userdata(counter.clone())?];
+    let arr_ud = lua.create_any_userdata(arr)?;
+
+    assert_eq!(Arc::strong_count(&counter), 2);
+    drop(arr_ud);
+    // On first iteration Lua will destroy the array, on second - userdata
+    lua.gc_collect()?;
+    lua.gc_collect()?;
+    assert_eq!(Arc::strong_count(&counter), 1);
 
     Ok(())
 }

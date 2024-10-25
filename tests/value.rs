@@ -52,7 +52,7 @@ fn test_value_eq() -> Result<()> {
     assert!(string1 == string2);
     assert!(string1.equals(&string2)?);
     assert!(num1 == num2);
-    assert!(num1.equals(num2)?);
+    assert!(num1.equals(&num2)?);
     assert!(num1 != num3);
     assert!(func1 == func2);
     assert!(func1 != func3);
@@ -89,32 +89,78 @@ fn test_multi_value() {
 }
 
 #[test]
+fn test_value_to_pointer() -> Result<()> {
+    let lua = Lua::new();
+
+    let globals = lua.globals();
+    lua.load(
+        r#"
+        table = {}
+        string = "hello"
+        num = 1
+        func = function() end
+        thread = coroutine.create(function() end)
+    "#,
+    )
+    .exec()?;
+    globals.set("null", Value::NULL)?;
+
+    let table: Value = globals.get("table")?;
+    let string: Value = globals.get("string")?;
+    let num: Value = globals.get("num")?;
+    let func: Value = globals.get("func")?;
+    let thread: Value = globals.get("thread")?;
+    let null: Value = globals.get("null")?;
+    let ud: Value = Value::UserData(lua.create_any_userdata(())?);
+
+    assert!(!table.to_pointer().is_null());
+    assert!(!string.to_pointer().is_null());
+    assert!(num.to_pointer().is_null());
+    assert!(!func.to_pointer().is_null());
+    assert!(!thread.to_pointer().is_null());
+    assert!(null.to_pointer().is_null());
+    assert!(!ud.to_pointer().is_null());
+
+    Ok(())
+}
+
+#[test]
 fn test_value_to_string() -> Result<()> {
     let lua = Lua::new();
 
     assert_eq!(Value::Nil.to_string()?, "nil");
+    assert_eq!(Value::Nil.type_name(), "nil");
     assert_eq!(Value::Boolean(true).to_string()?, "true");
+    assert_eq!(Value::Boolean(true).type_name(), "boolean");
     assert_eq!(Value::NULL.to_string()?, "null");
+    assert_eq!(Value::NULL.type_name(), "lightuserdata");
     assert_eq!(
         Value::LightUserData(LightUserData(0x1 as *const c_void as *mut _)).to_string()?,
         "lightuserdata: 0x1"
     );
     assert_eq!(Value::Integer(1).to_string()?, "1");
+    assert_eq!(Value::Integer(1).type_name(), "integer");
     assert_eq!(Value::Number(34.59).to_string()?, "34.59");
+    assert_eq!(Value::Number(34.59).type_name(), "number");
     #[cfg(all(feature = "luau", not(feature = "luau-vector4")))]
     assert_eq!(
         Value::Vector(mlua::Vector::new(10.0, 11.1, 12.2)).to_string()?,
         "vector(10, 11.1, 12.2)"
+    );
+    #[cfg(all(feature = "luau", not(feature = "luau-vector4")))]
+    assert_eq!(
+        Value::Vector(mlua::Vector::new(10.0, 11.1, 12.2)).type_name(),
+        "vector"
     );
     #[cfg(feature = "luau-vector4")]
     assert_eq!(
         Value::Vector(mlua::Vector::new(10.0, 11.1, 12.2, 13.3)).to_string()?,
         "vector(10, 11.1, 12.2, 13.3)"
     );
-    assert_eq!(
-        Value::String(lua.create_string("hello")?).to_string()?,
-        "hello"
-    );
+
+    let s = Value::String(lua.create_string("hello")?);
+    assert_eq!(s.to_string()?, "hello");
+    assert_eq!(s.type_name(), "string");
 
     let table: Value = lua.load("{}").eval()?;
     assert!(table.to_string()?.starts_with("table:"));
@@ -122,26 +168,43 @@ fn test_value_to_string() -> Result<()> {
         .load("setmetatable({}, {__tostring = function() return 'test table' end})")
         .eval()?;
     assert_eq!(table.to_string()?, "test table");
+    assert_eq!(table.type_name(), "table");
 
     let func: Value = lua.load("function() end").eval()?;
     assert!(func.to_string()?.starts_with("function:"));
+    assert_eq!(func.type_name(), "function");
 
     let thread: Value = lua.load("coroutine.create(function() end)").eval()?;
     assert!(thread.to_string()?.starts_with("thread:"));
+    assert_eq!(thread.type_name(), "thread");
 
     lua.register_userdata_type::<StdString>(|reg| {
         reg.add_meta_method("__tostring", |_, this, ()| Ok(this.clone()));
     })?;
     let ud: Value = Value::UserData(lua.create_any_userdata(String::from("string userdata"))?);
     assert_eq!(ud.to_string()?, "string userdata");
+    assert_eq!(ud.type_name(), "userdata");
 
     struct MyUserData;
     impl UserData for MyUserData {}
     let ud: Value = Value::UserData(lua.create_userdata(MyUserData)?);
     assert!(ud.to_string()?.starts_with("MyUserData:"));
 
-    let err = Value::Error(Error::runtime("test error"));
+    let err = Value::Error(Box::new(Error::runtime("test error")));
     assert_eq!(err.to_string()?, "runtime error: test error");
+    assert_eq!(err.type_name(), "error");
+
+    #[cfg(feature = "luau")]
+    {
+        let buf = Value::Buffer(lua.create_buffer(b"hello")?);
+        assert!(buf.to_string()?.starts_with("buffer:"));
+        assert_eq!(buf.type_name(), "buffer");
+
+        // Set `__tostring` metamethod for buffer
+        let mt = lua.load("{__tostring = buffer.tostring}").eval()?;
+        lua.set_type_metatable::<mlua::Buffer>(mt);
+        assert_eq!(buf.to_string()?, "hello");
+    }
 
     Ok(())
 }
@@ -189,9 +252,7 @@ fn test_value_conversions() -> Result<()> {
     assert_eq!(Value::Number(1.23).as_f64(), Some(1.23f64));
     assert!(Value::String(lua.create_string("hello")?).is_string());
     assert_eq!(
-        Value::String(lua.create_string("hello")?)
-            .as_string()
-            .unwrap(),
+        Value::String(lua.create_string("hello")?).as_string().unwrap(),
         "hello"
     );
     assert_eq!(
@@ -207,11 +268,9 @@ fn test_value_conversions() -> Result<()> {
     assert!(Value::Table(lua.create_table()?).is_table());
     assert!(Value::Table(lua.create_table()?).as_table().is_some());
     assert!(Value::Function(lua.create_function(|_, ()| Ok(())).unwrap()).is_function());
-    assert!(
-        Value::Function(lua.create_function(|_, ()| Ok(())).unwrap())
-            .as_function()
-            .is_some()
-    );
+    assert!(Value::Function(lua.create_function(|_, ()| Ok(())).unwrap())
+        .as_function()
+        .is_some());
     assert!(Value::Thread(lua.create_thread(lua.load("function() end").eval()?)?).is_thread());
     assert!(
         Value::Thread(lua.create_thread(lua.load("function() end").eval()?)?)
@@ -225,6 +284,14 @@ fn test_value_conversions() -> Result<()> {
             .and_then(|ud| ud.borrow::<&str>().ok())
             .as_deref(),
         Some(&"hello")
+    );
+
+    assert!(Value::Error(Box::new(Error::runtime("some error"))).is_error());
+    assert_eq!(
+        (Value::Error(Box::new(Error::runtime("some error"))).as_error())
+            .unwrap()
+            .to_string(),
+        "runtime error: some error"
     );
 
     Ok(())

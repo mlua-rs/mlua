@@ -15,7 +15,7 @@ fn test_memory_limit() -> Result<()> {
     let f = lua
         .load("local t = {}; for i = 1,10000 do t[i] = i end")
         .into_function()?;
-    f.call::<_, ()>(()).expect("should trigger no memory limit");
+    f.call::<()>(()).expect("should trigger no memory limit");
 
     if cfg!(feature = "luajit") && lua.set_memory_limit(0).is_err() {
         // seems this luajit version does not support memory limit
@@ -23,13 +23,13 @@ fn test_memory_limit() -> Result<()> {
     }
 
     lua.set_memory_limit(initial_memory + 10000)?;
-    match f.call::<_, ()>(()) {
+    match f.call::<()>(()) {
         Err(Error::MemoryError(_)) => {}
         something_else => panic!("did not trigger memory error: {:?}", something_else),
     };
 
     lua.set_memory_limit(0)?;
-    f.call::<_, ()>(()).expect("should trigger no memory limit");
+    f.call::<()>(()).expect("should trigger no memory limit");
 
     Ok(())
 }
@@ -49,7 +49,7 @@ fn test_memory_limit_thread() -> Result<()> {
 
     lua.set_memory_limit(lua.used_memory() + 10000)?;
     let thread = lua.create_thread(f)?;
-    match thread.resume::<_, ()>(()) {
+    match thread.resume::<()>(()) {
         Err(Error::MemoryError(_)) => {}
         something_else => panic!("did not trigger memory error: {:?}", something_else),
     };
@@ -68,12 +68,7 @@ fn test_gc_control() -> Result<()> {
         assert_eq!(lua.gc_inc(0, 0, 0), GCMode::Generational);
     }
 
-    #[cfg(any(
-        feature = "lua54",
-        feature = "lua53",
-        feature = "lua52",
-        feature = "luau"
-    ))]
+    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "luau"))]
     {
         assert!(lua.gc_is_running());
         lua.gc_stop();

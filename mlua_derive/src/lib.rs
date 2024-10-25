@@ -64,9 +64,10 @@ pub fn lua_module(attr: TokenStream, item: TokenStream) -> TokenStream {
 
         #[no_mangle]
         unsafe extern "C-unwind" fn #ext_entrypoint_name(state: *mut mlua::lua_State) -> ::std::os::raw::c_int {
-            let lua = mlua::Lua::init_from_ptr(state);
-            #skip_memory_check
-            lua.entrypoint1(state, #func_name)
+            mlua::Lua::entrypoint1(state, move |lua| {
+                #skip_memory_check
+                #func_name(lua)
+            })
         }
     };
 
@@ -99,15 +100,14 @@ pub fn chunk(input: TokenStream) -> TokenStream {
         use ::std::borrow::Cow;
         use ::std::cell::Cell;
         use ::std::io::Result as IoResult;
-        use ::std::marker::PhantomData;
 
-        struct InnerChunk<'lua, F: FnOnce(&'lua Lua) -> Result<Table<'lua>>>(Cell<Option<F>>, PhantomData<&'lua ()>);
+        struct InnerChunk<F: FnOnce(&Lua) -> Result<Table>>(Cell<Option<F>>);
 
-        impl<'lua, F> AsChunk<'lua, 'static> for InnerChunk<'lua, F>
+        impl<F> AsChunk<'static> for InnerChunk<F>
         where
-            F: FnOnce(&'lua Lua) -> Result<Table<'lua>>,
+            F: FnOnce(&Lua) -> Result<Table>,
         {
-            fn environment(&self, lua: &'lua Lua) -> Result<Option<Table<'lua>>> {
+            fn environment(&self, lua: &Lua) -> Result<Option<Table>> {
                 if #caps_len > 0 {
                     if let Some(make_env) = self.0.take() {
                         return make_env(lua).map(Some);
@@ -125,9 +125,7 @@ pub fn chunk(input: TokenStream) -> TokenStream {
             }
         }
 
-        fn annotate<'a, F: FnOnce(&'a Lua) -> Result<Table<'a>>>(f: F) -> F { f }
-
-        let make_env = annotate(move |lua: &Lua| -> Result<Table> {
+        let make_env = move |lua: &Lua| -> Result<Table> {
             let globals = lua.globals();
             let env = lua.create_table()?;
             let meta = lua.create_table()?;
@@ -139,9 +137,9 @@ pub fn chunk(input: TokenStream) -> TokenStream {
 
             env.set_metatable(Some(meta));
             Ok(env)
-        });
+        };
 
-        InnerChunk(Cell::new(Some(make_env)), PhantomData)
+        InnerChunk(Cell::new(Some(make_env)))
     }};
 
     wrapped_code.into()

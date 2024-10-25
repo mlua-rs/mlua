@@ -29,12 +29,8 @@ extern "C-unwind" {
     pub fn luaL_tolstring(L: *mut lua_State, idx: c_int, len: *mut usize) -> *const c_char;
     pub fn luaL_argerror(L: *mut lua_State, arg: c_int, extramsg: *const c_char) -> c_int;
     pub fn luaL_checklstring(L: *mut lua_State, arg: c_int, l: *mut usize) -> *const c_char;
-    pub fn luaL_optlstring(
-        L: *mut lua_State,
-        arg: c_int,
-        def: *const c_char,
-        l: *mut usize,
-    ) -> *const c_char;
+    pub fn luaL_optlstring(L: *mut lua_State, arg: c_int, def: *const c_char, l: *mut usize)
+        -> *const c_char;
     pub fn luaL_checknumber(L: *mut lua_State, arg: c_int) -> lua_Number;
     pub fn luaL_optnumber(L: *mut lua_State, arg: c_int, def: lua_Number) -> lua_Number;
     pub fn luaL_checkinteger(L: *mut lua_State, arg: c_int) -> lua_Integer;
@@ -72,8 +68,7 @@ extern "C-unwind" {
     pub fn luaL_ref(L: *mut lua_State, t: c_int) -> c_int;
     pub fn luaL_unref(L: *mut lua_State, t: c_int, r#ref: c_int);
 
-    pub fn luaL_loadfilex(L: *mut lua_State, filename: *const c_char, mode: *const c_char)
-        -> c_int;
+    pub fn luaL_loadfilex(L: *mut lua_State, filename: *const c_char, mode: *const c_char) -> c_int;
 }
 
 #[inline(always)]
@@ -111,12 +106,7 @@ extern "C-unwind" {
 
     pub fn luaL_traceback(L: *mut lua_State, L1: *mut lua_State, msg: *const c_char, level: c_int);
 
-    pub fn luaL_requiref(
-        L: *mut lua_State,
-        modname: *const c_char,
-        openf: lua_CFunction,
-        glb: c_int,
-    );
+    pub fn luaL_requiref(L: *mut lua_State, modname: *const c_char, openf: lua_CFunction, glb: c_int);
 }
 
 //
@@ -175,13 +165,27 @@ pub unsafe fn luaL_getmetatable(L: *mut lua_State, n: *const c_char) {
 // luaL_opt would be implemented here but it is undocumented, so it's omitted
 
 #[inline(always)]
-pub unsafe fn luaL_loadbuffer(
-    L: *mut lua_State,
-    s: *const c_char,
-    sz: usize,
-    n: *const c_char,
-) -> c_int {
+pub unsafe fn luaL_loadbuffer(L: *mut lua_State, s: *const c_char, sz: usize, n: *const c_char) -> c_int {
     luaL_loadbufferx(L, s, sz, n, ptr::null())
+}
+
+pub unsafe fn luaL_loadbufferenv(
+    L: *mut lua_State,
+    data: *const c_char,
+    size: usize,
+    name: *const c_char,
+    mode: *const c_char,
+    mut env: c_int,
+) -> c_int {
+    if env != 0 {
+        env = lua::lua_absindex(L, env);
+    }
+    let status = luaL_loadbufferx(L, data, size, name, mode);
+    if status == lua::LUA_OK && env != 0 {
+        lua::lua_pushvalue(L, env);
+        lua::lua_setupvalue(L, -2, 1);
+    }
+    status
 }
 
 //

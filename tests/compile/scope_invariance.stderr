@@ -1,25 +1,24 @@
 error[E0373]: closure may outlive the current function, but it borrows `test.field`, which is owned by the current function
-  --> tests/compile/scope_invariance.rs:14:38
+  --> tests/compile/scope_invariance.rs:13:39
    |
 9  |     lua.scope(|scope| {
-   |                ----- has type `&mlua::Scope<'_, '1>`
+   |                ----- has type `&'1 mut mlua::scope::Scope<'1, '_>`
 ...
-14 |                 .create_function_mut(|_, ()| {
-   |                                      ^^^^^^^ may outlive borrowed value `test.field`
-15 |                     test.field = 42;
-   |                     ---------- `test.field` is borrowed here
+13 |             scope.create_function_mut(|_, ()| {
+   |                                       ^^^^^^^ may outlive borrowed value `test.field`
+14 |                 test.field = 42;
+   |                 ---------- `test.field` is borrowed here
    |
 note: function requires argument type to outlive `'1`
   --> tests/compile/scope_invariance.rs:13:13
    |
-13 | /             scope
-14 | |                 .create_function_mut(|_, ()| {
-15 | |                     test.field = 42;
-16 | |                     //~^ error: `test` does not live long enough
-17 | |                     Ok(())
-18 | |                 })?
-   | |__________________^
+13 | /             scope.create_function_mut(|_, ()| {
+14 | |                 test.field = 42;
+15 | |                 //~^ error: `test` does not live long enough
+16 | |                 Ok(())
+17 | |             })?
+   | |______________^
 help: to force the closure to take ownership of `test.field` (and any other referenced variables), use the `move` keyword
    |
-14 |                 .create_function_mut(move |_, ()| {
-   |                                      ++++
+13 |             scope.create_function_mut(move |_, ()| {
+   |                                       ++++

@@ -1,8 +1,20 @@
 [lua54_coverage]
-features = "lua54,vendored,async,serialize,macros,unstable"
+features = "lua54,vendored,async,send,serialize,macros,anyhow"
+
+[lua54_with_memory_limit_coverage]
+features = "lua54,vendored,async,send,serialize,macros"
+rustflags = "--cfg force_memory_limit"
 
 [lua51_coverage]
-features = "lua51,vendored,async,serialize,macros,unstable"
+features = "lua51,vendored,async,send,serialize,macros"
+
+[lua51_with_memory_limit_coverage]
+features = "lua51,vendored,async,send,serialize,macros"
+rustflags = "--cfg force_memory_limit"
 
 [luau_coverage]
-features = "luau,async,serialize,macros,unstable"
+features = "luau,async,send,serialize,macros"
+
+[luau_with_memory_limit_coverage]
+features = "luau,async,send,serialize,macros"
+rustflags = "--cfg force_memory_limit"

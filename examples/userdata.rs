@@ -7,7 +7,7 @@ struct Rectangle {
 }
 
 impl UserData for Rectangle {
-    fn add_fields<'lua, F: mlua::UserDataFields<'lua, Self>>(fields: &mut F) {
+    fn add_fields<F: mlua::UserDataFields<Self>>(fields: &mut F) {
         fields.add_field_method_get("length", |_, this| Ok(this.length));
         fields.add_field_method_set("length", |_, this, val| {
             this.length = val;
@@ -20,7 +20,7 @@ impl UserData for Rectangle {
         });
     }
 
-    fn add_methods<'lua, M: mlua::UserDataMethods<'lua, Self>>(methods: &mut M) {
+    fn add_methods<M: mlua::UserDataMethods<Self>>(methods: &mut M) {
         methods.add_method("area", |_, this, ()| Ok(this.length * this.width));
         methods.add_method("diagonal", |_, this, ()| {
             Ok((this.length.pow(2) as f64 + this.width.pow(2) as f64).sqrt())

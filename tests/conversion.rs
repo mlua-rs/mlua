@@ -1,11 +1,12 @@
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
-use std::ffi::{CStr, CString};
+use std::ffi::{CStr, CString, OsString};
+use std::path::PathBuf;
 
 use bstr::BString;
 use maplit::{btreemap, btreeset, hashmap, hashset};
 use mlua::{
-    AnyUserData, Error, Function, IntoLua, Lua, RegistryKey, Result, Table, Thread, UserDataRef,
+    AnyUserData, Either, Error, Function, IntoLua, Lua, RegistryKey, Result, Table, Thread, UserDataRef,
     Value,
 };
 
@@ -21,7 +22,7 @@ fn test_value_into_lua() -> Result<()> {
     // Push into stack
     let table = lua.create_table()?;
     table.set("v", &v)?;
-    assert_eq!(v, table.get::<_, Value>("v")?);
+    assert_eq!(v, table.get::<Value>("v")?);
 
     Ok(())
 }
@@ -33,41 +34,28 @@ fn test_string_into_lua() -> Result<()> {
     // Direct conversion
     let s = lua.create_string("hello, world!")?;
     let s2 = (&s).into_lua(&lua)?;
-    assert_eq!(s, s2.as_string().unwrap());
+    assert_eq!(s, *s2.as_string().unwrap());
 
     // Push into stack
     let table = lua.create_table()?;
     table.set("s", &s)?;
-    assert_eq!(s, table.get::<_, String>("s")?);
+    assert_eq!(s, table.get::<String>("s")?);
 
     Ok(())
 }
 
-#[cfg(all(feature = "unstable", not(feature = "send")))]
 #[test]
-fn test_owned_string_into_lua() -> Result<()> {
+fn test_string_from_lua() -> Result<()> {
     let lua = Lua::new();
 
-    // Direct conversion
-    let s = lua.create_string("hello, world")?.into_owned();
-    let s2 = (&s).into_lua(&lua)?;
-    assert_eq!(s.to_ref(), *s2.as_string().unwrap());
+    // From stack
+    let f = lua.create_function(|_, s: mlua::String| Ok(s))?;
+    let s = f.call::<String>("hello, world!")?;
+    assert_eq!(s, "hello, world!");
 
-    // Push into stack
-    let table = lua.create_table()?;
-    table.set("s", &s)?;
-    assert_eq!(s.to_ref(), table.get::<_, String>("s")?);
-
-    Ok(())
-}
-
-#[cfg(all(feature = "unstable", not(feature = "send")))]
-#[test]
-fn test_owned_string_from_lua() -> Result<()> {
-    let lua = Lua::new();
-
-    let s = lua.unpack::<mlua::OwnedString>(lua.pack("hello, world")?)?;
-    assert_eq!(s.to_ref(), "hello, world");
+    // Should fallback to default conversion
+    let s = f.call::<String>(42)?;
+    assert_eq!(s, "42");
 
     Ok(())
 }
@@ -83,26 +71,8 @@ fn test_table_into_lua() -> Result<()> {
 
     // Push into stack
     let f = lua.create_function(|_, (t, s): (Table, String)| t.set("s", s))?;
-    f.call((&t, "hello"))?;
-    assert_eq!("hello", t.get::<_, String>("s")?);
-
-    Ok(())
-}
-
-#[cfg(all(feature = "unstable", not(feature = "send")))]
-#[test]
-fn test_owned_table_into_lua() -> Result<()> {
-    let lua = Lua::new();
-
-    // Direct conversion
-    let t = lua.create_table()?.into_owned();
-    let t2 = (&t).into_lua(&lua)?;
-    assert_eq!(t.to_ref(), *t2.as_table().unwrap());
-
-    // Push into stack
-    let f = lua.create_function(|_, (t, s): (Table, String)| t.set("s", s))?;
-    f.call((&t, "hello"))?;
-    assert_eq!("hello", t.to_ref().get::<_, String>("s")?);
+    f.call::<()>((&t, "hello"))?;
+    assert_eq!("hello", t.get::<String>("s")?);
 
     Ok(())
 }
@@ -119,27 +89,22 @@ fn test_function_into_lua() -> Result<()> {
     // Push into stack
     let table = lua.create_table()?;
     table.set("f", &f)?;
-    assert_eq!(f, table.get::<_, Function>("f")?);
+    assert_eq!(f, table.get::<Function>("f")?);
 
     Ok(())
 }
 
-#[cfg(all(feature = "unstable", not(feature = "send")))]
 #[test]
-fn test_owned_function_into_lua() -> Result<()> {
+fn test_function_from_lua() -> Result<()> {
     let lua = Lua::new();
 
-    // Direct conversion
-    let f = lua
-        .create_function(|_, ()| Ok::<_, Error>(()))?
-        .into_owned();
-    let f2 = (&f).into_lua(&lua)?;
-    assert_eq!(f.to_ref(), *f2.as_function().unwrap());
-
-    // Push into stack
-    let table = lua.create_table()?;
-    table.set("f", &f)?;
-    assert_eq!(f.to_ref(), table.get::<_, Function>("f")?);
+    assert!(lua.globals().get::<Function>("print").is_ok());
+    match lua.globals().get::<Function>("math") {
+        Err(err @ Error::FromLuaConversionError { .. }) => {
+            assert_eq!(err.to_string(), "error converting Lua table to function");
+        }
+        _ => panic!("expected `Error::FromLuaConversionError`"),
+    }
 
     Ok(())
 }
@@ -157,37 +122,21 @@ fn test_thread_into_lua() -> Result<()> {
     // Push into stack
     let table = lua.create_table()?;
     table.set("th", &th)?;
-    assert_eq!(th, table.get::<_, Thread>("th")?);
+    assert_eq!(th, table.get::<Thread>("th")?);
 
     Ok(())
 }
 
-#[cfg(all(feature = "unstable", not(feature = "send")))]
 #[test]
-fn test_owned_thread_into_lua() -> Result<()> {
+fn test_thread_from_lua() -> Result<()> {
     let lua = Lua::new();
 
-    // Direct conversion
-    let f = lua.create_function(|_, ()| Ok::<_, Error>(()))?;
-    let th = lua.create_thread(f)?.into_owned();
-    let th2 = (&th).into_lua(&lua)?;
-    assert_eq!(&th.to_ref(), th2.as_thread().unwrap());
-
-    // Push into stack
-    let table = lua.create_table()?;
-    table.set("th", &th)?;
-    assert_eq!(th.to_ref(), table.get::<_, Thread>("th")?);
-
-    Ok(())
-}
-
-#[cfg(all(feature = "unstable", not(feature = "send")))]
-#[test]
-fn test_owned_thread_from_lua() -> Result<()> {
-    let lua = Lua::new();
-
-    let th = lua.unpack::<mlua::OwnedThread>(Value::Thread(lua.current_thread()))?;
-    assert_eq!(th.to_ref(), lua.current_thread());
+    match lua.globals().get::<Thread>("print") {
+        Err(err @ Error::FromLuaConversionError { .. }) => {
+            assert_eq!(err.to_string(), "error converting Lua function to thread");
+        }
+        _ => panic!("expected `Error::FromLuaConversionError`"),
+    }
 
     Ok(())
 }
@@ -204,27 +153,47 @@ fn test_anyuserdata_into_lua() -> Result<()> {
     // Push into stack
     let table = lua.create_table()?;
     table.set("ud", &ud)?;
-    assert_eq!(ud, table.get::<_, AnyUserData>("ud")?);
-    assert_eq!("hello", *table.get::<_, UserDataRef<String>>("ud")?);
+    assert_eq!(ud, table.get::<AnyUserData>("ud")?);
+    assert_eq!("hello", *table.get::<UserDataRef<String>>("ud")?);
 
     Ok(())
 }
 
-#[cfg(all(feature = "unstable", not(feature = "send")))]
 #[test]
-fn test_owned_anyuserdata_into_lua() -> Result<()> {
+fn test_anyuserdata_from_lua() -> Result<()> {
     let lua = Lua::new();
 
-    // Direct conversion
-    let ud = lua.create_any_userdata(String::from("hello"))?.into_owned();
-    let ud2 = (&ud).into_lua(&lua)?;
-    assert_eq!(ud.to_ref(), *ud2.as_userdata().unwrap());
+    match lua.globals().get::<AnyUserData>("print") {
+        Err(err @ Error::FromLuaConversionError { .. }) => {
+            assert_eq!(err.to_string(), "error converting Lua function to userdata");
+        }
+        _ => panic!("expected `Error::FromLuaConversionError`"),
+    }
 
-    // Push into stack
-    let table = lua.create_table()?;
-    table.set("ud", &ud)?;
-    assert_eq!(ud.to_ref(), table.get::<_, AnyUserData>("ud")?);
-    assert_eq!("hello", *table.get::<_, UserDataRef<String>>("ud")?);
+    Ok(())
+}
+
+#[test]
+fn test_error_conversion() -> Result<()> {
+    let lua = Lua::new();
+
+    // Any Lua value can be converted to `Error`
+    match lua.convert::<Error>(Error::external("external error")) {
+        Ok(Error::ExternalError(msg)) => assert_eq!(msg.to_string(), "external error"),
+        res => panic!("expected `Error::ExternalError`, got {res:?}"),
+    }
+    match lua.convert::<Error>("abc") {
+        Ok(Error::RuntimeError(msg)) => assert_eq!(msg, "abc"),
+        res => panic!("expected `Error::RuntimeError`, got {res:?}"),
+    }
+    match lua.convert::<Error>(true) {
+        Ok(Error::RuntimeError(msg)) => assert_eq!(msg, "true"),
+        res => panic!("expected `Error::RuntimeError`, got {res:?}"),
+    }
+    match lua.convert::<Error>(lua.globals()) {
+        Ok(Error::RuntimeError(msg)) => assert!(msg.starts_with("table:")),
+        res => panic!("expected `Error::RuntimeError`, got {res:?}"),
+    }
 
     Ok(())
 }
@@ -238,30 +207,27 @@ fn test_registry_value_into_lua() -> Result<()> {
     let r = lua.create_registry_value(&s)?;
     let value1 = lua.pack(&r)?;
     let value2 = lua.pack(r)?;
-    assert_eq!(value1.as_str(), Some("hello, world"));
-    assert_eq!(value2.to_pointer(), value2.to_pointer());
+    assert_eq!(value1.as_str().as_deref(), Some("hello, world"));
+    assert_eq!(value1.to_pointer(), value2.to_pointer());
 
     // Push into stack
     let t = lua.create_table()?;
     let r = lua.create_registry_value(&t)?;
     let f = lua.create_function(|_, (t, k, v): (Table, Value, Value)| t.set(k, v))?;
-    f.call((&r, "hello", "world"))?;
-    f.call((r, "welcome", "to the jungle"))?;
-    assert_eq!(t.get::<_, String>("hello")?, "world");
-    assert_eq!(t.get::<_, String>("welcome")?, "to the jungle");
+    f.call::<()>((&r, "hello", "world"))?;
+    f.call::<()>((r, "welcome", "to the jungle"))?;
+    assert_eq!(t.get::<String>("hello")?, "world");
+    assert_eq!(t.get::<String>("welcome")?, "to the jungle");
 
     // Try to set nil registry key
     let r_nil = lua.create_registry_value(Value::Nil)?;
     t.set("hello", &r_nil)?;
-    assert_eq!(t.get::<_, Value>("hello")?, Value::Nil);
+    assert_eq!(t.get::<Value>("hello")?, Value::Nil);
 
     // Check non-owned registry key
     let lua2 = Lua::new();
     let r2 = lua2.create_registry_value("abc")?;
-    assert!(matches!(
-        f.call::<_, ()>(&r2),
-        Err(Error::MismatchedRegistryKey)
-    ));
+    assert!(matches!(f.call::<()>(&r2), Err(Error::MismatchedRegistryKey)));
 
     Ok(())
 }
@@ -272,7 +238,79 @@ fn test_registry_key_from_lua() -> Result<()> {
 
     let fkey = lua.load("function() return 1 end").eval::<RegistryKey>()?;
     let f = lua.registry_value::<Function>(&fkey)?;
-    assert_eq!(f.call::<_, i32>(())?, 1);
+    assert_eq!(f.call::<i32>(())?, 1);
+
+    Ok(())
+}
+
+#[test]
+fn test_bool_into_lua() -> Result<()> {
+    let lua = Lua::new();
+
+    // Direct conversion
+    assert!(true.into_lua(&lua)?.is_boolean());
+
+    // Push into stack
+    let table = lua.create_table()?;
+    table.set("b", true)?;
+    assert_eq!(true, table.get::<bool>("b")?);
+
+    Ok(())
+}
+
+#[test]
+fn test_bool_from_lua() -> Result<()> {
+    let lua = Lua::new();
+
+    assert!(lua.globals().get::<bool>("print")?);
+    assert!(lua.convert::<bool>(123)?);
+    assert!(!lua.convert::<bool>(Value::Nil)?);
+
+    Ok(())
+}
+
+#[test]
+fn test_integer_from_lua() -> Result<()> {
+    let lua = Lua::new();
+
+    // From stack
+    let f = lua.create_function(|_, i: i32| Ok(i))?;
+    assert_eq!(f.call::<i32>(42)?, 42);
+
+    // Out of range
+    match f.call::<i32>(i64::MAX).err() {
+        Some(Error::CallbackError { cause, .. }) => match cause.as_ref() {
+            Error::BadArgument { cause, .. } => match cause.as_ref() {
+                Error::FromLuaConversionError { message, .. } => {
+                    assert_eq!(message.as_ref().unwrap(), "out of range");
+                }
+                err => panic!("expected Error::FromLuaConversionError, got {err:?}"),
+            },
+            err => panic!("expected Error::BadArgument, got {err:?}"),
+        },
+        err => panic!("expected Error::CallbackError, got {err:?}"),
+    }
+
+    // Should fallback to default conversion
+    assert_eq!(f.call::<i32>("42")?, 42);
+
+    Ok(())
+}
+
+#[test]
+fn test_float_from_lua() -> Result<()> {
+    let lua = Lua::new();
+
+    // From stack
+    let f = lua.create_function(|_, f: f32| Ok(f))?;
+    assert_eq!(f.call::<f32>(42.0)?, 42.0);
+
+    // Out of range (but never fails)
+    let val = f.call::<f32>(f64::MAX)?;
+    assert!(val.is_infinite());
+
+    // Should fallback to default conversion
+    assert_eq!(f.call::<f32>("42.0")?, 42.0);
 
     Ok(())
 }
@@ -405,7 +443,7 @@ fn test_conv_array() -> Result<()> {
     let v2: [i32; 3] = lua.globals().get("v")?;
     assert_eq!(v, v2);
 
-    let v2 = lua.globals().get::<_, [i32; 4]>("v");
+    let v2 = lua.globals().get::<[i32; 4]>("v");
     assert!(matches!(v2, Err(Error::FromLuaConversionError { .. })));
 
     Ok(())
@@ -427,10 +465,10 @@ fn test_bstring_from_lua() -> Result<()> {
 
     // Test from stack
     let f = lua.create_function(|_, bstr: BString| Ok(bstr))?;
-    let bstr = f.call::<_, BString>("hello, world")?;
+    let bstr = f.call::<BString>("hello, world")?;
     assert_eq!(bstr, "hello, world");
 
-    let bstr = f.call::<_, BString>(-43.22)?;
+    let bstr = f.call::<BString>(-43.22)?;
     assert_eq!(bstr, "-43.22");
 
     Ok(())
@@ -441,15 +479,64 @@ fn test_bstring_from_lua() -> Result<()> {
 fn test_bstring_from_lua_buffer() -> Result<()> {
     let lua = Lua::new();
 
-    let b = lua.create_buffer("hello, world")?;
-    let bstr = lua.unpack::<BString>(Value::UserData(b))?;
+    let buf = lua.create_buffer("hello, world")?;
+    let bstr = lua.convert::<BString>(buf)?;
     assert_eq!(bstr, "hello, world");
 
     // Test from stack
     let f = lua.create_function(|_, bstr: BString| Ok(bstr))?;
     let buf = lua.create_buffer("hello, world")?;
-    let bstr = f.call::<_, BString>(buf)?;
+    let bstr = f.call::<BString>(buf)?;
     assert_eq!(bstr, "hello, world");
+
+    Ok(())
+}
+
+#[test]
+fn test_osstring_into_from_lua() -> Result<()> {
+    let lua = Lua::new();
+
+    let s = OsString::from("hello, world");
+
+    let v = lua.pack(s.as_os_str())?;
+    assert!(v.is_string());
+    assert_eq!(v.as_str().unwrap(), "hello, world");
+
+    let v = lua.pack(s)?;
+    assert!(v.is_string());
+    assert_eq!(v.as_str().unwrap(), "hello, world");
+
+    let s = lua.create_string("hello, world")?;
+    let bstr = lua.unpack::<OsString>(Value::String(s))?;
+    assert_eq!(bstr, "hello, world");
+
+    let bstr = lua.unpack::<OsString>(Value::Integer(123))?;
+    assert_eq!(bstr, "123");
+
+    let bstr = lua.unpack::<OsString>(Value::Number(-123.55))?;
+    assert_eq!(bstr, "-123.55");
+
+    Ok(())
+}
+
+#[test]
+fn test_pathbuf_into_from_lua() -> Result<()> {
+    let lua = Lua::new();
+
+    let pb = PathBuf::from(env!("CARGO_TARGET_TMPDIR"));
+    let pb_str = pb.to_str().unwrap();
+
+    let v = lua.pack(pb.as_path())?;
+    assert!(v.is_string());
+    assert_eq!(v.as_str().unwrap(), pb_str);
+
+    let v = lua.pack(pb.clone())?;
+    assert!(v.is_string());
+    assert_eq!(v.as_str().unwrap(), pb_str);
+
+    let s = lua.create_string(pb_str)?;
+    let bstr = lua.unpack::<PathBuf>(Value::String(s))?;
+    assert_eq!(bstr, pb);
 
     Ok(())
 }
@@ -465,9 +552,108 @@ fn test_option_into_from_lua() -> Result<()> {
 
     // Push into stack / get from stack
     let f = lua.create_function(|_, v: Option<i32>| Ok(v))?;
-    assert_eq!(f.call::<_, Option<i32>>(Some(42))?, Some(42));
-    assert_eq!(f.call::<_, Option<i32>>(Option::<i32>::None)?, None);
-    assert_eq!(f.call::<_, Option<i32>>(())?, None);
+    assert_eq!(f.call::<Option<i32>>(Some(42))?, Some(42));
+    assert_eq!(f.call::<Option<i32>>(Option::<i32>::None)?, None);
+    assert_eq!(f.call::<Option<i32>>(())?, None);
+
+    Ok(())
+}
+
+#[test]
+fn test_either_enum() -> Result<()> {
+    // Left
+    let mut either = Either::<_, String>::Left(42);
+    assert!(either.is_left());
+    assert_eq!(*either.as_ref().left().unwrap(), 42);
+    *either.as_mut().left().unwrap() = 44;
+    assert_eq!(*either.as_ref().left().unwrap(), 44);
+    assert_eq!(format!("{either}"), "44");
+    assert_eq!(either.right(), None);
+
+    // Right
+    either = Either::Right("hello".to_string());
+    assert!(either.is_right());
+    assert_eq!(*either.as_ref().right().unwrap(), "hello");
+    *either.as_mut().right().unwrap() = "world".to_string();
+    assert_eq!(*either.as_ref().right().unwrap(), "world");
+    assert_eq!(format!("{either}"), "world");
+    assert_eq!(either.left(), None);
+
+    Ok(())
+}
+
+#[test]
+fn test_either_into_lua() -> Result<()> {
+    let lua = Lua::new();
+
+    // Direct conversion
+    let mut either = Either::<i32, &Table>::Left(42);
+    assert_eq!(either.into_lua(&lua)?, Value::Integer(42));
+    let t = lua.create_table()?;
+    either = Either::Right(&t);
+    assert!(matches!(either.into_lua(&lua)?, Value::Table(_)));
+
+    // Push into stack
+    let f =
+        lua.create_function(|_, either: Either<i32, Table>| either.right().unwrap().set("hello", "world"))?;
+    let t = lua.create_table()?;
+    either = Either::Right(&t);
+    f.call::<()>(either)?;
+    assert_eq!(t.get::<String>("hello")?, "world");
+
+    let f = lua.create_function(|_, either: Either<i32, Table>| Ok(either.left().unwrap() + 1))?;
+    either = Either::Left(42);
+    assert_eq!(f.call::<i32>(either)?, 43);
+
+    Ok(())
+}
+
+#[test]
+fn test_either_from_lua() -> Result<()> {
+    let lua = Lua::new();
+
+    // From value
+    let mut either = lua.unpack::<Either<i32, Table>>(Value::Integer(42))?;
+    assert!(either.is_left());
+    assert_eq!(*either.as_ref().left().unwrap(), 42);
+    let t = lua.create_table()?;
+    either = lua.unpack::<Either<i32, Table>>(Value::Table(t.clone()))?;
+    assert!(either.is_right());
+    assert_eq!(either.as_ref().right().unwrap(), &t);
+    match lua.unpack::<Either<i32, Table>>(Value::String(lua.create_string("abc")?)) {
+        Err(Error::FromLuaConversionError { to, .. }) => assert_eq!(to, "Either<i32, Table>"),
+        _ => panic!("expected `Error::FromLuaConversionError`"),
+    }
+
+    // From stack
+    let f = lua.create_function(|_, either: Either<i32, Table>| Ok(either))?;
+    let either = f.call::<Either<i32, Table>>(42)?;
+    assert!(either.is_left());
+    assert_eq!(*either.as_ref().left().unwrap(), 42);
+
+    let either = f.call::<Either<i32, Table>>([5; 5])?;
+    assert!(either.is_right());
+    assert_eq!(either.as_ref().right().unwrap(), &[5; 5]);
+
+    // Check error message
+    match f.call::<Value>("hello") {
+        Ok(_) => panic!("expected error, got Ok"),
+        Err(ref err @ Error::CallbackError { ref cause, .. }) => {
+            match cause.as_ref() {
+                Error::BadArgument { cause, .. } => match cause.as_ref() {
+                    Error::FromLuaConversionError { to, .. } => {
+                        assert_eq!(to, "Either<i32, Table>")
+                    }
+                    err => panic!("expected `Error::FromLuaConversionError`, got {err:?}"),
+                },
+                err => panic!("expected `Error::BadArgument`, got {err:?}"),
+            }
+            assert!(err
+                .to_string()
+                .starts_with("bad argument #1: error converting Lua string to Either<i32, Table>"),);
+        }
+        err => panic!("expected `Error::CallbackError`, got {err:?}"),
+    }
 
     Ok(())
 }

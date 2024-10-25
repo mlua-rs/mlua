@@ -222,13 +222,7 @@ extern "C-unwind" {
     //
     // 'load' and 'call' functions (load and run Lua code)
     //
-    pub fn lua_callk(
-        L: *mut lua_State,
-        nargs: c_int,
-        nresults: c_int,
-        ctx: c_int,
-        k: Option<lua_CFunction>,
-    );
+    pub fn lua_callk(L: *mut lua_State, nargs: c_int, nresults: c_int, ctx: c_int, k: Option<lua_CFunction>);
     pub fn lua_pcallk(
         L: *mut lua_State,
         nargs: c_int,
@@ -266,12 +260,7 @@ extern "C-unwind" {
     //
     // Coroutine functions
     //
-    pub fn lua_yieldk(
-        L: *mut lua_State,
-        nresults: c_int,
-        ctx: c_int,
-        k: Option<lua_CFunction>,
-    ) -> c_int;
+    pub fn lua_yieldk(L: *mut lua_State, nresults: c_int, ctx: c_int, k: Option<lua_CFunction>) -> c_int;
     #[link_name = "lua_resume"]
     pub fn lua_resume_(L: *mut lua_State, from: *mut lua_State, narg: c_int) -> c_int;
     pub fn lua_status(L: *mut lua_State) -> c_int;
@@ -471,12 +460,7 @@ extern "C-unwind" {
     pub fn lua_upvalueid(L: *mut lua_State, fidx: c_int, n: c_int) -> *mut c_void;
     pub fn lua_upvaluejoin(L: *mut lua_State, fidx1: c_int, n1: c_int, fidx2: c_int, n2: c_int);
 
-    pub fn lua_sethook(
-        L: *mut lua_State,
-        func: Option<lua_Hook>,
-        mask: c_int,
-        count: c_int,
-    ) -> c_int;
+    pub fn lua_sethook(L: *mut lua_State, func: Option<lua_Hook>, mask: c_int, count: c_int) -> c_int;
     pub fn lua_gethook(L: *mut lua_State) -> Option<lua_Hook>;
     pub fn lua_gethookmask(L: *mut lua_State) -> c_int;
     pub fn lua_gethookcount(L: *mut lua_State) -> c_int;

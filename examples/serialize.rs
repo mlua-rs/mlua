@@ -28,9 +28,14 @@ fn main() -> Result<()> {
     let globals = lua.globals();
 
     // Create Car struct from a Lua table
-    let car: Car = lua.from_value(lua.load(r#"
+    let car: Car = lua.from_value(
+        lua.load(
+            r#"
         {active = true, model = "Volkswagen Golf", transmission = "Automatic", engine = {v = 1499, kw = 90}}
-    "#).eval()?)?;
+    "#,
+        )
+        .eval()?,
+    )?;
 
     // Set it as (serializable) userdata
     globals.set("null", lua.null())?;

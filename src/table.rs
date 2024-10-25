@@ -1,7 +1,19 @@
 use std::collections::HashSet;
 use std::fmt;
 use std::marker::PhantomData;
-use std::os::raw::c_void;
+use std::os::raw::{c_int, c_void};
+use std::string::String as StdString;
+
+use crate::error::{Error, Result};
+use crate::function::Function;
+use crate::state::{LuaGuard, RawLua};
+use crate::traits::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, ObjectLike};
+use crate::types::{Integer, LuaType, ValueRef};
+use crate::util::{assert_stack, check_stack, get_metatable_ptr, StackGuard};
+use crate::value::{Nil, Value};
+
+#[cfg(feature = "async")]
+use futures_util::future::{self, Either, Future};
 
 #[cfg(feature = "serialize")]
 use {
@@ -10,42 +22,11 @@ use {
     std::{cell::RefCell, rc::Rc, result::Result as StdResult},
 };
 
-use crate::error::{Error, Result};
-use crate::function::Function;
-use crate::private::Sealed;
-use crate::types::{Integer, LuaRef};
-use crate::util::{assert_stack, check_stack, StackGuard};
-use crate::value::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, Nil, Value};
-
-#[cfg(feature = "async")]
-use futures_util::future::{self, LocalBoxFuture};
-
 /// Handle to an internal Lua table.
-#[derive(Clone)]
-pub struct Table<'lua>(pub(crate) LuaRef<'lua>);
+#[derive(Clone, PartialEq)]
+pub struct Table(pub(crate) ValueRef);
 
-/// Owned handle to an internal Lua table.
-///
-/// The owned handle holds a *strong* reference to the current Lua instance.
-/// Be warned, if you place it into a Lua type (eg. [`UserData`] or a Rust callback), it is *very easy*
-/// to accidentally cause reference cycles that would prevent destroying Lua instance.
-///
-/// [`UserData`]: crate::UserData
-#[cfg(feature = "unstable")]
-#[cfg_attr(docsrs, doc(cfg(feature = "unstable")))]
-#[derive(Clone, Debug)]
-pub struct OwnedTable(pub(crate) crate::types::LuaOwnedRef);
-
-#[cfg(feature = "unstable")]
-impl OwnedTable {
-    /// Get borrowed handle to the underlying Lua table.
-    #[cfg_attr(feature = "send", allow(unused))]
-    pub const fn to_ref(&self) -> Table {
-        Table(self.0.to_ref())
-    }
-}
-
-impl<'lua> Table<'lua> {
+impl Table {
     /// Sets a key-value pair in the table.
     ///
     /// If the value is `nil`, this will effectively remove the pair.
@@ -78,22 +59,26 @@ impl<'lua> Table<'lua> {
     /// # }
     /// ```
     ///
-    /// [`raw_set`]: #method.raw_set
-    pub fn set<K: IntoLua<'lua>, V: IntoLua<'lua>>(&self, key: K, value: V) -> Result<()> {
-        // Fast track
+    /// [`raw_set`]: Table::raw_set
+    pub fn set(&self, key: impl IntoLua, value: impl IntoLua) -> Result<()> {
+        // Fast track (skip protected call)
         if !self.has_metatable() {
             return self.raw_set(key, value);
         }
 
-        let lua = self.0.lua;
+        self.set_protected(key, value)
+    }
+
+    pub(crate) fn set_protected(&self, key: impl IntoLua, value: impl IntoLua) -> Result<()> {
+        let lua = self.0.lua.lock();
         let state = lua.state();
         unsafe {
             let _sg = StackGuard::new(state);
             check_stack(state, 5)?;
 
             lua.push_ref(&self.0);
-            key.push_into_stack(lua)?;
-            value.push_into_stack(lua)?;
+            key.push_into_stack(&lua)?;
+            value.push_into_stack(&lua)?;
             protect_lua!(state, 3, 0, fn(state) ffi::lua_settable(state, -3))
         }
     }
@@ -121,51 +106,55 @@ impl<'lua> Table<'lua> {
     /// # }
     /// ```
     ///
-    /// [`raw_get`]: #method.raw_get
-    pub fn get<K: IntoLua<'lua>, V: FromLua<'lua>>(&self, key: K) -> Result<V> {
-        // Fast track
+    /// [`raw_get`]: Table::raw_get
+    pub fn get<V: FromLua>(&self, key: impl IntoLua) -> Result<V> {
+        // Fast track (skip protected call)
         if !self.has_metatable() {
             return self.raw_get(key);
         }
 
-        let lua = self.0.lua;
+        self.get_protected(key)
+    }
+
+    pub(crate) fn get_protected<V: FromLua>(&self, key: impl IntoLua) -> Result<V> {
+        let lua = self.0.lua.lock();
         let state = lua.state();
         unsafe {
             let _sg = StackGuard::new(state);
             check_stack(state, 4)?;
 
             lua.push_ref(&self.0);
-            key.push_into_stack(lua)?;
+            key.push_into_stack(&lua)?;
             protect_lua!(state, 2, 1, fn(state) ffi::lua_gettable(state, -2))?;
 
-            V::from_stack(-1, lua)
+            V::from_stack(-1, &lua)
         }
     }
 
     /// Checks whether the table contains a non-nil value for `key`.
     ///
     /// This might invoke the `__index` metamethod.
-    pub fn contains_key<K: IntoLua<'lua>>(&self, key: K) -> Result<bool> {
-        Ok(self.get::<_, Value>(key)? != Value::Nil)
+    pub fn contains_key(&self, key: impl IntoLua) -> Result<bool> {
+        Ok(self.get::<Value>(key)? != Value::Nil)
     }
 
     /// Appends a value to the back of the table.
     ///
     /// This might invoke the `__len` and `__newindex` metamethods.
-    pub fn push<V: IntoLua<'lua>>(&self, value: V) -> Result<()> {
-        // Fast track
+    pub fn push(&self, value: impl IntoLua) -> Result<()> {
+        // Fast track (skip protected call)
         if !self.has_metatable() {
             return self.raw_push(value);
         }
 
-        let lua = self.0.lua;
+        let lua = self.0.lua.lock();
         let state = lua.state();
         unsafe {
             let _sg = StackGuard::new(state);
             check_stack(state, 4)?;
 
             lua.push_ref(&self.0);
-            value.push_into_stack(lua)?;
+            value.push_into_stack(&lua)?;
             protect_lua!(state, 2, 0, fn(state) {
                 let len = ffi::luaL_len(state, -2) as Integer;
                 ffi::lua_seti(state, -2, len + 1);
@@ -177,13 +166,13 @@ impl<'lua> Table<'lua> {
     /// Removes the last element from the table and returns it.
     ///
     /// This might invoke the `__len` and `__newindex` metamethods.
-    pub fn pop<V: FromLua<'lua>>(&self) -> Result<V> {
-        // Fast track
+    pub fn pop<V: FromLua>(&self) -> Result<V> {
+        // Fast track (skip protected call)
         if !self.has_metatable() {
             return self.raw_pop();
         }
 
-        let lua = self.0.lua;
+        let lua = self.0.lua.lock();
         let state = lua.state();
         unsafe {
             let _sg = StackGuard::new(state);
@@ -196,7 +185,7 @@ impl<'lua> Table<'lua> {
                 ffi::lua_pushnil(state);
                 ffi::lua_seti(state, -3, len);
             })?;
-            V::from_stack(-1, lua)
+            V::from_stack(-1, &lua)
         }
     }
 
@@ -229,27 +218,22 @@ impl<'lua> Table<'lua> {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn equals<T: AsRef<Self>>(&self, other: T) -> Result<bool> {
-        let other = other.as_ref();
+    pub fn equals(&self, other: &Self) -> Result<bool> {
         if self == other {
             return Ok(true);
         }
 
-        // Compare using __eq metamethod if exists
+        // Compare using `__eq` metamethod if exists
         // First, check the self for the metamethod.
         // If self does not define it, then check the other table.
-        if let Some(mt) = self.get_metatable() {
+        if let Some(mt) = self.metatable() {
             if mt.contains_key("__eq")? {
-                return mt
-                    .get::<_, Function>("__eq")?
-                    .call((self.clone(), other.clone()));
+                return mt.get::<Function>("__eq")?.call((self, other));
             }
         }
-        if let Some(mt) = other.get_metatable() {
+        if let Some(mt) = other.metatable() {
             if mt.contains_key("__eq")? {
-                return mt
-                    .get::<_, Function>("__eq")?
-                    .call((self.clone(), other.clone()));
+                return mt.get::<Function>("__eq")?.call((self, other));
             }
         }
 
@@ -257,19 +241,19 @@ impl<'lua> Table<'lua> {
     }
 
     /// Sets a key-value pair without invoking metamethods.
-    pub fn raw_set<K: IntoLua<'lua>, V: IntoLua<'lua>>(&self, key: K, value: V) -> Result<()> {
-        #[cfg(feature = "luau")]
-        self.check_readonly_write()?;
-
-        let lua = self.0.lua;
+    pub fn raw_set(&self, key: impl IntoLua, value: impl IntoLua) -> Result<()> {
+        let lua = self.0.lua.lock();
         let state = lua.state();
         unsafe {
+            #[cfg(feature = "luau")]
+            self.check_readonly_write(&lua)?;
+
             let _sg = StackGuard::new(state);
             check_stack(state, 5)?;
 
             lua.push_ref(&self.0);
-            key.push_into_stack(lua)?;
-            value.push_into_stack(lua)?;
+            key.push_into_stack(&lua)?;
+            value.push_into_stack(&lua)?;
 
             if lua.unlikely_memory_error() {
                 ffi::lua_rawset(state, -3);
@@ -282,37 +266,39 @@ impl<'lua> Table<'lua> {
     }
 
     /// Gets the value associated to `key` without invoking metamethods.
-    pub fn raw_get<K: IntoLua<'lua>, V: FromLua<'lua>>(&self, key: K) -> Result<V> {
-        let lua = self.0.lua;
+    pub fn raw_get<V: FromLua>(&self, key: impl IntoLua) -> Result<V> {
+        let lua = self.0.lua.lock();
         let state = lua.state();
         unsafe {
             let _sg = StackGuard::new(state);
             check_stack(state, 3)?;
 
             lua.push_ref(&self.0);
-            key.push_into_stack(lua)?;
+            key.push_into_stack(&lua)?;
             ffi::lua_rawget(state, -2);
 
-            V::from_stack(-1, lua)
+            V::from_stack(-1, &lua)
         }
     }
 
-    /// Inserts element value at position `idx` to the table, shifting up the elements from `table[idx]`.
+    /// Inserts element value at position `idx` to the table, shifting up the elements from
+    /// `table[idx]`.
+    ///
     /// The worst case complexity is O(n), where n is the table length.
-    pub fn raw_insert<V: IntoLua<'lua>>(&self, idx: Integer, value: V) -> Result<()> {
+    pub fn raw_insert(&self, idx: Integer, value: impl IntoLua) -> Result<()> {
         let size = self.raw_len() as Integer;
         if idx < 1 || idx > size + 1 {
             return Err(Error::runtime("index out of bounds"));
         }
 
-        let lua = self.0.lua;
+        let lua = self.0.lua.lock();
         let state = lua.state();
         unsafe {
             let _sg = StackGuard::new(state);
             check_stack(state, 5)?;
 
             lua.push_ref(&self.0);
-            value.push_into_stack(lua)?;
+            value.push_into_stack(&lua)?;
             protect_lua!(state, 2, 0, |state| {
                 for i in (idx..=size).rev() {
                     // table[i+1] = table[i]
@@ -325,18 +311,18 @@ impl<'lua> Table<'lua> {
     }
 
     /// Appends a value to the back of the table without invoking metamethods.
-    pub fn raw_push<V: IntoLua<'lua>>(&self, value: V) -> Result<()> {
-        #[cfg(feature = "luau")]
-        self.check_readonly_write()?;
-
-        let lua = self.0.lua;
+    pub fn raw_push(&self, value: impl IntoLua) -> Result<()> {
+        let lua = self.0.lua.lock();
         let state = lua.state();
         unsafe {
+            #[cfg(feature = "luau")]
+            self.check_readonly_write(&lua)?;
+
             let _sg = StackGuard::new(state);
             check_stack(state, 4)?;
 
             lua.push_ref(&self.0);
-            value.push_into_stack(lua)?;
+            value.push_into_stack(&lua)?;
 
             unsafe fn callback(state: *mut ffi::lua_State) {
                 let len = ffi::lua_rawlen(state, -2) as Integer;
@@ -353,13 +339,13 @@ impl<'lua> Table<'lua> {
     }
 
     /// Removes the last element from the table and returns it, without invoking metamethods.
-    pub fn raw_pop<V: FromLua<'lua>>(&self) -> Result<V> {
-        #[cfg(feature = "luau")]
-        self.check_readonly_write()?;
-
-        let lua = self.0.lua;
+    pub fn raw_pop<V: FromLua>(&self) -> Result<V> {
+        let lua = self.0.lua.lock();
         let state = lua.state();
         unsafe {
+            #[cfg(feature = "luau")]
+            self.check_readonly_write(&lua)?;
+
             let _sg = StackGuard::new(state);
             check_stack(state, 3)?;
 
@@ -370,21 +356,21 @@ impl<'lua> Table<'lua> {
             ffi::lua_pushnil(state);
             ffi::lua_rawseti(state, -3, len);
 
-            V::from_stack(-1, lua)
+            V::from_stack(-1, &lua)
         }
     }
 
     /// Removes a key from the table.
     ///
     /// If `key` is an integer, mlua shifts down the elements from `table[key+1]`,
-    /// and erases element `table[key]`. The complexity is O(n) in the worst case,
-    /// where n is the table length.
+    /// and erases element `table[key]`. The complexity is `O(n)` in the worst case,
+    /// where `n` is the table length.
     ///
     /// For other key types this is equivalent to setting `table[key] = nil`.
-    pub fn raw_remove<K: IntoLua<'lua>>(&self, key: K) -> Result<()> {
-        let lua = self.0.lua;
+    pub fn raw_remove(&self, key: impl IntoLua) -> Result<()> {
+        let lua = self.0.lua.lock();
         let state = lua.state();
-        let key = key.into_lua(lua)?;
+        let key = key.into_lua(lua.lua())?;
         match key {
             Value::Integer(idx) => {
                 let size = self.raw_len() as Integer;
@@ -415,13 +401,13 @@ impl<'lua> Table<'lua> {
     ///
     /// This method is useful to clear the table while keeping its capacity.
     pub fn clear(&self) -> Result<()> {
-        #[cfg(feature = "luau")]
-        self.check_readonly_write()?;
-
-        let lua = self.0.lua;
+        let lua = self.0.lua.lock();
         unsafe {
             #[cfg(feature = "luau")]
-            ffi::lua_cleartable(lua.ref_thread(), self.0.index);
+            {
+                self.check_readonly_write(&lua)?;
+                ffi::lua_cleartable(lua.ref_thread(), self.0.index);
+            }
 
             #[cfg(not(feature = "luau"))]
             {
@@ -453,16 +439,15 @@ impl<'lua> Table<'lua> {
 
     /// Returns the result of the Lua `#` operator.
     ///
-    /// This might invoke the `__len` metamethod. Use the [`raw_len`] method if that is not desired.
-    ///
-    /// [`raw_len`]: #method.raw_len
+    /// This might invoke the `__len` metamethod. Use the [`Table::raw_len`] method if that is not
+    /// desired.
     pub fn len(&self) -> Result<Integer> {
-        // Fast track
+        // Fast track (skip protected call)
         if !self.has_metatable() {
             return Ok(self.raw_len() as Integer);
         }
 
-        let lua = self.0.lua;
+        let lua = self.0.lua.lock();
         let state = lua.state();
         unsafe {
             let _sg = StackGuard::new(state);
@@ -475,8 +460,8 @@ impl<'lua> Table<'lua> {
 
     /// Returns the result of the Lua `#` operator, without invoking the `__len` metamethod.
     pub fn raw_len(&self) -> usize {
-        let ref_thread = self.0.lua.ref_thread();
-        unsafe { ffi::lua_rawlen(ref_thread, self.0.index) }
+        let lua = self.0.lua.lock();
+        unsafe { ffi::lua_rawlen(lua.ref_thread(), self.0.index) }
     }
 
     /// Returns `true` if the table is empty, without invoking metamethods.
@@ -489,7 +474,7 @@ impl<'lua> Table<'lua> {
         }
 
         // Check hash part
-        let lua = self.0.lua;
+        let lua = self.0.lua.lock();
         let state = lua.state();
         unsafe {
             let _sg = StackGuard::new(state);
@@ -507,9 +492,11 @@ impl<'lua> Table<'lua> {
 
     /// Returns a reference to the metatable of this table, or `None` if no metatable is set.
     ///
-    /// Unlike the `getmetatable` Lua function, this method ignores the `__metatable` field.
-    pub fn get_metatable(&self) -> Option<Table<'lua>> {
-        let lua = self.0.lua;
+    /// Unlike the [`getmetatable`] Lua function, this method ignores the `__metatable` field.
+    ///
+    /// [`getmetatable`]: https://www.lua.org/manual/5.4/manual.html#pdf-getmetatable
+    pub fn metatable(&self) -> Option<Table> {
+        let lua = self.0.lua.lock();
         let state = lua.state();
         unsafe {
             let _sg = StackGuard::new(state);
@@ -524,18 +511,25 @@ impl<'lua> Table<'lua> {
         }
     }
 
+    #[doc(hidden)]
+    #[deprecated(since = "0.10.0", note = "please use `metatable` instead")]
+    #[cfg(not(tarpaulin_include))]
+    pub fn get_metatable(&self) -> Option<Table> {
+        self.metatable()
+    }
+
     /// Sets or removes the metatable of this table.
     ///
     /// If `metatable` is `None`, the metatable is removed (if no metatable is set, this does
     /// nothing).
-    pub fn set_metatable(&self, metatable: Option<Table<'lua>>) {
+    pub fn set_metatable(&self, metatable: Option<Table>) {
         // Workaround to throw readonly error without returning Result
         #[cfg(feature = "luau")]
         if self.is_readonly() {
             panic!("attempt to modify a readonly table");
         }
 
-        let lua = self.0.lua;
+        let lua = self.0.lua.lock();
         let state = lua.state();
         unsafe {
             let _sg = StackGuard::new(state);
@@ -555,14 +549,8 @@ impl<'lua> Table<'lua> {
     #[doc(hidden)]
     #[inline]
     pub fn has_metatable(&self) -> bool {
-        let ref_thread = self.0.lua.ref_thread();
-        unsafe {
-            if ffi::lua_getmetatable(ref_thread, self.0.index) != 0 {
-                ffi::lua_pop(ref_thread, 1);
-                return true;
-            }
-        }
-        false
+        let lua = self.0.lua.lock();
+        unsafe { !get_metatable_ptr(lua.ref_thread(), self.0.index).is_null() }
     }
 
     /// Sets `readonly` attribute on the table.
@@ -571,7 +559,8 @@ impl<'lua> Table<'lua> {
     #[cfg(any(feature = "luau", doc))]
     #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
     pub fn set_readonly(&self, enabled: bool) {
-        let ref_thread = self.0.lua.ref_thread();
+        let lua = self.0.lua.lock();
+        let ref_thread = lua.ref_thread();
         unsafe {
             ffi::lua_setreadonly(ref_thread, self.0.index, enabled as _);
             if !enabled {
@@ -587,7 +576,8 @@ impl<'lua> Table<'lua> {
     #[cfg(any(feature = "luau", doc))]
     #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
     pub fn is_readonly(&self) -> bool {
-        let ref_thread = self.0.lua.ref_thread();
+        let lua = self.0.lua.lock();
+        let ref_thread = lua.ref_thread();
         unsafe { ffi::lua_getreadonly(ref_thread, self.0.index) != 0 }
     }
 
@@ -602,25 +592,11 @@ impl<'lua> Table<'lua> {
         self.0.to_pointer()
     }
 
-    /// Convert this handle to owned version.
-    #[cfg(all(feature = "unstable", any(not(feature = "send"), doc)))]
-    #[cfg_attr(docsrs, doc(cfg(all(feature = "unstable", not(feature = "send")))))]
-    #[inline]
-    pub fn into_owned(self) -> OwnedTable {
-        OwnedTable(self.0.into_owned())
-    }
-
-    /// Consume this table and return an iterator over the pairs of the table.
+    /// Returns an iterator over the pairs of the table.
     ///
     /// This works like the Lua `pairs` function, but does not invoke the `__pairs` metamethod.
     ///
     /// The pairs are wrapped in a [`Result`], since they are lazily converted to `K` and `V` types.
-    ///
-    /// # Note
-    ///
-    /// While this method consumes the `Table` object, it can not prevent code from mutating the
-    /// table while the iteration is in progress. Refer to the [Lua manual] for information about
-    /// the consequences of such mutation.
     ///
     /// # Examples
     ///
@@ -641,11 +617,11 @@ impl<'lua> Table<'lua> {
     /// # }
     /// ```
     ///
-    /// [`Result`]: crate::Result
     /// [Lua manual]: http://www.lua.org/manual/5.4/manual.html#pdf-next
-    pub fn pairs<K: FromLua<'lua>, V: FromLua<'lua>>(self) -> TablePairs<'lua, K, V> {
+    pub fn pairs<K: FromLua, V: FromLua>(&self) -> TablePairs<K, V> {
         TablePairs {
-            table: self.0,
+            guard: self.0.lua.lock(),
+            table: self,
             key: Some(Nil),
             _phantom: PhantomData,
         }
@@ -657,10 +633,10 @@ impl<'lua> Table<'lua> {
     /// It does not invoke the `__pairs` metamethod.
     pub fn for_each<K, V>(&self, mut f: impl FnMut(K, V) -> Result<()>) -> Result<()>
     where
-        K: FromLua<'lua>,
-        V: FromLua<'lua>,
+        K: FromLua,
+        V: FromLua,
     {
-        let lua = self.0.lua;
+        let lua = self.0.lua.lock();
         let state = lua.state();
         unsafe {
             let _sg = StackGuard::new(state);
@@ -669,8 +645,8 @@ impl<'lua> Table<'lua> {
             lua.push_ref(&self.0);
             ffi::lua_pushnil(state);
             while ffi::lua_next(state, -2) != 0 {
-                let k = K::from_stack(-2, lua)?;
-                let v = V::from_stack(-1, lua)?;
+                let k = K::from_stack(-2, &lua)?;
+                let v = V::from_stack(-1, &lua)?;
                 f(k, v)?;
                 // Keep key for next iteration
                 ffi::lua_pop(state, 1);
@@ -679,17 +655,11 @@ impl<'lua> Table<'lua> {
         Ok(())
     }
 
-    /// Consume this table and return an iterator over all values in the sequence part of the table.
+    /// Returns an iterator over all values in the sequence part of the table.
     ///
     /// The iterator will yield all values `t[1]`, `t[2]` and so on, until a `nil` value is
     /// encountered. This mirrors the behavior of Lua's `ipairs` function but does not invoke
     /// any metamethods.
-    ///
-    /// # Note
-    ///
-    /// While this method consumes the `Table` object, it can not prevent code from mutating the
-    /// table while the iteration is in progress. Refer to the [Lua manual] for information about
-    /// the consequences of such mutation.
     ///
     /// # Examples
     ///
@@ -713,30 +683,21 @@ impl<'lua> Table<'lua> {
     /// # Ok(())
     /// # }
     /// ```
-    ///
-    /// [`pairs`]: #method.pairs
-    /// [`Result`]: crate::Result
-    /// [Lua manual]: http://www.lua.org/manual/5.4/manual.html#pdf-next
-    pub fn sequence_values<V: FromLua<'lua>>(self) -> TableSequence<'lua, V> {
+    pub fn sequence_values<V: FromLua>(&self) -> TableSequence<V> {
         TableSequence {
-            table: self.0,
+            guard: self.0.lua.lock(),
+            table: self,
             index: 1,
             _phantom: PhantomData,
         }
     }
 
-    #[doc(hidden)]
-    #[deprecated(since = "0.9.0", note = "use `sequence_values` instead")]
-    pub fn raw_sequence_values<V: FromLua<'lua>>(self) -> TableSequence<'lua, V> {
-        self.sequence_values()
-    }
-
-    #[cfg(feature = "serialize")]
+    /// Iterates over the sequence part of the table, invoking the given closure on each value.
     pub(crate) fn for_each_value<V>(&self, mut f: impl FnMut(V) -> Result<()>) -> Result<()>
     where
-        V: FromLua<'lua>,
+        V: FromLua,
     {
-        let lua = self.0.lua;
+        let lua = self.0.lua.lock();
         let state = lua.state();
         unsafe {
             let _sg = StackGuard::new(state);
@@ -746,7 +707,7 @@ impl<'lua> Table<'lua> {
             let len = ffi::lua_rawlen(state, -1);
             for i in 1..=len {
                 ffi::lua_rawgeti(state, -1, i as _);
-                f(V::from_stack(-1, lua)?)?;
+                f(V::from_stack(-1, &lua)?)?;
                 ffi::lua_pop(state, 1);
             }
         }
@@ -755,18 +716,18 @@ impl<'lua> Table<'lua> {
 
     /// Sets element value at position `idx` without invoking metamethods.
     #[doc(hidden)]
-    pub fn raw_seti<V: IntoLua<'lua>>(&self, idx: usize, value: V) -> Result<()> {
-        #[cfg(feature = "luau")]
-        self.check_readonly_write()?;
-
-        let lua = self.0.lua;
+    pub fn raw_seti(&self, idx: usize, value: impl IntoLua) -> Result<()> {
+        let lua = self.0.lua.lock();
         let state = lua.state();
         unsafe {
+            #[cfg(feature = "luau")]
+            self.check_readonly_write(&lua)?;
+
             let _sg = StackGuard::new(state);
             check_stack(state, 5)?;
 
             lua.push_ref(&self.0);
-            value.push_into_stack(lua)?;
+            value.push_into_stack(&lua)?;
 
             let idx = idx.try_into().unwrap();
             if lua.unlikely_memory_error() {
@@ -780,7 +741,7 @@ impl<'lua> Table<'lua> {
 
     #[cfg(feature = "serialize")]
     pub(crate) fn is_array(&self) -> bool {
-        let lua = self.0.lua;
+        let lua = self.0.lua.lock();
         let state = lua.state();
         unsafe {
             let _sg = StackGuard::new(state);
@@ -797,8 +758,8 @@ impl<'lua> Table<'lua> {
 
     #[cfg(feature = "luau")]
     #[inline(always)]
-    pub(crate) fn check_readonly_write(&self) -> Result<()> {
-        if self.is_readonly() {
+    fn check_readonly_write(&self, lua: &RawLua) -> Result<()> {
+        if unsafe { ffi::lua_getreadonly(lua.ref_thread(), self.0.index) != 0 } {
             return Err(Error::runtime("attempt to modify a readonly table"));
         }
         Ok(())
@@ -812,11 +773,10 @@ impl<'lua> Table<'lua> {
     ) -> fmt::Result {
         visited.insert(self.to_pointer());
 
-        let t = self.clone();
         // Collect key/value pairs into a vector so we can sort them
-        let mut pairs = t.pairs::<Value, Value>().flatten().collect::<Vec<_>>();
+        let mut pairs = self.pairs::<Value, Value>().flatten().collect::<Vec<_>>();
         // Sort keys
-        pairs.sort_by(|(a, _), (b, _)| a.cmp(b));
+        pairs.sort_by(|(a, _), (b, _)| a.sort_cmp(b));
         if pairs.is_empty() {
             return write!(fmt, "{{}}");
         }
@@ -832,34 +792,21 @@ impl<'lua> Table<'lua> {
     }
 }
 
-impl fmt::Debug for Table<'_> {
+impl fmt::Debug for Table {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
         if fmt.alternate() {
             return self.fmt_pretty(fmt, 0, &mut HashSet::new());
         }
-        fmt.write_fmt(format_args!("Table({:?})", self.0))
+        fmt.debug_tuple("Table").field(&self.0).finish()
     }
 }
 
-impl<'lua> PartialEq for Table<'lua> {
-    fn eq(&self, other: &Self) -> bool {
-        self.0 == other.0
-    }
-}
-
-impl<'lua> AsRef<Table<'lua>> for Table<'lua> {
-    #[inline]
-    fn as_ref(&self) -> &Self {
-        self
-    }
-}
-
-impl<'lua, T> PartialEq<[T]> for Table<'lua>
+impl<T> PartialEq<[T]> for Table
 where
-    T: IntoLua<'lua> + Clone,
+    T: IntoLua + Clone,
 {
     fn eq(&self, other: &[T]) -> bool {
-        let lua = self.0.lua;
+        let lua = self.0.lua.lock();
         let state = lua.state();
         unsafe {
             let _sg = StackGuard::new(state);
@@ -874,7 +821,7 @@ where
                 if val == Nil {
                     return i == other.len();
                 }
-                match other.get(i).map(|v| v.clone().into_lua(lua)) {
+                match other.get(i).map(|v| v.clone().into_lua(lua.lua())) {
                     Some(Ok(other_val)) if val == other_val => continue,
                     _ => return false,
                 }
@@ -884,9 +831,9 @@ where
     }
 }
 
-impl<'lua, T> PartialEq<&[T]> for Table<'lua>
+impl<T> PartialEq<&[T]> for Table
 where
-    T: IntoLua<'lua> + Clone,
+    T: IntoLua + Clone,
 {
     #[inline]
     fn eq(&self, other: &&[T]) -> bool {
@@ -894,9 +841,9 @@ where
     }
 }
 
-impl<'lua, T, const N: usize> PartialEq<[T; N]> for Table<'lua>
+impl<T, const N: usize> PartialEq<[T; N]> for Table
 where
-    T: IntoLua<'lua> + Clone,
+    T: IntoLua + Clone,
 {
     #[inline]
     fn eq(&self, other: &[T; N]) -> bool {
@@ -904,163 +851,98 @@ where
     }
 }
 
-/// An extension trait for `Table`s that provides a variety of convenient functionality.
-pub trait TableExt<'lua>: Sealed {
-    /// Calls the table as function assuming it has `__call` metamethod.
-    ///
-    /// The metamethod is called with the table as its first argument, followed by the passed arguments.
-    fn call<A, R>(&self, args: A) -> Result<R>
-    where
-        A: IntoLuaMulti<'lua>,
-        R: FromLuaMulti<'lua>;
-
-    /// Asynchronously calls the table as function assuming it has `__call` metamethod.
-    ///
-    /// The metamethod is called with the table as its first argument, followed by the passed arguments.
-    #[cfg(feature = "async")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
-    fn call_async<A, R>(&self, args: A) -> LocalBoxFuture<'lua, Result<R>>
-    where
-        A: IntoLuaMulti<'lua>,
-        R: FromLuaMulti<'lua> + 'lua;
-
-    /// Gets the function associated to `key` from the table and executes it,
-    /// passing the table itself along with `args` as function arguments.
-    ///
-    /// This is a shortcut for
-    /// `table.get::<_, Function>(key)?.call((table.clone(), arg1, ..., argN))`
-    ///
-    /// This might invoke the `__index` metamethod.
-    fn call_method<A, R>(&self, name: &str, args: A) -> Result<R>
-    where
-        A: IntoLuaMulti<'lua>,
-        R: FromLuaMulti<'lua>;
-
-    /// Gets the function associated to `key` from the table and executes it,
-    /// passing `args` as function arguments.
-    ///
-    /// This is a shortcut for
-    /// `table.get::<_, Function>(key)?.call(args)`
-    ///
-    /// This might invoke the `__index` metamethod.
-    fn call_function<A, R>(&self, name: &str, args: A) -> Result<R>
-    where
-        A: IntoLuaMulti<'lua>,
-        R: FromLuaMulti<'lua>;
-
-    /// Gets the function associated to `key` from the table and asynchronously executes it,
-    /// passing the table itself along with `args` as function arguments and returning Future.
-    ///
-    /// Requires `feature = "async"`
-    ///
-    /// This might invoke the `__index` metamethod.
-    #[cfg(feature = "async")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
-    fn call_async_method<A, R>(&self, name: &str, args: A) -> LocalBoxFuture<'lua, Result<R>>
-    where
-        A: IntoLuaMulti<'lua>,
-        R: FromLuaMulti<'lua> + 'lua;
-
-    /// Gets the function associated to `key` from the table and asynchronously executes it,
-    /// passing `args` as function arguments and returning Future.
-    ///
-    /// Requires `feature = "async"`
-    ///
-    /// This might invoke the `__index` metamethod.
-    #[cfg(feature = "async")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
-    fn call_async_function<A, R>(&self, name: &str, args: A) -> LocalBoxFuture<'lua, Result<R>>
-    where
-        A: IntoLuaMulti<'lua>,
-        R: FromLuaMulti<'lua> + 'lua;
+impl LuaType for Table {
+    const TYPE_ID: c_int = ffi::LUA_TTABLE;
 }
 
-impl<'lua> TableExt<'lua> for Table<'lua> {
-    fn call<A, R>(&self, args: A) -> Result<R>
+impl ObjectLike for Table {
+    #[inline]
+    fn get<V: FromLua>(&self, key: impl IntoLua) -> Result<V> {
+        self.get(key)
+    }
+
+    #[inline]
+    fn set(&self, key: impl IntoLua, value: impl IntoLua) -> Result<()> {
+        self.set(key, value)
+    }
+
+    #[inline]
+    fn call<R>(&self, args: impl IntoLuaMulti) -> Result<R>
     where
-        A: IntoLuaMulti<'lua>,
-        R: FromLuaMulti<'lua>,
+        R: FromLuaMulti,
     {
         // Convert table to a function and call via pcall that respects the `__call` metamethod.
-        Function(self.0.clone()).call(args)
+        Function(self.0.copy()).call(args)
     }
 
     #[cfg(feature = "async")]
-    fn call_async<A, R>(&self, args: A) -> LocalBoxFuture<'lua, Result<R>>
+    #[inline]
+    fn call_async<R>(&self, args: impl IntoLuaMulti) -> impl Future<Output = Result<R>>
     where
-        A: IntoLuaMulti<'lua>,
-        R: FromLuaMulti<'lua> + 'lua,
+        R: FromLuaMulti,
     {
-        let args = match args.into_lua_multi(self.0.lua) {
-            Ok(args) => args,
-            Err(e) => return Box::pin(future::err(e)),
-        };
-        let func = Function(self.0.clone());
-        Box::pin(async move { func.call_async(args).await })
+        Function(self.0.copy()).call_async(args)
     }
 
-    fn call_method<A, R>(&self, name: &str, args: A) -> Result<R>
+    #[inline]
+    fn call_method<R>(&self, name: &str, args: impl IntoLuaMulti) -> Result<R>
     where
-        A: IntoLuaMulti<'lua>,
-        R: FromLuaMulti<'lua>,
+        R: FromLuaMulti,
     {
-        let lua = self.0.lua;
-        let mut args = args.into_lua_multi(lua)?;
-        args.push_front(Value::Table(self.clone()));
-        self.get::<_, Function>(name)?.call(args)
-    }
-
-    fn call_function<A, R>(&self, name: &str, args: A) -> Result<R>
-    where
-        A: IntoLuaMulti<'lua>,
-        R: FromLuaMulti<'lua>,
-    {
-        self.get::<_, Function>(name)?.call(args)
+        self.call_function(name, (self, args))
     }
 
     #[cfg(feature = "async")]
-    fn call_async_method<A, R>(&self, name: &str, args: A) -> LocalBoxFuture<'lua, Result<R>>
+    fn call_async_method<R>(&self, name: &str, args: impl IntoLuaMulti) -> impl Future<Output = Result<R>>
     where
-        A: IntoLuaMulti<'lua>,
-        R: FromLuaMulti<'lua> + 'lua,
+        R: FromLuaMulti,
     {
-        let lua = self.0.lua;
-        let mut args = match args.into_lua_multi(lua) {
-            Ok(args) => args,
-            Err(e) => return Box::pin(future::err(e)),
-        };
-        args.push_front(Value::Table(self.clone()));
-        self.call_async_function(name, args)
+        self.call_async_function(name, (self, args))
     }
 
-    #[cfg(feature = "async")]
-    fn call_async_function<A, R>(&self, name: &str, args: A) -> LocalBoxFuture<'lua, Result<R>>
-    where
-        A: IntoLuaMulti<'lua>,
-        R: FromLuaMulti<'lua> + 'lua,
-    {
-        let lua = self.0.lua;
-        let args = match args.into_lua_multi(lua) {
-            Ok(args) => args,
-            Err(e) => return Box::pin(future::err(e)),
-        };
-        match self.get::<_, Function>(name) {
-            Ok(func) => Box::pin(async move { func.call_async(args).await }),
-            Err(e) => Box::pin(future::err(e)),
+    #[inline]
+    fn call_function<R: FromLuaMulti>(&self, name: &str, args: impl IntoLuaMulti) -> Result<R> {
+        match self.get(name)? {
+            Value::Function(func) => func.call(args),
+            val => {
+                let msg = format!("attempt to call a {} value (function '{name}')", val.type_name());
+                Err(Error::runtime(msg))
+            }
         }
+    }
+
+    #[cfg(feature = "async")]
+    #[inline]
+    fn call_async_function<R>(&self, name: &str, args: impl IntoLuaMulti) -> impl Future<Output = Result<R>>
+    where
+        R: FromLuaMulti,
+    {
+        match self.get(name) {
+            Ok(Value::Function(func)) => Either::Left(func.call_async(args)),
+            Ok(val) => {
+                let msg = format!("attempt to call a {} value (function '{name}')", val.type_name());
+                Either::Right(future::ready(Err(Error::RuntimeError(msg))))
+            }
+            Err(err) => Either::Right(future::ready(Err(err))),
+        }
+    }
+
+    #[inline]
+    fn to_string(&self) -> Result<StdString> {
+        Value::Table(Table(self.0.copy())).to_string()
     }
 }
 
 /// A wrapped [`Table`] with customized serialization behavior.
 #[cfg(feature = "serialize")]
-pub(crate) struct SerializableTable<'a, 'lua> {
-    table: &'a Table<'lua>,
+pub(crate) struct SerializableTable<'a> {
+    table: &'a Table,
     options: crate::serde::de::Options,
     visited: Rc<RefCell<FxHashSet<*const c_void>>>,
 }
 
 #[cfg(feature = "serialize")]
-impl<'lua> Serialize for Table<'lua> {
+impl Serialize for Table {
     #[inline]
     fn serialize<S: Serializer>(&self, serializer: S) -> StdResult<S::Ok, S::Error> {
         SerializableTable::new(self, Default::default(), Default::default()).serialize(serializer)
@@ -1068,10 +950,10 @@ impl<'lua> Serialize for Table<'lua> {
 }
 
 #[cfg(feature = "serialize")]
-impl<'a, 'lua> SerializableTable<'a, 'lua> {
+impl<'a> SerializableTable<'a> {
     #[inline]
     pub(crate) fn new(
-        table: &'a Table<'lua>,
+        table: &'a Table,
         options: crate::serde::de::Options,
         visited: Rc<RefCell<FxHashSet<*const c_void>>>,
     ) -> Self {
@@ -1084,7 +966,7 @@ impl<'a, 'lua> SerializableTable<'a, 'lua> {
 }
 
 #[cfg(feature = "serialize")]
-impl<'a, 'lua> Serialize for SerializableTable<'a, 'lua> {
+impl Serialize for SerializableTable<'_> {
     fn serialize<S>(&self, serializer: S) -> StdResult<S::Ok, S::Error>
     where
         S: Serializer,
@@ -1118,7 +1000,7 @@ impl<'a, 'lua> Serialize for SerializableTable<'a, 'lua> {
                 seq.serialize_element(&SerializableValue::new(&value, options, Some(visited)))
                     .map_err(|err| {
                         serialize_err = Some(err);
-                        Error::SerializeError(String::new())
+                        Error::SerializeError(StdString::new())
                     })
             });
             convert_result(res, serialize_err)?;
@@ -1143,7 +1025,7 @@ impl<'a, 'lua> Serialize for SerializableTable<'a, 'lua> {
             )
             .map_err(|err| {
                 serialize_err = Some(err);
-                Error::SerializeError(String::new())
+                Error::SerializeError(StdString::new())
             })
         };
 
@@ -1151,7 +1033,7 @@ impl<'a, 'lua> Serialize for SerializableTable<'a, 'lua> {
             // Fast track
             self.table.for_each(process_pair)
         } else {
-            MapPairs::new(self.table.clone(), self.options.sort_keys)
+            MapPairs::new(self.table, self.options.sort_keys)
                 .map_err(serde::ser::Error::custom)?
                 .try_for_each(|kv| {
                     let (key, value) = kv?;
@@ -1168,39 +1050,40 @@ impl<'a, 'lua> Serialize for SerializableTable<'a, 'lua> {
 /// This struct is created by the [`Table::pairs`] method.
 ///
 /// [`Table::pairs`]: crate::Table::pairs
-pub struct TablePairs<'lua, K, V> {
-    table: LuaRef<'lua>,
-    key: Option<Value<'lua>>,
+pub struct TablePairs<'a, K, V> {
+    guard: LuaGuard,
+    table: &'a Table,
+    key: Option<Value>,
     _phantom: PhantomData<(K, V)>,
 }
 
-impl<'lua, K, V> Iterator for TablePairs<'lua, K, V>
+impl<K, V> Iterator for TablePairs<'_, K, V>
 where
-    K: FromLua<'lua>,
-    V: FromLua<'lua>,
+    K: FromLua,
+    V: FromLua,
 {
     type Item = Result<(K, V)>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(prev_key) = self.key.take() {
-            let lua = self.table.lua;
+            let lua: &RawLua = &self.guard;
             let state = lua.state();
 
             let res = (|| unsafe {
                 let _sg = StackGuard::new(state);
                 check_stack(state, 5)?;
 
-                lua.push_ref(&self.table);
-                lua.push_value(prev_key)?;
+                lua.push_ref(&self.table.0);
+                lua.push_value(&prev_key)?;
 
                 // It must be safe to call `lua_next` unprotected as deleting a key from a table is
                 // a permitted operation.
                 // It fails only if the key is not found (never existed) which seems impossible scenario.
                 if ffi::lua_next(state, -2) != 0 {
-                    let key = lua.stack_value(-2);
+                    let key = lua.stack_value(-2, None);
                     Ok(Some((
                         key.clone(),
-                        K::from_lua(key, lua)?,
+                        K::from_lua(key, lua.lua())?,
                         V::from_stack(-1, lua)?,
                     )))
                 } else {
@@ -1227,21 +1110,21 @@ where
 /// This struct is created by the [`Table::sequence_values`] method.
 ///
 /// [`Table::sequence_values`]: crate::Table::sequence_values
-pub struct TableSequence<'lua, V> {
-    // TODO: Use `&Table`
-    table: LuaRef<'lua>,
+pub struct TableSequence<'a, V> {
+    guard: LuaGuard,
+    table: &'a Table,
     index: Integer,
     _phantom: PhantomData<V>,
 }
 
-impl<'lua, V> Iterator for TableSequence<'lua, V>
+impl<V> Iterator for TableSequence<'_, V>
 where
-    V: FromLua<'lua>,
+    V: FromLua,
 {
     type Item = Result<V>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let lua = self.table.lua;
+        let lua: &RawLua = &self.guard;
         let state = lua.state();
         unsafe {
             let _sg = StackGuard::new(state);
@@ -1249,7 +1132,7 @@ where
                 return Some(Err(err));
             }
 
-            lua.push_ref(&self.table);
+            lua.push_ref(&self.table.0);
             match ffi::lua_rawgeti(state, -1, self.index) {
                 ffi::LUA_TNIL => None,
                 _ => {
@@ -1265,8 +1148,8 @@ where
 mod assertions {
     use super::*;
 
+    #[cfg(not(feature = "send"))]
     static_assertions::assert_not_impl_any!(Table: Send);
-
-    #[cfg(feature = "unstable")]
-    static_assertions::assert_not_impl_any!(OwnedTable: Send);
+    #[cfg(feature = "send")]
+    static_assertions::assert_impl_all!(Table: Send, Sync);
 }

@@ -2,7 +2,7 @@ use std::ffi::CStr;
 use std::os::raw::{c_float, c_int};
 
 use crate::error::Result;
-use crate::lua::Lua;
+use crate::state::Lua;
 
 // Since Luau has some missing standard functions, we re-implement them here
 
@@ -10,10 +10,7 @@ impl Lua {
     pub(crate) unsafe fn configure_luau(&self) -> Result<()> {
         let globals = self.globals();
 
-        globals.raw_set(
-            "collectgarbage",
-            self.create_c_function(lua_collectgarbage)?,
-        )?;
+        globals.raw_set("collectgarbage", self.create_c_function(lua_collectgarbage)?)?;
         globals.raw_set("vector", self.create_c_function(lua_vector)?)?;
 
         // Set `_VERSION` global to include version number

@@ -10,9 +10,9 @@ use mlua::{chunk, ExternalResult, Lua, Result, UserData, UserDataMethods};
 struct BodyReader(Incoming);
 
 impl UserData for BodyReader {
-    fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
+    fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
         // Every call returns a next chunk
-        methods.add_async_method_mut("read", |lua, reader, ()| async move {
+        methods.add_async_method_mut("read", |lua, mut reader, ()| async move {
             if let Some(bytes) = reader.0.frame().await {
                 if let Some(bytes) = bytes.into_lua_err()?.data_ref() {
                     return Some(lua.create_string(&bytes)).transpose();

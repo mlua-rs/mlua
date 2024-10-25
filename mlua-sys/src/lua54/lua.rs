@@ -1,9 +1,8 @@
 //! Contains definitions from `lua.h`.
 
 use std::marker::{PhantomData, PhantomPinned};
-use std::mem;
 use std::os::raw::{c_char, c_double, c_int, c_uchar, c_ushort, c_void};
-use std::ptr;
+use std::{mem, ptr};
 
 // Mark for precompiled code (`<esc>Lua`)
 pub const LUA_SIGNATURE: &[u8] = b"\x1bLua";
@@ -101,8 +100,7 @@ pub type lua_Alloc =
     unsafe extern "C-unwind" fn(ud: *mut c_void, ptr: *mut c_void, osize: usize, nsize: usize) -> *mut c_void;
 
 /// Type for warning functions
-pub type lua_WarnFunction =
-    unsafe extern "C-unwind" fn(ud: *mut c_void, msg: *const c_char, tocont: c_int);
+pub type lua_WarnFunction = unsafe extern "C-unwind" fn(ud: *mut c_void, msg: *const c_char, tocont: c_int);
 
 #[cfg_attr(all(windows, raw_dylib), link(name = "lua54", kind = "raw-dylib"))]
 extern "C-unwind" {
@@ -266,12 +264,7 @@ extern "C-unwind" {
         mode: *const c_char,
     ) -> c_int;
 
-    pub fn lua_dump(
-        L: *mut lua_State,
-        writer: lua_Writer,
-        data: *mut c_void,
-        strip: c_int,
-    ) -> c_int;
+    pub fn lua_dump(L: *mut lua_State, writer: lua_Writer, data: *mut c_void, strip: c_int) -> c_int;
 }
 
 #[inline(always)]
@@ -295,12 +288,7 @@ extern "C-unwind" {
         ctx: lua_KContext,
         k: Option<lua_KFunction>,
     ) -> c_int;
-    pub fn lua_resume(
-        L: *mut lua_State,
-        from: *mut lua_State,
-        narg: c_int,
-        nres: *mut c_int,
-    ) -> c_int;
+    pub fn lua_resume(L: *mut lua_State, from: *mut lua_State, narg: c_int, nres: *mut c_int) -> c_int;
     pub fn lua_status(L: *mut lua_State) -> c_int;
     pub fn lua_isyieldable(L: *mut lua_State) -> c_int;
 }

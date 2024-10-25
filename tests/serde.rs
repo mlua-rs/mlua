@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::error::Error as StdError;
 
 use mlua::{
-    DeserializeOptions, Error, ExternalResult, Lua, LuaSerdeExt, Result as LuaResult,
+    AnyUserData, DeserializeOptions, Error, ExternalResult, IntoLua, Lua, LuaSerdeExt, Result as LuaResult,
     SerializeOptions, UserData, Value,
 };
 use serde::{Deserialize, Serialize};
@@ -72,62 +72,30 @@ fn test_serialize() -> Result<(), Box<dyn StdError>> {
 }
 
 #[test]
-fn test_serialize_in_scope() -> LuaResult<()> {
-    #[derive(Serialize, Clone)]
-    struct MyUserData(i64, String);
-
-    impl UserData for MyUserData {}
-
-    let lua = Lua::new();
-    lua.scope(|scope| {
-        let ud = scope.create_ser_userdata(MyUserData(-5, "test userdata".into()))?;
-        assert_eq!(
-            serde_json::to_value(&ud).unwrap(),
-            serde_json::json!((-5, "test userdata"))
-        );
-        Ok(())
-    })?;
-
-    lua.scope(|scope| {
-        let ud = scope.create_ser_userdata(MyUserData(-5, "test userdata".into()))?;
-        lua.globals().set("ud", ud)
-    })?;
-    let val = lua.load("ud").eval::<Value>()?;
-    match serde_json::to_value(&val) {
-        Ok(v) => panic!("expected destructed error, got {}", v),
-        Err(e) if e.to_string().contains("destructed") => {}
-        Err(e) => panic!("expected destructed error, got {}", e),
-    }
-
-    struct MyUserDataRef<'a>(#[allow(unused)] &'a ());
-
-    impl<'a> UserData for MyUserDataRef<'a> {}
-
-    lua.scope(|scope| {
-        let ud = scope.create_nonstatic_userdata(MyUserDataRef(&()))?;
-        match serde_json::to_value(&ud) {
-            Ok(v) => panic!("expected serialization error, got {}", v),
-            Err(serde_json::Error { .. }) => {}
-        };
-        Ok(())
-    })?;
-
-    Ok(())
-}
-
-#[test]
-fn test_serialize_any_userdata() -> Result<(), Box<dyn StdError>> {
+fn test_serialize_any_userdata() {
     let lua = Lua::new();
 
     let json_val = serde_json::json!({
         "a": 1,
         "b": "test",
     });
-    let json_ud = lua.create_ser_any_userdata(json_val)?;
-    let json_str = serde_json::to_string_pretty(&json_ud)?;
+    let json_ud = lua.create_ser_any_userdata(json_val).unwrap();
+    let json_str = serde_json::to_string_pretty(&json_ud).unwrap();
     assert_eq!(json_str, "{\n  \"a\": 1,\n  \"b\": \"test\"\n}");
+}
 
-    Ok(())
+#[test]
+fn test_serialize_wrapped_any_userdata() {
+    let lua = Lua::new();
+
+    let json_val = serde_json::json!({
+        "a": 1,
+        "b": "test",
+    });
+    let ud = AnyUserData::wrap_ser(json_val);
+    let json_ud = ud.into_lua(&lua).unwrap();
+    let json_str = serde_json::to_string(&json_ud).unwrap();
+    assert_eq!(json_str, "{\"a\":1,\"b\":\"test\"}");
 }
 
 #[test]
@@ -395,10 +363,7 @@ fn test_to_value_with_options() -> Result<(), Box<dyn StdError>> {
         unit: (),
         unitstruct: UnitStruct,
     };
-    let data2 = lua.to_value_with(
-        &mydata,
-        SerializeOptions::new().serialize_none_to_null(false),
-    )?;
+    let data2 = lua.to_value_with(&mydata, SerializeOptions::new().serialize_none_to_null(false))?;
     globals.set("data2", data2)?;
     lua.load(
         r#"
@@ -410,10 +375,7 @@ fn test_to_value_with_options() -> Result<(), Box<dyn StdError>> {
     .exec()?;
 
     // serialize_unit_to_null
-    let data3 = lua.to_value_with(
-        &mydata,
-        SerializeOptions::new().serialize_unit_to_null(false),
-    )?;
+    let data3 = lua.to_value_with(&mydata, SerializeOptions::new().serialize_unit_to_null(false))?;
     globals.set("data3", data3)?;
     lua.load(
         r#"
@@ -767,27 +729,29 @@ fn test_arbitrary_precision() {
 
 #[cfg(feature = "luau")]
 #[test]
-fn test_buffer_serialize() {
+fn test_buffer_serialize() -> LuaResult<()> {
     let lua = Lua::new();
 
-    let buf = lua.create_buffer(&[1, 2, 3, 4]).unwrap();
+    let buf = lua.create_buffer(&[1, 2, 3, 4])?;
     let val = serde_value::to_value(&buf).unwrap();
     assert_eq!(val, serde_value::Value::Bytes(vec![1, 2, 3, 4]));
 
     // Try empty buffer
-    let buf = lua.create_buffer(&[]).unwrap();
+    let buf = lua.create_buffer(&[])?;
     let val = serde_value::to_value(&buf).unwrap();
     assert_eq!(val, serde_value::Value::Bytes(vec![]));
+
+    Ok(())
 }
 
 #[cfg(feature = "luau")]
 #[test]
-fn test_buffer_from_value() {
+fn test_buffer_from_value() -> LuaResult<()> {
     let lua = Lua::new();
 
-    let buf = lua.create_buffer(&[1, 2, 3, 4]).unwrap();
-    let val = lua
-        .from_value::<serde_value::Value>(Value::UserData(buf))
-        .unwrap();
+    let buf = lua.create_buffer(&[1, 2, 3, 4])?;
+    let val = lua.from_value::<serde_value::Value>(Value::Buffer(buf)).unwrap();
     assert_eq!(val, serde_value::Value::Bytes(vec![1, 2, 3, 4]));
+
+    Ok(())
 }
