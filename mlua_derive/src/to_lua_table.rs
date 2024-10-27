@@ -24,8 +24,8 @@ pub fn to_lua_table(input: TokenStream) -> TokenStream {
     });
 
     let gen = quote! {
-        impl<'lua> ::mlua::IntoLua<'lua> for #ident {
-            fn into_lua(self, lua: &'lua ::mlua::Lua) -> ::mlua::Result<::mlua::Value<'lua>> {
+        impl mlua::IntoLua for #ident {
+            fn into_lua(self, lua: &mlua::Lua) -> ::mlua::Result<::mlua::Value> {
                 let table = lua.create_table()?;
                 #(#set_fields)*
                 Ok(::mlua::Value::Table(table))

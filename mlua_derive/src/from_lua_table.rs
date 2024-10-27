@@ -24,8 +24,8 @@ pub fn from_lua_table(input: TokenStream) -> TokenStream {
     });
 
     let gen = quote! {
-        impl<'lua> ::mlua::FromLua<'lua> for #ident {
-            fn from_lua(lua_value: ::mlua::Value<'lua>, lua: &'lua ::mlua::Lua) -> ::mlua::Result<Self> {
+        impl mlua::FromLua for #ident {
+            fn from_lua(lua_value: mlua::Value, lua: &mlua::Lua) -> ::mlua::Result<Self> {
                 if let ::mlua::Value::Table(table) = lua_value {
                     Ok(Self {
                         #(#get_fields)*
@@ -33,7 +33,7 @@ pub fn from_lua_table(input: TokenStream) -> TokenStream {
                 } else {
                     Err(::mlua::Error::FromLuaConversionError {
                         from: lua_value.type_name(),
-                        to: stringify!(#ident),
+                        to: stringify!(#ident).to_string(),
                         message: Some(String::from("expected a Lua table")),
                     })
                 }

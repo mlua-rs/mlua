@@ -47,6 +47,16 @@ ultraviolet = ["dep:ultraviolet"]
 json = ["serialize", "serde_json"]
 macros = ["mlua_derive/macros"]
 anyhow = ["dep:anyhow", "error-send"]
+# default = [
+#     "luajit",
+#     "vendored",
+#     "macros",
+#     "uuid",
+#     "json",
+#     "time",
+#     "send",
+#     "async",
+# ]
 
 [dependencies]
 mlua_derive = { version = "=0.10.0", optional = true, path = "mlua_derive" }

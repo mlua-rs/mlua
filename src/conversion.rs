@@ -350,8 +350,8 @@ impl FromLua for LightUserData {
 }
 
 #[cfg(feature = "time")]
-impl<'lua> IntoLua<'lua> for time::OffsetDateTime {
-    fn into_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
+impl IntoLua for time::OffsetDateTime {
+    fn into_lua(self, lua: &Lua) -> Result<Value> {
         let datetime_str = self.format(&time::format_description::well_known::Rfc3339).map_err(|e| Error::RuntimeError(e.to_string()))?;
         let lua_string = lua.create_string(&datetime_str)?;
         Ok(Value::String(lua_string))
@@ -359,20 +359,20 @@ impl<'lua> IntoLua<'lua> for time::OffsetDateTime {
 }
 
 #[cfg(feature = "time")]
-impl<'lua> FromLua<'lua> for time::OffsetDateTime {
-    fn from_lua(value: Value<'lua>, _: &'lua Lua) -> Result<Self> {
+impl FromLua for time::OffsetDateTime {
+    fn from_lua(value: Value, _: &Lua) -> Result<Self> {
         match value {
             Value::String(lua_string) => {
                 let datetime_str = lua_string.to_str()?;
-                time::OffsetDateTime::parse(datetime_str, &time::format_description::well_known::Rfc3339).map_err(|e| Error::FromLuaConversionError {
+                time::OffsetDateTime::parse(&datetime_str, &time::format_description::well_known::Rfc3339).map_err(|e| Error::FromLuaConversionError {
                     from: "string",
-                    to: "time::OffsetDateTime",
+                    to: "time::OffsetDateTime".to_string(),
                     message: Some(e.to_string()),
                 })
             },
             _ => Err(Error::FromLuaConversionError {
                 from: value.type_name(),
-                to: "time::OffsetDateTime",
+                to: "time::OffsetDateTime".to_string(),
                 message: Some("Expected a string".to_string()),
             }),
         }
@@ -380,9 +380,9 @@ impl<'lua> FromLua<'lua> for time::OffsetDateTime {
 }
 
 #[cfg(feature = "json")]
-impl<'lua> IntoLua<'lua> for serde_json::Value {
+impl IntoLua for serde_json::Value {
     #[inline]
-    fn into_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
+    fn into_lua(self, lua: &Lua) -> Result<Value> {
         match self {
             serde_json::Value::Null => Ok(Value::Nil),
             serde_json::Value::Bool(b) => Ok(Value::Boolean(b)),
@@ -394,7 +394,7 @@ impl<'lua> IntoLua<'lua> for serde_json::Value {
                 } else {
                     Err(Error::FromLuaConversionError {
                         from: "number",
-                        to: "Value",
+                        to: "Value".to_string(),
                         message: Some("Invalid number".to_string()),
                     })
                 }
@@ -422,12 +422,12 @@ impl<'lua> IntoLua<'lua> for serde_json::Value {
 }
 
 #[cfg(feature = "json")]
-impl<'lua> FromLua<'lua> for serde_json::Value {
-    fn from_lua(value: Value<'lua>, _: &'lua Lua) -> Result<Self> {
+impl FromLua for serde_json::Value {
+    fn from_lua(value: Value, _: &Lua) -> Result<Self> {
         let ty = value.type_name();
         serde_json::to_value(value).map_err(|e| Error::FromLuaConversionError {
             from: ty,
-            to: "serde_json::Value",
+            to: "serde_json::Value".to_string(),
             message: Some(format!("{}", e)),
         })
     }
@@ -435,9 +435,9 @@ impl<'lua> FromLua<'lua> for serde_json::Value {
 
 
 #[cfg(feature = "json")]
-impl<'lua> IntoLua<'lua> for &'_ serde_json::Value {
+impl IntoLua for &serde_json::Value {
     #[inline]
-    fn into_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
+    fn into_lua(self, lua: &Lua) -> Result<Value> {
         match self {
             serde_json::Value::Null => Ok(Value::Nil),
             serde_json::Value::Bool(b) => Ok(Value::Boolean(*b)),
@@ -449,7 +449,7 @@ impl<'lua> IntoLua<'lua> for &'_ serde_json::Value {
                 } else {
                     Err(Error::FromLuaConversionError {
                         from: "number",
-                        to: "Value",
+                        to: "Value".to_string(),
                         message: Some("Invalid number".to_string()),
                     })
                 }
@@ -477,23 +477,23 @@ impl<'lua> IntoLua<'lua> for &'_ serde_json::Value {
 }
 
 #[cfg(feature = "uuid")]
-impl<'lua> FromLua<'lua> for uuid::Uuid {
+impl FromLua for uuid::Uuid {
     #[inline]
-    fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> Result<uuid::Uuid> {
+    fn from_lua(value: Value, lua: &Lua) -> Result<uuid::Uuid> {
         let ty = value.type_name();
         let string_result = lua.coerce_string(value)?
             .ok_or_else(|| Error::FromLuaConversionError {
                 from: ty,
-                to: "string",
+                to: "string".to_string(),
                 message: Some("expected string uuid".to_string()),
             });
         match string_result {
             Ok(string) => {
-                match uuid::Uuid::parse_str(string.to_str()?) {
+                match uuid::Uuid::parse_str(&string.to_str()?) {
                     Ok(val) => Ok(val),
                     Err(_) => Err(Error::FromLuaConversionError {
                         from: "string",
-                        to: "uuid::Uuid",
+                        to: "uuid::Uuid".to_string(),
                         message: Some("failed to parse UUID".to_string()),
                     })
                 }
@@ -504,24 +504,24 @@ impl<'lua> FromLua<'lua> for uuid::Uuid {
 }
 
 #[cfg(feature = "uuid")]
-impl<'lua> IntoLua<'lua> for uuid::Uuid {
+impl IntoLua for uuid::Uuid {
     #[inline]
-    fn into_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
+    fn into_lua(self, lua: &Lua) -> Result<Value> {
         let uuid_string = lua.create_string(self.to_string().as_str())?;
         Ok(Value::String(uuid_string))
     }
 }
 
 #[cfg(feature = "uuid")]
-impl<'lua> IntoLua<'lua> for &uuid::Uuid {
+impl IntoLua for &uuid::Uuid {
     #[inline]
-    fn into_lua(self, lua: &'lua Lua) -> Result<Value<'lua>> {
+    fn into_lua(self, lua: &Lua) -> Result<Value> {
         let uuid_string = lua.create_string(self.to_string().as_str())?;
         Ok(Value::String(uuid_string))
     }
 
     #[inline]
-    unsafe fn push_into_stack(self, lua: &'lua Lua) -> Result<()> {
+    unsafe fn push_into_stack(self, lua: &RawLua) -> Result<()> {
         let uuid_string = lua.create_string(self.to_string().as_str())?;
         lua.push_ref(&uuid_string.0);
         Ok(())
