@@ -1,10 +1,12 @@
 use proc_macro::TokenStream;
 use quote::{quote, format_ident};
-use syn::{parse_macro_input, DeriveInput, Data, Fields};
+use syn::{parse_macro_input, DeriveInput, Data, Fields, Generics};
 
 pub fn to_lua_table(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let ident = input.ident;
+    let generics = add_trait_bounds(input.generics);
+    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
 
     let fields = if let Data::Struct(data_struct) = input.data {
         match data_struct.fields {
@@ -24,7 +26,7 @@ pub fn to_lua_table(input: TokenStream) -> TokenStream {
     });
 
     let gen = quote! {
-        impl mlua::IntoLua for #ident {
+        impl #impl_generics mlua::IntoLua for #ident #ty_generics #where_clause {
             fn into_lua(self, lua: &mlua::Lua) -> ::mlua::Result<::mlua::Value> {
                 let table = lua.create_table()?;
                 #(#set_fields)*
@@ -34,4 +36,13 @@ pub fn to_lua_table(input: TokenStream) -> TokenStream {
     };
 
     gen.into()
+}
+
+fn add_trait_bounds(mut generics: Generics) -> Generics {
+    for param in &mut generics.params {
+        if let syn::GenericParam::Type(type_param) = param {
+            type_param.bounds.push(syn::parse_quote!(mlua::IntoLua));
+        }
+    }
+    generics
 }
