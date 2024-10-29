@@ -961,9 +961,9 @@ impl RawLua {
         #[cfg(feature = "luau")]
         let extra_init = None;
         #[cfg(not(feature = "luau"))]
-        let extra_init: Option<fn(*mut ffi::lua_State) -> Result<()>> = Some(|state| {
+        let extra_init: Option<fn(*mut ffi::lua_State, c_int) -> Result<()>> = Some(|state, mt_idx| {
             ffi::lua_pushcfunction(state, crate::util::userdata_destructor::<UserDataStorage<T>>);
-            rawset_field(state, -2, "__gc")
+            rawset_field(state, mt_idx, "__gc")
         });
 
         init_userdata_metatable(

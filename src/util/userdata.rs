@@ -152,7 +152,7 @@ pub(crate) unsafe fn init_userdata_metatable(
     field_getters: Option<c_int>,
     field_setters: Option<c_int>,
     methods: Option<c_int>,
-    extra_init: Option<fn(*mut ffi::lua_State) -> Result<()>>,
+    extra_init: Option<fn(*mut ffi::lua_State, c_int) -> Result<()>>,
 ) -> Result<()> {
     if field_getters.is_some() || methods.is_some() {
         // Push `__index` generator function
@@ -197,7 +197,7 @@ pub(crate) unsafe fn init_userdata_metatable(
 
     // Additional initialization
     if let Some(extra_init) = extra_init {
-        extra_init(state)?;
+        extra_init(state, metatable)?;
     }
 
     ffi::lua_pushboolean(state, 0);
