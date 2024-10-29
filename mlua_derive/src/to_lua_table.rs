@@ -11,10 +11,10 @@ pub fn to_lua_table(input: TokenStream) -> TokenStream {
     let fields = if let Data::Struct(data_struct) = input.data {
         match data_struct.fields {
             Fields::Named(fields) => fields,
-            _ => panic!("ToLua can only be derived for structs with named fields"),
+            _ => panic!("ToLuaTable can only be derived for structs with named fields"),
         }
     } else {
-        panic!("ToLua can only be derived for structs");
+        panic!("ToLuaTable can only be derived for structs");
     };
 
     let set_fields = fields.named.iter().map(|field| {
