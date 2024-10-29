@@ -3,7 +3,7 @@ use std::os::raw::{c_int, c_void};
 use std::{ptr, str};
 
 use crate::error::Result;
-use crate::util::{check_stack, get_metatable_ptr, push_string, push_table, rawset_field, TypeKey};
+use crate::util::{check_stack, get_metatable_ptr, push_table, rawget_field, rawset_field, TypeKey};
 
 // Pushes the userdata and attaches a metatable with __gc method.
 // Internally uses 3 stack spaces, does not call checkstack.
@@ -154,14 +154,11 @@ pub(crate) unsafe fn init_userdata_metatable(
     methods: Option<c_int>,
     extra_init: Option<fn(*mut ffi::lua_State) -> Result<()>>,
 ) -> Result<()> {
-    ffi::lua_pushvalue(state, metatable);
-
     if field_getters.is_some() || methods.is_some() {
         // Push `__index` generator function
         init_userdata_metatable_index(state)?;
 
-        push_string(state, b"__index", true)?;
-        let index_type = ffi::lua_rawget(state, -3);
+        let index_type = rawget_field(state, metatable, "__index")?;
         match index_type {
             ffi::LUA_TNIL | ffi::LUA_TTABLE | ffi::LUA_TFUNCTION => {
                 for &idx in &[field_getters, methods] {
@@ -175,28 +172,27 @@ pub(crate) unsafe fn init_userdata_metatable(
                 // Generate `__index`
                 protect_lua!(state, 4, 1, fn(state) ffi::lua_call(state, 3, 1))?;
             }
-            _ => mlua_panic!("improper __index type {}", index_type),
+            _ => mlua_panic!("improper `__index` type: {}", index_type),
         }
 
-        rawset_field(state, -2, "__index")?;
+        rawset_field(state, metatable, "__index")?;
     }
 
     if let Some(field_setters) = field_setters {
         // Push `__newindex` generator function
         init_userdata_metatable_newindex(state)?;
 
-        push_string(state, b"__newindex", true)?;
-        let newindex_type = ffi::lua_rawget(state, -3);
+        let newindex_type = rawget_field(state, metatable, "__newindex")?;
         match newindex_type {
             ffi::LUA_TNIL | ffi::LUA_TTABLE | ffi::LUA_TFUNCTION => {
                 ffi::lua_pushvalue(state, field_setters);
                 // Generate `__newindex`
                 protect_lua!(state, 3, 1, fn(state) ffi::lua_call(state, 2, 1))?;
             }
-            _ => mlua_panic!("improper __newindex type {}", newindex_type),
+            _ => mlua_panic!("improper `__newindex` type: {}", newindex_type),
         }
 
-        rawset_field(state, -2, "__newindex")?;
+        rawset_field(state, metatable, "__newindex")?;
     }
 
     // Additional initialization
@@ -205,9 +201,7 @@ pub(crate) unsafe fn init_userdata_metatable(
     }
 
     ffi::lua_pushboolean(state, 0);
-    rawset_field(state, -2, "__metatable")?;
-
-    ffi::lua_pop(state, 1);
+    rawset_field(state, metatable, "__metatable")?;
 
     Ok(())
 }

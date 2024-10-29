@@ -66,6 +66,11 @@ impl StackGuard {
     pub(crate) fn with_top(state: *mut ffi::lua_State, top: c_int) -> StackGuard {
         StackGuard { state, top }
     }
+
+    #[inline]
+    pub(crate) fn keep(&mut self, n: c_int) {
+        self.top += n;
+    }
 }
 
 impl Drop for StackGuard {
@@ -127,6 +132,15 @@ pub(crate) unsafe fn push_table(
         ffi::lua_createtable(state, narr, nrec);
         Ok(())
     }
+}
+
+// Uses 4 stack spaces, does not call checkstack.
+pub(crate) unsafe fn rawget_field(state: *mut ffi::lua_State, table: c_int, field: &str) -> Result<c_int> {
+    ffi::lua_pushvalue(state, table);
+    protect_lua!(state, 1, 1, |state| {
+        ffi::lua_pushlstring(state, field.as_ptr() as *const c_char, field.len());
+        ffi::lua_rawget(state, -2)
+    })
 }
 
 // Uses 4 stack spaces, does not call checkstack.

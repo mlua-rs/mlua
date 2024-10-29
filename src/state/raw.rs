@@ -832,7 +832,7 @@ impl RawLua {
 
     pub(crate) unsafe fn push_userdata_metatable<T>(&self, mut registry: UserDataRegistry<T>) -> Result<()> {
         let state = self.state();
-        let _sg = StackGuard::with_top(state, ffi::lua_gettop(state) + 1);
+        let mut stack_guard = StackGuard::new(state);
         check_stack(state, 13)?;
 
         // Prepare metatable, add meta methods first and then meta fields
@@ -862,8 +862,6 @@ impl RawLua {
             rawset_field(state, -2, MetaMethod::Type.name())?;
         }
         let metatable_index = ffi::lua_absindex(state, -1);
-
-        let mut extra_tables_count = 0;
 
         let fields_nrec = registry.fields.len();
         if fields_nrec > 0 {
@@ -909,7 +907,6 @@ impl RawLua {
                 rawset_field(state, -2, &k)?;
             }
             field_getters_index = Some(ffi::lua_absindex(state, -1));
-            extra_tables_count += 1;
         }
 
         let mut field_setters_index = None;
@@ -921,7 +918,6 @@ impl RawLua {
                 rawset_field(state, -2, &k)?;
             }
             field_setters_index = Some(ffi::lua_absindex(state, -1));
-            extra_tables_count += 1;
         }
 
         let mut methods_index = None;
@@ -958,7 +954,6 @@ impl RawLua {
                 }
                 _ => {
                     methods_index = Some(ffi::lua_absindex(state, -1));
-                    extra_tables_count += 1;
                 }
             }
         }
@@ -980,8 +975,8 @@ impl RawLua {
             extra_init,
         )?;
 
-        // Pop extra tables to get metatable on top of the stack
-        ffi::lua_pop(state, extra_tables_count);
+        // Update stack guard to keep metatable after return
+        stack_guard.keep(1);
 
         Ok(())
     }
