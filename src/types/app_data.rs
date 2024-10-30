@@ -1,5 +1,5 @@
 use std::any::{Any, TypeId};
-use std::cell::{Cell, Ref, RefCell, RefMut, UnsafeCell};
+use std::cell::{BorrowError, BorrowMutError, Cell, Ref, RefCell, RefMut, UnsafeCell};
 use std::fmt;
 use std::ops::{Deref, DerefMut};
 use std::result::Result as StdResult;
@@ -41,30 +41,66 @@ impl AppData {
             .and_then(|data| data.into_inner().downcast::<T>().ok().map(|data| *data)))
     }
 
+    #[inline]
     #[track_caller]
     pub(crate) fn borrow<T: 'static>(&self, guard: Option<LuaGuard>) -> Option<AppDataRef<T>> {
-        let data = unsafe { &*self.container.get() }
-            .get(&TypeId::of::<T>())?
-            .borrow();
-        self.borrow.set(self.borrow.get() + 1);
-        Some(AppDataRef {
-            data: Ref::filter_map(data, |data| data.downcast_ref()).ok()?,
-            borrow: &self.borrow,
-            _guard: guard,
-        })
+        match self.try_borrow(guard) {
+            Ok(data) => data,
+            Err(err) => panic!("already mutably borrowed: {err:?}"),
+        }
     }
 
+    pub(crate) fn try_borrow<T: 'static>(
+        &self,
+        guard: Option<LuaGuard>,
+    ) -> Result<Option<AppDataRef<T>>, BorrowError> {
+        let data = unsafe { &*self.container.get() }
+            .get(&TypeId::of::<T>())
+            .map(|c| c.try_borrow())
+            .transpose()?
+            .and_then(|data| Ref::filter_map(data, |data| data.downcast_ref()).ok());
+        match data {
+            Some(data) => {
+                self.borrow.set(self.borrow.get() + 1);
+                Ok(Some(AppDataRef {
+                    data,
+                    borrow: &self.borrow,
+                    _guard: guard,
+                }))
+            }
+            None => Ok(None),
+        }
+    }
+
+    #[inline]
     #[track_caller]
     pub(crate) fn borrow_mut<T: 'static>(&self, guard: Option<LuaGuard>) -> Option<AppDataRefMut<T>> {
+        match self.try_borrow_mut(guard) {
+            Ok(data) => data,
+            Err(err) => panic!("already borrowed: {err:?}"),
+        }
+    }
+
+    pub(crate) fn try_borrow_mut<T: 'static>(
+        &self,
+        guard: Option<LuaGuard>,
+    ) -> Result<Option<AppDataRefMut<T>>, BorrowMutError> {
         let data = unsafe { &*self.container.get() }
-            .get(&TypeId::of::<T>())?
-            .borrow_mut();
-        self.borrow.set(self.borrow.get() + 1);
-        Some(AppDataRefMut {
-            data: RefMut::filter_map(data, |data| data.downcast_mut()).ok()?,
-            borrow: &self.borrow,
-            _guard: guard,
-        })
+            .get(&TypeId::of::<T>())
+            .map(|c| c.try_borrow_mut())
+            .transpose()?
+            .and_then(|data| RefMut::filter_map(data, |data| data.downcast_mut()).ok());
+        match data {
+            Some(data) => {
+                self.borrow.set(self.borrow.get() + 1);
+                Ok(Some(AppDataRefMut {
+                    data,
+                    borrow: &self.borrow,
+                    _guard: guard,
+                }))
+            }
+            None => Ok(None),
+        }
     }
 
     #[track_caller]

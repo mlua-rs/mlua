@@ -844,10 +844,12 @@ fn test_application_data() -> Result<()> {
     assert_eq!(format!("{s:?}"), "\"test1\"");
 
     // Borrowing immutably and mutably of the same type is not allowed
+    assert!(lua.try_app_data_mut::<&str>().is_err());
     match catch_unwind(AssertUnwindSafe(|| lua.app_data_mut::<&str>().unwrap())) {
         Ok(_) => panic!("expected panic"),
         Err(_) => {}
     }
+    assert!(lua.try_app_data_ref::<Vec<&str>>().is_err());
     drop((s, v));
 
     // Test that application data is accessible from anywhere

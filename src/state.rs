@@ -1,5 +1,5 @@
 use std::any::TypeId;
-use std::cell::RefCell;
+use std::cell::{BorrowError, BorrowMutError, RefCell};
 use std::marker::PhantomData;
 use std::ops::Deref;
 use std::os::raw::c_int;
@@ -1854,6 +1854,14 @@ impl Lua {
         extra.app_data.borrow(Some(guard))
     }
 
+    /// Tries to get a reference to an application data object stored by [`Lua::set_app_data`] of
+    /// type `T`.
+    pub fn try_app_data_ref<T: 'static>(&self) -> StdResult<Option<AppDataRef<T>>, BorrowError> {
+        let guard = self.lock_arc();
+        let extra = unsafe { &*guard.extra.get() };
+        extra.app_data.try_borrow(Some(guard))
+    }
+
     /// Gets a mutable reference to an application data object stored by [`Lua::set_app_data`] of
     /// type `T`.
     ///
@@ -1865,6 +1873,14 @@ impl Lua {
         let guard = self.lock_arc();
         let extra = unsafe { &*guard.extra.get() };
         extra.app_data.borrow_mut(Some(guard))
+    }
+
+    /// Tries to get a mutable reference to an application data object stored by
+    /// [`Lua::set_app_data`] of type `T`.
+    pub fn try_app_data_mut<T: 'static>(&self) -> StdResult<Option<AppDataRefMut<T>>, BorrowMutError> {
+        let guard = self.lock_arc();
+        let extra = unsafe { &*guard.extra.get() };
+        extra.app_data.try_borrow_mut(Some(guard))
     }
 
     /// Removes an application data of type `T`.
