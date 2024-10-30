@@ -124,6 +124,23 @@ impl MultiValue {
         MultiValue(VecDeque::with_capacity(capacity))
     }
 
+    /// Creates a `MultiValue` container from vector of values.
+    ///
+    /// This methods needs *O*(*n*) data movement if the circular buffer doesn't happen to be at the
+    /// beginning of the allocation.
+    #[inline]
+    pub fn from_vec(vec: Vec<Value>) -> MultiValue {
+        vec.into()
+    }
+
+    /// Consumes the `MultiValue` and returns a vector of values.
+    ///
+    /// This methods works in *O*(1) time and does not allocate any additional memory.
+    #[inline]
+    pub fn into_vec(self) -> Vec<Value> {
+        self.into()
+    }
+
     #[inline]
     pub(crate) fn from_lua_iter<T: IntoLua>(lua: &Lua, iter: impl IntoIterator<Item = T>) -> Result<Self> {
         let iter = iter.into_iter();
@@ -132,6 +149,20 @@ impl MultiValue {
             multi_value.push_back(value.into_lua(lua)?);
         }
         Ok(multi_value)
+    }
+}
+
+impl From<Vec<Value>> for MultiValue {
+    #[inline]
+    fn from(value: Vec<Value>) -> Self {
+        MultiValue(value.into())
+    }
+}
+
+impl From<MultiValue> for Vec<Value> {
+    #[inline]
+    fn from(value: MultiValue) -> Self {
+        value.0.into()
     }
 }
 
@@ -203,7 +234,7 @@ impl FromLuaMulti for MultiValue {
 /// # Ok(())
 /// # }
 /// ```
-#[derive(Debug, Clone)]
+#[derive(Default, Debug, Clone)]
 pub struct Variadic<T>(Vec<T>);
 
 impl<T> Variadic<T> {
@@ -211,11 +242,38 @@ impl<T> Variadic<T> {
     pub const fn new() -> Variadic<T> {
         Variadic(Vec::new())
     }
+
+    /// Creates an empty `Variadic` container with space for at least `capacity` elements.
+    pub fn with_capacity(capacity: usize) -> Variadic<T> {
+        Variadic(Vec::with_capacity(capacity))
+    }
 }
 
-impl<T> Default for Variadic<T> {
-    fn default() -> Variadic<T> {
-        const { Variadic::new() }
+impl<T> Deref for Variadic<T> {
+    type Target = Vec<T>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<T> DerefMut for Variadic<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl<T> From<Vec<T>> for Variadic<T> {
+    #[inline]
+    fn from(vec: Vec<T>) -> Self {
+        Variadic(vec)
+    }
+}
+
+impl<T> From<Variadic<T>> for Vec<T> {
+    #[inline]
+    fn from(value: Variadic<T>) -> Self {
+        value.0
     }
 }
 
@@ -231,20 +289,6 @@ impl<T> IntoIterator for Variadic<T> {
 
     fn into_iter(self) -> Self::IntoIter {
         self.0.into_iter()
-    }
-}
-
-impl<T> Deref for Variadic<T> {
-    type Target = Vec<T>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl<T> DerefMut for Variadic<T> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
     }
 }
 
