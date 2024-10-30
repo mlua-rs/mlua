@@ -132,7 +132,9 @@ pub(crate) struct UserDataCell<T> {
     value: UnsafeCell<T>,
 }
 
+#[cfg(feature = "send")]
 unsafe impl<T: Send> Send for UserDataCell<T> {}
+#[cfg(feature = "send")]
 unsafe impl<T: Send> Sync for UserDataCell<T> {}
 
 impl<T> UserDataCell<T> {
