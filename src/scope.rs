@@ -19,7 +19,9 @@ use crate::util::{
 /// See [`Lua::scope`] for more details.
 pub struct Scope<'scope, 'env: 'scope> {
     lua: LuaGuard,
+    // Internal destructors run first, then user destructors (based on the declaration order)
     destructors: Destructors<'env>,
+    user_destructors: UserDestructors<'env>,
     _scope_invariant: PhantomData<&'scope mut &'scope ()>,
     _env_invariant: PhantomData<&'env mut &'env ()>,
 }
@@ -29,11 +31,14 @@ type DestructorCallback<'a> = Box<dyn FnOnce(&RawLua, ValueRef) -> Vec<Box<dyn F
 // Implement Drop on Destructors instead of Scope to avoid compilation error
 struct Destructors<'a>(RefCell<Vec<(ValueRef, DestructorCallback<'a>)>>);
 
+struct UserDestructors<'a>(RefCell<Vec<Box<dyn FnOnce() + 'a>>>);
+
 impl<'scope, 'env: 'scope> Scope<'scope, 'env> {
     pub(crate) fn new(lua: LuaGuard) -> Self {
         Scope {
             lua,
             destructors: Destructors(RefCell::new(Vec::new())),
+            user_destructors: UserDestructors(RefCell::new(Vec::new())),
             _scope_invariant: PhantomData,
             _env_invariant: PhantomData,
         }
@@ -215,6 +220,31 @@ impl<'scope, 'env: 'scope> Scope<'scope, 'env> {
         }
     }
 
+    /// Adds a destructor function to be run when the scope ends.
+    ///
+    /// This functionality is useful for cleaning up any resources after the scope ends.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// # use mlua::{Error, Lua, Result};
+    /// # fn main() -> Result<()> {
+    /// let lua = Lua::new();
+    /// let ud = lua.create_any_userdata(String::from("hello"))?;
+    /// lua.scope(|scope| {
+    ///     scope.add_destructor(|| {
+    ///         _ = ud.take::<String>();
+    ///     });
+    ///     // Run the code that uses `ud` here
+    ///    Ok(())
+    /// })?;
+    /// assert!(matches!(ud.borrow::<String>(), Err(Error::UserDataDestructed)));
+    /// # Ok(())
+    /// # }
+    pub fn add_destructor(&'scope self, destructor: impl FnOnce() + 'env) {
+        self.user_destructors.0.borrow_mut().push(Box::new(destructor));
+    }
+
     unsafe fn create_callback(&'scope self, f: ScopedCallback<'scope>) -> Result<Function> {
         let f = mem::transmute::<ScopedCallback, Callback>(f);
         let f = self.lua.create_callback(f)?;
@@ -268,6 +298,15 @@ impl Drop for Destructors<'_> {
                 .collect::<Vec<_>>();
 
             drop(to_drop);
+        }
+    }
+}
+
+impl Drop for UserDestructors<'_> {
+    fn drop(&mut self) {
+        let destructors = mem::take(&mut *self.0.borrow_mut());
+        for destructor in destructors {
+            destructor();
         }
     }
 }

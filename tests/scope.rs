@@ -1,6 +1,7 @@
 use std::cell::Cell;
 use std::rc::Rc;
 use std::string::String as StdString;
+use std::sync::Arc;
 
 use mlua::{
     AnyUserData, Error, Function, Lua, MetaMethod, ObjectLike, Result, String, UserData, UserDataFields,
@@ -62,6 +63,27 @@ fn test_scope_outer_lua_access() -> Result<()> {
     let table = lua.create_table()?;
     lua.scope(|scope| scope.create_function(|_, ()| table.set("a", "b"))?.call::<()>(()))?;
     assert_eq!(table.get::<String>("a")?, "b");
+
+    Ok(())
+}
+
+#[test]
+fn test_scope_capture_scope() -> Result<()> {
+    let lua = Lua::new();
+
+    let i = Cell::new(0);
+    lua.scope(|scope| {
+        let f = scope.create_function(|_, ()| {
+            scope.create_function(|_, n: u32| {
+                i.set(i.get() + n);
+                Ok(())
+            })
+        })?;
+        f.call::<Function>(())?.call::<()>(10)?;
+        Ok(())
+    })?;
+
+    assert_eq!(i.get(), 10);
 
     Ok(())
 }
@@ -459,6 +481,42 @@ fn test_scope_any_userdata_ref_mut() -> Result<()> {
         modify_userdata(&lua, &ud)
     })?;
     assert_eq!(data, 2);
+
+    Ok(())
+}
+
+#[test]
+fn test_scope_destructors() -> Result<()> {
+    let lua = Lua::new();
+
+    lua.register_userdata_type::<Arc<StdString>>(|reg| {
+        reg.add_meta_method("__tostring", |_, data, ()| Ok(data.to_string()));
+    })?;
+
+    let arc_str = Arc::new(StdString::from("foo"));
+
+    let ud = lua.create_any_userdata(arc_str.clone())?;
+    lua.scope(|scope| {
+        scope.add_destructor(|| {
+            assert!(ud.take::<Arc<StdString>>().is_ok());
+        });
+        Ok(())
+    })?;
+    assert_eq!(Arc::strong_count(&arc_str), 1);
+
+    // Try destructing the userdata while it's borrowed
+    let ud = lua.create_any_userdata(arc_str.clone())?;
+    ud.borrow_scoped::<Arc<StdString>, _>(|arc_str| {
+        assert_eq!(arc_str.as_str(), "foo");
+        lua.scope(|scope| {
+            scope.add_destructor(|| {
+                assert!(ud.take::<Arc<StdString>>().is_err());
+            });
+            Ok(())
+        })
+        .unwrap();
+        assert_eq!(arc_str.as_str(), "foo");
+    })?;
 
     Ok(())
 }
