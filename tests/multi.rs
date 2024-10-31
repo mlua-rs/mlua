@@ -1,4 +1,4 @@
-use mlua::{Error, ExternalError, IntoLuaMulti, Lua, MultiValue, Result, String, Value, Variadic};
+use mlua::{Error, ExternalError, Integer, IntoLuaMulti, Lua, MultiValue, Result, String, Value, Variadic};
 
 #[test]
 fn test_result_conversions() -> Result<()> {
@@ -65,7 +65,7 @@ fn test_multivalue() {
     multi.push_back(Value::Integer(1));
     multi.push_back(Value::Integer(2));
     multi.push_front(Value::Integer(3));
-    assert_eq!(multi.iter().filter_map(|v| v.as_integer()).sum::<i64>(), 6);
+    assert_eq!(multi.iter().filter_map(|v| v.as_integer()).sum::<Integer>(), 6);
 
     let vec = multi.into_vec();
     assert_eq!(&vec, &[Value::Integer(3), Value::Integer(1), Value::Integer(2)]);
