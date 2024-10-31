@@ -1470,9 +1470,10 @@ impl Lua {
     /// lifetimes only outlive the scope lifetime.
     pub fn scope<'env, R>(
         &self,
-        f: impl for<'scope> FnOnce(&'scope Scope<'scope, 'env>) -> Result<R>,
+        f: impl for<'scope> FnOnce(&'scope mut Scope<'scope, 'env>) -> Result<R>,
     ) -> Result<R> {
-        f(&Scope::new(self.lock_arc()))
+        // TODO: Update to `&Scope` in next major release
+        f(&mut Scope::new(self.lock_arc()))
     }
 
     /// Attempts to coerce a Lua value into a String in a manner consistent with Lua's internal
