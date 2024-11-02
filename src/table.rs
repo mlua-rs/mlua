@@ -777,16 +777,45 @@ impl Table {
         let mut pairs = self.pairs::<Value, Value>().flatten().collect::<Vec<_>>();
         // Sort keys
         pairs.sort_by(|(a, _), (b, _)| a.sort_cmp(b));
+        let is_sequence = pairs.iter().enumerate().all(|(i, (k, _))| {
+            if let Value::Integer(n) = k {
+                *n == (i + 1) as Integer
+            } else {
+                false
+            }
+        });
         if pairs.is_empty() {
             return write!(fmt, "{{}}");
         }
         writeln!(fmt, "{{")?;
-        for (key, value) in pairs {
-            write!(fmt, "{}[", " ".repeat(ident + 2))?;
-            key.fmt_pretty(fmt, false, ident + 2, visited)?;
-            write!(fmt, "] = ")?;
-            value.fmt_pretty(fmt, true, ident + 2, visited)?;
-            writeln!(fmt, ",")?;
+        if is_sequence {
+            // Format as list
+            for (_, value) in pairs {
+                write!(fmt, "{}", " ".repeat(ident + 2))?;
+                value.fmt_pretty(fmt, true, ident + 2, visited)?;
+                writeln!(fmt, ",")?;
+            }
+        } else {
+            for (key, value) in pairs {
+                match key {
+                    Value::String(key)
+                        if key
+                            .to_string_lossy()
+                            .chars()
+                            .all(|c| matches!(c, 'a'..='z' | 'A'..='Z' | '0'..='9' | '_')) =>
+                    {
+                        write!(fmt, "{}{}", " ".repeat(ident + 2), key.to_string_lossy())?;
+                        write!(fmt, " = ")?;
+                    }
+                    _ => {
+                        write!(fmt, "{}[", " ".repeat(ident + 2))?;
+                        key.fmt_pretty(fmt, false, ident + 2, visited)?;
+                        write!(fmt, "] = ")?;
+                    }
+                }
+                value.fmt_pretty(fmt, true, ident + 2, visited)?;
+                writeln!(fmt, ",")?;
+            }
         }
         write!(fmt, "{}}}", " ".repeat(ident))
     }
