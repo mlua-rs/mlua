@@ -1082,6 +1082,7 @@ mod cell;
 mod lock;
 mod object;
 mod registry;
+mod util;
 
 #[cfg(test)]
 mod assertions {

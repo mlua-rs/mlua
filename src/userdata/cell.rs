@@ -16,6 +16,7 @@ use crate::util::get_userdata;
 use crate::value::Value;
 
 use super::lock::{RawLock, UserDataLock};
+use super::util::is_sync;
 
 #[cfg(all(feature = "serialize", not(feature = "send")))]
 type DynSerialize = dyn erased_serde::Serialize;
@@ -164,7 +165,11 @@ impl<T> Deref for UserDataRef<T> {
 impl<T> Drop for UserDataRef<T> {
     #[inline]
     fn drop(&mut self) {
-        unsafe { self.0.raw_lock().unlock_shared() };
+        if !cfg!(feature = "send") || is_sync::<T>() {
+            unsafe { self.0.raw_lock().unlock_shared() };
+        } else {
+            unsafe { self.0.raw_lock().unlock_exclusive() };
+        }
     }
 }
 
@@ -185,7 +190,11 @@ impl<T> TryFrom<UserDataVariant<T>> for UserDataRef<T> {
 
     #[inline]
     fn try_from(variant: UserDataVariant<T>) -> Result<Self> {
-        if !variant.raw_lock().try_lock_shared() {
+        if !cfg!(feature = "send") || is_sync::<T>() {
+            if !variant.raw_lock().try_lock_shared() {
+                return Err(Error::UserDataBorrowError);
+            }
+        } else if !variant.raw_lock().try_lock_exclusive() {
             return Err(Error::UserDataBorrowError);
         }
         Ok(UserDataRef(variant))
@@ -282,7 +291,11 @@ pub(crate) struct UserDataBorrowRef<'a, T>(&'a UserDataVariant<T>);
 impl<T> Drop for UserDataBorrowRef<'_, T> {
     #[inline]
     fn drop(&mut self) {
-        unsafe { self.0.raw_lock().unlock_shared() };
+        if !cfg!(feature = "send") || is_sync::<T>() {
+            unsafe { self.0.raw_lock().unlock_shared() };
+        } else {
+            unsafe { self.0.raw_lock().unlock_exclusive() };
+        }
     }
 }
 
@@ -301,7 +314,11 @@ impl<'a, T> TryFrom<&'a UserDataVariant<T>> for UserDataBorrowRef<'a, T> {
 
     #[inline(always)]
     fn try_from(variant: &'a UserDataVariant<T>) -> Result<Self> {
-        if !variant.raw_lock().try_lock_shared() {
+        if !cfg!(feature = "send") || is_sync::<T>() {
+            if !variant.raw_lock().try_lock_shared() {
+                return Err(Error::UserDataBorrowError);
+            }
+        } else if !variant.raw_lock().try_lock_exclusive() {
             return Err(Error::UserDataBorrowError);
         }
         Ok(UserDataBorrowRef(variant))
