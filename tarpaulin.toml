@@ -1,5 +1,5 @@
 [lua54_coverage]
-features = "lua54,vendored,async,send,serialize,macros,anyhow"
+features = "lua54,vendored,async,send,serialize,macros,anyhow,userdata-wrappers"
 
 [lua54_with_memory_limit_coverage]
 features = "lua54,vendored,async,send,serialize,macros"
