@@ -57,6 +57,7 @@ Below is a list of the available feature flags. By default `mlua` does not enabl
 * `serialize`: add serialization and deserialization support to `mlua` types using [serde] framework
 * `macros`: enable procedural macros (such as `chunk!`)
 * `anyhow`: enable `anyhow::Error` conversion into Lua
+* `userdata-wrappers`: opt into `impl UserData` for `Rc<T>`/`Arc<T>`/`Rc<RefCell<T>>`/`Arc<Mutex<T>>` where `T: UserData`
 
 [5.4]: https://www.lua.org/manual/5.4/manual.html
 [5.3]: https://www.lua.org/manual/5.3/manual.html

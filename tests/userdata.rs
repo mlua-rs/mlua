@@ -881,3 +881,160 @@ fn test_nested_userdata_gc() -> Result<()> {
 
     Ok(())
 }
+
+#[cfg(feature = "userdata-wrappers")]
+#[test]
+fn test_userdata_wrappers() -> Result<()> {
+    struct MyUserData(i64);
+
+    impl UserData for MyUserData {
+        fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
+            fields.add_field("static", "constant");
+            fields.add_field_method_get("data", |_, this| Ok(this.0));
+            fields.add_field_method_set("data", |_, this, val| {
+                this.0 = val;
+                Ok(())
+            })
+        }
+    }
+
+    let lua = Lua::new();
+    let globals = lua.globals();
+
+    // Rc<T>
+    #[cfg(not(feature = "send"))]
+    {
+        let ud = std::rc::Rc::new(MyUserData(1));
+        globals.set("rc_ud", ud.clone())?;
+        lua.load(
+            r#"
+            assert(rc_ud.static == "constant")
+            local ok, err = pcall(function() rc_ud.data = 2 end)
+            assert(
+                tostring(err):sub(1, 32) == "error mutably borrowing userdata",
+                "expected error mutably borrowing userdata, got " .. tostring(err)
+            )
+            assert(rc_ud.data == 1)
+        "#,
+        )
+        .exec()
+        .unwrap();
+        globals.set("rc_ud", Nil)?;
+        lua.gc_collect()?;
+        assert_eq!(std::rc::Rc::strong_count(&ud), 1);
+    }
+
+    // Rc<RefCell<T>>
+    #[cfg(not(feature = "send"))]
+    {
+        let ud = std::rc::Rc::new(std::cell::RefCell::new(MyUserData(2)));
+        globals.set("rc_refcell_ud", ud.clone())?;
+        lua.load(
+            r#"
+            assert(rc_refcell_ud.static == "constant")
+            rc_refcell_ud.data = rc_refcell_ud.data + 1
+            assert(rc_refcell_ud.data == 3)
+        "#,
+        )
+        .exec()?;
+        assert_eq!(ud.borrow().0, 3);
+        globals.set("rc_refcell_ud", Nil)?;
+        lua.gc_collect()?;
+        assert_eq!(std::rc::Rc::strong_count(&ud), 1);
+    }
+
+    // Arc<T>
+    {
+        let ud = Arc::new(MyUserData(3));
+        globals.set("arc_ud", ud.clone())?;
+        lua.load(
+            r#"
+            assert(arc_ud.static == "constant")
+            local ok, err = pcall(function() arc_ud.data = 10 end)
+            assert(
+                tostring(err):sub(1, 32) == "error mutably borrowing userdata",
+                "expected error mutably borrowing userdata, got " .. tostring(err)
+            )
+            assert(arc_ud.data == 3)
+        "#,
+        )
+        .exec()?;
+        globals.set("arc_ud", Nil)?;
+        lua.gc_collect()?;
+        assert_eq!(Arc::strong_count(&ud), 1);
+    }
+
+    // Arc<Mutex<T>>
+    {
+        let ud = Arc::new(std::sync::Mutex::new(MyUserData(4)));
+        globals.set("arc_mutex_ud", ud.clone())?;
+        lua.load(
+            r#"
+            assert(arc_mutex_ud.static == "constant")
+            arc_mutex_ud.data = arc_mutex_ud.data + 1
+            assert(arc_mutex_ud.data == 5)
+        "#,
+        )
+        .exec()?;
+        assert_eq!(ud.lock().unwrap().0, 5);
+        globals.set("arc_mutex_ud", Nil)?;
+        lua.gc_collect()?;
+        assert_eq!(Arc::strong_count(&ud), 1);
+    }
+
+    // Arc<RwLock<T>>
+    {
+        let ud = Arc::new(std::sync::RwLock::new(MyUserData(6)));
+        globals.set("arc_rwlock_ud", ud.clone())?;
+        lua.load(
+            r#"
+            assert(arc_rwlock_ud.static == "constant")
+            arc_rwlock_ud.data = arc_rwlock_ud.data + 1
+            assert(arc_rwlock_ud.data == 7)
+        "#,
+        )
+        .exec()?;
+        assert_eq!(ud.read().unwrap().0, 7);
+        globals.set("arc_rwlock_ud", Nil)?;
+        lua.gc_collect()?;
+        assert_eq!(Arc::strong_count(&ud), 1);
+    }
+
+    // Arc<parking_lot::Mutex<T>>
+    {
+        let ud = Arc::new(parking_lot::Mutex::new(MyUserData(8)));
+        globals.set("arc_parking_lot_mutex_ud", ud.clone())?;
+        lua.load(
+            r#"
+            assert(arc_parking_lot_mutex_ud.static == "constant")
+            arc_parking_lot_mutex_ud.data = arc_parking_lot_mutex_ud.data + 1
+            assert(arc_parking_lot_mutex_ud.data == 9)
+        "#,
+        )
+        .exec()?;
+        assert_eq!(ud.lock().0, 9);
+        globals.set("arc_parking_lot_mutex_ud", Nil)?;
+        lua.gc_collect()?;
+        assert_eq!(Arc::strong_count(&ud), 1);
+    }
+
+    // Arc<parking_lot::RwLock<T>>
+    {
+        let ud = Arc::new(parking_lot::RwLock::new(MyUserData(10)));
+        globals.set("arc_parking_lot_rwlock_ud", ud.clone())?;
+        lua.load(
+            r#"
+            assert(arc_parking_lot_rwlock_ud.static == "constant")
+            arc_parking_lot_rwlock_ud.data = arc_parking_lot_rwlock_ud.data + 1
+            assert(arc_parking_lot_rwlock_ud.data == 11)
+        "#,
+        )
+        .exec()?;
+        assert_eq!(ud.read().0, 11);
+        globals.set("arc_parking_lot_rwlock_ud", Nil)?;
+        lua.gc_collect()?;
+        assert_eq!(Arc::strong_count(&ud), 1);
+    }
+
+    Ok(())
+}

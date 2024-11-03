@@ -21,12 +21,32 @@ use {
     std::future::{self, Future},
 };
 
+#[cfg(all(feature = "userdata-wrappers", not(feature = "send")))]
+use std::rc::Rc;
+#[cfg(feature = "userdata-wrappers")]
+use std::sync::{Arc, Mutex, RwLock};
+
 type StaticFieldCallback = Box<dyn FnOnce(&RawLua) -> Result<()> + 'static>;
 
 #[derive(Clone, Copy)]
-pub(crate) enum UserDataTypeId {
+enum UserDataTypeId {
     Shared(TypeId),
     Unique(usize),
+
+    #[cfg(all(feature = "userdata-wrappers", not(feature = "send")))]
+    Rc(TypeId),
+    #[cfg(all(feature = "userdata-wrappers", not(feature = "send")))]
+    RcRefCell(TypeId),
+    #[cfg(feature = "userdata-wrappers")]
+    Arc(TypeId),
+    #[cfg(feature = "userdata-wrappers")]
+    ArcMutex(TypeId),
+    #[cfg(feature = "userdata-wrappers")]
+    ArcRwLock(TypeId),
+    #[cfg(feature = "userdata-wrappers")]
+    ArcParkingLotMutex(TypeId),
+    #[cfg(feature = "userdata-wrappers")]
+    ArcParkingLotRwLock(TypeId),
 }
 
 /// Handle to registry for userdata methods and metamethods.
@@ -45,31 +65,23 @@ pub struct UserDataRegistry<T> {
     #[cfg(feature = "async")]
     pub(crate) async_meta_methods: Vec<(String, AsyncCallback)>,
 
-    pub(crate) type_id: UserDataTypeId,
+    type_id: UserDataTypeId,
     _type: PhantomData<T>,
 }
 
 impl<T> UserDataRegistry<T> {
-    #[inline]
+    #[inline(always)]
     pub(crate) fn new(type_id: TypeId) -> Self {
-        UserDataRegistry {
-            fields: Vec::new(),
-            field_getters: Vec::new(),
-            field_setters: Vec::new(),
-            meta_fields: Vec::new(),
-            methods: Vec::new(),
-            #[cfg(feature = "async")]
-            async_methods: Vec::new(),
-            meta_methods: Vec::new(),
-            #[cfg(feature = "async")]
-            async_meta_methods: Vec::new(),
-            type_id: UserDataTypeId::Shared(type_id),
-            _type: PhantomData,
-        }
+        Self::with_type_id(UserDataTypeId::Shared(type_id))
     }
 
-    #[inline]
-    pub(crate) fn new_unique(ud_ptr: *const c_void) -> Self {
+    #[inline(always)]
+    pub(crate) fn new_unique(ud_ptr: *mut c_void) -> Self {
+        Self::with_type_id(UserDataTypeId::Unique(ud_ptr as usize))
+    }
+
+    #[inline(always)]
+    fn with_type_id(type_id: UserDataTypeId) -> Self {
         UserDataRegistry {
             fields: Vec::new(),
             field_getters: Vec::new(),
@@ -81,7 +93,7 @@ impl<T> UserDataRegistry<T> {
             meta_methods: Vec::new(),
             #[cfg(feature = "async")]
             async_meta_methods: Vec::new(),
-            type_id: UserDataTypeId::Unique(ud_ptr as usize),
+            type_id,
             _type: PhantomData,
         }
     }
@@ -91,6 +103,20 @@ impl<T> UserDataRegistry<T> {
         match self.type_id {
             UserDataTypeId::Shared(type_id) => Some(type_id),
             UserDataTypeId::Unique(_) => None,
+            #[cfg(all(feature = "userdata-wrappers", not(feature = "send")))]
+            UserDataTypeId::Rc(type_id) => Some(type_id),
+            #[cfg(all(feature = "userdata-wrappers", not(feature = "send")))]
+            UserDataTypeId::RcRefCell(type_id) => Some(type_id),
+            #[cfg(feature = "userdata-wrappers")]
+            UserDataTypeId::Arc(type_id) => Some(type_id),
+            #[cfg(feature = "userdata-wrappers")]
+            UserDataTypeId::ArcMutex(type_id) => Some(type_id),
+            #[cfg(feature = "userdata-wrappers")]
+            UserDataTypeId::ArcRwLock(type_id) => Some(type_id),
+            #[cfg(feature = "userdata-wrappers")]
+            UserDataTypeId::ArcParkingLotMutex(type_id) => Some(type_id),
+            #[cfg(feature = "userdata-wrappers")]
+            UserDataTypeId::ArcParkingLotRwLock(type_id) => Some(type_id),
         }
     }
 
@@ -120,28 +146,102 @@ impl<T> UserDataRegistry<T> {
             let args = A::from_stack_args(nargs - 1, 2, Some(&name), rawlua);
 
             match target_type_id {
-                // This branch is for `'static` userdata that share type metatable
-                UserDataTypeId::Shared(target_type_id) => {
-                    match try_self_arg!(rawlua.get_userdata_type_id::<T>(self_index)) {
-                        Some(self_type_id) if self_type_id == target_type_id => {
-                            let ud = get_userdata::<UserDataStorage<T>>(state, self_index);
-                            try_self_arg!((*ud).try_borrow_scoped(|ud| {
-                                method(rawlua.lua(), ud, args?)?.push_into_stack_multi(rawlua)
-                            }))
-                        }
-                        _ => Err(Error::bad_self_argument(&name, Error::UserDataTypeMismatch)),
-                    }
+                #[rustfmt::skip]
+                UserDataTypeId::Shared(target_type_id)
+                    if try_self_arg!(rawlua.get_userdata_type_id::<T>(self_index)) == Some(target_type_id) =>
+                {
+                    let ud = get_userdata::<UserDataStorage<T>>(state, self_index);
+                    try_self_arg!((*ud).try_borrow_scoped(|ud| {
+                        method(rawlua.lua(), ud, args?)?.push_into_stack_multi(rawlua)
+                    }))
                 }
-                UserDataTypeId::Unique(target_ptr) => {
-                    match get_userdata::<UserDataStorage<T>>(state, self_index) {
-                        ud if ud as usize == target_ptr => {
-                            try_self_arg!((*ud).try_borrow_scoped(|ud| {
-                                method(rawlua.lua(), ud, args?)?.push_into_stack_multi(rawlua)
-                            }))
-                        }
-                        _ => Err(Error::bad_self_argument(&name, Error::UserDataTypeMismatch)),
-                    }
+                #[rustfmt::skip]
+                UserDataTypeId::Unique(target_ptr)
+                    if get_userdata::<UserDataStorage<T>>(state, self_index) as usize == target_ptr =>
+                {
+                    let ud = target_ptr as *mut UserDataStorage<T>;
+                    try_self_arg!((*ud).try_borrow_scoped(|ud| {
+                        method(rawlua.lua(), ud, args?)?.push_into_stack_multi(rawlua)
+                    }))
                 }
+                #[cfg(all(feature = "userdata-wrappers", not(feature = "send")))]
+                #[rustfmt::skip]
+                UserDataTypeId::Rc(target_type_id)
+                    if try_self_arg!(rawlua.get_userdata_type_id::<Rc<T>>(self_index)) == Some(target_type_id) =>
+                {
+                    let ud = get_userdata::<UserDataStorage<Rc<T>>>(state, self_index);
+                    try_self_arg!((*ud).try_borrow_scoped(|ud| {
+                        method(rawlua.lua(), ud, args?)?.push_into_stack_multi(rawlua)
+                    }))
+                }
+                #[cfg(all(feature = "userdata-wrappers", not(feature = "send")))]
+                #[rustfmt::skip]
+                UserDataTypeId::RcRefCell(target_type_id)
+                    if try_self_arg!(rawlua.get_userdata_type_id::<Rc<RefCell<T>>>(self_index)) == Some(target_type_id) =>
+                {
+                    let ud = get_userdata::<UserDataStorage<Rc<RefCell<T>>>>(state, self_index);
+                    try_self_arg!((*ud).try_borrow_scoped(|ud| {
+                        let ud = ud.try_borrow().map_err(|_| Error::UserDataBorrowError)?;
+                        method(rawlua.lua(), &ud, args?)?.push_into_stack_multi(rawlua)
+                    }))
+                }
+                #[cfg(feature = "userdata-wrappers")]
+                #[rustfmt::skip]
+                UserDataTypeId::Arc(target_type_id)
+                    if try_self_arg!(rawlua.get_userdata_type_id::<Arc<T>>(self_index)) == Some(target_type_id) =>
+                {
+                    let ud = get_userdata::<UserDataStorage<Arc<T>>>(state, self_index);
+                    try_self_arg!((*ud).try_borrow_scoped(|ud| {
+                        method(rawlua.lua(), ud, args?)?.push_into_stack_multi(rawlua)
+                    }))
+                }
+                #[cfg(feature = "userdata-wrappers")]
+                #[rustfmt::skip]
+                UserDataTypeId::ArcMutex(target_type_id)
+                    if try_self_arg!(rawlua.get_userdata_type_id::<Arc<Mutex<T>>>(self_index)) == Some(target_type_id) =>
+                {
+                    let ud = get_userdata::<UserDataStorage<Arc<Mutex<T>>>>(state, self_index);
+                    try_self_arg!((*ud).try_borrow_scoped(|ud| {
+                        let ud = ud.try_lock().map_err(|_| Error::UserDataBorrowError)?;
+                        method(rawlua.lua(), &ud, args?)?.push_into_stack_multi(rawlua)
+                    }))
+                }
+                #[cfg(feature = "userdata-wrappers")]
+                #[rustfmt::skip]
+                UserDataTypeId::ArcRwLock(target_type_id)
+                    if try_self_arg!(rawlua.get_userdata_type_id::<Arc<RwLock<T>>>(self_index)) == Some(target_type_id) =>
+                {
+                    let ud = get_userdata::<UserDataStorage<Arc<RwLock<T>>>>(state, self_index);
+                    try_self_arg!((*ud).try_borrow_scoped(|ud| {
+                        let ud = ud.try_read().map_err(|_| Error::UserDataBorrowError)?;
+                        method(rawlua.lua(), &ud, args?)?.push_into_stack_multi(rawlua)
+                    }))
+                }
+                #[cfg(feature = "userdata-wrappers")]
+                #[rustfmt::skip]
+                UserDataTypeId::ArcParkingLotMutex(target_type_id)
+                    if try_self_arg!(rawlua.get_userdata_type_id::<Arc<parking_lot::Mutex<T>>>(self_index))
+                        == Some(target_type_id) =>
+                {
+                    let ud = get_userdata::<UserDataStorage<Arc<parking_lot::Mutex<T>>>>(state, self_index);
+                    try_self_arg!((*ud).try_borrow_scoped(|ud| {
+                        let ud = ud.try_lock().ok_or(Error::UserDataBorrowError)?;
+                        method(rawlua.lua(), &ud, args?)?.push_into_stack_multi(rawlua)
+                    }))
+                }
+                #[cfg(feature = "userdata-wrappers")]
+                #[rustfmt::skip]
+                UserDataTypeId::ArcParkingLotRwLock(target_type_id)
+                    if try_self_arg!(rawlua.get_userdata_type_id::<Arc<parking_lot::RwLock<T>>>(self_index))
+                        == Some(target_type_id) =>
+                {
+                    let ud = get_userdata::<UserDataStorage<Arc<parking_lot::RwLock<T>>>>(state, self_index);
+                    try_self_arg!((*ud).try_borrow_scoped(|ud| {
+                        let ud = ud.try_read().ok_or(Error::UserDataBorrowError)?;
+                        method(rawlua.lua(), &ud, args?)?.push_into_stack_multi(rawlua)
+                    }))
+                }
+                _ => Err(Error::bad_self_argument(&name, Error::UserDataTypeMismatch)),
             }
         })
     }
@@ -174,28 +274,96 @@ impl<T> UserDataRegistry<T> {
             let args = A::from_stack_args(nargs - 1, 2, Some(&name), rawlua);
 
             match target_type_id {
-                // This branch is for `'static` userdata that share type metatable
-                UserDataTypeId::Shared(target_type_id) => {
-                    match try_self_arg!(rawlua.get_userdata_type_id::<T>(self_index)) {
-                        Some(self_type_id) if self_type_id == target_type_id => {
-                            let ud = get_userdata::<UserDataStorage<T>>(state, self_index);
-                            try_self_arg!((*ud).try_borrow_scoped_mut(|ud| {
-                                method(rawlua.lua(), ud, args?)?.push_into_stack_multi(rawlua)
-                            }))
-                        }
-                        _ => Err(Error::bad_self_argument(&name, Error::UserDataTypeMismatch)),
-                    }
+                #[rustfmt::skip]
+                UserDataTypeId::Shared(target_type_id)
+                    if try_self_arg!(rawlua.get_userdata_type_id::<T>(self_index)) == Some(target_type_id) =>
+                {
+                    let ud = get_userdata::<UserDataStorage<T>>(state, self_index);
+                    try_self_arg!((*ud).try_borrow_scoped_mut(|ud| {
+                        method(rawlua.lua(), ud, args?)?.push_into_stack_multi(rawlua)
+                    }))
                 }
-                UserDataTypeId::Unique(target_ptr) => {
-                    match get_userdata::<UserDataStorage<T>>(state, self_index) {
-                        ud if ud as usize == target_ptr => {
-                            try_self_arg!((*ud).try_borrow_scoped_mut(|ud| {
-                                method(rawlua.lua(), ud, args?)?.push_into_stack_multi(rawlua)
-                            }))
-                        }
-                        _ => Err(Error::bad_self_argument(&name, Error::UserDataTypeMismatch)),
-                    }
+                #[rustfmt::skip]
+                UserDataTypeId::Unique(target_ptr)
+                    if get_userdata::<UserDataStorage<T>>(state, self_index) as usize == target_ptr =>
+                {
+                    let ud = target_ptr as *mut UserDataStorage<T>;
+                    try_self_arg!((*ud).try_borrow_scoped_mut(|ud| {
+                        method(rawlua.lua(), ud, args?)?.push_into_stack_multi(rawlua)
+                    }))
                 }
+                #[cfg(all(feature = "userdata-wrappers", not(feature = "send")))]
+                #[rustfmt::skip]
+                UserDataTypeId::Rc(target_type_id)
+                    if try_self_arg!(rawlua.get_userdata_type_id::<Rc<T>>(self_index)) == Some(target_type_id) =>
+                {
+                    Err(Error::UserDataBorrowMutError)
+                },
+                #[cfg(all(feature = "userdata-wrappers", not(feature = "send")))]
+                #[rustfmt::skip]
+                UserDataTypeId::RcRefCell(target_type_id)
+                    if try_self_arg!(rawlua.get_userdata_type_id::<Rc<RefCell<T>>>(self_index)) == Some(target_type_id) =>
+                {
+                    let ud = get_userdata::<UserDataStorage<Rc<RefCell<T>>>>(state, self_index);
+                    try_self_arg!((*ud).try_borrow_scoped(|ud| {
+                        let mut ud = ud.try_borrow_mut().map_err(|_| Error::UserDataBorrowMutError)?;
+                        method(rawlua.lua(), &mut ud, args?)?.push_into_stack_multi(rawlua)
+                    }))
+                }
+                #[cfg(feature = "userdata-wrappers")]
+                #[rustfmt::skip]
+                UserDataTypeId::Arc(target_type_id)
+                    if try_self_arg!(rawlua.get_userdata_type_id::<Arc<T>>(self_index)) == Some(target_type_id) =>
+                {
+                    Err(Error::UserDataBorrowMutError)
+                },
+                #[cfg(feature = "userdata-wrappers")]
+                #[rustfmt::skip]
+                UserDataTypeId::ArcMutex(target_type_id)
+                    if try_self_arg!(rawlua.get_userdata_type_id::<Arc<Mutex<T>>>(self_index)) == Some(target_type_id) =>
+                {
+                    let ud = get_userdata::<UserDataStorage<Arc<Mutex<T>>>>(state, self_index);
+                    try_self_arg!((*ud).try_borrow_scoped(|ud| {
+                        let mut ud = ud.try_lock().map_err(|_| Error::UserDataBorrowMutError)?;
+                        method(rawlua.lua(), &mut ud, args?)?.push_into_stack_multi(rawlua)
+                    }))
+                }
+                #[cfg(feature = "userdata-wrappers")]
+                #[rustfmt::skip]
+                UserDataTypeId::ArcRwLock(target_type_id)
+                    if try_self_arg!(rawlua.get_userdata_type_id::<Arc<RwLock<T>>>(self_index)) == Some(target_type_id) =>
+                {
+                    let ud = get_userdata::<UserDataStorage<Arc<RwLock<T>>>>(state, self_index);
+                    try_self_arg!((*ud).try_borrow_scoped(|ud| {
+                        let mut ud = ud.try_write().map_err(|_| Error::UserDataBorrowMutError)?;
+                        method(rawlua.lua(), &mut ud, args?)?.push_into_stack_multi(rawlua)
+                    }))
+                }
+                #[cfg(feature = "userdata-wrappers")]
+                #[rustfmt::skip]
+                UserDataTypeId::ArcParkingLotMutex(target_type_id)
+                    if try_self_arg!(rawlua.get_userdata_type_id::<Arc<parking_lot::Mutex<T>>>(self_index))
+                        == Some(target_type_id) =>
+                {
+                    let ud = get_userdata::<UserDataStorage<Arc<parking_lot::Mutex<T>>>>(state, self_index);
+                    try_self_arg!((*ud).try_borrow_scoped(|ud| {
+                        let mut ud = ud.try_lock().ok_or(Error::UserDataBorrowMutError)?;
+                        method(rawlua.lua(), &mut ud, args?)?.push_into_stack_multi(rawlua)
+                    }))
+                }
+                #[cfg(feature = "userdata-wrappers")]
+                #[rustfmt::skip]
+                UserDataTypeId::ArcParkingLotRwLock(target_type_id)
+                    if try_self_arg!(rawlua.get_userdata_type_id::<Arc<parking_lot::RwLock<T>>>(self_index))
+                        == Some(target_type_id) =>
+                {
+                    let ud = get_userdata::<UserDataStorage<Arc<parking_lot::RwLock<T>>>>(state, self_index);
+                    try_self_arg!((*ud).try_borrow_scoped(|ud| {
+                        let mut ud = ud.try_write().ok_or(Error::UserDataBorrowMutError)?;
+                        method(rawlua.lua(), &mut ud, args?)?.push_into_stack_multi(rawlua)
+                    }))
+                }
+                _ => Err(Error::bad_self_argument(&name, Error::UserDataTypeMismatch)),
             }
         })
     }
@@ -607,11 +775,14 @@ impl<T> UserDataMethods<T> for UserDataRegistry<T> {
 }
 
 macro_rules! lua_userdata_impl {
-    ($type:ty) => {
+    ($type:ty => $type_variant:tt) => {
+        lua_userdata_impl!($type, UserDataTypeId::$type_variant(TypeId::of::<$type>()));
+    };
+
+    ($type:ty, $type_id:expr) => {
         impl<T: UserData + 'static> UserData for $type {
             fn register(registry: &mut UserDataRegistry<Self>) {
-                let type_id = TypeId::of::<T>();
-                let mut orig_registry = UserDataRegistry::new(type_id);
+                let mut orig_registry = UserDataRegistry::with_type_id($type_id);
                 T::register(&mut orig_registry);
 
                 // Copy all fields, methods, etc. from the original registry
@@ -635,4 +806,19 @@ macro_rules! lua_userdata_impl {
 // A special proxy object for UserData
 pub(crate) struct UserDataProxy<T>(pub(crate) PhantomData<T>);
 
-lua_userdata_impl!(UserDataProxy<T>);
+lua_userdata_impl!(UserDataProxy<T>, UserDataTypeId::Shared(TypeId::of::<T>()));
+
+#[cfg(all(feature = "userdata-wrappers", not(feature = "send")))]
+lua_userdata_impl!(Rc<T> => Rc);
+#[cfg(all(feature = "userdata-wrappers", not(feature = "send")))]
+lua_userdata_impl!(Rc<RefCell<T>> => RcRefCell);
+#[cfg(feature = "userdata-wrappers")]
+lua_userdata_impl!(Arc<T> => Arc);
+#[cfg(feature = "userdata-wrappers")]
+lua_userdata_impl!(Arc<Mutex<T>> => ArcMutex);
+#[cfg(feature = "userdata-wrappers")]
+lua_userdata_impl!(Arc<RwLock<T>> => ArcRwLock);
+#[cfg(feature = "userdata-wrappers")]
+lua_userdata_impl!(Arc<parking_lot::Mutex<T>> => ArcParkingLotMutex);
+#[cfg(feature = "userdata-wrappers")]
+lua_userdata_impl!(Arc<parking_lot::RwLock<T>> => ArcParkingLotRwLock);

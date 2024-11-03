@@ -1,7 +1,6 @@
 use std::cell::RefCell;
 use std::marker::PhantomData;
 use std::mem;
-use std::os::raw::c_void;
 
 use crate::error::{Error, Result};
 use crate::function::Function;
@@ -183,7 +182,7 @@ impl<'scope, 'env: 'scope> Scope<'scope, 'env> {
             let ud_ptr = util::push_uninit_userdata::<UserDataStorage<T>>(state, protect)?;
 
             // Push the metatable and register it with no TypeId
-            let mut registry = UserDataRegistry::new_unique(ud_ptr as *const c_void);
+            let mut registry = UserDataRegistry::new_unique(ud_ptr as *mut _);
             T::register(&mut registry);
             self.lua.push_userdata_metatable(registry)?;
             let mt_ptr = ffi::lua_topointer(state, -1);

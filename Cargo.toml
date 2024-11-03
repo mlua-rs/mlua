@@ -43,6 +43,7 @@ error-send = []
 serialize = ["dep:serde", "dep:erased-serde", "dep:serde-value"]
 macros = ["mlua_derive/macros"]
 anyhow = ["dep:anyhow", "error-send"]
+userdata-wrappers = []
 
 [dependencies]
 mlua_derive = { version = "=0.10.0", optional = true, path = "mlua_derive" }
