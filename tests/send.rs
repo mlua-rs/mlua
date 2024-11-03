@@ -20,12 +20,11 @@ fn test_userdata_multithread_access_send_only() -> Result<()> {
         fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
             methods.add_method("method", |lua, this, ()| {
                 let ud = lua.globals().get::<AnyUserData>("ud")?;
-                assert!((ud.call_method::<()>("method2", ()).err().unwrap().to_string())
-                    .contains("error borrowing userdata"));
+                assert_eq!(ud.call_method::<String>("method2", ())?, "method2");
                 Ok(this.0.clone())
             });
 
-            methods.add_method("method2", |_, _, ()| Ok(()));
+            methods.add_method("method2", |_, _, ()| Ok("method2"));
         }
     }
 

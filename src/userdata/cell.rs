@@ -291,11 +291,7 @@ pub(crate) struct UserDataBorrowRef<'a, T>(&'a UserDataVariant<T>);
 impl<T> Drop for UserDataBorrowRef<'_, T> {
     #[inline]
     fn drop(&mut self) {
-        if !cfg!(feature = "send") || is_sync::<T>() {
-            unsafe { self.0.raw_lock().unlock_shared() };
-        } else {
-            unsafe { self.0.raw_lock().unlock_exclusive() };
-        }
+        unsafe { self.0.raw_lock().unlock_shared() };
     }
 }
 
@@ -314,11 +310,11 @@ impl<'a, T> TryFrom<&'a UserDataVariant<T>> for UserDataBorrowRef<'a, T> {
 
     #[inline(always)]
     fn try_from(variant: &'a UserDataVariant<T>) -> Result<Self> {
-        if !cfg!(feature = "send") || is_sync::<T>() {
-            if !variant.raw_lock().try_lock_shared() {
-                return Err(Error::UserDataBorrowError);
-            }
-        } else if !variant.raw_lock().try_lock_exclusive() {
+        // We don't need to check for `T: Sync` because when this method is used (internally),
+        // Lua mutex is already locked.
+        // If non-`Sync` userdata is already borrowed by another thread (via `UserDataRef`), it will be
+        // exclusively locked.
+        if !variant.raw_lock().try_lock_shared() {
             return Err(Error::UserDataBorrowError);
         }
         Ok(UserDataBorrowRef(variant))
