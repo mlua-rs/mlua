@@ -485,7 +485,7 @@ impl Lua {
         let lua = self.lock();
         unsafe {
             if (*lua.extra.get()).sandboxed != enabled {
-                let state = lua.main_state;
+                let state = lua.main_state();
                 check_stack(state, 3)?;
                 protect_lua!(state, 0, 0, |state| {
                     if enabled {
@@ -562,10 +562,10 @@ impl Lua {
         unsafe {
             let state = lua.state();
             ffi::lua_sethook(state, None, 0, 0);
-            match crate::util::get_main_state(lua.main_state) {
-                Some(main_state) if !ptr::eq(state, main_state) => {
+            match lua.main_state {
+                Some(main_state) if state != main_state.as_ptr() => {
                     // If main_state is different from state, remove hook from it too
-                    ffi::lua_sethook(main_state, None, 0, 0);
+                    ffi::lua_sethook(main_state.as_ptr(), None, 0, 0);
                 }
                 _ => {}
             };
@@ -654,7 +654,7 @@ impl Lua {
         let lua = self.lock();
         unsafe {
             (*lua.extra.get()).interrupt_callback = Some(Rc::new(callback));
-            (*ffi::lua_callbacks(lua.main_state)).interrupt = Some(interrupt_proc);
+            (*ffi::lua_callbacks(lua.main_state())).interrupt = Some(interrupt_proc);
         }
     }
 
@@ -667,7 +667,7 @@ impl Lua {
         let lua = self.lock();
         unsafe {
             (*lua.extra.get()).interrupt_callback = None;
-            (*ffi::lua_callbacks(lua.main_state)).interrupt = None;
+            (*ffi::lua_callbacks(lua.main_state())).interrupt = None;
         }
     }
 
@@ -697,10 +697,9 @@ impl Lua {
         }
 
         let lua = self.lock();
-        let state = lua.main_state;
         unsafe {
             (*lua.extra.get()).warn_callback = Some(Box::new(callback));
-            ffi::lua_setwarnf(state, Some(warn_proc), lua.extra.get() as *mut c_void);
+            ffi::lua_setwarnf(lua.state(), Some(warn_proc), lua.extra.get() as *mut c_void);
         }
     }
 
@@ -715,7 +714,7 @@ impl Lua {
         let lua = self.lock();
         unsafe {
             (*lua.extra.get()).warn_callback = None;
-            ffi::lua_setwarnf(lua.main_state, None, ptr::null_mut());
+            ffi::lua_setwarnf(lua.state(), None, ptr::null_mut());
         }
     }
 
@@ -767,13 +766,14 @@ impl Lua {
     /// Returns the amount of memory (in bytes) currently used inside this Lua state.
     pub fn used_memory(&self) -> usize {
         let lua = self.lock();
+        let state = lua.main_state();
         unsafe {
-            match MemoryState::get(lua.main_state) {
+            match MemoryState::get(state) {
                 mem_state if !mem_state.is_null() => (*mem_state).used_memory(),
                 _ => {
                     // Get data from the Lua GC
-                    let used_kbytes = ffi::lua_gc(lua.main_state, ffi::LUA_GCCOUNT, 0);
-                    let used_kbytes_rem = ffi::lua_gc(lua.main_state, ffi::LUA_GCCOUNTB, 0);
+                    let used_kbytes = ffi::lua_gc(state, ffi::LUA_GCCOUNT, 0);
+                    let used_kbytes_rem = ffi::lua_gc(state, ffi::LUA_GCCOUNTB, 0);
                     (used_kbytes as usize) * 1024 + (used_kbytes_rem as usize)
                 }
             }
@@ -790,7 +790,7 @@ impl Lua {
     pub fn set_memory_limit(&self, limit: usize) -> Result<usize> {
         let lua = self.lock();
         unsafe {
-            match MemoryState::get(lua.main_state) {
+            match MemoryState::get(lua.state()) {
                 mem_state if !mem_state.is_null() => Ok((*mem_state).set_memory_limit(limit)),
                 _ => Err(Error::MemoryControlNotAvailable),
             }
@@ -803,19 +803,19 @@ impl Lua {
     #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "luau"))]
     pub fn gc_is_running(&self) -> bool {
         let lua = self.lock();
-        unsafe { ffi::lua_gc(lua.main_state, ffi::LUA_GCISRUNNING, 0) != 0 }
+        unsafe { ffi::lua_gc(lua.main_state(), ffi::LUA_GCISRUNNING, 0) != 0 }
     }
 
     /// Stop the Lua GC from running
     pub fn gc_stop(&self) {
         let lua = self.lock();
-        unsafe { ffi::lua_gc(lua.main_state, ffi::LUA_GCSTOP, 0) };
+        unsafe { ffi::lua_gc(lua.main_state(), ffi::LUA_GCSTOP, 0) };
     }
 
     /// Restarts the Lua GC if it is not running
     pub fn gc_restart(&self) {
         let lua = self.lock();
-        unsafe { ffi::lua_gc(lua.main_state, ffi::LUA_GCRESTART, 0) };
+        unsafe { ffi::lua_gc(lua.main_state(), ffi::LUA_GCRESTART, 0) };
     }
 
     /// Perform a full garbage-collection cycle.
@@ -824,9 +824,10 @@ impl Lua {
     /// objects. Once to finish the current gc cycle, and once to start and finish the next cycle.
     pub fn gc_collect(&self) -> Result<()> {
         let lua = self.lock();
+        let state = lua.main_state();
         unsafe {
-            check_stack(lua.main_state, 2)?;
-            protect_lua!(lua.main_state, 0, 0, fn(state) ffi::lua_gc(state, ffi::LUA_GCCOLLECT, 0))
+            check_stack(state, 2)?;
+            protect_lua!(state, 0, 0, fn(state) ffi::lua_gc(state, ffi::LUA_GCCOLLECT, 0))
         }
     }
 
@@ -843,9 +844,10 @@ impl Lua {
     /// finished a collection cycle.
     pub fn gc_step_kbytes(&self, kbytes: c_int) -> Result<bool> {
         let lua = self.lock();
+        let state = lua.main_state();
         unsafe {
-            check_stack(lua.main_state, 3)?;
-            protect_lua!(lua.main_state, 0, 0, |state| {
+            check_stack(state, 3)?;
+            protect_lua!(state, 0, 0, |state| {
                 ffi::lua_gc(state, ffi::LUA_GCSTEP, kbytes) != 0
             })
         }
@@ -861,11 +863,12 @@ impl Lua {
     /// [documentation]: https://www.lua.org/manual/5.4/manual.html#2.5
     pub fn gc_set_pause(&self, pause: c_int) -> c_int {
         let lua = self.lock();
+        let state = lua.main_state();
         unsafe {
             #[cfg(not(feature = "luau"))]
-            return ffi::lua_gc(lua.main_state, ffi::LUA_GCSETPAUSE, pause);
+            return ffi::lua_gc(state, ffi::LUA_GCSETPAUSE, pause);
             #[cfg(feature = "luau")]
-            return ffi::lua_gc(lua.main_state, ffi::LUA_GCSETGOAL, pause);
+            return ffi::lua_gc(state, ffi::LUA_GCSETGOAL, pause);
         }
     }
 
@@ -877,7 +880,7 @@ impl Lua {
     /// [documentation]: https://www.lua.org/manual/5.4/manual.html#2.5
     pub fn gc_set_step_multiplier(&self, step_multiplier: c_int) -> c_int {
         let lua = self.lock();
-        unsafe { ffi::lua_gc(lua.main_state, ffi::LUA_GCSETSTEPMUL, step_multiplier) }
+        unsafe { ffi::lua_gc(lua.main_state(), ffi::LUA_GCSETSTEPMUL, step_multiplier) }
     }
 
     /// Changes the collector to incremental mode with the given parameters.
@@ -888,7 +891,7 @@ impl Lua {
     /// [documentation]: https://www.lua.org/manual/5.4/manual.html#2.5.1
     pub fn gc_inc(&self, pause: c_int, step_multiplier: c_int, step_size: c_int) -> GCMode {
         let lua = self.lock();
-        let state = lua.main_state;
+        let state = lua.main_state();
 
         #[cfg(any(
             feature = "lua53",
@@ -941,7 +944,7 @@ impl Lua {
     #[cfg_attr(docsrs, doc(cfg(feature = "lua54")))]
     pub fn gc_gen(&self, minor_multiplier: c_int, major_multiplier: c_int) -> GCMode {
         let lua = self.lock();
-        let state = lua.main_state;
+        let state = lua.main_state();
         let prev_mode = unsafe { ffi::lua_gc(state, ffi::LUA_GCGEN, minor_multiplier, major_multiplier) };
         match prev_mode {
             ffi::LUA_GCGEN => GCMode::Generational,

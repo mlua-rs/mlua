@@ -1,11 +1,12 @@
 use std::any::TypeId;
 use std::cell::{Cell, UnsafeCell};
 use std::ffi::{CStr, CString};
+use std::mem;
 use std::os::raw::{c_char, c_int, c_void};
 use std::panic::resume_unwind;
+use std::ptr::{self, NonNull};
 use std::result::Result as StdResult;
 use std::sync::Arc;
-use std::{mem, ptr};
 
 use crate::chunk::ChunkMode;
 use crate::error::{Error, Result};
@@ -41,7 +42,6 @@ use {
     crate::multi::MultiValue,
     crate::traits::FromLuaMulti,
     crate::types::{AsyncCallback, AsyncCallbackUpvalue, AsyncPollUpvalue},
-    std::ptr::NonNull,
     std::task::{Context, Poll, Waker},
 };
 
@@ -50,7 +50,7 @@ use {
 pub struct RawLua {
     // The state is dynamic and depends on context
     pub(super) state: Cell<*mut ffi::lua_State>,
-    pub(super) main_state: *mut ffi::lua_State,
+    pub(super) main_state: Option<NonNull<ffi::lua_State>>,
     pub(super) extra: XRc<UnsafeCell<ExtraData>>,
 }
 
@@ -61,9 +61,9 @@ impl Drop for RawLua {
                 return;
             }
 
-            let mem_state = MemoryState::get(self.main_state);
+            let mem_state = MemoryState::get(self.main_state());
 
-            ffi::lua_close(self.main_state);
+            ffi::lua_close(self.main_state());
 
             // Deallocate `MemoryState`
             if !mem_state.is_null() {
@@ -95,10 +95,11 @@ impl RawLua {
         self.state.get()
     }
 
-    #[cfg(feature = "luau")]
     #[inline(always)]
     pub(crate) fn main_state(&self) -> *mut ffi::lua_State {
         self.main_state
+            .map(|state| state.as_ptr())
+            .unwrap_or_else(|| self.state())
     }
 
     #[inline(always)]
@@ -221,7 +222,8 @@ impl RawLua {
         #[allow(clippy::arc_with_non_send_sync)]
         let rawlua = XRc::new(ReentrantMutex::new(RawLua {
             state: Cell::new(state),
-            main_state,
+            // Make sure that we don't store current state as main state (if it's not available)
+            main_state: get_main_state(state).and_then(NonNull::new),
             extra: XRc::clone(&extra),
         }));
         (*extra.get()).set_lua(&rawlua);
@@ -263,7 +265,7 @@ impl RawLua {
             ));
         }
 
-        let res = load_std_libs(self.main_state, libs);
+        let res = load_std_libs(self.main_state(), libs);
 
         // If `package` library loaded into a safe lua state then disable C modules
         let curr_libs = (*self.extra.get()).libs;
@@ -734,7 +736,7 @@ impl RawLua {
         }
 
         // MemoryInfo is empty in module mode so we cannot predict memory limits
-        match MemoryState::get(self.main_state) {
+        match MemoryState::get(self.state()) {
             mem_state if !mem_state.is_null() => (*mem_state).memory_limit() == 0,
             _ => (*self.extra.get()).skip_memory_check, // Check the special flag (only for module mode)
         }
@@ -1095,7 +1097,7 @@ impl RawLua {
         #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "luau"))]
         unsafe {
             if !(*self.extra.get()).libs.contains(StdLib::COROUTINE) {
-                load_std_libs(self.main_state, StdLib::COROUTINE)?;
+                load_std_libs(self.main_state(), StdLib::COROUTINE)?;
                 (*self.extra.get()).libs |= StdLib::COROUTINE;
             }
         }
