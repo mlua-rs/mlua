@@ -696,6 +696,31 @@ impl AnyUserData {
         }
     }
 
+    /// Destroys this userdata.
+    ///
+    /// This is similar to [`AnyUserData::take`], but it doesn't require a type.
+    ///
+    /// This method works for non-scoped userdata only.
+    pub fn destroy(&self) -> Result<()> {
+        let lua = self.0.lua.lock();
+        let state = lua.state();
+        unsafe {
+            let _sg = StackGuard::new(state);
+            check_stack(state, 3)?;
+
+            lua.push_userdata_ref(&self.0)?;
+            protect_lua!(state, 1, 1, fn(state) {
+                if ffi::luaL_callmeta(state, -1, cstr!("__gc")) == 0 {
+                    ffi::lua_pushboolean(state, 0);
+                }
+            })?;
+            if ffi::lua_isboolean(state, -1) != 0 && ffi::lua_toboolean(state, -1) != 0 {
+                return Ok(());
+            }
+            Err(Error::UserDataBorrowMutError)
+        }
+    }
+
     /// Sets an associated value to this [`AnyUserData`].
     ///
     /// The value may be any Lua value whatsoever, and can be retrieved with [`user_value`].

@@ -376,7 +376,18 @@ fn test_userdata_take() -> Result<()> {
 fn test_userdata_destroy() -> Result<()> {
     struct MyUserdata(#[allow(unused)] Arc<()>);
 
-    impl UserData for MyUserdata {}
+    impl UserData for MyUserdata {
+        fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
+            methods.add_method("try_destroy", |lua, _this, ()| {
+                let ud = lua.globals().get::<AnyUserData>("ud")?;
+                match ud.destroy() {
+                    Err(Error::UserDataBorrowMutError) => {}
+                    r => panic!("expected `UserDataBorrowMutError` error, got {:?}", r),
+                }
+                Ok(())
+            });
+        }
+    }
 
     let rc = Arc::new(());
 
@@ -392,6 +403,23 @@ fn test_userdata_destroy() -> Result<()> {
     lua.gc_collect()?;
     lua.gc_collect()?;
 
+    assert_eq!(Arc::strong_count(&rc), 1);
+
+    let ud = lua.create_userdata(MyUserdata(rc.clone()))?;
+    assert_eq!(Arc::strong_count(&rc), 2);
+    let ud_ref = ud.borrow::<MyUserdata>()?;
+    // With active `UserDataRef` this methods only marks userdata as destructed
+    // without running destructor
+    ud.destroy()?;
+    assert_eq!(Arc::strong_count(&rc), 2);
+    drop(ud_ref);
+    assert_eq!(Arc::strong_count(&rc), 1);
+
+    // We cannot destroy (internally) borrowed userdata
+    let ud = lua.create_userdata(MyUserdata(rc.clone()))?;
+    lua.globals().set("ud", &ud)?;
+    lua.load("ud:try_destroy()").exec().unwrap();
+    ud.destroy()?;
     assert_eq!(Arc::strong_count(&rc), 1);
 
     Ok(())

@@ -152,7 +152,6 @@ pub(crate) unsafe fn init_userdata_metatable(
     field_getters: Option<c_int>,
     field_setters: Option<c_int>,
     methods: Option<c_int>,
-    extra_init: Option<fn(*mut ffi::lua_State, c_int) -> Result<()>>,
 ) -> Result<()> {
     if field_getters.is_some() || methods.is_some() {
         // Push `__index` generator function
@@ -193,11 +192,6 @@ pub(crate) unsafe fn init_userdata_metatable(
         }
 
         rawset_field(state, metatable, "__newindex")?;
-    }
-
-    // Additional initialization
-    if let Some(extra_init) = extra_init {
-        extra_init(state, metatable)?;
     }
 
     ffi::lua_pushboolean(state, 0);
@@ -345,7 +339,7 @@ unsafe fn init_userdata_metatable_newindex(state: *mut ffi::lua_State) -> Result
 }
 
 #[cfg(not(feature = "luau"))]
-pub(crate) unsafe extern "C-unwind" fn userdata_destructor<T>(state: *mut ffi::lua_State) -> c_int {
+unsafe extern "C-unwind" fn userdata_destructor<T>(state: *mut ffi::lua_State) -> c_int {
     // It's probably NOT a good idea to catch Rust panics in finalizer
     // Lua 5.4 ignores it, other versions generates `LUA_ERRGCMM` without calling message handler
     take_userdata::<T>(state);

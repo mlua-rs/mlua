@@ -1,5 +1,5 @@
 use std::any::{type_name, TypeId};
-use std::cell::{RefCell, UnsafeCell};
+use std::cell::{Cell, RefCell, UnsafeCell};
 use std::fmt;
 use std::ops::{Deref, DerefMut};
 use std::os::raw::c_int;
@@ -100,6 +100,15 @@ impl<T> UserDataVariant<T> {
     }
 
     #[inline(always)]
+    fn borrow_count(&self) -> &Cell<usize> {
+        match self {
+            Self::Default(inner) => &inner.borrow_count,
+            #[cfg(feature = "serialize")]
+            Self::Serializable(inner) => &inner.borrow_count,
+        }
+    }
+
+    #[inline(always)]
     fn as_ptr(&self) -> *mut T {
         match self {
             Self::Default(inner) => inner.value.get(),
@@ -130,6 +139,7 @@ impl Serialize for UserDataStorage<()> {
 /// A type that provides interior mutability for a userdata value (thread-safe).
 pub(crate) struct UserDataCell<T> {
     raw_lock: RawLock,
+    borrow_count: Cell<usize>,
     value: UnsafeCell<T>,
 }
 
@@ -143,6 +153,7 @@ impl<T> UserDataCell<T> {
     fn new(value: T) -> Self {
         UserDataCell {
             raw_lock: RawLock::INIT,
+            borrow_count: Cell::new(0),
             value: UnsafeCell::new(value),
         }
     }
@@ -291,7 +302,10 @@ pub(crate) struct UserDataBorrowRef<'a, T>(&'a UserDataVariant<T>);
 impl<T> Drop for UserDataBorrowRef<'_, T> {
     #[inline]
     fn drop(&mut self) {
-        unsafe { self.0.raw_lock().unlock_shared() };
+        unsafe {
+            self.0.borrow_count().set(self.0.borrow_count().get() - 1);
+            self.0.raw_lock().unlock_shared();
+        }
     }
 }
 
@@ -317,6 +331,7 @@ impl<'a, T> TryFrom<&'a UserDataVariant<T>> for UserDataBorrowRef<'a, T> {
         if !variant.raw_lock().try_lock_shared() {
             return Err(Error::UserDataBorrowError);
         }
+        variant.borrow_count().set(variant.borrow_count().get() + 1);
         Ok(UserDataBorrowRef(variant))
     }
 }
@@ -326,7 +341,10 @@ pub(crate) struct UserDataBorrowMut<'a, T>(&'a UserDataVariant<T>);
 impl<T> Drop for UserDataBorrowMut<'_, T> {
     #[inline]
     fn drop(&mut self) {
-        unsafe { self.0.raw_lock().unlock_exclusive() };
+        unsafe {
+            self.0.borrow_count().set(self.0.borrow_count().get() - 1);
+            self.0.raw_lock().unlock_exclusive();
+        }
     }
 }
 
@@ -354,6 +372,7 @@ impl<'a, T> TryFrom<&'a UserDataVariant<T>> for UserDataBorrowMut<'a, T> {
         if !variant.raw_lock().try_lock_exclusive() {
             return Err(Error::UserDataBorrowMutError);
         }
+        variant.borrow_count().set(variant.borrow_count().get() + 1);
         Ok(UserDataBorrowMut(variant))
     }
 }
@@ -468,6 +487,14 @@ impl<T> UserDataStorage<T> {
     pub(crate) fn new_scoped(data: T) -> Self {
         let data = Box::into_raw(Box::new(data));
         Self::Scoped(ScopedUserDataVariant::Boxed(RefCell::new(data)))
+    }
+
+    #[inline(always)]
+    pub(crate) fn is_borrowed(&self) -> bool {
+        match self {
+            Self::Owned(variant) => variant.borrow_count().get() > 0,
+            Self::Scoped(_) => true,
+        }
     }
 
     #[inline]

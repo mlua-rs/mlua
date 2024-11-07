@@ -27,7 +27,7 @@ use crate::util::{
     assert_stack, check_stack, get_destructed_userdata_metatable, get_internal_userdata, get_main_state,
     get_metatable_ptr, get_userdata, init_error_registry, init_internal_metatable, init_userdata_metatable,
     pop_error, push_internal_userdata, push_string, push_table, rawset_field, safe_pcall, safe_xpcall,
-    short_type_name, StackGuard, WrappedFailure,
+    short_type_name, take_userdata, StackGuard, WrappedFailure,
 };
 use crate::value::{Nil, Value};
 
@@ -960,13 +960,19 @@ impl RawLua {
             }
         }
 
-        #[cfg(feature = "luau")]
-        let extra_init = None;
-        #[cfg(not(feature = "luau"))]
-        let extra_init: Option<fn(*mut ffi::lua_State, c_int) -> Result<()>> = Some(|state, mt_idx| {
-            ffi::lua_pushcfunction(state, crate::util::userdata_destructor::<UserDataStorage<T>>);
-            rawset_field(state, mt_idx, "__gc")
-        });
+        unsafe extern "C-unwind" fn userdata_destructor<T>(state: *mut ffi::lua_State) -> c_int {
+            let ud = get_userdata::<UserDataStorage<T>>(state, -1);
+            if !(*ud).is_borrowed() {
+                take_userdata::<UserDataStorage<T>>(state);
+                ffi::lua_pushboolean(state, 1);
+            } else {
+                ffi::lua_pushboolean(state, 0);
+            }
+            1
+        }
+
+        ffi::lua_pushcfunction(state, userdata_destructor::<T>);
+        rawset_field(state, metatable_index, "__gc")?;
 
         init_userdata_metatable(
             state,
@@ -974,7 +980,6 @@ impl RawLua {
             field_getters_index,
             field_setters_index,
             methods_index,
-            extra_init,
         )?;
 
         // Update stack guard to keep metatable after return

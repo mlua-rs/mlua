@@ -21,9 +21,6 @@ pub(crate) use userdata::{
 pub(crate) use userdata::push_uninit_userdata;
 pub(crate) use userdata::push_userdata;
 
-#[cfg(not(feature = "luau"))]
-pub(crate) use userdata::userdata_destructor;
-
 // Checks that Lua has enough free stack space for future stack operations. On failure, this will
 // panic with an internal error message.
 #[inline]
