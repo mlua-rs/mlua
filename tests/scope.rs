@@ -410,15 +410,26 @@ fn test_scope_userdata_ref_mut() -> Result<()> {
 fn test_scope_any_userdata() -> Result<()> {
     let lua = Lua::new();
 
-    lua.register_userdata_type::<StdString>(|reg| {
-        reg.add_meta_method("__tostring", |_, data, ()| Ok(data.clone()));
-    })?;
+    fn register(reg: &mut UserDataRegistry<&mut StdString>) {
+        reg.add_method_mut("push", |_, this, s: String| {
+            this.push_str(&s.to_str()?);
+            Ok(())
+        });
+        reg.add_meta_method("__tostring", |_, data, ()| Ok((*data).clone()));
+    }
 
-    let data = StdString::from("foo");
+    let mut data = StdString::from("foo");
     lua.scope(|scope| {
-        let ud = scope.create_any_userdata_ref(&data)?;
+        let ud = scope.create_any_userdata(&mut data, register)?;
         lua.globals().set("ud", ud)?;
-        lua.load("assert(tostring(ud) == 'foo')").exec()
+        lua.load(
+            r#"
+            assert(tostring(ud) == "foo")
+            ud:push("bar")
+            assert(tostring(ud) == "foobar")
+        "#,
+        )
+        .exec()
     })?;
 
     // Check that userdata is destructed
@@ -498,7 +509,7 @@ fn test_scope_destructors() -> Result<()> {
     let ud = lua.create_any_userdata(arc_str.clone())?;
     lua.scope(|scope| {
         scope.add_destructor(|| {
-            assert!(ud.take::<Arc<StdString>>().is_ok());
+            assert!(ud.destroy().is_ok());
         });
         Ok(())
     })?;
@@ -510,7 +521,7 @@ fn test_scope_destructors() -> Result<()> {
         assert_eq!(arc_str.as_str(), "foo");
         lua.scope(|scope| {
             scope.add_destructor(|| {
-                assert!(ud.take::<Arc<StdString>>().is_err());
+                assert!(ud.destroy().is_err());
             });
             Ok(())
         })

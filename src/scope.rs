@@ -171,7 +171,7 @@ impl<'scope, 'env: 'scope> Scope<'scope, 'env> {
             let _sg = StackGuard::new(state);
             check_stack(state, 3)?;
 
-            // // We don't write the data to the userdata until pushing the metatable
+            // We don't write the data to the userdata until pushing the metatable
             let protect = !self.lua.unlikely_memory_error();
             #[cfg(feature = "luau")]
             let ud_ptr = {
@@ -194,29 +194,79 @@ impl<'scope, 'env: 'scope> Scope<'scope, 'env> {
             ffi::lua_setmetatable(state, -2);
 
             let ud = AnyUserData(self.lua.pop_ref());
-
-            let destructor: DestructorCallback = Box::new(|rawlua, vref| {
-                let state = rawlua.state();
-                let _sg = StackGuard::new(state);
-                assert_stack(state, 2);
-
-                // Check that userdata is valid (very likely)
-                if rawlua.push_userdata_ref(&vref).is_err() {
-                    return vec![];
-                }
-
-                // Deregister metatable
-                let mt_ptr = get_metatable_ptr(state, -1);
-                rawlua.deregister_userdata_metatable(mt_ptr);
-
-                let ud = take_userdata::<UserDataStorage<T>>(state);
-
-                vec![Box::new(move || drop(ud))]
-            });
-            self.destructors.0.borrow_mut().push((ud.0.clone(), destructor));
+            self.attach_destructor::<T>(&ud);
 
             Ok(ud)
         }
+    }
+
+    /// Creates a Lua userdata object from a custom Rust type.
+    ///
+    /// Since the Rust type is not required to be static and implement [`UserData`] trait,
+    /// you need to provide a function to register fields or methods for the object.
+    ///
+    /// See also [`Scope::create_userdata`] for more details about non-static limitations.
+    pub fn create_any_userdata<T>(
+        &'scope self,
+        data: T,
+        register: impl FnOnce(&mut UserDataRegistry<T>),
+    ) -> Result<AnyUserData>
+    where
+        T: 'env,
+    {
+        let state = self.lua.state();
+        let ud = unsafe {
+            let _sg = StackGuard::new(state);
+            check_stack(state, 3)?;
+
+            // We don't write the data to the userdata until pushing the metatable
+            let protect = !self.lua.unlikely_memory_error();
+            #[cfg(feature = "luau")]
+            let ud_ptr = {
+                let data = UserDataStorage::new_scoped(data);
+                util::push_userdata::<UserDataStorage<T>>(state, data, protect)?
+            };
+            #[cfg(not(feature = "luau"))]
+            let ud_ptr = util::push_uninit_userdata::<UserDataStorage<T>>(state, protect)?;
+
+            // Push the metatable and register it with no TypeId
+            let mut registry = UserDataRegistry::new_unique(ud_ptr as *mut _);
+            register(&mut registry);
+            self.lua.push_userdata_metatable(registry)?;
+            let mt_ptr = ffi::lua_topointer(state, -1);
+            self.lua.register_userdata_metatable(mt_ptr, None);
+
+            // Write data to the pointer and attach metatable
+            #[cfg(not(feature = "luau"))]
+            std::ptr::write(ud_ptr, UserDataStorage::new_scoped(data));
+            ffi::lua_setmetatable(state, -2);
+
+            AnyUserData(self.lua.pop_ref())
+        };
+        self.attach_destructor::<T>(&ud);
+        Ok(ud)
+    }
+
+    fn attach_destructor<T: 'env>(&'scope self, ud: &AnyUserData) {
+        let destructor: DestructorCallback = Box::new(|rawlua, vref| unsafe {
+            let state = rawlua.state();
+            let _sg = StackGuard::new(state);
+            assert_stack(state, 2);
+
+            // Check that userdata is valid (very likely)
+            if rawlua.push_userdata_ref(&vref).is_err() {
+                return vec![];
+            }
+
+            // Deregister metatable
+            let mt_ptr = get_metatable_ptr(state, -1);
+            rawlua.deregister_userdata_metatable(mt_ptr);
+
+            let ud = take_userdata::<UserDataStorage<T>>(state);
+
+            vec![Box::new(move || drop(ud))]
+        });
+        self.destructors.0.borrow_mut().push((ud.0.clone(), destructor));
     }
 
     /// Adds a destructor function to be run when the scope ends.
