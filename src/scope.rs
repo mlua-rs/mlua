@@ -88,11 +88,9 @@ impl<'scope, 'env: 'scope> Scope<'scope, 'env> {
     where
         T: UserData + 'static,
     {
-        unsafe {
-            let ud = self.lua.make_userdata(UserDataStorage::new_ref(data))?;
-            self.seal_userdata::<T>(&ud)?;
-            Ok(ud)
-        }
+        let ud = unsafe { self.lua.make_userdata(UserDataStorage::new_ref(data)) }?;
+        self.seal_userdata::<T>(&ud);
+        Ok(ud)
     }
 
     /// Creates a Lua userdata object from a mutable reference to custom userdata type.
@@ -104,11 +102,9 @@ impl<'scope, 'env: 'scope> Scope<'scope, 'env> {
     where
         T: UserData + 'static,
     {
-        unsafe {
-            let ud = self.lua.make_userdata(UserDataStorage::new_ref_mut(data))?;
-            self.seal_userdata::<T>(&ud)?;
-            Ok(ud)
-        }
+        let ud = unsafe { self.lua.make_userdata(UserDataStorage::new_ref_mut(data)) }?;
+        self.seal_userdata::<T>(&ud);
+        Ok(ud)
     }
 
     /// Creates a Lua userdata object from a reference to custom Rust type.
@@ -122,11 +118,9 @@ impl<'scope, 'env: 'scope> Scope<'scope, 'env> {
     where
         T: 'static,
     {
-        unsafe {
-            let ud = self.lua.make_any_userdata(UserDataStorage::new_ref(data))?;
-            self.seal_userdata::<T>(&ud)?;
-            Ok(ud)
-        }
+        let ud = unsafe { self.lua.make_any_userdata(UserDataStorage::new_ref(data)) }?;
+        self.seal_userdata::<T>(&ud);
+        Ok(ud)
     }
 
     /// Creates a Lua userdata object from a mutable reference to custom Rust type.
@@ -138,11 +132,9 @@ impl<'scope, 'env: 'scope> Scope<'scope, 'env> {
     where
         T: 'static,
     {
-        unsafe {
-            let ud = self.lua.make_any_userdata(UserDataStorage::new_ref_mut(data))?;
-            self.seal_userdata::<T>(&ud)?;
-            Ok(ud)
-        }
+        let ud = unsafe { self.lua.make_any_userdata(UserDataStorage::new_ref_mut(data)) }?;
+        self.seal_userdata::<T>(&ud);
+        Ok(ud)
     }
 
     /// Creates a Lua userdata object from a custom userdata type.
@@ -194,7 +186,7 @@ impl<'scope, 'env: 'scope> Scope<'scope, 'env> {
             ffi::lua_setmetatable(state, -2);
 
             let ud = AnyUserData(self.lua.pop_ref());
-            self.attach_destructor::<T>(&ud);
+            self.seal_userdata::<T>(&ud);
 
             Ok(ud)
         }
@@ -243,30 +235,8 @@ impl<'scope, 'env: 'scope> Scope<'scope, 'env> {
 
             AnyUserData(self.lua.pop_ref())
         };
-        self.attach_destructor::<T>(&ud);
+        self.seal_userdata::<T>(&ud);
         Ok(ud)
-    }
-
-    fn attach_destructor<T: 'env>(&'scope self, ud: &AnyUserData) {
-        let destructor: DestructorCallback = Box::new(|rawlua, vref| unsafe {
-            let state = rawlua.state();
-            let _sg = StackGuard::new(state);
-            assert_stack(state, 2);
-
-            // Check that userdata is valid (very likely)
-            if rawlua.push_userdata_ref(&vref).is_err() {
-                return vec![];
-            }
-
-            // Deregister metatable
-            let mt_ptr = get_metatable_ptr(state, -1);
-            rawlua.deregister_userdata_metatable(mt_ptr);
-
-            let ud = take_userdata::<UserDataStorage<T>>(state);
-
-            vec![Box::new(move || drop(ud))]
-        });
-        self.destructors.0.borrow_mut().push((ud.0.clone(), destructor));
     }
 
     /// Adds a destructor function to be run when the scope ends.
@@ -312,23 +282,27 @@ impl<'scope, 'env: 'scope> Scope<'scope, 'env> {
     }
 
     /// Shortens the lifetime of the userdata to the lifetime of the scope.
-    unsafe fn seal_userdata<T: 'static>(&self, ud: &AnyUserData) -> Result<()> {
-        let destructor: DestructorCallback = Box::new(|rawlua, vref| {
+    fn seal_userdata<T: 'env>(&self, ud: &AnyUserData) {
+        let destructor: DestructorCallback = Box::new(|rawlua, vref| unsafe {
             let state = rawlua.state();
             let _sg = StackGuard::new(state);
             assert_stack(state, 2);
 
             // Ensure that userdata is not destructed
-            if rawlua.push_userdata_ref(&vref).is_err() {
-                return vec![];
+            match rawlua.push_userdata_ref(&vref) {
+                Ok(Some(_)) => {}
+                Ok(None) => {
+                    // Deregister metatable
+                    let mt_ptr = get_metatable_ptr(state, -1);
+                    rawlua.deregister_userdata_metatable(mt_ptr);
+                }
+                Err(_) => return vec![],
             }
 
             let data = take_userdata::<UserDataStorage<T>>(state);
             vec![Box::new(move || drop(data))]
         });
         self.destructors.0.borrow_mut().push((ud.0.clone(), destructor));
-
-        Ok(())
     }
 }
 
