@@ -693,7 +693,8 @@ impl Table {
     }
 
     /// Iterates over the sequence part of the table, invoking the given closure on each value.
-    pub(crate) fn for_each_value<V>(&self, mut f: impl FnMut(V) -> Result<()>) -> Result<()>
+    #[doc(hidden)]
+    pub fn for_each_value<V>(&self, mut f: impl FnMut(V) -> Result<()>) -> Result<()>
     where
         V: FromLua,
     {

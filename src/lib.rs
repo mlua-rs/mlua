@@ -65,6 +65,7 @@
 // Deny warnings inside doc tests / examples. When this isn't present, rustdoc doesn't show *any*
 // warnings at all.
 #![cfg_attr(docsrs, feature(doc_cfg))]
+#![cfg_attr(not(send), allow(clippy::arc_with_non_send_sync))]
 
 #[macro_use]
 mod macros;

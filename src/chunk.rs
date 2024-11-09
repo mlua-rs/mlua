@@ -301,7 +301,7 @@ impl Compiler {
     }
 }
 
-impl<'a> Chunk<'a> {
+impl Chunk<'_> {
     /// Sets the name of this chunk, which results in more informative error traces.
     pub fn set_name(mut self, name: impl Into<String>) -> Self {
         self.name = name.into();

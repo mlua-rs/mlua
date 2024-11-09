@@ -53,7 +53,7 @@ mod inner {
 
     pub(crate) struct ReentrantMutexGuard<'a, T>(&'a T);
 
-    impl<'a, T> Deref for ReentrantMutexGuard<'a, T> {
+    impl<T> Deref for ReentrantMutexGuard<'_, T> {
         type Target = T;
 
         #[inline(always)]
