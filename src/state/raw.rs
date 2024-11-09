@@ -1347,6 +1347,12 @@ unsafe fn load_std_libs(state: *mut ffi::lua_State, libs: StdLib) -> Result<()> 
         ffi::lua_pop(state, 1);
     }
 
+    #[cfg(feature = "luau")]
+    if libs.contains(StdLib::VECTOR) {
+        requiref(state, ffi::LUA_VECLIBNAME, ffi::luaopen_vector, 1)?;
+        ffi::lua_pop(state, 1);
+    }
+
     if libs.contains(StdLib::MATH) {
         requiref(state, ffi::LUA_MATHLIBNAME, ffi::luaopen_math, 1)?;
         ffi::lua_pop(state, 1);
@@ -1369,16 +1375,15 @@ unsafe fn load_std_libs(state: *mut ffi::lua_State, libs: StdLib) -> Result<()> 
     }
 
     #[cfg(feature = "luajit")]
-    {
-        if libs.contains(StdLib::JIT) {
-            requiref(state, ffi::LUA_JITLIBNAME, ffi::luaopen_jit, 1)?;
-            ffi::lua_pop(state, 1);
-        }
+    if libs.contains(StdLib::JIT) {
+        requiref(state, ffi::LUA_JITLIBNAME, ffi::luaopen_jit, 1)?;
+        ffi::lua_pop(state, 1);
+    }
 
-        if libs.contains(StdLib::FFI) {
-            requiref(state, ffi::LUA_FFILIBNAME, ffi::luaopen_ffi, 1)?;
-            ffi::lua_pop(state, 1);
-        }
+    #[cfg(feature = "luajit")]
+    if libs.contains(StdLib::FFI) {
+        requiref(state, ffi::LUA_FFILIBNAME, ffi::luaopen_ffi, 1)?;
+        ffi::lua_pop(state, 1);
     }
 
     Ok(())

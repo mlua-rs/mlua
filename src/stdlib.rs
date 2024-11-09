@@ -48,12 +48,17 @@ impl StdLib {
     #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
     pub const BUFFER: StdLib = StdLib(1 << 9);
 
+    /// [`vector`](https://luau-lang.org/library#vector-library) library
+    #[cfg(any(feature = "luau", doc))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
+    pub const VECTOR: StdLib = StdLib(1 << 10);
+
     /// [`jit`](http://luajit.org/ext_jit.html) library
     ///
     /// Requires `feature = "luajit"`
     #[cfg(any(feature = "luajit", doc))]
     #[cfg_attr(docsrs, doc(cfg(feature = "luajit")))]
-    pub const JIT: StdLib = StdLib(1 << 9);
+    pub const JIT: StdLib = StdLib(1 << 11);
 
     /// (**unsafe**) [`ffi`](http://luajit.org/ext_ffi.html) library
     ///

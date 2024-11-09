@@ -97,17 +97,19 @@ fn test_require() -> Result<()> {
 fn test_vectors() -> Result<()> {
     let lua = Lua::new();
 
-    let v: Vector = lua.load("vector(1, 2, 3) + vector(3, 2, 1)").eval()?;
+    let v: Vector = lua
+        .load("vector.create(1, 2, 3) + vector.create(3, 2, 1)")
+        .eval()?;
     assert_eq!(v, [4.0, 4.0, 4.0]);
 
     // Test conversion into Rust array
-    let v: [f64; 3] = lua.load("vector(1, 2, 3)").eval()?;
+    let v: [f64; 3] = lua.load("vector.create(1, 2, 3)").eval()?;
     assert!(v == [1.0, 2.0, 3.0]);
 
     // Test vector methods
     lua.load(
         r#"
-        local v = vector(1, 2, 3)
+        local v = vector.create(1, 2, 3)
         assert(v.x == 1)
         assert(v.y == 2)
         assert(v.z == 3)
@@ -118,7 +120,7 @@ fn test_vectors() -> Result<()> {
     // Test vector methods (fastcall)
     lua.load(
         r#"
-        local v = vector(1, 2, 3)
+        local v = vector.create(1, 2, 3)
         assert(v.x == 1)
         assert(v.y == 2)
         assert(v.z == 3)
@@ -135,17 +137,19 @@ fn test_vectors() -> Result<()> {
 fn test_vectors() -> Result<()> {
     let lua = Lua::new();
 
-    let v: Vector = lua.load("vector(1, 2, 3, 4) + vector(4, 3, 2, 1)").eval()?;
+    let v: Vector = lua
+        .load("vector.create(1, 2, 3, 4) + vector.create(4, 3, 2, 1)")
+        .eval()?;
     assert_eq!(v, [5.0, 5.0, 5.0, 5.0]);
 
     // Test conversion into Rust array
-    let v: [f64; 4] = lua.load("vector(1, 2, 3, 4)").eval()?;
+    let v: [f64; 4] = lua.load("vector.create(1, 2, 3, 4)").eval()?;
     assert!(v == [1.0, 2.0, 3.0, 4.0]);
 
     // Test vector methods
     lua.load(
         r#"
-        local v = vector(1, 2, 3, 4)
+        local v = vector.create(1, 2, 3, 4)
         assert(v.x == 1)
         assert(v.y == 2)
         assert(v.z == 3)
@@ -157,7 +161,7 @@ fn test_vectors() -> Result<()> {
     // Test vector methods (fastcall)
     lua.load(
         r#"
-        local v = vector(1, 2, 3, 4)
+        local v = vector.create(1, 2, 3, 4)
         assert(v.x == 1)
         assert(v.y == 2)
         assert(v.z == 3)
@@ -180,10 +184,10 @@ fn test_vector_metatable() -> Result<()> {
             r#"
             {
                 __index = {
-                    new = vector,
+                    new = vector.create,
 
                     product = function(a, b)
-                        return vector(a.x * b.x, a.y * b.y, a.z * b.z)
+                        return vector.create(a.x * b.x, a.y * b.y, a.z * b.z)
                     end
                 }
             }

@@ -133,13 +133,7 @@ fn test_serialize_failure() -> Result<(), Box<dyn StdError>> {
 fn test_serialize_vector() -> Result<(), Box<dyn StdError>> {
     let lua = Lua::new();
 
-    let globals = lua.globals();
-    globals.set(
-        "vector",
-        lua.create_function(|_, (x, y, z)| Ok(mlua::Vector::new(x, y, z)))?,
-    )?;
-
-    let val = lua.load("{_vector = vector(1, 2, 3)}").eval::<Value>()?;
+    let val = lua.load("{_vector = vector.create(1, 2, 3)}").eval::<Value>()?;
     let json = serde_json::json!({
         "_vector": [1.0, 2.0, 3.0],
     });
@@ -156,13 +150,9 @@ fn test_serialize_vector() -> Result<(), Box<dyn StdError>> {
 fn test_serialize_vector() -> Result<(), Box<dyn StdError>> {
     let lua = Lua::new();
 
-    let globals = lua.globals();
-    globals.set(
-        "vector",
-        lua.create_function(|_, (x, y, z, w)| Ok(mlua::Vector::new(x, y, z, w)))?,
-    )?;
-
-    let val = lua.load("{_vector = vector(1, 2, 3, 4)}").eval::<Value>()?;
+    let val = lua
+        .load("{_vector = vector.create(1, 2, 3, 4)}")
+        .eval::<Value>()?;
     let json = serde_json::json!({
         "_vector": [1.0, 2.0, 3.0, 4.0],
     });
