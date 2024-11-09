@@ -1028,7 +1028,7 @@ impl Lua {
     ///
     /// Requires `feature = "luau"`
     ///
-    /// [buffer]: https://luau-lang.org/library#buffer-library
+    /// [buffer]: https://luau.org/library#buffer-library
     #[cfg(any(feature = "luau", doc))]
     #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
     pub fn create_buffer(&self, buf: impl AsRef<[u8]>) -> Result<Buffer> {

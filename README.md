@@ -31,7 +31,7 @@ Started as `rlua` fork, `mlua` supports Lua 5.4, 5.3, 5.2, 5.1 (including LuaJIT
 WebAssembly (WASM) is supported through `wasm32-unknown-emscripten` target for all Lua versions excluding JIT.
 
 [GitHub Actions]: https://github.com/khvzak/mlua/actions
-[Roblox Luau]: https://luau-lang.org
+[Roblox Luau]: https://luau.org
 
 ## Usage
 
@@ -291,7 +291,7 @@ Please check the [Luau Sandboxing] page if you are interested in running untrust
 
 `mlua` provides `Lua::sandbox` method for enabling sandbox mode (Luau only).
 
-[Luau Sandboxing]: https://luau-lang.org/sandbox
+[Luau Sandboxing]: https://luau.org/sandbox
 
 ## License
 

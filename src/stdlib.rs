@@ -43,12 +43,12 @@ impl StdLib {
     /// [`package`](https://www.lua.org/manual/5.4/manual.html#6.3) library
     pub const PACKAGE: StdLib = StdLib(1 << 8);
 
-    /// [`buffer`](https://luau-lang.org/library#buffer-library) library
+    /// [`buffer`](https://luau.org/library#buffer-library) library
     #[cfg(any(feature = "luau", doc))]
     #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
     pub const BUFFER: StdLib = StdLib(1 << 9);
 
-    /// [`vector`](https://luau-lang.org/library#vector-library) library
+    /// [`vector`](https://luau.org/library#vector-library) library
     #[cfg(any(feature = "luau", doc))]
     #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
     pub const VECTOR: StdLib = StdLib(1 << 10);
