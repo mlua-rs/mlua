@@ -55,7 +55,11 @@ impl String {
     ///
     /// Any non-Unicode sequences are replaced with [`U+FFFD REPLACEMENT CHARACTER`][U+FFFD].
     ///
+    /// This method returns [`StdString`] instead of [`Cow<'_, str>`] because lifetime cannot be
+    /// bound to a weak Lua object.
+    ///
     /// [U+FFFD]: std::char::REPLACEMENT_CHARACTER
+    /// [`Cow<'_, str>`]: std::borrow::Cow
     ///
     /// # Examples
     ///
