@@ -1,3 +1,18 @@
+## v0.10.1 (Nov 9th, 2024)
+
+- Minimal Luau updated to 0.650
+- Added Luau native vector library support (this can change behavior if you use `vector` function!)
+- Added Lua `String::display` method
+- Improved pretty-printing for Lua tables (#478)
+- Added `Scope::create_any_userdata` to create Lua objects from any non-`'static` Rust types
+- Added `AnyUserData::destroy` method
+- New `userdata-wrappers` feature to `impl UserData` for `Rc<T>`/`Arc<T>`/`Rc<RefCell<T>>`/`Arc<Mutex<T>>` (similar to v0.9)
+- `UserDataRef` in `send` mode now uses shared lock if `T: Sync` (and exclusive lock otherwise)
+- Added `Scope::add_destructor` to attach custom destructors
+- Added `Lua::try_app_data_ref` and `Lua::try_app_data_mut` methods
+- Added `From<Vec>` and `Into<Vec>` support to `MultiValue` and `Variadic` types
+- Bug fixes and improvements (#477 #479)
+
 ## v0.10.0 (Oct 25th, 2024)
 
 Changes since v0.10.0-rc.1
