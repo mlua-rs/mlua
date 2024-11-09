@@ -114,3 +114,17 @@ fn test_string_pointer() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn test_string_display() -> Result<()> {
+    let lua = Lua::new();
+
+    let s = lua.create_string("hello")?;
+    assert_eq!(format!("{}", s.display()), "hello");
+
+    // With invalid utf8
+    let s = lua.create_string(b"hello\0world\xFF")?;
+    assert_eq!(format!("{}", s.display()), "hello\0world�");
+
+    Ok(())
+}

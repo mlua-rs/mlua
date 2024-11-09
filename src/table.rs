@@ -800,7 +800,7 @@ impl Table {
             for (key, value) in pairs {
                 match key {
                     Value::String(key) if is_simple_key(&key.as_bytes()) => {
-                        write!(fmt, "{}{}", " ".repeat(ident + 2), key.to_string_lossy())?;
+                        write!(fmt, "{}{}", " ".repeat(ident + 2), key.display())?;
                         write!(fmt, " = ")?;
                     }
                     _ => {

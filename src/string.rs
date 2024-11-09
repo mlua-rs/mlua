@@ -78,6 +78,16 @@ impl String {
         StdString::from_utf8_lossy(&self.as_bytes()).into_owned()
     }
 
+    /// Returns an object that implements [`Display`] for safely printing a Lua [`String`] that may
+    /// contain non-Unicode data.
+    ///
+    /// This may perform lossy conversion.
+    ///
+    /// [`Display`]: fmt::Display
+    pub fn display(&self) -> impl fmt::Display + '_ {
+        Display(self)
+    }
+
     /// Get the bytes that make up this string.
     ///
     /// The returned slice will not contain the terminating nul byte, but will contain any nul
@@ -213,6 +223,15 @@ impl Serialize for String {
             Ok(s) => serializer.serialize_str(&s),
             Err(_) => serializer.serialize_bytes(&self.as_bytes()),
         }
+    }
+}
+
+struct Display<'a>(&'a String);
+
+impl fmt::Display for Display<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let bytes = self.0.as_bytes();
+        <bstr::BStr as fmt::Display>::fmt(bstr::BStr::new(&bytes), f)
     }
 }
 
