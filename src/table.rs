@@ -778,13 +778,8 @@ impl Table {
         let mut pairs = self.pairs::<Value, Value>().flatten().collect::<Vec<_>>();
         // Sort keys
         pairs.sort_by(|(a, _), (b, _)| a.sort_cmp(b));
-        let is_sequence = pairs.iter().enumerate().all(|(i, (k, _))| {
-            if let Value::Integer(n) = k {
-                *n == (i + 1) as Integer
-            } else {
-                false
-            }
-        });
+        let is_sequence = (pairs.iter().enumerate())
+            .all(|(i, (k, _))| matches!(k, Value::Integer(n) if *n == (i + 1) as Integer));
         if pairs.is_empty() {
             return write!(fmt, "{{}}");
         }
@@ -797,14 +792,14 @@ impl Table {
                 writeln!(fmt, ",")?;
             }
         } else {
+            fn is_simple_key(key: &[u8]) -> bool {
+                key.iter().take(1).all(|c| c.is_ascii_alphabetic() || *c == b'_')
+                    && key.iter().all(|c| c.is_ascii_alphanumeric() || *c == b'_')
+            }
+
             for (key, value) in pairs {
                 match key {
-                    Value::String(key)
-                        if key
-                            .to_string_lossy()
-                            .chars()
-                            .all(|c| matches!(c, 'a'..='z' | 'A'..='Z' | '0'..='9' | '_')) =>
-                    {
+                    Value::String(key) if is_simple_key(&key.as_bytes()) => {
                         write!(fmt, "{}{}", " ".repeat(ident + 2), key.to_string_lossy())?;
                         write!(fmt, " = ")?;
                     }
