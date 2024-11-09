@@ -397,6 +397,7 @@ fn test_table_fmt() -> Result<()> {
         .load(
             r#"
         local t = {1, 2, 3, a = 5, b = { 6 }}
+        t["special-<chars>"] = 10
         t[9.2] = 9.2
         t[1.99] = 1.99
         t[true] = true
@@ -410,7 +411,7 @@ fn test_table_fmt() -> Result<()> {
     // Pretty print
     assert_eq!(
         format!("{table:#?}"),
-        "{\n  [false] = false,\n  [true] = true,\n  [1] = 1,\n  [1.99] = 1.99,\n  [2] = 2,\n  [3] = 3,\n  [9.2] = 9.2,\n  [\"a\"] = 5,\n  [\"b\"] = {\n    [1] = 6,\n  },\n}"
+        "{\n  [false] = false,\n  [true] = true,\n  [1] = 1,\n  [1.99] = 1.99,\n  [2] = 2,\n  [3] = 3,\n  [9.2] = 9.2,\n  a = 5,\n  b = {\n    6,\n  },\n  [\"special-<chars>\"] = 10,\n}"
     );
 
     Ok(())

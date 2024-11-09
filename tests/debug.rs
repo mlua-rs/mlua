@@ -7,7 +7,7 @@ fn test_debug_format() -> Result<()> {
     // Globals
     let globals = lua.globals();
     let dump = format!("{globals:#?}");
-    assert!(dump.starts_with("{\n  [\"_G\"] = table:"));
+    assert!(dump.starts_with("{\n  _G = table:"));
 
     // TODO: Other cases
 
