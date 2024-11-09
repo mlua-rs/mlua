@@ -415,7 +415,10 @@ fn test_table_fmt() -> Result<()> {
     );
 
     let table2 = lua.create_table_from([("1", "first"), ("2", "second")])?;
-    assert_eq!(format!("{table2:#?}"), "{\n  [\"1\"] = \"first\",\n  [\"2\"] = \"second\",\n}");
+    assert_eq!(
+        format!("{table2:#?}"),
+        "{\n  [\"1\"] = \"first\",\n  [\"2\"] = \"second\",\n}"
+    );
 
     Ok(())
 }
