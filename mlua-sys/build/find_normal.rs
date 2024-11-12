@@ -32,13 +32,17 @@ pub fn probe_lua() {
     // Find using `pkg-config`
 
     #[cfg(feature = "lua54")]
-    let (incl_bound, excl_bound, alt_probe, ver) = ("5.4", "5.5", ["lua5.4", "lua-5.4"], "5.4");
+    let (incl_bound, excl_bound, alt_probe, ver) =
+        ("5.4", "5.5", ["lua5.4", "lua-5.4", "lua54"], "5.4");
     #[cfg(feature = "lua53")]
-    let (incl_bound, excl_bound, alt_probe, ver) = ("5.3", "5.4", ["lua5.3", "lua-5.3"], "5.3");
+    let (incl_bound, excl_bound, alt_probe, ver) =
+        ("5.3", "5.4", ["lua5.3", "lua-5.3", "lua53"], "5.3");
     #[cfg(feature = "lua52")]
-    let (incl_bound, excl_bound, alt_probe, ver) = ("5.2", "5.3", ["lua5.2", "lua-5.2"], "5.2");
+    let (incl_bound, excl_bound, alt_probe, ver) =
+        ("5.2", "5.3", ["lua5.2", "lua-5.2", "lua52"], "5.2");
     #[cfg(feature = "lua51")]
-    let (incl_bound, excl_bound, alt_probe, ver) = ("5.1", "5.2", ["lua5.1", "lua-5.1"], "5.1");
+    let (incl_bound, excl_bound, alt_probe, ver) =
+        ("5.1", "5.2", ["lua5.1", "lua-5.1", "lua51"], "5.1");
     #[cfg(feature = "luajit")]
     let (incl_bound, excl_bound, alt_probe, ver) = ("2.0.4", "2.2", [], "JIT");
 
