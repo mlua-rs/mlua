@@ -31,7 +31,7 @@ type StaticFieldCallback = Box<dyn FnOnce(&RawLua) -> Result<()> + 'static>;
 #[derive(Clone, Copy)]
 enum UserDataTypeId {
     Shared(TypeId),
-    Unique(usize),
+    Unique(*mut c_void),
 
     #[cfg(all(feature = "userdata-wrappers", not(feature = "send")))]
     Rc(TypeId),
@@ -77,7 +77,7 @@ impl<T> UserDataRegistry<T> {
 
     #[inline(always)]
     pub(crate) fn new_unique(ud_ptr: *mut c_void) -> Self {
-        Self::with_type_id(UserDataTypeId::Unique(ud_ptr as usize))
+        Self::with_type_id(UserDataTypeId::Unique(ud_ptr))
     }
 
     #[inline(always)]
@@ -157,7 +157,7 @@ impl<T> UserDataRegistry<T> {
                 }
                 #[rustfmt::skip]
                 UserDataTypeId::Unique(target_ptr)
-                    if get_userdata::<UserDataStorage<T>>(state, self_index) as usize == target_ptr =>
+                    if get_userdata::<UserDataStorage<T>>(state, self_index) as *mut c_void == target_ptr =>
                 {
                     let ud = target_ptr as *mut UserDataStorage<T>;
                     try_self_arg!((*ud).try_borrow_scoped(|ud| {
@@ -285,7 +285,7 @@ impl<T> UserDataRegistry<T> {
                 }
                 #[rustfmt::skip]
                 UserDataTypeId::Unique(target_ptr)
-                    if get_userdata::<UserDataStorage<T>>(state, self_index) as usize == target_ptr =>
+                    if get_userdata::<UserDataStorage<T>>(state, self_index) as *mut c_void == target_ptr =>
                 {
                     let ud = target_ptr as *mut UserDataStorage<T>;
                     try_self_arg!((*ud).try_borrow_scoped_mut(|ud| {
