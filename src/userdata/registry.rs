@@ -99,6 +99,9 @@ impl UserDataTypeId {
     }
 }
 
+#[cfg(feature = "send")]
+unsafe impl Send for UserDataTypeId {}
+
 impl<T> UserDataRegistry<T> {
     #[inline(always)]
     pub(crate) fn new(lua: &Lua, type_id: TypeId) -> Self {
