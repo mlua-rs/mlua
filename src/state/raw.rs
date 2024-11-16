@@ -22,12 +22,14 @@ use crate::types::{
     AppDataRef, AppDataRefMut, Callback, CallbackUpvalue, DestructedUserdata, Integer, LightUserData,
     MaybeSend, ReentrantMutex, RegistryKey, ValueRef, XRc,
 };
-use crate::userdata::{AnyUserData, MetaMethod, UserData, UserDataRegistry, UserDataStorage};
+use crate::userdata::{
+    AnyUserData, MetaMethod, RawUserDataRegistry, UserData, UserDataRegistry, UserDataStorage,
+};
 use crate::util::{
     assert_stack, check_stack, get_destructed_userdata_metatable, get_internal_userdata, get_main_state,
     get_metatable_ptr, get_userdata, init_error_registry, init_internal_metatable, init_userdata_metatable,
     pop_error, push_internal_userdata, push_string, push_table, rawset_field, safe_pcall, safe_xpcall,
-    short_type_name, take_userdata, StackGuard, WrappedFailure,
+    short_type_name, StackGuard, WrappedFailure,
 };
 use crate::value::{Nil, Value};
 
@@ -757,7 +759,7 @@ impl RawLua {
             let mut registry = UserDataRegistry::new(type_id);
             T::register(&mut registry);
 
-            self.create_userdata_metatable(registry)
+            self.create_userdata_metatable(registry.into_raw())
         })
     }
 
@@ -774,7 +776,7 @@ impl RawLua {
 
             // Create an empty metatable
             let registry = UserDataRegistry::<T>::new(type_id);
-            self.create_userdata_metatable(registry)
+            self.create_userdata_metatable(registry.into_raw())
         })
     }
 
@@ -810,12 +812,9 @@ impl RawLua {
         Ok(AnyUserData(self.pop_ref()))
     }
 
-    pub(crate) unsafe fn create_userdata_metatable<T>(
-        &self,
-        registry: UserDataRegistry<T>,
-    ) -> Result<Integer> {
+    pub(crate) unsafe fn create_userdata_metatable(&self, registry: RawUserDataRegistry) -> Result<Integer> {
         let state = self.state();
-        let type_id = registry.type_id();
+        let type_id = registry.type_id;
 
         self.push_userdata_metatable(registry)?;
 
@@ -832,7 +831,7 @@ impl RawLua {
         Ok(id as Integer)
     }
 
-    pub(crate) unsafe fn push_userdata_metatable<T>(&self, mut registry: UserDataRegistry<T>) -> Result<()> {
+    pub(crate) unsafe fn push_userdata_metatable(&self, mut registry: RawUserDataRegistry) -> Result<()> {
         let state = self.state();
         let mut stack_guard = StackGuard::new(state);
         check_stack(state, 13)?;
@@ -859,7 +858,7 @@ impl RawLua {
         }
         // Set `__name/__type` if not provided
         if !has_name {
-            let type_name = short_type_name::<T>();
+            let type_name = registry.type_name;
             push_string(state, type_name.as_bytes(), !self.unlikely_memory_error())?;
             rawset_field(state, -2, MetaMethod::Type.name())?;
         }
@@ -960,18 +959,7 @@ impl RawLua {
             }
         }
 
-        unsafe extern "C-unwind" fn userdata_destructor<T>(state: *mut ffi::lua_State) -> c_int {
-            let ud = get_userdata::<UserDataStorage<T>>(state, -1);
-            if !(*ud).is_borrowed() {
-                take_userdata::<UserDataStorage<T>>(state);
-                ffi::lua_pushboolean(state, 1);
-            } else {
-                ffi::lua_pushboolean(state, 0);
-            }
-            1
-        }
-
-        ffi::lua_pushcfunction(state, userdata_destructor::<T>);
+        ffi::lua_pushcfunction(state, registry.destructor);
         rawset_field(state, metatable_index, "__gc")?;
 
         init_userdata_metatable(

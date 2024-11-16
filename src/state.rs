@@ -1317,7 +1317,7 @@ impl Lua {
             }
 
             // Register the type
-            lua.create_userdata_metatable(registry)?;
+            lua.create_userdata_metatable(registry.into_raw())?;
         }
         Ok(())
     }

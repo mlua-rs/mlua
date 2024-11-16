@@ -176,7 +176,7 @@ impl<'scope, 'env: 'scope> Scope<'scope, 'env> {
             // Push the metatable and register it with no TypeId
             let mut registry = UserDataRegistry::new_unique(ud_ptr as *mut _);
             T::register(&mut registry);
-            self.lua.push_userdata_metatable(registry)?;
+            self.lua.push_userdata_metatable(registry.into_raw())?;
             let mt_ptr = ffi::lua_topointer(state, -1);
             self.lua.register_userdata_metatable(mt_ptr, None);
 
@@ -224,7 +224,7 @@ impl<'scope, 'env: 'scope> Scope<'scope, 'env> {
             // Push the metatable and register it with no TypeId
             let mut registry = UserDataRegistry::new_unique(ud_ptr as *mut _);
             register(&mut registry);
-            self.lua.push_userdata_metatable(registry)?;
+            self.lua.push_userdata_metatable(registry.into_raw())?;
             let mt_ptr = ffi::lua_topointer(state, -1);
             self.lua.register_userdata_metatable(mt_ptr, None);
 

@@ -27,8 +27,8 @@ use {
 // Re-export for convenience
 pub(crate) use cell::UserDataStorage;
 pub use cell::{UserDataRef, UserDataRefMut};
-pub(crate) use registry::UserDataProxy;
 pub use registry::UserDataRegistry;
+pub(crate) use registry::{RawUserDataRegistry, UserDataProxy};
 
 /// Kinds of metamethods that can be overridden.
 ///

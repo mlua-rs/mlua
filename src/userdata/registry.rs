@@ -51,6 +51,12 @@ enum UserDataTypeId {
 
 /// Handle to registry for userdata methods and metamethods.
 pub struct UserDataRegistry<T> {
+    raw: RawUserDataRegistry,
+    ud_type_id: UserDataTypeId,
+    _type: PhantomData<T>,
+}
+
+pub(crate) struct RawUserDataRegistry {
     // Fields
     pub(crate) fields: Vec<(String, StaticFieldCallback)>,
     pub(crate) field_getters: Vec<(String, Callback)>,
@@ -65,42 +71,15 @@ pub struct UserDataRegistry<T> {
     #[cfg(feature = "async")]
     pub(crate) async_meta_methods: Vec<(String, AsyncCallback)>,
 
-    type_id: UserDataTypeId,
-    _type: PhantomData<T>,
+    pub(crate) destructor: ffi::lua_CFunction,
+    pub(crate) type_id: Option<TypeId>,
+    pub(crate) type_name: StdString,
 }
 
-impl<T> UserDataRegistry<T> {
-    #[inline(always)]
-    pub(crate) fn new(type_id: TypeId) -> Self {
-        Self::with_type_id(UserDataTypeId::Shared(type_id))
-    }
-
-    #[inline(always)]
-    pub(crate) fn new_unique(ud_ptr: *mut c_void) -> Self {
-        Self::with_type_id(UserDataTypeId::Unique(ud_ptr))
-    }
-
-    #[inline(always)]
-    fn with_type_id(type_id: UserDataTypeId) -> Self {
-        UserDataRegistry {
-            fields: Vec::new(),
-            field_getters: Vec::new(),
-            field_setters: Vec::new(),
-            meta_fields: Vec::new(),
-            methods: Vec::new(),
-            #[cfg(feature = "async")]
-            async_methods: Vec::new(),
-            meta_methods: Vec::new(),
-            #[cfg(feature = "async")]
-            async_meta_methods: Vec::new(),
-            type_id,
-            _type: PhantomData,
-        }
-    }
-
+impl UserDataTypeId {
     #[inline]
-    pub(crate) fn type_id(&self) -> Option<TypeId> {
-        match self.type_id {
+    pub(crate) fn type_id(self) -> Option<TypeId> {
+        match self {
             UserDataTypeId::Shared(type_id) => Some(type_id),
             UserDataTypeId::Unique(_) => None,
             #[cfg(all(feature = "userdata-wrappers", not(feature = "send")))]
@@ -119,6 +98,43 @@ impl<T> UserDataRegistry<T> {
             UserDataTypeId::ArcParkingLotRwLock(type_id) => Some(type_id),
         }
     }
+}
+
+impl<T> UserDataRegistry<T> {
+    #[inline(always)]
+    pub(crate) fn new(type_id: TypeId) -> Self {
+        Self::with_type_id(UserDataTypeId::Shared(type_id))
+    }
+
+    #[inline(always)]
+    pub(crate) fn new_unique(ud_ptr: *mut c_void) -> Self {
+        Self::with_type_id(UserDataTypeId::Unique(ud_ptr))
+    }
+
+    #[inline(always)]
+    fn with_type_id(ud_type_id: UserDataTypeId) -> Self {
+        let raw = RawUserDataRegistry {
+            fields: Vec::new(),
+            field_getters: Vec::new(),
+            field_setters: Vec::new(),
+            meta_fields: Vec::new(),
+            methods: Vec::new(),
+            #[cfg(feature = "async")]
+            async_methods: Vec::new(),
+            meta_methods: Vec::new(),
+            #[cfg(feature = "async")]
+            async_meta_methods: Vec::new(),
+            destructor: super::util::userdata_destructor::<T>,
+            type_id: ud_type_id.type_id(),
+            type_name: short_type_name::<T>(),
+        };
+
+        UserDataRegistry {
+            raw,
+            ud_type_id,
+            _type: PhantomData,
+        }
+    }
 
     fn box_method<M, A, R>(&self, name: &str, method: M) -> Callback
     where
@@ -133,7 +149,7 @@ impl<T> UserDataRegistry<T> {
             };
         }
 
-        let target_type_id = self.type_id;
+        let target_type_id = self.ud_type_id;
         Box::new(move |rawlua, nargs| unsafe {
             if nargs == 0 {
                 let err = Error::from_lua_conversion("missing argument", "userdata", None);
@@ -260,7 +276,7 @@ impl<T> UserDataRegistry<T> {
         }
 
         let method = RefCell::new(method);
-        let target_type_id = self.type_id;
+        let target_type_id = self.ud_type_id;
         Box::new(move |rawlua, nargs| unsafe {
             let mut method = method.try_borrow_mut().map_err(|_| Error::RecursiveMutCallback)?;
             if nargs == 0 {
@@ -514,6 +530,11 @@ impl<T> UserDataRegistry<T> {
         }
         value.into_lua(lua)
     }
+
+    #[inline(always)]
+    pub(crate) fn into_raw(self) -> RawUserDataRegistry {
+        self.raw
+    }
 }
 
 // Returns function name for the type `T`, without the module path
@@ -527,7 +548,7 @@ impl<T> UserDataFields<T> for UserDataRegistry<T> {
         V: IntoLua + 'static,
     {
         let name = name.to_string();
-        self.fields.push((
+        self.raw.fields.push((
             name,
             Box::new(move |rawlua| unsafe { value.push_into_stack(rawlua) }),
         ));
@@ -540,7 +561,7 @@ impl<T> UserDataFields<T> for UserDataRegistry<T> {
     {
         let name = name.to_string();
         let callback = self.box_method(&name, move |lua, data, ()| method(lua, data));
-        self.field_getters.push((name, callback));
+        self.raw.field_getters.push((name, callback));
     }
 
     fn add_field_method_set<M, A>(&mut self, name: impl ToString, method: M)
@@ -550,7 +571,7 @@ impl<T> UserDataFields<T> for UserDataRegistry<T> {
     {
         let name = name.to_string();
         let callback = self.box_method_mut(&name, method);
-        self.field_setters.push((name, callback));
+        self.raw.field_setters.push((name, callback));
     }
 
     fn add_field_function_get<F, R>(&mut self, name: impl ToString, function: F)
@@ -560,7 +581,7 @@ impl<T> UserDataFields<T> for UserDataRegistry<T> {
     {
         let name = name.to_string();
         let callback = self.box_function(&name, function);
-        self.field_getters.push((name, callback));
+        self.raw.field_getters.push((name, callback));
     }
 
     fn add_field_function_set<F, A>(&mut self, name: impl ToString, mut function: F)
@@ -570,7 +591,7 @@ impl<T> UserDataFields<T> for UserDataRegistry<T> {
     {
         let name = name.to_string();
         let callback = self.box_function_mut(&name, move |lua, (data, val)| function(lua, data, val));
-        self.field_setters.push((name, callback));
+        self.raw.field_setters.push((name, callback));
     }
 
     fn add_meta_field<V>(&mut self, name: impl ToString, value: V)
@@ -578,7 +599,7 @@ impl<T> UserDataFields<T> for UserDataRegistry<T> {
         V: IntoLua + 'static,
     {
         let name = name.to_string();
-        self.meta_fields.push((
+        self.raw.meta_fields.push((
             name.clone(),
             Box::new(move |rawlua| unsafe {
                 Self::check_meta_field(rawlua.lua(), &name, value)?.push_into_stack(rawlua)
@@ -592,7 +613,7 @@ impl<T> UserDataFields<T> for UserDataRegistry<T> {
         R: IntoLua,
     {
         let name = name.to_string();
-        self.meta_fields.push((
+        self.raw.meta_fields.push((
             name.clone(),
             Box::new(move |rawlua| unsafe {
                 let lua = rawlua.lua();
@@ -611,7 +632,7 @@ impl<T> UserDataMethods<T> for UserDataRegistry<T> {
     {
         let name = name.to_string();
         let callback = self.box_method(&name, method);
-        self.methods.push((name, callback));
+        self.raw.methods.push((name, callback));
     }
 
     fn add_method_mut<M, A, R>(&mut self, name: impl ToString, method: M)
@@ -622,7 +643,7 @@ impl<T> UserDataMethods<T> for UserDataRegistry<T> {
     {
         let name = name.to_string();
         let callback = self.box_method_mut(&name, method);
-        self.methods.push((name, callback));
+        self.raw.methods.push((name, callback));
     }
 
     #[cfg(feature = "async")]
@@ -636,7 +657,7 @@ impl<T> UserDataMethods<T> for UserDataRegistry<T> {
     {
         let name = name.to_string();
         let callback = self.box_async_method(&name, method);
-        self.async_methods.push((name, callback));
+        self.raw.async_methods.push((name, callback));
     }
 
     #[cfg(feature = "async")]
@@ -650,7 +671,7 @@ impl<T> UserDataMethods<T> for UserDataRegistry<T> {
     {
         let name = name.to_string();
         let callback = self.box_async_method_mut(&name, method);
-        self.async_methods.push((name, callback));
+        self.raw.async_methods.push((name, callback));
     }
 
     fn add_function<F, A, R>(&mut self, name: impl ToString, function: F)
@@ -661,7 +682,7 @@ impl<T> UserDataMethods<T> for UserDataRegistry<T> {
     {
         let name = name.to_string();
         let callback = self.box_function(&name, function);
-        self.methods.push((name, callback));
+        self.raw.methods.push((name, callback));
     }
 
     fn add_function_mut<F, A, R>(&mut self, name: impl ToString, function: F)
@@ -672,7 +693,7 @@ impl<T> UserDataMethods<T> for UserDataRegistry<T> {
     {
         let name = name.to_string();
         let callback = self.box_function_mut(&name, function);
-        self.methods.push((name, callback));
+        self.raw.methods.push((name, callback));
     }
 
     #[cfg(feature = "async")]
@@ -685,7 +706,7 @@ impl<T> UserDataMethods<T> for UserDataRegistry<T> {
     {
         let name = name.to_string();
         let callback = self.box_async_function(&name, function);
-        self.async_methods.push((name, callback));
+        self.raw.async_methods.push((name, callback));
     }
 
     fn add_meta_method<M, A, R>(&mut self, name: impl ToString, method: M)
@@ -696,7 +717,7 @@ impl<T> UserDataMethods<T> for UserDataRegistry<T> {
     {
         let name = name.to_string();
         let callback = self.box_method(&name, method);
-        self.meta_methods.push((name, callback));
+        self.raw.meta_methods.push((name, callback));
     }
 
     fn add_meta_method_mut<M, A, R>(&mut self, name: impl ToString, method: M)
@@ -707,7 +728,7 @@ impl<T> UserDataMethods<T> for UserDataRegistry<T> {
     {
         let name = name.to_string();
         let callback = self.box_method_mut(&name, method);
-        self.meta_methods.push((name, callback));
+        self.raw.meta_methods.push((name, callback));
     }
 
     #[cfg(all(feature = "async", not(any(feature = "lua51", feature = "luau"))))]
@@ -721,7 +742,7 @@ impl<T> UserDataMethods<T> for UserDataRegistry<T> {
     {
         let name = name.to_string();
         let callback = self.box_async_method(&name, method);
-        self.async_meta_methods.push((name, callback));
+        self.raw.async_meta_methods.push((name, callback));
     }
 
     #[cfg(all(feature = "async", not(any(feature = "lua51", feature = "luau"))))]
@@ -735,7 +756,7 @@ impl<T> UserDataMethods<T> for UserDataRegistry<T> {
     {
         let name = name.to_string();
         let callback = self.box_async_method_mut(&name, method);
-        self.async_meta_methods.push((name, callback));
+        self.raw.async_meta_methods.push((name, callback));
     }
 
     fn add_meta_function<F, A, R>(&mut self, name: impl ToString, function: F)
@@ -746,7 +767,7 @@ impl<T> UserDataMethods<T> for UserDataRegistry<T> {
     {
         let name = name.to_string();
         let callback = self.box_function(&name, function);
-        self.meta_methods.push((name, callback));
+        self.raw.meta_methods.push((name, callback));
     }
 
     fn add_meta_function_mut<F, A, R>(&mut self, name: impl ToString, function: F)
@@ -757,7 +778,7 @@ impl<T> UserDataMethods<T> for UserDataRegistry<T> {
     {
         let name = name.to_string();
         let callback = self.box_function_mut(&name, function);
-        self.meta_methods.push((name, callback));
+        self.raw.meta_methods.push((name, callback));
     }
 
     #[cfg(all(feature = "async", not(any(feature = "lua51", feature = "luau"))))]
@@ -770,7 +791,7 @@ impl<T> UserDataMethods<T> for UserDataRegistry<T> {
     {
         let name = name.to_string();
         let callback = self.box_async_function(&name, function);
-        self.async_meta_methods.push((name, callback));
+        self.raw.async_meta_methods.push((name, callback));
     }
 }
 
@@ -786,18 +807,16 @@ macro_rules! lua_userdata_impl {
                 T::register(&mut orig_registry);
 
                 // Copy all fields, methods, etc. from the original registry
-                registry.fields.extend(orig_registry.fields);
-                registry.field_getters.extend(orig_registry.field_getters);
-                registry.field_setters.extend(orig_registry.field_setters);
-                registry.meta_fields.extend(orig_registry.meta_fields);
-                registry.methods.extend(orig_registry.methods);
+                (registry.raw.fields).extend(orig_registry.raw.fields);
+                (registry.raw.field_getters).extend(orig_registry.raw.field_getters);
+                (registry.raw.field_setters).extend(orig_registry.raw.field_setters);
+                (registry.raw.meta_fields).extend(orig_registry.raw.meta_fields);
+                (registry.raw.methods).extend(orig_registry.raw.methods);
                 #[cfg(feature = "async")]
-                registry.async_methods.extend(orig_registry.async_methods);
-                registry.meta_methods.extend(orig_registry.meta_methods);
+                (registry.raw.async_methods).extend(orig_registry.raw.async_methods);
+                (registry.raw.meta_methods).extend(orig_registry.raw.meta_methods);
                 #[cfg(feature = "async")]
-                registry
-                    .async_meta_methods
-                    .extend(orig_registry.async_meta_methods);
+                (registry.raw.async_meta_methods).extend(orig_registry.raw.async_meta_methods);
             }
         }
     };
