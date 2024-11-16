@@ -13,6 +13,7 @@ use crate::error::Result;
 use crate::state::RawLua;
 use crate::stdlib::StdLib;
 use crate::types::{AppData, ReentrantMutex, XRc};
+use crate::userdata::RawUserDataRegistry;
 use crate::util::{get_internal_metatable, push_internal_userdata, TypeKey, WrappedFailure};
 
 #[cfg(any(feature = "luau", doc))]
@@ -35,6 +36,7 @@ pub(crate) struct ExtraData {
     pub(super) weak: MaybeUninit<WeakLua>,
     pub(super) owned: bool,
 
+    pub(super) pending_userdata_reg: FxHashMap<TypeId, RawUserDataRegistry>,
     pub(super) registered_userdata_t: FxHashMap<TypeId, c_int>,
     pub(super) registered_userdata_mt: FxHashMap<*const c_void, Option<TypeId>>,
     pub(super) last_checked_userdata_mt: (*const c_void, Option<TypeId>),
@@ -144,6 +146,7 @@ impl ExtraData {
             lua: MaybeUninit::uninit(),
             weak: MaybeUninit::uninit(),
             owned,
+            pending_userdata_reg: FxHashMap::default(),
             registered_userdata_t: FxHashMap::default(),
             registered_userdata_mt: FxHashMap::default(),
             last_checked_userdata_mt: (ptr::null(), None),

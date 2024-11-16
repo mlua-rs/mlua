@@ -756,7 +756,7 @@ impl RawLua {
             }
 
             // Create a new metatable from `UserData` definition
-            let mut registry = UserDataRegistry::new(type_id);
+            let mut registry = UserDataRegistry::new(self.lua(), type_id);
             T::register(&mut registry);
 
             self.create_userdata_metatable(registry.into_raw())
@@ -774,9 +774,12 @@ impl RawLua {
                 return Ok(table_id as Integer);
             }
 
-            // Create an empty metatable
-            let registry = UserDataRegistry::<T>::new(type_id);
-            self.create_userdata_metatable(registry.into_raw())
+            // Check if metatable creation is pending or create an empty metatable otherwise
+            let registry = match (*self.extra.get()).pending_userdata_reg.remove(&type_id) {
+                Some(registry) => registry,
+                None => UserDataRegistry::<T>::new(self.lua(), type_id).into_raw(),
+            };
+            self.create_userdata_metatable(registry)
         })
     }
 
@@ -851,9 +854,9 @@ impl RawLua {
             rawset_field(state, -2, MetaMethod::validate(&k)?)?;
         }
         let mut has_name = false;
-        for (k, push_field) in registry.meta_fields {
+        for (k, v) in registry.meta_fields {
             has_name = has_name || k == MetaMethod::Type;
-            push_field(self)?;
+            v?.push_into_stack(self)?;
             rawset_field(state, -2, MetaMethod::validate(&k)?)?;
         }
         // Set `__name/__type` if not provided
@@ -875,8 +878,8 @@ impl RawLua {
                         ffi::lua_pop(state, 1);
                         push_table(state, 0, fields_nrec, true)?;
                     }
-                    for (k, push_field) in mem::take(&mut registry.fields) {
-                        push_field(self)?;
+                    for (k, v) in mem::take(&mut registry.fields) {
+                        v?.push_into_stack(self)?;
                         rawset_field(state, -2, &k)?;
                     }
                     rawset_field(state, metatable_index, "__index")?;
@@ -896,12 +899,12 @@ impl RawLua {
                 self.push(self.create_callback(m)?)?;
                 rawset_field(state, -2, &k)?;
             }
-            for (k, push_field) in registry.fields {
+            for (k, v) in registry.fields {
                 unsafe extern "C-unwind" fn return_field(state: *mut ffi::lua_State) -> c_int {
                     ffi::lua_pushvalue(state, ffi::lua_upvalueindex(1));
                     1
                 }
-                push_field(self)?;
+                v?.push_into_stack(self)?;
                 protect_lua!(state, 1, 1, fn(state) {
                     ffi::lua_pushcclosure(state, return_field, 1);
                 })?;

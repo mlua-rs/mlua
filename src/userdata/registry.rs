@@ -7,7 +7,7 @@ use std::os::raw::c_void;
 use std::string::String as StdString;
 
 use crate::error::{Error, Result};
-use crate::state::{Lua, RawLua};
+use crate::state::{Lua, LuaGuard};
 use crate::traits::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti};
 use crate::types::{Callback, MaybeSend};
 use crate::userdata::{AnyUserData, MetaMethod, UserData, UserDataFields, UserDataMethods, UserDataStorage};
@@ -25,8 +25,6 @@ use {
 use std::rc::Rc;
 #[cfg(feature = "userdata-wrappers")]
 use std::sync::{Arc, Mutex, RwLock};
-
-type StaticFieldCallback = Box<dyn FnOnce(&RawLua) -> Result<()> + 'static>;
 
 #[derive(Clone, Copy)]
 enum UserDataTypeId {
@@ -51,6 +49,7 @@ enum UserDataTypeId {
 
 /// Handle to registry for userdata methods and metamethods.
 pub struct UserDataRegistry<T> {
+    lua: LuaGuard,
     raw: RawUserDataRegistry,
     ud_type_id: UserDataTypeId,
     _type: PhantomData<T>,
@@ -58,10 +57,10 @@ pub struct UserDataRegistry<T> {
 
 pub(crate) struct RawUserDataRegistry {
     // Fields
-    pub(crate) fields: Vec<(String, StaticFieldCallback)>,
+    pub(crate) fields: Vec<(String, Result<Value>)>,
     pub(crate) field_getters: Vec<(String, Callback)>,
     pub(crate) field_setters: Vec<(String, Callback)>,
-    pub(crate) meta_fields: Vec<(String, StaticFieldCallback)>,
+    pub(crate) meta_fields: Vec<(String, Result<Value>)>,
 
     // Methods
     pub(crate) methods: Vec<(String, Callback)>,
@@ -102,17 +101,17 @@ impl UserDataTypeId {
 
 impl<T> UserDataRegistry<T> {
     #[inline(always)]
-    pub(crate) fn new(type_id: TypeId) -> Self {
-        Self::with_type_id(UserDataTypeId::Shared(type_id))
+    pub(crate) fn new(lua: &Lua, type_id: TypeId) -> Self {
+        Self::with_type_id(lua, UserDataTypeId::Shared(type_id))
     }
 
     #[inline(always)]
-    pub(crate) fn new_unique(ud_ptr: *mut c_void) -> Self {
-        Self::with_type_id(UserDataTypeId::Unique(ud_ptr))
+    pub(crate) fn new_unique(lua: &Lua, ud_ptr: *mut c_void) -> Self {
+        Self::with_type_id(lua, UserDataTypeId::Unique(ud_ptr))
     }
 
     #[inline(always)]
-    fn with_type_id(ud_type_id: UserDataTypeId) -> Self {
+    fn with_type_id(lua: &Lua, ud_type_id: UserDataTypeId) -> Self {
         let raw = RawUserDataRegistry {
             fields: Vec::new(),
             field_getters: Vec::new(),
@@ -130,6 +129,7 @@ impl<T> UserDataRegistry<T> {
         };
 
         UserDataRegistry {
+            lua: lua.lock_arc(),
             raw,
             ud_type_id,
             _type: PhantomData,
@@ -548,10 +548,7 @@ impl<T> UserDataFields<T> for UserDataRegistry<T> {
         V: IntoLua + 'static,
     {
         let name = name.to_string();
-        self.raw.fields.push((
-            name,
-            Box::new(move |rawlua| unsafe { value.push_into_stack(rawlua) }),
-        ));
+        self.raw.fields.push((name, value.into_lua(self.lua.lua())));
     }
 
     fn add_field_method_get<M, R>(&mut self, name: impl ToString, method: M)
@@ -598,13 +595,10 @@ impl<T> UserDataFields<T> for UserDataRegistry<T> {
     where
         V: IntoLua + 'static,
     {
+        let lua = self.lua.lua();
         let name = name.to_string();
-        self.raw.meta_fields.push((
-            name.clone(),
-            Box::new(move |rawlua| unsafe {
-                Self::check_meta_field(rawlua.lua(), &name, value)?.push_into_stack(rawlua)
-            }),
-        ));
+        let field = Self::check_meta_field(lua, &name, value).and_then(|v| v.into_lua(lua));
+        self.raw.meta_fields.push((name, field));
     }
 
     fn add_meta_field_with<F, R>(&mut self, name: impl ToString, f: F)
@@ -612,14 +606,10 @@ impl<T> UserDataFields<T> for UserDataRegistry<T> {
         F: FnOnce(&Lua) -> Result<R> + 'static,
         R: IntoLua,
     {
+        let lua = self.lua.lua();
         let name = name.to_string();
-        self.raw.meta_fields.push((
-            name.clone(),
-            Box::new(move |rawlua| unsafe {
-                let lua = rawlua.lua();
-                Self::check_meta_field(lua, &name, f(lua)?)?.push_into_stack(rawlua)
-            }),
-        ));
+        let field = f(lua).and_then(|v| Self::check_meta_field(lua, &name, v).and_then(|v| v.into_lua(lua)));
+        self.raw.meta_fields.push((name, field));
     }
 }
 
@@ -803,7 +793,7 @@ macro_rules! lua_userdata_impl {
     ($type:ty, $type_id:expr) => {
         impl<T: UserData + 'static> UserData for $type {
             fn register(registry: &mut UserDataRegistry<Self>) {
-                let mut orig_registry = UserDataRegistry::with_type_id($type_id);
+                let mut orig_registry = UserDataRegistry::with_type_id(registry.lua.lua(), $type_id);
                 T::register(&mut orig_registry);
 
                 // Copy all fields, methods, etc. from the original registry
@@ -841,3 +831,9 @@ lua_userdata_impl!(Arc<RwLock<T>> => ArcRwLock);
 lua_userdata_impl!(Arc<parking_lot::Mutex<T>> => ArcParkingLotMutex);
 #[cfg(feature = "userdata-wrappers")]
 lua_userdata_impl!(Arc<parking_lot::RwLock<T>> => ArcParkingLotRwLock);
+
+#[cfg(test)]
+mod assertions {
+    #[cfg(feature = "send")]
+    static_assertions::assert_impl_all!(super::RawUserDataRegistry: Send);
+}
