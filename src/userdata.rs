@@ -1073,7 +1073,7 @@ impl Serialize for AnyUserData {
     }
 }
 
-pub(crate) struct WrappedUserdata<F: FnOnce(&Lua) -> Result<AnyUserData>>(F);
+struct WrappedUserdata<F: FnOnce(&Lua) -> Result<AnyUserData>>(F);
 
 impl AnyUserData {
     /// Wraps any Rust type, returning an opaque type that implements [`IntoLua`] trait.

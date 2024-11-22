@@ -368,7 +368,7 @@ impl<'a> IntoIterator for BorrowedBytes<'a> {
     }
 }
 
-pub(crate) struct WrappedString<T: AsRef<[u8]>>(T);
+struct WrappedString<T: AsRef<[u8]>>(T);
 
 impl String {
     /// Wraps bytes, returning an opaque type that implements [`IntoLua`] trait.

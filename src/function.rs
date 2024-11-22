@@ -509,10 +509,10 @@ impl Function {
     }
 }
 
-pub(crate) struct WrappedFunction(pub(crate) Callback);
+struct WrappedFunction(pub(crate) Callback);
 
 #[cfg(feature = "async")]
-pub(crate) struct WrappedAsyncFunction(pub(crate) AsyncCallback);
+struct WrappedAsyncFunction(pub(crate) AsyncCallback);
 
 impl Function {
     /// Wraps a Rust function or closure, returning an opaque type that implements [`IntoLua`]
