@@ -128,3 +128,18 @@ fn test_string_display() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn test_string_wrap() -> Result<()> {
+    let lua = Lua::new();
+
+    let s = String::wrap("hello, world");
+    lua.globals().set("s", s)?;
+    assert_eq!(lua.globals().get::<String>("s")?, "hello, world");
+
+    let s2 = String::wrap("hello, world (owned)".to_string());
+    lua.globals().set("s2", s2)?;
+    assert_eq!(lua.globals().get::<String>("s2")?, "hello, world (owned)");
+
+    Ok(())
+}

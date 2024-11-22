@@ -7,7 +7,9 @@ use std::{cmp, fmt, slice, str};
 
 use crate::error::{Error, Result};
 use crate::state::Lua;
+use crate::traits::IntoLua;
 use crate::types::{LuaType, ValueRef};
+use crate::value::Value;
 
 #[cfg(feature = "serialize")]
 use {
@@ -363,6 +365,26 @@ impl<'a> IntoIterator for BorrowedBytes<'a> {
 
     fn into_iter(self) -> Self::IntoIter {
         self.0.iter()
+    }
+}
+
+pub(crate) struct WrappedString<F: FnOnce(&Lua) -> Result<String>>(F);
+
+impl String {
+    /// Wraps bytes, returning an opaque type that implements [`IntoLua`] trait.
+    ///
+    /// This function uses [`Lua::create_string`] under the hood.
+    pub fn wrap(data: impl AsRef<[u8]>) -> impl IntoLua {
+        WrappedString(move |lua| lua.create_string(data))
+    }
+}
+
+impl<F> IntoLua for WrappedString<F>
+where
+    F: FnOnce(&Lua) -> Result<String>,
+{
+    fn into_lua(self, lua: &Lua) -> Result<Value> {
+        (self.0)(lua).map(Value::String)
     }
 }
 
