@@ -1003,10 +1003,17 @@ impl Lua {
     /// [`Chunk::exec`]: crate::Chunk::exec
     #[track_caller]
     pub fn load<'a>(&self, chunk: impl AsChunk<'a>) -> Chunk<'a> {
-        let caller = Location::caller();
+        self.load_with_location(chunk, Location::caller())
+    }
+
+    pub(crate) fn load_with_location<'a>(
+        &self,
+        chunk: impl AsChunk<'a>,
+        location: &'static Location<'static>,
+    ) -> Chunk<'a> {
         Chunk {
             lua: self.weak(),
-            name: chunk.name().unwrap_or_else(|| caller.to_string()),
+            name: chunk.name().unwrap_or_else(|| location.to_string()),
             env: chunk.environment(self),
             mode: chunk.mode(),
             source: chunk.source(),

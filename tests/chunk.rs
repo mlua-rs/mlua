@@ -1,6 +1,6 @@
 use std::{fs, io};
 
-use mlua::{Lua, Result};
+use mlua::{Chunk, Lua, Result};
 
 #[test]
 fn test_chunk_path() -> Result<()> {
@@ -118,6 +118,23 @@ fn test_compiler() -> Result<()> {
         }
         res => panic!("expected result: {res:?}"),
     }
+
+    Ok(())
+}
+
+#[test]
+fn test_chunk_wrap() -> Result<()> {
+    let lua = Lua::new();
+
+    let f = Chunk::wrap("return 123");
+    lua.globals().set("f", f)?;
+    lua.load("assert(f() == 123)").exec().unwrap();
+
+    lua.globals().set("f2", Chunk::wrap("c()"))?;
+    assert!(
+        (lua.load("f2()").exec().err().unwrap().to_string()).contains(file!()),
+        "wrong chunk location"
+    );
 
     Ok(())
 }

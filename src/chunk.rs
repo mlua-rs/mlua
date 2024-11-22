@@ -2,6 +2,8 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::ffi::CString;
 use std::io::Result as IoResult;
+use std::marker::PhantomData;
+use std::panic::Location;
 use std::path::{Path, PathBuf};
 use std::string::String as StdString;
 
@@ -9,7 +11,8 @@ use crate::error::{Error, Result};
 use crate::function::Function;
 use crate::state::{Lua, WeakLua};
 use crate::table::Table;
-use crate::traits::{FromLuaMulti, IntoLuaMulti};
+use crate::traits::{FromLuaMulti, IntoLua, IntoLuaMulti};
+use crate::value::Value;
 
 /// Trait for types [loadable by Lua] and convertible to a [`Chunk`]
 ///
@@ -559,5 +562,34 @@ impl Chunk<'_> {
         buf.extend(b"return ");
         buf.extend(source);
         buf
+    }
+}
+
+struct WrappedChunk<'a, T: AsChunk<'a>> {
+    chunk: T,
+    caller: &'static Location<'static>,
+    _marker: PhantomData<&'a T>,
+}
+
+impl<'a> Chunk<'a> {
+    /// Wraps a chunk of Lua code, returning an opaque type that implements [`IntoLua`] trait.
+    ///
+    /// The resulted `IntoLua` implementation will convert the chunk into a Lua function without
+    /// executing it.
+    #[track_caller]
+    pub fn wrap(chunk: impl AsChunk<'a> + 'a) -> impl IntoLua + 'a {
+        WrappedChunk {
+            chunk,
+            caller: Location::caller(),
+            _marker: PhantomData,
+        }
+    }
+}
+
+impl<'a, T: AsChunk<'a>> IntoLua for WrappedChunk<'a, T> {
+    fn into_lua(self, lua: &Lua) -> Result<Value> {
+        lua.load_with_location(self.chunk, self.caller)
+            .into_function()
+            .map(Value::Function)
     }
 }
