@@ -368,23 +368,20 @@ impl<'a> IntoIterator for BorrowedBytes<'a> {
     }
 }
 
-pub(crate) struct WrappedString<F: FnOnce(&Lua) -> Result<String>>(F);
+pub(crate) struct WrappedString<T: AsRef<[u8]>>(T);
 
 impl String {
     /// Wraps bytes, returning an opaque type that implements [`IntoLua`] trait.
     ///
     /// This function uses [`Lua::create_string`] under the hood.
     pub fn wrap(data: impl AsRef<[u8]>) -> impl IntoLua {
-        WrappedString(move |lua| lua.create_string(data))
+        WrappedString(data)
     }
 }
 
-impl<F> IntoLua for WrappedString<F>
-where
-    F: FnOnce(&Lua) -> Result<String>,
-{
+impl<T: AsRef<[u8]>> IntoLua for WrappedString<T> {
     fn into_lua(self, lua: &Lua) -> Result<Value> {
-        (self.0)(lua).map(Value::String)
+        lua.create_string(self.0).map(Value::String)
     }
 }
 
