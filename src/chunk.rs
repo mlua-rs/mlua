@@ -19,6 +19,8 @@ use crate::value::Value;
 /// [loadable by Lua]: https://www.lua.org/manual/5.4/manual.html#3.3.2
 pub trait AsChunk<'a> {
     /// Returns optional chunk name
+    ///
+    /// See [`Chunk::set_name`] for possible name prefixes.
     fn name(&self) -> Option<StdString> {
         None
     }
@@ -306,6 +308,11 @@ impl Compiler {
 
 impl Chunk<'_> {
     /// Sets the name of this chunk, which results in more informative error traces.
+    ///
+    /// Possible name prefixes:
+    /// - `@` - file path (when truncation is needed, the end of the file path is kept, as this is
+    ///   more useful for identifying the file)
+    /// - `=` - custom chunk name (when truncation is needed, the beginning of the name is kept)
     pub fn set_name(mut self, name: impl Into<String>) -> Self {
         self.name = name.into();
         self
