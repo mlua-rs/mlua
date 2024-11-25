@@ -1,4 +1,3 @@
-use std::ffi::CStr;
 use std::os::raw::{c_int, c_void};
 use std::{ptr, str};
 
@@ -222,50 +221,47 @@ unsafe fn init_userdata_metatable_index(state: *mut ffi::lua_State) -> Result<()
     ffi::lua_pop(state, 1);
 
     // Create and cache `__index` generator
-    let code = cstr!(
-        r#"
-            local error, isfunction, istable = ...
-            return function (__index, field_getters, methods)
-                -- Common case: has field getters and index is a table
-                if field_getters ~= nil and methods == nil and istable(__index) then
-                    return function (self, key)
-                        local field_getter = field_getters[key]
-                        if field_getter ~= nil then
-                            return field_getter(self)
-                        end
-                        return __index[key]
-                    end
-                end
-
+    let code = cr#"
+        local error, isfunction, istable = ...
+        return function (__index, field_getters, methods)
+            -- Common case: has field getters and index is a table
+            if field_getters ~= nil and methods == nil and istable(__index) then
                 return function (self, key)
-                    if field_getters ~= nil then
-                        local field_getter = field_getters[key]
-                        if field_getter ~= nil then
-                            return field_getter(self)
-                        end
+                    local field_getter = field_getters[key]
+                    if field_getter ~= nil then
+                        return field_getter(self)
                     end
-
-                    if methods ~= nil then
-                        local method = methods[key]
-                        if method ~= nil then
-                            return method
-                        end
-                    end
-
-                    if isfunction(__index) then
-                        return __index(self, key)
-                    elseif __index == nil then
-                        error("attempt to get an unknown field '"..key.."'")
-                    else
-                        return __index[key]
-                    end
+                    return __index[key]
                 end
             end
-    "#
-    );
-    let code_len = CStr::from_ptr(code).to_bytes().len();
+
+            return function (self, key)
+                if field_getters ~= nil then
+                    local field_getter = field_getters[key]
+                    if field_getter ~= nil then
+                        return field_getter(self)
+                    end
+                end
+
+                if methods ~= nil then
+                    local method = methods[key]
+                    if method ~= nil then
+                        return method
+                    end
+                end
+
+                if isfunction(__index) then
+                    return __index(self, key)
+                elseif __index == nil then
+                    error("attempt to get an unknown field '"..key.."'")
+                else
+                    return __index[key]
+                end
+            end
+        end
+    "#;
     protect_lua!(state, 0, 1, |state| {
-        let ret = ffi::luaL_loadbuffer(state, code, code_len, cstr!("__mlua_index"));
+        let ret = ffi::luaL_loadbuffer(state, code.as_ptr(), code.count_bytes(), cstr!("__mlua_index"));
         if ret != ffi::LUA_OK {
             ffi::lua_error(state);
         }
@@ -293,33 +289,30 @@ unsafe fn init_userdata_metatable_newindex(state: *mut ffi::lua_State) -> Result
     ffi::lua_pop(state, 1);
 
     // Create and cache `__newindex` generator
-    let code = cstr!(
-        r#"
-            local error, isfunction = ...
-            return function (__newindex, field_setters)
-                return function (self, key, value)
-                    if field_setters ~= nil then
-                        local field_setter = field_setters[key]
-                        if field_setter ~= nil then
-                            field_setter(self, value)
-                            return
-                        end
-                    end
-
-                    if isfunction(__newindex) then
-                        __newindex(self, key, value)
-                    elseif __newindex == nil then
-                        error("attempt to set an unknown field '"..key.."'")
-                    else
-                        __newindex[key] = value
+    let code = cr#"
+        local error, isfunction = ...
+        return function (__newindex, field_setters)
+            return function (self, key, value)
+                if field_setters ~= nil then
+                    local field_setter = field_setters[key]
+                    if field_setter ~= nil then
+                        field_setter(self, value)
+                        return
                     end
                 end
+
+                if isfunction(__newindex) then
+                    __newindex(self, key, value)
+                elseif __newindex == nil then
+                    error("attempt to set an unknown field '"..key.."'")
+                else
+                    __newindex[key] = value
+                end
             end
-    "#
-    );
-    let code_len = CStr::from_ptr(code).to_bytes().len();
+        end
+    "#;
     protect_lua!(state, 0, 1, |state| {
-        let ret = ffi::luaL_loadbuffer(state, code, code_len, cstr!("__mlua_newindex"));
+        let ret = ffi::luaL_loadbuffer(state, code.as_ptr(), code.count_bytes(), cstr!("__mlua_newindex"));
         if ret != ffi::LUA_OK {
             ffi::lua_error(state);
         }
