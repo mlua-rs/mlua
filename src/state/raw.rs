@@ -319,39 +319,58 @@ impl RawLua {
         let state = self.state();
         unsafe {
             let _sg = StackGuard::new(state);
-            check_stack(state, 2)?;
+            check_stack(state, 3)?;
 
-            let mode_str = match mode {
+            let name = name.map(CStr::as_ptr).unwrap_or(ptr::null());
+            let mode = match mode {
                 Some(ChunkMode::Binary) => cstr!("b"),
                 Some(ChunkMode::Text) => cstr!("t"),
                 None => cstr!("bt"),
             };
-
-            match ffi::luaL_loadbufferenv(
-                state,
-                source.as_ptr() as *const c_char,
-                source.len(),
-                name.map(|n| n.as_ptr()).unwrap_or_else(ptr::null),
-                mode_str,
-                match env {
-                    Some(env) => {
-                        self.push_ref(&env.0);
-                        -1
-                    }
-                    _ => 0,
-                },
-            ) {
-                ffi::LUA_OK => {
-                    #[cfg(feature = "luau-jit")]
-                    if (*self.extra.get()).enable_jit && ffi::luau_codegen_supported() != 0 {
-                        ffi::luau_codegen_compile(state, -1);
-                    }
-
-                    Ok(Function(self.pop_ref()))
-                }
+            let status = if cfg!(not(feature = "luau")) || self.unlikely_memory_error() {
+                self.load_chunk_inner(state, name, env, mode, source)
+            } else {
+                // Only Luau can trigger an exception during chunk loading
+                protect_lua!(state, 0, 1, |state| {
+                    self.load_chunk_inner(state, name, env, mode, source)
+                })?
+            };
+            match status {
+                ffi::LUA_OK => Ok(Function(self.pop_ref())),
                 err => Err(pop_error(state, err)),
             }
         }
+    }
+
+    pub(crate) unsafe fn load_chunk_inner(
+        &self,
+        state: *mut ffi::lua_State,
+        name: *const c_char,
+        env: Option<&Table>,
+        mode: *const c_char,
+        source: &[u8],
+    ) -> c_int {
+        let status = ffi::luaL_loadbufferenv(
+            state,
+            source.as_ptr() as *const c_char,
+            source.len(),
+            name,
+            mode,
+            match env {
+                Some(env) => {
+                    self.push_ref(&env.0);
+                    -1
+                }
+                _ => 0,
+            },
+        );
+        #[cfg(feature = "luau-jit")]
+        if status == ffi::LUA_OK {
+            if (*self.extra.get()).enable_jit && ffi::luau_codegen_supported() != 0 {
+                ffi::luau_codegen_compile(state, -1);
+            }
+        }
+        status
     }
 
     /// Sets a 'hook' function for a thread (coroutine).
