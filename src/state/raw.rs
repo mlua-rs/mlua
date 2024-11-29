@@ -327,10 +327,10 @@ impl RawLua {
                 Some(ChunkMode::Text) => cstr!("t"),
                 None => cstr!("bt"),
             };
-            let status = if cfg!(not(feature = "luau")) || self.unlikely_memory_error() {
+            let status = if self.unlikely_memory_error() {
                 self.load_chunk_inner(state, name, env, mode, source)
             } else {
-                // Only Luau can trigger an exception during chunk loading
+                // Luau and Lua 5.2 can trigger an exception during chunk loading
                 protect_lua!(state, 0, 1, |state| {
                     self.load_chunk_inner(state, name, env, mode, source)
                 })?

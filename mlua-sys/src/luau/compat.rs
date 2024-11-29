@@ -326,10 +326,14 @@ pub unsafe fn luaL_loadbufferenv(
     mut size: usize,
     name: *const c_char,
     mode: *const c_char,
-    env: c_int,
+    mut env: c_int,
 ) -> c_int {
     extern "C" {
         fn free(p: *mut c_void);
+    }
+
+    unsafe extern "C-unwind" fn data_dtor(data: *mut c_void) {
+        free(*(data as *mut *mut c_char) as *mut c_void);
     }
 
     let chunk_is_text = size == 0 || (*data as u8) >= b'\t';
@@ -345,9 +349,16 @@ pub unsafe fn luaL_loadbufferenv(
     }
 
     if chunk_is_text {
+        if env < 0 {
+            env -= 1;
+        }
+        let data_ud = lua_newuserdatadtor(L, mem::size_of::<*mut c_char>(), data_dtor) as *mut *mut c_char;
         let data = luau_compile_(data, size, ptr::null_mut(), &mut size);
+        ptr::write(data_ud, data);
+        // By deferring the `free(data)` to the userdata destructor, we ensure that
+        // even if `luau_load` throws an error, the `data` is still released.
         let ok = luau_load(L, name, data, size, env) == 0;
-        free(data as *mut c_void);
+        lua_replace(L, -2); // replace data with the result
         if !ok {
             return LUA_ERRSYNTAX;
         }
