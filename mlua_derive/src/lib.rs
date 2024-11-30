@@ -7,7 +7,7 @@ use syn::{parse_macro_input, ItemFn, LitStr, Result};
 #[cfg(feature = "macros")]
 use {
     crate::chunk::Chunk, proc_macro::TokenTree, proc_macro2::TokenStream as TokenStream2,
-    proc_macro_error::proc_macro_error,
+    proc_macro_error2::proc_macro_error,
 };
 
 #[derive(Default)]
