@@ -283,6 +283,20 @@ fn test_sandbox() -> Result<()> {
 }
 
 #[test]
+fn test_sandbox_safeenv() -> Result<()> {
+    let lua = Lua::new();
+
+    lua.sandbox(true)?;
+    lua.globals().set("state", lua.create_table()?)?;
+    lua.globals().set_safeenv(false);
+    lua.load("state.a = 123").exec()?;
+    let a: i32 = lua.load("state.a = 321; return state.a").eval()?;
+    assert_eq!(a, 321);
+
+    Ok(())
+}
+
+#[test]
 fn test_sandbox_nolibs() -> Result<()> {
     let lua = Lua::new_with(StdLib::NONE, LuaOptions::default()).unwrap();
 
