@@ -388,11 +388,6 @@ impl RawLua {
 
         unsafe extern "C-unwind" fn hook_proc(state: *mut ffi::lua_State, ar: *mut ffi::lua_Debug) {
             let extra = ExtraData::get(state);
-            if (*extra).hook_thread != state {
-                // Hook was destined for a different thread, ignore
-                ffi::lua_sethook(state, None, 0, 0);
-                return;
-            }
             let result = callback_error_ext(state, extra, move |extra, _| {
                 let hook_cb = (*extra).hook_callback.clone();
                 let hook_cb = mlua_expect!(hook_cb, "no hook callback set in hook_proc");
