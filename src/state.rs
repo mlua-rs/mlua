@@ -1948,8 +1948,9 @@ impl Lua {
         self.raw.lock()
     }
 
-    pub unsafe fn unsafe_raw(&self) -> ReentrantMutexGuard<RawLua> {
-        self.raw.lock()
+    pub unsafe fn unsafe_raw<R>(&self, f: impl FnOnce(&RawLua) -> R) -> R {
+        let raw = self.lock();
+        f(&raw)
     }
 
     #[inline(always)]
