@@ -67,8 +67,13 @@ pub enum Value {
     /// `Error` is a special builtin userdata type. When received from Lua it is implicitly cloned.
     Error(Box<Error>),
     /// Any other value not known to mlua (eg. LuaJIT CData).
-    #[allow(private_interfaces)]
-    Other(ValueRef),
+    Other(Other),
+}
+
+/// Opaque wrapper to allow matching on `Value::Other` variant
+#[derive(Clone)]
+pub struct Other {
+    pub(crate) inner: ValueRef,
 }
 
 pub use self::Value::Nil;
@@ -140,7 +145,7 @@ impl Value {
             | Value::Function(Function(vref))
             | Value::Thread(Thread(vref, ..))
             | Value::UserData(AnyUserData(vref))
-            | Value::Other(vref) => vref.to_pointer(),
+            | Value::Other(Other { inner: vref }) => vref.to_pointer(),
             #[cfg(feature = "luau")]
             Value::Buffer(crate::Buffer(vref)) => vref.to_pointer(),
             _ => ptr::null(),
@@ -179,7 +184,7 @@ impl Value {
             | Value::Function(Function(vref))
             | Value::Thread(Thread(vref, ..))
             | Value::UserData(AnyUserData(vref))
-            | Value::Other(vref) => unsafe { invoke_to_string(vref) },
+            | Value::Other(Other { inner: vref }) => unsafe { invoke_to_string(vref) },
             #[cfg(feature = "luau")]
             Value::Buffer(crate::Buffer(vref)) => unsafe { invoke_to_string(vref) },
             Value::Error(err) => Ok(err.to_string()),
@@ -565,7 +570,7 @@ impl Value {
             buf @ Value::Buffer(_) => write!(fmt, "buffer: {:?}", buf.to_pointer()),
             Value::Error(e) if recursive => write!(fmt, "{e:?}"),
             Value::Error(_) => write!(fmt, "error"),
-            Value::Other(v) => write!(fmt, "other: {:?}", v.to_pointer()),
+            Value::Other(Other { inner: v }) => write!(fmt, "other: {:?}", v.to_pointer()),
         }
     }
 }
@@ -592,7 +597,7 @@ impl fmt::Debug for Value {
             #[cfg(feature = "luau")]
             Value::Buffer(buf) => write!(fmt, "{buf:?}"),
             Value::Error(e) => write!(fmt, "Error({e:?})"),
-            Value::Other(v) => write!(fmt, "Other({v:?})"),
+            Value::Other(v) => write!(fmt, "Other({0:?})", v.inner),
         }
     }
 }

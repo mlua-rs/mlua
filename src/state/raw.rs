@@ -31,7 +31,7 @@ use crate::util::{
     pop_error, push_internal_userdata, push_string, push_table, rawset_field, safe_pcall, safe_xpcall,
     short_type_name, StackGuard, WrappedFailure,
 };
-use crate::value::{Nil, Value};
+use crate::value::{Nil, Other, Value};
 
 use super::extra::ExtraData;
 use super::{Lua, LuaOptions, WeakLua};
@@ -585,7 +585,7 @@ impl RawLua {
                 let protect = !self.unlikely_memory_error();
                 push_internal_userdata(state, WrappedFailure::Error(*err.clone()), protect)?;
             }
-            Value::Other(vref) => self.push_ref(vref),
+            Value::Other(Other { inner: vref }) => self.push_ref(vref),
         }
         Ok(())
     }
@@ -689,7 +689,9 @@ impl RawLua {
 
             _ => {
                 ffi::lua_xpush(state, self.ref_thread(), idx);
-                Value::Other(self.pop_ref_thread())
+                Value::Other(Other {
+                    inner: self.pop_ref_thread(),
+                })
             }
         }
     }
