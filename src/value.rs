@@ -67,8 +67,7 @@ pub enum Value {
     /// `Error` is a special builtin userdata type. When received from Lua it is implicitly cloned.
     Error(Box<Error>),
     /// Any other value not known to mlua (eg. LuaJIT CData).
-    #[allow(private_interfaces)]
-    Other(ValueRef),
+    Other(#[doc(hidden)] ValueRef),
 }
 
 pub use self::Value::Nil;
