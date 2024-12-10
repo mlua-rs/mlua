@@ -1948,6 +1948,10 @@ impl Lua {
         self.raw.lock()
     }
 
+    pub unsafe fn unsafe_raw(&self) -> ReentrantMutexGuard<RawLua> {
+        self.raw.lock()
+    }
+
     #[inline(always)]
     pub(crate) fn lock_arc(&self) -> LuaGuard {
         LuaGuard(self.raw.lock_arc())
