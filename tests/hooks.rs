@@ -75,9 +75,21 @@ fn test_function_calls() -> Result<()> {
 
     let output = output.lock().unwrap();
     if cfg!(feature = "luajit") && lua.load("jit.version_num").eval::<i64>()? >= 20100 {
+        #[cfg(not(force_memory_limit))]
         assert_eq!(*output, vec![(None, "main"), (Some("len".to_string()), "Lua")]);
+        #[cfg(force_memory_limit)]
+        assert_eq!(
+            *output,
+            vec![(None, "C"), (None, "main"), (Some("len".to_string()), "Lua")]
+        );
     } else {
+        #[cfg(not(force_memory_limit))]
         assert_eq!(*output, vec![(None, "main"), (Some("len".to_string()), "C")]);
+        #[cfg(force_memory_limit)]
+        assert_eq!(
+            *output,
+            vec![(None, "C"), (None, "main"), (Some("len".to_string()), "C")]
+        );
     }
 
     Ok(())

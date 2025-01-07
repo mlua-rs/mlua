@@ -1377,3 +1377,21 @@ fn test_exec_raw() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn test_gc_drop_ref_thread() -> Result<()> {
+    let lua = Lua::new();
+
+    let t = lua.create_table()?;
+    lua.create_function(move |_, ()| {
+        _ = &t;
+        Ok(())
+    })?;
+
+    for _ in 0..10000 {
+        // GC will run eventually to collect the function and the table above
+        lua.create_table()?;
+    }
+
+    Ok(())
+}

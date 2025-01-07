@@ -581,6 +581,24 @@ impl Table {
         unsafe { ffi::lua_getreadonly(ref_thread, self.0.index) != 0 }
     }
 
+    /// Controls `safeenv` attribute on the table.
+    ///
+    /// This a special flag that activates some performance optimizations for environment tables.
+    /// In particular, it controls:
+    /// - Optimization of import resolution (cache values of constant keys).
+    /// - Fast-path for built-in iteration with pairs/ipairs.
+    /// - Fast-path for some built-in functions (fastcall).
+    ///
+    /// For `safeenv` environments, monkey patching or modifying values may not work as expected.
+    ///
+    /// Requires `feature = "luau"`
+    #[cfg(any(feature = "luau", doc))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
+    pub fn set_safeenv(&self, enabled: bool) {
+        let lua = self.0.lua.lock();
+        unsafe { ffi::lua_setsafeenv(lua.ref_thread(), self.0.index, enabled as _) };
+    }
+
     /// Converts this table to a generic C pointer.
     ///
     /// Different tables will give different pointers.

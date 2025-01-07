@@ -1043,8 +1043,8 @@ impl Lua {
         let state = lua.state();
         unsafe {
             if lua.unlikely_memory_error() {
-                crate::util::push_buffer(lua.ref_thread(), buf.as_ref(), false)?;
-                return Ok(Buffer(lua.pop_ref_thread()));
+                crate::util::push_buffer(state, buf.as_ref(), false)?;
+                return Ok(Buffer(lua.pop_ref()));
             }
 
             let _sg = StackGuard::new(state);

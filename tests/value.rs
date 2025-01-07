@@ -296,3 +296,25 @@ fn test_value_conversions() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn test_value_exhaustive_match() {
+    match Value::Nil {
+        Value::Nil => {}
+        Value::Boolean(_) => {}
+        Value::LightUserData(_) => {}
+        Value::Integer(_) => {}
+        Value::Number(_) => {}
+        #[cfg(feature = "luau")]
+        Value::Vector(_) => {}
+        Value::String(_) => {}
+        Value::Table(_) => {}
+        Value::Function(_) => {}
+        Value::Thread(_) => {}
+        Value::UserData(_) => {}
+        #[cfg(feature = "luau")]
+        Value::Buffer(_) => {}
+        Value::Error(_) => {}
+        Value::Other(_) => {}
+    }
+}

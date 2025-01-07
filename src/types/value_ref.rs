@@ -4,7 +4,7 @@ use std::os::raw::{c_int, c_void};
 use crate::state::{RawLua, WeakLua};
 
 /// A reference to a Lua (complex) value stored in the Lua auxiliary thread.
-pub(crate) struct ValueRef {
+pub struct ValueRef {
     pub(crate) lua: WeakLua,
     pub(crate) index: c_int,
     pub(crate) drop: bool,

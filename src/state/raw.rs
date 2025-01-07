@@ -327,10 +327,10 @@ impl RawLua {
                 Some(ChunkMode::Text) => cstr!("t"),
                 None => cstr!("bt"),
             };
-            let status = if cfg!(not(feature = "luau")) || self.unlikely_memory_error() {
+            let status = if self.unlikely_memory_error() {
                 self.load_chunk_inner(state, name, env, mode, source)
             } else {
-                // Only Luau can trigger an exception during chunk loading
+                // Luau and Lua 5.2 can trigger an exception during chunk loading
                 protect_lua!(state, 0, 1, |state| {
                     self.load_chunk_inner(state, name, env, mode, source)
                 })?
@@ -427,8 +427,8 @@ impl RawLua {
     pub(crate) unsafe fn create_string(&self, s: impl AsRef<[u8]>) -> Result<String> {
         let state = self.state();
         if self.unlikely_memory_error() {
-            push_string(self.ref_thread(), s.as_ref(), false)?;
-            return Ok(String(self.pop_ref_thread()));
+            push_string(state, s.as_ref(), false)?;
+            return Ok(String(self.pop_ref()));
         }
 
         let _sg = StackGuard::new(state);
@@ -439,12 +439,12 @@ impl RawLua {
 
     /// See [`Lua::create_table_with_capacity`]
     pub(crate) unsafe fn create_table_with_capacity(&self, narr: usize, nrec: usize) -> Result<Table> {
+        let state = self.state();
         if self.unlikely_memory_error() {
-            push_table(self.ref_thread(), narr, nrec, false)?;
-            return Ok(Table(self.pop_ref_thread()));
+            push_table(state, narr, nrec, false)?;
+            return Ok(Table(self.pop_ref()));
         }
 
-        let state = self.state();
         let _sg = StackGuard::new(state);
         check_stack(state, 3)?;
         push_table(state, narr, nrec, true)?;
@@ -729,6 +729,10 @@ impl RawLua {
 
     pub(crate) unsafe fn drop_ref(&self, vref: &ValueRef) {
         let ref_thread = self.ref_thread();
+        mlua_debug_assert!(
+            ffi::lua_gettop(ref_thread) >= vref.index,
+            "GC finalizer is not allowed in ref_thread"
+        );
         ffi::lua_pushnil(ref_thread);
         ffi::lua_replace(ref_thread, vref.index);
         (*self.extra.get()).ref_free.push(vref.index);

@@ -7,8 +7,6 @@ use crate::error::{Error, Result};
 use crate::state::{ExtraData, RawLua};
 use crate::util::{self, get_internal_metatable, WrappedFailure};
 
-const WRAPPED_FAILURE_POOL_SIZE: usize = 64;
-
 pub(super) struct StateGuard<'a>(&'a RawLua, *mut ffi::lua_State);
 
 impl<'a> StateGuard<'a> {
@@ -42,26 +40,27 @@ where
 
     enum PreallocatedFailure {
         New(*mut WrappedFailure),
-        Existing(i32),
+        Reserved,
     }
 
     impl PreallocatedFailure {
         unsafe fn reserve(state: *mut ffi::lua_State, extra: *mut ExtraData) -> Self {
-            match (*extra).wrapped_failure_pool.pop() {
-                Some(index) => PreallocatedFailure::Existing(index),
-                None => {
-                    // We need to check stack for Luau in case when callback is called from interrupt
-                    // See https://github.com/Roblox/luau/issues/446 and mlua #142 and #153
-                    #[cfg(feature = "luau")]
-                    ffi::lua_rawcheckstack(state, 2);
-                    // Place it to the beginning of the stack
-                    let ud = WrappedFailure::new_userdata(state);
-                    ffi::lua_insert(state, 1);
-                    PreallocatedFailure::New(ud)
-                }
+            if (*extra).wrapped_failure_top > 0 {
+                (*extra).wrapped_failure_top -= 1;
+                return PreallocatedFailure::Reserved;
             }
+
+            // We need to check stack for Luau in case when callback is called from interrupt
+            // See https://github.com/Roblox/luau/issues/446 and mlua #142 and #153
+            #[cfg(feature = "luau")]
+            ffi::lua_rawcheckstack(state, 2);
+            // Place it to the beginning of the stack
+            let ud = WrappedFailure::new_userdata(state);
+            ffi::lua_insert(state, 1);
+            PreallocatedFailure::New(ud)
         }
 
+        #[cold]
         unsafe fn r#use(&self, state: *mut ffi::lua_State, extra: *mut ExtraData) -> *mut WrappedFailure {
             let ref_thread = (*extra).ref_thread;
             match *self {
@@ -69,12 +68,12 @@ where
                     ffi::lua_settop(state, 1);
                     ud
                 }
-                PreallocatedFailure::Existing(index) => {
+                PreallocatedFailure::Reserved => {
+                    let index = (*extra).wrapped_failure_pool.pop().unwrap();
                     ffi::lua_settop(state, 0);
                     #[cfg(feature = "luau")]
                     ffi::lua_rawcheckstack(state, 2);
-                    ffi::lua_pushvalue(ref_thread, index);
-                    ffi::lua_xmove(ref_thread, state, 1);
+                    ffi::lua_xpush(ref_thread, state, index);
                     ffi::lua_pushnil(ref_thread);
                     ffi::lua_replace(ref_thread, index);
                     (*extra).ref_free.push(index);
@@ -87,24 +86,13 @@ where
             let ref_thread = (*extra).ref_thread;
             match self {
                 PreallocatedFailure::New(_) => {
-                    if (*extra).wrapped_failure_pool.len() < WRAPPED_FAILURE_POOL_SIZE {
-                        ffi::lua_rotate(state, 1, -1);
-                        ffi::lua_xmove(state, ref_thread, 1);
-                        let index = ref_stack_pop(extra);
-                        (*extra).wrapped_failure_pool.push(index);
-                    } else {
-                        ffi::lua_remove(state, 1);
-                    }
+                    ffi::lua_rotate(state, 1, -1);
+                    ffi::lua_xmove(state, ref_thread, 1);
+                    let index = ref_stack_pop(extra);
+                    (*extra).wrapped_failure_pool.push(index);
+                    (*extra).wrapped_failure_top += 1;
                 }
-                PreallocatedFailure::Existing(index) => {
-                    if (*extra).wrapped_failure_pool.len() < WRAPPED_FAILURE_POOL_SIZE {
-                        (*extra).wrapped_failure_pool.push(index);
-                    } else {
-                        ffi::lua_pushnil(ref_thread);
-                        ffi::lua_replace(ref_thread, index);
-                        (*extra).ref_free.push(index);
-                    }
-                }
+                PreallocatedFailure::Reserved => (*extra).wrapped_failure_top += 1,
             }
         }
     }
