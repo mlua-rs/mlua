@@ -273,7 +273,7 @@ async fn test_async_lua54_to_be_closed() -> Result<()> {
 
     // Don't close by default when awaiting async threads
     let co = lua.create_thread(f.clone())?;
-    let _ = co.clone().into_async::<()>(()).await;
+    let _ = co.clone().into_async::<()>(())?.await;
     assert_eq!(globals.get::<usize>("close_count")?, 1);
     let _ = co.reset(f);
     assert_eq!(globals.get::<usize>("close_count")?, 2);
@@ -300,7 +300,7 @@ async fn test_async_thread_stream() -> Result<()> {
         .eval()?,
     )?;
 
-    let mut stream = thread.into_async::<i64>(1);
+    let mut stream = thread.into_async::<i64>(1)?;
     let mut sum = 0;
     while let Some(n) = stream.try_next().await? {
         sum += n;
@@ -325,7 +325,7 @@ async fn test_async_thread() -> Result<()> {
         }
     })?;
 
-    let res: String = lua.create_thread(f)?.into_async(()).await?;
+    let res: String = lua.create_thread(f)?.into_async(())?.await?;
 
     assert_eq!(res, "done");
 
@@ -564,6 +564,36 @@ async fn test_async_terminate() -> Result<()> {
         let _ = tokio::time::timeout(Duration::from_millis(30), func.call_async::<()>(())).await;
     }
     assert!(mutex.try_lock().is_ok());
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_async_task() -> Result<()> {
+    let lua = Lua::new();
+
+    let delay = lua.create_function(|lua, (secs, f, args): (f32, Function, MultiValue)| {
+        let thread = lua.create_thread(f)?;
+        let thread2 = thread.clone().into_async::<()>(args)?;
+        tokio::task::spawn_local(async move {
+            tokio::time::sleep(Duration::from_secs_f32(secs)).await;
+            _ = thread2.await;
+        });
+        Ok(thread)
+    })?;
+
+    lua.globals().set("delay", delay)?;
+    let local = tokio::task::LocalSet::new();
+    local
+        .run_until(async {
+            _ = lua
+                .load("delay(0.1, function(msg) global_msg = msg end, 'done')")
+                .exec_async()
+                .await;
+        })
+        .await;
+    local.await;
+    assert_eq!(lua.globals().get::<String>("global_msg")?, "done");
 
     Ok(())
 }

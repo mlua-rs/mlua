@@ -161,10 +161,10 @@ impl Function {
     {
         let lua = self.0.lua.lock();
         let thread_res = unsafe {
-            lua.create_recycled_thread(self).map(|th| {
-                let mut th = th.into_async(args);
+            lua.create_recycled_thread(self).and_then(|th| {
+                let mut th = th.into_async(args)?;
                 th.set_recyclable(true);
-                th
+                Ok(th)
             })
         };
         async move { thread_res?.await }
