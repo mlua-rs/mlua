@@ -107,7 +107,6 @@ fn test_thread() -> Result<()> {
 }
 
 #[test]
-#[cfg(any(feature = "lua54", feature = "luau"))]
 fn test_thread_reset() -> Result<()> {
     use mlua::{AnyUserData, UserData};
     use std::sync::Arc;
@@ -120,7 +119,8 @@ fn test_thread_reset() -> Result<()> {
     let arc = Arc::new(());
 
     let func: Function = lua.load(r#"function(ud) coroutine.yield(ud) end"#).eval()?;
-    let thread = lua.create_thread(func.clone())?;
+    let thread = lua.create_thread(lua.load("return 0").into_function()?)?; // Dummy function first
+    assert!(thread.reset(func.clone()).is_ok());
 
     for _ in 0..2 {
         assert_eq!(thread.status(), ThreadStatus::Resumable);
@@ -145,11 +145,7 @@ fn test_thread_reset() -> Result<()> {
         assert!(thread.reset(func.clone()).is_err());
         // Reset behavior has changed in Lua v5.4.4
         // It's became possible to force reset thread by popping error object
-        assert!(matches!(
-            thread.status(),
-            ThreadStatus::Finished | ThreadStatus::Error
-        ));
-        // Would pass in 5.4.4
+        assert!(matches!(thread.status(), ThreadStatus::Finished));
         assert!(thread.reset(func.clone()).is_ok());
         assert_eq!(thread.status(), ThreadStatus::Resumable);
     }
