@@ -2,8 +2,7 @@ use std::fmt;
 use std::os::raw::{c_int, c_void};
 
 use crate::error::{Error, Result};
-#[allow(unused)]
-use crate::state::Lua;
+use crate::function::Function;
 use crate::state::RawLua;
 use crate::traits::{FromLuaMulti, IntoLuaMulti};
 use crate::types::{LuaType, ValueRef};
@@ -232,7 +231,7 @@ impl Thread {
     #[cfg_attr(docsrs, doc(cfg(not(feature = "luau"))))]
     pub fn set_hook<F>(&self, triggers: HookTriggers, callback: F)
     where
-        F: Fn(&Lua, Debug) -> Result<crate::VmState> + MaybeSend + 'static,
+        F: Fn(&crate::Lua, Debug) -> Result<crate::VmState> + MaybeSend + 'static,
     {
         let lua = self.0.lua.lock();
         unsafe {
@@ -249,32 +248,37 @@ impl Thread {
     /// In Luau: resets to the initial state of a newly created Lua thread.
     /// Lua threads in arbitrary states (like yielded or errored) can be reset properly.
     ///
+    /// Other Lua versions can reset only new or finished threads.
+    ///
     /// Sets a Lua function for the thread afterwards.
     ///
-    /// Requires `feature = "lua54"` OR `feature = "luau"`.
-    ///
     /// [Lua 5.4]: https://www.lua.org/manual/5.4/manual.html#lua_closethread
-    #[cfg(any(feature = "lua54", feature = "luau"))]
-    #[cfg_attr(docsrs, doc(cfg(any(feature = "lua54", feature = "luau"))))]
-    pub fn reset(&self, func: crate::function::Function) -> Result<()> {
+    pub fn reset(&self, func: Function) -> Result<()> {
         let lua = self.0.lua.lock();
-        if matches!(self.status_inner(&lua), ThreadStatusInner::Running) {
-            return Err(Error::runtime("cannot reset a running thread"));
+        let thread_state = self.state();
+        match self.status_inner(&lua) {
+            ThreadStatusInner::Running => return Err(Error::runtime("cannot reset a running thread")),
+            // Any Lua can reuse new or finished thread
+            ThreadStatusInner::New(_) => unsafe { ffi::lua_settop(thread_state, 0) },
+            ThreadStatusInner::Finished => {}
+            #[cfg(not(any(feature = "lua54", feature = "luau")))]
+            _ => return Err(Error::runtime("cannot reset non-finished thread")),
+            #[cfg(any(feature = "lua54", feature = "luau"))]
+            _ => unsafe {
+                #[cfg(all(feature = "lua54", not(feature = "vendored")))]
+                let status = ffi::lua_resetthread(thread_state);
+                #[cfg(all(feature = "lua54", feature = "vendored"))]
+                let status = ffi::lua_closethread(thread_state, lua.state());
+                #[cfg(feature = "lua54")]
+                if status != ffi::LUA_OK {
+                    return Err(pop_error(thread_state, status));
+                }
+                #[cfg(feature = "luau")]
+                ffi::lua_resetthread(thread_state);
+            },
         }
 
-        let thread_state = self.state();
         unsafe {
-            #[cfg(all(feature = "lua54", not(feature = "vendored")))]
-            let status = ffi::lua_resetthread(thread_state);
-            #[cfg(all(feature = "lua54", feature = "vendored"))]
-            let status = ffi::lua_closethread(thread_state, lua.state());
-            #[cfg(feature = "lua54")]
-            if status != ffi::LUA_OK {
-                return Err(pop_error(thread_state, status));
-            }
-            #[cfg(feature = "luau")]
-            ffi::lua_resetthread(thread_state);
-
             // Push function to the top of the thread stack
             ffi::lua_xpush(lua.ref_thread(), thread_state, func.0.index);
 
@@ -445,30 +449,19 @@ impl LuaType for Thread {
 
 #[cfg(feature = "async")]
 impl<R> AsyncThread<R> {
-    #[inline]
+    #[inline(always)]
     pub(crate) fn set_recyclable(&mut self, recyclable: bool) {
         self.recycle = recyclable;
     }
 }
 
 #[cfg(feature = "async")]
-#[cfg(any(feature = "lua54", feature = "luau"))]
 impl<R> Drop for AsyncThread<R> {
     fn drop(&mut self) {
         if self.recycle {
             if let Some(lua) = self.thread.0.lua.try_lock() {
-                unsafe {
-                    // For Lua 5.4 this also closes all pending to-be-closed variables
-                    if !lua.recycle_thread(&mut self.thread) {
-                        #[cfg(feature = "lua54")]
-                        if matches!(self.thread.status_inner(&lua), ThreadStatusInner::Error) {
-                            #[cfg(not(feature = "vendored"))]
-                            ffi::lua_resetthread(self.thread.state());
-                            #[cfg(feature = "vendored")]
-                            ffi::lua_closethread(self.thread.state(), lua.state());
-                        }
-                    }
-                }
+                // For Lua 5.4 this also closes all pending to-be-closed variables
+                unsafe { lua.recycle_thread(&mut self.thread) };
             }
         }
     }
@@ -549,7 +542,7 @@ impl<R: FromLuaMulti> Future for AsyncThread<R> {
 #[cfg(feature = "async")]
 #[inline(always)]
 unsafe fn is_poll_pending(state: *mut ffi::lua_State) -> bool {
-    ffi::lua_tolightuserdata(state, -1) == Lua::poll_pending().0
+    ffi::lua_tolightuserdata(state, -1) == crate::Lua::poll_pending().0
 }
 
 #[cfg(feature = "async")]

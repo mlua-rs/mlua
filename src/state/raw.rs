@@ -505,7 +505,6 @@ impl RawLua {
     /// Wraps a Lua function into a new or recycled thread (coroutine).
     #[cfg(feature = "async")]
     pub(crate) unsafe fn create_recycled_thread(&self, func: &Function) -> Result<Thread> {
-        #[cfg(any(feature = "lua54", feature = "luau"))]
         if let Some(index) = (*self.extra.get()).thread_pool.pop() {
             let thread_state = ffi::lua_tothread(self.ref_thread(), index);
             ffi::lua_xpush(self.ref_thread(), thread_state, func.0.index);
@@ -525,27 +524,47 @@ impl RawLua {
 
     /// Resets thread (coroutine) and returns it to the pool for later use.
     #[cfg(feature = "async")]
-    #[cfg(any(feature = "lua54", feature = "luau"))]
-    pub(crate) unsafe fn recycle_thread(&self, thread: &mut Thread) -> bool {
+    pub(crate) unsafe fn recycle_thread(&self, thread: &mut Thread) {
+        let thread_state = thread.1;
         let extra = &mut *self.extra.get();
-        if extra.thread_pool.len() < extra.thread_pool.capacity() {
-            let thread_state = ffi::lua_tothread(extra.ref_thread, thread.0.index);
-            #[cfg(all(feature = "lua54", not(feature = "vendored")))]
-            let status = ffi::lua_resetthread(thread_state);
-            #[cfg(all(feature = "lua54", feature = "vendored"))]
-            let status = ffi::lua_closethread(thread_state, self.state());
+        if extra.thread_pool.len() == extra.thread_pool.capacity() {
             #[cfg(feature = "lua54")]
-            if status != ffi::LUA_OK {
-                // Error object is on top, drop it
+            if ffi::lua_status(thread_state) != ffi::LUA_OK {
+                // Close all to-be-closed variables without returning thread to the pool
+                #[cfg(not(feature = "vendored"))]
+                ffi::lua_resetthread(thread_state);
+                #[cfg(feature = "vendored")]
+                ffi::lua_closethread(thread_state, self.state());
+            }
+            return;
+        }
+
+        let mut reset_ok = false;
+        if ffi::lua_status(thread_state) == ffi::LUA_OK {
+            if ffi::lua_gettop(thread_state) > 0 {
                 ffi::lua_settop(thread_state, 0);
             }
-            #[cfg(feature = "luau")]
+            reset_ok = true;
+        }
+
+        #[cfg(feature = "lua54")]
+        if !reset_ok {
+            #[cfg(not(feature = "vendored"))]
+            let status = ffi::lua_resetthread(thread_state);
+            #[cfg(feature = "vendored")]
+            let status = ffi::lua_closethread(thread_state, self.state());
+            reset_ok = status == ffi::LUA_OK;
+        }
+        #[cfg(feature = "luau")]
+        if !reset_ok {
             ffi::lua_resetthread(thread_state);
+            reset_ok = true;
+        }
+
+        if reset_ok {
             extra.thread_pool.push(thread.0.index);
             thread.0.drop = false; // Prevent thread from being garbage collected
-            return true;
         }
-        false
     }
 
     /// Pushes a value that implements `IntoLua` onto the Lua stack.

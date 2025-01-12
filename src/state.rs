@@ -98,9 +98,6 @@ pub struct LuaOptions {
 
     /// Max size of thread (coroutine) object pool used to execute asynchronous functions.
     ///
-    /// It works on Lua 5.4 and Luau, where [`lua_resetthread`] function
-    /// is available and allows to reuse old coroutines after resetting their state.
-    ///
     /// Default: **0** (disabled)
     ///
     /// [`lua_resetthread`]: https://www.lua.org/manual/5.4/manual.html#lua_resetthread
