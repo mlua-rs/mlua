@@ -188,7 +188,7 @@ impl Thread {
         let thread_state = self.state();
         unsafe {
             let _sg = StackGuard::new(state);
-            let _thread_sg = StackGuard::new(thread_state);
+            let _thread_sg = StackGuard::with_top(thread_state, 0);
 
             check_stack(state, 1)?;
             args.push_into_stack(&lua)?;
