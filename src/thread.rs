@@ -8,6 +8,7 @@ use crate::traits::{FromLuaMulti, IntoLuaMulti};
 use crate::types::{LuaType, ValueRef};
 use crate::util::{check_stack, error_traceback_thread, pop_error, StackGuard};
 
+use crate::IntoLua;
 #[cfg(not(feature = "luau"))]
 use crate::{
     hook::{Debug, HookTriggers},
@@ -173,6 +174,29 @@ impl Thread {
         }
     }
 
+    pub fn resume_error(&self, args: impl IntoLua) -> Result<()> {
+        let lua = self.0.lua.lock();
+
+        match self.status_inner(&lua) {
+            ThreadStatusInner::New(_) | ThreadStatusInner::Yielded(_) => {}
+            _ => return Err(Error::CoroutineUnresumable),
+        };
+
+        let state = lua.state();
+        let thread_state = self.state();
+        unsafe {
+            let _sg = StackGuard::new(state);
+            let _thread_sg = StackGuard::new(thread_state);
+
+            check_stack(state, 1)?;
+            args.push_into_stack(&lua)?;
+            ffi::lua_xmove(state, thread_state, 1);
+            self.resumeerror_inner(&lua)?;
+
+            Ok(())
+        }
+    }
+
     /// Resumes execution of this thread.
     ///
     /// It's similar to `resume()` but leaves `nresults` values on the thread stack.
@@ -184,6 +208,28 @@ impl Thread {
         match ret {
             ffi::LUA_OK => Ok((ThreadStatusInner::Finished, nresults)),
             ffi::LUA_YIELD => Ok((ThreadStatusInner::Yielded(0), nresults)),
+            ffi::LUA_ERRMEM => {
+                // Don't call error handler for memory errors
+                Err(pop_error(thread_state, ret))
+            }
+            _ => {
+                check_stack(state, 3)?;
+                protect_lua!(state, 0, 1, |state| error_traceback_thread(state, thread_state))?;
+                Err(pop_error(state, ret))
+            }
+        }
+    }
+
+    /// Resumes execution of this thread.
+    ///
+    /// It's similar to `resume()` but leaves `nresults` values on the thread stack.
+    unsafe fn resumeerror_inner(&self, lua: &RawLua) -> Result<ThreadStatusInner> {
+        let state = lua.state();
+        let thread_state = self.state();
+        let ret = ffi::luau::lua_resumeerror(thread_state, state);
+        match ret {
+            ffi::LUA_OK => Ok(ThreadStatusInner::Finished),
+            ffi::LUA_YIELD => Ok(ThreadStatusInner::Yielded(0)),
             ffi::LUA_ERRMEM => {
                 // Don't call error handler for memory errors
                 Err(pop_error(thread_state, ret))
@@ -584,4 +630,76 @@ mod assertions {
     static_assertions::assert_not_impl_any!(AsyncThread<()>: Send);
     #[cfg(all(feature = "async", feature = "send"))]
     static_assertions::assert_impl_all!(AsyncThread<()>: Send, Sync);
+}
+
+#[cfg(test)]
+mod resumeerror_test {
+    #[test]
+    fn test_resumeerror() {
+        // Create tokio runtime and use spawn_local
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .worker_threads(10)
+            .build()
+            .unwrap();
+
+        let local = tokio::task::LocalSet::new();
+
+        local.block_on(&rt, async {
+            use crate::{Function, Lua, Thread, Value};
+
+            let lua = Lua::new();
+
+            let thread: Function = lua
+                .load(
+                    r#"
+    local luacall = ...
+    local function callback(...)
+        print("AM HERE")
+        luacall(coroutine.running(), ...)
+        return coroutine.yield()
+    end
+    
+    return callback
+                "#,
+                )
+                .call(
+                    lua.create_function(|lua, th: Thread| {
+                        tokio::task::spawn_local(async move {
+                            println!("Thread: {:?}, {:?}", th, th.status());
+                            th.resume_error("An error here".to_string()).unwrap();
+                            tokio::task::yield_now().await;
+                        });
+                        Ok(())
+                    })
+                    .unwrap(),
+                )
+                .unwrap();
+
+            let thread_b: Thread = lua
+                .load(
+                    r#"
+                    local a = ...
+                    return coroutine.create(function (...)
+                        local b = ...
+                        assert(b == 1)
+                        local ok, result = pcall(a)
+                        assert(not ok)
+                        print("Done with: ", ok, result)
+                        return result
+                    end)
+                "#,
+                )
+                .call(thread.clone())
+                .unwrap();
+
+            println!("{:?}", thread_b.resume::<Value>(1));
+
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+            println!("{:?}", thread_b.status());
+
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        });
+    }
 }
