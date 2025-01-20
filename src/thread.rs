@@ -174,9 +174,11 @@ impl Thread {
         }
     }
 
-    pub fn resume_error(&self, args: impl IntoLua) -> Result<()> {
+    pub fn resume_error<R>(&self, args: impl IntoLua) -> Result<R>
+    where
+        R: FromLuaMulti,
+    {
         let lua = self.0.lua.lock();
-
         match self.status_inner(&lua) {
             ThreadStatusInner::New(_) | ThreadStatusInner::Yielded(_) => {}
             _ => return Err(Error::CoroutineUnresumable),
@@ -191,9 +193,11 @@ impl Thread {
             check_stack(state, 1)?;
             args.push_into_stack(&lua)?;
             ffi::lua_xmove(state, thread_state, 1);
-            self.resumeerror_inner(&lua)?;
 
-            Ok(())
+            let (_, nresults) = self.resumeerror_inner(&lua)?;
+            check_stack(state, nresults + 1)?;
+            ffi::lua_xmove(thread_state, state, nresults);
+            R::from_stack_multi(nresults, &lua)
         }
     }
 
@@ -223,13 +227,19 @@ impl Thread {
     /// Resumes execution of this thread.
     ///
     /// It's similar to `resume()` but leaves `nresults` values on the thread stack.
-    unsafe fn resumeerror_inner(&self, lua: &RawLua) -> Result<ThreadStatusInner> {
+    unsafe fn resumeerror_inner(&self, lua: &RawLua) -> Result<(ThreadStatusInner, c_int)> {
         let state = lua.state();
         let thread_state = self.state();
+        let mut nresults = 0;
         let ret = ffi::luau::lua_resumeerror(thread_state, state);
+
+        if ret == ffi::LUA_OK || ret == ffi::LUA_YIELD {
+            nresults = ffi::lua_gettop(thread_state);
+        }
+
         match ret {
-            ffi::LUA_OK => Ok(ThreadStatusInner::Finished),
-            ffi::LUA_YIELD => Ok(ThreadStatusInner::Yielded(0)),
+            ffi::LUA_OK => Ok((ThreadStatusInner::Finished, nresults)),
+            ffi::LUA_YIELD => Ok((ThreadStatusInner::Yielded(0), nresults)),
             ffi::LUA_ERRMEM => {
                 // Don't call error handler for memory errors
                 Err(pop_error(thread_state, ret))
@@ -667,7 +677,7 @@ mod resumeerror_test {
                     lua.create_function(|lua, th: Thread| {
                         tokio::task::spawn_local(async move {
                             println!("Thread: {:?}, {:?}", th, th.status());
-                            th.resume_error("An error here".to_string()).unwrap();
+                            th.resume_error::<()>("An error here".to_string()).unwrap();
                             tokio::task::yield_now().await;
                         });
                         Ok(())
