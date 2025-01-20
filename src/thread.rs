@@ -174,6 +174,8 @@ impl Thread {
         }
     }
 
+    #[cfg(feature = "luau")]
+    /// Resumes a thread with an error.
     pub fn resume_error<R>(&self, args: impl IntoLua) -> Result<R>
     where
         R: FromLuaMulti,
@@ -224,9 +226,10 @@ impl Thread {
         }
     }
 
-    /// Resumes execution of this thread.
+    #[cfg(feature = "luau")]
+    /// Resumes execution of this thread with an error.
     ///
-    /// It's similar to `resume()` but leaves `nresults` values on the thread stack.
+    /// It's similar to `resume_error()` but leaves `nresults` values on the thread stack.
     unsafe fn resumeerror_inner(&self, lua: &RawLua) -> Result<(ThreadStatusInner, c_int)> {
         let state = lua.state();
         let thread_state = self.state();
@@ -674,7 +677,7 @@ mod resumeerror_test {
                 "#,
                 )
                 .call(
-                    lua.create_function(|lua, th: Thread| {
+                    lua.create_function(|_lua, th: Thread| {
                         tokio::task::spawn_local(async move {
                             println!("Thread: {:?}, {:?}", th, th.status());
                             th.resume_error::<()>("An error here".to_string()).unwrap();
