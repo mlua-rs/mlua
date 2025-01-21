@@ -714,7 +714,7 @@ impl FromLua for char {
             _ => Err(Error::FromLuaConversionError {
                 from: ty,
                 to: Self::type_name(),
-                message: Some("expected string or number".to_string()),
+                message: Some("expected string or integer".to_string()),
             }),
         }
     }
