@@ -671,7 +671,7 @@ impl FromLua for char {
         match value {
             // When integer: reduce it to u8 and try to convert to char
             Value::Integer(i) => {
-                if i <= u8::MAX.into() {
+                if i <= u8::MAX.into() && i >= 0 {
                     Ok(char::from(i as u8))
                 } else {
                     Err(Error::FromLuaConversionError {
