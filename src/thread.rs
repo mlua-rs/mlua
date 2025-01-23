@@ -373,6 +373,41 @@ impl Thread {
     pub fn to_pointer(&self) -> *const c_void {
         self.0.to_pointer()
     }
+    /// Closes a thread and marks it as finished.
+    ///
+    /// In [Lua 5.4]: cleans its call stack and closes all pending to-be-closed variables.
+    /// Returns a error in case of either the original error that stopped the thread or errors
+    /// in closing methods.
+    ///
+    /// In Luau: resets to the initial state of a newly created Lua thread.
+    /// Lua threads in arbitrary states (like yielded or errored) can be reset properly.
+    ///
+    /// Requires `feature = "lua54"` OR `feature = "luau"`.
+    ///
+    /// [Lua 5.4]: https://www.lua.org/manual/5.4/manual.html#lua_closethread
+    #[cfg(any(feature = "lua54", feature = "luau"))]
+    #[cfg_attr(docsrs, doc(cfg(any(feature = "lua54", feature = "luau"))))]
+    pub fn close(&self) -> Result<()> {
+        let lua = self.0.lua.lock();
+        if self.status_inner(&lua) == ThreadStatus::Running {
+            return Err(Error::runtime("cannot reset a running thread"));
+        }
+
+        let thread_state = self.state();
+        unsafe {
+            #[cfg(all(feature = "lua54", not(feature = "vendored")))]
+            let status = ffi::lua_resetthread(thread_state);
+            #[cfg(all(feature = "lua54", feature = "vendored"))]
+            let status = ffi::lua_closethread(thread_state, lua.state());
+            #[cfg(feature = "lua54")]
+            if status != ffi::LUA_OK {
+                return Err(pop_error(thread_state, status));
+            }
+            #[cfg(feature = "luau")]
+            ffi::lua_resetthread(thread_state);
+            Ok(())
+        }
+    }
 }
 
 impl fmt::Debug for Thread {
