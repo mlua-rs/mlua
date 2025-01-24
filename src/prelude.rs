@@ -20,13 +20,14 @@ pub use crate::{
 #[doc(no_inline)]
 pub use crate::HookTriggers as LuaHookTriggers;
 
-#[cfg(feature = "luau")]
-#[doc(no_inline)]
-pub use crate::{CoverageInfo as LuaCoverageInfo, Vector as LuaVector};
-
 #[cfg(feature = "async")]
 #[doc(no_inline)]
 pub use crate::{AsyncThread as LuaAsyncThread, LuaNativeAsyncFn};
+#[cfg(feature = "luau")]
+#[doc(no_inline)]
+pub use crate::{
+    CoverageInfo as LuaCoverageInfo, ThreadEventInfo as LuaThreadEventInfo, Vector as LuaVector,
+};
 
 #[cfg(feature = "serialize")]
 #[doc(no_inline)]

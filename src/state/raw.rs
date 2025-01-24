@@ -64,7 +64,10 @@ impl Drop for RawLua {
             }
 
             let mem_state = MemoryState::get(self.main_state());
-
+            #[cfg(feature = "luau")] // Fixes a crash during shutdown
+            {
+                (*ffi::lua_callbacks(self.main_state())).userthread = None;
+            }
             ffi::lua_close(self.main_state());
 
             // Deallocate `MemoryState`
@@ -554,6 +557,21 @@ impl RawLua {
     #[inline(always)]
     pub(crate) unsafe fn push(&self, value: impl IntoLua) -> Result<()> {
         value.push_into_stack(self)
+    }
+
+    pub(crate) unsafe fn push_ref_thread(&self, ref_thread: *mut ffi::lua_State) -> Result<()> {
+        let state = self.state();
+        check_stack(state, 1)?;
+        let _sg = StackGuard::new(ref_thread);
+        check_stack(ref_thread, 1)?;
+
+        if self.unlikely_memory_error() {
+            ffi::lua_pushthread(ref_thread)
+        } else {
+            protect_lua!(ref_thread, 0, 1, |ref_thread| ffi::lua_pushthread(ref_thread))?
+        };
+        ffi::lua_xmove(ref_thread, self.state(), 1);
+        Ok(())
     }
 
     /// Pushes a `Value` (by reference) onto the Lua stack.

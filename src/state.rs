@@ -23,6 +23,10 @@ use crate::types::{
     AppDataRef, AppDataRefMut, ArcReentrantMutexGuard, Integer, LuaType, MaybeSend, Number, ReentrantMutex,
     ReentrantMutexGuard, RegistryKey, VmState, XRc, XWeak,
 };
+
+#[cfg(any(feature = "luau", doc))]
+#[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
+use crate::types::ThreadEventInfo;
 use crate::userdata::{AnyUserData, UserData, UserDataProxy, UserDataRegistry, UserDataStorage};
 use crate::util::{
     assert_stack, check_stack, protect_lua_closure, push_string, push_table, rawset_field, StackGuard,
@@ -668,6 +672,72 @@ impl Lua {
         unsafe {
             (*lua.extra.get()).interrupt_callback = None;
             (*ffi::lua_callbacks(lua.main_state())).interrupt = None;
+        }
+    }
+
+    /// Sets a callback that will be called by Luau whenever a thread is created/destroyed.
+    ///
+    /// Often used for keeping track of threads.
+    #[cfg(any(feature = "luau", doc))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
+    pub fn set_thread_event_callback<F>(&self, callback: F)
+    where
+        F: Fn(&Lua, ThreadEventInfo) -> Result<()> + MaybeSend + 'static,
+    {
+        use std::rc::Rc;
+
+        unsafe extern "C-unwind" fn userthread_proc(parent: *mut ffi::lua_State, state: *mut ffi::lua_State) {
+            callback_error_ext(state, ptr::null_mut(), move |extra, _| {
+                let raw_lua: &RawLua = (*extra).raw_lua();
+                let _guard = StateGuard::new(raw_lua, state);
+
+                let userthread_cb = (*extra).userthread_callback.clone();
+                let userthread_cb =
+                    mlua_expect!(userthread_cb, "no userthread callback set in userthread_proc");
+                if parent.is_null() {
+                    raw_lua.push(Value::Nil).unwrap();
+                } else {
+                    raw_lua.push_ref_thread(parent).unwrap();
+                }
+                if parent.is_null() {
+                    let event_info = ThreadEventInfo::Destroyed(state.cast_const().cast());
+                    let main_state = raw_lua.main_state();
+                    if main_state == state {
+                        return Ok(()); // Don't process Destroyed event on main thread.
+                    }
+                    let main_extra = ExtraData::get(main_state);
+                    let main_raw_lua: &RawLua = (*main_extra).raw_lua();
+                    let _guard = StateGuard::new(main_raw_lua, state);
+                    userthread_cb((*main_extra).lua(), event_info)
+                } else {
+                    raw_lua.push_ref_thread(parent).unwrap();
+                    let event_info = match raw_lua.pop_value() {
+                        Value::Thread(thr) => ThreadEventInfo::Created(thr),
+                        _ => unimplemented!(),
+                    };
+                    userthread_cb((*extra).lua(), event_info)
+                }
+            });
+        }
+
+        // Set interrupt callback
+        let lua = self.lock();
+        unsafe {
+            (*lua.extra.get()).userthread_callback = Some(Rc::new(callback));
+            (*ffi::lua_callbacks(lua.main_state())).userthread = Some(userthread_proc);
+        }
+    }
+
+    /// Removes any thread event function previously set by `set_thread_event_callback`.
+    ///
+    /// This function has no effect if a callback was not previously set.
+    #[cfg(any(feature = "luau", doc))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
+    pub fn remove_thread_event_callback(&self) {
+        let lua = self.lock();
+        unsafe {
+            (*lua.extra.get()).userthread_callback = None;
+            (*ffi::lua_callbacks(lua.main_state())).userthread = None;
         }
     }
 
