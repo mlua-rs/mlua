@@ -695,7 +695,7 @@ impl FromLua for char {
                         message: Some(
                             "string must have one char when converting to char. (empty string)".to_string(),
                         ),
-                    })
+                    });
                 };
 
                 if let Some(_extra_char) = str_iter.next() {
