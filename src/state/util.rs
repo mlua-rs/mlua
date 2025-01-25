@@ -1,3 +1,4 @@
+use std::mem::take;
 use std::os::raw::c_int;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::ptr;
@@ -6,6 +7,7 @@ use std::sync::Arc;
 use crate::error::{Error, Result};
 use crate::state::{ExtraData, RawLua};
 use crate::util::{self, get_internal_metatable, WrappedFailure};
+use crate::IntoLuaMulti;
 
 pub(super) struct StateGuard<'a>(&'a RawLua, *mut ffi::lua_State);
 
@@ -107,7 +109,20 @@ where
             prealloc_failure.release(state, extra);
             r
         }
-        Ok(Err(err)) => {
+        Ok(Err(mut err)) => {
+            if let Error::Yielding = err {
+                let raw = extra.as_ref().unwrap_unchecked().raw_lua();
+                let values = take(&mut extra.as_mut().unwrap_unchecked().yielded_values);
+                match values.push_into_stack_multi(raw) {
+                    Ok(nargs) => {
+                        ffi::lua_yield(state, nargs);
+                        unreachable!()
+                    },
+                    Err(new_err) => {
+                        err = new_err;
+                    }
+                }
+            }
             let wrapped_error = prealloc_failure.r#use(state, extra);
 
             // Build `CallbackError` with traceback

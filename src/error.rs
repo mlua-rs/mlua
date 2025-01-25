@@ -205,6 +205,13 @@ pub enum Error {
         /// Underlying error.
         cause: Arc<Error>,
     },
+    // Yield.
+    //
+    // Not an error.
+    // Returning `Err(Yielding)` from a Rust callback will yield with no values.
+    // See `Lua::yield(args: impl FromLuaMulti) -> Result<Infallible, Error>` for more info.
+    // If it cannot yield, it will raise an error.
+    Yielding,
 }
 
 /// A specialized `Result` type used by `mlua`'s API.
@@ -321,6 +328,9 @@ impl fmt::Display for Error {
             Error::WithContext { context, cause } => {
                 writeln!(fmt, "{context}")?;
                 write!(fmt, "{cause}")
+            },
+            Error::Yielding => {
+                write!(fmt, "yield across Rust/Lua boundary")
             }
         }
     }

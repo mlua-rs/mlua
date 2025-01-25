@@ -220,6 +220,18 @@ fn test_coroutine_panic() {
 }
 
 #[test]
+fn test_yieldability() {
+    let lua = Lua::new();
+
+    let always_yield = lua.create_function(|lua, ()| {
+        lua.yield_args((42, "69420"))
+    }).unwrap();
+
+    let thread = lua.create_thread(always_yield).unwrap();
+    assert_eq!(thread.resume::<(i32, String)>(()).unwrap(), (42, String::from("69420")));
+}
+
+#[test]
 fn test_thread_pointer() -> Result<()> {
     let lua = Lua::new();
 

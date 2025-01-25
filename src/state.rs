@@ -1,5 +1,6 @@
 use std::any::TypeId;
 use std::cell::{BorrowError, BorrowMutError, RefCell};
+use std::convert::Infallible;
 use std::marker::PhantomData;
 use std::ops::Deref;
 use std::os::raw::c_int;
@@ -1965,6 +1966,31 @@ impl Lua {
     #[inline(always)]
     pub(crate) unsafe fn raw_lua(&self) -> &RawLua {
         &*self.raw.data_ptr()
+    }
+    /// Yields arguments
+    /// 
+    /// If this function cannot yield, it will raise a runtime error. It yields by using
+    /// the Error::Yielding error to rapidly exit all of the try blocks.
+    /// 
+    /// Note: On lua 5.1, 5.2, and JIT, this function will unable to know if it can yield 
+    /// or not until it reaches the Lua state.
+    pub fn yield_args(&self, args: impl IntoLuaMulti) -> Result<()> {
+        let raw = self.lock();
+        #[cfg(not(any(feature = "lua51", feature = "lua52", feature = "luajit")))]
+        if !raw.is_yieldable() {
+            return Err(Error::runtime("cannot yield across Rust/Lua boundary."))
+        }
+        unsafe {
+            raw.extra.get().as_mut().unwrap_unchecked().yielded_values = args.into_lua_multi(self)?;
+        }
+        Err(Error::Yielding)
+    }
+
+    /// Checks if Lua is currently allowed to yield.
+    #[cfg(not(any(feature = "lua51", feature="lua52", feature = "luajit")))]
+    #[inline]
+    pub(crate) fn is_yieldable(&self) -> bool {
+        self.lock().is_yieldable()
     }
 }
 

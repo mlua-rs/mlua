@@ -18,6 +18,7 @@ use crate::util::{get_internal_metatable, push_internal_userdata, TypeKey, Wrapp
 
 #[cfg(any(feature = "luau", doc))]
 use crate::chunk::Compiler;
+use crate::MultiValue;
 
 #[cfg(feature = "async")]
 use {futures_util::task::noop_waker_ref, std::ptr::NonNull, std::task::Waker};
@@ -87,6 +88,9 @@ pub(crate) struct ExtraData {
     pub(super) compiler: Option<Compiler>,
     #[cfg(feature = "luau-jit")]
     pub(super) enable_jit: bool,
+
+    // Values currently being yielded from Lua.yield()
+    pub(super) yielded_values: MultiValue,
 }
 
 impl Drop for ExtraData {
@@ -182,6 +186,7 @@ impl ExtraData {
             compiler: None,
             #[cfg(feature = "luau-jit")]
             enable_jit: true,
+            yielded_values: MultiValue::default(),
         }));
 
         // Store it in the registry
