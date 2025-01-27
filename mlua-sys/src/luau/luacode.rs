@@ -1,5 +1,6 @@
 //! Contains definitions from `luacode.h`.
 
+use std::marker::{PhantomData, PhantomPinned};
 use std::os::raw::{c_char, c_int, c_void};
 use std::{ptr, slice};
 
@@ -15,6 +16,10 @@ pub struct lua_CompileOptions {
     pub vectorType: *const c_char,
     pub mutableGlobals: *const *const c_char,
     pub userdataTypes: *const *const c_char,
+    pub librariesWithKnownMembers: *const *const c_char,
+    pub libraryMemberTypeCallback: Option<lua_LibraryMemberTypeCallback>,
+    pub libraryMemberConstantCallback: Option<lua_LibraryMemberConstantCallback>,
+    pub disabledBuiltins: *const *const c_char,
 }
 
 impl Default for lua_CompileOptions {
@@ -29,8 +34,32 @@ impl Default for lua_CompileOptions {
             vectorType: ptr::null(),
             mutableGlobals: ptr::null(),
             userdataTypes: ptr::null(),
+            librariesWithKnownMembers: ptr::null(),
+            libraryMemberTypeCallback: None,
+            libraryMemberConstantCallback: None,
+            disabledBuiltins: ptr::null(),
         }
     }
+}
+
+#[repr(C)]
+pub struct lua_CompileConstant {
+    _data: [u8; 0],
+    _marker: PhantomData<(*mut u8, PhantomPinned)>,
+}
+
+pub type lua_LibraryMemberTypeCallback =
+    extern "C" fn(library: *const c_char, member: *const c_char) -> c_int;
+
+pub type lua_LibraryMemberConstantCallback =
+    extern "C" fn(library: *const c_char, member: *const c_char, constant: *mut lua_CompileConstant);
+
+extern "C" {
+    fn luau_set_compile_constant_nil(constant: *mut lua_CompileConstant);
+    fn luau_set_compile_constant_boolean(constant: *mut lua_CompileConstant, b: c_int);
+    fn luau_set_compile_constant_number(constant: *mut lua_CompileConstant, n: f64);
+    fn luau_set_compile_constant_vector(constant: *mut lua_CompileConstant, x: f32, y: f32, z: f32, w: f32);
+    fn luau_set_compile_constant_string(constant: *mut lua_CompileConstant, s: *const c_char, l: usize);
 }
 
 extern "C-unwind" {
