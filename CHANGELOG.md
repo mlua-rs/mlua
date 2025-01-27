@@ -1,3 +1,9 @@
+## v0.10.2 (Jan 27th, 2025)
+
+- Set `Default` for `Value` to be `Nil`
+- Allow exhaustive match on `Value` (#502)
+- Add `Table::set_safeenv` method (Luau)
+
 ## v0.10.2 (Dec 1st, 2024)
 
 - Switch proc-macro-error to proc-macro-error2 (#493)
