@@ -48,18 +48,40 @@ pub struct lua_CompileConstant {
     _marker: PhantomData<(*mut u8, PhantomPinned)>,
 }
 
-pub type lua_LibraryMemberTypeCallback =
-    extern "C" fn(library: *const c_char, member: *const c_char) -> c_int;
+/// Type table tags
+#[doc(hidden)]
+#[repr(i32)]
+#[non_exhaustive]
+pub enum luau_BytecodeType {
+    Nil = 0,
+    Boolean,
+    Number,
+    String,
+    Table,
+    Function,
+    Thread,
+    UserData,
+    Vector,
+    Buffer,
 
-pub type lua_LibraryMemberConstantCallback =
-    extern "C" fn(library: *const c_char, member: *const c_char, constant: *mut lua_CompileConstant);
+    Any = 15,
+}
+
+pub type lua_LibraryMemberTypeCallback =
+    unsafe extern "C-unwind" fn(library: *const c_char, member: *const c_char) -> c_int;
+
+pub type lua_LibraryMemberConstantCallback = unsafe extern "C-unwind" fn(
+    library: *const c_char,
+    member: *const c_char,
+    constant: *mut lua_CompileConstant,
+);
 
 extern "C" {
-    fn luau_set_compile_constant_nil(constant: *mut lua_CompileConstant);
-    fn luau_set_compile_constant_boolean(constant: *mut lua_CompileConstant, b: c_int);
-    fn luau_set_compile_constant_number(constant: *mut lua_CompileConstant, n: f64);
-    fn luau_set_compile_constant_vector(constant: *mut lua_CompileConstant, x: f32, y: f32, z: f32, w: f32);
-    fn luau_set_compile_constant_string(constant: *mut lua_CompileConstant, s: *const c_char, l: usize);
+    pub fn luau_set_compile_constant_nil(cons: *mut lua_CompileConstant);
+    pub fn luau_set_compile_constant_boolean(cons: *mut lua_CompileConstant, b: c_int);
+    pub fn luau_set_compile_constant_number(cons: *mut lua_CompileConstant, n: f64);
+    pub fn luau_set_compile_constant_vector(cons: *mut lua_CompileConstant, x: f32, y: f32, z: f32, w: f32);
+    pub fn luau_set_compile_constant_string(cons: *mut lua_CompileConstant, s: *const c_char, l: usize);
 }
 
 extern "C-unwind" {
