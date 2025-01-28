@@ -175,7 +175,10 @@ impl Thread {
     }
 
     #[cfg(feature = "luau")]
-    /// Resumes a thread with an error.
+    /// Resumes a thread with an error. This is useful when developing
+    /// custom async schedulers' etc. with mlua as it allows bubbling up
+    /// errors from the yielded thread upwards with working pcall out of
+    /// the box.
     pub fn resume_error<R>(&self, args: impl IntoLua) -> Result<R>
     where
         R: FromLuaMulti,
@@ -643,76 +646,4 @@ mod assertions {
     static_assertions::assert_not_impl_any!(AsyncThread<()>: Send);
     #[cfg(all(feature = "async", feature = "send"))]
     static_assertions::assert_impl_all!(AsyncThread<()>: Send, Sync);
-}
-
-#[cfg(test)]
-mod resumeerror_test {
-    #[test]
-    fn test_resumeerror() {
-        // Create tokio runtime and use spawn_local
-        let rt = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .worker_threads(10)
-            .build()
-            .unwrap();
-
-        let local = tokio::task::LocalSet::new();
-
-        local.block_on(&rt, async {
-            use crate::{Function, Lua, Thread, Value};
-
-            let lua = Lua::new();
-
-            let thread: Function = lua
-                .load(
-                    r#"
-    local luacall = ...
-    local function callback(...)
-        print("AM HERE")
-        luacall(coroutine.running(), ...)
-        return coroutine.yield()
-    end
-    
-    return callback
-                "#,
-                )
-                .call(
-                    lua.create_function(|_lua, th: Thread| {
-                        tokio::task::spawn_local(async move {
-                            println!("Thread: {:?}, {:?}", th, th.status());
-                            th.resume_error::<()>("An error here".to_string()).unwrap();
-                            tokio::task::yield_now().await;
-                        });
-                        Ok(())
-                    })
-                    .unwrap(),
-                )
-                .unwrap();
-
-            let thread_b: Thread = lua
-                .load(
-                    r#"
-                    local a = ...
-                    return coroutine.create(function (...)
-                        local b = ...
-                        assert(b == 1)
-                        local ok, result = pcall(a)
-                        assert(not ok)
-                        print("Done with: ", ok, result)
-                        return result
-                    end)
-                "#,
-                )
-                .call(thread.clone())
-                .unwrap();
-
-            println!("{:?}", thread_b.resume::<Value>(1));
-
-            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-
-            println!("{:?}", thread_b.status());
-
-            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-        });
-    }
 }

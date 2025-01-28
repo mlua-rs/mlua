@@ -227,3 +227,75 @@ fn test_thread_pointer() -> Result<()> {
 
     Ok(())
 }
+
+#[cfg(feature = "luau")]
+#[cfg(test)]
+mod resumeerror_test {
+    #[test]
+    fn test_resumeerror() {
+        // Create tokio runtime and use spawn_local [this is required for the test to work]
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .worker_threads(10)
+            .build()
+            .unwrap();
+
+        let local = tokio::task::LocalSet::new();
+
+        local.block_on(&rt, async {
+            use mlua::{Function, Lua, Thread};
+
+            let lua = Lua::new();
+
+            let thread: Function = lua
+                .load(
+                    r#"
+local luacall = ...
+local function callback(...)
+    luacall(coroutine.running(), ...)
+    return coroutine.yield()
+end
+
+return callback
+                "#,
+                )
+                .call(
+                    lua.create_function(|_lua, th: Thread| {
+                        tokio::task::spawn_local(async move {
+                            th.resume_error::<()>("ErrorABC".to_string()).unwrap();
+                            tokio::task::yield_now().await;
+                        });
+                        Ok(())
+                    })
+                    .unwrap(),
+                )
+                .unwrap();
+
+            let thread_b: Thread = lua
+                .load(
+                    r#"
+                    local a = ...
+                    return coroutine.create(function (...)
+                        local b = ...
+                        assert(b == 1)
+                        -- Test 1: Working pcall
+                        local ok, result = pcall(a)
+                        assert(not ok, "Should not be ok")
+                        assert(result == "ErrorABC", "Should be ErrorABC")
+
+                        -- Repeat
+                        local ok, result = pcall(a)
+                        assert(not ok)
+                        assert(result == "ErrorABC")
+                    end)
+                "#,
+                )
+                .call(thread.clone())
+                .unwrap();
+
+            // Actually using this system in practice needs a few extra pieces (such as a way to track return
+            // values etc.)
+            thread_b.resume::<()>(1).expect("Error in thread_b");
+        });
+    }
+}
