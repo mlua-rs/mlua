@@ -227,3 +227,28 @@ fn test_thread_pointer() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+#[cfg(feature = "luau")]
+fn test_thread_resume_error() -> Result<()> {
+    let lua = Lua::new();
+
+    let thread = lua
+        .load(
+            r#"
+        coroutine.create(function()
+            local ok, err = pcall(coroutine.yield, 123)
+            assert(not ok, "yield should fail")
+            assert(err == "myerror", "unexpected error: " .. tostring(err))
+            return "success"
+        end)
+    "#,
+        )
+        .eval::<Thread>()?;
+
+    assert_eq!(thread.resume::<i64>(())?, 123);
+    let status = thread.resume_error::<String>("myerror").unwrap();
+    assert_eq!(status, "success");
+
+    Ok(())
+}

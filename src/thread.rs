@@ -173,6 +173,39 @@ impl Thread {
         }
     }
 
+    /// Resumes execution of this thread, immediately raising an error.
+    ///
+    /// This is a Luau specific extension.
+    #[cfg(feature = "luau")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
+    pub fn resume_error<R>(&self, error: impl crate::IntoLua) -> Result<R>
+    where
+        R: FromLuaMulti,
+    {
+        let lua = self.0.lua.lock();
+        match self.status_inner(&lua) {
+            ThreadStatusInner::New(_) | ThreadStatusInner::Yielded(_) => {}
+            _ => return Err(Error::CoroutineUnresumable),
+        };
+
+        let state = lua.state();
+        let thread_state = self.state();
+        unsafe {
+            let _sg = StackGuard::new(state);
+            let _thread_sg = StackGuard::with_top(thread_state, 0);
+
+            check_stack(state, 1)?;
+            error.push_into_stack(&lua)?;
+            ffi::lua_xmove(state, thread_state, 1);
+
+            let (_, nresults) = self.resume_inner(&lua, ffi::LUA_RESUMEERROR)?;
+            check_stack(state, nresults + 1)?;
+            ffi::lua_xmove(thread_state, state, nresults);
+
+            R::from_stack_multi(nresults, &lua)
+        }
+    }
+
     /// Resumes execution of this thread.
     ///
     /// It's similar to `resume()` but leaves `nresults` values on the thread stack.
@@ -180,7 +213,10 @@ impl Thread {
         let state = lua.state();
         let thread_state = self.state();
         let mut nresults = 0;
+        #[cfg(not(feature = "luau"))]
         let ret = ffi::lua_resume(thread_state, state, nargs, &mut nresults as *mut c_int);
+        #[cfg(feature = "luau")]
+        let ret = ffi::lua_resumex(thread_state, state, nargs, &mut nresults as *mut c_int);
         match ret {
             ffi::LUA_OK => Ok((ThreadStatusInner::Finished, nresults)),
             ffi::LUA_YIELD => Ok((ThreadStatusInner::Yielded(0), nresults)),
