@@ -657,3 +657,29 @@ fn test_either_from_lua() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn test_char_into_lua() -> Result<()> {
+    let lua = Lua::new();
+
+    let v = '🦀';
+    let v2 = v.into_lua(&lua)?;
+    assert_eq!(Some(v.to_string()), v2.as_string_lossy());
+
+    Ok(())
+}
+
+#[test]
+fn test_char_from_lua() -> Result<()> {
+    let lua = Lua::new();
+
+    let f = lua.create_function(|_, s: mlua::String| Ok(s))?;
+    let s = f.call::<char>("A")?;
+    assert_eq!(s, 'A');
+
+    let f = lua.create_function(|_, s: mlua::Integer| Ok(s))?;
+    let s = f.call::<char>(65)?;
+    assert_eq!(s, 'A');
+
+    Ok(())
+}
