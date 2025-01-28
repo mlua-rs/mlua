@@ -999,13 +999,13 @@ impl Lua {
     ///
     /// [`Chunk::exec`]: crate::Chunk::exec
     #[track_caller]
-    pub fn load<'a>(&self, chunk: impl AsChunk<'a>) -> Chunk<'a> {
+    pub fn load<'a>(&self, chunk: impl AsChunk + 'a) -> Chunk<'a> {
         self.load_with_location(chunk, Location::caller())
     }
 
     pub(crate) fn load_with_location<'a>(
         &self,
-        chunk: impl AsChunk<'a>,
+        chunk: impl AsChunk + 'a,
         location: &'static Location<'static>,
     ) -> Chunk<'a> {
         Chunk {

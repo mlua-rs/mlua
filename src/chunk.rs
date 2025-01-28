@@ -2,7 +2,6 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::ffi::CString;
 use std::io::Result as IoResult;
-use std::marker::PhantomData;
 use std::panic::Location;
 use std::path::{Path, PathBuf};
 use std::string::String as StdString;
@@ -17,7 +16,7 @@ use crate::value::Value;
 /// Trait for types [loadable by Lua] and convertible to a [`Chunk`]
 ///
 /// [loadable by Lua]: https://www.lua.org/manual/5.4/manual.html#3.3.2
-pub trait AsChunk<'a> {
+pub trait AsChunk {
     /// Returns optional chunk name
     ///
     /// See [`Chunk::set_name`] for possible name prefixes.
@@ -39,61 +38,75 @@ pub trait AsChunk<'a> {
     }
 
     /// Returns chunk data (can be text or binary)
-    fn source(self) -> IoResult<Cow<'a, [u8]>>;
+    fn source<'a>(self) -> IoResult<Cow<'a, [u8]>>
+    where
+        Self: 'a;
 }
 
-impl<'a> AsChunk<'a> for &'a str {
-    fn source(self) -> IoResult<Cow<'a, [u8]>> {
+impl AsChunk for &str {
+    fn source<'a>(self) -> IoResult<Cow<'a, [u8]>>
+    where
+        Self: 'a,
+    {
         Ok(Cow::Borrowed(self.as_ref()))
     }
 }
 
-impl AsChunk<'static> for StdString {
-    fn source(self) -> IoResult<Cow<'static, [u8]>> {
+impl AsChunk for StdString {
+    fn source<'a>(self) -> IoResult<Cow<'a, [u8]>> {
         Ok(Cow::Owned(self.into_bytes()))
     }
 }
 
-impl<'a> AsChunk<'a> for &'a StdString {
-    fn source(self) -> IoResult<Cow<'a, [u8]>> {
+impl AsChunk for &StdString {
+    fn source<'a>(self) -> IoResult<Cow<'a, [u8]>>
+    where
+        Self: 'a,
+    {
         Ok(Cow::Borrowed(self.as_bytes()))
     }
 }
 
-impl<'a> AsChunk<'a> for &'a [u8] {
-    fn source(self) -> IoResult<Cow<'a, [u8]>> {
+impl AsChunk for &[u8] {
+    fn source<'a>(self) -> IoResult<Cow<'a, [u8]>>
+    where
+        Self: 'a,
+    {
         Ok(Cow::Borrowed(self))
     }
 }
 
-impl AsChunk<'static> for Vec<u8> {
-    fn source(self) -> IoResult<Cow<'static, [u8]>> {
+impl AsChunk for Vec<u8> {
+    fn source<'a>(self) -> IoResult<Cow<'a, [u8]>> {
         Ok(Cow::Owned(self))
     }
 }
 
-impl<'a> AsChunk<'a> for &'a Vec<u8> {
-    fn source(self) -> IoResult<Cow<'a, [u8]>> {
-        Ok(Cow::Borrowed(self.as_ref()))
+impl AsChunk for &Vec<u8> {
+    fn source<'a>(self) -> IoResult<Cow<'a, [u8]>>
+    where
+        Self: 'a,
+    {
+        Ok(Cow::Borrowed(self))
     }
 }
 
-impl AsChunk<'static> for &Path {
+impl AsChunk for &Path {
     fn name(&self) -> Option<StdString> {
         Some(format!("@{}", self.display()))
     }
 
-    fn source(self) -> IoResult<Cow<'static, [u8]>> {
+    fn source<'a>(self) -> IoResult<Cow<'a, [u8]>> {
         std::fs::read(self).map(Cow::Owned)
     }
 }
 
-impl AsChunk<'static> for PathBuf {
+impl AsChunk for PathBuf {
     fn name(&self) -> Option<StdString> {
         Some(format!("@{}", self.display()))
     }
 
-    fn source(self) -> IoResult<Cow<'static, [u8]>> {
+    fn source<'a>(self) -> IoResult<Cow<'a, [u8]>> {
         std::fs::read(self).map(Cow::Owned)
     }
 }
@@ -506,10 +519,10 @@ impl Chunk<'_> {
                 if self.detect_mode() == ChunkMode::Binary {
                     let lua = self.lua.lock();
                     if let Some(mut cache) = lua.app_data_mut_unguarded::<ChunksCache>() {
-                        cache.0.insert(text_source, binary_source.as_ref().to_vec());
+                        cache.0.insert(text_source, binary_source.to_vec());
                     } else {
                         let mut cache = ChunksCache(HashMap::new());
-                        cache.0.insert(text_source, binary_source.as_ref().to_vec());
+                        cache.0.insert(text_source, binary_source.to_vec());
                         let _ = lua.try_set_app_data(cache);
                     };
                 }
@@ -543,21 +556,20 @@ impl Chunk<'_> {
     }
 
     fn detect_mode(&self) -> ChunkMode {
-        match (self.mode, &self.source) {
-            (Some(mode), _) => mode,
-            (None, Ok(source)) => {
-                #[cfg(not(feature = "luau"))]
-                if source.starts_with(ffi::LUA_SIGNATURE) {
-                    return ChunkMode::Binary;
-                }
-                #[cfg(feature = "luau")]
-                if *source.first().unwrap_or(&u8::MAX) < b'\n' {
-                    return ChunkMode::Binary;
-                }
-                ChunkMode::Text
-            }
-            (None, Err(_)) => ChunkMode::Text, // any value is fine
+        if let Some(mode) = self.mode {
+            return mode;
         }
+        if let Ok(source) = &self.source {
+            #[cfg(not(feature = "luau"))]
+            if source.starts_with(ffi::LUA_SIGNATURE) {
+                return ChunkMode::Binary;
+            }
+            #[cfg(feature = "luau")]
+            if *source.first().unwrap_or(&u8::MAX) < b'\n' {
+                return ChunkMode::Binary;
+            }
+        }
+        ChunkMode::Text
     }
 
     fn convert_name(name: String) -> Result<CString> {
@@ -572,29 +584,27 @@ impl Chunk<'_> {
     }
 }
 
-struct WrappedChunk<'a, T: AsChunk<'a>> {
+struct WrappedChunk<T: AsChunk> {
     chunk: T,
     caller: &'static Location<'static>,
-    _marker: PhantomData<&'a T>,
 }
 
-impl<'a> Chunk<'a> {
+impl Chunk<'_> {
     /// Wraps a chunk of Lua code, returning an opaque type that implements [`IntoLua`] trait.
     ///
     /// The resulted `IntoLua` implementation will convert the chunk into a Lua function without
     /// executing it.
     #[doc(hidden)]
     #[track_caller]
-    pub fn wrap(chunk: impl AsChunk<'a> + 'a) -> impl IntoLua + 'a {
+    pub fn wrap(chunk: impl AsChunk) -> impl IntoLua {
         WrappedChunk {
             chunk,
             caller: Location::caller(),
-            _marker: PhantomData,
         }
     }
 }
 
-impl<'a, T: AsChunk<'a>> IntoLua for WrappedChunk<'a, T> {
+impl<T: AsChunk> IntoLua for WrappedChunk<T> {
     fn into_lua(self, lua: &Lua) -> Result<Value> {
         lua.load_with_location(self.chunk, self.caller)
             .into_function()

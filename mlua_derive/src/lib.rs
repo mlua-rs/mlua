@@ -103,7 +103,7 @@ pub fn chunk(input: TokenStream) -> TokenStream {
 
         struct InnerChunk<F: FnOnce(&Lua) -> Result<Table>>(Cell<Option<F>>);
 
-        impl<F> AsChunk<'static> for InnerChunk<F>
+        impl<F> AsChunk for InnerChunk<F>
         where
             F: FnOnce(&Lua) -> Result<Table>,
         {
@@ -120,7 +120,7 @@ pub fn chunk(input: TokenStream) -> TokenStream {
                 Some(ChunkMode::Text)
             }
 
-            fn source(self) -> IoResult<Cow<'static, [u8]>> {
+            fn source<'a>(self) -> IoResult<Cow<'a, [u8]>> {
                 Ok(Cow::Borrowed((#source).as_bytes()))
             }
         }
