@@ -673,13 +673,18 @@ fn test_char_into_lua() -> Result<()> {
 fn test_char_from_lua() -> Result<()> {
     let lua = Lua::new();
 
-    let f = lua.create_function(|_, s: mlua::String| Ok(s))?;
-    let s = f.call::<char>("A")?;
-    assert_eq!(s, 'A');
-
-    let f = lua.create_function(|_, s: mlua::Integer| Ok(s))?;
-    let s = f.call::<char>(65)?;
-    assert_eq!(s, 'A');
+    assert_eq!(lua.convert::<char>("A")?, 'A');
+    assert_eq!(lua.convert::<char>(65)?, 'A');
+    assert_eq!(lua.convert::<char>(128175)?, '💯');
+    assert!(lua
+        .convert::<char>(5456324)
+        .is_err_and(|e| e.to_string().contains("integer out of range")));
+    assert!(lua
+        .convert::<char>("hello")
+        .is_err_and(|e| e.to_string().contains("expected string to have exactly one char")));
+    assert!(lua
+        .convert::<char>(HashMap::<String, String>::new())
+        .is_err_and(|e| e.to_string().contains("expected string or integer")));
 
     Ok(())
 }

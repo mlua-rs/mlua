@@ -660,55 +660,35 @@ impl IntoLua for char {
     fn into_lua(self, lua: &Lua) -> Result<Value> {
         let mut char_bytes = [0; 4];
         self.encode_utf8(&mut char_bytes);
-        Ok(Value::String(lua.create_string(char_bytes)?))
+        Ok(Value::String(lua.create_string(&char_bytes[..self.len_utf8()])?))
     }
 }
 
 impl FromLua for char {
-    #[inline]
     fn from_lua(value: Value, _lua: &Lua) -> Result<Self> {
         let ty = value.type_name();
         match value {
-            // When integer: reduce it to u8 and try to convert to char
             Value::Integer(i) => {
-                if i <= u8::MAX.into() && i >= 0 {
-                    Ok(char::from(i as u8))
-                } else {
-                    Err(Error::FromLuaConversionError {
+                cast(i)
+                    .and_then(char::from_u32)
+                    .ok_or_else(|| Error::FromLuaConversionError {
                         from: ty,
-                        to: Self::type_name(),
-                        message: Some(
-                            "expected int to be a u8 when converting to char. You can also use strings."
-                                .to_string(),
-                        ),
+                        to: "char".to_string(),
+                        message: Some("integer out of range when converting to char".to_string()),
                     })
-                }
             }
-            // When String: first char, and only if there is one char
             Value::String(s) => {
                 let str = s.to_str()?;
                 let mut str_iter = str.chars();
-                let Some(char) = str_iter.next() else {
-                    return Err(Error::FromLuaConversionError {
+                match (str_iter.next(), str_iter.next()) {
+                    (Some(char), None) => Ok(char),
+                    _ => Err(Error::FromLuaConversionError {
                         from: ty,
-                        to: Self::type_name(),
+                        to: "char".to_string(),
                         message: Some(
-                            "string must have one char when converting to char. (empty string)".to_string(),
+                            "expected string to have exactly one char when converting to char".to_string(),
                         ),
-                    });
-                };
-
-                if let Some(_extra_char) = str_iter.next() {
-                    Err(Error::FromLuaConversionError {
-                        from: ty,
-                        to: Self::type_name(),
-                        message: Some(
-                            "expected lua string to have exactly one char when converting to char"
-                                .to_string(),
-                        ),
-                    })
-                } else {
-                    Ok(char)
+                    }),
                 }
             }
             _ => Err(Error::FromLuaConversionError {
