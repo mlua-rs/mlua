@@ -6,8 +6,8 @@ use std::path::PathBuf;
 use bstr::BString;
 use maplit::{btreemap, btreeset, hashmap, hashset};
 use mlua::{
-    AnyUserData, Either, Error, Function, IntoLua, Lua, RegistryKey, Result, Table, Thread, UserDataRef,
-    Value,
+    AnyUserData, BorrowedBytes, BorrowedStr, Either, Error, Function, IntoLua, Lua, RegistryKey, Result,
+    Table, Thread, UserDataRef, Value,
 };
 
 #[test]
@@ -56,6 +56,66 @@ fn test_string_from_lua() -> Result<()> {
     // Should fallback to default conversion
     let s = f.call::<String>(42)?;
     assert_eq!(s, "42");
+
+    Ok(())
+}
+
+#[test]
+fn test_borrowedstr_into_lua() -> Result<()> {
+    let lua = Lua::new();
+
+    // Direct conversion
+    let s = lua.create_string("hello, world!")?;
+    let bs = s.to_str()?;
+    let bs2 = (&bs).into_lua(&lua)?;
+    assert_eq!(bs2.as_string().unwrap(), "hello, world!");
+
+    // Push into stack
+    let table = lua.create_table()?;
+    table.set("bs", &bs)?;
+    assert_eq!(bs, table.get::<String>("bs")?);
+
+    Ok(())
+}
+
+#[test]
+fn test_borrowedstr_from_lua() -> Result<()> {
+    let lua = Lua::new();
+
+    // From stack
+    let f = lua.create_function(|_, s: BorrowedStr| Ok(s))?;
+    let s = f.call::<String>("hello, world!")?;
+    assert_eq!(s, "hello, world!");
+
+    Ok(())
+}
+
+#[test]
+fn test_borrowedbytes_into_lua() -> Result<()> {
+    let lua = Lua::new();
+
+    // Direct conversion
+    let s = lua.create_string("hello, world!")?;
+    let bb = s.as_bytes();
+    let bb2 = (&bb).into_lua(&lua)?;
+    assert_eq!(bb2.as_string().unwrap(), "hello, world!");
+
+    // Push into stack
+    let table = lua.create_table()?;
+    table.set("bb", &bb)?;
+    assert_eq!(bb, table.get::<String>("bb")?.as_bytes());
+
+    Ok(())
+}
+
+#[test]
+fn test_borrowedbytes_from_lua() -> Result<()> {
+    let lua = Lua::new();
+
+    // From stack
+    let f = lua.create_function(|_, s: BorrowedBytes| Ok(s))?;
+    let s = f.call::<String>("hello, world!")?;
+    assert_eq!(s, "hello, world!");
 
     Ok(())
 }

@@ -143,3 +143,17 @@ fn test_string_wrap() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn test_bytes_into_iter() -> Result<()> {
+    let lua = Lua::new();
+
+    let s = lua.create_string("hello")?;
+    let bytes = s.as_bytes();
+
+    for (i, &b) in bytes.into_iter().enumerate() {
+        assert_eq!(b, s.as_bytes()[i]);
+    }
+
+    Ok(())
+}
