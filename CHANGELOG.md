@@ -1,4 +1,4 @@
-## v0.10.2 (Jan 27th, 2025)
+## v0.10.3 (Jan 27th, 2025)
 
 - Set `Default` for `Value` to be `Nil`
 - Allow exhaustive match on `Value` (#502)
