@@ -342,6 +342,12 @@ impl RawLua {
         }
     }
 
+    #[cfg(not(any(feature = "lua51", feature="lua52", feature = "luajit")))]
+    #[inline]
+    pub(crate) fn is_yieldable(&self) -> bool {
+        unsafe { ffi::lua_isyieldable(self.state()) != 0 }
+    }
+
     pub(crate) unsafe fn load_chunk_inner(
         &self,
         state: *mut ffi::lua_State,
