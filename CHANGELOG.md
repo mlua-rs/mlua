@@ -467,7 +467,7 @@ Breaking changes:
 - [**Breaking**] Removed `AnyUserData::has_metamethod()`
 - Added `Thread::reset()` for luajit/lua54 to recycle threads.
   It's possible to attach a new function to a thread (coroutine).
-- Added `chunk!` macro support to load chunks of Lua code using the Rust tokenizer and optinally capturing Rust variables.
+- Added `chunk!` macro support to load chunks of Lua code using the Rust tokenizer and optionally capturing Rust variables.
 - Improved error reporting (`Error`'s `__tostring` method formats full stacktraces). This is useful in the module mode.
 
 ## v0.6.0-beta.1
@@ -523,7 +523,7 @@ Breaking changes:
 
 - Lua 5.4 support with `MetaMethod::Close`.
 - `lua53` feature is disabled by default. Now preferred Lua version have to be chosen explicitly.
-- Provide safety guaraness for Lua state, which means that potenially unsafe operations, like loading C modules (using `require` or `package.loadlib`) are disabled. Equalient for the previous `Lua::new()` function is `Lua::unsafe_new()`.
+- Provide safety guarantees for Lua state, which means that potentially unsafe operations, like loading C modules (using `require` or `package.loadlib`) are disabled. Equivalent to the previous `Lua::new()` function is `Lua::unsafe_new()`.
 - New `send` feature to require `Send`.
 - New `module` feature, that disables linking to Lua Core Libraries. Required for modules.
 - Don't allow `'callback` outlive `'lua` in `Lua::create_function()` to fix [the unsoundness](tests/compile/static_callback_args.rs).
