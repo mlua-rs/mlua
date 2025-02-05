@@ -318,7 +318,7 @@ fn test_scope_userdata_drop() -> Result<()> {
 
     let ud = lua.globals().get::<AnyUserData>("ud")?;
     match ud.borrow_scoped::<MyUserData, _>(|_| Ok::<_, Error>(())) {
-        Ok(_) => panic!("succesfull borrow for destructed userdata"),
+        Ok(_) => panic!("successful borrow for destructed userdata"),
         Err(Error::UserDataDestructed) => {}
         Err(err) => panic!("improper borrow error for destructed userdata: {err:?}"),
     }
