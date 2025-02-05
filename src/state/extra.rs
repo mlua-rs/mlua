@@ -80,6 +80,8 @@ pub(crate) struct ExtraData {
     pub(super) warn_callback: Option<crate::types::WarnCallback>,
     #[cfg(feature = "luau")]
     pub(super) interrupt_callback: Option<crate::types::InterruptCallback>,
+    #[cfg(feature = "luau")]
+    pub(super) userthread_callback: Option<crate::types::ThreadEventCallback>,
 
     #[cfg(feature = "luau")]
     pub(super) sandboxed: bool,
@@ -176,6 +178,8 @@ impl ExtraData {
             warn_callback: None,
             #[cfg(feature = "luau")]
             interrupt_callback: None,
+            #[cfg(feature = "luau")]
+            userthread_callback: None,
             #[cfg(feature = "luau")]
             sandboxed: false,
             #[cfg(feature = "luau")]
