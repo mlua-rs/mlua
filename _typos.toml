@@ -1,0 +1,6 @@
+[default]
+extend-ignore-identifiers-re = ["catched", "2nd", "ser"]
+
+[default.extend-words]
+thr = "thr"
+aas = "aas"
