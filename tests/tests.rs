@@ -322,7 +322,7 @@ fn test_error() -> Result<()> {
     let return_string_error = globals.get::<Function>("return_string_error")?;
     assert!(return_string_error.call::<Error>(()).is_ok());
 
-    match lua.load("if you're happy and you know it syntax error").exec() {
+    match lua.load("if you are happy and you know it syntax error").exec() {
         Err(Error::SyntaxError {
             incomplete_input: false,
             ..
