@@ -214,7 +214,7 @@ fn test_function_dump() -> Result<()> {
 
 #[cfg(feature = "luau")]
 #[test]
-fn test_finction_coverage() -> Result<()> {
+fn test_function_coverage() -> Result<()> {
     let lua = Lua::new();
 
     lua.set_compiler(mlua::Compiler::default().set_coverage_level(1));

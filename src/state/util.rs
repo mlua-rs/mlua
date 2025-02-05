@@ -23,7 +23,7 @@ impl Drop for StateGuard<'_> {
 }
 
 // An optimized version of `callback_error` that does not allocate `WrappedFailure` userdata
-// and instead reuses unsed values from previous calls (or allocates new).
+// and instead reuses unused values from previous calls (or allocates new).
 pub(super) unsafe fn callback_error_ext<F, R>(
     state: *mut ffi::lua_State,
     mut extra: *mut ExtraData,
