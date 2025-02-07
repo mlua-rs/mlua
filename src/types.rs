@@ -1,10 +1,9 @@
 use std::cell::UnsafeCell;
 use std::os::raw::{c_int, c_void};
-use std::rc::Rc;
 
 use crate::error::Result;
 #[cfg(not(feature = "luau"))]
-use crate::hook::Debug;
+use crate::hook::{Debug, HookTriggers};
 use crate::state::{ExtraData, Lua, RawLua};
 
 // Re-export mutex wrappers
@@ -73,17 +72,23 @@ pub enum VmState {
     Yield,
 }
 
+#[cfg(not(feature = "luau"))]
+pub(crate) enum HookKind {
+    Global,
+    Thread(HookTriggers, HookCallback),
+}
+
 #[cfg(all(feature = "send", not(feature = "luau")))]
-pub(crate) type HookCallback = Rc<dyn Fn(&Lua, Debug) -> Result<VmState> + Send>;
+pub(crate) type HookCallback = Box<dyn Fn(&Lua, Debug) -> Result<VmState> + Send>;
 
 #[cfg(all(not(feature = "send"), not(feature = "luau")))]
-pub(crate) type HookCallback = Rc<dyn Fn(&Lua, Debug) -> Result<VmState>>;
+pub(crate) type HookCallback = Box<dyn Fn(&Lua, Debug) -> Result<VmState>>;
 
 #[cfg(all(feature = "send", feature = "luau"))]
-pub(crate) type InterruptCallback = Rc<dyn Fn(&Lua) -> Result<VmState> + Send>;
+pub(crate) type InterruptCallback = std::rc::Rc<dyn Fn(&Lua) -> Result<VmState> + Send>;
 
 #[cfg(all(not(feature = "send"), feature = "luau"))]
-pub(crate) type InterruptCallback = Rc<dyn Fn(&Lua) -> Result<VmState>>;
+pub(crate) type InterruptCallback = std::rc::Rc<dyn Fn(&Lua) -> Result<VmState>>;
 
 #[cfg(all(feature = "send", feature = "lua54"))]
 pub(crate) type WarnCallback = Box<dyn Fn(&Lua, &str, bool) -> Result<()> + Send>;

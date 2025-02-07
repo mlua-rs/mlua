@@ -11,7 +11,7 @@ use crate::util::{check_stack, error_traceback_thread, pop_error, StackGuard};
 #[cfg(not(feature = "luau"))]
 use crate::{
     hook::{Debug, HookTriggers},
-    types::MaybeSend,
+    types::HookKind,
 };
 
 #[cfg(feature = "async")]
@@ -262,16 +262,26 @@ impl Thread {
     /// Sets a hook function that will periodically be called as Lua code executes.
     ///
     /// This function is similar or [`Lua::set_hook`] except that it sets for the thread.
-    /// To remove a hook call [`Lua::remove_hook`].
+    /// You can have multiple hooks for different threads.
+    ///
+    /// To remove a hook call [`Thread::remove_hook`].
     #[cfg(not(feature = "luau"))]
     #[cfg_attr(docsrs, doc(cfg(not(feature = "luau"))))]
-    pub fn set_hook<F>(&self, triggers: HookTriggers, callback: F)
+    pub fn set_hook<F>(&self, triggers: HookTriggers, callback: F) -> Result<()>
     where
-        F: Fn(&crate::Lua, Debug) -> Result<crate::VmState> + MaybeSend + 'static,
+        F: Fn(&crate::Lua, Debug) -> Result<crate::VmState> + crate::MaybeSend + 'static,
     {
         let lua = self.0.lua.lock();
+        unsafe { lua.set_thread_hook(self.state(), HookKind::Thread(triggers, Box::new(callback))) }
+    }
+
+    /// Removes any hook function from this thread.
+    #[cfg(not(feature = "luau"))]
+    #[cfg_attr(docsrs, doc(cfg(not(feature = "luau"))))]
+    pub fn remove_hook(&self) {
+        let _lua = self.0.lua.lock();
         unsafe {
-            lua.set_thread_hook(self.state(), triggers, callback);
+            ffi::lua_sethook(self.state(), None, 0, 0);
         }
     }
 

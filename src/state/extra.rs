@@ -75,7 +75,7 @@ pub(crate) struct ExtraData {
     #[cfg(not(feature = "luau"))]
     pub(super) hook_callback: Option<crate::types::HookCallback>,
     #[cfg(not(feature = "luau"))]
-    pub(super) hook_thread: *mut ffi::lua_State,
+    pub(super) hook_triggers: crate::hook::HookTriggers,
     #[cfg(feature = "lua54")]
     pub(super) warn_callback: Option<crate::types::WarnCallback>,
     #[cfg(feature = "luau")]
@@ -171,7 +171,7 @@ impl ExtraData {
             #[cfg(not(feature = "luau"))]
             hook_callback: None,
             #[cfg(not(feature = "luau"))]
-            hook_thread: ptr::null_mut(),
+            hook_triggers: Default::default(),
             #[cfg(feature = "lua54")]
             warn_callback: None,
             #[cfg(feature = "luau")]

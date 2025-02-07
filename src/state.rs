@@ -30,7 +30,7 @@ use crate::util::{
 use crate::value::{Nil, Value};
 
 #[cfg(not(feature = "luau"))]
-use crate::hook::HookTriggers;
+use crate::{hook::HookTriggers, types::HookKind};
 
 #[cfg(any(feature = "luau", doc))]
 use crate::{buffer::Buffer, chunk::Compiler};
@@ -501,6 +501,26 @@ impl Lua {
         }
     }
 
+    /// Sets or replaces a global hook function that will periodically be called as Lua code
+    /// executes.
+    ///
+    /// All new threads created (by mlua) after this call will use the global hook function.
+    ///
+    /// For more information see [`Lua::set_hook`].
+    #[cfg(not(feature = "luau"))]
+    #[cfg_attr(docsrs, doc(cfg(not(feature = "luau"))))]
+    pub fn set_global_hook<F>(&self, triggers: HookTriggers, callback: F) -> Result<()>
+    where
+        F: Fn(&Lua, Debug) -> Result<VmState> + MaybeSend + 'static,
+    {
+        let lua = self.lock();
+        unsafe {
+            (*lua.extra.get()).hook_triggers = triggers;
+            (*lua.extra.get()).hook_callback = Some(Box::new(callback));
+            lua.set_thread_hook(lua.state(), HookKind::Global)
+        }
+    }
+
     /// Sets a hook function that will periodically be called as Lua code executes.
     ///
     /// When exactly the hook function is called depends on the contents of the `triggers`
@@ -511,11 +531,9 @@ impl Lua {
     /// limited form of execution limits by setting [`HookTriggers.every_nth_instruction`] and
     /// erroring once an instruction limit has been reached.
     ///
-    /// This method sets a hook function for the current thread of this Lua instance.
+    /// This method sets a hook function for the *current* thread of this Lua instance.
     /// If you want to set a hook function for another thread (coroutine), use
     /// [`Thread::set_hook`] instead.
-    ///
-    /// Please note you cannot have more than one hook function set at a time for this Lua instance.
     ///
     /// # Example
     ///
@@ -541,15 +559,28 @@ impl Lua {
     /// [`HookTriggers.every_nth_instruction`]: crate::HookTriggers::every_nth_instruction
     #[cfg(not(feature = "luau"))]
     #[cfg_attr(docsrs, doc(cfg(not(feature = "luau"))))]
-    pub fn set_hook<F>(&self, triggers: HookTriggers, callback: F)
+    pub fn set_hook<F>(&self, triggers: HookTriggers, callback: F) -> Result<()>
     where
         F: Fn(&Lua, Debug) -> Result<VmState> + MaybeSend + 'static,
     {
         let lua = self.lock();
-        unsafe { lua.set_thread_hook(lua.state(), triggers, callback) };
+        unsafe { lua.set_thread_hook(lua.state(), HookKind::Thread(triggers, Box::new(callback))) }
     }
 
-    /// Removes any hook previously set by [`Lua::set_hook`] or [`Thread::set_hook`].
+    /// Removes a global hook previously set by [`Lua::set_global_hook`].
+    ///
+    /// This function has no effect if a hook was not previously set.
+    #[cfg(not(feature = "luau"))]
+    #[cfg_attr(docsrs, doc(cfg(not(feature = "luau"))))]
+    pub fn remove_global_hook(&self) {
+        let lua = self.lock();
+        unsafe {
+            (*lua.extra.get()).hook_callback = None;
+            (*lua.extra.get()).hook_triggers = HookTriggers::default();
+        }
+    }
+
+    /// Removes any hook from the current thread.
     ///
     /// This function has no effect if a hook was not previously set.
     #[cfg(not(feature = "luau"))]
@@ -557,17 +588,7 @@ impl Lua {
     pub fn remove_hook(&self) {
         let lua = self.lock();
         unsafe {
-            let state = lua.state();
-            ffi::lua_sethook(state, None, 0, 0);
-            match lua.main_state {
-                Some(main_state) if state != main_state.as_ptr() => {
-                    // If main_state is different from state, remove hook from it too
-                    ffi::lua_sethook(main_state.as_ptr(), None, 0, 0);
-                }
-                _ => {}
-            };
-            (*lua.extra.get()).hook_callback = None;
-            (*lua.extra.get()).hook_thread = ptr::null_mut();
+            ffi::lua_sethook(lua.state(), None, 0, 0);
         }
     }
 

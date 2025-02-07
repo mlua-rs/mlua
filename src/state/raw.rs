@@ -37,7 +37,10 @@ use super::extra::ExtraData;
 use super::{Lua, LuaOptions, WeakLua};
 
 #[cfg(not(feature = "luau"))]
-use crate::hook::{Debug, HookTriggers};
+use crate::{
+    hook::Debug,
+    types::{HookCallback, HookKind, VmState},
+};
 
 #[cfg(feature = "async")]
 use {
@@ -186,6 +189,8 @@ impl RawLua {
                 init_internal_metatable::<XRc<UnsafeCell<ExtraData>>>(state, None)?;
                 init_internal_metatable::<Callback>(state, None)?;
                 init_internal_metatable::<CallbackUpvalue>(state, None)?;
+                #[cfg(not(feature = "luau"))]
+                init_internal_metatable::<HookCallback>(state, None)?;
                 #[cfg(feature = "async")]
                 {
                     init_internal_metatable::<AsyncCallback>(state, None)?;
@@ -373,42 +378,22 @@ impl RawLua {
         status
     }
 
-    /// Sets a 'hook' function for a thread (coroutine).
+    /// Sets a hook for a thread (coroutine).
     #[cfg(not(feature = "luau"))]
-    pub(crate) unsafe fn set_thread_hook<F>(
+    pub(crate) unsafe fn set_thread_hook(
         &self,
-        state: *mut ffi::lua_State,
-        triggers: HookTriggers,
-        callback: F,
-    ) where
-        F: Fn(&Lua, Debug) -> Result<crate::VmState> + MaybeSend + 'static,
-    {
-        use crate::types::VmState;
-        use std::rc::Rc;
+        thread_state: *mut ffi::lua_State,
+        hook: HookKind,
+    ) -> Result<()> {
+        // Key to store hooks in the registry
+        const HOOKS_KEY: *const c_char = cstr!("__mlua_hooks");
 
-        unsafe extern "C-unwind" fn hook_proc(state: *mut ffi::lua_State, ar: *mut ffi::lua_Debug) {
-            let extra = ExtraData::get(state);
-            if (*extra).hook_thread != state {
-                // Hook was destined for a different thread, ignore
-                ffi::lua_sethook(state, None, 0, 0);
-                return;
-            }
-            let result = callback_error_ext(state, extra, move |extra, _| {
-                let hook_cb = (*extra).hook_callback.clone();
-                let hook_cb = mlua_expect!(hook_cb, "no hook callback set in hook_proc");
-                if Rc::strong_count(&hook_cb) > 2 {
-                    return Ok(VmState::Continue); // Don't allow recursion
-                }
-                let rawlua = (*extra).raw_lua();
-                let _guard = StateGuard::new(rawlua, state);
-                let debug = Debug::new(rawlua, ar);
-                hook_cb((*extra).lua(), debug)
-            });
-            match result {
+        unsafe fn process_status(state: *mut ffi::lua_State, event: c_int, status: VmState) {
+            match status {
                 VmState::Continue => {}
                 VmState::Yield => {
                     // Only count and line events can yield
-                    if (*ar).event == ffi::LUA_HOOKCOUNT || (*ar).event == ffi::LUA_HOOKLINE {
+                    if event == ffi::LUA_HOOKCOUNT || event == ffi::LUA_HOOKLINE {
                         #[cfg(any(feature = "lua54", feature = "lua53"))]
                         if ffi::lua_isyieldable(state) != 0 {
                             ffi::lua_yield(state, 0);
@@ -423,9 +408,86 @@ impl RawLua {
             }
         }
 
-        (*self.extra.get()).hook_callback = Some(Rc::new(callback));
-        (*self.extra.get()).hook_thread = state; // Mark for what thread the hook is set
-        ffi::lua_sethook(state, Some(hook_proc), triggers.mask(), triggers.count());
+        unsafe extern "C-unwind" fn global_hook_proc(state: *mut ffi::lua_State, ar: *mut ffi::lua_Debug) {
+            let status = callback_error_ext(state, ptr::null_mut(), move |extra, _| {
+                let rawlua = (*extra).raw_lua();
+                let debug = Debug::new(rawlua, ar);
+                match (*extra).hook_callback.take() {
+                    Some(hook_cb) => {
+                        // Temporary obtain ownership of the hook callback
+                        let result = hook_cb((*extra).lua(), debug);
+                        (*extra).hook_callback = Some(hook_cb);
+                        result
+                    }
+                    None => {
+                        ffi::lua_sethook(state, None, 0, 0);
+                        Ok(VmState::Continue)
+                    }
+                }
+            });
+            process_status(state, (*ar).event, status);
+        }
+
+        unsafe extern "C-unwind" fn hook_proc(state: *mut ffi::lua_State, ar: *mut ffi::lua_Debug) {
+            ffi::luaL_checkstack(state, 3, ptr::null());
+            ffi::lua_getfield(state, ffi::LUA_REGISTRYINDEX, HOOKS_KEY);
+            ffi::lua_pushthread(state);
+            if ffi::lua_rawget(state, -2) != ffi::LUA_TUSERDATA {
+                ffi::lua_pop(state, 2);
+                ffi::lua_sethook(state, None, 0, 0);
+                return;
+            }
+
+            let status = callback_error_ext(state, ptr::null_mut(), |extra, _| {
+                let rawlua = (*extra).raw_lua();
+                let debug = Debug::new(rawlua, ar);
+                match get_internal_userdata::<HookCallback>(state, -1, ptr::null()).as_ref() {
+                    Some(hook_cb) => hook_cb((*extra).lua(), debug),
+                    None => {
+                        ffi::lua_sethook(state, None, 0, 0);
+                        Ok(VmState::Continue)
+                    }
+                }
+            });
+            process_status(state, (*ar).event, status)
+        }
+
+        let (triggers, callback) = match hook {
+            HookKind::Global if (*self.extra.get()).hook_callback.is_none() => {
+                return Ok(());
+            }
+            HookKind::Global => {
+                let triggers = (*self.extra.get()).hook_triggers;
+                let (mask, count) = (triggers.mask(), triggers.count());
+                ffi::lua_sethook(thread_state, Some(global_hook_proc), mask, count);
+                return Ok(());
+            }
+            HookKind::Thread(triggers, callback) => (triggers, callback),
+        };
+
+        // Hooks for threads stored in the registry (in a weak table)
+        let state = self.state();
+        let _sg = StackGuard::new(state);
+        check_stack(state, 3)?;
+        protect_lua!(state, 0, 0, |state| {
+            if ffi::luaL_getsubtable(state, ffi::LUA_REGISTRYINDEX, HOOKS_KEY) == 0 {
+                // Table just created, initialize it
+                ffi::lua_pushliteral(state, "k");
+                ffi::lua_setfield(state, -2, cstr!("__mode")); // hooktable.__mode = "k"
+                ffi::lua_pushvalue(state, -1);
+                ffi::lua_setmetatable(state, -2); // metatable(hooktable) = hooktable
+            }
+
+            ffi::lua_pushthread(thread_state);
+            ffi::lua_xmove(thread_state, state, 1); // key (thread)
+            let callback: HookCallback = Box::new(callback);
+            let _ = push_internal_userdata(state, callback, false); // value (hook callback)
+            ffi::lua_rawset(state, -3); // hooktable[thread] = hook callback
+        })?;
+
+        ffi::lua_sethook(thread_state, Some(hook_proc), triggers.mask(), triggers.count());
+
+        Ok(())
     }
 
     /// See [`Lua::create_string`]
@@ -497,6 +559,11 @@ impl RawLua {
         } else {
             protect_lua!(state, 0, 1, |state| ffi::lua_newthread(state))?
         };
+
+        // Inherit global hook if set
+        #[cfg(not(feature = "luau"))]
+        self.set_thread_hook(thread_state, HookKind::Global)?;
+
         let thread = Thread(self.pop_ref(), thread_state);
         ffi::lua_xpush(self.ref_thread(), thread_state, func.0.index);
         Ok(thread)

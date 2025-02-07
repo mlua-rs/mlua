@@ -597,3 +597,31 @@ async fn test_async_task() -> Result<()> {
 
     Ok(())
 }
+
+#[tokio::test]
+#[cfg(not(feature = "luau"))]
+async fn test_async_hook() -> Result<()> {
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    let lua = Lua::new();
+
+    static HOOK_CALLED: AtomicBool = AtomicBool::new(false);
+    lua.set_global_hook(mlua::HookTriggers::new().every_line(), move |_, _| {
+        if !HOOK_CALLED.swap(true, Ordering::Relaxed) {
+            Ok(mlua::VmState::Yield)
+        } else {
+            Ok(mlua::VmState::Continue)
+        }
+    })?;
+
+    let sleep = lua.create_async_function(move |_lua, n: u64| async move {
+        sleep_ms(n).await;
+        Ok(())
+    })?;
+    lua.globals().set("sleep", sleep)?;
+
+    lua.load(r"sleep(100)").exec_async().await?;
+    assert!(HOOK_CALLED.load(Ordering::Relaxed));
+
+    Ok(())
+}
