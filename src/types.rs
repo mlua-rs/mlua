@@ -7,6 +7,9 @@ use crate::error::Result;
 use crate::hook::Debug;
 use crate::state::{ExtraData, Lua, RawLua};
 
+#[cfg(any(feature = "luau", doc))]
+use crate::thread::Thread;
+
 // Re-export mutex wrappers
 pub(crate) use sync::{ArcReentrantMutexGuard, ReentrantMutex, ReentrantMutexGuard, XRc, XWeak};
 
@@ -73,6 +76,20 @@ pub enum VmState {
     Yield,
 }
 
+/// Information about a thread event.
+///
+/// For creating a thread, it contains the thread that created it.
+///
+/// This is useful for tracking the origin of all threads.
+#[cfg(any(feature = "luau", doc))]
+#[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
+pub enum ThreadEventInfo {
+    /// When a thread is created, it contains the thread that created it.
+    Created(Thread),
+    /// When a thread is destroyed, it returns its .to_pointer representation.
+    Destroyed(*const c_void),
+}
+
 #[cfg(all(feature = "send", not(feature = "luau")))]
 pub(crate) type HookCallback = Rc<dyn Fn(&Lua, Debug) -> Result<VmState> + Send>;
 
@@ -84,6 +101,12 @@ pub(crate) type InterruptCallback = Rc<dyn Fn(&Lua) -> Result<VmState> + Send>;
 
 #[cfg(all(not(feature = "send"), feature = "luau"))]
 pub(crate) type InterruptCallback = Rc<dyn Fn(&Lua) -> Result<VmState>>;
+
+#[cfg(all(feature = "send", feature = "luau"))]
+pub(crate) type ThreadEventCallback = Rc<dyn Fn(&Lua, ThreadEventInfo) -> Result<()> + Send>;
+
+#[cfg(all(not(feature = "send"), feature = "luau"))]
+pub(crate) type ThreadEventCallback = Rc<dyn Fn(&Lua, ThreadEventInfo) -> Result<()>>;
 
 #[cfg(all(feature = "send", feature = "lua54"))]
 pub(crate) type WarnCallback = Box<dyn Fn(&Lua, &str, bool) -> Result<()> + Send>;

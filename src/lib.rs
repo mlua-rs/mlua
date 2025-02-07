@@ -112,6 +112,8 @@ pub use crate::thread::{Thread, ThreadStatus};
 pub use crate::traits::{
     FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, LuaNativeFn, LuaNativeFnMut, ObjectLike,
 };
+#[cfg(feature = "luau")]
+pub use crate::types::ThreadEventInfo;
 pub use crate::types::{
     AppDataRef, AppDataRefMut, Either, Integer, LightUserData, MaybeSend, Number, RegistryKey, VmState,
 };
