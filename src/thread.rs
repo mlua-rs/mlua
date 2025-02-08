@@ -272,7 +272,12 @@ impl Thread {
         F: Fn(&crate::Lua, Debug) -> Result<crate::VmState> + crate::MaybeSend + 'static,
     {
         let lua = self.0.lua.lock();
-        unsafe { lua.set_thread_hook(self.state(), HookKind::Thread(triggers, Box::new(callback))) }
+        unsafe {
+            lua.set_thread_hook(
+                self.state(),
+                HookKind::Thread(triggers, crate::types::XRc::new(callback)),
+            )
+        }
     }
 
     /// Removes any hook function from this thread.

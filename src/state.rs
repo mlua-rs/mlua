@@ -516,7 +516,7 @@ impl Lua {
         let lua = self.lock();
         unsafe {
             (*lua.extra.get()).hook_triggers = triggers;
-            (*lua.extra.get()).hook_callback = Some(Box::new(callback));
+            (*lua.extra.get()).hook_callback = Some(XRc::new(callback));
             lua.set_thread_hook(lua.state(), HookKind::Global)
         }
     }
@@ -564,7 +564,7 @@ impl Lua {
         F: Fn(&Lua, Debug) -> Result<VmState> + MaybeSend + 'static,
     {
         let lua = self.lock();
-        unsafe { lua.set_thread_hook(lua.state(), HookKind::Thread(triggers, Box::new(callback))) }
+        unsafe { lua.set_thread_hook(lua.state(), HookKind::Thread(triggers, XRc::new(callback))) }
     }
 
     /// Removes a global hook previously set by [`Lua::set_global_hook`].
@@ -644,8 +644,6 @@ impl Lua {
     where
         F: Fn(&Lua) -> Result<VmState> + MaybeSend + 'static,
     {
-        use std::rc::Rc;
-
         unsafe extern "C-unwind" fn interrupt_proc(state: *mut ffi::lua_State, gc: c_int) {
             if gc >= 0 {
                 // We don't support GC interrupts since they cannot survive Lua exceptions
@@ -654,7 +652,7 @@ impl Lua {
             let result = callback_error_ext(state, ptr::null_mut(), move |extra, _| {
                 let interrupt_cb = (*extra).interrupt_callback.clone();
                 let interrupt_cb = mlua_expect!(interrupt_cb, "no interrupt callback set in interrupt_proc");
-                if Rc::strong_count(&interrupt_cb) > 2 {
+                if XRc::strong_count(&interrupt_cb) > 2 {
                     return Ok(VmState::Continue); // Don't allow recursion
                 }
                 let _guard = StateGuard::new((*extra).raw_lua(), state);
@@ -671,7 +669,7 @@ impl Lua {
         // Set interrupt callback
         let lua = self.lock();
         unsafe {
-            (*lua.extra.get()).interrupt_callback = Some(Rc::new(callback));
+            (*lua.extra.get()).interrupt_callback = Some(XRc::new(callback));
             (*ffi::lua_callbacks(lua.main_state())).interrupt = Some(interrupt_proc);
         }
     }

@@ -410,15 +410,12 @@ impl RawLua {
 
         unsafe extern "C-unwind" fn global_hook_proc(state: *mut ffi::lua_State, ar: *mut ffi::lua_Debug) {
             let status = callback_error_ext(state, ptr::null_mut(), move |extra, _| {
-                let rawlua = (*extra).raw_lua();
-                let _guard = StateGuard::new(rawlua, state);
-                let debug = Debug::new(rawlua, ar);
-                match (*extra).hook_callback.take() {
-                    Some(hook_cb) => {
-                        // Temporary obtain ownership of the hook callback
-                        let result = hook_cb((*extra).lua(), debug);
-                        (*extra).hook_callback = Some(hook_cb);
-                        result
+                match (*extra).hook_callback.clone() {
+                    Some(hook_callback) => {
+                        let rawlua = (*extra).raw_lua();
+                        let _guard = StateGuard::new(rawlua, state);
+                        let debug = Debug::new(rawlua, ar);
+                        hook_callback((*extra).lua(), debug)
                     }
                     None => {
                         ffi::lua_sethook(state, None, 0, 0);
@@ -430,11 +427,17 @@ impl RawLua {
         }
 
         unsafe extern "C-unwind" fn hook_proc(state: *mut ffi::lua_State, ar: *mut ffi::lua_Debug) {
+            let top = ffi::lua_gettop(state);
+            let mut hook_callback_ptr = ptr::null();
             ffi::luaL_checkstack(state, 3, ptr::null());
-            ffi::lua_getfield(state, ffi::LUA_REGISTRYINDEX, HOOKS_KEY);
-            ffi::lua_pushthread(state);
-            if ffi::lua_rawget(state, -2) != ffi::LUA_TUSERDATA {
-                ffi::lua_pop(state, 2);
+            if ffi::lua_getfield(state, ffi::LUA_REGISTRYINDEX, HOOKS_KEY) == ffi::LUA_TTABLE {
+                ffi::lua_pushthread(state);
+                if ffi::lua_rawget(state, -2) == ffi::LUA_TUSERDATA {
+                    hook_callback_ptr = get_internal_userdata::<HookCallback>(state, -1, ptr::null());
+                }
+            }
+            ffi::lua_settop(state, top);
+            if hook_callback_ptr.is_null() {
                 ffi::lua_sethook(state, None, 0, 0);
                 return;
             }
@@ -443,13 +446,8 @@ impl RawLua {
                 let rawlua = (*extra).raw_lua();
                 let _guard = StateGuard::new(rawlua, state);
                 let debug = Debug::new(rawlua, ar);
-                match get_internal_userdata::<HookCallback>(state, -1, ptr::null()).as_ref() {
-                    Some(hook_cb) => hook_cb((*extra).lua(), debug),
-                    None => {
-                        ffi::lua_sethook(state, None, 0, 0);
-                        Ok(VmState::Continue)
-                    }
-                }
+                let hook_callback = (*hook_callback_ptr).clone();
+                hook_callback((*extra).lua(), debug)
             });
             process_status(state, (*ar).event, status)
         }
@@ -482,7 +480,6 @@ impl RawLua {
 
             ffi::lua_pushthread(thread_state);
             ffi::lua_xmove(thread_state, state, 1); // key (thread)
-            let callback: HookCallback = Box::new(callback);
             let _ = push_internal_userdata(state, callback, false); // value (hook callback)
             ffi::lua_rawset(state, -3); // hooktable[thread] = hook callback
         })?;
