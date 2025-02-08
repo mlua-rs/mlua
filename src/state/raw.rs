@@ -411,6 +411,7 @@ impl RawLua {
         unsafe extern "C-unwind" fn global_hook_proc(state: *mut ffi::lua_State, ar: *mut ffi::lua_Debug) {
             let status = callback_error_ext(state, ptr::null_mut(), move |extra, _| {
                 let rawlua = (*extra).raw_lua();
+                let _guard = StateGuard::new(rawlua, state);
                 let debug = Debug::new(rawlua, ar);
                 match (*extra).hook_callback.take() {
                     Some(hook_cb) => {
@@ -440,6 +441,7 @@ impl RawLua {
 
             let status = callback_error_ext(state, ptr::null_mut(), |extra, _| {
                 let rawlua = (*extra).raw_lua();
+                let _guard = StateGuard::new(rawlua, state);
                 let debug = Debug::new(rawlua, ar);
                 match get_internal_userdata::<HookCallback>(state, -1, ptr::null()).as_ref() {
                     Some(hook_cb) => hook_cb((*extra).lua(), debug),
