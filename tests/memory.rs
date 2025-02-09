@@ -57,8 +57,8 @@ fn test_memory_limit_thread() -> Result<()> {
         return Ok(());
     }
 
-    lua.set_memory_limit(lua.used_memory() + 10000)?;
     let thread = lua.create_thread(f)?;
+    lua.set_memory_limit(lua.used_memory() + 10000)?;
     match thread.resume::<()>(()) {
         Err(Error::MemoryError(_)) => {}
         something_else => panic!("did not trigger memory error: {:?}", something_else),
