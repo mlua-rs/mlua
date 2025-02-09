@@ -1289,6 +1289,13 @@ fn test_warnings() -> Result<()> {
             if matches!(*cause, Error::RuntimeError(ref err) if err == "warning error")
     ));
 
+    // Recursive warning
+    lua.set_warning_function(|lua, _, _| {
+        lua.warning("inner", false);
+        Ok(())
+    });
+    lua.warning("hello", false);
+
     Ok(())
 }
 

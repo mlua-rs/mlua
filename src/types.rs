@@ -86,10 +86,10 @@ pub(crate) type InterruptCallback = Rc<dyn Fn(&Lua) -> Result<VmState> + Send>;
 pub(crate) type InterruptCallback = Rc<dyn Fn(&Lua) -> Result<VmState>>;
 
 #[cfg(all(feature = "send", feature = "lua54"))]
-pub(crate) type WarnCallback = Box<dyn Fn(&Lua, &str, bool) -> Result<()> + Send>;
+pub(crate) type WarnCallback = XRc<dyn Fn(&Lua, &str, bool) -> Result<()> + Send>;
 
 #[cfg(all(not(feature = "send"), feature = "lua54"))]
-pub(crate) type WarnCallback = Box<dyn Fn(&Lua, &str, bool) -> Result<()>>;
+pub(crate) type WarnCallback = XRc<dyn Fn(&Lua, &str, bool) -> Result<()>>;
 
 /// A trait that adds `Send` requirement if `send` feature is enabled.
 #[cfg(feature = "send")]

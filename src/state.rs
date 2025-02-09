@@ -684,18 +684,19 @@ impl Lua {
         unsafe extern "C-unwind" fn warn_proc(ud: *mut c_void, msg: *const c_char, tocont: c_int) {
             let extra = ud as *mut ExtraData;
             callback_error_ext((*extra).raw_lua().state(), extra, |extra, _| {
-                let cb = mlua_expect!(
-                    (*extra).warn_callback.as_ref(),
-                    "no warning callback set in warn_proc"
-                );
+                let warn_callback = (*extra).warn_callback.clone();
+                let warn_callback = mlua_expect!(warn_callback, "no warning callback set in warn_proc");
+                if XRc::strong_count(&warn_callback) > 2 {
+                    return Ok(());
+                }
                 let msg = StdString::from_utf8_lossy(CStr::from_ptr(msg).to_bytes());
-                cb((*extra).lua(), &msg, tocont != 0)
+                warn_callback((*extra).lua(), &msg, tocont != 0)
             });
         }
 
         let lua = self.lock();
         unsafe {
-            (*lua.extra.get()).warn_callback = Some(Box::new(callback));
+            (*lua.extra.get()).warn_callback = Some(XRc::new(callback));
             ffi::lua_setwarnf(lua.state(), Some(warn_proc), lua.extra.get() as *mut c_void);
         }
     }
