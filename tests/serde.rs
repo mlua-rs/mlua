@@ -3,6 +3,7 @@
 use std::collections::HashMap;
 use std::error::Error as StdError;
 
+use bstr::BString;
 use mlua::{
     AnyUserData, DeserializeOptions, Error, ExternalResult, IntoLua, Lua, LuaSerdeExt, Result as LuaResult,
     SerializeOptions, UserData, Value,
@@ -420,6 +421,7 @@ fn test_from_value_struct() -> Result<(), Box<dyn StdError>> {
         map: HashMap<i32, i32>,
         empty: Vec<()>,
         tuple: (u8, u8, u8),
+        bytes: BString,
     }
 
     let value = lua
@@ -431,6 +433,7 @@ fn test_from_value_struct() -> Result<(), Box<dyn StdError>> {
                 map = {2, [4] = 1},
                 empty = {},
                 tuple = {10, 20, 30},
+                bytes = "\240\040\140\040",
             }
         "#,
         )
@@ -443,6 +446,7 @@ fn test_from_value_struct() -> Result<(), Box<dyn StdError>> {
             map: vec![(1, 2), (4, 1)].into_iter().collect(),
             empty: vec![],
             tuple: (10, 20, 30),
+            bytes: BString::from([240, 40, 140, 40]),
         },
         got
     );
