@@ -126,7 +126,12 @@ pub use crate::hook::HookTriggers;
 
 #[cfg(any(feature = "luau", doc))]
 #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
-pub use crate::{buffer::Buffer, chunk::Compiler, function::CoverageInfo, vector::Vector};
+pub use crate::{
+    buffer::Buffer,
+    chunk::{CompileConstant, Compiler},
+    function::CoverageInfo,
+    vector::Vector,
+};
 
 #[cfg(feature = "async")]
 #[cfg_attr(docsrs, doc(cfg(feature = "async")))]

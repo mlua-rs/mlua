@@ -96,8 +96,6 @@ fn test_chunk_macro() -> Result<()> {
 #[cfg(feature = "luau")]
 #[test]
 fn test_compiler() -> Result<()> {
-    use std::vec;
-
     let compiler = mlua::Compiler::new()
         .set_optimization_level(2)
         .set_debug_level(2)
@@ -106,10 +104,11 @@ fn test_compiler() -> Result<()> {
         .set_vector_lib("vector")
         .set_vector_ctor("new")
         .set_vector_type("vector")
-        .set_mutable_globals(vec!["mutable_global".into()])
-        .set_userdata_types(vec!["MyUserdata".into()]);
+        .set_mutable_globals(vec!["mutable_global"])
+        .set_userdata_types(vec!["MyUserdata"])
+        .set_disabled_builtins(vec!["tostring"]);
 
-    assert!(compiler.compile("return vector.new(1, 2, 3)").is_ok());
+    assert!(compiler.compile("return tostring(vector.new(1, 2, 3))").is_ok());
 
     // Error
     match compiler.compile("%") {
@@ -120,6 +119,32 @@ fn test_compiler() -> Result<()> {
     }
 
     Ok(())
+}
+
+#[cfg(feature = "luau")]
+#[test]
+fn test_compiler_library_constants() {
+    use mlua::{CompileConstant, Compiler, Vector};
+
+    let compiler = Compiler::new()
+        .set_optimization_level(2)
+        .set_library_constants(vec![
+            ("mylib", "const_bool", CompileConstant::Boolean(true)),
+            ("mylib", "const_num", CompileConstant::Number(123.0)),
+            ("mylib", "const_vec", CompileConstant::Vector(Vector::zero())),
+            ("mylib", "const_str", "value1".into()),
+        ]);
+
+    let lua = Lua::new();
+    lua.set_compiler(compiler);
+    let const_bool = lua.load("return mylib.const_bool").eval::<bool>().unwrap();
+    assert_eq!(const_bool, true);
+    let const_num = lua.load("return mylib.const_num").eval::<f64>().unwrap();
+    assert_eq!(const_num, 123.0);
+    let const_vec = lua.load("return mylib.const_vec").eval::<Vector>().unwrap();
+    assert_eq!(const_vec, Vector::zero());
+    let const_str = lua.load("return mylib.const_str").eval::<String>();
+    assert_eq!(const_str.unwrap(), "value1");
 }
 
 #[test]
