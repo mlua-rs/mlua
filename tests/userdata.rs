@@ -410,7 +410,7 @@ fn test_userdata_destroy() -> Result<()> {
     let ud_ref = ud.borrow::<MyUserdata>()?;
     // With active `UserDataRef` this methods only marks userdata as destructed
     // without running destructor
-    ud.destroy()?;
+    ud.destroy().unwrap();
     assert_eq!(Arc::strong_count(&rc), 2);
     drop(ud_ref);
     assert_eq!(Arc::strong_count(&rc), 1);
@@ -419,7 +419,7 @@ fn test_userdata_destroy() -> Result<()> {
     let ud = lua.create_userdata(MyUserdata(rc.clone()))?;
     lua.globals().set("ud", &ud)?;
     lua.load("ud:try_destroy()").exec().unwrap();
-    ud.destroy()?;
+    ud.destroy().unwrap();
     assert_eq!(Arc::strong_count(&rc), 1);
 
     Ok(())
