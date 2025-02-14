@@ -36,7 +36,7 @@ pub(crate) fn is_sync<T>() -> bool {
 
 pub(super) unsafe extern "C-unwind" fn userdata_destructor<T>(state: *mut ffi::lua_State) -> c_int {
     let ud = get_userdata::<UserDataStorage<T>>(state, -1);
-    if !(*ud).is_borrowed() {
+    if (*ud).is_safe_to_destroy() {
         take_userdata::<UserDataStorage<T>>(state);
         ffi::lua_pushboolean(state, 1);
     } else {
