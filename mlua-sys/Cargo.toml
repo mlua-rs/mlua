@@ -30,6 +30,7 @@ luau = ["luau0-src"]
 luau-codegen = ["luau"]
 luau-vector4 = ["luau"]
 vendored = ["lua-src", "luajit-src"]
+external = []
 module = []
 
 [dependencies]
