@@ -12,7 +12,7 @@ license = "MIT"
 links = "lua"
 build = "build/main.rs"
 description = """
-Low level (FFI) bindings to Lua 5.4/5.3/5.2/5.1 (including LuaJIT) and Roblox Luau
+Low level (FFI) bindings to Lua 5.4/5.3/5.2/5.1 (including LuaJIT) and Luau
 """
 
 [package.metadata.docs.rs]

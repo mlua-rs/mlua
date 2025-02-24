@@ -304,7 +304,7 @@ Other:
 
 ## v0.8.0
 Changes since 0.7.4
-- Roblox Luau support
+- Luau support
 - Removed C glue
 - Added async support to `__index` and `__newindex` metamethods
 - Added `Function::info()` to get information about functions (#149).
@@ -354,7 +354,7 @@ Breaking changes:
 
 ## v0.8.0-beta.1
 
-- Roblox Luau support
+- Luau support
 - Refactored ffi module. C glue is no longer required
 - Added async support to `__index` and `__newindex` metamethods
 

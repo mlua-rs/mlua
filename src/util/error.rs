@@ -262,7 +262,7 @@ where
 
 pub(crate) unsafe extern "C-unwind" fn error_traceback(state: *mut ffi::lua_State) -> c_int {
     // Luau calls error handler for memory allocation errors, skip it
-    // See https://github.com/Roblox/luau/issues/880
+    // See https://github.com/luau-lang/luau/issues/880
     #[cfg(feature = "luau")]
     if MemoryState::limit_reached(state) {
         return 0;

@@ -51,7 +51,7 @@ where
             }
 
             // We need to check stack for Luau in case when callback is called from interrupt
-            // See https://github.com/Roblox/luau/issues/446 and mlua #142 and #153
+            // See https://github.com/luau-lang/luau/issues/446 and mlua #142 and #153
             #[cfg(feature = "luau")]
             ffi::lua_rawcheckstack(state, 2);
             // Place it to the beginning of the stack

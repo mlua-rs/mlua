@@ -1,4 +1,4 @@
-//! MLua compatibility layer for Roblox Luau.
+//! MLua compatibility layer for Luau.
 //!
 //! Based on github.com/keplerproject/lua-compat-5.3
 
