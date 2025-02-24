@@ -27,7 +27,7 @@ impl MemoryState {
             mlua_assert!(!mem_state.is_null(), "Luau state has no allocator userdata");
         }
         #[cfg(not(feature = "luau"))]
-        if ffi::lua_getallocf(state, &mut mem_state) != ALLOCATOR {
+        if !std::ptr::fn_addr_eq(ffi::lua_getallocf(state, &mut mem_state), ALLOCATOR) {
             mem_state = ptr::null_mut();
         }
         mem_state as *mut MemoryState
