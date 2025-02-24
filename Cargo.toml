@@ -11,7 +11,7 @@ keywords = ["lua", "luajit", "luau", "async", "scripting"]
 categories = ["api-bindings", "asynchronous"]
 license = "MIT"
 description = """
-High level bindings to Lua 5.4/5.3/5.2/5.1 (including LuaJIT) and Roblox Luau
+High level bindings to Lua 5.4/5.3/5.2/5.1 (including LuaJIT) and Luau
 with async/await features and support of writing native Lua modules in Rust.
 """
 

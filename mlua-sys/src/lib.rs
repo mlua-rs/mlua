@@ -1,4 +1,4 @@
-//! Low level bindings to Lua 5.4/5.3/5.2/5.1 (including LuaJIT) and Roblox Luau.
+//! Low level bindings to Lua 5.4/5.3/5.2/5.1 (including LuaJIT) and Luau.
 
 #![allow(non_camel_case_types, non_snake_case, dead_code)]
 #![allow(clippy::missing_safety_doc)]
