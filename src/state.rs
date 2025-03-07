@@ -1809,8 +1809,8 @@ impl Lua {
         let state = lua.state();
         unsafe {
             let mut unref_list = (*lua.extra.get()).registry_unref_list.lock();
-            let unref_list = mem::replace(&mut *unref_list, Some(Vec::new()));
-            for id in mlua_expect!(unref_list, "unref list not set") {
+            let unref_list = unref_list.replace(Vec::new());
+            for id in mlua_expect!(unref_list, "unref list is not set") {
                 ffi::luaL_unref(state, ffi::LUA_REGISTRYINDEX, id);
             }
         }
