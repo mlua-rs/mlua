@@ -500,9 +500,7 @@ fn test_safe_integers() -> Result<()> {
     {
         assert_ne!(f.call::<i64>(MAX_SAFE_INTEGER + 2)?, MAX_SAFE_INTEGER + 2);
         assert_ne!(f.call::<i64>(MIN_SAFE_INTEGER - 2)?, MIN_SAFE_INTEGER - 2);
-
-        let n = f.call::<i64>(i64::MAX)?;
-        println!("i64::MAX = {}", n);
+        assert_eq!(f.call::<f64>(i64::MAX)?, i64::MAX as f64);
     }
 
     Ok(())
