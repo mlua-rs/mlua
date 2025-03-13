@@ -128,6 +128,11 @@ pub unsafe fn lua_isinteger(L: *mut lua_State, idx: c_int) -> c_int {
 }
 
 #[inline(always)]
+pub unsafe fn lua_pushinteger(L: *mut lua_State, i: lua_Integer) {
+    lua_pushnumber(L, i as lua_Number);
+}
+
+#[inline(always)]
 pub unsafe fn lua_tointeger(L: *mut lua_State, i: c_int) -> lua_Integer {
     lua_tointegerx(L, i, ptr::null_mut())
 }
@@ -178,6 +183,7 @@ pub unsafe fn lua_geti(L: *mut lua_State, mut idx: c_int, n: lua_Integer) -> c_i
 
 #[inline(always)]
 pub unsafe fn lua_rawgeti(L: *mut lua_State, idx: c_int, n: lua_Integer) -> c_int {
+    let n = n.try_into().expect("cannot convert index from lua_Integer");
     lua_rawgeti_(L, idx, n)
 }
 
@@ -213,6 +219,7 @@ pub unsafe fn lua_seti(L: *mut lua_State, mut idx: c_int, n: lua_Integer) {
 
 #[inline(always)]
 pub unsafe fn lua_rawseti(L: *mut lua_State, idx: c_int, n: lua_Integer) {
+    let n = n.try_into().expect("cannot convert index from lua_Integer");
     lua_rawseti_(L, idx, n)
 }
 
@@ -312,6 +319,24 @@ pub unsafe fn luaL_checkstack(L: *mut lua_State, sz: c_int, msg: *const c_char) 
             lua_pushliteral(L, "stack overflow");
             lua_error(L);
         }
+    }
+}
+
+#[inline(always)]
+pub unsafe fn luaL_checkinteger(L: *mut lua_State, narg: c_int) -> lua_Integer {
+    let mut isnum = 0;
+    let int = lua_tointegerx(L, narg, &mut isnum);
+    if isnum == 0 {
+        luaL_typeerror(L, narg, lua_typename(L, LUA_TNUMBER));
+    }
+    int
+}
+
+pub unsafe fn luaL_optinteger(L: *mut lua_State, narg: c_int, def: lua_Integer) -> lua_Integer {
+    if lua_isnoneornil(L, narg) != 0 {
+        def
+    } else {
+        luaL_checkinteger(L, narg)
     }
 }
 
