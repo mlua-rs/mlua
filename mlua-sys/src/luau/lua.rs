@@ -69,8 +69,11 @@ pub const LUA_MINSTACK: c_int = 20;
 /// A Lua number, usually equivalent to `f64`.
 pub type lua_Number = c_double;
 
-/// A Lua integer, equivalent to `i32`.
-pub type lua_Integer = c_int;
+/// A Lua integer, usually equivalent to `i64`
+#[cfg(target_pointer_width = "32")]
+pub type lua_Integer = i32;
+#[cfg(target_pointer_width = "64")]
+pub type lua_Integer = i64;
 
 /// A Lua unsigned integer, equivalent to `u32`.
 pub type lua_Unsigned = c_uint;
@@ -136,7 +139,7 @@ extern "C-unwind" {
 
     pub fn lua_tonumberx(L: *mut lua_State, idx: c_int, isnum: *mut c_int) -> lua_Number;
     #[link_name = "lua_tointegerx"]
-    pub fn lua_tointegerx_(L: *mut lua_State, idx: c_int, isnum: *mut c_int) -> lua_Integer;
+    pub fn lua_tointegerx_(L: *mut lua_State, idx: c_int, isnum: *mut c_int) -> c_int;
     pub fn lua_tounsignedx(L: *mut lua_State, idx: c_int, isnum: *mut c_int) -> lua_Unsigned;
     pub fn lua_tovector(L: *mut lua_State, idx: c_int) -> *const c_float;
     pub fn lua_toboolean(L: *mut lua_State, idx: c_int) -> c_int;
@@ -160,7 +163,8 @@ extern "C-unwind" {
     //
     pub fn lua_pushnil(L: *mut lua_State);
     pub fn lua_pushnumber(L: *mut lua_State, n: lua_Number);
-    pub fn lua_pushinteger(L: *mut lua_State, n: lua_Integer);
+    #[link_name = "lua_pushinteger"]
+    pub fn lua_pushinteger_(L: *mut lua_State, n: c_int);
     pub fn lua_pushunsigned(L: *mut lua_State, n: lua_Unsigned);
     #[cfg(not(feature = "luau-vector4"))]
     pub fn lua_pushvector(L: *mut lua_State, x: c_float, y: c_float, z: c_float);
@@ -310,13 +314,13 @@ extern "C-unwind" {
 //
 
 #[inline(always)]
-pub unsafe fn lua_tonumber(L: *mut lua_State, i: c_int) -> lua_Number {
-    lua_tonumberx(L, i, ptr::null_mut())
+pub unsafe fn lua_tonumber(L: *mut lua_State, idx: c_int) -> lua_Number {
+    lua_tonumberx(L, idx, ptr::null_mut())
 }
 
 #[inline(always)]
-pub unsafe fn lua_tointeger_(L: *mut lua_State, i: c_int) -> lua_Integer {
-    lua_tointegerx_(L, i, ptr::null_mut())
+pub unsafe fn lua_tointeger_(L: *mut lua_State, idx: c_int) -> c_int {
+    lua_tointegerx_(L, idx, ptr::null_mut())
 }
 
 #[inline(always)]
