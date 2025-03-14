@@ -13,7 +13,7 @@ cfg_if::cfg_if! {
         include!("main_inner.rs");
     } else {
         fn main() {
-            compile_error!("You can enable only one of the features: lua54, lua53, lua52, lua51, luajit, luajit52, luau");
+            compile_error!("You can enable only one of the features: lua54, lua53, lua52, lua51, luajit, luajit52, luau, pluto");
         }
     }
 }

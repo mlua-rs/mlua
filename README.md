@@ -51,6 +51,7 @@ Below is a list of the available feature flags. By default `mlua` does not enabl
 * `luau`: enable [Luau] support (auto vendored mode)
 * `luau-jit`: enable [Luau] support with JIT backend.
 * `luau-vector4`: enable [Luau] support with 4-dimensional vector.
+* `pluto`: enable [Pluto] support (Lua 5.4 dialect, auto vendored mode)
 * `vendored`: build static Lua(JIT) library from sources during `mlua` compilation using [lua-src] or [luajit-src] crates
 * `module`: enable module mode (building loadable `cdylib` library for Lua)
 * `async`: enable async/await support (any executor can be used, eg. [tokio] or [async-std])
@@ -67,6 +68,7 @@ Below is a list of the available feature flags. By default `mlua` does not enabl
 [5.1]: https://www.lua.org/manual/5.1/manual.html
 [LuaJIT]: https://luajit.org/
 [Luau]: https://github.com/luau-lang/luau
+[Pluto]: https://github.com/PlutoLang/Pluto
 [lua-src]: https://github.com/khvzak/lua-src-rs
 [luajit-src]: https://github.com/khvzak/luajit-src-rs
 [tokio]: https://github.com/tokio-rs/tokio

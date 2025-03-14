@@ -9,7 +9,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
         rust: [stable]
-        lua: [lua54, lua53, lua52, lua51, luajit, luau, luau-jit, luau-vector4]
+        lua: [lua54, lua53, lua52, lua51, luajit, luau, luau-jit, luau-vector4, pluto]
         include:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
@@ -105,7 +105,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
         rust: [stable, nightly]
-        lua: [lua54, lua53, lua52, lua51, luajit, luajit52, luau, luau-jit, luau-vector4]
+        lua: [lua54, lua53, lua52, lua51, luajit, luajit52, luau, luau-jit, luau-vector4, pluto]
         include:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
@@ -141,7 +141,7 @@ jobs:
       matrix:
         os: [ubuntu-latest]
         rust: [nightly]
-        lua: [lua54, lua53, lua52, lua51, luajit, luau, luau-jit, luau-vector4]
+        lua: [lua54, lua53, lua52, lua51, luajit, luau, luau-jit, luau-vector4, pluto]
         include:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
@@ -168,7 +168,7 @@ jobs:
       matrix:
         os: [ubuntu-latest]
         rust: [nightly]
-        lua: [lua54, lua53, lua52, lua51, luajit, luau, luau-jit, luau-vector4]
+        lua: [lua54, lua53, lua52, lua51, luajit, luau, luau-jit, luau-vector4, pluto]
         include:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
@@ -271,7 +271,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        lua: [lua54, lua53, lua52, lua51, luajit, luau, luau-jit, luau-vector4]
+        lua: [lua54, lua53, lua52, lua51, luajit, luau, luau-jit, luau-vector4, pluto]
     steps:
       - uses: actions/checkout@main
       - uses: dtolnay/rust-toolchain@stable

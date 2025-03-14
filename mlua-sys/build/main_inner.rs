@@ -1,7 +1,7 @@
 use std::env;
 
 cfg_if::cfg_if! {
-    if #[cfg(any(feature = "luau", feature = "vendored"))] {
+    if #[cfg(any(feature = "luau", feature = "pluto", feature = "vendored"))] {
         #[path = "find_vendored.rs"]
         mod find;
     } else {

@@ -1,6 +1,6 @@
 use std::any::TypeId;
 use std::cell::{Cell, UnsafeCell};
-use std::ffi::{CStr, CString};
+use std::ffi::CStr;
 use std::mem;
 use std::os::raw::{c_char, c_int, c_void};
 use std::panic::resume_unwind;
@@ -1351,16 +1351,14 @@ impl RawLua {
 
 // Uses 3 stack spaces
 unsafe fn load_std_libs(state: *mut ffi::lua_State, libs: StdLib) -> Result<()> {
-    #[inline(always)]
-    pub unsafe fn requiref(
+    unsafe fn requiref(
         state: *mut ffi::lua_State,
-        modname: &str,
+        modname: *const c_char,
         openf: ffi::lua_CFunction,
         glb: c_int,
     ) -> Result<()> {
-        let modname = mlua_expect!(CString::new(modname), "modname contains nil byte");
-        protect_lua!(state, 0, 1, |state| {
-            ffi::luaL_requiref(state, modname.as_ptr() as *const c_char, openf, glb)
+        protect_lua!(state, 0, 0, |state| {
+            ffi::luaL_requiref(state, modname, openf, glb)
         })
     }
 
@@ -1391,36 +1389,30 @@ unsafe fn load_std_libs(state: *mut ffi::lua_State, libs: StdLib) -> Result<()> 
     {
         if libs.contains(StdLib::COROUTINE) {
             requiref(state, ffi::LUA_COLIBNAME, ffi::luaopen_coroutine, 1)?;
-            ffi::lua_pop(state, 1);
         }
     }
 
     if libs.contains(StdLib::TABLE) {
         requiref(state, ffi::LUA_TABLIBNAME, ffi::luaopen_table, 1)?;
-        ffi::lua_pop(state, 1);
     }
 
     #[cfg(not(feature = "luau"))]
     if libs.contains(StdLib::IO) {
         requiref(state, ffi::LUA_IOLIBNAME, ffi::luaopen_io, 1)?;
-        ffi::lua_pop(state, 1);
     }
 
     if libs.contains(StdLib::OS) {
         requiref(state, ffi::LUA_OSLIBNAME, ffi::luaopen_os, 1)?;
-        ffi::lua_pop(state, 1);
     }
 
     if libs.contains(StdLib::STRING) {
         requiref(state, ffi::LUA_STRLIBNAME, ffi::luaopen_string, 1)?;
-        ffi::lua_pop(state, 1);
     }
 
     #[cfg(any(feature = "lua54", feature = "lua53", feature = "luau"))]
     {
         if libs.contains(StdLib::UTF8) {
             requiref(state, ffi::LUA_UTF8LIBNAME, ffi::luaopen_utf8, 1)?;
-            ffi::lua_pop(state, 1);
         }
     }
 
@@ -1428,7 +1420,6 @@ unsafe fn load_std_libs(state: *mut ffi::lua_State, libs: StdLib) -> Result<()> 
     {
         if libs.contains(StdLib::BIT) {
             requiref(state, ffi::LUA_BITLIBNAME, ffi::luaopen_bit32, 1)?;
-            ffi::lua_pop(state, 1);
         }
     }
 
@@ -1436,36 +1427,30 @@ unsafe fn load_std_libs(state: *mut ffi::lua_State, libs: StdLib) -> Result<()> 
     {
         if libs.contains(StdLib::BIT) {
             requiref(state, ffi::LUA_BITLIBNAME, ffi::luaopen_bit, 1)?;
-            ffi::lua_pop(state, 1);
         }
     }
 
     #[cfg(feature = "luau")]
     if libs.contains(StdLib::BUFFER) {
         requiref(state, ffi::LUA_BUFFERLIBNAME, ffi::luaopen_buffer, 1)?;
-        ffi::lua_pop(state, 1);
     }
 
     #[cfg(feature = "luau")]
     if libs.contains(StdLib::VECTOR) {
         requiref(state, ffi::LUA_VECLIBNAME, ffi::luaopen_vector, 1)?;
-        ffi::lua_pop(state, 1);
     }
 
     if libs.contains(StdLib::MATH) {
         requiref(state, ffi::LUA_MATHLIBNAME, ffi::luaopen_math, 1)?;
-        ffi::lua_pop(state, 1);
     }
 
     if libs.contains(StdLib::DEBUG) {
         requiref(state, ffi::LUA_DBLIBNAME, ffi::luaopen_debug, 1)?;
-        ffi::lua_pop(state, 1);
     }
 
     #[cfg(not(feature = "luau"))]
     if libs.contains(StdLib::PACKAGE) {
         requiref(state, ffi::LUA_LOADLIBNAME, ffi::luaopen_package, 1)?;
-        ffi::lua_pop(state, 1);
     }
     #[cfg(feature = "luau")]
     if libs.contains(StdLib::PACKAGE) {
@@ -1476,13 +1461,76 @@ unsafe fn load_std_libs(state: *mut ffi::lua_State, libs: StdLib) -> Result<()> 
     #[cfg(feature = "luajit")]
     if libs.contains(StdLib::JIT) {
         requiref(state, ffi::LUA_JITLIBNAME, ffi::luaopen_jit, 1)?;
-        ffi::lua_pop(state, 1);
     }
 
     #[cfg(feature = "luajit")]
     if libs.contains(StdLib::FFI) {
         requiref(state, ffi::LUA_FFILIBNAME, ffi::luaopen_ffi, 1)?;
-        ffi::lua_pop(state, 1);
+    }
+
+    // Preloaded pluto libraries
+    #[cfg(feature = "pluto")]
+    {
+        unsafe fn preload(
+            state: *mut ffi::lua_State,
+            modname: *const c_char,
+            openf: ffi::lua_CFunction,
+        ) -> Result<()> {
+            protect_lua!(state, 0, 0, |state| {
+                ffi::luaL_getsubtable(state, ffi::LUA_REGISTRYINDEX, ffi::LUA_PRELOAD_TABLE);
+                ffi::lua_pushcfunction(state, openf);
+                ffi::lua_setfield(state, -2, modname);
+            })
+        }
+
+        if libs.contains(StdLib::ASSERT) {
+            preload(state, cstr!("assert"), ffi::luaopen_assert)?;
+        }
+        if libs.contains(StdLib::BASE32) {
+            preload(state, cstr!("base32"), ffi::luaopen_base32)?;
+        }
+        if libs.contains(StdLib::BASE64) {
+            preload(state, cstr!("base64"), ffi::luaopen_base64)?;
+        }
+        if libs.contains(StdLib::BIGINT) {
+            preload(state, cstr!("bigint"), ffi::luaopen_bigint)?;
+        }
+        if libs.contains(StdLib::CANVAS) {
+            preload(state, cstr!("canvas"), ffi::luaopen_canvas)?;
+        }
+        if libs.contains(StdLib::CAT) {
+            preload(state, cstr!("cat"), ffi::luaopen_cat)?;
+        }
+        if libs.contains(StdLib::CRYPTO) {
+            preload(state, cstr!("crypto"), ffi::luaopen_crypto)?;
+        }
+        if libs.contains(StdLib::FFI) {
+            preload(state, cstr!("ffi"), ffi::luaopen_ffi)?;
+        }
+        if libs.contains(StdLib::HTTP) {
+            preload(state, cstr!("http"), ffi::luaopen_http)?;
+        }
+        if libs.contains(StdLib::JSON) {
+            preload(state, cstr!("json"), ffi::luaopen_json)?;
+        }
+        if libs.contains(StdLib::REGEX) {
+            preload(state, cstr!("regex"), ffi::luaopen_regex)?;
+        }
+        if libs.contains(StdLib::SCHEDULER) {
+            preload(state, cstr!("scheduler"), ffi::luaopen_scheduler)?;
+        }
+        if libs.contains(StdLib::SOCKET) {
+            preload(state, cstr!("socket"), ffi::luaopen_socket)?;
+        }
+        if libs.contains(StdLib::URL) {
+            preload(state, cstr!("url"), ffi::luaopen_url)?;
+        }
+        if libs.contains(StdLib::VECTOR3) {
+            preload(state, cstr!("vector3"), ffi::luaopen_vector3)?;
+        }
+        if libs.contains(StdLib::XML) {
+            preload(state, cstr!("xml"), ffi::luaopen_xml)?;
+        }
     }
 
     Ok(())
