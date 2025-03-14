@@ -1,6 +1,6 @@
 use std::any::TypeId;
 use std::cell::{Cell, UnsafeCell};
-use std::ffi::{CStr, CString};
+use std::ffi::CStr;
 use std::mem;
 use std::os::raw::{c_char, c_int, c_void};
 use std::panic::resume_unwind;
@@ -1351,16 +1351,14 @@ impl RawLua {
 
 // Uses 3 stack spaces
 unsafe fn load_std_libs(state: *mut ffi::lua_State, libs: StdLib) -> Result<()> {
-    #[inline(always)]
-    pub unsafe fn requiref(
+    unsafe fn requiref(
         state: *mut ffi::lua_State,
-        modname: &str,
+        modname: *const c_char,
         openf: ffi::lua_CFunction,
         glb: c_int,
     ) -> Result<()> {
-        let modname = mlua_expect!(CString::new(modname), "modname contains nil byte");
-        protect_lua!(state, 0, 1, |state| {
-            ffi::luaL_requiref(state, modname.as_ptr() as *const c_char, openf, glb)
+        protect_lua!(state, 0, 0, |state| {
+            ffi::luaL_requiref(state, modname, openf, glb)
         })
     }
 
@@ -1391,36 +1389,30 @@ unsafe fn load_std_libs(state: *mut ffi::lua_State, libs: StdLib) -> Result<()> 
     {
         if libs.contains(StdLib::COROUTINE) {
             requiref(state, ffi::LUA_COLIBNAME, ffi::luaopen_coroutine, 1)?;
-            ffi::lua_pop(state, 1);
         }
     }
 
     if libs.contains(StdLib::TABLE) {
         requiref(state, ffi::LUA_TABLIBNAME, ffi::luaopen_table, 1)?;
-        ffi::lua_pop(state, 1);
     }
 
     #[cfg(not(feature = "luau"))]
     if libs.contains(StdLib::IO) {
         requiref(state, ffi::LUA_IOLIBNAME, ffi::luaopen_io, 1)?;
-        ffi::lua_pop(state, 1);
     }
 
     if libs.contains(StdLib::OS) {
         requiref(state, ffi::LUA_OSLIBNAME, ffi::luaopen_os, 1)?;
-        ffi::lua_pop(state, 1);
     }
 
     if libs.contains(StdLib::STRING) {
         requiref(state, ffi::LUA_STRLIBNAME, ffi::luaopen_string, 1)?;
-        ffi::lua_pop(state, 1);
     }
 
     #[cfg(any(feature = "lua54", feature = "lua53", feature = "luau"))]
     {
         if libs.contains(StdLib::UTF8) {
             requiref(state, ffi::LUA_UTF8LIBNAME, ffi::luaopen_utf8, 1)?;
-            ffi::lua_pop(state, 1);
         }
     }
 
@@ -1428,7 +1420,6 @@ unsafe fn load_std_libs(state: *mut ffi::lua_State, libs: StdLib) -> Result<()> 
     {
         if libs.contains(StdLib::BIT) {
             requiref(state, ffi::LUA_BITLIBNAME, ffi::luaopen_bit32, 1)?;
-            ffi::lua_pop(state, 1);
         }
     }
 
@@ -1436,36 +1427,30 @@ unsafe fn load_std_libs(state: *mut ffi::lua_State, libs: StdLib) -> Result<()> 
     {
         if libs.contains(StdLib::BIT) {
             requiref(state, ffi::LUA_BITLIBNAME, ffi::luaopen_bit, 1)?;
-            ffi::lua_pop(state, 1);
         }
     }
 
     #[cfg(feature = "luau")]
     if libs.contains(StdLib::BUFFER) {
         requiref(state, ffi::LUA_BUFFERLIBNAME, ffi::luaopen_buffer, 1)?;
-        ffi::lua_pop(state, 1);
     }
 
     #[cfg(feature = "luau")]
     if libs.contains(StdLib::VECTOR) {
         requiref(state, ffi::LUA_VECLIBNAME, ffi::luaopen_vector, 1)?;
-        ffi::lua_pop(state, 1);
     }
 
     if libs.contains(StdLib::MATH) {
         requiref(state, ffi::LUA_MATHLIBNAME, ffi::luaopen_math, 1)?;
-        ffi::lua_pop(state, 1);
     }
 
     if libs.contains(StdLib::DEBUG) {
         requiref(state, ffi::LUA_DBLIBNAME, ffi::luaopen_debug, 1)?;
-        ffi::lua_pop(state, 1);
     }
 
     #[cfg(not(feature = "luau"))]
     if libs.contains(StdLib::PACKAGE) {
         requiref(state, ffi::LUA_LOADLIBNAME, ffi::luaopen_package, 1)?;
-        ffi::lua_pop(state, 1);
     }
     #[cfg(feature = "luau")]
     if libs.contains(StdLib::PACKAGE) {
@@ -1476,13 +1461,11 @@ unsafe fn load_std_libs(state: *mut ffi::lua_State, libs: StdLib) -> Result<()> 
     #[cfg(feature = "luajit")]
     if libs.contains(StdLib::JIT) {
         requiref(state, ffi::LUA_JITLIBNAME, ffi::luaopen_jit, 1)?;
-        ffi::lua_pop(state, 1);
     }
 
     #[cfg(feature = "luajit")]
     if libs.contains(StdLib::FFI) {
         requiref(state, ffi::LUA_FFILIBNAME, ffi::luaopen_ffi, 1)?;
-        ffi::lua_pop(state, 1);
     }
 
     Ok(())
