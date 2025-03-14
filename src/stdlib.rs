@@ -60,9 +60,11 @@ impl StdLib {
     #[cfg_attr(docsrs, doc(cfg(feature = "luajit")))]
     pub const JIT: StdLib = StdLib(1 << 11);
 
-    /// (**unsafe**) FFI library
-    #[cfg(any(feature = "luajit", feature = "pluto", doc))]
-    #[cfg_attr(docsrs, doc(cfg(any(feature = "luajit", feature = "pluto"))))]
+    /// (**unsafe**) [`ffi`](http://luajit.org/ext_ffi.html) library
+    ///
+    /// Requires `feature = "luajit"`
+    #[cfg(any(feature = "luajit", doc))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "luajit")))]
     pub const FFI: StdLib = StdLib(1 << 30);
 
     /// (**unsafe**) [`debug`](https://www.lua.org/manual/5.4/manual.html#6.10) library
@@ -81,57 +83,6 @@ impl StdLib {
     pub fn contains(self, lib: Self) -> bool {
         (self & lib).0 != 0
     }
-}
-
-#[cfg(feature = "pluto")]
-#[cfg_attr(docsrs, doc(cfg(feature = "pluto")))]
-impl StdLib {
-    /// Extended assertion utilities library
-    pub const ASSERT: StdLib = StdLib(1 << 12);
-
-    /// Base32 encoding/decoding library
-    pub const BASE32: StdLib = StdLib(1 << 13);
-
-    /// Base64 encoding/decoding library
-    pub const BASE64: StdLib = StdLib(1 << 14);
-
-    /// Arbitrary-precision integer arithmetic library
-    pub const BIGINT: StdLib = StdLib(1 << 15);
-
-    /// 2D graphics library
-    pub const CANVAS: StdLib = StdLib(1 << 16);
-
-    /// Encoding and decoding library for the [Colons and Tabs] format.
-    ///
-    /// [Colons and Tabs]: https://github.com/calamity-inc/Soup/blob/senpai/docs/user/cat.md
-    pub const CAT: StdLib = StdLib(1 << 17);
-
-    /// Cryptographic library
-    pub const CRYPTO: StdLib = StdLib(1 << 18);
-
-    /// HTTP client library
-    pub const HTTP: StdLib = StdLib(1 << 19);
-
-    /// JSON encoding/decoding library
-    pub const JSON: StdLib = StdLib(1 << 20);
-
-    /// Regular expression library
-    pub const REGEX: StdLib = StdLib(1 << 21);
-
-    /// Task scheduling library
-    pub const SCHEDULER: StdLib = StdLib(1 << 22);
-
-    /// Network socket library
-    pub const SOCKET: StdLib = StdLib(1 << 23);
-
-    /// URL parsing library
-    pub const URL: StdLib = StdLib(1 << 24);
-
-    /// 3D vector library
-    pub const VECTOR3: StdLib = StdLib(1 << 25);
-
-    /// XML encoding/decoding library
-    pub const XML: StdLib = StdLib(1 << 26);
 }
 
 impl BitAnd for StdLib {

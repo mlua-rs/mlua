@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 
 pub fn probe_lua() {
-    #[cfg(all(feature = "lua54", not(feature = "pluto")))]
+    #[cfg(feature = "lua54")]
     let artifacts = lua_src::Build::new().build(lua_src::Lua54);
 
     #[cfg(feature = "lua53")]
@@ -24,9 +24,6 @@ pub fn probe_lua() {
         .set_max_cstack_size(1000000)
         .set_vector_size(if cfg!(feature = "luau-vector4") { 4 } else { 3 })
         .build();
-
-    #[cfg(feature = "pluto")]
-    let artifacts = pluto_src::Build::new().use_longjmp(true).build();
 
     artifacts.print_cargo_metadata();
 }
