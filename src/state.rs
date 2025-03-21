@@ -1330,7 +1330,7 @@ impl Lua {
     /// This methods provides a way to add fields or methods to userdata objects of a type `T`.
     pub fn register_userdata_type<T: 'static>(&self, f: impl FnOnce(&mut UserDataRegistry<T>)) -> Result<()> {
         let type_id = TypeId::of::<T>();
-        let mut registry = UserDataRegistry::new(self, type_id);
+        let mut registry = UserDataRegistry::new(self);
         f(&mut registry);
 
         let lua = self.lock();
@@ -1499,7 +1499,6 @@ impl Lua {
         &self,
         f: impl for<'scope> FnOnce(&'scope Scope<'scope, 'env>) -> Result<R>,
     ) -> Result<R> {
-        // TODO: Update to `&Scope` in next major release
         f(&Scope::new(self.lock_arc()))
     }
 

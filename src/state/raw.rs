@@ -864,7 +864,7 @@ impl RawLua {
             }
 
             // Create a new metatable from `UserData` definition
-            let mut registry = UserDataRegistry::new(self.lua(), type_id);
+            let mut registry = UserDataRegistry::new(self.lua());
             T::register(&mut registry);
 
             self.create_userdata_metatable(registry.into_raw())
@@ -885,7 +885,7 @@ impl RawLua {
             // Check if metatable creation is pending or create an empty metatable otherwise
             let registry = match (*self.extra.get()).pending_userdata_reg.remove(&type_id) {
                 Some(registry) => registry,
-                None => UserDataRegistry::<T>::new(self.lua(), type_id).into_raw(),
+                None => UserDataRegistry::<T>::new(self.lua()).into_raw(),
             };
             self.create_userdata_metatable(registry)
         })
@@ -1103,17 +1103,22 @@ impl RawLua {
     // Returns `TypeId` for the userdata ref, checking that it's registered and not destructed.
     //
     // Returns `None` if the userdata is registered but non-static.
-    pub(crate) unsafe fn get_userdata_ref_type_id(&self, vref: &ValueRef) -> Result<Option<TypeId>> {
-        self.get_userdata_type_id_inner(self.ref_thread(), vref.index)
+    #[inline(always)]
+    pub(crate) fn get_userdata_ref_type_id(&self, vref: &ValueRef) -> Result<Option<TypeId>> {
+        unsafe { self.get_userdata_type_id_inner(self.ref_thread(), vref.index) }
     }
 
     // Same as `get_userdata_ref_type_id` but assumes the userdata is already on the stack.
-    pub(crate) unsafe fn get_userdata_type_id<T>(&self, idx: c_int) -> Result<Option<TypeId>> {
-        match self.get_userdata_type_id_inner(self.state(), idx) {
+    pub(crate) unsafe fn get_userdata_type_id<T>(
+        &self,
+        state: *mut ffi::lua_State,
+        idx: c_int,
+    ) -> Result<Option<TypeId>> {
+        match self.get_userdata_type_id_inner(state, idx) {
             Ok(type_id) => Ok(type_id),
-            Err(Error::UserDataTypeMismatch) if ffi::lua_type(self.state(), idx) != ffi::LUA_TUSERDATA => {
+            Err(Error::UserDataTypeMismatch) if ffi::lua_type(state, idx) != ffi::LUA_TUSERDATA => {
                 // Report `FromLuaConversionError` instead
-                let idx_type_name = CStr::from_ptr(ffi::luaL_typename(self.state(), idx));
+                let idx_type_name = CStr::from_ptr(ffi::luaL_typename(state, idx));
                 let idx_type_name = idx_type_name.to_str().unwrap();
                 let message = format!("expected userdata of type '{}'", short_type_name::<T>());
                 Err(Error::from_lua_conversion(idx_type_name, "userdata", message))
