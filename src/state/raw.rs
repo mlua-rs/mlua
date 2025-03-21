@@ -23,13 +23,14 @@ use crate::types::{
     MaybeSend, ReentrantMutex, RegistryKey, ValueRef, XRc,
 };
 use crate::userdata::{
-    AnyUserData, MetaMethod, RawUserDataRegistry, UserData, UserDataRegistry, UserDataStorage,
+    init_userdata_metatable, AnyUserData, MetaMethod, RawUserDataRegistry, UserData, UserDataRegistry,
+    UserDataStorage,
 };
 use crate::util::{
     assert_stack, check_stack, get_destructed_userdata_metatable, get_internal_userdata, get_main_state,
-    get_metatable_ptr, get_userdata, init_error_registry, init_internal_metatable, init_userdata_metatable,
-    pop_error, push_internal_userdata, push_string, push_table, rawset_field, safe_pcall, safe_xpcall,
-    short_type_name, StackGuard, WrappedFailure,
+    get_metatable_ptr, get_userdata, init_error_registry, init_internal_metatable, pop_error,
+    push_internal_userdata, push_string, push_table, rawset_field, safe_pcall, safe_xpcall, short_type_name,
+    StackGuard, WrappedFailure,
 };
 use crate::value::{Nil, Value};
 
