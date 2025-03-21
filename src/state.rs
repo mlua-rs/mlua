@@ -261,16 +261,23 @@ impl Lua {
         lua
     }
 
-    /// Constructs a new Lua instance from an existing raw state.
+    /// Returns or constructs Lua instance from a raw state.
     ///
-    /// Once called, a returned Lua state is cached in the registry and can be retrieved
+    /// Once initialized, the returned Lua instance is cached in the registry and can be retrieved
     /// by calling this function again.
-    #[allow(clippy::missing_safety_doc)]
+    ///
+    /// # Safety
+    /// The `Lua` must outlive the chosen lifetime `'a`.
     #[inline]
-    pub unsafe fn init_from_ptr(state: *mut ffi::lua_State) -> Lua {
-        Lua {
-            raw: RawLua::init_from_ptr(state, false),
-            collect_garbage: true,
+    pub unsafe fn get_or_init_from_ptr<'a>(state: *mut ffi::lua_State) -> &'a Lua {
+        debug_assert!(!state.is_null(), "Lua state is null");
+        match ExtraData::get(state) {
+            extra if !extra.is_null() => (*extra).lua(),
+            _ => {
+                // The `owned` flag is set to `false` as we don't own the Lua state.
+                RawLua::init_from_ptr(state, false);
+                (*ExtraData::get(state)).lua()
+            }
         }
     }
 
@@ -410,11 +417,7 @@ impl Lua {
         R: IntoLua,
     {
         // Make sure that Lua is initialized
-        let mut lua = Self::init_from_ptr(state);
-        lua.collect_garbage = false;
-        // `Lua` is no longer needed and must be dropped at this point to avoid memory leak
-        // in case of possible longjmp (lua_error) below
-        drop(lua);
+        let _ = Self::get_or_init_from_ptr(state);
 
         callback_error_ext(state, ptr::null_mut(), move |extra, nargs| {
             let rawlua = (*extra).raw_lua();

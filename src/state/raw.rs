@@ -58,12 +58,13 @@ pub struct RawLua {
     pub(super) state: Cell<*mut ffi::lua_State>,
     pub(super) main_state: Option<NonNull<ffi::lua_State>>,
     pub(super) extra: XRc<UnsafeCell<ExtraData>>,
+    owned: bool,
 }
 
 impl Drop for RawLua {
     fn drop(&mut self) {
         unsafe {
-            if !(*self.extra.get()).owned {
+            if !self.owned {
                 return;
             }
 
@@ -233,8 +234,17 @@ impl RawLua {
             // Make sure that we don't store current state as main state (if it's not available)
             main_state: get_main_state(state).and_then(NonNull::new),
             extra: XRc::clone(&extra),
+            owned,
         }));
         (*extra.get()).set_lua(&rawlua);
+        if owned {
+            // If Lua state is managed by us, then make internal `RawLua` reference "weak"
+            XRc::decrement_strong_count(XRc::as_ptr(&rawlua));
+        } else {
+            // If Lua state is not managed by us, then keep internal `RawLua` reference "strong"
+            // but `Extra` reference weak (it will be collected from registry at lua_close time)
+            XRc::decrement_strong_count(XRc::as_ptr(&extra));
+        }
 
         rawlua
     }

@@ -8,8 +8,8 @@ use std::sync::Arc;
 use std::{error, f32, f64, fmt};
 
 use mlua::{
-    ChunkMode, Error, ExternalError, Function, Lua, LuaOptions, Nil, Result, StdLib, String, Table, UserData,
-    Value, Variadic,
+    ffi, ChunkMode, Error, ExternalError, Function, Lua, LuaOptions, Nil, Result, StdLib, String, Table,
+    UserData, Value, Variadic,
 };
 
 #[cfg(not(feature = "luau"))]
@@ -1422,6 +1422,26 @@ fn test_gc_drop_ref_thread() -> Result<()> {
         // GC will run eventually to collect the function and the table above
         lua.create_table()?;
     }
+
+    Ok(())
+}
+
+#[cfg(not(feature = "luau"))]
+#[test]
+fn test_get_or_init_from_ptr() -> Result<()> {
+    // This would not work with Luau, the state must be init by mlua internally
+    let state = unsafe { ffi::luaL_newstate() };
+
+    let mut lua = unsafe { Lua::get_or_init_from_ptr(state) };
+    lua.globals().set("hello", "world678")?;
+
+    // The same Lua instance must be returned
+    lua = unsafe { Lua::get_or_init_from_ptr(state) };
+    assert_eq!(lua.globals().get::<String>("hello")?, "world678");
+
+    unsafe { ffi::lua_close(state) };
+
+    // Lua must not be accessed after closing
 
     Ok(())
 }

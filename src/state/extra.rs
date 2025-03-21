@@ -195,9 +195,6 @@ impl ExtraData {
             raw: XRc::clone(raw),
             collect_garbage: false,
         });
-        if self.owned {
-            XRc::decrement_strong_count(XRc::as_ptr(raw));
-        }
         self.weak.write(WeakLua(XRc::downgrade(raw)));
     }
 
