@@ -913,6 +913,7 @@ fn test_nested_userdata_gc() -> Result<()> {
 #[cfg(feature = "userdata-wrappers")]
 #[test]
 fn test_userdata_wrappers() -> Result<()> {
+    #[derive(Debug)]
     struct MyUserData(i64);
 
     impl UserData for MyUserData {
@@ -924,6 +925,10 @@ fn test_userdata_wrappers() -> Result<()> {
                 Ok(())
             })
         }
+
+        fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
+            methods.add_method("dbg", |_, this, ()| Ok(format!("{this:?}")));
+        }
     }
 
     let lua = Lua::new();
@@ -932,136 +937,359 @@ fn test_userdata_wrappers() -> Result<()> {
     // Rc<T>
     #[cfg(not(feature = "send"))]
     {
-        let ud = std::rc::Rc::new(MyUserData(1));
-        globals.set("rc_ud", ud.clone())?;
+        use std::rc::Rc;
+
+        let ud = Rc::new(MyUserData(1));
+        globals.set("ud", ud.clone())?;
         lua.load(
             r#"
-            assert(rc_ud.static == "constant")
-            local ok, err = pcall(function() rc_ud.data = 2 end)
+            assert(ud.static == "constant")
+            local ok, err = pcall(function() ud.data = 2 end)
             assert(
-                tostring(err):sub(1, 32) == "error mutably borrowing userdata",
-                "expected error mutably borrowing userdata, got " .. tostring(err)
+                tostring(err):find("error mutably borrowing userdata") ~= nil,
+                "expected 'error mutably borrowing userdata', got '" .. tostring(err) .. "'"
             )
-            assert(rc_ud.data == 1)
+            assert(ud.data == 1)
+            assert(ud:dbg(), "MyUserData(1)")
         "#,
         )
         .exec()
         .unwrap();
-        globals.set("rc_ud", Nil)?;
+
+        // Test borrowing original userdata
+        {
+            let ud = globals.get::<AnyUserData>("ud")?;
+            assert!(ud.is::<Rc<MyUserData>>());
+            assert!(!ud.is::<MyUserData>());
+
+            assert_eq!(ud.borrow::<MyUserData>()?.0, 1);
+            assert!(matches!(
+                ud.borrow_mut::<MyUserData>(),
+                Err(Error::UserDataBorrowMutError)
+            ));
+            assert!(ud.borrow_mut::<Rc<MyUserData>>().is_ok());
+
+            assert_eq!(ud.borrow_scoped::<MyUserData, _>(|x| x.0)?, 1);
+            assert!(matches!(
+                ud.borrow_mut_scoped::<MyUserData, _>(|_| ()),
+                Err(Error::UserDataBorrowMutError)
+            ));
+        }
+
+        // Collect userdata
+        globals.set("ud", Nil)?;
         lua.gc_collect()?;
-        assert_eq!(std::rc::Rc::strong_count(&ud), 1);
+        assert_eq!(Rc::strong_count(&ud), 1);
+
+        // We must be able to mutate userdata when having one reference only
+        globals.set("ud", ud)?;
+        lua.load(
+            r#"
+            ud.data = 2
+            assert(ud.data == 2)
+        "#,
+        )
+        .exec()
+        .unwrap();
     }
 
     // Rc<RefCell<T>>
     #[cfg(not(feature = "send"))]
     {
-        let ud = std::rc::Rc::new(std::cell::RefCell::new(MyUserData(2)));
-        globals.set("rc_refcell_ud", ud.clone())?;
+        use std::cell::RefCell;
+        use std::rc::Rc;
+
+        let ud = Rc::new(RefCell::new(MyUserData(2)));
+        globals.set("ud", ud.clone())?;
         lua.load(
             r#"
-            assert(rc_refcell_ud.static == "constant")
-            rc_refcell_ud.data = rc_refcell_ud.data + 1
-            assert(rc_refcell_ud.data == 3)
-        "#,
+            assert(ud.static == "constant")
+            assert(ud.data == 2)
+            ud.data = 10
+            assert(ud.data == 10)
+            assert(ud:dbg() == "MyUserData(10)")
+            "#,
         )
-        .exec()?;
-        assert_eq!(ud.borrow().0, 3);
-        globals.set("rc_refcell_ud", Nil)?;
+        .exec()
+        .unwrap();
+
+        // Test borrowing original userdata
+        {
+            let ud = globals.get::<AnyUserData>("ud")?;
+            assert!(ud.is::<Rc<RefCell<MyUserData>>>());
+            assert!(!ud.is::<MyUserData>());
+
+            assert_eq!(ud.borrow::<MyUserData>()?.0, 10);
+            assert_eq!(ud.borrow_mut::<MyUserData>()?.0, 10);
+            ud.borrow_mut::<MyUserData>()?.0 = 20;
+            assert_eq!(ud.borrow::<MyUserData>()?.0, 20);
+
+            assert_eq!(ud.borrow_scoped::<MyUserData, _>(|x| x.0)?, 20);
+            ud.borrow_mut_scoped::<MyUserData, _>(|x| x.0 = 30)?;
+            assert_eq!(ud.borrow::<MyUserData>()?.0, 30);
+
+            // Double (read) borrow is okay
+            let _borrow = ud.borrow::<MyUserData>()?;
+            assert_eq!(ud.borrow::<MyUserData>()?.0, 30);
+            assert!(matches!(
+                ud.borrow_mut::<MyUserData>(),
+                Err(Error::UserDataBorrowMutError)
+            ));
+        }
+
+        // Collect userdata
+        globals.set("ud", Nil)?;
         lua.gc_collect()?;
-        assert_eq!(std::rc::Rc::strong_count(&ud), 1);
+        assert_eq!(Rc::strong_count(&ud), 1);
+
+        // Check destroying wrapped UserDataRef without references in Lua
+        let ud = lua.convert::<UserDataRef<MyUserData>>(ud)?;
+        lua.gc_collect()?;
+        assert_eq!(ud.0, 30);
+        drop(ud);
     }
 
     // Arc<T>
     {
         let ud = Arc::new(MyUserData(3));
-        globals.set("arc_ud", ud.clone())?;
+        globals.set("ud", ud.clone())?;
         lua.load(
             r#"
-            assert(arc_ud.static == "constant")
-            local ok, err = pcall(function() arc_ud.data = 10 end)
+            assert(ud.static == "constant")
+            local ok, err = pcall(function() ud.data = 4 end)
             assert(
-                tostring(err):sub(1, 32) == "error mutably borrowing userdata",
-                "expected error mutably borrowing userdata, got " .. tostring(err)
+                tostring(err):find("error mutably borrowing userdata") ~= nil,
+                "expected 'error mutably borrowing userdata', got '" .. tostring(err) .. "'"
             )
-            assert(arc_ud.data == 3)
-        "#,
+            assert(ud.data == 3)
+            assert(ud:dbg() == "MyUserData(3)")
+            "#,
         )
-        .exec()?;
-        globals.set("arc_ud", Nil)?;
+        .exec()
+        .unwrap();
+
+        // Test borrowing original userdata
+        {
+            let ud = globals.get::<AnyUserData>("ud")?;
+            assert!(ud.is::<Arc<MyUserData>>());
+            assert!(!ud.is::<MyUserData>());
+
+            assert_eq!(ud.borrow::<MyUserData>()?.0, 3);
+            assert!(matches!(
+                ud.borrow_mut::<MyUserData>(),
+                Err(Error::UserDataBorrowMutError)
+            ));
+            assert!(ud.borrow_mut::<Arc<MyUserData>>().is_ok());
+
+            assert_eq!(ud.borrow_scoped::<MyUserData, _>(|x| x.0)?, 3);
+            assert!(matches!(
+                ud.borrow_mut_scoped::<MyUserData, _>(|_| ()),
+                Err(Error::UserDataBorrowMutError)
+            ));
+        }
+
+        // Collect userdata
+        globals.set("ud", Nil)?;
         lua.gc_collect()?;
         assert_eq!(Arc::strong_count(&ud), 1);
+
+        // We must be able to mutate userdata when having one reference only
+        globals.set("ud", ud)?;
+        lua.load(
+            r#"
+            ud.data = 4
+            assert(ud.data == 4)
+            "#,
+        )
+        .exec()
+        .unwrap();
     }
 
     // Arc<Mutex<T>>
     {
-        let ud = Arc::new(std::sync::Mutex::new(MyUserData(4)));
-        globals.set("arc_mutex_ud", ud.clone())?;
+        use std::sync::Mutex;
+
+        let ud = Arc::new(Mutex::new(MyUserData(5)));
+        globals.set("ud", ud.clone())?;
         lua.load(
             r#"
-            assert(arc_mutex_ud.static == "constant")
-            arc_mutex_ud.data = arc_mutex_ud.data + 1
-            assert(arc_mutex_ud.data == 5)
-        "#,
+            assert(ud.static == "constant")
+            assert(ud.data == 5)
+            ud.data = 6
+            assert(ud.data == 6)
+            assert(ud:dbg() == "MyUserData(6)")
+            "#,
         )
-        .exec()?;
-        assert_eq!(ud.lock().unwrap().0, 5);
-        globals.set("arc_mutex_ud", Nil)?;
+        .exec()
+        .unwrap();
+
+        // Test borrowing original userdata
+        {
+            let ud = globals.get::<AnyUserData>("ud")?;
+            assert!(ud.is::<Arc<Mutex<MyUserData>>>());
+            assert!(!ud.is::<MyUserData>());
+
+            #[rustfmt::skip]
+            assert!(matches!(ud.borrow::<MyUserData>(), Err(Error::UserDataTypeMismatch)));
+            #[rustfmt::skip]
+            assert!(matches!(ud.borrow_mut::<MyUserData>(), Err(Error::UserDataTypeMismatch)));
+
+            assert_eq!(ud.borrow_scoped::<MyUserData, _>(|x| x.0)?, 6);
+            ud.borrow_mut_scoped::<MyUserData, _>(|x| x.0 = 8)?;
+            assert_eq!(ud.borrow_scoped::<MyUserData, _>(|x| x.0)?, 8);
+        }
+
+        // Collect userdata
+        globals.set("ud", Nil)?;
         lua.gc_collect()?;
         assert_eq!(Arc::strong_count(&ud), 1);
     }
 
     // Arc<RwLock<T>>
     {
-        let ud = Arc::new(std::sync::RwLock::new(MyUserData(6)));
-        globals.set("arc_rwlock_ud", ud.clone())?;
+        use std::sync::RwLock;
+
+        let ud = Arc::new(RwLock::new(MyUserData(9)));
+        globals.set("ud", ud.clone())?;
         lua.load(
             r#"
-            assert(arc_rwlock_ud.static == "constant")
-            arc_rwlock_ud.data = arc_rwlock_ud.data + 1
-            assert(arc_rwlock_ud.data == 7)
-        "#,
+            assert(ud.static == "constant")
+            assert(ud.data == 9)
+            ud.data = 10
+            assert(ud.data == 10)
+            assert(ud:dbg() == "MyUserData(10)")
+            "#,
         )
-        .exec()?;
-        assert_eq!(ud.read().unwrap().0, 7);
-        globals.set("arc_rwlock_ud", Nil)?;
+        .exec()
+        .unwrap();
+
+        // Test borrowing original userdata
+        {
+            let ud = globals.get::<AnyUserData>("ud")?;
+            assert!(ud.is::<Arc<RwLock<MyUserData>>>());
+            assert!(!ud.is::<MyUserData>());
+
+            #[rustfmt::skip]
+            assert!(matches!(ud.borrow::<MyUserData>(), Err(Error::UserDataTypeMismatch)));
+            #[rustfmt::skip]
+            assert!(matches!(ud.borrow_mut::<MyUserData>(), Err(Error::UserDataTypeMismatch)));
+
+            assert_eq!(ud.borrow_scoped::<MyUserData, _>(|x| x.0)?, 10);
+            ud.borrow_mut_scoped::<MyUserData, _>(|x| x.0 = 12)?;
+            assert_eq!(ud.borrow_scoped::<MyUserData, _>(|x| x.0)?, 12);
+        }
+
+        // Collect userdata
+        globals.set("ud", Nil)?;
         lua.gc_collect()?;
         assert_eq!(Arc::strong_count(&ud), 1);
     }
 
     // Arc<parking_lot::Mutex<T>>
     {
-        let ud = Arc::new(parking_lot::Mutex::new(MyUserData(8)));
-        globals.set("arc_parking_lot_mutex_ud", ud.clone())?;
+        use parking_lot::Mutex;
+
+        let ud = Arc::new(Mutex::new(MyUserData(13)));
+        globals.set("ud", ud.clone())?;
         lua.load(
             r#"
-            assert(arc_parking_lot_mutex_ud.static == "constant")
-            arc_parking_lot_mutex_ud.data = arc_parking_lot_mutex_ud.data + 1
-            assert(arc_parking_lot_mutex_ud.data == 9)
-        "#,
+            assert(ud.static == "constant")
+            assert(ud.data == 13)
+            ud.data = 14
+            assert(ud.data == 14)
+            assert(ud:dbg() == "MyUserData(14)")
+            "#,
         )
-        .exec()?;
-        assert_eq!(ud.lock().0, 9);
-        globals.set("arc_parking_lot_mutex_ud", Nil)?;
+        .exec()
+        .unwrap();
+
+        // Test borrowing original userdata
+        {
+            let ud = globals.get::<AnyUserData>("ud")?;
+            assert!(ud.is::<Arc<Mutex<MyUserData>>>());
+            assert!(!ud.is::<MyUserData>());
+
+            assert_eq!(ud.borrow::<MyUserData>()?.0, 14);
+            assert_eq!(ud.borrow_mut::<MyUserData>()?.0, 14);
+            ud.borrow_mut::<MyUserData>()?.0 = 15;
+            assert_eq!(ud.borrow::<MyUserData>()?.0, 15);
+
+            assert_eq!(ud.borrow_scoped::<MyUserData, _>(|x| x.0)?, 15);
+            ud.borrow_mut_scoped::<MyUserData, _>(|x| x.0 = 16)?;
+            assert_eq!(ud.borrow::<MyUserData>()?.0, 16);
+
+            // Double borrow is not allowed
+            let _borrow = ud.borrow::<MyUserData>()?;
+            assert!(matches!(
+                ud.borrow::<MyUserData>(),
+                Err(Error::UserDataBorrowError)
+            ));
+        }
+
+        // Collect userdata
+        globals.set("ud", Nil)?;
         lua.gc_collect()?;
         assert_eq!(Arc::strong_count(&ud), 1);
+
+        // Check destroying wrapped UserDataRef without references in Lua
+        let ud = lua.convert::<UserDataRef<MyUserData>>(ud)?;
+        lua.gc_collect()?;
+        assert_eq!(ud.0, 16);
+        drop(ud);
     }
 
     // Arc<parking_lot::RwLock<T>>
     {
-        let ud = Arc::new(parking_lot::RwLock::new(MyUserData(10)));
-        globals.set("arc_parking_lot_rwlock_ud", ud.clone())?;
+        use parking_lot::RwLock;
+
+        let ud = Arc::new(RwLock::new(MyUserData(17)));
+        globals.set("ud", ud.clone())?;
         lua.load(
             r#"
-            assert(arc_parking_lot_rwlock_ud.static == "constant")
-            arc_parking_lot_rwlock_ud.data = arc_parking_lot_rwlock_ud.data + 1
-            assert(arc_parking_lot_rwlock_ud.data == 11)
-        "#,
+            assert(ud.static == "constant")
+            assert(ud.data == 17)
+            ud.data = 18
+            assert(ud.data == 18)
+            assert(ud:dbg() == "MyUserData(18)")
+            "#,
         )
-        .exec()?;
-        assert_eq!(ud.read().0, 11);
-        globals.set("arc_parking_lot_rwlock_ud", Nil)?;
+        .exec()
+        .unwrap();
+
+        // Test borrowing original userdata
+        {
+            let ud = globals.get::<AnyUserData>("ud")?;
+            assert!(ud.is::<Arc<RwLock<MyUserData>>>());
+            assert!(!ud.is::<MyUserData>());
+
+            assert_eq!(ud.borrow::<MyUserData>()?.0, 18);
+            assert_eq!(ud.borrow_mut::<MyUserData>()?.0, 18);
+            ud.borrow_mut::<MyUserData>()?.0 = 19;
+            assert_eq!(ud.borrow::<MyUserData>()?.0, 19);
+
+            assert_eq!(ud.borrow_scoped::<MyUserData, _>(|x| x.0)?, 19);
+            ud.borrow_mut_scoped::<MyUserData, _>(|x| x.0 = 20)?;
+            assert_eq!(ud.borrow::<MyUserData>()?.0, 20);
+
+            // Multiple read borrows are allowed with parking_lot::RwLock
+            let _borrow1 = ud.borrow::<MyUserData>()?;
+            let _borrow2 = ud.borrow::<MyUserData>()?;
+            assert!(matches!(
+                ud.borrow_mut::<MyUserData>(),
+                Err(Error::UserDataBorrowMutError)
+            ));
+        }
+
+        // Collect userdata
+        globals.set("ud", Nil)?;
         lua.gc_collect()?;
         assert_eq!(Arc::strong_count(&ud), 1);
+
+        // Check destroying wrapped UserDataRef without references in Lua
+        let ud = lua.convert::<UserDataRef<MyUserData>>(ud)?;
+        lua.gc_collect()?;
+        assert_eq!(ud.0, 20);
+        drop(ud);
     }
 
     Ok(())
