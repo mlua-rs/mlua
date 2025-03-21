@@ -220,9 +220,7 @@ impl MetaMethod {
     pub(crate) const fn as_cstr(self) -> &'static CStr {
         match self {
             #[rustfmt::skip]
-            MetaMethod::Type => unsafe {
-                CStr::from_bytes_with_nul_unchecked(if cfg!(feature = "luau") { b"__type\0" } else { b"__name\0" })
-            },
+            MetaMethod::Type => if cfg!(feature = "luau") { c"__type" } else { c"__name" },
             _ => unreachable!(),
         }
     }

@@ -416,7 +416,7 @@ impl RawLua {
                         }
                         #[cfg(any(feature = "lua52", feature = "lua51", feature = "luajit"))]
                         {
-                            ffi::lua_pushliteral(state, "attempt to yield from a hook");
+                            ffi::lua_pushliteral(state, c"attempt to yield from a hook");
                             ffi::lua_error(state);
                         }
                     }
