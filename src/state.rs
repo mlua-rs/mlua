@@ -213,7 +213,9 @@ impl Lua {
         let lua = unsafe { Self::inner_new(libs, options) };
 
         if libs.contains(StdLib::PACKAGE) {
-            mlua_expect!(lua.disable_c_modules(), "Error disabling C modules");
+            // This may already have been done at compile time,
+            // so we need to handle this gracefully.
+            let _ = lua.disable_c_modules();
         }
         lua.lock().mark_safe();
 
