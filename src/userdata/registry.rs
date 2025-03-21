@@ -10,10 +10,11 @@ use crate::error::{Error, Result};
 use crate::state::{Lua, LuaGuard};
 use crate::traits::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti};
 use crate::types::{Callback, MaybeSend};
-use crate::userdata::{AnyUserData, MetaMethod, UserData, UserDataFields, UserDataMethods, UserDataStorage};
-use crate::util::{
-    borrow_userdata_scoped, borrow_userdata_scoped_mut, get_userdata, short_type_name, TypeIdHints,
+use crate::userdata::{
+    borrow_userdata_scoped, borrow_userdata_scoped_mut, AnyUserData, MetaMethod, TypeIdHints, UserData,
+    UserDataFields, UserDataMethods, UserDataStorage,
 };
+use crate::util::{get_userdata, short_type_name};
 use crate::value::Value;
 
 #[cfg(feature = "async")]

@@ -12,10 +12,8 @@ pub(crate) use error::{
 pub(crate) use short_names::short_type_name;
 pub(crate) use types::TypeKey;
 pub(crate) use userdata::{
-    borrow_userdata_scoped, borrow_userdata_scoped_mut, get_destructed_userdata_metatable,
-    get_internal_metatable, get_internal_userdata, get_userdata, init_internal_metatable,
-    init_userdata_metatable, push_internal_userdata, take_userdata, TypeIdHints,
-    DESTRUCTED_USERDATA_METATABLE,
+    get_destructed_userdata_metatable, get_internal_metatable, get_internal_userdata, get_userdata,
+    init_internal_metatable, push_internal_userdata, take_userdata, DESTRUCTED_USERDATA_METATABLE,
 };
 
 #[cfg(not(feature = "luau"))]

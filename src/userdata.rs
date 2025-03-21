@@ -12,10 +12,7 @@ use crate::string::String;
 use crate::table::{Table, TablePairs};
 use crate::traits::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti};
 use crate::types::{MaybeSend, ValueRef};
-use crate::util::{
-    borrow_userdata_scoped, borrow_userdata_scoped_mut, check_stack, get_userdata, push_string,
-    take_userdata, StackGuard, TypeIdHints,
-};
+use crate::util::{check_stack, get_userdata, push_string, take_userdata, StackGuard};
 use crate::value::Value;
 
 #[cfg(feature = "async")]
@@ -32,6 +29,9 @@ pub(crate) use cell::UserDataStorage;
 pub use r#ref::{UserDataRef, UserDataRefMut};
 pub use registry::UserDataRegistry;
 pub(crate) use registry::{RawUserDataRegistry, UserDataProxy};
+pub(crate) use util::{
+    borrow_userdata_scoped, borrow_userdata_scoped_mut, init_userdata_metatable, TypeIdHints,
+};
 
 /// Kinds of metamethods that can be overridden.
 ///
