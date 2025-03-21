@@ -401,7 +401,7 @@ impl RawLua {
                         }
                         #[cfg(any(feature = "lua52", feature = "lua51", feature = "luajit"))]
                         {
-                            ffi::lua_pushliteral(state, "attempt to yield from a hook");
+                            ffi::lua_pushliteral(state, c"attempt to yield from a hook");
                             ffi::lua_error(state);
                         }
                     }
@@ -473,7 +473,7 @@ impl RawLua {
         protect_lua!(state, 0, 0, |state| {
             if ffi::luaL_getsubtable(state, ffi::LUA_REGISTRYINDEX, HOOKS_KEY) == 0 {
                 // Table just created, initialize it
-                ffi::lua_pushliteral(state, "k");
+                ffi::lua_pushliteral(state, c"k");
                 ffi::lua_setfield(state, -2, cstr!("__mode")); // hooktable.__mode = "k"
                 ffi::lua_pushvalue(state, -1);
                 ffi::lua_setmetatable(state, -2); // metatable(hooktable) = hooktable

@@ -43,7 +43,7 @@ unsafe fn compat53_findfield(L: *mut lua_State, objidx: c_int, level: c_int) -> 
             } else if compat53_findfield(L, objidx, level - 1) != 0 {
                 // try recursively
                 lua_remove(L, -2); // remove table (but keep name)
-                lua_pushliteral(L, ".");
+                lua_pushliteral(L, c".");
                 lua_insert(L, -2); // place '.' between the two names
                 lua_concat(L, 3);
                 return 1;
@@ -77,7 +77,7 @@ unsafe fn compat53_pushfuncname(L: *mut lua_State, level: c_int, ar: *mut lua_De
         lua_pushfstring(L, cstr!("function '%s'"), lua_tostring(L, -1));
         lua_remove(L, -2); // remove name
     } else {
-        lua_pushliteral(L, "?");
+        lua_pushliteral(L, c"?");
     }
 }
 
@@ -198,7 +198,7 @@ pub unsafe fn lua_rawgetp(L: *mut lua_State, idx: c_int, p: *const c_void) -> c_
 pub unsafe fn lua_getuservalue(L: *mut lua_State, mut idx: c_int) -> c_int {
     luaL_checkstack(L, 2, cstr!("not enough stack slots available"));
     idx = lua_absindex(L, idx);
-    lua_pushliteral(L, "__mlua_uservalues");
+    lua_pushliteral(L, c"__mlua_uservalues");
     if lua_rawget(L, LUA_REGISTRYINDEX) != LUA_TTABLE {
         return LUA_TNIL;
     }
@@ -236,13 +236,13 @@ pub unsafe fn lua_rawsetp(L: *mut lua_State, idx: c_int, p: *const c_void) {
 pub unsafe fn lua_setuservalue(L: *mut lua_State, mut idx: c_int) {
     luaL_checkstack(L, 4, cstr!("not enough stack slots available"));
     idx = lua_absindex(L, idx);
-    lua_pushliteral(L, "__mlua_uservalues");
+    lua_pushliteral(L, c"__mlua_uservalues");
     lua_pushvalue(L, -1);
     if lua_rawget(L, LUA_REGISTRYINDEX) != LUA_TTABLE {
         lua_pop(L, 1);
         lua_createtable(L, 0, 2); // main table
         lua_createtable(L, 0, 1); // metatable
-        lua_pushliteral(L, "k");
+        lua_pushliteral(L, c"k");
         lua_setfield(L, -2, cstr!("__mode"));
         lua_setmetatable(L, -2);
         lua_pushvalue(L, -2);
@@ -316,7 +316,7 @@ pub unsafe fn luaL_checkstack(L: *mut lua_State, sz: c_int, msg: *const c_char) 
         if !msg.is_null() {
             luaL_error(L, cstr!("stack overflow (%s)"), msg);
         } else {
-            lua_pushliteral(L, "stack overflow");
+            lua_pushliteral(L, c"stack overflow");
             lua_error(L);
         }
     }
@@ -455,11 +455,11 @@ pub unsafe fn luaL_traceback(L: *mut lua_State, L1: *mut lua_State, msg: *const 
     if !msg.is_null() {
         lua_pushfstring(L, cstr!("%s\n"), msg);
     }
-    lua_pushliteral(L, "stack traceback:");
+    lua_pushliteral(L, c"stack traceback:");
     while lua_getinfo(L1, level, cstr!(""), &mut ar) != 0 {
         if level + 1 == mark {
             // too many levels?
-            lua_pushliteral(L, "\n\t..."); // add a '...'
+            lua_pushliteral(L, c"\n\t..."); // add a '...'
             level = numlevels - COMPAT53_LEVELS2; // and skip to last ones
         } else {
             lua_getinfo(L1, level, cstr!("sln"), &mut ar);
@@ -467,7 +467,7 @@ pub unsafe fn luaL_traceback(L: *mut lua_State, L1: *mut lua_State, msg: *const 
             if ar.currentline > 0 {
                 lua_pushfstring(L, cstr!("%d:"), ar.currentline);
             }
-            lua_pushliteral(L, " in ");
+            lua_pushliteral(L, c" in ");
             compat53_pushfuncname(L, level, &mut ar);
             lua_concat(L, lua_gettop(L) - top);
         }
@@ -481,16 +481,16 @@ pub unsafe fn luaL_tolstring(L: *mut lua_State, mut idx: c_int, len: *mut usize)
     if luaL_callmeta(L, idx, cstr!("__tostring")) == 0 {
         match lua_type(L, idx) {
             LUA_TNIL => {
-                lua_pushliteral(L, "nil");
+                lua_pushliteral(L, c"nil");
             }
             LUA_TSTRING | LUA_TNUMBER => {
                 lua_pushvalue(L, idx);
             }
             LUA_TBOOLEAN => {
                 if lua_toboolean(L, idx) == 0 {
-                    lua_pushliteral(L, "false");
+                    lua_pushliteral(L, c"false");
                 } else {
-                    lua_pushliteral(L, "true");
+                    lua_pushliteral(L, c"true");
                 }
             }
             t => {
