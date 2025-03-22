@@ -1011,7 +1011,9 @@ impl Lua {
     ) -> Chunk<'a> {
         Chunk {
             lua: self.weak(),
-            name: chunk.name().unwrap_or_else(|| location.to_string()),
+            name: chunk
+                .name()
+                .unwrap_or_else(|| format!("@{}:{}", location.file(), location.line())),
             env: chunk.environment(self),
             mode: chunk.mode(),
             source: chunk.source(),

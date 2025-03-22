@@ -1,6 +1,24 @@
 use std::{fs, io};
 
-use mlua::{Chunk, Lua, Result};
+use mlua::{Chunk, ChunkMode, Lua, Result};
+
+#[test]
+fn test_chunk_methods() -> Result<()> {
+    let lua = Lua::new();
+
+    #[cfg(unix)]
+    assert!(lua.load("return 123").name().starts_with("@tests/chunk.rs"));
+    let chunk2 = lua.load("return 123").set_name("@new_name");
+    assert_eq!(chunk2.name(), "@new_name");
+
+    let env = lua.create_table_from([("a", 987)])?;
+    let chunk3 = lua.load("return a").set_environment(env.clone());
+    assert_eq!(chunk3.environment().unwrap(), &env);
+    assert_eq!(chunk3.mode(), ChunkMode::Text);
+    assert_eq!(chunk3.call::<i32>(())?, 987);
+
+    Ok(())
+}
 
 #[test]
 fn test_chunk_path() -> Result<()> {
