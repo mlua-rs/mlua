@@ -835,12 +835,11 @@ impl RawLua {
         let _sg = StackGuard::new(state);
         check_stack(state, 3)?;
 
-        // We push metatable first to ensure having correct metatable with `__gc` method
-        ffi::lua_pushnil(state);
-        ffi::lua_rawgeti(state, ffi::LUA_REGISTRYINDEX, get_metatable_id()?);
+        // We generate metatable first to make sure it *always* available when userdata pushed
+        let mt_id = get_metatable_id()?;
         let protect = !self.unlikely_memory_error();
         crate::util::push_userdata(state, data, protect)?;
-        ffi::lua_replace(state, -3);
+        ffi::lua_rawgeti(state, ffi::LUA_REGISTRYINDEX, mt_id);
         ffi::lua_setmetatable(state, -2);
 
         // Set empty environment for Lua 5.1
