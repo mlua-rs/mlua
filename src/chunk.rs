@@ -428,6 +428,11 @@ impl Compiler {
 }
 
 impl Chunk<'_> {
+    /// Returns the name of this chunk.
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
     /// Sets the name of this chunk, which results in more informative error traces.
     ///
     /// Possible name prefixes:
@@ -437,6 +442,11 @@ impl Chunk<'_> {
     pub fn set_name(mut self, name: impl Into<String>) -> Self {
         self.name = name.into();
         self
+    }
+
+    /// Returns the environment of this chunk.
+    pub fn environment(&self) -> Option<&Table> {
+        self.env.as_ref().ok()?.as_ref()
     }
 
     /// Sets the environment of the loaded chunk to the given value.
@@ -453,6 +463,11 @@ impl Chunk<'_> {
     pub fn set_environment(mut self, env: Table) -> Self {
         self.env = Ok(Some(env));
         self
+    }
+
+    /// Returns the mode (auto-detected by default) of this chunk.
+    pub fn mode(&self) -> ChunkMode {
+        self.detect_mode()
     }
 
     /// Sets whether the chunk is text or binary (autodetected by default).
