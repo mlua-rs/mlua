@@ -70,6 +70,13 @@ impl Drop for RawLua {
 
             let mem_state = MemoryState::get(self.main_state());
 
+            #[cfg(feature = "luau")]
+            {
+                // Reset any callbacks
+                (*ffi::lua_callbacks(self.main_state())).interrupt = None;
+                (*ffi::lua_callbacks(self.main_state())).userthread = None;
+            }
+
             ffi::lua_close(self.main_state());
 
             // Deallocate `MemoryState`
@@ -420,7 +427,7 @@ impl RawLua {
         }
 
         unsafe extern "C-unwind" fn global_hook_proc(state: *mut ffi::lua_State, ar: *mut ffi::lua_Debug) {
-            let status = callback_error_ext(state, ptr::null_mut(), move |extra, _| {
+            let status = callback_error_ext(state, ptr::null_mut(), false, move |extra, _| {
                 match (*extra).hook_callback.clone() {
                     Some(hook_callback) => {
                         let rawlua = (*extra).raw_lua();
@@ -453,7 +460,7 @@ impl RawLua {
                 return;
             }
 
-            let status = callback_error_ext(state, ptr::null_mut(), |extra, _| {
+            let status = callback_error_ext(state, ptr::null_mut(), false, |extra, _| {
                 let rawlua = (*extra).raw_lua();
                 let _guard = StateGuard::new(rawlua, state);
                 let debug = Debug::new(rawlua, ar);
@@ -564,7 +571,11 @@ impl RawLua {
         let _sg = StackGuard::new(state);
         check_stack(state, 3)?;
 
-        let thread_state = if self.unlikely_memory_error() {
+        let protect = !self.unlikely_memory_error();
+        #[cfg(feature = "luau")]
+        let protect = protect || (*self.extra.get()).userthread_callback.is_some();
+
+        let thread_state = if !protect {
             ffi::lua_newthread(state)
         } else {
             protect_lua!(state, 0, 1, |state| ffi::lua_newthread(state))?
@@ -1177,7 +1188,7 @@ impl RawLua {
     pub(crate) fn create_callback(&self, func: Callback) -> Result<Function> {
         unsafe extern "C-unwind" fn call_callback(state: *mut ffi::lua_State) -> c_int {
             let upvalue = get_userdata::<CallbackUpvalue>(state, ffi::lua_upvalueindex(1));
-            callback_error_ext(state, (*upvalue).extra.get(), |extra, nargs| {
+            callback_error_ext(state, (*upvalue).extra.get(), true, |extra, nargs| {
                 // Lua ensures that `LUA_MINSTACK` stack spaces are available (after pushing arguments)
                 // The lock must be already held as the callback is executed
                 let rawlua = (*extra).raw_lua();
@@ -1226,7 +1237,7 @@ impl RawLua {
             // so the first upvalue is always valid
             let upvalue = get_userdata::<AsyncCallbackUpvalue>(state, ffi::lua_upvalueindex(1));
             let extra = (*upvalue).extra.get();
-            callback_error_ext(state, extra, |extra, nargs| {
+            callback_error_ext(state, extra, true, |extra, nargs| {
                 // Lua ensures that `LUA_MINSTACK` stack spaces are available (after pushing arguments)
                 // The lock must be already held as the callback is executed
                 let rawlua = (*extra).raw_lua();
@@ -1251,7 +1262,7 @@ impl RawLua {
 
         unsafe extern "C-unwind" fn poll_future(state: *mut ffi::lua_State) -> c_int {
             let upvalue = get_userdata::<AsyncPollUpvalue>(state, ffi::lua_upvalueindex(1));
-            callback_error_ext(state, (*upvalue).extra.get(), |extra, _| {
+            callback_error_ext(state, (*upvalue).extra.get(), true, |extra, _| {
                 // Lua ensures that `LUA_MINSTACK` stack spaces are available (after pushing arguments)
                 // The lock must be already held as the future is polled
                 let rawlua = (*extra).raw_lua();

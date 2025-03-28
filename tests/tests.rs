@@ -1308,8 +1308,7 @@ fn test_warnings() -> Result<()> {
     lua.set_warning_function(|_, _, _| Err(Error::runtime("warning error")));
     assert!(matches!(
         lua.load(r#"warn("test")"#).exec(),
-        Err(Error::CallbackError { cause, .. })
-            if matches!(*cause, Error::RuntimeError(ref err) if err == "warning error")
+        Err(Error::RuntimeError(ref err)) if err == "warning error"
     ));
 
     // Recursive warning

@@ -2,8 +2,9 @@
 
 use std::fmt::Debug;
 use std::fs;
+use std::os::raw::c_void;
 use std::panic::{catch_unwind, AssertUnwindSafe};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicPtr, AtomicU64, Ordering};
 use std::sync::Arc;
 
 use mlua::{Compiler, Error, Lua, LuaOptions, Result, StdLib, Table, ThreadStatus, Value, Vector, VmState};
@@ -395,11 +396,8 @@ fn test_interrupts() -> Result<()> {
     //
     lua.set_interrupt(|_| Err(Error::runtime("error from interrupt")));
     match f.call::<()>(()) {
-        Err(Error::CallbackError { cause, .. }) => match *cause {
-            Error::RuntimeError(ref m) if m == "error from interrupt" => {}
-            ref e => panic!("expected RuntimeError with a specific message, got {:?}", e),
-        },
-        r => panic!("expected CallbackError, got {:?}", r),
+        Err(Error::RuntimeError(ref msg)) => assert_eq!(msg, "error from interrupt"),
+        res => panic!("expected `RuntimeError` with a specific message, got {res:?}"),
     }
 
     lua.remove_interrupt();
@@ -411,4 +409,63 @@ fn test_interrupts() -> Result<()> {
 fn test_fflags() {
     // We cannot really on any particular feature flag to be present
     assert!(Lua::set_fflag("UnknownFlag", true).is_err());
+}
+
+#[test]
+fn test_thread_events() -> Result<()> {
+    let lua = Lua::new();
+
+    let count = Arc::new(AtomicU64::new(0));
+    let thread_data: Arc<(AtomicPtr<c_void>, AtomicBool)> = Arc::new(Default::default());
+
+    let (count2, thread_data2) = (count.clone(), thread_data.clone());
+    lua.set_thread_event_callback(move |_, value| {
+        count2.fetch_add(1, Ordering::Relaxed);
+        (thread_data2.0).store(value.to_pointer() as *mut _, Ordering::Relaxed);
+        if value.is_thread() {
+            thread_data2.1.store(false, Ordering::Relaxed);
+        }
+        if value.is_light_userdata() {
+            thread_data2.1.store(true, Ordering::Relaxed);
+        }
+        Ok(())
+    });
+
+    let t = lua.create_thread(lua.load("return 123").into_function()?)?;
+    assert_eq!(count.load(Ordering::Relaxed), 1);
+    let t_ptr = t.to_pointer();
+    assert_eq!(t_ptr, thread_data.0.load(Ordering::Relaxed));
+    assert!(!thread_data.1.load(Ordering::Relaxed));
+
+    // Thead will be destroyed after GC cycle
+    drop(t);
+    lua.gc_collect()?;
+    assert_eq!(count.load(Ordering::Relaxed), 2);
+    assert_eq!(t_ptr, thread_data.0.load(Ordering::Relaxed));
+    assert!(thread_data.1.load(Ordering::Relaxed));
+
+    // Check that recursion is not allowed
+    let count3 = count.clone();
+    lua.set_thread_event_callback(move |lua, _value| {
+        count3.fetch_add(1, Ordering::Relaxed);
+        let _ = lua.create_thread(lua.load("return 123").into_function().unwrap())?;
+        Ok(())
+    });
+    let t = lua.create_thread(lua.load("return 123").into_function()?)?;
+    assert_eq!(count.load(Ordering::Relaxed), 3);
+
+    lua.remove_thread_event_callback();
+    drop(t);
+    lua.gc_collect()?;
+    assert_eq!(count.load(Ordering::Relaxed), 3);
+
+    // Test error inside callback
+    lua.set_thread_event_callback(move |_, _| Err(Error::runtime("error when processing thread event")));
+    let result = lua.create_thread(lua.load("return 123").into_function()?);
+    assert!(result.is_err());
+    assert!(
+        matches!(result, Err(Error::RuntimeError(err)) if err.contains("error when processing thread event"))
+    );
+
+    Ok(())
 }

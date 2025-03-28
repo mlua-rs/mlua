@@ -419,7 +419,7 @@ impl Lua {
         // Make sure that Lua is initialized
         let _ = Self::get_or_init_from_ptr(state);
 
-        callback_error_ext(state, ptr::null_mut(), move |extra, nargs| {
+        callback_error_ext(state, ptr::null_mut(), true, move |extra, nargs| {
             let rawlua = (*extra).raw_lua();
             let _guard = StateGuard::new(rawlua, state);
             let args = A::from_stack_args(nargs, 1, None, rawlua)?;
@@ -652,7 +652,7 @@ impl Lua {
                 // We don't support GC interrupts since they cannot survive Lua exceptions
                 return;
             }
-            let result = callback_error_ext(state, ptr::null_mut(), move |extra, _| {
+            let result = callback_error_ext(state, ptr::null_mut(), false, move |extra, _| {
                 let interrupt_cb = (*extra).interrupt_callback.clone();
                 let interrupt_cb = mlua_expect!(interrupt_cb, "no interrupt callback set in interrupt_proc");
                 if XRc::strong_count(&interrupt_cb) > 2 {
@@ -690,6 +690,60 @@ impl Lua {
         }
     }
 
+    /// Sets a thread event callback that will be called when a thread is created or destroyed.
+    ///
+    /// The callback is called with a [`Value`] argument that is either:
+    /// - A [`Thread`] object when thread is created
+    /// - A [`LightUserData`] when thread is destroyed
+    #[cfg(any(feature = "luau", doc))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
+    pub fn set_thread_event_callback<F>(&self, callback: F)
+    where
+        F: Fn(&Lua, Value) -> Result<()> + MaybeSend + 'static,
+    {
+        unsafe extern "C-unwind" fn userthread_proc(parent: *mut ffi::lua_State, child: *mut ffi::lua_State) {
+            let extra = ExtraData::get(child);
+            let thread_cb = match (*extra).userthread_callback {
+                Some(ref cb) => cb.clone(),
+                None => return,
+            };
+            if XRc::strong_count(&thread_cb) > 2 {
+                return; // Don't allow recursion
+            }
+            let value = match parent.is_null() {
+                // Thread is about to be destroyed, pass light userdata
+                true => Value::LightUserData(crate::LightUserData(child as _)),
+                false => {
+                    // Thread is created, pass thread object
+                    ffi::lua_pushthread(child);
+                    ffi::lua_xmove(child, (*extra).ref_thread, 1);
+                    Value::Thread(Thread((*extra).raw_lua().pop_ref_thread(), child))
+                }
+            };
+            callback_error_ext((*extra).raw_lua().state(), extra, false, move |extra, _| {
+                thread_cb((*extra).lua(), value)
+            })
+        }
+
+        // Set thread callback
+        let lua = self.lock();
+        unsafe {
+            (*lua.extra.get()).userthread_callback = Some(XRc::new(callback));
+            (*ffi::lua_callbacks(lua.main_state())).userthread = Some(userthread_proc);
+        }
+    }
+
+    /// Removes any thread event callback previously set by `set_thread_event_callback`.
+    #[cfg(any(feature = "luau", doc))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
+    pub fn remove_thread_event_callback(&self) {
+        let lua = self.lock();
+        unsafe {
+            (*lua.extra.get()).userthread_callback = None;
+            (*ffi::lua_callbacks(lua.main_state())).userthread = None;
+        }
+    }
+
     /// Sets the warning function to be used by Lua to emit warnings.
     ///
     /// Requires `feature = "lua54"`
@@ -705,7 +759,7 @@ impl Lua {
 
         unsafe extern "C-unwind" fn warn_proc(ud: *mut c_void, msg: *const c_char, tocont: c_int) {
             let extra = ud as *mut ExtraData;
-            callback_error_ext((*extra).raw_lua().state(), extra, |extra, _| {
+            callback_error_ext((*extra).raw_lua().state(), extra, false, |extra, _| {
                 let warn_callback = (*extra).warn_callback.clone();
                 let warn_callback = mlua_expect!(warn_callback, "no warning callback set in warn_proc");
                 if XRc::strong_count(&warn_callback) > 2 {
@@ -1444,7 +1498,7 @@ impl Lua {
                     Err(_) => return,
                 },
                 ffi::LUA_TTHREAD => {
-                    ffi::lua_newthread(state);
+                    ffi::lua_pushthread(state);
                 }
                 #[cfg(feature = "luau")]
                 ffi::LUA_TBUFFER => {

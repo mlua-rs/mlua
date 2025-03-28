@@ -27,6 +27,7 @@ impl Drop for StateGuard<'_> {
 pub(super) unsafe fn callback_error_ext<F, R>(
     state: *mut ffi::lua_State,
     mut extra: *mut ExtraData,
+    wrap_error: bool,
     f: F,
 ) -> R
 where
@@ -109,6 +110,13 @@ where
         }
         Ok(Err(err)) => {
             let wrapped_error = prealloc_failure.r#use(state, extra);
+
+            if !wrap_error {
+                ptr::write(wrapped_error, WrappedFailure::Error(err));
+                get_internal_metatable::<WrappedFailure>(state);
+                ffi::lua_setmetatable(state, -2);
+                ffi::lua_error(state)
+            }
 
             // Build `CallbackError` with traceback
             let traceback = if ffi::lua_checkstack(state, ffi::LUA_TRACEBACK_STACK) != 0 {
