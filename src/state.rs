@@ -326,12 +326,6 @@ impl Lua {
         R::from_stack_multi(nresults, &lua)
     }
 
-    #[doc(hidden)]
-    #[deprecated(since = "0.10.0", note = "please use `load_std_libs` instead")]
-    pub fn load_from_std_lib(&self, libs: StdLib) -> Result<()> {
-        self.load_std_libs(libs)
-    }
-
     /// Loads the specified subset of the standard libraries into an existing Lua state.
     ///
     /// Use the [`StdLib`] flags to specify the libraries you want to load.

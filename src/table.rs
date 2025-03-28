@@ -511,13 +511,6 @@ impl Table {
         }
     }
 
-    #[doc(hidden)]
-    #[deprecated(since = "0.10.0", note = "please use `metatable` instead")]
-    #[cfg(not(tarpaulin_include))]
-    pub fn get_metatable(&self) -> Option<Table> {
-        self.metatable()
-    }
-
     /// Sets or removes the metatable of this table.
     ///
     /// If `metatable` is `None`, the metatable is removed (if no metatable is set, this does

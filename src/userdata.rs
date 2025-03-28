@@ -895,12 +895,6 @@ impl AnyUserData {
         self.raw_metatable().map(UserDataMetatable)
     }
 
-    #[doc(hidden)]
-    #[deprecated(since = "0.10.0", note = "please use `metatable` instead")]
-    pub fn get_metatable(&self) -> Result<UserDataMetatable> {
-        self.metatable()
-    }
-
     fn raw_metatable(&self) -> Result<Table> {
         let lua = self.0.lua.lock();
         let state = lua.state();
