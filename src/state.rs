@@ -1907,6 +1907,8 @@ impl Lua {
     }
 
     /// Returns an internal `Poll::Pending` constant used for executing async callbacks.
+    ///
+    /// Every time when [`Future`] is Pending, Lua corotine is suspended with this constant.
     #[cfg(feature = "async")]
     #[doc(hidden)]
     #[inline(always)]
