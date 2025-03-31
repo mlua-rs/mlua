@@ -1,3 +1,4 @@
+use std::any::TypeId;
 use std::collections::HashMap;
 use std::string::String as StdString;
 use std::sync::Arc;
@@ -23,9 +24,11 @@ fn test_userdata() -> Result<()> {
     let userdata2 = lua.create_userdata(UserData2(Box::new(2)))?;
 
     assert!(userdata1.is::<UserData1>());
+    assert!(userdata1.type_id() == Some(TypeId::of::<UserData1>()));
     assert!(!userdata1.is::<UserData2>());
     assert!(userdata2.is::<UserData2>());
     assert!(!userdata2.is::<UserData1>());
+    assert!(userdata2.type_id() == Some(TypeId::of::<UserData2>()));
 
     assert_eq!(userdata1.borrow::<UserData1>()?.0, 1);
     assert_eq!(*userdata2.borrow::<UserData2>()?.0, 2);
