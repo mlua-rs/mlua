@@ -623,10 +623,9 @@ impl AnyUserData {
     /// Checks whether the type of this userdata is `T`.
     #[inline]
     pub fn is<T: 'static>(&self) -> bool {
-        let lua = self.0.lua.lock();
-        let type_id = lua.get_userdata_ref_type_id(&self.0);
+        let type_id = self.type_id();
         // We do not use wrapped types here, rather prefer to check the "real" type of the userdata
-        matches!(type_id, Ok(Some(type_id)) if type_id == TypeId::of::<T>())
+        matches!(type_id, Some(type_id) if type_id == TypeId::of::<T>())
     }
 
     /// Borrow this userdata immutably if it is of type `T`.
@@ -922,6 +921,15 @@ impl AnyUserData {
     #[inline]
     pub fn to_pointer(&self) -> *const c_void {
         self.0.to_pointer()
+    }
+
+    /// Returns [`TypeId`] of this userdata if it is registered and `'static`.
+    ///
+    /// This method is not available for scoped userdata.
+    #[inline]
+    pub fn type_id(&self) -> Option<TypeId> {
+        let lua = self.0.lua.lock();
+        lua.get_userdata_ref_type_id(&self.0).ok().flatten()
     }
 
     /// Returns a type name of this `UserData` (from a metatable field).
