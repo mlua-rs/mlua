@@ -49,7 +49,6 @@ pub use raw::RawLua;
 use util::{callback_error_ext, StateGuard};
 
 /// Top level Lua struct which represents an instance of Lua VM.
-#[derive(Clone)]
 pub struct Lua {
     pub(self) raw: XRc<ReentrantMutex<RawLua>>,
     // Controls whether garbage collection should be run on drop
@@ -147,6 +146,16 @@ impl Drop for Lua {
     fn drop(&mut self) {
         if self.collect_garbage {
             let _ = self.gc_collect();
+        }
+    }
+}
+
+impl Clone for Lua {
+    #[inline]
+    fn clone(&self) -> Self {
+        Lua {
+            raw: XRc::clone(&self.raw),
+            collect_garbage: false,
         }
     }
 }
