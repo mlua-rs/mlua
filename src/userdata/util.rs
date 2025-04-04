@@ -436,11 +436,18 @@ pub(crate) unsafe extern "C-unwind" fn collect_userdata<T>(state: *mut ffi::lua_
 
 // This method is called by Luau GC when it's time to collect the userdata.
 #[cfg(feature = "luau")]
-pub(crate) unsafe extern "C-unwind" fn collect_userdata<T>(
-    _state: *mut ffi::lua_State,
+pub(crate) unsafe extern "C" fn collect_userdata<T>(
+    state: *mut ffi::lua_State,
     ud: *mut std::os::raw::c_void,
 ) {
+    // Almost none Lua operations are allowed when destructor is running,
+    // so we need to set a flag to prevent calling any Lua functions
+    let extra = (*ffi::lua_callbacks(state)).userdata as *mut crate::state::ExtraData;
+    (*extra).running_userdata_gc = true;
+    // Luau does not support _any_ panics in destructors (they are declared as "C", NOT as "C-unwind"),
+    // so any panics will trigger `abort()`.
     ptr::drop_in_place(ud as *mut T);
+    (*extra).running_userdata_gc = false;
 }
 
 // This method can be called by user or Lua GC to destroy the userdata.

@@ -83,12 +83,12 @@ pub type lua_Unsigned = c_uint;
 pub type lua_CFunction = unsafe extern "C-unwind" fn(L: *mut lua_State) -> c_int;
 pub type lua_Continuation = unsafe extern "C-unwind" fn(L: *mut lua_State, status: c_int) -> c_int;
 
-/// Type for userdata destructor functions.
-pub type lua_Destructor = unsafe extern "C-unwind" fn(L: *mut lua_State, *mut c_void);
+/// Type for userdata destructor functions (no unwinding).
+pub type lua_Destructor = unsafe extern "C" fn(L: *mut lua_State, *mut c_void);
 
-/// Type for memory-allocation functions.
+/// Type for memory-allocation functions (no unwinding).
 pub type lua_Alloc =
-    unsafe extern "C-unwind" fn(ud: *mut c_void, ptr: *mut c_void, osize: usize, nsize: usize) -> *mut c_void;
+    unsafe extern "C" fn(ud: *mut c_void, ptr: *mut c_void, osize: usize, nsize: usize) -> *mut c_void;
 
 /// Returns Luau release version (eg. `0.xxx`).
 pub const fn luau_version() -> Option<&'static str> {
@@ -345,7 +345,7 @@ pub unsafe fn lua_newuserdata(L: *mut lua_State, sz: usize) -> *mut c_void {
 
 #[inline(always)]
 pub unsafe fn lua_newuserdata_t<T>(L: *mut lua_State, data: T) -> *mut T {
-    unsafe extern "C-unwind" fn destructor<T>(_: *mut lua_State, ud: *mut c_void) {
+    unsafe extern "C" fn destructor<T>(_: *mut lua_State, ud: *mut c_void) {
         ptr::drop_in_place(ud as *mut T);
     }
 

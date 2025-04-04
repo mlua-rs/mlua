@@ -357,7 +357,7 @@ pub unsafe fn luaL_loadbufferenv(
         fn free(p: *mut c_void);
     }
 
-    unsafe extern "C-unwind" fn data_dtor(_: *mut lua_State, data: *mut c_void) {
+    unsafe extern "C" fn data_dtor(_: *mut lua_State, data: *mut c_void) {
         free(*(data as *mut *mut c_char) as *mut c_void);
     }
 
