@@ -96,7 +96,7 @@ impl MemoryState {
     }
 }
 
-unsafe extern "C-unwind" fn allocator(
+unsafe extern "C" fn allocator(
     extra: *mut c_void,
     ptr: *mut c_void,
     osize: usize,

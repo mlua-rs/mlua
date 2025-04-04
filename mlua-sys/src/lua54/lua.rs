@@ -95,10 +95,10 @@ pub type lua_Reader =
 pub type lua_Writer =
     unsafe extern "C-unwind" fn(L: *mut lua_State, p: *const c_void, sz: usize, ud: *mut c_void) -> c_int;
 
-/// Type for memory-allocation functions
+/// Type for memory-allocation functions (no unwinding)
 #[rustfmt::skip]
 pub type lua_Alloc =
-    unsafe extern "C-unwind" fn(ud: *mut c_void, ptr: *mut c_void, osize: usize, nsize: usize) -> *mut c_void;
+    unsafe extern "C" fn(ud: *mut c_void, ptr: *mut c_void, osize: usize, nsize: usize) -> *mut c_void;
 
 /// Type for warning functions
 pub type lua_WarnFunction = unsafe extern "C-unwind" fn(ud: *mut c_void, msg: *const c_char, tocont: c_int);
