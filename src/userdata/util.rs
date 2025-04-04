@@ -2,6 +2,7 @@ use std::any::TypeId;
 use std::cell::Cell;
 use std::marker::PhantomData;
 use std::os::raw::c_int;
+use std::ptr;
 
 use super::UserDataStorage;
 use crate::error::{Error, Result};
@@ -423,7 +424,29 @@ unsafe fn init_userdata_metatable_newindex(state: *mut ffi::lua_State) -> Result
     })
 }
 
-pub(super) unsafe extern "C-unwind" fn userdata_destructor<T>(state: *mut ffi::lua_State) -> c_int {
+// This method is called by Lua GC when it's time to collect the userdata.
+//
+// This method is usually used to collect internal userdata.
+#[cfg(not(feature = "luau"))]
+pub(crate) unsafe extern "C-unwind" fn collect_userdata<T>(state: *mut ffi::lua_State) -> c_int {
+    let ud = get_userdata::<T>(state, -1);
+    ptr::drop_in_place(ud);
+    0
+}
+
+// This method is called by Luau GC when it's time to collect the userdata.
+#[cfg(feature = "luau")]
+pub(crate) unsafe extern "C-unwind" fn collect_userdata<T>(
+    _state: *mut ffi::lua_State,
+    ud: *mut std::os::raw::c_void,
+) {
+    ptr::drop_in_place(ud as *mut T);
+}
+
+// This method can be called by user or Lua GC to destroy the userdata.
+// It checks if the userdata is safe to destroy and sets the "destroyed" metatable
+// to prevent further GC collection.
+pub(super) unsafe extern "C-unwind" fn destroy_userdata_storage<T>(state: *mut ffi::lua_State) -> c_int {
     let ud = get_userdata::<UserDataStorage<T>>(state, -1);
     if (*ud).is_safe_to_destroy() {
         take_userdata::<UserDataStorage<T>>(state);

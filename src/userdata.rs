@@ -30,7 +30,8 @@ pub use r#ref::{UserDataRef, UserDataRefMut};
 pub use registry::UserDataRegistry;
 pub(crate) use registry::{RawUserDataRegistry, UserDataProxy};
 pub(crate) use util::{
-    borrow_userdata_scoped, borrow_userdata_scoped_mut, init_userdata_metatable, TypeIdHints,
+    borrow_userdata_scoped, borrow_userdata_scoped_mut, collect_userdata, init_userdata_metatable,
+    TypeIdHints,
 };
 
 /// Kinds of metamethods that can be overridden.

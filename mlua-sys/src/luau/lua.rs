@@ -84,7 +84,6 @@ pub type lua_CFunction = unsafe extern "C-unwind" fn(L: *mut lua_State) -> c_int
 pub type lua_Continuation = unsafe extern "C-unwind" fn(L: *mut lua_State, status: c_int) -> c_int;
 
 /// Type for userdata destructor functions.
-pub type lua_Udestructor = unsafe extern "C-unwind" fn(*mut c_void);
 pub type lua_Destructor = unsafe extern "C-unwind" fn(L: *mut lua_State, *mut c_void);
 
 /// Type for memory-allocation functions.
@@ -191,7 +190,7 @@ extern "C-unwind" {
     pub fn lua_pushlightuserdatatagged(L: *mut lua_State, p: *mut c_void, tag: c_int);
     pub fn lua_newuserdatatagged(L: *mut lua_State, sz: usize, tag: c_int) -> *mut c_void;
     pub fn lua_newuserdatataggedwithmetatable(L: *mut lua_State, sz: usize, tag: c_int) -> *mut c_void;
-    pub fn lua_newuserdatadtor(L: *mut lua_State, sz: usize, dtor: lua_Udestructor) -> *mut c_void;
+    pub fn lua_newuserdatadtor(L: *mut lua_State, sz: usize, dtor: lua_Destructor) -> *mut c_void;
 
     pub fn lua_newbuffer(L: *mut lua_State, sz: usize) -> *mut c_void;
 
@@ -345,12 +344,14 @@ pub unsafe fn lua_newuserdata(L: *mut lua_State, sz: usize) -> *mut c_void {
 }
 
 #[inline(always)]
-pub unsafe fn lua_newuserdata_t<T>(L: *mut lua_State) -> *mut T {
-    unsafe extern "C-unwind" fn destructor<T>(ud: *mut c_void) {
+pub unsafe fn lua_newuserdata_t<T>(L: *mut lua_State, data: T) -> *mut T {
+    unsafe extern "C-unwind" fn destructor<T>(_: *mut lua_State, ud: *mut c_void) {
         ptr::drop_in_place(ud as *mut T);
     }
 
-    lua_newuserdatadtor(L, mem::size_of::<T>(), destructor::<T>) as *mut T
+    let ud_ptr = lua_newuserdatadtor(L, const { mem::size_of::<T>() }, destructor::<T>) as *mut T;
+    ptr::write(ud_ptr, data);
+    ud_ptr
 }
 
 // TODO: lua_strlen
