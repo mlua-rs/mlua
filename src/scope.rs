@@ -168,7 +168,7 @@ impl<'scope, 'env: 'scope> Scope<'scope, 'env> {
             #[cfg(feature = "luau")]
             let ud_ptr = {
                 let data = UserDataStorage::new_scoped(data);
-                util::push_userdata::<UserDataStorage<T>>(state, data, protect)?
+                util::push_userdata(state, data, protect)?
             };
             #[cfg(not(feature = "luau"))]
             let ud_ptr = util::push_uninit_userdata::<UserDataStorage<T>>(state, protect)?;
@@ -216,7 +216,7 @@ impl<'scope, 'env: 'scope> Scope<'scope, 'env> {
             #[cfg(feature = "luau")]
             let ud_ptr = {
                 let data = UserDataStorage::new_scoped(data);
-                util::push_userdata::<UserDataStorage<T>>(state, data, protect)?
+                util::push_userdata(state, data, protect)?
             };
             #[cfg(not(feature = "luau"))]
             let ud_ptr = util::push_uninit_userdata::<UserDataStorage<T>>(state, protect)?;

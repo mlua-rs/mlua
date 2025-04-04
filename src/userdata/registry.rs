@@ -97,7 +97,7 @@ impl<T> UserDataRegistry<T> {
             meta_methods: Vec::new(),
             #[cfg(feature = "async")]
             async_meta_methods: Vec::new(),
-            destructor: super::util::userdata_destructor::<T>,
+            destructor: super::util::destroy_userdata_storage::<T>,
             type_id: r#type.type_id(),
             type_name: short_type_name::<T>(),
         };

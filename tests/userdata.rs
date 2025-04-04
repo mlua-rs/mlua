@@ -264,7 +264,7 @@ fn test_gc_userdata() -> Result<()> {
     impl UserData for MyUserdata {
         fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
             methods.add_method("access", |_, this, ()| {
-                assert!(this.id == 123);
+                assert_eq!(this.id, 123);
                 Ok(())
             });
         }

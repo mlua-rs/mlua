@@ -9,9 +9,8 @@ use std::sync::Arc;
 use crate::error::{Error, Result};
 use crate::memory::MemoryState;
 use crate::util::{
-    check_stack, get_internal_metatable, get_internal_userdata, init_internal_metatable,
-    push_internal_userdata, push_string, push_table, rawset_field, to_string, TypeKey,
-    DESTRUCTED_USERDATA_METATABLE,
+    check_stack, get_internal_userdata, init_internal_metatable, push_internal_userdata, push_string,
+    push_table, rawset_field, to_string, TypeKey, DESTRUCTED_USERDATA_METATABLE,
 };
 
 static WRAPPED_FAILURE_TYPE_KEY: u8 = 0;
@@ -31,12 +30,8 @@ impl TypeKey for WrappedFailure {
 
 impl WrappedFailure {
     pub(crate) unsafe fn new_userdata(state: *mut ffi::lua_State) -> *mut Self {
-        #[cfg(feature = "luau")]
-        let ud = ffi::lua_newuserdata_t::<Self>(state);
-        #[cfg(not(feature = "luau"))]
-        let ud = ffi::lua_newuserdata(state, std::mem::size_of::<Self>()) as *mut Self;
-        ptr::write(ud, WrappedFailure::None);
-        ud
+        // Unprotected calls always return `Ok`
+        push_internal_userdata(state, WrappedFailure::None, false).unwrap()
     }
 }
 
@@ -90,16 +85,11 @@ where
             let cause = Arc::new(err);
             let wrapped_error = WrappedFailure::Error(Error::CallbackError { traceback, cause });
             ptr::write(ud, wrapped_error);
-            get_internal_metatable::<WrappedFailure>(state);
-            ffi::lua_setmetatable(state, -2);
-
             ffi::lua_error(state)
         }
         Err(p) => {
             ffi::lua_settop(state, 1);
             ptr::write(ud, WrappedFailure::Panic(Some(p)));
-            get_internal_metatable::<WrappedFailure>(state);
-            ffi::lua_setmetatable(state, -2);
             ffi::lua_error(state)
         }
     }
