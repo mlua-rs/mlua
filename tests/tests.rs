@@ -12,6 +12,24 @@ use mlua::{
     Value, Variadic,
 };
 
+#[test]
+fn test_weak_lua() {
+    let lua = Lua::new();
+    let weak_lua = lua.weak();
+    assert!(weak_lua.try_upgrade().is_some());
+    drop(lua);
+    assert!(weak_lua.try_upgrade().is_none());
+}
+
+#[test]
+#[should_panic(expected = "Lua instance is destroyed")]
+fn test_weak_lua_panic() {
+    let lua = Lua::new();
+    let weak_lua = lua.weak();
+    drop(lua);
+    let _ = weak_lua.upgrade();
+}
+
 #[cfg(not(feature = "luau"))]
 #[test]
 fn test_safety() -> Result<()> {
