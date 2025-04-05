@@ -621,7 +621,7 @@ impl Lua {
     ///     .into_function()?,
     /// )?;
     /// while co.status() == ThreadStatus::Resumable {
-    ///     co.resume(())?;
+    ///     co.resume::<()>(())?;
     /// }
     /// # Ok(())
     /// # }
@@ -1835,7 +1835,7 @@ impl Lua {
     /// fn main() -> Result<()> {
     ///     let lua = Lua::new();
     ///     lua.set_app_data("hello");
-    ///     lua.create_function(hello)?.call(())?;
+    ///     lua.create_function(hello)?.call::<()>(())?;
     ///     let s = lua.app_data_ref::<&str>().unwrap();
     ///     assert_eq!(*s, "world");
     ///     Ok(())

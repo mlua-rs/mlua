@@ -146,7 +146,7 @@ impl Function {
     ///     Ok(())
     /// })?;
     ///
-    /// sleep.call_async(10).await?;
+    /// sleep.call_async::<()>(10).await?;
     ///
     /// # Ok(())
     /// # }
