@@ -79,7 +79,7 @@ static_assertions = "1.0"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 criterion = { version = "0.5", features = ["async_tokio"] }
-rustyline = "14.0"
+rustyline = "15.0"
 tokio = { version = "1.0", features = ["full"] }
 
 [lints.rust]
