@@ -445,7 +445,7 @@ impl Thread {
     ///     Ok(())
     /// })?)?;
     /// thread.sandbox()?;
-    /// thread.resume(())?;
+    /// thread.resume::<()>(())?;
     ///
     /// // The global environment should be unchanged
     /// assert_eq!(lua.globals().get::<Option<u32>>("var")?, None);
