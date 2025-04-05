@@ -13,7 +13,7 @@ pub use crate::{
     UserData as LuaUserData, UserDataFields as LuaUserDataFields, UserDataMetatable as LuaUserDataMetatable,
     UserDataMethods as LuaUserDataMethods, UserDataRef as LuaUserDataRef,
     UserDataRefMut as LuaUserDataRefMut, UserDataRegistry as LuaUserDataRegistry, Value as LuaValue,
-    Variadic as LuaVariadic, VmState as LuaVmState,
+    Variadic as LuaVariadic, VmState as LuaVmState, WeakLua,
 };
 
 #[cfg(not(feature = "luau"))]

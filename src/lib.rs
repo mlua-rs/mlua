@@ -104,7 +104,7 @@ pub use crate::function::{Function, FunctionInfo};
 pub use crate::hook::{Debug, DebugEvent, DebugNames, DebugSource, DebugStack};
 pub use crate::multi::{MultiValue, Variadic};
 pub use crate::scope::Scope;
-pub use crate::state::{GCMode, Lua, LuaOptions};
+pub use crate::state::{GCMode, Lua, LuaOptions, WeakLua};
 pub use crate::stdlib::StdLib;
 pub use crate::string::{BorrowedBytes, BorrowedStr, String};
 pub use crate::table::{Table, TablePairs, TableSequence};

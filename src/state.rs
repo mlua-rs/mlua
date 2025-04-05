@@ -55,8 +55,11 @@ pub struct Lua {
     pub(self) collect_garbage: bool,
 }
 
+/// Weak reference to Lua instance.
+///
+/// This can used to prevent circular references between Lua and Rust objects.
 #[derive(Clone)]
-pub(crate) struct WeakLua(XWeak<ReentrantMutex<RawLua>>);
+pub struct WeakLua(XWeak<ReentrantMutex<RawLua>>);
 
 pub(crate) struct LuaGuard(ArcReentrantMutexGuard<RawLua>);
 
@@ -1995,6 +1998,15 @@ impl Lua {
         LightUserData(&ASYNC_POLL_PENDING as *const u8 as *mut std::os::raw::c_void)
     }
 
+    /// Returns a weak reference to the Lua instance.
+    ///
+    /// This is useful for creating a reference to the Lua instance that does not prevent it from
+    /// being deallocated.
+    #[inline(always)]
+    pub fn weak(&self) -> WeakLua {
+        WeakLua(XRc::downgrade(&self.raw))
+    }
+
     // Luau version located in `luau/mod.rs`
     #[cfg(not(feature = "luau"))]
     fn disable_c_modules(&self) -> Result<()> {
@@ -2038,11 +2050,6 @@ impl Lua {
         LuaGuard(self.raw.lock_arc())
     }
 
-    #[inline(always)]
-    pub(crate) fn weak(&self) -> WeakLua {
-        WeakLua(XRc::downgrade(&self.raw))
-    }
-
     /// Returns a handle to the unprotected Lua state without any synchronization.
     ///
     /// This is useful where we know that the lock is already held by the caller.
@@ -2070,13 +2077,29 @@ impl WeakLua {
         Some(LuaGuard::new(self.0.upgrade()?))
     }
 
+    /// Upgrades the weak Lua reference to a strong reference.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the Lua instance is destroyed.
     #[track_caller]
     #[inline(always)]
-    pub(crate) fn upgrade(&self) -> Lua {
+    pub fn upgrade(&self) -> Lua {
         Lua {
             raw: self.0.upgrade().expect("Lua instance is destroyed"),
             collect_garbage: false,
         }
+    }
+
+    /// Tries to upgrade the weak Lua reference to a strong reference.
+    ///
+    /// Returns `None` if the Lua instance is destroyed.
+    #[inline(always)]
+    pub fn try_upgrade(&self) -> Option<Lua> {
+        Some(Lua {
+            raw: self.0.upgrade()?,
+            collect_garbage: false,
+        })
     }
 }
 
