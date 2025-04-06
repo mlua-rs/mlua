@@ -4,7 +4,7 @@ version = "0.10.1"
 authors = ["Aleksandr Orlenko <zxteam@pm.me>"]
 edition = "2021"
 description = "Procedural macros for the mlua crate."
-repository = "https://github.com/khvzak/mlua"
+repository = "https://github.com/mlua-rs/mlua"
 keywords = ["lua", "mlua"]
 license = "MIT"
 
