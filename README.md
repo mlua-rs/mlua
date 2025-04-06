@@ -1,8 +1,8 @@
 # mlua
 [![Build Status]][github-actions] [![Latest Version]][crates.io] [![API Documentation]][docs.rs] [![Coverage Status]][codecov.io] ![MSRV]
 
-[Build Status]: https://github.com/khvzak/mlua/workflows/CI/badge.svg
-[github-actions]: https://github.com/khvzak/mlua/actions
+[Build Status]: https://github.com/mlua-rs/mlua/workflows/CI/badge.svg
+[github-actions]: https://github.com/mlua-rs/mlua/actions
 [Latest Version]: https://img.shields.io/crates/v/mlua.svg
 [crates.io]: https://crates.io/crates/mlua
 [API Documentation]: https://docs.rs/mlua/badge.svg
@@ -19,7 +19,7 @@
 
 > **Note**
 >
-> See v0.10 [release notes](https://github.com/khvzak/mlua/blob/main/docs/release_notes/v0.10.md).
+> See v0.10 [release notes](https://github.com/mlua-rs/mlua/blob/main/docs/release_notes/v0.10.md).
 
 `mlua` is bindings to [Lua](https://www.lua.org) programming language for Rust with a goal to provide
 _safe_ (as far as it's possible), high level, easy to use, practical and flexible API.
@@ -30,7 +30,7 @@ Started as `rlua` fork, `mlua` supports Lua 5.4, 5.3, 5.2, 5.1 (including LuaJIT
 
 WebAssembly (WASM) is supported through `wasm32-unknown-emscripten` target for all Lua versions excluding JIT.
 
-[GitHub Actions]: https://github.com/khvzak/mlua/actions
+[GitHub Actions]: https://github.com/mlua-rs/mlua/actions
 [Luau]: https://luau.org
 
 ## Usage
@@ -65,8 +65,8 @@ Below is a list of the available feature flags. By default `mlua` does not enabl
 [5.1]: https://www.lua.org/manual/5.1/manual.html
 [LuaJIT]: https://luajit.org/
 [Luau]: https://github.com/luau-lang/luau
-[lua-src]: https://github.com/khvzak/lua-src-rs
-[luajit-src]: https://github.com/khvzak/luajit-src-rs
+[lua-src]: https://github.com/mlua-rs/lua-src-rs
+[luajit-src]: https://github.com/mlua-rs/luajit-src-rs
 [tokio]: https://github.com/tokio-rs/tokio
 [async-std]: https://github.com/async-rs/async-std
 [`Send`]: https://doc.rust-lang.org/std/marker/trait.Send.html
