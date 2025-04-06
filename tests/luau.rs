@@ -1,5 +1,6 @@
 #![cfg(feature = "luau")]
 
+use std::cell::Cell;
 use std::fmt::Debug;
 use std::fs;
 use std::os::raw::c_void;
@@ -419,16 +420,18 @@ fn test_thread_events() -> Result<()> {
     let thread_data: Arc<(AtomicPtr<c_void>, AtomicBool)> = Arc::new(Default::default());
 
     let (count2, thread_data2) = (count.clone(), thread_data.clone());
-    lua.set_thread_event_callback(move |_, value| {
+    lua.set_thread_creation_callback(move |_, thread| {
         count2.fetch_add(1, Ordering::Relaxed);
-        (thread_data2.0).store(value.to_pointer() as *mut _, Ordering::Relaxed);
-        if value.is_thread() {
-            thread_data2.1.store(false, Ordering::Relaxed);
-        }
-        if value.is_light_userdata() {
-            thread_data2.1.store(true, Ordering::Relaxed);
-        }
+        (thread_data2.0).store(thread.to_pointer() as *mut _, Ordering::Relaxed);
+        thread_data2.1.store(false, Ordering::Relaxed);
         Ok(())
+    });
+    let (count3, thread_data3) = (count.clone(), thread_data.clone());
+    lua.set_thread_collection_callback(move |thread_ptr| {
+        count3.fetch_add(1, Ordering::Relaxed);
+        if thread_data3.0.load(Ordering::Relaxed) == thread_ptr.0 {
+            thread_data3.1.store(true, Ordering::Relaxed);
+        }
     });
 
     let t = lua.create_thread(lua.load("return 123").into_function()?)?;
@@ -445,27 +448,47 @@ fn test_thread_events() -> Result<()> {
     assert!(thread_data.1.load(Ordering::Relaxed));
 
     // Check that recursion is not allowed
-    let count3 = count.clone();
-    lua.set_thread_event_callback(move |lua, _value| {
-        count3.fetch_add(1, Ordering::Relaxed);
+    let count4 = count.clone();
+    lua.set_thread_creation_callback(move |lua, _value| {
+        count4.fetch_add(1, Ordering::Relaxed);
         let _ = lua.create_thread(lua.load("return 123").into_function().unwrap())?;
         Ok(())
     });
     let t = lua.create_thread(lua.load("return 123").into_function()?)?;
     assert_eq!(count.load(Ordering::Relaxed), 3);
 
-    lua.remove_thread_event_callback();
+    lua.remove_thread_callbacks();
     drop(t);
     lua.gc_collect()?;
     assert_eq!(count.load(Ordering::Relaxed), 3);
 
     // Test error inside callback
-    lua.set_thread_event_callback(move |_, _| Err(Error::runtime("error when processing thread event")));
+    lua.set_thread_creation_callback(move |_, _| Err(Error::runtime("error when processing thread event")));
     let result = lua.create_thread(lua.load("return 123").into_function()?);
     assert!(result.is_err());
     assert!(
         matches!(result, Err(Error::RuntimeError(err)) if err.contains("error when processing thread event"))
     );
+
+    // Test context switch when running Lua script
+    let count = Cell::new(0);
+    lua.set_thread_creation_callback(move |_, _| {
+        count.set(count.get() + 1);
+        if count.get() == 2 {
+            return Err(Error::runtime("thread limit exceeded"));
+        }
+        Ok(())
+    });
+    let result = lua
+        .load(
+            r#"
+            local co = coroutine.wrap(function() return coroutine.create(print) end)
+            co()
+    "#,
+        )
+        .exec();
+    assert!(result.is_err());
+    assert!(matches!(result, Err(Error::RuntimeError(err)) if err.contains("thread limit exceeded")));
 
     Ok(())
 }

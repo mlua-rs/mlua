@@ -81,10 +81,12 @@ pub(crate) struct ExtraData {
     #[cfg(feature = "luau")]
     pub(super) interrupt_callback: Option<crate::types::InterruptCallback>,
     #[cfg(feature = "luau")]
-    pub(super) userthread_callback: Option<crate::types::UserThreadCallback>,
+    pub(super) thread_creation_callback: Option<crate::types::ThreadCreationCallback>,
+    #[cfg(feature = "luau")]
+    pub(super) thread_collection_callback: Option<crate::types::ThreadCollectionCallback>,
 
     #[cfg(feature = "luau")]
-    pub(crate) running_userdata_gc: bool,
+    pub(crate) running_gc: bool,
     #[cfg(feature = "luau")]
     pub(super) sandboxed: bool,
     #[cfg(feature = "luau")]
@@ -181,7 +183,9 @@ impl ExtraData {
             #[cfg(feature = "luau")]
             interrupt_callback: None,
             #[cfg(feature = "luau")]
-            userthread_callback: None,
+            thread_creation_callback: None,
+            #[cfg(feature = "luau")]
+            thread_collection_callback: None,
             #[cfg(feature = "luau")]
             sandboxed: false,
             #[cfg(feature = "luau")]
@@ -189,7 +193,7 @@ impl ExtraData {
             #[cfg(feature = "luau-jit")]
             enable_jit: true,
             #[cfg(feature = "luau")]
-            running_userdata_gc: false,
+            running_gc: false,
         }));
 
         // Store it in the registry

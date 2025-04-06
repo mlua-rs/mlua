@@ -696,56 +696,91 @@ impl Lua {
         }
     }
 
-    /// Sets a thread event callback that will be called when a thread is created or destroyed.
-    ///
-    /// The callback is called with a [`Value`] argument that is either:
-    /// - A [`Thread`] object when thread is created
-    /// - A [`LightUserData`] when thread is destroyed
+    /// Sets a thread creation callback that will be called when a thread is created.
     #[cfg(any(feature = "luau", doc))]
     #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
-    pub fn set_thread_event_callback<F>(&self, callback: F)
+    pub fn set_thread_creation_callback<F>(&self, callback: F)
     where
-        F: Fn(&Lua, Value) -> Result<()> + MaybeSend + 'static,
+        F: Fn(&Lua, Thread) -> Result<()> + MaybeSend + 'static,
     {
-        unsafe extern "C-unwind" fn userthread_proc(parent: *mut ffi::lua_State, child: *mut ffi::lua_State) {
-            let extra = ExtraData::get(child);
-            let thread_cb = match (*extra).userthread_callback {
-                Some(ref cb) => cb.clone(),
-                None => return,
-            };
-            if XRc::strong_count(&thread_cb) > 2 {
-                return; // Don't allow recursion
-            }
-            let value = match parent.is_null() {
-                // Thread is about to be destroyed, pass light userdata
-                true => Value::LightUserData(crate::LightUserData(child as _)),
-                false => {
-                    // Thread is created, pass thread object
-                    ffi::lua_pushthread(child);
-                    ffi::lua_xmove(child, (*extra).ref_thread, 1);
-                    Value::Thread(Thread((*extra).raw_lua().pop_ref_thread(), child))
-                }
-            };
-            callback_error_ext((*extra).raw_lua().state(), extra, false, move |extra, _| {
-                thread_cb((*extra).lua(), value)
-            })
-        }
-
-        // Set thread callback
         let lua = self.lock();
         unsafe {
-            (*lua.extra.get()).userthread_callback = Some(XRc::new(callback));
-            (*ffi::lua_callbacks(lua.main_state())).userthread = Some(userthread_proc);
+            (*lua.extra.get()).thread_creation_callback = Some(XRc::new(callback));
+            (*ffi::lua_callbacks(lua.main_state())).userthread = Some(Self::userthread_proc);
         }
     }
 
-    /// Removes any thread event callback previously set by `set_thread_event_callback`.
+    /// Sets a thread collection callback that will be called when a thread is destroyed.
+    ///
+    /// Luau GC does not support exceptions during collection, so the callback must be
+    /// non-panicking. If the callback panics, the program will be aborted.
     #[cfg(any(feature = "luau", doc))]
     #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
-    pub fn remove_thread_event_callback(&self) {
+    pub fn set_thread_collection_callback<F>(&self, callback: F)
+    where
+        F: Fn(crate::LightUserData) + MaybeSend + 'static,
+    {
         let lua = self.lock();
         unsafe {
-            (*lua.extra.get()).userthread_callback = None;
+            (*lua.extra.get()).thread_collection_callback = Some(XRc::new(callback));
+            (*ffi::lua_callbacks(lua.main_state())).userthread = Some(Self::userthread_proc);
+        }
+    }
+
+    #[cfg(feature = "luau")]
+    unsafe extern "C-unwind" fn userthread_proc(parent: *mut ffi::lua_State, child: *mut ffi::lua_State) {
+        let extra = ExtraData::get(child);
+        if !parent.is_null() {
+            // Thread is created
+            let callback = match (*extra).thread_creation_callback {
+                Some(ref cb) => cb.clone(),
+                None => return,
+            };
+            if XRc::strong_count(&callback) > 2 {
+                return; // Don't allow recursion
+            }
+            ffi::lua_pushthread(child);
+            ffi::lua_xmove(child, (*extra).ref_thread, 1);
+            let value = Thread((*extra).raw_lua().pop_ref_thread(), child);
+            let _guard = StateGuard::new((*extra).raw_lua(), parent);
+            callback_error_ext((*extra).raw_lua().state(), extra, false, move |extra, _| {
+                callback((*extra).lua(), value)
+            })
+        } else {
+            // Thread is about to be collected
+            let callback = match (*extra).thread_collection_callback {
+                Some(ref cb) => cb.clone(),
+                None => return,
+            };
+
+            // We need to wrap the callback call in non-unwind function as it's not safe to unwind when
+            // Luau GC is running.
+            // This will trigger `abort()` if the callback panics.
+            unsafe extern "C" fn run_callback(
+                callback: *const crate::types::ThreadCollectionCallback,
+                value: *mut ffi::lua_State,
+            ) {
+                (*callback)(crate::LightUserData(value as _));
+            }
+
+            (*extra).running_gc = true;
+            run_callback(&callback, child);
+            (*extra).running_gc = false;
+        }
+    }
+
+    /// Removes any thread creation or collection callbacks previously set by
+    /// [`Lua::set_thread_creation_callback`] or [`Lua::set_thread_collection_callback`].
+    ///
+    /// This function has no effect if a thread callbacks were not previously set.
+    #[cfg(any(feature = "luau", doc))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
+    pub fn remove_thread_callbacks(&self) {
+        let lua = self.lock();
+        unsafe {
+            let extra = lua.extra.get();
+            (*extra).thread_creation_callback = None;
+            (*extra).thread_collection_callback = None;
             (*ffi::lua_callbacks(lua.main_state())).userthread = None;
         }
     }
@@ -2039,8 +2074,8 @@ impl Lua {
     pub(crate) fn lock(&self) -> ReentrantMutexGuard<RawLua> {
         let rawlua = self.raw.lock();
         #[cfg(feature = "luau")]
-        if unsafe { (*rawlua.extra.get()).running_userdata_gc } {
-            panic!("Luau VM is suspended while userdata destructor is running");
+        if unsafe { (*rawlua.extra.get()).running_gc } {
+            panic!("Luau VM is suspended while GC is running");
         }
         rawlua
     }
@@ -2066,8 +2101,8 @@ impl WeakLua {
     pub(crate) fn lock(&self) -> LuaGuard {
         let guard = LuaGuard::new(self.0.upgrade().expect("Lua instance is destroyed"));
         #[cfg(feature = "luau")]
-        if unsafe { (*guard.extra.get()).running_userdata_gc } {
-            panic!("Luau VM is suspended while userdata destructor is running");
+        if unsafe { (*guard.extra.get()).running_gc } {
+            panic!("Luau VM is suspended while GC is running");
         }
         guard
     }

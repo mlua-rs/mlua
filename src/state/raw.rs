@@ -573,7 +573,7 @@ impl RawLua {
 
         let protect = !self.unlikely_memory_error();
         #[cfg(feature = "luau")]
-        let protect = protect || (*self.extra.get()).userthread_callback.is_some();
+        let protect = protect || (*self.extra.get()).thread_creation_callback.is_some();
 
         let thread_state = if !protect {
             ffi::lua_newthread(state)
