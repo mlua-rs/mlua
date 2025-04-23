@@ -126,7 +126,7 @@ impl MultiValue {
 
     /// Creates a `MultiValue` container from vector of values.
     ///
-    /// This methods works in *O*(1) time and does not allocate any additional memory.
+    /// This method works in *O*(1) time and does not allocate any additional memory.
     #[inline]
     pub fn from_vec(vec: Vec<Value>) -> MultiValue {
         vec.into()
@@ -134,7 +134,7 @@ impl MultiValue {
 
     /// Consumes the `MultiValue` and returns a vector of values.
     ///
-    /// This methods needs *O*(*n*) data movement if the circular buffer doesn't happen to be at the
+    /// This method needs *O*(*n*) data movement if the circular buffer doesn't happen to be at the
     /// beginning of the allocation.
     #[inline]
     pub fn into_vec(self) -> Vec<Value> {
