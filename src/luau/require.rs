@@ -9,6 +9,7 @@ use std::{env, fmt, fs, ptr};
 
 use crate::error::Result;
 use crate::state::{callback_error_ext, Lua};
+use crate::types::MaybeSend;
 use crate::value::Value;
 
 /// An error that can occur during navigation in the Luau `require` system.
@@ -37,7 +38,7 @@ impl IntoNavigateResult for StdResult<(), NavigateError> {
 type WriteResult = ffi::luarequire_WriteResult;
 
 /// A trait for handling modules loading and navigation in the Luau `require` system.
-pub trait Require {
+pub trait Require: MaybeSend {
     /// Returns `true` if "require" is permitted for the given chunk name.
     fn is_require_allowed(&self, chunk_name: &str) -> bool;
 
