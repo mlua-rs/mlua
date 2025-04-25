@@ -86,7 +86,8 @@ pub trait Require: MaybeSend {
     fn config(&self) -> IoResult<Vec<u8>>;
 
     /// Loads the module and returns the result (function or table).
-    fn load(&self, lua: &Lua, chunk_name: &str, content: &[u8]) -> Result<Value> {
+    fn load(&self, lua: &Lua, path: &str, chunk_name: &str, content: &[u8]) -> Result<Value> {
+        let _ = path;
         lua.load(content).set_name(chunk_name).call(())
     }
 }
@@ -413,15 +414,17 @@ pub(super) unsafe extern "C" fn init_config(config: *mut ffi::luarequire_Configu
     unsafe extern "C-unwind" fn load(
         state: *mut ffi::lua_State,
         ctx: *mut c_void,
+        path: *const c_char,
         chunk_name: *const c_char,
         contents: *const c_char,
     ) -> c_int {
         let this = &*(ctx as *const Box<dyn Require>);
+        let path = CStr::from_ptr(path).to_string_lossy();
         let chunk_name = CStr::from_ptr(chunk_name).to_string_lossy();
         let contents = CStr::from_ptr(contents).to_bytes();
         let lua = Lua::get_or_init_from_ptr(state);
         callback_error_ext(state, ptr::null_mut(), false, move |_extra, _| {
-            match this.load(lua, &chunk_name, contents)? {
+            match this.load(lua, &path, &chunk_name, contents)? {
                 Value::Nil => lua.lock().push(true)?,
                 value => lua.lock().push(value)?,
             };
