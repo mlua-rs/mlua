@@ -82,7 +82,7 @@ pub enum GCMode {
 }
 
 /// Controls Lua interpreter behavior such as Rust panics handling.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 #[non_exhaustive]
 pub struct LuaOptions {
     /// Catch Rust panics when using [`pcall`]/[`xpcall`].
@@ -107,11 +107,6 @@ pub struct LuaOptions {
     #[cfg(feature = "async")]
     #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
     pub thread_pool_size: usize,
-
-    /// A custom [`crate::Require`] trait object to load Luau modules.
-    #[cfg(feature = "luau")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
-    pub requirer: Option<Box<dyn crate::Require>>,
 }
 
 impl Default for LuaOptions {
@@ -127,8 +122,6 @@ impl LuaOptions {
             catch_rust_panics: true,
             #[cfg(feature = "async")]
             thread_pool_size: 0,
-            #[cfg(feature = "luau")]
-            requirer: None,
         }
     }
 
@@ -149,17 +142,6 @@ impl LuaOptions {
     #[must_use]
     pub const fn thread_pool_size(mut self, size: usize) -> Self {
         self.thread_pool_size = size;
-        self
-    }
-
-    /// Sets a custom [`crate::Require`] trait object to load Luau modules.
-    ///
-    /// By default, the standard Luau `ReplRequirer` implementation is used.
-    #[cfg(feature = "luau")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
-    #[must_use]
-    pub fn with_requirer<R: crate::Require + 'static>(mut self, requirer: R) -> Self {
-        self.requirer = Some(Box::new(requirer));
         self
     }
 }
@@ -288,7 +270,7 @@ impl Lua {
         };
 
         #[cfg(feature = "luau")]
-        mlua_expect!(lua.configure_luau(options), "Error configuring Luau");
+        mlua_expect!(lua.configure_luau(), "Error configuring Luau");
 
         lua
     }

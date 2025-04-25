@@ -2,14 +2,33 @@ use std::ffi::CStr;
 use std::os::raw::c_int;
 
 use crate::error::Result;
-use crate::state::{ExtraData, Lua, LuaOptions};
+use crate::function::Function;
+use crate::state::Lua;
 
 pub use require::{NavigateError, Require};
 
 // Since Luau has some missing standard functions, we re-implement them here
 
 impl Lua {
-    pub(crate) unsafe fn configure_luau(&self, mut options: LuaOptions) -> Result<()> {
+    /// Create a custom Luau `require` function using provided [`Require`] implementation to find
+    /// and load modules.
+    ///
+    /// The provided object is stored in the Lua registry and will not be garbage collected
+    /// until the Lua state is closed.
+    #[cfg(any(feature = "luau", doc))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
+    pub fn create_require_function<R: Require + 'static>(&self, require: R) -> Result<Function> {
+        unsafe {
+            self.exec_raw((), move |state| {
+                let requirer_ptr = ffi::lua_newuserdata_t::<Box<dyn Require>>(state, Box::new(require));
+                // Keep the require object in the registry to prevent it from being garbage collected
+                ffi::lua_rawsetp(state, ffi::LUA_REGISTRYINDEX, requirer_ptr as *const _);
+                ffi::lua_pushrequire(state, require::init_config, requirer_ptr as *mut _);
+            })
+        }
+    }
+
+    pub(crate) unsafe fn configure_luau(&self) -> Result<()> {
         let globals = self.globals();
 
         globals.raw_set("collectgarbage", self.create_c_function(lua_collectgarbage)?)?;
@@ -20,12 +39,9 @@ impl Lua {
             globals.raw_set("_VERSION", format!("Luau {version}"))?;
         }
 
-        // Enable `require` function
-        let requirer = (options.requirer.take()).unwrap_or_else(|| Box::new(require::TextRequirer::new()));
-        self.exec_raw::<()>((), |state| {
-            let requirer_ptr = (*ExtraData::get(state)).set_requirer(requirer);
-            ffi::luaopen_require(state, require::init_config, requirer_ptr as *mut _);
-        })?;
+        // Enable default `require` implementation
+        let require = self.create_require_function(require::TextRequirer::new())?;
+        self.globals().raw_set("require", require)?;
 
         Ok(())
     }
