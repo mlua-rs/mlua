@@ -101,7 +101,7 @@ pub struct luarequire_Configuration {
 
     // Executes the module and places the result on the stack. Returns the number of results placed on the
     // stack.
-    pub load: unsafe extern "C" fn(
+    pub load: unsafe extern "C-unwind" fn(
         L: *mut lua_State,
         ctx: *mut c_void,
         chunkname: *const c_char,

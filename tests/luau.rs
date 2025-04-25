@@ -2,7 +2,6 @@
 
 use std::cell::Cell;
 use std::fmt::Debug;
-use std::fs;
 use std::os::raw::c_void;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::atomic::{AtomicBool, AtomicPtr, AtomicU64, Ordering};
@@ -14,83 +13,6 @@ use mlua::{Compiler, Error, Lua, LuaOptions, Result, StdLib, Table, ThreadStatus
 fn test_version() -> Result<()> {
     let lua = Lua::new();
     assert!(lua.globals().get::<String>("_VERSION")?.starts_with("Luau 0."));
-    Ok(())
-}
-
-#[test]
-fn test_require() -> Result<()> {
-    // Ensure that require() is not available if package module is not loaded
-    let mut lua = Lua::new_with(StdLib::NONE, LuaOptions::default())?;
-    assert!(lua.globals().get::<Option<Value>>("require")?.is_none());
-    assert!(lua.globals().get::<Option<Value>>("package")?.is_none());
-
-    if cfg!(target_arch = "wasm32") {
-        // TODO: figure out why emscripten fails on file operations
-        // Also see https://github.com/rust-lang/rust/issues/119250
-        return Ok(());
-    }
-
-    lua = Lua::new();
-
-    // Check that require() can load stdlib modules (including `package`)
-    lua.load(
-        r#"
-        local math = require("math")
-        assert(math == _G.math, "math module does not match _G.math")
-        local package = require("package")
-        assert(package == _G.package, "package module does not match _G.package")
-    "#,
-    )
-    .exec()?;
-
-    let temp_dir = tempfile::tempdir().unwrap();
-    fs::write(
-        temp_dir.path().join("module.luau"),
-        r#"
-        counter = (counter or 0) + 1
-        return {
-            counter = counter,
-            error = function() error("test") end,
-        }
-    "#,
-    )?;
-
-    lua.globals()
-        .get::<Table>("package")?
-        .set("path", temp_dir.path().join("?.luau").to_string_lossy())?;
-
-    lua.load(
-        r#"
-        local module = require("module")
-        assert(module.counter == 1)
-        module = require("module")
-        assert(module.counter == 1)
-
-        local ok, err = pcall(module.error)
-        assert(not ok and string.find(err, "module.luau") ~= nil)
-    "#,
-    )
-    .exec()?;
-
-    // Require non-existent module
-    match lua.load("require('non-existent')").exec() {
-        Err(Error::RuntimeError(e)) if e.contains("module 'non-existent' not found") => {}
-        r => panic!("expected RuntimeError(...) with a specific message, got {r:?}"),
-    }
-
-    // Require binary module in safe mode
-    lua.globals()
-        .get::<Table>("package")?
-        .set("cpath", temp_dir.path().join("?.so").to_string_lossy())?;
-    fs::write(temp_dir.path().join("dylib.so"), "")?;
-    match lua.load("require('dylib')").exec() {
-        Err(Error::RuntimeError(e)) if cfg!(unix) && e.contains("module 'dylib' not found") => {
-            assert!(e.contains("dynamic libraries are disabled in safe mode"))
-        }
-        Err(Error::RuntimeError(e)) if e.contains("module 'dylib' not found") => {}
-        r => panic!("expected RuntimeError(...) with a specific message, got {r:?}"),
-    }
-
     Ok(())
 }
 
@@ -492,3 +414,6 @@ fn test_thread_events() -> Result<()> {
 
     Ok(())
 }
+
+#[path = "luau/require.rs"]
+mod require;

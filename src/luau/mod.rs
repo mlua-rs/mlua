@@ -2,12 +2,14 @@ use std::ffi::CStr;
 use std::os::raw::c_int;
 
 use crate::error::Result;
-use crate::state::Lua;
+use crate::state::{ExtraData, Lua, LuaOptions};
+
+pub use require::{NavigateError, Require};
 
 // Since Luau has some missing standard functions, we re-implement them here
 
 impl Lua {
-    pub(crate) unsafe fn configure_luau(&self) -> Result<()> {
+    pub(crate) unsafe fn configure_luau(&self, mut options: LuaOptions) -> Result<()> {
         let globals = self.globals();
 
         globals.raw_set("collectgarbage", self.create_c_function(lua_collectgarbage)?)?;
@@ -18,11 +20,13 @@ impl Lua {
             globals.raw_set("_VERSION", format!("Luau {version}"))?;
         }
 
-        Ok(())
-    }
+        // Enable `require` function
+        let requirer = (options.requirer.take()).unwrap_or_else(|| Box::new(require::TextRequirer::new()));
+        self.exec_raw::<()>((), |state| {
+            let requirer_ptr = (*ExtraData::get(state)).set_requirer(requirer);
+            ffi::luaopen_require(state, require::init_config, requirer_ptr as *mut _);
+        })?;
 
-    pub(crate) fn disable_c_modules(&self) -> Result<()> {
-        package::disable_dylibs(self);
         Ok(())
     }
 }
@@ -64,6 +68,4 @@ unsafe extern "C-unwind" fn lua_collectgarbage(state: *mut ffi::lua_State) -> c_
     }
 }
 
-pub(crate) use package::register_package_module;
-
-mod package;
+mod require;

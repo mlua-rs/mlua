@@ -194,7 +194,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest]
         rust: [stable]
-        lua: [lua54, lua53, lua52, lua51, luajit, luau]
+        lua: [lua54, lua53, lua52, lua51, luajit]
         include:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu

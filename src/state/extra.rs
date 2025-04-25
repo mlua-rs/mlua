@@ -93,6 +93,8 @@ pub(crate) struct ExtraData {
     pub(super) compiler: Option<Compiler>,
     #[cfg(feature = "luau-jit")]
     pub(super) enable_jit: bool,
+    #[cfg(feature = "luau")]
+    pub(super) requirer: Option<Box<dyn crate::luau::Require>>,
 }
 
 impl Drop for ExtraData {
@@ -194,6 +196,8 @@ impl ExtraData {
             enable_jit: true,
             #[cfg(feature = "luau")]
             running_gc: false,
+            #[cfg(feature = "luau")]
+            requirer: None,
         }));
 
         // Store it in the registry
@@ -210,7 +214,7 @@ impl ExtraData {
         self.weak.write(WeakLua(XRc::downgrade(raw)));
     }
 
-    pub(super) unsafe fn get(state: *mut ffi::lua_State) -> *mut Self {
+    pub(crate) unsafe fn get(state: *mut ffi::lua_State) -> *mut Self {
         #[cfg(feature = "luau")]
         if cfg!(not(feature = "module")) {
             // In the main app we can use `lua_callbacks` to access ExtraData
@@ -256,5 +260,14 @@ impl ExtraData {
     #[inline(always)]
     pub(super) unsafe fn weak(&self) -> &WeakLua {
         self.weak.assume_init_ref()
+    }
+
+    #[cfg(feature = "luau")]
+    pub(crate) fn set_requirer(
+        &mut self,
+        requirer: Box<dyn crate::luau::Require>,
+    ) -> *mut Box<dyn crate::luau::Require> {
+        self.requirer.replace(requirer);
+        self.requirer.as_mut().unwrap()
     }
 }

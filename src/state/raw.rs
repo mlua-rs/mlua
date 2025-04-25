@@ -121,7 +121,7 @@ impl RawLua {
         unsafe { (*self.extra.get()).ref_thread }
     }
 
-    pub(super) unsafe fn new(libs: StdLib, options: LuaOptions) -> XRc<ReentrantMutex<Self>> {
+    pub(super) unsafe fn new(libs: StdLib, options: &LuaOptions) -> XRc<ReentrantMutex<Self>> {
         let mem_state: *mut MemoryState = Box::into_raw(Box::default());
         let mut state = ffi::lua_newstate(ALLOCATOR, mem_state as *mut c_void);
         // If state is null then switch to Lua internal allocator
@@ -293,10 +293,15 @@ impl RawLua {
         let res = load_std_libs(self.main_state(), libs);
 
         // If `package` library loaded into a safe lua state then disable C modules
-        let curr_libs = (*self.extra.get()).libs;
-        if is_safe && (curr_libs ^ (curr_libs | libs)).contains(StdLib::PACKAGE) {
-            mlua_expect!(self.lua().disable_c_modules(), "Error during disabling C modules");
+        #[cfg(not(feature = "luau"))]
+        if is_safe {
+            let curr_libs = (*self.extra.get()).libs;
+            if (curr_libs ^ (curr_libs | libs)).contains(StdLib::PACKAGE) {
+                mlua_expect!(self.lua().disable_c_modules(), "Error during disabling C modules");
+            }
         }
+        #[cfg(feature = "luau")]
+        let _ = is_safe;
         unsafe { (*self.extra.get()).libs |= libs };
 
         res
@@ -1477,11 +1482,6 @@ unsafe fn load_std_libs(state: *mut ffi::lua_State, libs: StdLib) -> Result<()> 
     #[cfg(not(feature = "luau"))]
     if libs.contains(StdLib::PACKAGE) {
         requiref(state, ffi::LUA_LOADLIBNAME, ffi::luaopen_package, 1)?;
-    }
-    #[cfg(feature = "luau")]
-    if libs.contains(StdLib::PACKAGE) {
-        let lua = (*ExtraData::get(state)).lua();
-        crate::luau::register_package_module(lua)?;
     }
 
     #[cfg(feature = "luajit")]

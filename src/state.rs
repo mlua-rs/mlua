@@ -46,7 +46,8 @@ use serde::Serialize;
 
 pub(crate) use extra::ExtraData;
 pub use raw::RawLua;
-use util::{callback_error_ext, StateGuard};
+pub(crate) use util::callback_error_ext;
+use util::StateGuard;
 
 /// Top level Lua struct which represents an instance of Lua VM.
 pub struct Lua {
@@ -81,7 +82,7 @@ pub enum GCMode {
 }
 
 /// Controls Lua interpreter behavior such as Rust panics handling.
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 #[non_exhaustive]
 pub struct LuaOptions {
     /// Catch Rust panics when using [`pcall`]/[`xpcall`].
@@ -106,6 +107,11 @@ pub struct LuaOptions {
     #[cfg(feature = "async")]
     #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
     pub thread_pool_size: usize,
+
+    /// A custom [`crate::Require`] trait object to load Luau modules.
+    #[cfg(feature = "luau")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
+    pub requirer: Option<Box<dyn crate::Require>>,
 }
 
 impl Default for LuaOptions {
@@ -121,6 +127,8 @@ impl LuaOptions {
             catch_rust_panics: true,
             #[cfg(feature = "async")]
             thread_pool_size: 0,
+            #[cfg(feature = "luau")]
+            requirer: None,
         }
     }
 
@@ -141,6 +149,17 @@ impl LuaOptions {
     #[must_use]
     pub const fn thread_pool_size(mut self, size: usize) -> Self {
         self.thread_pool_size = size;
+        self
+    }
+
+    /// Sets a custom [`crate::Require`] trait object to load Luau modules.
+    ///
+    /// By default, the standard Luau `ReplRequirer` implementation is used.
+    #[cfg(feature = "luau")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
+    #[must_use]
+    pub fn with_requirer<R: crate::Require + 'static>(mut self, requirer: R) -> Self {
+        self.requirer = Some(Box::new(requirer));
         self
     }
 }
@@ -224,6 +243,7 @@ impl Lua {
 
         let lua = unsafe { Self::inner_new(libs, options) };
 
+        #[cfg(not(feature = "luau"))]
         if libs.contains(StdLib::PACKAGE) {
             mlua_expect!(lua.disable_c_modules(), "Error disabling C modules");
         }
@@ -263,12 +283,12 @@ impl Lua {
     /// Creates a new Lua state with required `libs` and `options`
     unsafe fn inner_new(libs: StdLib, options: LuaOptions) -> Lua {
         let lua = Lua {
-            raw: RawLua::new(libs, options),
+            raw: RawLua::new(libs, &options),
             collect_garbage: true,
         };
 
         #[cfg(feature = "luau")]
-        mlua_expect!(lua.configure_luau(), "Error configuring Luau");
+        mlua_expect!(lua.configure_luau(options), "Error configuring Luau");
 
         lua
     }

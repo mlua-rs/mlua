@@ -76,7 +76,7 @@ mod conversion;
 mod error;
 mod function;
 mod hook;
-#[cfg(feature = "luau")]
+#[cfg(any(feature = "luau", doc))]
 mod luau;
 mod memory;
 mod multi;
@@ -130,6 +130,7 @@ pub use crate::{
     buffer::Buffer,
     chunk::{CompileConstant, Compiler},
     function::CoverageInfo,
+    luau::{NavigateError, Require},
     vector::Vector,
 };
 
