@@ -104,6 +104,7 @@ pub struct luarequire_Configuration {
     pub load: unsafe extern "C-unwind" fn(
         L: *mut lua_State,
         ctx: *mut c_void,
+        path: *const c_char,
         chunkname: *const c_char,
         contents: *const c_char,
     ) -> c_int,
@@ -114,7 +115,7 @@ pub type luarequire_Configuration_init = unsafe extern "C" fn(config: *mut luare
 
 extern "C-unwind" {
     // Initializes and pushes the require closure onto the stack without registration.
-    pub fn lua_pushrequire(
+    pub fn luarequire_pushrequire(
         L: *mut lua_State,
         config_init: luarequire_Configuration_init,
         ctx: *mut c_void,
@@ -122,4 +123,21 @@ extern "C-unwind" {
 
     // Initializes the require library and registers it globally.
     pub fn luaopen_require(L: *mut lua_State, config_init: luarequire_Configuration_init, ctx: *mut c_void);
+
+    // Initializes and pushes a "proxyrequire" closure onto the stack.
+    //
+    // The closure takes two parameters: the string path to resolve and the chunkname of an existing
+    // module.
+    pub fn luarequire_pushproxyrequire(
+        L: *mut lua_State,
+        config_init: luarequire_Configuration_init,
+        ctx: *mut c_void,
+    ) -> c_int;
+
+    // Registers an aliased require path to a result.
+    //
+    // After registration, the given result will always be immediately returned when the given path is
+    // required.
+    // Expects the path and table to be passed as arguments on the stack.
+    pub fn luarequire_registermodule(L: *mut lua_State) -> c_int;
 }
