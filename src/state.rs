@@ -2,7 +2,7 @@ use std::any::TypeId;
 use std::cell::{BorrowError, BorrowMutError, RefCell};
 use std::marker::PhantomData;
 use std::ops::Deref;
-use std::os::raw::c_int;
+use std::os::raw::{c_char, c_int};
 use std::panic::Location;
 use std::result::Result as StdResult;
 use std::{fmt, mem, ptr};
@@ -347,40 +347,78 @@ impl Lua {
         unsafe { self.lock().load_std_libs(libs) }
     }
 
-    /// Loads module `modname` into an existing Lua state using the specified entrypoint
-    /// function.
+    /// Registers module into an existing Lua state using the specified value.
     ///
-    /// Internally calls the Lua function `func` with the string `modname` as an argument,
-    /// sets the call result to `package.loaded[modname]` and returns copy of the result.
+    /// After registration, the given value will always be immediately returned when the
+    /// given module is [required].
     ///
-    /// If `package.loaded[modname]` value is not nil, returns copy of the value without
-    /// calling the function.
+    /// [required]: https://www.lua.org/manual/5.4/manual.html#pdf-require
+    pub fn register_module(&self, modname: &str, value: impl IntoLua) -> Result<()> {
+        #[cfg(not(feature = "luau"))]
+        const LOADED_MODULES_KEY: *const c_char = ffi::LUA_LOADED_TABLE;
+        #[cfg(feature = "luau")]
+        const LOADED_MODULES_KEY: *const c_char = cstr!("_REGISTEREDMODULES");
+
+        if cfg!(feature = "luau") && !modname.starts_with('@') {
+            return Err(Error::runtime("module name must begin with '@'"));
+        }
+        unsafe {
+            self.exec_raw::<()>(value, |state| {
+                ffi::luaL_getsubtable(state, ffi::LUA_REGISTRYINDEX, LOADED_MODULES_KEY);
+                ffi::lua_pushlstring(state, modname.as_ptr() as *const c_char, modname.len() as _);
+                ffi::lua_pushvalue(state, -3);
+                ffi::lua_rawset(state, -3);
+            })
+        }
+    }
+
+    /// Preloads module into an existing Lua state using the specified loader function.
     ///
-    /// If the function does not return a non-nil value then this method assigns true to
-    /// `package.loaded[modname]`.
+    /// When the module is required, the loader function will be called with module name as the
+    /// first argument.
     ///
-    /// Behavior is similar to Lua's [`require`] function.
+    /// This is similar to setting the [`package.preload[modname]`] field.
     ///
-    /// [`require`]: https://www.lua.org/manual/5.4/manual.html#pdf-require
-    pub fn load_from_function<T>(&self, modname: &str, func: Function) -> Result<T>
-    where
-        T: FromLua,
-    {
-        let lua = self.lock();
-        let state = lua.state();
+    /// [`package.preload[modname]`]: https://www.lua.org/manual/5.4/manual.html#pdf-package.preload
+    #[cfg(not(feature = "luau"))]
+    #[cfg_attr(docsrs, doc(cfg(not(feature = "luau"))))]
+    pub fn preload_module(&self, modname: &str, func: Function) -> Result<()> {
+        #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+        let preload = unsafe {
+            self.exec_raw::<Option<Table>>((), |state| {
+                ffi::lua_getfield(state, ffi::LUA_REGISTRYINDEX, ffi::LUA_PRELOAD_TABLE);
+            })?
+        };
+        #[cfg(any(feature = "lua51", feature = "luajit"))]
+        let preload = unsafe {
+            self.exec_raw::<Option<Table>>((), |state| {
+                if ffi::lua_getfield(state, ffi::LUA_REGISTRYINDEX, ffi::LUA_LOADED_TABLE) != ffi::LUA_TNIL {
+                    ffi::luaL_getsubtable(state, -1, ffi::LUA_LOADLIBNAME);
+                    ffi::luaL_getsubtable(state, -1, cstr!("preload"));
+                    ffi::lua_rotate(state, 1, 1);
+                }
+            })?
+        };
+        if let Some(preload) = preload {
+            preload.raw_set(modname, func)?;
+        }
+        Ok(())
+    }
+
+    #[doc(hidden)]
+    #[deprecated(since = "0.11.0", note = "Use `register_module` instead")]
+    #[cfg(not(feature = "luau"))]
+    #[cfg(not(tarpaulin_include))]
+    pub fn load_from_function<T: FromLua>(&self, modname: &str, func: Function) -> Result<T> {
         let loaded = unsafe {
-            let _sg = StackGuard::new(state);
-            check_stack(state, 2)?;
-            protect_lua!(state, 0, 1, fn(state) {
-                ffi::luaL_getsubtable(state, ffi::LUA_REGISTRYINDEX, cstr!("_LOADED"));
-            })?;
-            Table(lua.pop_ref())
+            self.exec_raw::<Table>((), |state| {
+                ffi::luaL_getsubtable(state, ffi::LUA_REGISTRYINDEX, ffi::LUA_LOADED_TABLE);
+            })?
         };
 
-        let modname = unsafe { lua.create_string(modname)? };
-        let value = match loaded.raw_get(&modname)? {
+        let value = match loaded.raw_get(modname)? {
             Value::Nil => {
-                let result = match func.call(&modname)? {
+                let result = match func.call(modname)? {
                     Value::Nil => Value::Boolean(true),
                     res => res,
                 };
@@ -394,24 +432,14 @@ impl Lua {
 
     /// Unloads module `modname`.
     ///
-    /// Removes module from the [`package.loaded`] table which allows to load it again.
-    /// It does not support unloading binary Lua modules since they are internally cached and can be
-    /// unloaded only by closing Lua state.
+    /// This method does not support unloading binary Lua modules since they are internally cached
+    /// and can be unloaded only by closing Lua state.
+    ///
+    /// This is similar to calling [`Lua::register_module`] with `Nil` value.
     ///
     /// [`package.loaded`]: https://www.lua.org/manual/5.4/manual.html#pdf-package.loaded
-    pub fn unload(&self, modname: &str) -> Result<()> {
-        let lua = self.lock();
-        let state = lua.state();
-        let loaded = unsafe {
-            let _sg = StackGuard::new(state);
-            check_stack(state, 2)?;
-            protect_lua!(state, 0, 1, fn(state) {
-                ffi::luaL_getsubtable(state, ffi::LUA_REGISTRYINDEX, cstr!("_LOADED"));
-            })?;
-            Table(lua.pop_ref())
-        };
-
-        loaded.raw_set(modname, Nil)
+    pub fn unload_module(&self, modname: &str) -> Result<()> {
+        self.register_module(modname, Nil)
     }
 
     // Executes module entrypoint function, which returns only one Value.

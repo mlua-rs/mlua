@@ -3,7 +3,6 @@ use std::collections::HashMap;
 use std::iter::FromIterator;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::string::String as StdString;
-use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 use std::{error, f32, f64, fmt};
 
@@ -1168,36 +1167,79 @@ fn test_jit_version() -> Result<()> {
 }
 
 #[test]
-fn test_load_from_function() -> Result<()> {
+fn test_register_module() -> Result<()> {
     let lua = Lua::new();
 
-    let i = Arc::new(AtomicU32::new(0));
-    let i2 = i.clone();
-    let func = lua.create_function(move |lua, modname: String| {
-        i2.fetch_add(1, Ordering::Relaxed);
+    let t = lua.create_table()?;
+    t.set("name", "my_module")?;
+    lua.register_module("@my_module", &t)?;
+
+    lua.load(
+        r#"
+        local my_module = require("@my_module")
+        assert(my_module.name == "my_module")
+    "#,
+    )
+    .exec()?;
+
+    lua.unload_module("@my_module")?;
+    lua.load(
+        r#"
+        local ok, err = pcall(function() return require("@my_module") end)
+        assert(not ok)
+        "#,
+    )
+    .exec()?;
+
+    #[cfg(feature = "luau")]
+    {
+        // Luau registered modules must have '@' prefix
+        let res = lua.register_module("my_module", 123);
+        assert!(res.is_err());
+        assert_eq!(
+            res.unwrap_err().to_string(),
+            "runtime error: module name must begin with '@'"
+        );
+    }
+
+    Ok(())
+}
+
+#[test]
+#[cfg(not(feature = "luau"))]
+fn test_preload_module() -> Result<()> {
+    let lua = Lua::new();
+
+    let loader = lua.create_function(move |lua, modname: String| {
         let t = lua.create_table()?;
-        t.set("__name", modname)?;
+        t.set("name", modname)?;
         Ok(t)
     })?;
 
-    let t: Table = lua.load_from_function("my_module", func.clone())?;
-    assert_eq!(t.get::<String>("__name")?, "my_module");
-    assert_eq!(i.load(Ordering::Relaxed), 1);
-
-    let _: Value = lua.load_from_function("my_module", func.clone())?;
-    assert_eq!(i.load(Ordering::Relaxed), 1);
-
-    let func_nil = lua.create_function(move |_, _: String| Ok(Value::Nil))?;
-    let v: Value = lua.load_from_function("my_module2", func_nil)?;
-    assert_eq!(v, Value::Boolean(true));
+    lua.preload_module("@my_module", loader.clone())?;
+    lua.load(
+        r#"
+        -- `my_module` is global for purposes of next test
+        my_module = require("@my_module")
+        assert(my_module.name == "@my_module")
+        local my_module2 = require("@my_module")
+        assert(my_module == my_module2)
+    "#,
+    )
+    .exec()
+    .unwrap();
 
     // Test unloading and loading again
-    lua.unload("my_module")?;
-    let _: Value = lua.load_from_function("my_module", func)?;
-    assert_eq!(i.load(Ordering::Relaxed), 2);
-
-    // Unloading nonexistent module must not fail
-    lua.unload("my_module2")?;
+    lua.unload_module("@my_module")?;
+    lua.load(
+        r#"
+        local my_module3 = require("@my_module")
+        -- `my_module` is not equal to `my_module3` because it was reloaded
+        assert(my_module ~= my_module3)
+        "#,
+    )
+    .exec()
+    .unwrap();
 
     Ok(())
 }
