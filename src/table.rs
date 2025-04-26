@@ -468,26 +468,16 @@ impl Table {
     ///
     /// It checks both the array part and the hash part.
     pub fn is_empty(&self) -> bool {
-        // Check array part
-        if self.raw_len() != 0 {
-            return false;
-        }
-
-        // Check hash part
         let lua = self.0.lua.lock();
-        let state = lua.state();
+        let ref_thread = lua.ref_thread();
         unsafe {
-            let _sg = StackGuard::new(state);
-            assert_stack(state, 4);
-
-            lua.push_ref(&self.0);
-            ffi::lua_pushnil(state);
-            if ffi::lua_next(state, -2) != 0 {
-                return false;
+            ffi::lua_pushnil(ref_thread);
+            if ffi::lua_next(ref_thread, self.0.index) == 0 {
+                return true;
             }
+            ffi::lua_pop(ref_thread, 2);
         }
-
-        true
+        false
     }
 
     /// Returns a reference to the metatable of this table, or `None` if no metatable is set.

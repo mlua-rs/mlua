@@ -28,7 +28,7 @@ use super::{Lua, WeakLua};
 static EXTRA_REGISTRY_KEY: u8 = 0;
 
 const WRAPPED_FAILURE_POOL_DEFAULT_CAPACITY: usize = 64;
-const REF_STACK_RESERVE: c_int = 1;
+const REF_STACK_RESERVE: c_int = 2;
 
 /// Data associated with the Lua state.
 pub(crate) struct ExtraData {
