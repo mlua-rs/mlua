@@ -455,34 +455,39 @@ unsafe fn write_to_buffer(
     size_out: *mut usize,
     data_fetcher: impl Fn() -> IoResult<Vec<u8>>,
 ) -> WriteResult {
-    struct DataCache(Vec<u8>);
+    struct DataCache(Option<Vec<u8>>);
 
     // The initial buffer size can be too small, to avoid making a second data fetch call,
     // we cache the content in the first call, and then re-use it.
 
     let lua = Lua::get_or_init_from_ptr(state);
-    if let Some(data_cache) = lua.app_data_ref::<DataCache>() {
-        let data_len = data_cache.0.len();
-        mlua_assert!(data_len <= buffer_size, "buffer is too small");
-        *size_out = data_len;
-        ptr::copy_nonoverlapping(data_cache.0.as_ptr(), buffer as *mut _, data_len);
-        drop(data_cache);
-        lua.remove_app_data::<DataCache>();
-        return WriteResult::Success;
+    match lua.try_app_data_mut::<DataCache>() {
+        Ok(Some(mut data_cache)) => {
+            if let Some(data) = data_cache.0.take() {
+                mlua_assert!(data.len() <= buffer_size, "buffer is too small");
+                *size_out = data.len();
+                ptr::copy_nonoverlapping(data.as_ptr(), buffer as *mut _, data.len());
+                return WriteResult::Success;
+            }
+        }
+        Ok(None) => {
+            // Init the cache
+            _ = lua.try_set_app_data(DataCache(None));
+        }
+        Err(_) => {}
     }
 
     match data_fetcher() {
         Ok(data) => {
-            let data_len = data.len();
-            *size_out = data_len;
-            if data_len > buffer_size {
+            *size_out = data.len();
+            if *size_out > buffer_size {
                 // Cache the data for the next call to avoid getting the contents again
-                lua.set_app_data(DataCache(data));
-                *size_out = data_len;
+                if let Ok(Some(mut data_cache)) = lua.try_app_data_mut::<DataCache>() {
+                    data_cache.0 = Some(data);
+                }
                 return WriteResult::BufferTooSmall;
             }
-            ptr::copy_nonoverlapping(data.as_ptr(), buffer as *mut _, data_len);
-            *size_out = data_len;
+            ptr::copy_nonoverlapping(data.as_ptr(), buffer as *mut _, data.len());
             WriteResult::Success
         }
         Err(_) => WriteResult::Failure,
