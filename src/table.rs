@@ -1013,7 +1013,10 @@ impl Serialize for SerializableTable<'_> {
 
         // Array
         let len = self.table.raw_len();
-        if len > 0 || self.table.is_array() {
+        if len > 0
+            || self.table.is_array()
+            || (self.options.encode_empty_tables_as_array && self.table.is_empty())
+        {
             let mut seq = serializer.serialize_seq(Some(len))?;
             let mut serialize_err = None;
             let res = self.table.for_each_value::<Value>(|value| {

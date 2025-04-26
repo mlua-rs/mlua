@@ -700,6 +700,15 @@ impl<'a> SerializableValue<'a> {
         self.options.sort_keys = enabled;
         self
     }
+
+    /// If true, empty Lua tables will be encoded as array, instead of map.
+    ///
+    /// Default: **false**
+    #[must_use]
+    pub const fn encode_empty_tables_as_array(mut self, enabled: bool) -> Self {
+        self.options.encode_empty_tables_as_array = enabled;
+        self
+    }
 }
 
 #[cfg(feature = "serialize")]

@@ -49,6 +49,11 @@ pub struct Options {
     ///
     /// Default: **false**
     pub sort_keys: bool,
+
+    /// If true, empty Lua tables will be encoded as array, instead of map.
+    ///
+    /// Default: **false**
+    pub encode_empty_tables_as_array: bool,
 }
 
 impl Default for Options {
@@ -64,6 +69,7 @@ impl Options {
             deny_unsupported_types: true,
             deny_recursive_tables: true,
             sort_keys: false,
+            encode_empty_tables_as_array: false,
         }
     }
 
@@ -91,6 +97,15 @@ impl Options {
     #[must_use]
     pub const fn sort_keys(mut self, enabled: bool) -> Self {
         self.sort_keys = enabled;
+        self
+    }
+
+    /// Sets [`encode_empty_tables_as_array`] option.
+    ///
+    /// [`encode_empty_tables_as_array`]: #structfield.encode_empty_tables_as_array
+    #[must_use]
+    pub const fn encode_empty_tables_as_array(mut self, enabled: bool) -> Self {
+        self.encode_empty_tables_as_array = enabled;
         self
     }
 }
@@ -141,6 +156,9 @@ impl<'de> serde::Deserializer<'de> for Deserializer {
                 Err(_) => visitor.visit_bytes(&s.as_bytes()),
             },
             Value::Table(ref t) if t.raw_len() > 0 || t.is_array() => self.deserialize_seq(visitor),
+            Value::Table(ref t) if self.options.encode_empty_tables_as_array && t.is_empty() => {
+                self.deserialize_seq(visitor)
+            }
             Value::Table(_) => self.deserialize_map(visitor),
             Value::LightUserData(ud) if ud.0.is_null() => visitor.visit_none(),
             Value::UserData(ud) if ud.is_serializable() => {
