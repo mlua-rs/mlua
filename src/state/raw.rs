@@ -12,7 +12,7 @@ use crate::chunk::ChunkMode;
 use crate::error::{Error, Result};
 use crate::function::Function;
 use crate::memory::{MemoryState, ALLOCATOR};
-use crate::state::util::{callback_error_ext, ref_stack_pop, StateGuard};
+use crate::state::util::{callback_error_ext, ref_stack_pop};
 use crate::stdlib::StdLib;
 use crate::string::String;
 use crate::table::Table;
@@ -436,7 +436,6 @@ impl RawLua {
                 match (*extra).hook_callback.clone() {
                     Some(hook_callback) => {
                         let rawlua = (*extra).raw_lua();
-                        let _guard = StateGuard::new(rawlua, state);
                         let debug = Debug::new(rawlua, ar);
                         hook_callback((*extra).lua(), debug)
                     }
@@ -467,7 +466,6 @@ impl RawLua {
 
             let status = callback_error_ext(state, ptr::null_mut(), false, |extra, _| {
                 let rawlua = (*extra).raw_lua();
-                let _guard = StateGuard::new(rawlua, state);
                 let debug = Debug::new(rawlua, ar);
                 let hook_callback = (*hook_callback_ptr).clone();
                 hook_callback((*extra).lua(), debug)
@@ -1197,7 +1195,6 @@ impl RawLua {
                 // Lua ensures that `LUA_MINSTACK` stack spaces are available (after pushing arguments)
                 // The lock must be already held as the callback is executed
                 let rawlua = (*extra).raw_lua();
-                let _guard = StateGuard::new(rawlua, state);
                 match (*upvalue).data {
                     Some(ref func) => func(rawlua, nargs),
                     None => Err(Error::CallbackDestructed),
@@ -1241,12 +1238,10 @@ impl RawLua {
             // Async functions cannot be scoped and therefore destroyed,
             // so the first upvalue is always valid
             let upvalue = get_userdata::<AsyncCallbackUpvalue>(state, ffi::lua_upvalueindex(1));
-            let extra = (*upvalue).extra.get();
-            callback_error_ext(state, extra, true, |extra, nargs| {
+            callback_error_ext(state, (*upvalue).extra.get(), true, |extra, nargs| {
                 // Lua ensures that `LUA_MINSTACK` stack spaces are available (after pushing arguments)
                 // The lock must be already held as the callback is executed
                 let rawlua = (*extra).raw_lua();
-                let _guard = StateGuard::new(rawlua, state);
 
                 let func = &*(*upvalue).data;
                 let fut = func(rawlua, nargs);
@@ -1271,7 +1266,6 @@ impl RawLua {
                 // Lua ensures that `LUA_MINSTACK` stack spaces are available (after pushing arguments)
                 // The lock must be already held as the future is polled
                 let rawlua = (*extra).raw_lua();
-                let _guard = StateGuard::new(rawlua, state);
 
                 let fut = &mut (*upvalue).data;
                 let mut ctx = Context::from_waker(rawlua.waker());

@@ -47,7 +47,6 @@ use serde::Serialize;
 pub(crate) use extra::ExtraData;
 pub use raw::RawLua;
 pub(crate) use util::callback_error_ext;
-use util::StateGuard;
 
 /// Top level Lua struct which represents an instance of Lua VM.
 pub struct Lua {
@@ -457,7 +456,6 @@ impl Lua {
 
         callback_error_ext(state, ptr::null_mut(), true, move |extra, nargs| {
             let rawlua = (*extra).raw_lua();
-            let _guard = StateGuard::new(rawlua, state);
             let args = A::from_stack_args(nargs, 1, None, rawlua)?;
             func(rawlua.lua(), args)?.push_into_stack(rawlua)?;
             Ok(1)
@@ -694,7 +692,6 @@ impl Lua {
                 if XRc::strong_count(&interrupt_cb) > 2 {
                     return Ok(VmState::Continue); // Don't allow recursion
                 }
-                let _guard = StateGuard::new((*extra).raw_lua(), state);
                 interrupt_cb((*extra).lua())
             });
             match result {
@@ -772,8 +769,7 @@ impl Lua {
             ffi::lua_pushthread(child);
             ffi::lua_xmove(child, (*extra).ref_thread, 1);
             let value = Thread((*extra).raw_lua().pop_ref_thread(), child);
-            let _guard = StateGuard::new((*extra).raw_lua(), parent);
-            callback_error_ext((*extra).raw_lua().state(), extra, false, move |extra, _| {
+            callback_error_ext(parent, extra, false, move |extra, _| {
                 callback((*extra).lua(), value)
             })
         } else {
