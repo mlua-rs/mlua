@@ -7,10 +7,10 @@ use crate::error::{Error, Result};
 use crate::state::{ExtraData, RawLua};
 use crate::util::{self, get_internal_metatable, WrappedFailure};
 
-pub(super) struct StateGuard<'a>(&'a RawLua, *mut ffi::lua_State);
+struct StateGuard<'a>(&'a RawLua, *mut ffi::lua_State);
 
 impl<'a> StateGuard<'a> {
-    pub(super) fn new(inner: &'a RawLua, mut state: *mut ffi::lua_State) -> Self {
+    fn new(inner: &'a RawLua, mut state: *mut ffi::lua_State) -> Self {
         state = inner.state.replace(state);
         Self(inner, state)
     }
@@ -101,7 +101,11 @@ where
     // to store a wrapped failure (error or panic) *before* we proceed.
     let prealloc_failure = PreallocatedFailure::reserve(state, extra);
 
-    match catch_unwind(AssertUnwindSafe(|| f(extra, nargs))) {
+    match catch_unwind(AssertUnwindSafe(|| {
+        let rawlua = (*extra).raw_lua();
+        let _guard = StateGuard::new(rawlua, state);
+        f(extra, nargs)
+    })) {
         Ok(Ok(r)) => {
             // Return unused `WrappedFailure` to the pool
             prealloc_failure.release(state, extra);
