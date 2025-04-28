@@ -249,7 +249,7 @@ impl ExtraData {
     }
 
     #[inline(always)]
-    pub(super) unsafe fn raw_lua(&self) -> &RawLua {
+    pub(crate) unsafe fn raw_lua(&self) -> &RawLua {
         &*self.lua.assume_init_ref().raw.data_ptr()
     }
 

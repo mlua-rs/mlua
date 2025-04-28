@@ -422,11 +422,11 @@ pub(super) unsafe extern "C" fn init_config(config: *mut ffi::luarequire_Configu
         let path = CStr::from_ptr(path).to_string_lossy();
         let chunk_name = CStr::from_ptr(chunk_name).to_string_lossy();
         let contents = CStr::from_ptr(contents).to_bytes();
-        let lua = Lua::get_or_init_from_ptr(state);
-        callback_error_ext(state, ptr::null_mut(), false, move |_extra, _| {
-            match this.load(lua, &path, &chunk_name, contents)? {
-                Value::Nil => lua.lock().push(true)?,
-                value => lua.lock().push(value)?,
+        callback_error_ext(state, ptr::null_mut(), false, move |extra, _| {
+            let rawlua = (*extra).raw_lua();
+            match this.load(rawlua.lua(), &path, &chunk_name, contents)? {
+                Value::Nil => rawlua.push(true)?,
+                value => rawlua.push_value(&value)?,
             };
             Ok(1)
         })
