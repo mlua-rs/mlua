@@ -14,7 +14,7 @@ use crate::userdata::{
     borrow_userdata_scoped, borrow_userdata_scoped_mut, AnyUserData, MetaMethod, TypeIdHints, UserData,
     UserDataFields, UserDataMethods, UserDataStorage,
 };
-use crate::util::{get_userdata, short_type_name};
+use crate::util::short_type_name;
 use crate::value::Value;
 
 #[cfg(feature = "async")]
@@ -143,16 +143,16 @@ impl<T> UserDataRegistry<T> {
                         method(rawlua.lua(), ud, args?)?.push_into_stack_multi(rawlua)
                     }))
                 }
-                #[rustfmt::skip]
-                UserDataType::Unique(target_ptr)
-                    if get_userdata::<UserDataStorage<T>>(state, self_index) as *mut c_void == target_ptr =>
-                {
+                UserDataType::Unique(target_ptr) if ffi::lua_touserdata(state, self_index) == target_ptr => {
                     let ud = target_ptr as *mut UserDataStorage<T>;
                     try_self_arg!((*ud).try_borrow_scoped(|ud| {
                         method(rawlua.lua(), ud, args?)?.push_into_stack_multi(rawlua)
                     }))
                 }
-                _ => Err(Error::bad_self_argument(&name, Error::UserDataTypeMismatch)),
+                UserDataType::Unique(_) => {
+                    try_self_arg!(rawlua.get_userdata_type_id::<T>(state, self_index));
+                    Err(Error::bad_self_argument(&name, Error::UserDataTypeMismatch))
+                }
             }
         })
     }
@@ -192,16 +192,16 @@ impl<T> UserDataRegistry<T> {
                         method(rawlua.lua(), ud, args?)?.push_into_stack_multi(rawlua)
                     }))
                 }
-                #[rustfmt::skip]
-                UserDataType::Unique(target_ptr)
-                    if get_userdata::<UserDataStorage<T>>(state, self_index) as *mut c_void == target_ptr =>
-                {
+                UserDataType::Unique(target_ptr) if ffi::lua_touserdata(state, self_index) == target_ptr => {
                     let ud = target_ptr as *mut UserDataStorage<T>;
                     try_self_arg!((*ud).try_borrow_scoped_mut(|ud| {
                         method(rawlua.lua(), ud, args?)?.push_into_stack_multi(rawlua)
                     }))
                 }
-                _ => Err(Error::bad_self_argument(&name, Error::UserDataTypeMismatch)),
+                UserDataType::Unique(_) => {
+                    try_self_arg!(rawlua.get_userdata_type_id::<T>(state, self_index));
+                    Err(Error::bad_self_argument(&name, Error::UserDataTypeMismatch))
+                }
             }
         })
     }
