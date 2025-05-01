@@ -276,6 +276,23 @@ fn test_scope_userdata_mismatch() -> Result<()> {
             Err(other) => panic!("wrong error type {other:?}"),
             Ok(_) => panic!("incorrectly returned Ok"),
         }
+
+        // Pass non-userdata type
+        let err = inc.call::<()>((&au, 321)).err().unwrap();
+        match err {
+            Error::CallbackError { ref cause, .. } => match cause.as_ref() {
+                Error::BadArgument { to, pos, name, cause } => {
+                    assert_eq!(to.as_deref(), Some("MyUserData.inc"));
+                    assert_eq!(*pos, 1);
+                    assert_eq!(name.as_deref(), Some("self"));
+                    assert!(matches!(*cause.as_ref(), Error::FromLuaConversionError { .. }));
+                }
+                other => panic!("wrong error type {other:?}"),
+            },
+            other => panic!("wrong error type {other:?}"),
+        }
+        let err_msg = "bad argument `self` to `MyUserData.inc`: error converting Lua number to userdata (expected userdata of type 'MyUserData')";
+        assert!(err.to_string().contains(err_msg));
         Ok(())
     })?;
 
