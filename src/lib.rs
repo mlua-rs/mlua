@@ -66,6 +66,7 @@
 // warnings at all.
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![cfg_attr(not(send), allow(clippy::arc_with_non_send_sync))]
+#![allow(clippy::ptr_eq)]
 
 #[macro_use]
 mod macros;
