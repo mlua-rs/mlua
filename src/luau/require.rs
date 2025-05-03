@@ -8,6 +8,7 @@ use std::result::Result as StdResult;
 use std::{env, fmt, fs, ptr};
 
 use crate::error::Result;
+use crate::function::Function;
 use crate::state::{callback_error_ext, Lua};
 use crate::types::MaybeSend;
 use crate::value::Value;
@@ -85,10 +86,10 @@ pub trait Require: MaybeSend {
     /// This function is only called if `is_config_present` returns true.
     fn config(&self) -> IoResult<Vec<u8>>;
 
-    /// Loads the module and returns the result (function or table).
-    fn load(&self, lua: &Lua, path: &str, chunk_name: &str, content: &[u8]) -> Result<Value> {
+    /// Returns a loader that when called, loads the module and returns the result.
+    fn loader(&self, lua: &Lua, path: &str, chunk_name: &str, content: &[u8]) -> Result<Function> {
         let _ = path;
-        lua.load(content).set_name(chunk_name).call(())
+        lua.load(content).set_name(chunk_name).into_function()
     }
 }
 
@@ -424,7 +425,7 @@ pub(super) unsafe extern "C" fn init_config(config: *mut ffi::luarequire_Configu
         let contents = CStr::from_ptr(contents).to_bytes();
         callback_error_ext(state, ptr::null_mut(), false, move |extra, _| {
             let rawlua = (*extra).raw_lua();
-            match this.load(rawlua.lua(), &path, &chunk_name, contents)? {
+            match (this.loader(rawlua.lua(), &path, &chunk_name, contents)?).call(())? {
                 Value::Nil => rawlua.push(true)?,
                 value => rawlua.push_value(&value)?,
             };
