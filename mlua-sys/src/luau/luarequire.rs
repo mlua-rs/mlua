@@ -101,6 +101,8 @@ pub struct luarequire_Configuration {
 
     // Executes the module and places the result on the stack. Returns the number of results placed on the
     // stack.
+    // Returning -1 directs the requiring thread to yield. In this case, this thread should be resumed with
+    // the module result pushed onto its stack.
     pub load: unsafe extern "C-unwind" fn(
         L: *mut lua_State,
         ctx: *mut c_void,
@@ -140,4 +142,11 @@ extern "C-unwind" {
     // required.
     // Expects the path and table to be passed as arguments on the stack.
     pub fn luarequire_registermodule(L: *mut lua_State) -> c_int;
+
+    // Clears the entry associated with the given cache key from the require cache.
+    // Expects the cache key to be passed as an argument on the stack.
+    pub fn luarequire_clearcacheentry(L: *mut lua_State) -> c_int;
+
+    // Clears all entries from the require cache.
+    pub fn luarequire_clearcache(L: *mut lua_State) -> c_int;
 }
