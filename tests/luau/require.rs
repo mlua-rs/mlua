@@ -60,12 +60,14 @@ fn test_require_without_config() {
     // RequireWithFileAmbiguity
     let res = run_require(&lua, "./require/without_config/ambiguous_file_requirer");
     assert!(res.is_err());
-    assert!((res.unwrap_err().to_string()).contains("require path could not be resolved to a unique file"));
+    assert!((res.unwrap_err().to_string())
+        .contains("could not resolve child component \"dependency\" (ambiguous)"));
 
     // RequireWithDirectoryAmbiguity
     let res = run_require(&lua, "./require/without_config/ambiguous_directory_requirer");
     assert!(res.is_err());
-    assert!((res.unwrap_err().to_string()).contains("require path could not be resolved to a unique file"));
+    assert!((res.unwrap_err().to_string())
+        .contains("could not resolve child component \"dependency\" (ambiguous)"));
 
     // CheckCachedResult
     let res = run_require(&lua, "./require/without_config/validate_cache").unwrap();
