@@ -1356,7 +1356,7 @@ impl RawLua {
             "#,
         )
         .try_cache()
-        .set_name("__mlua_async_poll")
+        .set_name("=__mlua_async_poll")
         .set_environment(env)
         .into_function()
     }
