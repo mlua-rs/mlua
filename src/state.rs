@@ -356,7 +356,7 @@ impl Lua {
         #[cfg(not(feature = "luau"))]
         const LOADED_MODULES_KEY: *const c_char = ffi::LUA_LOADED_TABLE;
         #[cfg(feature = "luau")]
-        const LOADED_MODULES_KEY: *const c_char = cstr!("_REGISTEREDMODULES");
+        const LOADED_MODULES_KEY: *const c_char = ffi::LUA_REGISTERED_MODULES_TABLE;
 
         if cfg!(feature = "luau") && !modname.starts_with('@') {
             return Err(Error::runtime("module name must begin with '@'"));

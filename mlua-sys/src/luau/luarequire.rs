@@ -4,6 +4,8 @@ use std::os::raw::{c_char, c_int, c_void};
 
 use super::lua::lua_State;
 
+pub const LUA_REGISTERED_MODULES_TABLE: *const c_char = cstr!("_REGISTEREDMODULES");
+
 #[repr(C)]
 pub enum luarequire_NavigateResult {
     Success,

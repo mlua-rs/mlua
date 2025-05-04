@@ -5,13 +5,13 @@ use std::io::Result as IoResult;
 use std::os::raw::{c_char, c_int, c_void};
 use std::path::{Component, Path, PathBuf};
 use std::result::Result as StdResult;
-use std::{env, fmt, fs, ptr};
+use std::{env, fmt, fs, mem, ptr};
 
 use crate::error::Result;
 use crate::function::Function;
 use crate::state::{callback_error_ext, Lua};
+use crate::table::Table;
 use crate::types::MaybeSend;
-use crate::value::Value;
 
 /// An error that can occur during navigation in the Luau `require` system.
 pub enum NavigateError {
@@ -87,6 +87,8 @@ pub trait Require: MaybeSend {
     fn config(&self) -> IoResult<Vec<u8>>;
 
     /// Returns a loader that when called, loads the module and returns the result.
+    ///
+    /// Loader can be sync or async.
     fn loader(&self, lua: &Lua, path: &str, chunk_name: &str, content: &[u8]) -> Result<Function> {
         let _ = path;
         lua.load(content).set_name(chunk_name).into_function()
@@ -425,10 +427,7 @@ pub(super) unsafe extern "C" fn init_config(config: *mut ffi::luarequire_Configu
         let contents = CStr::from_ptr(contents).to_bytes();
         callback_error_ext(state, ptr::null_mut(), false, move |extra, _| {
             let rawlua = (*extra).raw_lua();
-            match (this.loader(rawlua.lua(), &path, &chunk_name, contents)?).call(())? {
-                Value::Nil => rawlua.push(true)?,
-                value => rawlua.push_value(&value)?,
-            };
+            rawlua.push(this.loader(rawlua.lua(), &path, &chunk_name, contents)?)?;
             Ok(1)
         })
     }
@@ -493,6 +492,105 @@ unsafe fn write_to_buffer(
         }
         Err(_) => WriteResult::Failure,
     }
+}
+
+#[cfg(feature = "luau")]
+pub fn create_require_function<R: Require + 'static>(lua: &Lua, require: R) -> Result<Function> {
+    unsafe extern "C-unwind" fn find_current_file(state: *mut ffi::lua_State) -> c_int {
+        let mut ar: ffi::lua_Debug = mem::zeroed();
+        for level in 2.. {
+            if ffi::lua_getinfo(state, level, cstr!("s"), &mut ar) == 0 {
+                ffi::luaL_error(state, cstr!("require is not supported in this context"));
+            }
+            if CStr::from_ptr(ar.what) != c"C" {
+                break;
+            }
+        }
+        ffi::lua_pushstring(state, ar.source);
+        1
+    }
+
+    unsafe extern "C-unwind" fn get_cache_key(state: *mut ffi::lua_State) -> c_int {
+        let requirer = ffi::lua_touserdata(state, ffi::lua_upvalueindex(1)) as *const Box<dyn Require>;
+        let cache_key = (*requirer).cache_key();
+        ffi::lua_pushlstring(state, cache_key.as_ptr() as *const _, cache_key.len());
+        1
+    }
+
+    let (get_cache_key, find_current_file, proxyrequire, registered_modules, loader_cache) = unsafe {
+        lua.exec_raw::<(Function, Function, Function, Table, Table)>((), move |state| {
+            let requirer_ptr = ffi::lua_newuserdata_t::<Box<dyn Require>>(state, Box::new(require));
+            ffi::lua_pushcclosured(state, get_cache_key, cstr!("get_cache_key"), 1);
+            ffi::lua_pushcfunctiond(state, find_current_file, cstr!("find_current_file"));
+            ffi::luarequire_pushproxyrequire(state, init_config, requirer_ptr as *mut _);
+            ffi::luaL_getsubtable(state, ffi::LUA_REGISTRYINDEX, ffi::LUA_REGISTERED_MODULES_TABLE);
+            ffi::luaL_getsubtable(state, ffi::LUA_REGISTRYINDEX, cstr!("__MLUA_LOADER_CACHE"));
+        })
+    }?;
+
+    unsafe extern "C-unwind" fn error(state: *mut ffi::lua_State) -> c_int {
+        ffi::luaL_where(state, 1);
+        ffi::lua_pushvalue(state, 1);
+        ffi::lua_concat(state, 2);
+        ffi::lua_error(state);
+    }
+
+    unsafe extern "C-unwind" fn r#type(state: *mut ffi::lua_State) -> c_int {
+        ffi::lua_pushstring(state, ffi::lua_typename(state, ffi::lua_type(state, 1)));
+        1
+    }
+
+    let (error, r#type) = unsafe {
+        lua.exec_raw::<(Function, Function)>((), move |state| {
+            ffi::lua_pushcfunctiond(state, error, cstr!("error"));
+            ffi::lua_pushcfunctiond(state, r#type, cstr!("type"));
+        })
+    }?;
+
+    // Prepare environment for the "require" function
+    let env = lua.create_table_with_capacity(0, 7)?;
+    env.raw_set("get_cache_key", get_cache_key)?;
+    env.raw_set("find_current_file", find_current_file)?;
+    env.raw_set("proxyrequire", proxyrequire)?;
+    env.raw_set("REGISTERED_MODULES", registered_modules)?;
+    env.raw_set("LOADER_CACHE", loader_cache)?;
+    env.raw_set("error", error)?;
+    env.raw_set("type", r#type)?;
+
+    lua.load(
+        r#"
+        local path = ...
+        if type(path) ~= "string" then
+            error("bad argument #1 to 'require' (string expected, got " .. type(path) .. ")")
+        end
+
+        -- Check if the module (path) is explicitly registered
+        local maybe_result = REGISTERED_MODULES[path]
+        if maybe_result ~= nil then
+            return maybe_result
+        end
+
+        local loader = proxyrequire(path, find_current_file())
+        local cache_key = get_cache_key()
+        -- Check if the loader result is already cached
+        local result = LOADER_CACHE[cache_key]
+        if result ~= nil then
+            return result
+        end
+
+        -- Call the loader function and cache the result
+        result = loader()
+        if result == nil then
+            result = true
+        end
+        LOADER_CACHE[cache_key] = result
+        return result
+        "#,
+    )
+    .try_cache()
+    .set_name("=__mlua_require")
+    .set_environment(env)
+    .into_function()
 }
 
 #[cfg(test)]

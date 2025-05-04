@@ -1,5 +1,4 @@
 use std::ffi::CStr;
-use std::mem;
 use std::os::raw::c_int;
 
 use crate::error::Result;
@@ -16,26 +15,7 @@ impl Lua {
     #[cfg(any(feature = "luau", doc))]
     #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
     pub fn create_require_function<R: Require + 'static>(&self, require: R) -> Result<Function> {
-        unsafe extern "C-unwind" fn mlua_require(state: *mut ffi::lua_State) -> c_int {
-            let mut ar: ffi::lua_Debug = mem::zeroed();
-            if ffi::lua_getinfo(state, 1, cstr!("s"), &mut ar) == 0 {
-                ffi::luaL_error(state, cstr!("require is not supported in this context"));
-            }
-            let top = ffi::lua_gettop(state);
-            ffi::lua_pushvalue(state, ffi::lua_upvalueindex(2)); // the "proxy" require function
-            ffi::lua_pushvalue(state, 1); // require path
-            ffi::lua_pushstring(state, ar.source); // current file
-            ffi::lua_call(state, 2, ffi::LUA_MULTRET);
-            ffi::lua_gettop(state) - top
-        }
-
-        unsafe {
-            self.exec_raw((), move |state| {
-                let requirer_ptr = ffi::lua_newuserdata_t::<Box<dyn Require>>(state, Box::new(require));
-                ffi::luarequire_pushproxyrequire(state, require::init_config, requirer_ptr as *mut _);
-                ffi::lua_pushcclosured(state, mlua_require, cstr!("require"), 2);
-            })
-        }
+        require::create_require_function(self, require)
     }
 
     pub(crate) unsafe fn configure_luau(&self) -> Result<()> {
