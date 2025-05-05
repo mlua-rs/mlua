@@ -20,7 +20,7 @@ use {libloading::Library, rustc_hash::FxHashMap};
 //
 
 #[cfg(unix)]
-const TARGET_MLUA_LUAU_ABI_VERSION: u32 = 2;
+const TARGET_MLUA_LUAU_ABI_VERSION: u32 = 3;
 
 #[cfg(all(unix, feature = "module"))]
 #[no_mangle]
