@@ -642,6 +642,7 @@ impl LuaType for Function {
 }
 
 #[cfg(feature = "async")]
+#[must_use = "futures do nothing unless you `.await` or poll them"]
 pub struct AsyncCallFuture<R: FromLuaMulti>(Result<AsyncThread<R>>);
 
 #[cfg(feature = "async")]
