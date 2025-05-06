@@ -1,6 +1,6 @@
 [package]
 name = "mlua"
-version = "0.10.4" # remember to update mlua_derive
+version = "0.11.0-beta.1" # remember to update mlua_derive
 authors = ["Aleksandr Orlenko <zxteam@pm.me>", "kyren <catherine@kyju.org>"]
 rust-version = "1.79.0"
 edition = "2021"
@@ -46,7 +46,7 @@ anyhow = ["dep:anyhow", "error-send"]
 userdata-wrappers = []
 
 [dependencies]
-mlua_derive = { version = "=0.10.1", optional = true, path = "mlua_derive" }
+mlua_derive = { version = "=0.11.0-beta.1", optional = true, path = "mlua_derive" }
 bstr = { version = "1.0", features = ["std"], default-features = false }
 either = "1.0"
 num-traits = { version = "0.2.14" }
