@@ -117,7 +117,7 @@ pub struct luarequire_Configuration {
 // Populates function pointers in the given luarequire_Configuration.
 pub type luarequire_Configuration_init = unsafe extern "C" fn(config: *mut luarequire_Configuration);
 
-extern "C-unwind" {
+unsafe extern "C-unwind" {
     // Initializes and pushes the require closure onto the stack without registration.
     pub fn luarequire_pushrequire(
         L: *mut lua_State,

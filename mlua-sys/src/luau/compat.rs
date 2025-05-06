@@ -368,7 +368,7 @@ pub unsafe fn luaL_loadbufferenv(
     mode: *const c_char,
     mut env: c_int,
 ) -> c_int {
-    extern "C" {
+    unsafe extern "C" {
         fn free(p: *mut c_void);
     }
 

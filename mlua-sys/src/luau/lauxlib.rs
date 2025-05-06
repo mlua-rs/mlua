@@ -3,7 +3,7 @@
 use std::os::raw::{c_char, c_float, c_int, c_void};
 use std::ptr;
 
-use super::lua::{self, lua_CFunction, lua_Number, lua_State, lua_Unsigned, LUA_REGISTRYINDEX};
+use super::lua::{self, LUA_REGISTRYINDEX, lua_CFunction, lua_Number, lua_State, lua_Unsigned};
 
 #[repr(C)]
 pub struct luaL_Reg {
@@ -11,7 +11,7 @@ pub struct luaL_Reg {
     pub func: lua_CFunction,
 }
 
-extern "C-unwind" {
+unsafe extern "C-unwind" {
     pub fn luaL_register(L: *mut lua_State, libname: *const c_char, l: *const luaL_Reg);
     #[link_name = "luaL_getmetafield"]
     pub fn luaL_getmetafield_(L: *mut lua_State, obj: c_int, e: *const c_char) -> c_int;
@@ -182,7 +182,7 @@ pub struct luaL_Strbuf {
 // For compatibility
 pub type luaL_Buffer = luaL_Strbuf;
 
-extern "C-unwind" {
+unsafe extern "C-unwind" {
     pub fn luaL_buffinit(L: *mut lua_State, B: *mut luaL_Strbuf);
     pub fn luaL_buffinitsize(L: *mut lua_State, B: *mut luaL_Strbuf, size: usize) -> *mut c_char;
     pub fn luaL_prepbuffsize(B: *mut luaL_Strbuf, size: usize) -> *mut c_char;

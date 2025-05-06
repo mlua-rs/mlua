@@ -12,10 +12,10 @@ pub const LUA_MULTRET: c_int = -1;
 const LUAI_MAXCSTACK: c_int = 1000000;
 
 // Number of valid Lua userdata tags
-const LUA_UTAG_LIMIT: c_int = 128;
+pub const LUA_UTAG_LIMIT: c_int = 128;
 
 // Number of valid Lua lightuserdata tags
-const LUA_LUTAG_LIMIT: c_int = 128;
+pub const LUA_LUTAG_LIMIT: c_int = 128;
 
 //
 // Pseudo-indices
@@ -95,7 +95,7 @@ pub const fn luau_version() -> Option<&'static str> {
     option_env!("LUAU_VERSION")
 }
 
-extern "C-unwind" {
+unsafe extern "C-unwind" {
     //
     // State manipulation
     //
@@ -264,14 +264,14 @@ pub const LUA_GCSETGOAL: c_int = 7;
 pub const LUA_GCSETSTEPMUL: c_int = 8;
 pub const LUA_GCSETSTEPSIZE: c_int = 9;
 
-extern "C-unwind" {
+unsafe extern "C-unwind" {
     pub fn lua_gc(L: *mut lua_State, what: c_int, data: c_int) -> c_int;
 }
 
 //
 // Memory statistics
 //
-extern "C-unwind" {
+unsafe extern "C-unwind" {
     pub fn lua_setmemcat(L: *mut lua_State, category: c_int);
     pub fn lua_totalbytes(L: *mut lua_State, category: c_int) -> usize;
 }
@@ -279,7 +279,7 @@ extern "C-unwind" {
 //
 // Miscellaneous functions
 //
-extern "C-unwind" {
+unsafe extern "C-unwind" {
     pub fn lua_error(L: *mut lua_State) -> !;
     pub fn lua_next(L: *mut lua_State, idx: c_int) -> c_int;
     pub fn lua_rawiter(L: *mut lua_State, idx: c_int, iter: c_int) -> c_int;
@@ -304,7 +304,7 @@ extern "C-unwind" {
 pub const LUA_NOREF: c_int = -1;
 pub const LUA_REFNIL: c_int = 0;
 
-extern "C-unwind" {
+unsafe extern "C-unwind" {
     pub fn lua_ref(L: *mut lua_State, idx: c_int) -> c_int;
     pub fn lua_unref(L: *mut lua_State, r#ref: c_int);
 }
@@ -470,7 +470,7 @@ pub type lua_Coverage = unsafe extern "C-unwind" fn(
     size: usize,
 );
 
-extern "C-unwind" {
+unsafe extern "C-unwind" {
     pub fn lua_stackdepth(L: *mut lua_State) -> c_int;
     pub fn lua_getinfo(L: *mut lua_State, level: c_int, what: *const c_char, ar: *mut lua_Debug) -> c_int;
     pub fn lua_getargument(L: *mut lua_State, level: c_int, n: c_int) -> c_int;
@@ -536,12 +536,12 @@ pub struct lua_Callbacks {
     pub onallocate: Option<unsafe extern "C-unwind" fn(L: *mut lua_State, osize: usize, nsize: usize)>,
 }
 
-extern "C" {
+unsafe extern "C" {
     pub fn lua_callbacks(L: *mut lua_State) -> *mut lua_Callbacks;
 }
 
 // Functions from customization lib
-extern "C" {
+unsafe extern "C" {
     pub fn luau_setfflag(name: *const c_char, value: c_int) -> c_int;
     pub fn lua_getmetatablepointer(L: *mut lua_State, idx: c_int) -> *const c_void;
 }

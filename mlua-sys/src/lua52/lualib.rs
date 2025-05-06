@@ -15,7 +15,7 @@ pub const LUA_DBLIBNAME: *const c_char = cstr!("debug");
 pub const LUA_LOADLIBNAME: *const c_char = cstr!("package");
 
 #[cfg_attr(all(windows, raw_dylib), link(name = "lua52", kind = "raw-dylib"))]
-extern "C-unwind" {
+unsafe extern "C-unwind" {
     pub fn luaopen_base(L: *mut lua_State) -> c_int;
     pub fn luaopen_coroutine(L: *mut lua_State) -> c_int;
     pub fn luaopen_table(L: *mut lua_State) -> c_int;

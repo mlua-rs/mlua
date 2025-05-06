@@ -21,7 +21,7 @@ pub const LUA_JITLIBNAME: *const c_char = cstr!("jit");
 pub const LUA_FFILIBNAME: *const c_char = cstr!("ffi");
 
 #[cfg_attr(all(windows, raw_dylib), link(name = "lua51", kind = "raw-dylib"))]
-extern "C-unwind" {
+unsafe extern "C-unwind" {
     pub fn luaopen_base(L: *mut lua_State) -> c_int;
     pub fn luaopen_table(L: *mut lua_State) -> c_int;
     pub fn luaopen_io(L: *mut lua_State) -> c_int;

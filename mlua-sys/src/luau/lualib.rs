@@ -15,7 +15,7 @@ pub const LUA_MATHLIBNAME: *const c_char = cstr!("math");
 pub const LUA_DBLIBNAME: *const c_char = cstr!("debug");
 pub const LUA_VECLIBNAME: *const c_char = cstr!("vector");
 
-extern "C-unwind" {
+unsafe extern "C-unwind" {
     pub fn luaopen_base(L: *mut lua_State) -> c_int;
     pub fn luaopen_coroutine(L: *mut lua_State) -> c_int;
     pub fn luaopen_table(L: *mut lua_State) -> c_int;

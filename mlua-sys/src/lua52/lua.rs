@@ -95,7 +95,7 @@ pub type lua_Alloc =
     unsafe extern "C" fn(ud: *mut c_void, ptr: *mut c_void, osize: usize, nsize: usize) -> *mut c_void;
 
 #[cfg_attr(all(windows, raw_dylib), link(name = "lua52", kind = "raw-dylib"))]
-extern "C-unwind" {
+unsafe extern "C-unwind" {
     //
     // State manipulation
     //
@@ -161,14 +161,14 @@ pub const LUA_OPLT: c_int = 1;
 pub const LUA_OPLE: c_int = 2;
 
 #[cfg_attr(all(windows, raw_dylib), link(name = "lua52", kind = "raw-dylib"))]
-extern "C-unwind" {
+unsafe extern "C-unwind" {
     pub fn lua_arith(L: *mut lua_State, op: c_int);
     pub fn lua_rawequal(L: *mut lua_State, idx1: c_int, idx2: c_int) -> c_int;
     pub fn lua_compare(L: *mut lua_State, idx1: c_int, idx2: c_int, op: c_int) -> c_int;
 }
 
 #[cfg_attr(all(windows, raw_dylib), link(name = "lua52", kind = "raw-dylib"))]
-extern "C-unwind" {
+unsafe extern "C-unwind" {
     //
     // Push functions (C -> stack)
     //
@@ -257,7 +257,7 @@ pub unsafe fn lua_pcall(L: *mut lua_State, n: c_int, r: c_int, f: c_int) -> c_in
 }
 
 #[cfg_attr(all(windows, raw_dylib), link(name = "lua52", kind = "raw-dylib"))]
-extern "C-unwind" {
+unsafe extern "C-unwind" {
     //
     // Coroutine functions
     //
@@ -289,12 +289,12 @@ pub const LUA_GCGEN: c_int = 10;
 pub const LUA_GCINC: c_int = 11;
 
 #[cfg_attr(all(windows, raw_dylib), link(name = "lua52", kind = "raw-dylib"))]
-extern "C-unwind" {
+unsafe extern "C-unwind" {
     pub fn lua_gc(L: *mut lua_State, what: c_int, data: c_int) -> c_int;
 }
 
 #[cfg_attr(all(windows, raw_dylib), link(name = "lua52", kind = "raw-dylib"))]
-extern "C-unwind" {
+unsafe extern "C-unwind" {
     //
     // Miscellaneous functions
     //
@@ -448,7 +448,7 @@ pub const LUA_MASKCOUNT: c_int = 1 << (LUA_HOOKCOUNT as usize);
 pub type lua_Hook = unsafe extern "C-unwind" fn(L: *mut lua_State, ar: *mut lua_Debug);
 
 #[cfg_attr(all(windows, raw_dylib), link(name = "lua52", kind = "raw-dylib"))]
-extern "C-unwind" {
+unsafe extern "C-unwind" {
     pub fn lua_getstack(L: *mut lua_State, level: c_int, ar: *mut lua_Debug) -> c_int;
     pub fn lua_getinfo(L: *mut lua_State, what: *const c_char, ar: *mut lua_Debug) -> c_int;
     pub fn lua_getlocal(L: *mut lua_State, ar: *const lua_Debug, n: c_int) -> *const c_char;
