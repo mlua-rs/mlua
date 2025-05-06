@@ -164,7 +164,7 @@ fn test_thread_reset() -> Result<()> {
     let result = thread.resume::<()>(());
     assert!(
         matches!(result, Err(Error::CallbackError{ ref cause, ..})
-            if matches!(cause.as_ref(), Error::RuntimeError(ref err)
+            if matches!(cause.as_ref(), Error::RuntimeError(err)
                 if err == "cannot reset a running thread")
         ),
         "unexpected result: {result:?}",

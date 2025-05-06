@@ -67,6 +67,7 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![cfg_attr(not(send), allow(clippy::arc_with_non_send_sync))]
 #![allow(clippy::ptr_eq)]
+#![allow(unsafe_op_in_unsafe_fn)]
 
 #[macro_use]
 mod macros;
