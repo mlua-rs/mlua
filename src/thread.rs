@@ -79,8 +79,6 @@ unsafe impl Sync for Thread {}
 
 /// Thread (coroutine) representation as an async [`Future`] or [`Stream`].
 ///
-/// Requires `feature = "async"`
-///
 /// [`Future`]: std::future::Future
 /// [`Stream`]: futures_util::stream::Stream
 #[cfg(feature = "async")]
@@ -356,8 +354,6 @@ impl Thread {
     /// values whereas [`Future`] version discards that values and poll until the final
     /// one (returned from the thread function).
     ///
-    /// Requires `feature = "async"`
-    ///
     /// [`Future`]: std::future::Future
     /// [`Stream`]: futures_util::stream::Stream
     /// [`resume`]: https://www.lua.org/manual/5.4/manual.html#lua_resume
@@ -455,8 +451,6 @@ impl Thread {
     /// # #[cfg(not(feature = "luau"))]
     /// # fn main() { }
     /// ```
-    ///
-    /// Requires `feature = "luau"`
     #[cfg(any(feature = "luau", doc))]
     #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
     #[doc(hidden)]

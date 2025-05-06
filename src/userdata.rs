@@ -56,30 +56,32 @@ pub enum MetaMethod {
     /// The unary minus (`-`) operator.
     Unm,
     /// The floor division (//) operator.
-    /// Requires `feature = "lua54/lua53/luau"`
     #[cfg(any(feature = "lua54", feature = "lua53", feature = "luau"))]
+    #[cfg_attr(docsrs, doc(cfg(any(feature = "lua54", feature = "lua53", feature = "luau"))))]
     IDiv,
     /// The bitwise AND (&) operator.
-    /// Requires `feature = "lua54/lua53"`
     #[cfg(any(feature = "lua54", feature = "lua53"))]
+    #[cfg_attr(docsrs, doc(cfg(any(feature = "lua54", feature = "lua53"))))]
     BAnd,
     /// The bitwise OR (|) operator.
-    /// Requires `feature = "lua54/lua53"`
     #[cfg(any(feature = "lua54", feature = "lua53"))]
+    #[cfg_attr(docsrs, doc(cfg(any(feature = "lua54", feature = "lua53"))))]
     BOr,
     /// The bitwise XOR (binary ~) operator.
-    /// Requires `feature = "lua54/lua53"`
     #[cfg(any(feature = "lua54", feature = "lua53"))]
+    #[cfg_attr(docsrs, doc(cfg(any(feature = "lua54", feature = "lua53"))))]
     BXor,
     /// The bitwise NOT (unary ~) operator.
-    /// Requires `feature = "lua54/lua53"`
     #[cfg(any(feature = "lua54", feature = "lua53"))]
+    #[cfg_attr(docsrs, doc(cfg(any(feature = "lua54", feature = "lua53"))))]
     BNot,
     /// The bitwise left shift (<<) operator.
     #[cfg(any(feature = "lua54", feature = "lua53"))]
+    #[cfg_attr(docsrs, doc(cfg(any(feature = "lua54", feature = "lua53"))))]
     Shl,
     /// The bitwise right shift (>>) operator.
     #[cfg(any(feature = "lua54", feature = "lua53"))]
+    #[cfg_attr(docsrs, doc(cfg(any(feature = "lua54", feature = "lua53"))))]
     Shr,
     /// The string concatenation operator `..`.
     Concat,
@@ -104,15 +106,15 @@ pub enum MetaMethod {
     /// The `__pairs` metamethod.
     ///
     /// This is not an operator, but it will be called by the built-in `pairs` function.
-    ///
-    /// Requires `feature = "lua54/lua53/lua52"`
-    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "luajit52",))]
+    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "luajit52"))]
+    #[cfg_attr(
+        docsrs,
+        doc(cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "luajit52")))
+    )]
     Pairs,
     /// The `__ipairs` metamethod.
     ///
     /// This is not an operator, but it will be called by the built-in [`ipairs`] function.
-    ///
-    /// Requires `feature = "lua52"`
     ///
     /// [`ipairs`]: https://www.lua.org/manual/5.2/manual.html#pdf-ipairs
     #[cfg(any(feature = "lua52", feature = "luajit52", doc))]
@@ -122,8 +124,6 @@ pub enum MetaMethod {
     ///
     /// Executed before the iteration begins, and should return an iterator function like `next`
     /// (or a custom one).
-    ///
-    /// Requires `feature = "lua"`
     #[cfg(any(feature = "luau", doc))]
     #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
     Iter,
@@ -133,8 +133,6 @@ pub enum MetaMethod {
     ///
     /// More information about to-be-closed variables can be found in the Lua 5.4
     /// [documentation][lua_doc].
-    ///
-    /// Requires `feature = "lua54"`
     ///
     /// [lua_doc]: https://www.lua.org/manual/5.4/manual.html#3.3.8
     #[cfg(feature = "lua54")]
@@ -272,8 +270,6 @@ pub trait UserDataMethods<T> {
     ///
     /// Refer to [`add_method`] for more information about the implementation.
     ///
-    /// Requires `feature = "async"`
-    ///
     /// [`add_method`]: UserDataMethods::add_method
     #[cfg(feature = "async")]
     #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
@@ -288,8 +284,6 @@ pub trait UserDataMethods<T> {
     /// Add an async method which accepts a `&mut T` as the first parameter and returns [`Future`].
     ///
     /// Refer to [`add_method`] for more information about the implementation.
-    ///
-    /// Requires `feature = "async"`
     ///
     /// [`add_method`]: UserDataMethods::add_method
     #[cfg(feature = "async")]
@@ -328,8 +322,6 @@ pub trait UserDataMethods<T> {
     /// [`Future`].
     ///
     /// This is an async version of [`add_function`].
-    ///
-    /// Requires `feature = "async"`
     ///
     /// [`add_function`]: UserDataMethods::add_function
     #[cfg(feature = "async")]
@@ -373,11 +365,12 @@ pub trait UserDataMethods<T> {
     ///
     /// This is an async version of [`add_meta_method`].
     ///
-    /// Requires `feature = "async"`
-    ///
     /// [`add_meta_method`]: UserDataMethods::add_meta_method
     #[cfg(all(feature = "async", not(any(feature = "lua51", feature = "luau"))))]
-    #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
+    #[cfg_attr(
+        docsrs,
+        doc(cfg(all(feature = "async", not(any(feature = "lua51", feature = "luau")))))
+    )]
     fn add_async_meta_method<M, A, MR, R>(&mut self, name: impl ToString, method: M)
     where
         T: 'static,
@@ -390,8 +383,6 @@ pub trait UserDataMethods<T> {
     /// [`Future`].
     ///
     /// This is an async version of [`add_meta_method_mut`].
-    ///
-    /// Requires `feature = "async"`
     ///
     /// [`add_meta_method_mut`]: UserDataMethods::add_meta_method_mut
     #[cfg(all(feature = "async", not(any(feature = "lua51", feature = "luau"))))]
@@ -430,11 +421,12 @@ pub trait UserDataMethods<T> {
     ///
     /// This is an async version of [`add_meta_function`].
     ///
-    /// Requires `feature = "async"`
-    ///
     /// [`add_meta_function`]: UserDataMethods::add_meta_function
     #[cfg(all(feature = "async", not(any(feature = "lua51", feature = "luau"))))]
-    #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
+    #[cfg_attr(
+        docsrs,
+        doc(cfg(all(feature = "async", not(any(feature = "lua51", feature = "luau")))))
+    )]
     fn add_async_meta_function<F, A, FR, R>(&mut self, name: impl ToString, function: F)
     where
         F: Fn(Lua, A) -> FR + MaybeSend + 'static,

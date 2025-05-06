@@ -134,8 +134,6 @@ impl Function {
     /// Internally it wraps the function to an [`AsyncThread`]. The returned type implements
     /// `Future<Output = Result<R>>` and can be awaited.
     ///
-    /// Requires `feature = "async"`
-    ///
     /// # Examples
     ///
     /// ```
@@ -433,8 +431,6 @@ impl Function {
     ///
     /// Recording of coverage information is controlled by [`Compiler::set_coverage_level`] option.
     ///
-    /// Requires `feature = "luau"`
-    ///
     /// [`Compiler::set_coverage_level`]: crate::chunk::Compiler::set_coverage_level
     #[cfg(any(feature = "luau", doc))]
     #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
@@ -494,8 +490,6 @@ impl Function {
     /// Copies the function prototype and all its upvalues to the
     /// newly created function.
     /// This function returns shallow clone (same handle) for Rust/C functions.
-    ///
-    /// Requires `feature = "luau"`
     #[cfg(any(feature = "luau", doc))]
     #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
     pub fn deep_clone(&self) -> Self {

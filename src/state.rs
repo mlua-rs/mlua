@@ -74,7 +74,6 @@ pub(crate) struct LuaGuard(ArcReentrantMutexGuard<RawLua>);
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum GCMode {
     Incremental,
-    /// Requires `feature = "lua54"`
     #[cfg(feature = "lua54")]
     #[cfg_attr(docsrs, doc(cfg(feature = "lua54")))]
     Generational,
@@ -511,8 +510,6 @@ impl Lua {
     /// # #[cfg(not(feature = "luau"))]
     /// # fn main() {}
     /// ```
-    ///
-    /// Requires `feature = "luau"`
     #[cfg(any(feature = "luau", doc))]
     #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
     pub fn sandbox(&self, enabled: bool) -> Result<()> {
@@ -812,8 +809,6 @@ impl Lua {
     }
 
     /// Sets the warning function to be used by Lua to emit warnings.
-    ///
-    /// Requires `feature = "lua54"`
     #[cfg(feature = "lua54")]
     #[cfg_attr(docsrs, doc(cfg(feature = "lua54")))]
     pub fn set_warning_function<F>(&self, callback: F)
@@ -847,8 +842,6 @@ impl Lua {
     /// Removes warning function previously set by `set_warning_function`.
     ///
     /// This function has no effect if a warning function was not previously set.
-    ///
-    /// Requires `feature = "lua54"`
     #[cfg(feature = "lua54")]
     #[cfg_attr(docsrs, doc(cfg(feature = "lua54")))]
     pub fn remove_warning_function(&self) {
@@ -863,8 +856,6 @@ impl Lua {
     ///
     /// A message in a call with `incomplete` set to `true` should be continued in
     /// another call to this function.
-    ///
-    /// Requires `feature = "lua54"`
     #[cfg(feature = "lua54")]
     #[cfg_attr(docsrs, doc(cfg(feature = "lua54")))]
     pub fn warning(&self, msg: impl AsRef<str>, incomplete: bool) {
@@ -939,8 +930,6 @@ impl Lua {
     }
 
     /// Returns `true` if the garbage collector is currently running automatically.
-    ///
-    /// Requires `feature = "lua54/lua53/lua52/luau"`
     #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "luau"))]
     pub fn gc_is_running(&self) -> bool {
         let lua = self.lock();
@@ -1078,8 +1067,6 @@ impl Lua {
     /// Returns the previous mode. More information about the generational GC
     /// can be found in the Lua 5.4 [documentation][lua_doc].
     ///
-    /// Requires `feature = "lua54"`
-    ///
     /// [lua_doc]: https://www.lua.org/manual/5.4/manual.html#2.5.2
     #[cfg(feature = "lua54")]
     #[cfg_attr(docsrs, doc(cfg(feature = "lua54")))]
@@ -1100,8 +1087,6 @@ impl Lua {
     /// including via `require` function.
     ///
     /// See [`Compiler`] for details and possible options.
-    ///
-    /// Requires `feature = "luau"`
     #[cfg(any(feature = "luau", doc))]
     #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
     pub fn set_compiler(&self, compiler: Compiler) {
@@ -1175,8 +1160,6 @@ impl Lua {
     }
 
     /// Create and return a Luau [buffer] object from a byte slice of data.
-    ///
-    /// Requires `feature = "luau"`
     ///
     /// [buffer]: https://luau.org/library#buffer-library
     #[cfg(any(feature = "luau", doc))]
@@ -1342,8 +1325,6 @@ impl Lua {
     ///
     /// The family of `call_async()` functions takes care about creating [`Thread`].
     ///
-    /// Requires `feature = "async"`
-    ///
     /// # Examples
     ///
     /// Non blocking sleep:
@@ -1409,8 +1390,6 @@ impl Lua {
     }
 
     /// Creates a Lua userdata object from a custom serializable userdata type.
-    ///
-    /// Requires `feature = "serialize"`
     #[cfg(feature = "serialize")]
     #[cfg_attr(docsrs, doc(cfg(feature = "serialize")))]
     #[inline]
@@ -1439,8 +1418,6 @@ impl Lua {
     /// Creates a Lua userdata object from a custom serializable Rust type.
     ///
     /// See [`Lua::create_any_userdata`] for more details.
-    ///
-    /// Requires `feature = "serialize"`
     #[cfg(feature = "serialize")]
     #[cfg_attr(docsrs, doc(cfg(feature = "serialize")))]
     #[inline]

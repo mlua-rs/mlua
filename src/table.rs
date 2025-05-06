@@ -537,8 +537,6 @@ impl Table {
     }
 
     /// Sets `readonly` attribute on the table.
-    ///
-    /// Requires `feature = "luau"`
     #[cfg(any(feature = "luau", doc))]
     #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
     pub fn set_readonly(&self, enabled: bool) {
@@ -554,8 +552,6 @@ impl Table {
     }
 
     /// Returns `readonly` attribute of the table.
-    ///
-    /// Requires `feature = "luau"`
     #[cfg(any(feature = "luau", doc))]
     #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
     pub fn is_readonly(&self) -> bool {
@@ -573,8 +569,6 @@ impl Table {
     /// - Fast-path for some built-in functions (fastcall).
     ///
     /// For `safeenv` environments, monkey patching or modifying values may not work as expected.
-    ///
-    /// Requires `feature = "luau"`
     #[cfg(any(feature = "luau", doc))]
     #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
     pub fn set_safeenv(&self, enabled: bool) {

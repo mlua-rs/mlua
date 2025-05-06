@@ -482,8 +482,6 @@ impl Chunk<'_> {
     /// Sets or overwrites a Luau compiler used for this chunk.
     ///
     /// See [`Compiler`] for details and possible options.
-    ///
-    /// Requires `feature = "luau"`
     #[cfg(any(feature = "luau", doc))]
     #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
     pub fn set_compiler(mut self, compiler: Compiler) -> Self {
@@ -501,8 +499,6 @@ impl Chunk<'_> {
     /// Asynchronously execute this chunk of code.
     ///
     /// See [`exec`] for more details.
-    ///
-    /// Requires `feature = "async"`
     ///
     /// [`exec`]: Chunk::exec
     #[cfg(feature = "async")]
@@ -534,8 +530,6 @@ impl Chunk<'_> {
     ///
     /// See [`eval`] for more details.
     ///
-    /// Requires `feature = "async"`
-    ///
     /// [`eval`]: Chunk::eval
     #[cfg(feature = "async")]
     #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
@@ -562,8 +556,6 @@ impl Chunk<'_> {
     /// Load the chunk function and asynchronously call it with the given arguments.
     ///
     /// See [`call`] for more details.
-    ///
-    /// Requires `feature = "async"`
     ///
     /// [`call`]: Chunk::call
     #[cfg(feature = "async")]
