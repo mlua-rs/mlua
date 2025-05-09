@@ -9,7 +9,7 @@ use tokio::sync::Mutex;
 
 use mlua::{
     Error, Function, Lua, LuaOptions, MultiValue, ObjectLike, Result, StdLib, Table, UserData,
-    UserDataMethods, Value,
+    UserDataMethods, UserDataRef, Value,
 };
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -547,6 +547,7 @@ async fn test_async_thread_error() -> Result<()> {
 
 #[tokio::test]
 async fn test_async_terminate() -> Result<()> {
+    // Future captures `Lua` instance and dropped all together
     let mutex = Arc::new(Mutex::new(0u32));
     {
         let lua = Lua::new();
@@ -563,6 +564,17 @@ async fn test_async_terminate() -> Result<()> {
 
         let _ = tokio::time::timeout(Duration::from_millis(30), func.call_async::<()>(())).await;
     }
+    assert!(mutex.try_lock().is_ok());
+
+    // Future is dropped, but `Lua` instance is still alive
+    let lua = Lua::new();
+    let func = lua.create_async_function(move |_, mutex: UserDataRef<Arc<Mutex<u32>>>| async move {
+        let _guard = mutex.lock().await;
+        sleep_ms(100).await;
+        Ok(())
+    })?;
+    let mutex2 = lua.create_any_userdata(mutex.clone())?;
+    let _ = tokio::time::timeout(Duration::from_millis(30), func.call_async::<()>(mutex2)).await;
     assert!(mutex.try_lock().is_ok());
 
     Ok(())

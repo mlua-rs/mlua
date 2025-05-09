@@ -2036,6 +2036,13 @@ impl Lua {
         LightUserData(&ASYNC_POLL_PENDING as *const u8 as *mut std::os::raw::c_void)
     }
 
+    #[cfg(feature = "async")]
+    #[inline(always)]
+    pub(crate) fn poll_terminate() -> LightUserData {
+        static ASYNC_POLL_TERMINATE: u8 = 0;
+        LightUserData(&ASYNC_POLL_TERMINATE as *const u8 as *mut std::os::raw::c_void)
+    }
+
     /// Returns a weak reference to the Lua instance.
     ///
     /// This is useful for creating a reference to the Lua instance that does not prevent it from

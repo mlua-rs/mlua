@@ -613,46 +613,11 @@ impl RawLua {
         self.create_thread(func)
     }
 
-    /// Resets thread (coroutine) and returns it to the pool for later use.
+    /// Returns the thread to the pool for later use.
     #[cfg(feature = "async")]
     pub(crate) unsafe fn recycle_thread(&self, thread: &mut Thread) {
-        let thread_state = thread.1;
         let extra = &mut *self.extra.get();
-        if extra.thread_pool.len() == extra.thread_pool.capacity() {
-            #[cfg(feature = "lua54")]
-            if ffi::lua_status(thread_state) != ffi::LUA_OK {
-                // Close all to-be-closed variables without returning thread to the pool
-                #[cfg(not(feature = "vendored"))]
-                ffi::lua_resetthread(thread_state);
-                #[cfg(feature = "vendored")]
-                ffi::lua_closethread(thread_state, self.state());
-            }
-            return;
-        }
-
-        let mut reset_ok = false;
-        if ffi::lua_status(thread_state) == ffi::LUA_OK {
-            if ffi::lua_gettop(thread_state) > 0 {
-                ffi::lua_settop(thread_state, 0);
-            }
-            reset_ok = true;
-        }
-
-        #[cfg(feature = "lua54")]
-        if !reset_ok {
-            #[cfg(not(feature = "vendored"))]
-            let status = ffi::lua_resetthread(thread_state);
-            #[cfg(feature = "vendored")]
-            let status = ffi::lua_closethread(thread_state, self.state());
-            reset_ok = status == ffi::LUA_OK;
-        }
-        #[cfg(feature = "luau")]
-        if !reset_ok {
-            ffi::lua_resetthread(thread_state);
-            reset_ok = true;
-        }
-
-        if reset_ok {
+        if extra.thread_pool.len() < extra.thread_pool.capacity() {
             extra.thread_pool.push(thread.0.index);
             thread.0.drop = false; // Prevent thread from being garbage collected
         }
@@ -1244,7 +1209,7 @@ impl RawLua {
                 let rawlua = (*extra).raw_lua();
 
                 let func = &*(*upvalue).data;
-                let fut = func(rawlua, nargs);
+                let fut = Some(func(rawlua, nargs));
                 let extra = XRc::clone(&(*upvalue).extra);
                 let protect = !rawlua.unlikely_memory_error();
                 push_internal_userdata(state, AsyncPollUpvalue { data: fut, extra }, protect)?;
@@ -1262,20 +1227,27 @@ impl RawLua {
 
         unsafe extern "C-unwind" fn poll_future(state: *mut ffi::lua_State) -> c_int {
             let upvalue = get_userdata::<AsyncPollUpvalue>(state, ffi::lua_upvalueindex(1));
-            callback_error_ext(state, (*upvalue).extra.get(), true, |extra, _| {
+            callback_error_ext(state, (*upvalue).extra.get(), true, |extra, nargs| {
                 // Lua ensures that `LUA_MINSTACK` stack spaces are available (after pushing arguments)
                 // The lock must be already held as the future is polled
                 let rawlua = (*extra).raw_lua();
 
+                if nargs == 1 && ffi::lua_tolightuserdata(state, -1) == Lua::poll_terminate().0 {
+                    // Destroy the future and terminate the Lua thread
+                    (*upvalue).data.take();
+                    ffi::lua_pushinteger(state, 0);
+                    return Ok(1);
+                }
+
                 let fut = &mut (*upvalue).data;
                 let mut ctx = Context::from_waker(rawlua.waker());
-                match fut.as_mut().poll(&mut ctx) {
-                    Poll::Pending => {
+                match fut.as_mut().map(|fut| fut.as_mut().poll(&mut ctx)) {
+                    Some(Poll::Pending) => {
                         ffi::lua_pushnil(state);
                         ffi::lua_pushlightuserdata(state, Lua::poll_pending().0);
                         Ok(2)
                     }
-                    Poll::Ready(nresults) => {
+                    Some(Poll::Ready(nresults)) => {
                         match nresults? {
                             nresults if nresults < 3 => {
                                 // Fast path for up to 2 results without creating a table
@@ -1293,6 +1265,7 @@ impl RawLua {
                             }
                         }
                     }
+                    None => Err(Error::CallbackDestructed),
                 }
             })
         }
@@ -1338,8 +1311,8 @@ impl RawLua {
         lua.load(
             r#"
             local poll = get_poll(...)
+            local nres, res, res2 = poll()
             while true do
-                local nres, res, res2 = poll()
                 if nres ~= nil then
                     if nres == 0 then
                         return
@@ -1351,7 +1324,10 @@ impl RawLua {
                         return unpack(res, nres)
                     end
                 end
-                yield(res) -- `res` is a "pending" value
+                -- `res` is a "pending" value
+                -- `yield` can return a signal to drop the future that we should propagate
+                -- to the poller
+                nres, res, res2 = poll(yield(res))
             end
             "#,
         )
