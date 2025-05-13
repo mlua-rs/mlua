@@ -247,7 +247,7 @@ pub use mlua_derive::FromLua;
 ///     ...
 /// }
 /// ```
-#[cfg(any(feature = "module", docsrs))]
+#[cfg(all(feature = "mlua_derive", any(feature = "module", doc)))]
 #[cfg_attr(docsrs, doc(cfg(feature = "module")))]
 pub use mlua_derive::lua_module;
 
