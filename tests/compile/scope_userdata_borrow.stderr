@@ -2,7 +2,7 @@ error[E0597]: `ibad` does not live long enough
   --> tests/compile/scope_userdata_borrow.rs:15:46
    |
 11 |     lua.scope(|scope| {
-   |                ----- has type `&mut mlua::scope::Scope<'_, '1>`
+   |                ----- has type `&mlua::Scope<'_, '1>`
 ...
 14 |             let ibad = 42;
    |                 ---- binding `ibad` declared here
