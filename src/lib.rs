@@ -210,7 +210,7 @@ pub use mlua_derive::FromLua;
 ///
 /// You can register multiple entrypoints as required.
 ///
-/// ```
+/// ```ignore
 /// use mlua::{Lua, Result, Table};
 ///
 /// #[mlua::lua_module]

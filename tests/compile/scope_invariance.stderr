@@ -2,7 +2,7 @@ error[E0373]: closure may outlive the current function, but it borrows `test.fie
   --> tests/compile/scope_invariance.rs:13:39
    |
 9  |     lua.scope(|scope| {
-   |                ----- has type `&'1 mut mlua::scope::Scope<'1, '_>`
+   |                ----- has type `&'1 mlua::Scope<'1, '_>`
 ...
 13 |             scope.create_function_mut(|_, ()| {
    |                                       ^^^^^^^ may outlive borrowed value `test.field`
