@@ -153,6 +153,8 @@ fn test_require_custom_error() {
     let lua = Lua::new();
     lua.globals().set("require", lua.create_require_function(TextRequirer::new(true)).unwrap()).unwrap();
 
+    let memusage = lua.used_memory();
+
     let res = run_require(&lua, "@failed/failure");
     assert!(res.is_err());
     println!("{}", res.clone().unwrap_err().to_string());
@@ -173,6 +175,11 @@ fn test_require_custom_error() {
     };
 
     assert_eq!(stack_count, 0);
+    
+    lua.gc_collect().unwrap();
+    lua.gc_collect().unwrap();
+
+    assert_eq!(memusage, lua.used_memory());
 }
 
 /// Simple test require trait to test custom errors
