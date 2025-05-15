@@ -1,9 +1,12 @@
 use std::ffi::CStr;
 use std::os::raw::c_int;
+use std::ptr;
 
+use crate::chunk::ChunkMode;
 use crate::error::Result;
 use crate::function::Function;
-use crate::state::Lua;
+use crate::state::{callback_error_ext, Lua};
+use crate::traits::{FromLuaMulti, IntoLua};
 
 pub use require::{NavigateError, Require};
 
@@ -22,6 +25,7 @@ impl Lua {
         let globals = self.globals();
 
         globals.raw_set("collectgarbage", self.create_c_function(lua_collectgarbage)?)?;
+        globals.raw_set("loadstring", self.create_c_function(lua_loadstring)?)?;
 
         // Set `_VERSION` global to include version number
         // The environment variable `LUAU_VERSION` set by the build script
@@ -72,6 +76,22 @@ unsafe extern "C-unwind" fn lua_collectgarbage(state: *mut ffi::lua_State) -> c_
         }
         _ => ffi::luaL_error(state, cstr!("collectgarbage called with invalid option")),
     }
+}
+
+unsafe extern "C-unwind" fn lua_loadstring(state: *mut ffi::lua_State) -> c_int {
+    callback_error_ext(state, ptr::null_mut(), false, move |extra, nargs| {
+        let rawlua = (*extra).raw_lua();
+        let (chunk, chunk_name) =
+            <(String, Option<String>)>::from_stack_args(nargs, 1, Some("loadstring"), rawlua)?;
+        let chunk_name = chunk_name.as_deref().unwrap_or("=(loadstring)");
+        (rawlua.lua())
+            .load(chunk)
+            .set_name(chunk_name)
+            .set_mode(ChunkMode::Text)
+            .into_function()?
+            .push_into_stack(rawlua)?;
+        Ok(1)
+    })
 }
 
 mod require;

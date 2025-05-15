@@ -7,7 +7,9 @@ use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::atomic::{AtomicBool, AtomicPtr, AtomicU64, Ordering};
 use std::sync::Arc;
 
-use mlua::{Compiler, Error, Lua, LuaOptions, Result, StdLib, Table, ThreadStatus, Value, Vector, VmState};
+use mlua::{
+    Compiler, Error, Function, Lua, LuaOptions, Result, StdLib, Table, ThreadStatus, Value, Vector, VmState,
+};
 
 #[test]
 fn test_version() -> Result<()> {
@@ -411,6 +413,25 @@ fn test_thread_events() -> Result<()> {
         .exec();
     assert!(result.is_err());
     assert!(matches!(result, Err(Error::RuntimeError(err)) if err.contains("thread limit exceeded")));
+
+    Ok(())
+}
+
+#[test]
+fn test_loadstring() -> Result<()> {
+    let lua = Lua::new();
+
+    let f = lua.load(r#"loadstring("return 123")"#).eval::<Function>()?;
+    assert_eq!(f.call::<i32>(())?, 123);
+
+    let err = lua
+        .load(r#"loadstring("retur 123", "chunk")"#)
+        .exec()
+        .err()
+        .unwrap();
+    assert!(err.to_string().contains(
+        r#"syntax error: [string "chunk"]:1: Incomplete statement: expected assignment or a function call"#
+    ));
 
     Ok(())
 }
