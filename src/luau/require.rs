@@ -6,17 +6,19 @@ use std::os::raw::{c_char, c_int, c_void};
 use std::path::{Component, Path, PathBuf};
 use std::result::Result as StdResult;
 use std::{env, fmt, fs, mem, ptr};
-
-use crate::error::Result;
+use crate::error::{Result, Error};
 use crate::function::Function;
 use crate::state::{callback_error_ext, Lua};
 use crate::table::Table;
 use crate::types::MaybeSend;
+use crate::traits::IntoLua;
+use crate::state::RawLua;
 
 /// An error that can occur during navigation in the Luau `require` system.
 pub enum NavigateError {
     Ambiguous,
     NotFound,
+    Error(Error)
 }
 
 #[cfg(feature = "luau")]
@@ -31,6 +33,7 @@ impl IntoNavigateResult for StdResult<(), NavigateError> {
             Ok(()) => ffi::luarequire_NavigateResult::Success,
             Err(NavigateError::Ambiguous) => ffi::luarequire_NavigateResult::Ambiguous,
             Err(NavigateError::NotFound) => ffi::luarequire_NavigateResult::NotFound,
+            Err(NavigateError::Error(_)) => unreachable!()
         }
     }
 }
@@ -320,42 +323,70 @@ pub(super) unsafe extern "C" fn init_config(config: *mut ffi::luarequire_Configu
         this.is_require_allowed(&chunk_name)
     }
 
-    unsafe extern "C" fn reset(
-        _state: *mut ffi::lua_State,
+    unsafe extern "C-unwind" fn reset(
+        state: *mut ffi::lua_State,
         ctx: *mut c_void,
         requirer_chunkname: *const c_char,
     ) -> ffi::luarequire_NavigateResult {
         let this = &*(ctx as *const Box<dyn Require>);
         let chunk_name = CStr::from_ptr(requirer_chunkname).to_string_lossy();
-        this.reset(&chunk_name).into_nav_result()
+        match this.reset(&chunk_name) {
+            Err(NavigateError::Error(err)) => {
+                let raw_lua = RawLua::init_from_ptr(state, false);
+                err.push_into_stack(&raw_lua.lock()).expect("mlua internal: failed to push error to stack");
+                ffi::lua_error(state);
+            },
+            error => error.into_nav_result()		
+        }
     }
 
-    unsafe extern "C" fn jump_to_alias(
-        _state: *mut ffi::lua_State,
+    unsafe extern "C-unwind" fn jump_to_alias(
+        state: *mut ffi::lua_State,
         ctx: *mut c_void,
         path: *const c_char,
     ) -> ffi::luarequire_NavigateResult {
         let this = &*(ctx as *const Box<dyn Require>);
         let path = CStr::from_ptr(path).to_string_lossy();
-        this.jump_to_alias(&path).into_nav_result()
+        match this.jump_to_alias(&path) {
+            Err(NavigateError::Error(err)) => {
+                let raw_lua = RawLua::init_from_ptr(state, false);
+                err.push_into_stack(&raw_lua.lock()).expect("mlua internal: failed to push error to stack");
+                ffi::lua_error(state);
+            },
+            error => error.into_nav_result()
+        }
     }
 
-    unsafe extern "C" fn to_parent(
-        _state: *mut ffi::lua_State,
+    unsafe extern "C-unwind" fn to_parent(
+        state: *mut ffi::lua_State,
         ctx: *mut c_void,
     ) -> ffi::luarequire_NavigateResult {
         let this = &*(ctx as *const Box<dyn Require>);
-        this.to_parent().into_nav_result()
+        match this.to_parent() {
+            Err(NavigateError::Error(err)) => {
+                let raw_lua = RawLua::init_from_ptr(state, false);
+                err.push_into_stack(&raw_lua.lock()).expect("mlua internal: failed to push error to stack");
+                ffi::lua_error(state);
+            },
+            error => error.into_nav_result()
+        }
     }
 
-    unsafe extern "C" fn to_child(
-        _state: *mut ffi::lua_State,
+    unsafe extern "C-unwind" fn to_child(
+        state: *mut ffi::lua_State,
         ctx: *mut c_void,
         name: *const c_char,
     ) -> ffi::luarequire_NavigateResult {
         let this = &*(ctx as *const Box<dyn Require>);
         let name = CStr::from_ptr(name).to_string_lossy();
-        this.to_child(&name).into_nav_result()
+        match this.to_child(&name) {
+            Err(NavigateError::Error(err)) => {
+                let raw_lua = RawLua::init_from_ptr(state, false);
+                err.push_into_stack(&raw_lua.lock()).expect("mlua internal: failed to push error to stack");
+                ffi::lua_error(state);
+            },
+            error => error.into_nav_result()
+        }
     }
 
     unsafe extern "C" fn is_module_present(_state: *mut ffi::lua_State, ctx: *mut c_void) -> bool {

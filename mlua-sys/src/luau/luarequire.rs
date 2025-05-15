@@ -30,7 +30,7 @@ pub struct luarequire_Configuration {
         unsafe extern "C" fn(L: *mut lua_State, ctx: *mut c_void, requirer_chunkname: *const c_char) -> bool,
 
     // Resets the internal state to point at the requirer module.
-    pub reset: unsafe extern "C" fn(
+    pub reset: unsafe extern "C-unwind" fn(
         L: *mut lua_State,
         ctx: *mut c_void,
         requirer_chunkname: *const c_char,
@@ -39,15 +39,15 @@ pub struct luarequire_Configuration {
     // Resets the internal state to point at an aliased module, given its exact path from a configuration
     // file. This function is only called when an alias's path cannot be resolved relative to its
     // configuration file.
-    pub jump_to_alias: unsafe extern "C" fn(
+    pub jump_to_alias: unsafe extern "C-unwind" fn(
         L: *mut lua_State,
         ctx: *mut c_void,
         path: *const c_char,
     ) -> luarequire_NavigateResult,
 
     // Navigates through the context by making mutations to the internal state.
-    pub to_parent: unsafe extern "C" fn(L: *mut lua_State, ctx: *mut c_void) -> luarequire_NavigateResult,
-    pub to_child: unsafe extern "C" fn(
+    pub to_parent: unsafe extern "C-unwind" fn(L: *mut lua_State, ctx: *mut c_void) -> luarequire_NavigateResult,
+    pub to_child: unsafe extern "C-unwind" fn(
         L: *mut lua_State,
         ctx: *mut c_void,
         name: *const c_char,

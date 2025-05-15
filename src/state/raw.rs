@@ -179,7 +179,7 @@ impl RawLua {
         rawlua
     }
 
-    pub(super) unsafe fn init_from_ptr(state: *mut ffi::lua_State, owned: bool) -> XRc<ReentrantMutex<Self>> {
+    pub(crate) unsafe fn init_from_ptr(state: *mut ffi::lua_State, owned: bool) -> XRc<ReentrantMutex<Self>> {
         assert!(!state.is_null(), "Lua state is NULL");
         if let Some(lua) = Self::try_from_ptr(state) {
             return lua;
