@@ -354,7 +354,7 @@ unsafe fn init_userdata_metatable_index(state: *mut ffi::lua_State) -> Result<()
         end
     "#;
     protect_lua!(state, 0, 1, |state| {
-        let ret = ffi::luaL_loadbuffer(state, code.as_ptr(), code.count_bytes(), cstr!("__mlua_index"));
+        let ret = ffi::luaL_loadbuffer(state, code.as_ptr(), code.count_bytes(), cstr!("=__mlua_index"));
         if ret != ffi::LUA_OK {
             ffi::lua_error(state);
         }
@@ -405,7 +405,8 @@ unsafe fn init_userdata_metatable_newindex(state: *mut ffi::lua_State) -> Result
         end
     "#;
     protect_lua!(state, 0, 1, |state| {
-        let ret = ffi::luaL_loadbuffer(state, code.as_ptr(), code.count_bytes(), cstr!("__mlua_newindex"));
+        let code_len = code.count_bytes();
+        let ret = ffi::luaL_loadbuffer(state, code.as_ptr(), code_len, cstr!("=__mlua_newindex"));
         if ret != ffi::LUA_OK {
             ffi::lua_error(state);
         }
