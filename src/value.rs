@@ -272,10 +272,7 @@ impl Value {
     /// If the value is a Lua [`Integer`], try to convert it to `i64` or return `None` otherwise.
     #[inline]
     pub fn as_i64(&self) -> Option<i64> {
-        #[cfg(target_pointer_width = "64")]
-        return self.as_integer();
-        #[cfg(not(target_pointer_width = "64"))]
-        return self.as_integer().map(i64::from);
+        self.as_integer().map(i64::from)
     }
 
     /// Cast the value to `u64`.

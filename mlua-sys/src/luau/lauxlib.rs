@@ -3,7 +3,7 @@
 use std::os::raw::{c_char, c_float, c_int, c_void};
 use std::ptr;
 
-use super::lua::{self, lua_CFunction, lua_Number, lua_State, lua_Unsigned, LUA_REGISTRYINDEX};
+use super::lua::{self, lua_CFunction, lua_Integer, lua_Number, lua_State, lua_Unsigned, LUA_REGISTRYINDEX};
 
 #[repr(C)]
 pub struct luaL_Reg {
@@ -33,10 +33,8 @@ extern "C-unwind" {
     pub fn luaL_checkboolean(L: *mut lua_State, narg: c_int) -> c_int;
     pub fn luaL_optboolean(L: *mut lua_State, narg: c_int, def: c_int) -> c_int;
 
-    #[link_name = "luaL_checkinteger"]
-    pub fn luaL_checkinteger_(L: *mut lua_State, narg: c_int) -> c_int;
-    #[link_name = "luaL_optinteger"]
-    pub fn luaL_optinteger_(L: *mut lua_State, narg: c_int, def: c_int) -> c_int;
+    pub fn luaL_checkinteger(L: *mut lua_State, narg: c_int) -> lua_Integer;
+    pub fn luaL_optinteger(L: *mut lua_State, narg: c_int, def: lua_Integer) -> lua_Integer;
     pub fn luaL_checkunsigned(L: *mut lua_State, narg: c_int) -> lua_Unsigned;
     pub fn luaL_optunsigned(L: *mut lua_State, narg: c_int, def: lua_Unsigned) -> lua_Unsigned;
 

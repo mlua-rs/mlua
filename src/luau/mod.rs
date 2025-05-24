@@ -51,7 +51,7 @@ unsafe extern "C-unwind" fn lua_collectgarbage(state: *mut ffi::lua_State) -> c_
             1
         }
         Ok("step") => {
-            let res = ffi::lua_gc(state, ffi::LUA_GCSTEP, arg as _);
+            let res = ffi::lua_gc(state, ffi::LUA_GCSTEP, arg);
             ffi::lua_pushboolean(state, res);
             1
         }

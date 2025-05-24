@@ -501,29 +501,6 @@ fn test_panic() -> Result<()> {
     Ok(())
 }
 
-#[cfg(target_pointer_width = "64")]
-#[test]
-fn test_safe_integers() -> Result<()> {
-    const MAX_SAFE_INTEGER: i64 = 2i64.pow(53) - 1;
-    const MIN_SAFE_INTEGER: i64 = -2i64.pow(53) + 1;
-
-    let lua = Lua::new();
-    let f = lua.load("return ...").into_function()?;
-
-    assert_eq!(f.call::<i64>(MAX_SAFE_INTEGER)?, MAX_SAFE_INTEGER);
-    assert_eq!(f.call::<i64>(MIN_SAFE_INTEGER)?, MIN_SAFE_INTEGER);
-
-    // For Lua versions that does not support 64-bit integers, the values will be converted to f64
-    #[cfg(any(feature = "luau", feature = "lua51", feature = "luajit"))]
-    {
-        assert_ne!(f.call::<i64>(MAX_SAFE_INTEGER + 2)?, MAX_SAFE_INTEGER + 2);
-        assert_ne!(f.call::<i64>(MIN_SAFE_INTEGER - 2)?, MIN_SAFE_INTEGER - 2);
-        assert_eq!(f.call::<f64>(i64::MAX)?, i64::MAX as f64);
-    }
-
-    Ok(())
-}
-
 #[test]
 fn test_num_conversion() -> Result<()> {
     let lua = Lua::new();
