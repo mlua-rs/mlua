@@ -1,4 +1,12 @@
+## v0.10.5 (May 24th, 2025)
+
+- mlua-sys is back to 0.6.x (Luau 0.663)
+- Reverted: Trigger abort when Luau userdata destructors are panic (requires new mlua-sys)
+- Reverted: Added large (52bit) integers support for Luau (breaking change)
+
 ## v0.10.4 (May 5th, 2025)
+
+_yanked_ because of semver-breaking changes
 
 - Luau updated to 0.672
 - New serde option `encode_empty_tables_as_array` to serialize empty tables as arrays
