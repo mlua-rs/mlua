@@ -199,16 +199,16 @@ pub unsafe fn luaL_tolstring(L: *mut lua_State, mut idx: c_int, len: *mut usize)
     if luaL_callmeta(L, idx, cstr!("__tostring")) == 0 {
         match lua_type(L, idx) {
             LUA_TNIL => {
-                lua_pushliteral(L, c"nil");
+                lua_pushliteral(L, "nil");
             }
             LUA_TSTRING | LUA_TNUMBER => {
                 lua_pushvalue(L, idx);
             }
             LUA_TBOOLEAN => {
                 if lua_toboolean(L, idx) == 0 {
-                    lua_pushliteral(L, c"false");
+                    lua_pushliteral(L, "false");
                 } else {
-                    lua_pushliteral(L, c"true");
+                    lua_pushliteral(L, "true");
                 }
             }
             t => {

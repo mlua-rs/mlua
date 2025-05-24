@@ -1,6 +1,5 @@
 //! Contains definitions from `lua.h`.
 
-use std::ffi::CStr;
 use std::marker::{PhantomData, PhantomPinned};
 use std::os::raw::{c_char, c_double, c_float, c_int, c_uint, c_void};
 use std::{mem, ptr};
@@ -403,8 +402,10 @@ pub unsafe fn lua_isnoneornil(L: *mut lua_State, n: c_int) -> c_int {
 }
 
 #[inline(always)]
-pub unsafe fn lua_pushliteral(L: *mut lua_State, s: &'static CStr) {
-    lua_pushstring_(L, s.as_ptr());
+pub unsafe fn lua_pushliteral(L: *mut lua_State, s: &'static str) {
+    use std::ffi::CString;
+    let c_str = CString::new(s).unwrap();
+    lua_pushlstring_(L, c_str.as_ptr(), c_str.as_bytes().len())
 }
 
 #[inline(always)]

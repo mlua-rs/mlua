@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
-use std::ffi::{CString, OsString};
+use std::ffi::{CStr, CString, OsString};
 use std::path::PathBuf;
 
 use bstr::BString;
@@ -450,8 +450,8 @@ fn test_conv_cstring() -> Result<()> {
     let s2: CString = lua.globals().get("s")?;
     assert_eq!(s, s2);
 
-    let cs = c"hello";
-    lua.globals().set("cs", c"hello")?;
+    let cs = CStr::from_bytes_with_nul(b"hello\0").unwrap();
+    lua.globals().set("cs", cs)?;
     let cs2: CString = lua.globals().get("cs")?;
     assert_eq!(cs, cs2.as_c_str());
 
