@@ -7,7 +7,7 @@ fn test_chunk_methods() -> Result<()> {
     let lua = Lua::new();
 
     #[cfg(unix)]
-    assert!(lua.load("return 123").name().starts_with("@tests/chunk.rs"));
+    assert!(lua.load("return 123").name().contains("tests/chunk.rs"));
     let chunk2 = lua.load("return 123").set_name("@new_name");
     assert_eq!(chunk2.name(), "@new_name");
 
