@@ -69,16 +69,9 @@ extern "C-unwind" {
 
     pub fn luaL_newstate() -> *mut lua_State;
 
-    pub fn luaL_findtable(
-        L: *mut lua_State,
-        idx: c_int,
-        fname: *const c_char,
-        szhint: c_int,
-    ) -> *const c_char;
+    // TODO: luaL_findtable
 
     pub fn luaL_typename(L: *mut lua_State, idx: c_int) -> *const c_char;
-
-    pub fn luaL_callyieldable(L: *mut lua_State, nargs: c_int, nresults: c_int) -> c_int;
 
     // sandbox libraries and globals
     #[link_name = "luaL_sandbox"]

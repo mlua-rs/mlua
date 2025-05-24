@@ -10,8 +10,6 @@ use super::lauxlib::*;
 use super::lua::*;
 use super::luacode::*;
 
-pub const LUA_RESUMEERROR: c_int = -1;
-
 unsafe fn compat53_reverse(L: *mut lua_State, mut a: c_int, mut b: c_int) {
     while a < b {
         lua_pushvalue(L, a);
@@ -286,19 +284,6 @@ pub unsafe fn lua_resume(L: *mut lua_State, from: *mut lua_State, narg: c_int, n
     ret
 }
 
-#[inline(always)]
-pub unsafe fn lua_resumex(L: *mut lua_State, from: *mut lua_State, narg: c_int, nres: *mut c_int) -> c_int {
-    let ret = if narg == LUA_RESUMEERROR {
-        lua_resumeerror(L, from)
-    } else {
-        lua_resume_(L, from, narg)
-    };
-    if (ret == LUA_OK || ret == LUA_YIELD) && !(nres.is_null()) {
-        *nres = lua_gettop(L);
-    }
-    ret
-}
-
 //
 // lauxlib ported functions
 //
@@ -347,7 +332,7 @@ pub unsafe fn luaL_loadbufferenv(
         fn free(p: *mut c_void);
     }
 
-    unsafe extern "C" fn data_dtor(_: *mut lua_State, data: *mut c_void) {
+    unsafe extern "C-unwind" fn data_dtor(data: *mut c_void) {
         free(*(data as *mut *mut c_char) as *mut c_void);
     }
 
