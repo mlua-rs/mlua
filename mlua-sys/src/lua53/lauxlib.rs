@@ -9,10 +9,10 @@ use super::lua::{self, lua_CFunction, lua_Integer, lua_Number, lua_State};
 pub const LUA_ERRFILE: c_int = lua::LUA_ERRERR + 1;
 
 // Key, in the registry, for table of loaded modules
-pub const LUA_LOADED_TABLE: *const c_char = cstr!("_LOADED");
+pub const LUA_LOADED_TABLE: &str = "_LOADED";
 
 // Key, in the registry, for table of preloaded loaders
-pub const LUA_PRELOAD_TABLE: *const c_char = cstr!("_PRELOAD");
+pub const LUA_PRELOAD_TABLE: &str = "_PRELOAD";
 
 #[repr(C)]
 pub struct luaL_Reg {
