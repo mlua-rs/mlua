@@ -82,8 +82,6 @@ pub(crate) struct ExtraData {
     pub(super) interrupt_callback: Option<crate::types::InterruptCallback>,
 
     #[cfg(feature = "luau")]
-    pub(crate) running_userdata_gc: bool,
-    #[cfg(feature = "luau")]
     pub(super) sandboxed: bool,
     #[cfg(feature = "luau")]
     pub(super) compiler: Option<Compiler>,
@@ -184,8 +182,6 @@ impl ExtraData {
             compiler: None,
             #[cfg(feature = "luau-jit")]
             enable_jit: true,
-            #[cfg(feature = "luau")]
-            running_userdata_gc: false,
         }));
 
         // Store it in the registry

@@ -15,23 +15,20 @@ pub(crate) unsafe fn push_internal_userdata<T: TypeKey>(
     #[cfg(not(feature = "luau"))]
     let ud_ptr = if protect {
         protect_lua!(state, 0, 1, move |state| {
-            let ud_ptr = ffi::lua_newuserdata(state, const { mem::size_of::<T>() }) as *mut T;
-            ptr::write(ud_ptr, t);
-            ud_ptr
+            ffi::lua_newuserdata(state, const { mem::size_of::<T>() }) as *mut T
         })?
     } else {
-        let ud_ptr = ffi::lua_newuserdata(state, const { mem::size_of::<T>() }) as *mut T;
-        ptr::write(ud_ptr, t);
-        ud_ptr
+        ffi::lua_newuserdata(state, const { mem::size_of::<T>() }) as *mut T
     };
 
     #[cfg(feature = "luau")]
     let ud_ptr = if protect {
-        protect_lua!(state, 0, 1, move |state| ffi::lua_newuserdata_t::<T>(state, t))?
+        protect_lua!(state, 0, 1, move |state| ffi::lua_newuserdata_t::<T>(state))?
     } else {
-        ffi::lua_newuserdata_t::<T>(state, t)
+        ffi::lua_newuserdata_t::<T>(state)
     };
 
+    ptr::write(ud_ptr, t);
     get_internal_metatable::<T>(state);
     ffi::lua_setmetatable(state, -2);
     Ok(ud_ptr)

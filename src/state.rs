@@ -1966,12 +1966,7 @@ impl Lua {
 
     #[inline(always)]
     pub(crate) fn lock(&self) -> ReentrantMutexGuard<RawLua> {
-        let rawlua = self.raw.lock();
-        #[cfg(feature = "luau")]
-        if unsafe { (*rawlua.extra.get()).running_userdata_gc } {
-            panic!("Luau VM is suspended while userdata destructor is running");
-        }
-        rawlua
+        self.raw.lock()
     }
 
     #[inline(always)]
@@ -1993,12 +1988,7 @@ impl WeakLua {
     #[track_caller]
     #[inline(always)]
     pub(crate) fn lock(&self) -> LuaGuard {
-        let guard = LuaGuard::new(self.0.upgrade().expect("Lua instance is destroyed"));
-        #[cfg(feature = "luau")]
-        if unsafe { (*guard.extra.get()).running_userdata_gc } {
-            panic!("Luau VM is suspended while userdata destructor is running");
-        }
-        guard
+        LuaGuard::new(self.0.upgrade().expect("Lua instance is destroyed"))
     }
 
     #[inline(always)]

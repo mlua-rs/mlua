@@ -124,15 +124,16 @@ unsafe extern "C-unwind" fn lua_require(state: *mut ffi::lua_State) -> c_int {
     ffi::lua_pop(state, 1); // remove nil
 
     // load the module
-    let err_buf = ffi::lua_newuserdata_t(state, StdString::new());
+    let err_buf = ffi::lua_newuserdata_t::<StdString>(state);
+    err_buf.write(StdString::new());
     ffi::luaL_getsubtable(state, ffi::LUA_REGISTRYINDEX, cstr!("_LOADERS")); // _LOADERS is at index 3
     for i in 1.. {
         if ffi::lua_rawgeti(state, -1, i) == ffi::LUA_TNIL {
             // no more loaders?
-            if (*err_buf).is_empty() {
+            if (&*err_buf).is_empty() {
                 ffi::luaL_error(state, cstr!("module '%s' not found"), name);
             } else {
-                let bytes = (*err_buf).as_bytes();
+                let bytes = (&*err_buf).as_bytes();
                 let extra = ffi::lua_pushlstring(state, bytes.as_ptr() as *const _, bytes.len());
                 ffi::luaL_error(state, cstr!("module '%s' not found:%s"), name, extra);
             }
