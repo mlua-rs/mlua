@@ -56,9 +56,9 @@ pub struct luarequire_Configuration {
     // Returns whether the context is currently pointing at a module.
     pub is_module_present: unsafe extern "C" fn(L: *mut lua_State, ctx: *mut c_void) -> bool,
 
-    // Provides the contents of the current module. This function is only called if is_module_present returns
-    // true.
-    pub get_contents: unsafe extern "C" fn(
+    // Provides a chunkname for the current module. This will be accessible through the debug library. This
+    // function is only called if is_module_present returns true.
+    pub get_chunkname: unsafe extern "C" fn(
         L: *mut lua_State,
         ctx: *mut c_void,
         buffer: *mut c_char,
@@ -66,9 +66,9 @@ pub struct luarequire_Configuration {
         size_out: *mut usize,
     ) -> luarequire_WriteResult,
 
-    // Provides a chunkname for the current module. This will be accessible through the debug library. This
-    // function is only called if is_module_present returns true.
-    pub get_chunkname: unsafe extern "C" fn(
+    // Provides a loadname that identifies the current module and is passed to load. This function
+    // is only called if is_module_present returns true.
+    pub get_loadname: unsafe extern "C" fn(
         L: *mut lua_State,
         ctx: *mut c_void,
         buffer: *mut c_char,
@@ -91,15 +91,34 @@ pub struct luarequire_Configuration {
     // NAVIGATE_FAILURE is returned (at root).
     pub is_config_present: unsafe extern "C" fn(L: *mut lua_State, ctx: *mut c_void) -> bool,
 
-    // Provides the contents of the configuration file in the current context.
-    // This function is only called if is_config_present returns true.
-    pub get_config: unsafe extern "C" fn(
-        L: *mut lua_State,
-        ctx: *mut c_void,
-        buffer: *mut c_char,
-        buffer_size: usize,
-        size_out: *mut usize,
-    ) -> luarequire_WriteResult,
+    // Parses the configuration file in the current context for the given alias and returns its
+    // value or WRITE_FAILURE if not found. This function is only called if is_config_present
+    // returns true. If this function pointer is set, get_config must not be set. Opting in to this
+    // function pointer disables parsing configuration files internally and can be used for finer
+    // control over the configuration file parsing process.
+    pub get_alias: Option<
+        unsafe extern "C" fn(
+            L: *mut lua_State,
+            ctx: *mut c_void,
+            alias: *const c_char,
+            buffer: *mut c_char,
+            buffer_size: usize,
+            size_out: *mut usize,
+        ) -> luarequire_WriteResult,
+    >,
+
+    // Provides the contents of the configuration file in the current context. This function is only called
+    // if is_config_present returns true. If this function pointer is set, get_alias must not be set. Opting
+    // in to this function pointer enables parsing configuration files internally.
+    pub get_config: Option<
+        unsafe extern "C" fn(
+            L: *mut lua_State,
+            ctx: *mut c_void,
+            buffer: *mut c_char,
+            buffer_size: usize,
+            size_out: *mut usize,
+        ) -> luarequire_WriteResult,
+    >,
 
     // Executes the module and places the result on the stack. Returns the number of results placed on the
     // stack.
@@ -110,7 +129,7 @@ pub struct luarequire_Configuration {
         ctx: *mut c_void,
         path: *const c_char,
         chunkname: *const c_char,
-        contents: *const c_char,
+        loadname: *const c_char,
     ) -> c_int,
 }
 

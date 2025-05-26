@@ -2,6 +2,7 @@ use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::ffi::CStr;
 use std::io::Result as IoResult;
+use std::ops::{Deref, DerefMut};
 use std::os::raw::{c_char, c_int, c_void};
 use std::path::{Component, Path, PathBuf};
 use std::result::Result as StdResult;
@@ -44,55 +45,43 @@ pub trait Require: MaybeSend {
     fn is_require_allowed(&self, chunk_name: &str) -> bool;
 
     /// Resets the internal state to point at the requirer module.
-    fn reset(&self, chunk_name: &str) -> StdResult<(), NavigateError>;
+    fn reset(&mut self, chunk_name: &str) -> StdResult<(), NavigateError>;
 
     /// Resets the internal state to point at an aliased module.
     ///
     /// This function received an exact path from a configuration file.
     /// It's only called when an alias's path cannot be resolved relative to its
     /// configuration file.
-    fn jump_to_alias(&self, path: &str) -> StdResult<(), NavigateError>;
+    fn jump_to_alias(&mut self, path: &str) -> StdResult<(), NavigateError>;
 
     // Navigate to parent directory
-    fn to_parent(&self) -> StdResult<(), NavigateError>;
+    fn to_parent(&mut self) -> StdResult<(), NavigateError>;
 
     /// Navigate to the given child directory.
-    fn to_child(&self, name: &str) -> StdResult<(), NavigateError>;
+    fn to_child(&mut self, name: &str) -> StdResult<(), NavigateError>;
 
     /// Returns whether the context is currently pointing at a module
-    fn is_module_present(&self) -> bool;
-
-    /// Returns the contents of the current module
-    ///
-    /// This function is only called if `is_module_present` returns true.
-    fn contents(&self) -> IoResult<Vec<u8>>;
-
-    /// Returns a chunk name for the current module.
-    ///
-    /// This function is only called if `is_module_present` returns true.
-    /// The chunk name is used to identify the module using the debug library.
-    fn chunk_name(&self) -> String;
+    fn has_module(&self) -> bool;
 
     /// Provides a cache key representing the current module.
     ///
-    /// This function is only called if `is_module_present` returns true.
-    fn cache_key(&self) -> Vec<u8>;
+    /// This function is only called if `has_module` returns true.
+    fn cache_key(&self) -> String;
 
-    /// Returns whether a configuration file is present in the current context.
-    fn is_config_present(&self) -> bool;
+    /// Returns whether a configuration is present in the current context.
+    fn has_config(&self) -> bool;
 
     /// Returns the contents of the configuration file in the current context.
     ///
-    /// This function is only called if `is_config_present` returns true.
+    /// This function is only called if `has_config` returns true.
     fn config(&self) -> IoResult<Vec<u8>>;
 
-    /// Returns a loader that when called, loads the module and returns the result.
+    /// Returns a loader function for the current module, that when called, loads the module
+    /// and returns the result.
     ///
     /// Loader can be sync or async.
-    fn loader(&self, lua: &Lua, path: &str, chunk_name: &str, content: &[u8]) -> Result<Function> {
-        let _ = path;
-        lua.load(content).set_name(chunk_name).into_function()
-    }
+    /// This function is only called if `has_module` returns true.
+    fn loader(&self, lua: &Lua) -> Result<Function>;
 }
 
 impl fmt::Debug for dyn Require {
@@ -104,9 +93,9 @@ impl fmt::Debug for dyn Require {
 /// The standard implementation of Luau `require` navigation.
 #[derive(Default)]
 pub(super) struct TextRequirer {
-    abs_path: RefCell<PathBuf>,
-    rel_path: RefCell<PathBuf>,
-    module_path: RefCell<PathBuf>,
+    abs_path: PathBuf,
+    rel_path: PathBuf,
+    module_path: PathBuf,
 }
 
 impl TextRequirer {
@@ -196,7 +185,7 @@ impl Require for TextRequirer {
         chunk_name.starts_with('@')
     }
 
-    fn reset(&self, chunk_name: &str) -> StdResult<(), NavigateError> {
+    fn reset(&mut self, chunk_name: &str) -> StdResult<(), NavigateError> {
         if !chunk_name.starts_with('@') {
             return Err(NavigateError::NotFound);
         }
@@ -208,18 +197,18 @@ impl Require for TextRequirer {
                 Ok(cwd) => cwd,
                 Err(_) => return Err(NavigateError::NotFound),
             };
-            self.abs_path.replace(Self::normalize_path(&cwd.join(&path)));
-            self.rel_path.replace(path);
-            self.module_path.replace(PathBuf::new());
+            self.abs_path = Self::normalize_path(&cwd.join(&path));
+            self.rel_path = path;
+            self.module_path = PathBuf::new();
 
             return Ok(());
         }
 
         if path.is_absolute() {
             let module_path = Self::find_module_path(&path)?;
-            self.abs_path.replace(path.clone());
-            self.rel_path.replace(path);
-            self.module_path.replace(module_path);
+            self.abs_path = path.clone();
+            self.rel_path = path;
+            self.module_path = module_path;
         } else {
             // Relative path
             let cwd = match env::current_dir() {
@@ -228,76 +217,109 @@ impl Require for TextRequirer {
             };
             let abs_path = cwd.join(&path);
             let module_path = Self::find_module_path(&abs_path)?;
-            self.abs_path.replace(Self::normalize_path(&abs_path));
-            self.rel_path.replace(path);
-            self.module_path.replace(module_path);
+            self.abs_path = Self::normalize_path(&abs_path);
+            self.rel_path = path;
+            self.module_path = module_path;
         }
 
         Ok(())
     }
 
-    fn jump_to_alias(&self, path: &str) -> StdResult<(), NavigateError> {
+    fn jump_to_alias(&mut self, path: &str) -> StdResult<(), NavigateError> {
         let path = Self::normalize_path(path.as_ref());
         let module_path = Self::find_module_path(&path)?;
 
-        self.abs_path.replace(path.clone());
-        self.rel_path.replace(path);
-        self.module_path.replace(module_path);
+        self.abs_path = path.clone();
+        self.rel_path = path;
+        self.module_path = module_path;
 
         Ok(())
     }
 
-    fn to_parent(&self) -> StdResult<(), NavigateError> {
-        let mut abs_path = self.abs_path.borrow().clone();
+    fn to_parent(&mut self) -> StdResult<(), NavigateError> {
+        let mut abs_path = self.abs_path.clone();
         if !abs_path.pop() {
             return Err(NavigateError::NotFound);
         }
-        let mut rel_parent = self.rel_path.borrow().clone();
+        let mut rel_parent = self.rel_path.clone();
         rel_parent.pop();
         let module_path = Self::find_module_path(&abs_path)?;
 
-        self.abs_path.replace(abs_path);
-        self.rel_path.replace(Self::normalize_path(&rel_parent));
-        self.module_path.replace(module_path);
+        self.abs_path = abs_path;
+        self.rel_path = Self::normalize_path(&rel_parent);
+        self.module_path = module_path;
 
         Ok(())
     }
 
-    fn to_child(&self, name: &str) -> StdResult<(), NavigateError> {
-        let abs_path = self.abs_path.borrow().join(name);
-        let rel_path = self.rel_path.borrow().join(name);
+    fn to_child(&mut self, name: &str) -> StdResult<(), NavigateError> {
+        let abs_path = self.abs_path.join(name);
+        let rel_path = self.rel_path.join(name);
         let module_path = Self::find_module_path(&abs_path)?;
 
-        self.abs_path.replace(abs_path);
-        self.rel_path.replace(rel_path);
-        self.module_path.replace(module_path);
+        self.abs_path = abs_path;
+        self.rel_path = rel_path;
+        self.module_path = module_path;
 
         Ok(())
     }
 
-    fn is_module_present(&self) -> bool {
-        self.module_path.borrow().is_file()
+    fn has_module(&self) -> bool {
+        self.module_path.is_file()
     }
 
-    fn contents(&self) -> IoResult<Vec<u8>> {
-        fs::read(&*self.module_path.borrow())
+    fn cache_key(&self) -> String {
+        self.module_path.display().to_string()
     }
 
-    fn chunk_name(&self) -> String {
-        format!("@{}", self.rel_path.borrow().display())
-    }
-
-    fn cache_key(&self) -> Vec<u8> {
-        self.module_path.borrow().display().to_string().into_bytes()
-    }
-
-    fn is_config_present(&self) -> bool {
-        self.abs_path.borrow().join(".luaurc").is_file()
+    fn has_config(&self) -> bool {
+        self.abs_path.join(".luaurc").is_file()
     }
 
     fn config(&self) -> IoResult<Vec<u8>> {
-        fs::read(self.abs_path.borrow().join(".luaurc"))
+        fs::read(self.abs_path.join(".luaurc"))
     }
+
+    fn loader(&self, lua: &Lua) -> Result<Function> {
+        let name = format!("@{}", self.rel_path.display());
+        lua.load(self.module_path.as_path())
+            .set_name(name)
+            .into_function()
+    }
+}
+
+struct Context(Box<dyn Require>);
+
+impl Deref for Context {
+    type Target = dyn Require;
+
+    fn deref(&self) -> &Self::Target {
+        &*self.0
+    }
+}
+
+impl DerefMut for Context {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut *self.0
+    }
+}
+
+macro_rules! try_borrow {
+    ($state:expr, $ctx:expr) => {
+        match (*($ctx as *const RefCell<Context>)).try_borrow() {
+            Ok(ctx) => ctx,
+            Err(_) => ffi::luaL_error($state, cstr!("require context is already borrowed")),
+        }
+    };
+}
+
+macro_rules! try_borrow_mut {
+    ($state:expr, $ctx:expr) => {
+        match (*($ctx as *const RefCell<Context>)).try_borrow_mut() {
+            Ok(ctx) => ctx,
+            Err(_) => ffi::luaL_error($state, cstr!("require context is already borrowed")),
+        }
+    };
 }
 
 #[cfg(feature = "luau")]
@@ -307,7 +329,7 @@ pub(super) unsafe extern "C" fn init_config(config: *mut ffi::luarequire_Configu
     }
 
     unsafe extern "C" fn is_require_allowed(
-        _state: *mut ffi::lua_State,
+        state: *mut ffi::lua_State,
         ctx: *mut c_void,
         requirer_chunkname: *const c_char,
     ) -> bool {
@@ -315,76 +337,72 @@ pub(super) unsafe extern "C" fn init_config(config: *mut ffi::luarequire_Configu
             return false;
         }
 
-        let this = &*(ctx as *const Box<dyn Require>);
+        let this = try_borrow!(state, ctx);
         let chunk_name = CStr::from_ptr(requirer_chunkname).to_string_lossy();
         this.is_require_allowed(&chunk_name)
     }
 
     unsafe extern "C" fn reset(
-        _state: *mut ffi::lua_State,
+        state: *mut ffi::lua_State,
         ctx: *mut c_void,
         requirer_chunkname: *const c_char,
     ) -> ffi::luarequire_NavigateResult {
-        let this = &*(ctx as *const Box<dyn Require>);
+        let mut this = try_borrow_mut!(state, ctx);
         let chunk_name = CStr::from_ptr(requirer_chunkname).to_string_lossy();
         this.reset(&chunk_name).into_nav_result()
     }
 
     unsafe extern "C" fn jump_to_alias(
-        _state: *mut ffi::lua_State,
+        state: *mut ffi::lua_State,
         ctx: *mut c_void,
         path: *const c_char,
     ) -> ffi::luarequire_NavigateResult {
-        let this = &*(ctx as *const Box<dyn Require>);
+        let mut this = try_borrow_mut!(state, ctx);
         let path = CStr::from_ptr(path).to_string_lossy();
         this.jump_to_alias(&path).into_nav_result()
     }
 
     unsafe extern "C" fn to_parent(
-        _state: *mut ffi::lua_State,
+        state: *mut ffi::lua_State,
         ctx: *mut c_void,
     ) -> ffi::luarequire_NavigateResult {
-        let this = &*(ctx as *const Box<dyn Require>);
+        let mut this = try_borrow_mut!(state, ctx);
         this.to_parent().into_nav_result()
     }
 
     unsafe extern "C" fn to_child(
-        _state: *mut ffi::lua_State,
+        state: *mut ffi::lua_State,
         ctx: *mut c_void,
         name: *const c_char,
     ) -> ffi::luarequire_NavigateResult {
-        let this = &*(ctx as *const Box<dyn Require>);
+        let mut this = try_borrow_mut!(state, ctx);
         let name = CStr::from_ptr(name).to_string_lossy();
         this.to_child(&name).into_nav_result()
     }
 
-    unsafe extern "C" fn is_module_present(_state: *mut ffi::lua_State, ctx: *mut c_void) -> bool {
-        let this = &*(ctx as *const Box<dyn Require>);
-        this.is_module_present()
-    }
-
-    unsafe extern "C" fn get_contents(
-        state: *mut ffi::lua_State,
-        ctx: *mut c_void,
-        buffer: *mut c_char,
-        buffer_size: usize,
-        size_out: *mut usize,
-    ) -> WriteResult {
-        let this = &*(ctx as *const Box<dyn Require>);
-        write_to_buffer(state, buffer, buffer_size, size_out, || this.contents())
+    unsafe extern "C" fn is_module_present(state: *mut ffi::lua_State, ctx: *mut c_void) -> bool {
+        let this = try_borrow!(state, ctx);
+        this.has_module()
     }
 
     unsafe extern "C" fn get_chunkname(
-        state: *mut ffi::lua_State,
-        ctx: *mut c_void,
+        _state: *mut ffi::lua_State,
+        _ctx: *mut c_void,
         buffer: *mut c_char,
         buffer_size: usize,
         size_out: *mut usize,
     ) -> WriteResult {
-        let this = &*(ctx as *const Box<dyn Require>);
-        write_to_buffer(state, buffer, buffer_size, size_out, || {
-            Ok(this.chunk_name().into_bytes())
-        })
+        write_to_buffer(buffer, buffer_size, size_out, &[])
+    }
+
+    unsafe extern "C" fn get_loadname(
+        _state: *mut ffi::lua_State,
+        _ctx: *mut c_void,
+        buffer: *mut c_char,
+        buffer_size: usize,
+        size_out: *mut usize,
+    ) -> WriteResult {
+        write_to_buffer(buffer, buffer_size, size_out, &[])
     }
 
     unsafe extern "C" fn get_cache_key(
@@ -394,13 +412,14 @@ pub(super) unsafe extern "C" fn init_config(config: *mut ffi::luarequire_Configu
         buffer_size: usize,
         size_out: *mut usize,
     ) -> WriteResult {
-        let this = &*(ctx as *const Box<dyn Require>);
-        write_to_buffer(state, buffer, buffer_size, size_out, || Ok(this.cache_key()))
+        let this = try_borrow!(state, ctx);
+        let cache_key = this.cache_key();
+        write_to_buffer(buffer, buffer_size, size_out, cache_key.as_bytes())
     }
 
-    unsafe extern "C" fn is_config_present(_state: *mut ffi::lua_State, ctx: *mut c_void) -> bool {
-        let this = &*(ctx as *const Box<dyn Require>);
-        this.is_config_present()
+    unsafe extern "C" fn is_config_present(state: *mut ffi::lua_State, ctx: *mut c_void) -> bool {
+        let this = try_borrow!(state, ctx);
+        this.has_config()
     }
 
     unsafe extern "C" fn get_config(
@@ -410,24 +429,25 @@ pub(super) unsafe extern "C" fn init_config(config: *mut ffi::luarequire_Configu
         buffer_size: usize,
         size_out: *mut usize,
     ) -> WriteResult {
-        let this = &*(ctx as *const Box<dyn Require>);
-        write_to_buffer(state, buffer, buffer_size, size_out, || this.config())
+        let this = try_borrow!(state, ctx);
+        let Ok(config) = this.config() else {
+            return WriteResult::Failure;
+        };
+        write_to_buffer(buffer, buffer_size, size_out, &config)
     }
 
     unsafe extern "C-unwind" fn load(
         state: *mut ffi::lua_State,
         ctx: *mut c_void,
-        path: *const c_char,
-        chunk_name: *const c_char,
-        contents: *const c_char,
+        _path: *const c_char,
+        _chunkname: *const c_char,
+        _loadname: *const c_char,
     ) -> c_int {
-        let this = &*(ctx as *const Box<dyn Require>);
-        let path = CStr::from_ptr(path).to_string_lossy();
-        let chunk_name = CStr::from_ptr(chunk_name).to_string_lossy();
-        let contents = CStr::from_ptr(contents).to_bytes();
+        let this = try_borrow!(state, ctx);
         callback_error_ext(state, ptr::null_mut(), false, move |extra, _| {
             let rawlua = (*extra).raw_lua();
-            rawlua.push(this.loader(rawlua.lua(), &path, &chunk_name, contents)?)?;
+            let loader = this.loader(rawlua.lua())?;
+            rawlua.push(loader)?;
             Ok(1)
         })
     }
@@ -438,60 +458,34 @@ pub(super) unsafe extern "C" fn init_config(config: *mut ffi::luarequire_Configu
     (*config).to_parent = to_parent;
     (*config).to_child = to_child;
     (*config).is_module_present = is_module_present;
-    (*config).get_contents = get_contents;
     (*config).get_chunkname = get_chunkname;
+    (*config).get_loadname = get_loadname;
     (*config).get_cache_key = get_cache_key;
     (*config).is_config_present = is_config_present;
-    (*config).get_config = get_config;
+    (*config).get_alias = None;
+    (*config).get_config = Some(get_config);
     (*config).load = load;
 }
 
 /// Helper function to write data to a buffer
 #[cfg(feature = "luau")]
 unsafe fn write_to_buffer(
-    state: *mut ffi::lua_State,
     buffer: *mut c_char,
     buffer_size: usize,
     size_out: *mut usize,
-    data_fetcher: impl Fn() -> IoResult<Vec<u8>>,
+    data: &[u8],
 ) -> WriteResult {
-    struct DataCache(Option<Vec<u8>>);
-
-    // The initial buffer size can be too small, to avoid making a second data fetch call,
-    // we cache the content in the first call, and then re-use it.
-
-    let lua = Lua::get_or_init_from_ptr(state);
-    match lua.try_app_data_mut::<DataCache>() {
-        Ok(Some(mut data_cache)) => {
-            if let Some(data) = data_cache.0.take() {
-                mlua_assert!(data.len() <= buffer_size, "buffer is too small");
-                *size_out = data.len();
-                ptr::copy_nonoverlapping(data.as_ptr(), buffer as *mut _, data.len());
-                return WriteResult::Success;
-            }
-        }
-        Ok(None) => {
-            // Init the cache
-            _ = lua.try_set_app_data(DataCache(None));
-        }
-        Err(_) => {}
+    // the buffer must be null terminated as it's a c++ `std::string` data() buffer
+    let is_null_terminated = data.last() == Some(&0);
+    *size_out = data.len() + if is_null_terminated { 0 } else { 1 };
+    if *size_out > buffer_size {
+        return WriteResult::BufferTooSmall;
     }
-
-    match data_fetcher() {
-        Ok(data) => {
-            *size_out = data.len();
-            if *size_out > buffer_size {
-                // Cache the data for the next call to avoid getting the contents again
-                if let Ok(Some(mut data_cache)) = lua.try_app_data_mut::<DataCache>() {
-                    data_cache.0 = Some(data);
-                }
-                return WriteResult::BufferTooSmall;
-            }
-            ptr::copy_nonoverlapping(data.as_ptr(), buffer as *mut _, data.len());
-            WriteResult::Success
-        }
-        Err(_) => WriteResult::Failure,
+    ptr::copy_nonoverlapping(data.as_ptr(), buffer as *mut _, data.len());
+    if !is_null_terminated {
+        *buffer.add(data.len()) = 0;
     }
+    WriteResult::Success
 }
 
 #[cfg(feature = "luau")]
@@ -511,18 +505,20 @@ pub fn create_require_function<R: Require + 'static>(lua: &Lua, require: R) -> R
     }
 
     unsafe extern "C-unwind" fn get_cache_key(state: *mut ffi::lua_State) -> c_int {
-        let requirer = ffi::lua_touserdata(state, ffi::lua_upvalueindex(1)) as *const Box<dyn Require>;
-        let cache_key = (*requirer).cache_key();
+        let ctx = ffi::lua_touserdata(state, ffi::lua_upvalueindex(1));
+        let ctx = try_borrow!(state, ctx);
+        let cache_key = ctx.cache_key();
         ffi::lua_pushlstring(state, cache_key.as_ptr() as *const _, cache_key.len());
         1
     }
 
     let (get_cache_key, find_current_file, proxyrequire, registered_modules, loader_cache) = unsafe {
         lua.exec_raw::<(Function, Function, Function, Table, Table)>((), move |state| {
-            let requirer_ptr = ffi::lua_newuserdata_t::<Box<dyn Require>>(state, Box::new(require));
+            let context = Context(Box::new(require));
+            let context_ptr = ffi::lua_newuserdata_t(state, RefCell::new(context));
             ffi::lua_pushcclosured(state, get_cache_key, cstr!("get_cache_key"), 1);
             ffi::lua_pushcfunctiond(state, find_current_file, cstr!("find_current_file"));
-            ffi::luarequire_pushproxyrequire(state, init_config, requirer_ptr as *mut _);
+            ffi::luarequire_pushproxyrequire(state, init_config, context_ptr as *mut _);
             ffi::luaL_getsubtable(state, ffi::LUA_REGISTRYINDEX, ffi::LUA_REGISTERED_MODULES_TABLE);
             ffi::luaL_getsubtable(state, ffi::LUA_REGISTRYINDEX, cstr!("__MLUA_LOADER_CACHE"));
         })
