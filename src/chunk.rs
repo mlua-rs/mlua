@@ -38,28 +38,28 @@ pub trait AsChunk {
     }
 
     /// Returns chunk data (can be text or binary)
-    fn source<'a>(self) -> IoResult<Cow<'a, [u8]>>
+    fn source<'a>(&self) -> IoResult<Cow<'a, [u8]>>
     where
         Self: 'a;
 }
 
 impl AsChunk for &str {
-    fn source<'a>(self) -> IoResult<Cow<'a, [u8]>>
+    fn source<'a>(&self) -> IoResult<Cow<'a, [u8]>>
     where
         Self: 'a,
     {
-        Ok(Cow::Borrowed(self.as_ref()))
+        Ok(Cow::Borrowed(self.as_bytes()))
     }
 }
 
 impl AsChunk for StdString {
-    fn source<'a>(self) -> IoResult<Cow<'a, [u8]>> {
-        Ok(Cow::Owned(self.into_bytes()))
+    fn source<'a>(&self) -> IoResult<Cow<'a, [u8]>> {
+        Ok(Cow::Owned(self.clone().into_bytes()))
     }
 }
 
 impl AsChunk for &StdString {
-    fn source<'a>(self) -> IoResult<Cow<'a, [u8]>>
+    fn source<'a>(&self) -> IoResult<Cow<'a, [u8]>>
     where
         Self: 'a,
     {
@@ -68,7 +68,7 @@ impl AsChunk for &StdString {
 }
 
 impl AsChunk for &[u8] {
-    fn source<'a>(self) -> IoResult<Cow<'a, [u8]>>
+    fn source<'a>(&self) -> IoResult<Cow<'a, [u8]>>
     where
         Self: 'a,
     {
@@ -77,13 +77,13 @@ impl AsChunk for &[u8] {
 }
 
 impl AsChunk for Vec<u8> {
-    fn source<'a>(self) -> IoResult<Cow<'a, [u8]>> {
-        Ok(Cow::Owned(self))
+    fn source<'a>(&self) -> IoResult<Cow<'a, [u8]>> {
+        Ok(Cow::Owned(self.clone()))
     }
 }
 
 impl AsChunk for &Vec<u8> {
-    fn source<'a>(self) -> IoResult<Cow<'a, [u8]>>
+    fn source<'a>(&self) -> IoResult<Cow<'a, [u8]>>
     where
         Self: 'a,
     {
@@ -96,7 +96,7 @@ impl AsChunk for &Path {
         Some(format!("@{}", self.display()))
     }
 
-    fn source<'a>(self) -> IoResult<Cow<'a, [u8]>> {
+    fn source<'a>(&self) -> IoResult<Cow<'a, [u8]>> {
         std::fs::read(self).map(Cow::Owned)
     }
 }
@@ -106,8 +106,29 @@ impl AsChunk for PathBuf {
         Some(format!("@{}", self.display()))
     }
 
-    fn source<'a>(self) -> IoResult<Cow<'a, [u8]>> {
+    fn source<'a>(&self) -> IoResult<Cow<'a, [u8]>> {
         std::fs::read(self).map(Cow::Owned)
+    }
+}
+
+impl<C: AsChunk + ?Sized> AsChunk for Box<C> {
+    fn name(&self) -> Option<StdString> {
+        (**self).name()
+    }
+
+    fn environment(&self, lua: &Lua) -> Result<Option<Table>> {
+        (**self).environment(lua)
+    }
+
+    fn mode(&self) -> Option<ChunkMode> {
+        (**self).mode()
+    }
+
+    fn source<'a>(&self) -> IoResult<Cow<'a, [u8]>>
+    where
+        Self: 'a,
+    {
+        (**self).source()
     }
 }
 
