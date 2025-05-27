@@ -47,7 +47,7 @@ pub(crate) unsafe fn get_internal_metatable<T: TypeKey>(state: *mut ffi::lua_Sta
 // Uses 6 stack spaces and calls checkstack.
 pub(crate) unsafe fn init_internal_metatable<T: TypeKey>(
     state: *mut ffi::lua_State,
-    customize_fn: Option<fn(*mut ffi::lua_State) -> Result<()>>,
+    customize_fn: Option<fn(*mut ffi::lua_State)>,
 ) -> Result<()> {
     check_stack(state, 6)?;
 
@@ -62,11 +62,11 @@ pub(crate) unsafe fn init_internal_metatable<T: TypeKey>(
     ffi::lua_pushboolean(state, 0);
     rawset_field(state, -2, "__metatable")?;
 
-    if let Some(f) = customize_fn {
-        f(state)?;
-    }
-
     protect_lua!(state, 1, 0, |state| {
+        if let Some(f) = customize_fn {
+            f(state);
+        }
+
         ffi::lua_rawsetp(state, ffi::LUA_REGISTRYINDEX, T::type_key());
     })?;
 

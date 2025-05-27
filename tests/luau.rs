@@ -436,5 +436,16 @@ fn test_loadstring() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn test_typeof_error() -> Result<()> {
+    let lua = Lua::new();
+
+    let err = Error::runtime("just a test error");
+    let res = lua.load("return typeof(...)").call::<String>(err)?;
+    assert_eq!(res, "error");
+
+    Ok(())
+}
+
 #[path = "luau/require.rs"]
 mod require;
