@@ -253,7 +253,7 @@ impl Function {
             "#,
         )
         .try_cache()
-        .set_name("__mlua_bind")
+        .set_name("=__mlua_bind")
         .call((self, args_wrapper))
     }
 
