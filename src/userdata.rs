@@ -683,22 +683,16 @@ impl AnyUserData {
     /// Keeps associated user values unchanged (they will be collected by Lua's GC).
     pub fn take<T: 'static>(&self) -> Result<T> {
         let lua = self.0.lua.lock();
-        let state = lua.state();
-        unsafe {
-            let _sg = StackGuard::new(state);
-            check_stack(state, 2)?;
-
-            let type_id = lua.push_userdata_ref(&self.0)?;
-            match type_id {
-                Some(type_id) if type_id == TypeId::of::<T>() => {
-                    if (*get_userdata::<UserDataStorage<T>>(state, -1)).has_exclusive_access() {
-                        take_userdata::<UserDataStorage<T>>(state).into_inner()
-                    } else {
-                        Err(Error::UserDataBorrowMutError)
-                    }
+        match lua.get_userdata_ref_type_id(&self.0)? {
+            Some(type_id) if type_id == TypeId::of::<T>() => unsafe {
+                let ref_thread = lua.ref_thread();
+                if (*get_userdata::<UserDataStorage<T>>(ref_thread, self.0.index)).has_exclusive_access() {
+                    take_userdata::<UserDataStorage<T>>(ref_thread, self.0.index).into_inner()
+                } else {
+                    Err(Error::UserDataBorrowMutError)
                 }
-                _ => Err(Error::UserDataTypeMismatch),
-            }
+            },
+            _ => Err(Error::UserDataTypeMismatch),
         }
     }
 

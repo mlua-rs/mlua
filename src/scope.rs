@@ -8,9 +8,7 @@ use crate::state::{Lua, LuaGuard, RawLua};
 use crate::traits::{FromLuaMulti, IntoLuaMulti};
 use crate::types::{Callback, CallbackUpvalue, ScopedCallback, ValueRef};
 use crate::userdata::{AnyUserData, UserData, UserDataRegistry, UserDataStorage};
-use crate::util::{
-    self, assert_stack, check_stack, get_metatable_ptr, get_userdata, take_userdata, StackGuard,
-};
+use crate::util::{self, check_stack, get_metatable_ptr, get_userdata, take_userdata, StackGuard};
 
 /// Constructed by the [`Lua::scope`] method, allows temporarily creating Lua userdata and
 /// callbacks that are not required to be `Send` or `'static`.
@@ -284,22 +282,18 @@ impl<'scope, 'env: 'scope> Scope<'scope, 'env> {
     /// Shortens the lifetime of the userdata to the lifetime of the scope.
     fn seal_userdata<T: 'env>(&self, ud: &AnyUserData) {
         let destructor: DestructorCallback = Box::new(|rawlua, vref| unsafe {
-            let state = rawlua.state();
-            let _sg = StackGuard::new(state);
-            assert_stack(state, 2);
-
             // Ensure that userdata is not destructed
-            match rawlua.push_userdata_ref(&vref) {
+            match rawlua.get_userdata_ref_type_id(&vref) {
                 Ok(Some(_)) => {}
                 Ok(None) => {
                     // Deregister metatable
-                    let mt_ptr = get_metatable_ptr(state, -1);
+                    let mt_ptr = get_metatable_ptr(rawlua.ref_thread(), vref.index);
                     rawlua.deregister_userdata_metatable(mt_ptr);
                 }
                 Err(_) => return vec![],
             }
 
-            let data = take_userdata::<UserDataStorage<T>>(state);
+            let data = take_userdata::<UserDataStorage<T>>(rawlua.ref_thread(), vref.index);
             vec![Box::new(move || drop(data))]
         });
         self.destructors.0.borrow_mut().push((ud.0.clone(), destructor));

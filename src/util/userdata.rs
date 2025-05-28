@@ -141,24 +141,27 @@ pub(crate) unsafe fn get_userdata<T>(state: *mut ffi::lua_State, index: c_int) -
     ud
 }
 
-// Pops the userdata off of the top of the stack and returns it to rust, invalidating the lua
-// userdata and gives it the special "destructed" userdata metatable. Userdata must not have been
-// previously invalidated, and this method does not check for this.
-// Uses 1 extra stack space and does not call checkstack.
-pub(crate) unsafe fn take_userdata<T>(state: *mut ffi::lua_State) -> T {
-    // We set the metatable of userdata on __gc to a special table with no __gc method and with
-    // metamethods that trigger an error on access. We do this so that it will not be double
-    // dropped, and also so that it cannot be used or identified as any particular userdata type
-    // after the first call to __gc.
+/// Unwraps `T` from the Lua userdata and invalidating it by setting the special "destructed"
+/// metatable.
+///
+/// This method does not check that userdata is of type `T` and was not previously invalidated.
+///
+/// Uses 1 extra stack space, does not call checkstack.
+pub(crate) unsafe fn take_userdata<T>(state: *mut ffi::lua_State, idx: c_int) -> T {
+    #[rustfmt::skip]
+    let idx = if idx < 0 { ffi::lua_absindex(state, idx) } else { idx };
+
+    // Update the metatable of this userdata to a special one with no `__gc` method and with
+    // metamethods that trigger an error on access.
+    // We do this so that it will not be double dropped or used after being dropped.
     get_destructed_userdata_metatable(state);
-    ffi::lua_setmetatable(state, -2);
-    let ud = get_userdata::<T>(state, -1);
+    ffi::lua_setmetatable(state, idx);
+    let ud = get_userdata::<T>(state, idx);
 
     // Update userdata tag to disable destructor and mark as destructed
     #[cfg(feature = "luau")]
-    ffi::lua_setuserdatatag(state, -1, 1);
+    ffi::lua_setuserdatatag(state, idx, 1);
 
-    ffi::lua_pop(state, 1);
     ptr::read(ud)
 }
 

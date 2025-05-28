@@ -455,9 +455,9 @@ pub(crate) unsafe extern "C" fn collect_userdata<T>(
 // It checks if the userdata is safe to destroy and sets the "destroyed" metatable
 // to prevent further GC collection.
 pub(super) unsafe extern "C-unwind" fn destroy_userdata_storage<T>(state: *mut ffi::lua_State) -> c_int {
-    let ud = get_userdata::<UserDataStorage<T>>(state, -1);
+    let ud = get_userdata::<UserDataStorage<T>>(state, 1);
     if (*ud).is_safe_to_destroy() {
-        take_userdata::<UserDataStorage<T>>(state);
+        take_userdata::<UserDataStorage<T>>(state, 1);
         ffi::lua_pushboolean(state, 1);
     } else {
         ffi::lua_pushboolean(state, 0);
