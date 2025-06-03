@@ -1,7 +1,11 @@
-use mlua::{IntoLua, Lua, Result, Value};
+use mlua::{IntoLua, Lua, MultiValue, Result, Value};
 
 fn run_require(lua: &Lua, path: impl IntoLua) -> Result<Value> {
     lua.load(r#"return require(...)"#).call(path)
+}
+
+fn run_require_pcall(lua: &Lua, path: impl IntoLua) -> Result<MultiValue> {
+    lua.load(r#"return pcall(require, ...)"#).call(path)
 }
 
 #[track_caller]
@@ -32,6 +36,13 @@ fn test_require_errors() {
     assert!(res.is_err());
     assert!((res.unwrap_err().to_string())
         .contains("bad argument #1 to 'require' (string expected, got boolean)"));
+
+    // Require from loadstring
+    let res = lua
+        .load(r#"return loadstring("require('./a/relative/path')")()"#)
+        .eval::<Value>();
+    assert!(res.is_err());
+    assert!((res.unwrap_err().to_string()).contains("require is not supported in this context"));
 }
 
 #[test]
@@ -41,6 +52,11 @@ fn test_require_without_config() {
     // RequireSimpleRelativePath
     let res = run_require(&lua, "./require/without_config/dependency").unwrap();
     assert_eq!("result from dependency", get_str(&res, 1));
+
+    // RequireSimpleRelativePathWithinPcall
+    let res = run_require_pcall(&lua, "./require/without_config/dependency").unwrap();
+    assert!(res[0].as_boolean().unwrap());
+    assert_eq!("result from dependency", get_str(&res[1], 1));
 
     // RequireRelativeToRequiringFile
     let res = run_require(&lua, "./require/without_config/module").unwrap();
@@ -59,9 +75,23 @@ fn test_require_without_config() {
     let res = run_require(&lua, "./require/without_config/lua").unwrap();
     assert_eq!("result from init.lua", get_str(&res, 1));
 
-    // RequireSubmoduleUsingSelf
+    // RequireSubmoduleUsingSelfIndirectly
     let res = run_require(&lua, "./require/without_config/nested_module_requirer").unwrap();
     assert_eq!("result from submodule", get_str(&res, 1));
+
+    // RequireSubmoduleUsingSelfDirectly
+    let res = run_require(&lua, "./require/without_config/nested").unwrap();
+    assert_eq!("result from submodule", get_str(&res, 1));
+
+    // CannotRequireInitLuauDirectly
+    let res = run_require(&lua, "./require/without_config/nested/init");
+    assert!(res.is_err());
+    assert!((res.unwrap_err().to_string()).contains("could not resolve child component \"init\""));
+
+    // RequireNestedInits
+    let res = run_require(&lua, "./require/without_config/nested_inits_requirer").unwrap();
+    assert_eq!("result from nested_inits/init", get_str(&res, 1));
+    assert_eq!("required into module", get_str(&res, 2));
 
     // RequireWithFileAmbiguity
     let res = run_require(&lua, "./require/without_config/ambiguous_file_requirer");

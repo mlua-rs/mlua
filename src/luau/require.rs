@@ -144,16 +144,18 @@ impl TextRequirer {
     fn find_module_path(path: &Path) -> StdResult<PathBuf, NavigateError> {
         let mut found_path = None;
 
-        let current_ext = (path.extension().and_then(|s| s.to_str()))
-            .map(|s| format!("{s}."))
-            .unwrap_or_default();
-        for ext in ["luau", "lua"] {
-            let candidate = path.with_extension(format!("{current_ext}{ext}"));
-            if candidate.is_file() {
-                if found_path.is_some() {
-                    return Err(NavigateError::Ambiguous);
+        if path.components().last() != Some(Component::Normal("init".as_ref())) {
+            let current_ext = (path.extension().and_then(|s| s.to_str()))
+                .map(|s| format!("{s}."))
+                .unwrap_or_default();
+            for ext in ["luau", "lua"] {
+                let candidate = path.with_extension(format!("{current_ext}{ext}"));
+                if candidate.is_file() {
+                    if found_path.is_some() {
+                        return Err(NavigateError::Ambiguous);
+                    }
+                    found_path = Some(candidate);
                 }
-                found_path = Some(candidate);
             }
         }
         if path.is_dir() {
