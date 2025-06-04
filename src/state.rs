@@ -1,5 +1,6 @@
 use std::any::TypeId;
 use std::cell::{BorrowError, BorrowMutError, RefCell};
+use std::convert::Infallible;
 use std::marker::PhantomData;
 use std::ops::Deref;
 use std::os::raw::{c_char, c_int};
@@ -17,7 +18,7 @@ use crate::scope::Scope;
 use crate::stdlib::StdLib;
 use crate::string::String;
 use crate::table::Table;
-use crate::thread::Thread;
+use crate::thread::{Thread, LuauContinuationStatus};
 use crate::traits::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti};
 use crate::types::{
     AppDataRef, AppDataRefMut, ArcReentrantMutexGuard, Integer, LuaType, MaybeSend, Number, ReentrantMutex,
@@ -1288,6 +1289,32 @@ impl Lua {
         }))
     }
 
+    /// Same as ``create_function`` but with support for Luau continuations
+    ///
+    /// Note that yieldable luau continuations are not currently supported at this time
+    #[cfg(feature = "luau")]
+    pub fn create_function_with_luau_continuation<F, FC, A, AC, R, RC>(&self, func: F, cont: FC) -> Result<Function> 
+    where
+        F: Fn(&Lua, A) -> Result<R> + MaybeSend + 'static,
+        FC: Fn(&Lua, LuauContinuationStatus, AC) -> Result<RC> + MaybeSend + 'static,
+        A: FromLuaMulti,
+        AC: FromLuaMulti,
+        R: IntoLuaMulti,
+        RC: IntoLuaMulti,
+    {
+        (self.lock()).create_callback_with_luau_continuation(
+            Box::new(move |rawlua, nargs| unsafe {
+                let args = A::from_stack_args(nargs, 1, None, rawlua)?;
+                func(rawlua.lua(), args)?.push_into_stack_multi(rawlua)
+            }),
+            Box::new(move |rawlua, nargs, status| unsafe {
+                let args = AC::from_stack_args(nargs, 1, None, rawlua)?;
+                let status = LuauContinuationStatus::from_status(status);
+                cont(rawlua.lua(), status, args)?.push_into_stack_multi(rawlua)
+            }),
+        )
+    } 
+
     /// Wraps a Rust mutable closure, creating a callable Lua function handle to it.
     ///
     /// This is a version of [`Lua::create_function`] that accepts a `FnMut` argument.
@@ -2102,6 +2129,33 @@ impl Lua {
     #[inline(always)]
     pub(crate) unsafe fn raw_lua(&self) -> &RawLua {
         &*self.raw.data_ptr()
+    }
+
+    /// Yields arguments
+    /// 
+    /// If this function cannot yield, it will raise a runtime error.
+    /// 
+    /// Note: On lua 5.1, 5.2, and JIT, this function will unable to know if it can yield 
+    /// or not until it reaches the Lua state.
+    ///
+    /// Unsafe and should only be used in a function with a luau continuation for now
+    pub unsafe fn yield_args(&self, args: impl IntoLuaMulti) -> Result<()> {
+        let raw = self.lock();
+        #[cfg(not(any(feature = "lua51", feature = "lua52", feature = "luajit")))]
+        if !raw.is_yieldable() {
+            return Err(Error::runtime("cannot yield across Rust/Lua boundary."))
+        }
+        unsafe {
+            raw.extra.get().as_mut().unwrap_unchecked().yielded_values = args.into_lua_multi(self)?;
+        }
+        Ok(())
+    }
+
+    /// Checks if Lua is currently allowed to yield.
+    #[cfg(not(any(feature = "lua51", feature="lua52", feature = "luajit")))]
+    #[inline]
+    pub(crate) fn is_yieldable(&self) -> bool {
+        self.lock().is_yieldable()
     }
 }
 

@@ -26,6 +26,25 @@ use {
     },
 };
 
+/// Luau continuation final status
+#[cfg(feature = "luau")]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub enum LuauContinuationStatus {
+    Ok,
+    Yielded,
+    Error,
+}
+
+impl LuauContinuationStatus {
+    pub(crate) fn from_status(status: c_int) -> Self {
+        match status {
+            ffi::LUA_YIELD => Self::Yielded,
+            ffi::LUA_OK => Self::Ok,
+            _ => Self::Error,
+        }
+    }
+}
+
 /// Status of a Lua thread (coroutine).
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum ThreadStatus {

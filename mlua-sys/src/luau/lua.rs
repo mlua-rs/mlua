@@ -427,6 +427,11 @@ pub unsafe fn lua_pushcclosure(L: *mut lua_State, f: lua_CFunction, nup: c_int) 
 }
 
 #[inline(always)]
+pub unsafe fn lua_pushcclosurec(L: *mut lua_State, f: lua_CFunction, cont: lua_Continuation, nup: c_int) {
+    lua_pushcclosurek(L, f, ptr::null(), nup, Some(cont))
+}
+
+#[inline(always)]
 pub unsafe fn lua_pushcclosured(L: *mut lua_State, f: lua_CFunction, debugname: *const c_char, nup: c_int) {
     lua_pushcclosurek(L, f, debugname, nup, None)
 }
