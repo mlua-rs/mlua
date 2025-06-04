@@ -2134,8 +2134,9 @@ impl Lua {
         &*self.raw.data_ptr()
     }
 
-    /// Sets the yields arguments. Note that Ok(()) must be returned for the Rust function
-    /// to actually yield. This method is mostly useful with Luau continuations
+    /// Sets the yields arguments. Note that ``Ok(())`` must be returned for the Rust function
+    /// to actually yield. This method is mostly useful with Luau continuations and Rust-Rust
+    /// yields
     /// 
     /// If this function cannot yield, it will raise a runtime error.
     /// 
@@ -2143,10 +2144,6 @@ impl Lua {
     /// or not until it reaches the Lua state.
     ///
     /// Potentially unsafe at this time. Use with caution.
-    ///
-    /// This method only supports Luau for now as proper Rust yielding in other Lua variants is 
-    /// more complicated. This limitation may be lifted in the future.
-    #[cfg(feature = "luau")] // todo: support non-luau set_yield_args, the groundwork is here
     pub unsafe fn set_yield_args(&self, args: impl IntoLuaMulti) -> Result<()> {
         let raw = self.lock();
         #[cfg(not(any(feature = "lua51", feature = "lua52", feature = "luajit")))]

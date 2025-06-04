@@ -3,8 +3,6 @@ use std::os::raw::c_int;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::ptr;
 use std::sync::Arc;
-
-#[cfg(feature = "luau")]
 use crate::IntoLuaMulti;
 
 use crate::error::{Error, Result};
@@ -159,9 +157,6 @@ where
 }
 
 /// An yieldable version of `callback_error_ext`
-///
-/// Outside of Luau, this does the same thing as ``callback_error_ext`` right now
-#[cfg(feature = "luau")]
 pub(crate) unsafe fn callback_error_ext_yieldable<F>(
     state: *mut ffi::lua_State,
     mut extra: *mut ExtraData,

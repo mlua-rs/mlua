@@ -252,3 +252,18 @@ fn test_thread_resume_error() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn test_thread_yield_args() -> Result<()> {
+    let lua = Lua::new();
+    let always_yield = lua.create_function(
+        |lua, ()| {
+            unsafe { lua.set_yield_args((42, "69420".to_string(), 45.6))? }
+            Ok(())
+        })?;
+
+    let thread = lua.create_thread(always_yield)?;
+    assert_eq!(thread.resume::<(i32, String, f32)>(())?, (42, String::from("69420"), 45.6));
+
+    Ok(())
+}
