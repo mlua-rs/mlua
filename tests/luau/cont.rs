@@ -20,7 +20,6 @@ fn test_luau_continuation() {
         2
     );
 
-    // does not work yet
     let always_yield = lua.create_function(
         |lua, ()| {
             unsafe { lua.yield_args((42, "69420".to_string()))? }
