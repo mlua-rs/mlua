@@ -6,8 +6,8 @@ fn test_luau_continuation() {
     let lua = Lua::new();
 
     let cont_func = lua.create_function_with_luau_continuation(
-        |lua, a: u64| Ok(a + 1),
-        |lua, status, a: u64| {
+        |_lua, a: u64| Ok(a + 1),
+        |_lua, _status, a: u64| {
             println!("Reached cont");
             Ok(a + 2)
         }
@@ -20,6 +20,7 @@ fn test_luau_continuation() {
         2
     );
 
+    // basic yield test before we go any further
     let always_yield = lua.create_function(
         |lua, ()| {
             unsafe { lua.set_yield_args((42, "69420".to_string(), 45.6))? }
@@ -41,7 +42,7 @@ fn test_luau_continuation() {
             }
             Ok(())
         },
-        |lua, status, a: u64| {
+        |_lua, _status, a: u64| {
             println!("Reached cont");
             Ok(a + 39)
         }
@@ -64,7 +65,7 @@ fn test_luau_continuation() {
             unsafe { lua.set_yield_args((42, "69420".to_string(), 45.6))? }
             Ok(())
         },
-        |lua, _, mv: mlua::MultiValue| {
+        |_lua, _, mv: mlua::MultiValue| {
             println!("Reached second continuation");
             if mv.is_empty() {
                 return Ok(mv);

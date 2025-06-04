@@ -21,8 +21,6 @@ use crate::thread::Thread;
 
 #[cfg(feature = "luau")]
 use crate::thread::LuauContinuationStatus;
-#[cfg(feature = "luau")]
-use std::convert::Infallible;
 
 use crate::traits::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti};
 use crate::types::{
