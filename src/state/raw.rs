@@ -12,16 +12,22 @@ use crate::chunk::ChunkMode;
 use crate::error::{Error, Result};
 use crate::function::Function;
 use crate::memory::{MemoryState, ALLOCATOR};
-use crate::state::util::{callback_error_ext, callback_error_ext_yieldable, ref_stack_pop};
+use crate::state::util::{callback_error_ext, ref_stack_pop};
+#[cfg(feature = "luau")]
+use crate::state::util::callback_error_ext_yieldable;
 use crate::stdlib::StdLib;
 use crate::string::String;
 use crate::table::Table;
 use crate::thread::Thread;
 use crate::traits::IntoLua;
 use crate::types::{
-    AppDataRef, AppDataRefMut, Callback, LuauContinuation, CallbackUpvalue, LuauContinuationUpvalue, DestructedUserdata, 
+    AppDataRef, AppDataRefMut, Callback, CallbackUpvalue, DestructedUserdata, 
     Integer, LightUserData, MaybeSend, ReentrantMutex, RegistryKey, ValueRef, XRc,
 };
+
+#[cfg(feature = "luau")]
+use crate::types::{LuauContinuation, LuauContinuationUpvalue};
+
 use crate::userdata::{
     init_userdata_metatable, AnyUserData, MetaMethod, RawUserDataRegistry, UserData, UserDataRegistry,
     UserDataStorage,
@@ -1156,6 +1162,21 @@ impl RawLua {
 
     // Creates a Function out of a Callback containing a 'static Fn.
     pub(crate) fn create_callback(&self, func: Callback) -> Result<Function> {
+        #[cfg(not(feature = "luau"))]
+        unsafe extern "C-unwind" fn call_callback(state: *mut ffi::lua_State) -> c_int {
+            let upvalue = get_userdata::<CallbackUpvalue>(state, ffi::lua_upvalueindex(1));
+            callback_error_ext(state, (*upvalue).extra.get(), true, |extra, nargs| {
+                // Lua ensures that `LUA_MINSTACK` stack spaces are available (after pushing arguments)
+                // The lock must be already held as the callback is executed
+                let rawlua = (*extra).raw_lua();
+                match (*upvalue).data {
+                    Some(ref func) => func(rawlua, nargs),
+                    None => Err(Error::CallbackDestructed),
+                }
+            })
+        }
+        
+        #[cfg(feature = "luau")]
         unsafe extern "C-unwind" fn call_callback(state: *mut ffi::lua_State) -> c_int {
             let upvalue = get_userdata::<CallbackUpvalue>(state, ffi::lua_upvalueindex(1));
             callback_error_ext_yieldable(state, (*upvalue).extra.get(), true, |extra, nargs| {

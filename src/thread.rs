@@ -35,6 +35,7 @@ pub enum LuauContinuationStatus {
     Error,
 }
 
+#[cfg(feature = "luau")]
 impl LuauContinuationStatus {
     pub(crate) fn from_status(status: c_int) -> Self {
         match status {

@@ -22,7 +22,7 @@ fn test_luau_continuation() {
 
     let always_yield = lua.create_function(
         |lua, ()| {
-            unsafe { lua.yield_args((42, "69420".to_string(), 45.6))? }
+            unsafe { lua.set_yield_args((42, "69420".to_string(), 45.6))? }
             Ok(())
         })
         .unwrap();
@@ -34,8 +34,8 @@ fn test_luau_continuation() {
     let cont_func = lua.create_function_with_luau_continuation(
         |lua, a: u64| {
             unsafe { 
-                match lua.yield_args(a) {
-                    Ok(()) => println!("yield_args called"),
+                match lua.set_yield_args(a) {
+                    Ok(()) => println!("set_yield_args called"),
                     Err(e) => println!("{:?}", e)
                 } 
             }
@@ -58,4 +58,23 @@ fn test_luau_continuation() {
     let v = th.resume::<i32>(v).expect("Failed to load continuation");
 
     assert_eq!(v, 41);
+
+    let always_yield = lua.create_function_with_luau_continuation(
+        |lua, ()| {
+            unsafe { lua.set_yield_args((42, "69420".to_string(), 45.6))? }
+            Ok(())
+        },
+        |lua, _, mv: mlua::MultiValue| {
+            println!("Reached second continuation");
+            if mv.is_empty() {
+                return Ok(mv);
+            }
+            Err(mlua::Error::external(format!("a{}", mv.len())))
+        }
+    )
+    .unwrap();
+
+    let thread = lua.create_thread(always_yield).unwrap();
+    let mv = thread.resume::<mlua::MultiValue>(()).unwrap();
+    assert!(thread.resume::<String>(mv).unwrap_err().to_string().starts_with("a3"));
 }

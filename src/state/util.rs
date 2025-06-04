@@ -3,6 +3,8 @@ use std::os::raw::c_int;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::ptr;
 use std::sync::Arc;
+
+#[cfg(feature = "luau")]
 use crate::IntoLuaMulti;
 
 use crate::error::{Error, Result};
@@ -110,7 +112,7 @@ where
         f(extra, nargs)
     })) {
         Ok(Ok(r)) => {
-            let raw = extra.as_ref().unwrap_unchecked().raw_lua();
+            // Ensure yielded values are cleared
             take(&mut extra.as_mut().unwrap_unchecked().yielded_values);
 
             // Return unused `WrappedFailure` to the pool
@@ -156,7 +158,10 @@ where
     }
 }
 
-// An yieldable version of `callback_error_ext`
+/// An yieldable version of `callback_error_ext`
+///
+/// Outside of Luau, this does the same thing as ``callback_error_ext`` right now
+#[cfg(feature = "luau")]
 pub(crate) unsafe fn callback_error_ext_yieldable<F>(
     state: *mut ffi::lua_State,
     mut extra: *mut ExtraData,
@@ -166,8 +171,6 @@ pub(crate) unsafe fn callback_error_ext_yieldable<F>(
 where
     F: FnOnce(*mut ExtraData, c_int) -> Result<c_int>,
 {
-    println!("callback_error_ext_yieldable");
-
     if extra.is_null() {
         extra = ExtraData::get(state);
     }
@@ -247,10 +250,8 @@ where
             let values = take(&mut extra.as_mut().unwrap_unchecked().yielded_values);
 
             if !values.is_empty() {
-                println!("YIELD {:?}", values);
                 match values.push_into_stack_multi(raw) {
                     Ok(nargs) => {
-                        println!("YIELDARGS {}", nargs);
                         ffi::lua_xmove(raw.state(), state, nargs);
                         return ffi::lua_yield(state, nargs);
                     },

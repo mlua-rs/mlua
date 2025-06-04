@@ -1,6 +1,5 @@
 use std::any::TypeId;
 use std::cell::{BorrowError, BorrowMutError, RefCell};
-use std::convert::Infallible;
 use std::marker::PhantomData;
 use std::ops::Deref;
 use std::os::raw::{c_char, c_int};
@@ -18,7 +17,13 @@ use crate::scope::Scope;
 use crate::stdlib::StdLib;
 use crate::string::String;
 use crate::table::Table;
-use crate::thread::{Thread, LuauContinuationStatus};
+use crate::thread::Thread;
+
+#[cfg(feature = "luau")]
+use crate::thread::LuauContinuationStatus;
+#[cfg(feature = "luau")]
+use std::convert::Infallible;
+
 use crate::traits::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti};
 use crate::types::{
     AppDataRef, AppDataRefMut, ArcReentrantMutexGuard, Integer, LuaType, MaybeSend, Number, ReentrantMutex,
@@ -2131,15 +2136,17 @@ impl Lua {
         &*self.raw.data_ptr()
     }
 
-    /// Yields arguments
+    /// Sets the yields arguments. Note that Ok(()) must be returned for the Rust function
+    /// to actually yield. This method is mostly useful with Luau continuations
     /// 
     /// If this function cannot yield, it will raise a runtime error.
     /// 
     /// Note: On lua 5.1, 5.2, and JIT, this function will unable to know if it can yield 
     /// or not until it reaches the Lua state.
     ///
-    /// Unsafe and should only be used in a function with a luau continuation for now
-    pub unsafe fn yield_args(&self, args: impl IntoLuaMulti) -> Result<()> {
+    /// Potentially unsafe at this time. Use with caution
+    #[cfg(feature = "luau")] // todo: support non-luau set_yield_args, the groundwork is here
+    pub unsafe fn set_yield_args(&self, args: impl IntoLuaMulti) -> Result<()> {
         let raw = self.lock();
         #[cfg(not(any(feature = "lua51", feature = "lua52", feature = "luajit")))]
         if !raw.is_yieldable() {
@@ -2154,7 +2161,7 @@ impl Lua {
     /// Checks if Lua is currently allowed to yield.
     #[cfg(not(any(feature = "lua51", feature="lua52", feature = "luajit")))]
     #[inline]
-    pub(crate) fn is_yieldable(&self) -> bool {
+    pub fn is_yieldable(&self) -> bool {
         self.lock().is_yieldable()
     }
 }
