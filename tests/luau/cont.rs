@@ -22,13 +22,13 @@ fn test_luau_continuation() {
 
     let always_yield = lua.create_function(
         |lua, ()| {
-            unsafe { lua.yield_args((42, "69420".to_string()))? }
+            unsafe { lua.yield_args((42, "69420".to_string(), 45.6))? }
             Ok(())
         })
         .unwrap();
 
     let thread = lua.create_thread(always_yield).unwrap();
-    assert_eq!(thread.resume::<(i32, String)>(()).unwrap(), (42, String::from("69420")));
+    assert_eq!(thread.resume::<(i32, String, f32)>(()).unwrap(), (42, String::from("69420"), 45.6));
 
     // Trigger the continuation
     let cont_func = lua.create_function_with_luau_continuation(
