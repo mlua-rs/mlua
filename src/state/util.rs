@@ -251,6 +251,7 @@ where
                 match values.push_into_stack_multi(raw) {
                     Ok(nargs) => {
                         println!("YIELDARGS {}", nargs);
+                        ffi::lua_xmove(raw.state(), state, nargs);
                         return ffi::lua_yield(state, nargs);
                     },
                     Err(err) => {

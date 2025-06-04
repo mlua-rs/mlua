@@ -234,6 +234,7 @@ impl Thread {
         let ret = ffi::lua_resume(thread_state, state, nargs, &mut nresults as *mut c_int);
         #[cfg(feature = "luau")]
         let ret = ffi::lua_resumex(thread_state, state, nargs, &mut nresults as *mut c_int);
+
         match ret {
             ffi::LUA_OK => Ok((ThreadStatusInner::Finished, nresults)),
             ffi::LUA_YIELD => Ok((ThreadStatusInner::Yielded(0), nresults)),

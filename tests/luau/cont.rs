@@ -21,12 +21,15 @@ fn test_luau_continuation() {
     );
 
     // does not work yet
-    /*let always_yield = lua.create_function(|lua, ()| {
-        unsafe { lua.yield_args((42, "69420")) }
-    }).unwrap();
+    let always_yield = lua.create_function(
+        |lua, ()| {
+            unsafe { lua.yield_args((42, "69420".to_string()))? }
+            Ok(())
+        })
+        .unwrap();
 
     let thread = lua.create_thread(always_yield).unwrap();
-    assert_eq!(thread.resume::<(i32, String)>(()).unwrap(), (42, String::from("69420")));*/
+    assert_eq!(thread.resume::<(i32, String)>(()).unwrap(), (42, String::from("69420")));
 
     // Trigger the continuation
     let cont_func = lua.create_function_with_luau_continuation(
@@ -48,12 +51,12 @@ fn test_luau_continuation() {
     let luau_func = lua.load("
         local cont_func = ...
         local res = cont_func(1)
-        return res
+        return res + 1
     ").into_function().expect("Failed to create function");
     let th = lua.create_thread(luau_func).expect("Failed to create luau thread");
 
     let v = th.resume::<mlua::MultiValue>(cont_func).expect("Failed to resume");
     let v = th.resume::<i32>(v).expect("Failed to load continuation");
 
-    assert_eq!(v, 40);
+    assert_eq!(v, 41);
 }
