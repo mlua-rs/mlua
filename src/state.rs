@@ -2142,7 +2142,10 @@ impl Lua {
     /// Note: On lua 5.1, 5.2, and JIT, this function will unable to know if it can yield 
     /// or not until it reaches the Lua state.
     ///
-    /// Potentially unsafe at this time. Use with caution
+    /// Potentially unsafe at this time. Use with caution.
+    ///
+    /// This method only supports Luau for now as proper Rust yielding in other Lua variants is 
+    /// more complicated. This limitation may be lifted in the future.
     #[cfg(feature = "luau")] // todo: support non-luau set_yield_args, the groundwork is here
     pub unsafe fn set_yield_args(&self, args: impl IntoLuaMulti) -> Result<()> {
         let raw = self.lock();
