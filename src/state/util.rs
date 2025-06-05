@@ -189,10 +189,23 @@ where
             let values = take(&mut extra.as_mut().unwrap_unchecked().yielded_values);
 
             if !values.is_empty() {
+                if raw.state() == state {
+                    // Edge case: main thread is being yielded
+                    //
+                    // We need to pop/clear stack early, then push args
+                    ffi::lua_pop(state, -1);
+                }
+
                 match values.push_into_stack_multi(raw) {
                     Ok(nargs) => {
-                        ffi::lua_pop(state, -1);
-                        ffi::lua_xmove(raw.state(), state, nargs);
+                        // If not main thread, then clear and xmove to target thread
+                        if raw.state() != state {
+                            // luau preserves the stack making yieldable continuations ugly and leaky
+                            //
+                            // Even outside of luau, clearing the stack is probably desirable
+                            ffi::lua_pop(state, -1);
+                            ffi::lua_xmove(raw.state(), state, nargs);
+                        }
                         return ffi::lua_yield(state, nargs);
                     }
                     Err(err) => {
