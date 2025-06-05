@@ -15,6 +15,7 @@ use crate::table::Table;
 use crate::types::MaybeSend;
 
 /// An error that can occur during navigation in the Luau `require` system.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NavigateError {
     Ambiguous,
     NotFound,
@@ -91,7 +92,7 @@ impl fmt::Debug for dyn Require {
 }
 
 /// The standard implementation of Luau `require` navigation.
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub(super) struct TextRequirer {
     abs_path: PathBuf,
     rel_path: PathBuf,
@@ -141,35 +142,25 @@ impl TextRequirer {
         components.into_iter().collect()
     }
 
-    fn find_module_path(path: &Path) -> StdResult<PathBuf, NavigateError> {
+    fn find_module(path: &Path) -> StdResult<PathBuf, NavigateError> {
         let mut found_path = None;
 
-        if path.components().last() != Some(Component::Normal("init".as_ref())) {
+        if path.components().next_back() != Some(Component::Normal("init".as_ref())) {
             let current_ext = (path.extension().and_then(|s| s.to_str()))
                 .map(|s| format!("{s}."))
                 .unwrap_or_default();
             for ext in ["luau", "lua"] {
                 let candidate = path.with_extension(format!("{current_ext}{ext}"));
-                if candidate.is_file() {
-                    if found_path.is_some() {
-                        return Err(NavigateError::Ambiguous);
-                    }
-                    found_path = Some(candidate);
+                if candidate.is_file() && found_path.replace(candidate).is_some() {
+                    return Err(NavigateError::Ambiguous);
                 }
             }
         }
         if path.is_dir() {
-            if found_path.is_some() {
-                return Err(NavigateError::Ambiguous);
-            }
-
             for component in ["init.luau", "init.lua"] {
                 let candidate = path.join(component);
-                if candidate.is_file() {
-                    if found_path.is_some() {
-                        return Err(NavigateError::Ambiguous);
-                    }
-                    found_path = Some(candidate);
+                if candidate.is_file() && found_path.replace(candidate).is_some() {
+                    return Err(NavigateError::Ambiguous);
                 }
             }
 
@@ -191,36 +182,30 @@ impl Require for TextRequirer {
         if !chunk_name.starts_with('@') {
             return Err(NavigateError::NotFound);
         }
-        let chunk_name = &Self::normalize_chunk_name(chunk_name)[1..];
-        let path = Self::normalize_path(chunk_name.as_ref());
+        let chunk_name = Self::normalize_chunk_name(&chunk_name[1..]);
+        let chunk_path = Self::normalize_path(chunk_name.as_ref());
 
-        if path.extension() == Some("rs".as_ref()) {
-            let cwd = match env::current_dir() {
-                Ok(cwd) => cwd,
-                Err(_) => return Err(NavigateError::NotFound),
-            };
-            self.abs_path = Self::normalize_path(&cwd.join(&path));
-            self.rel_path = path;
+        if chunk_path.extension() == Some("rs".as_ref()) {
+            let cwd = env::current_dir().map_err(|_| NavigateError::NotFound)?;
+            self.abs_path = Self::normalize_path(&cwd.join(&chunk_path));
+            self.rel_path = chunk_path;
             self.module_path = PathBuf::new();
 
             return Ok(());
         }
 
-        if path.is_absolute() {
-            let module_path = Self::find_module_path(&path)?;
-            self.abs_path = path.clone();
-            self.rel_path = path;
+        if chunk_path.is_absolute() {
+            let module_path = Self::find_module(&chunk_path)?;
+            self.abs_path = chunk_path.clone();
+            self.rel_path = chunk_path;
             self.module_path = module_path;
         } else {
             // Relative path
-            let cwd = match env::current_dir() {
-                Ok(cwd) => cwd,
-                Err(_) => return Err(NavigateError::NotFound),
-            };
-            let abs_path = cwd.join(&path);
-            let module_path = Self::find_module_path(&abs_path)?;
-            self.abs_path = Self::normalize_path(&abs_path);
-            self.rel_path = path;
+            let cwd = env::current_dir().map_err(|_| NavigateError::NotFound)?;
+            let abs_path = Self::normalize_path(&cwd.join(&chunk_path));
+            let module_path = Self::find_module(&abs_path)?;
+            self.abs_path = abs_path;
+            self.rel_path = chunk_path;
             self.module_path = module_path;
         }
 
@@ -229,7 +214,7 @@ impl Require for TextRequirer {
 
     fn jump_to_alias(&mut self, path: &str) -> StdResult<(), NavigateError> {
         let path = Self::normalize_path(path.as_ref());
-        let module_path = Self::find_module_path(&path)?;
+        let module_path = Self::find_module(&path)?;
 
         self.abs_path = path.clone();
         self.rel_path = path;
@@ -245,7 +230,7 @@ impl Require for TextRequirer {
         }
         let mut rel_parent = self.rel_path.clone();
         rel_parent.pop();
-        let module_path = Self::find_module_path(&abs_path)?;
+        let module_path = Self::find_module(&abs_path)?;
 
         self.abs_path = abs_path;
         self.rel_path = Self::normalize_path(&rel_parent);
@@ -257,7 +242,7 @@ impl Require for TextRequirer {
     fn to_child(&mut self, name: &str) -> StdResult<(), NavigateError> {
         let abs_path = self.abs_path.join(name);
         let rel_path = self.rel_path.join(name);
-        let module_path = Self::find_module_path(&abs_path)?;
+        let module_path = Self::find_module(&abs_path)?;
 
         self.abs_path = abs_path;
         self.rel_path = rel_path;
@@ -275,7 +260,7 @@ impl Require for TextRequirer {
     }
 
     fn has_config(&self) -> bool {
-        self.abs_path.join(".luaurc").is_file()
+        self.abs_path.is_dir() && self.abs_path.join(".luaurc").is_file()
     }
 
     fn config(&self) -> IoResult<Vec<u8>> {
@@ -284,9 +269,7 @@ impl Require for TextRequirer {
 
     fn loader(&self, lua: &Lua) -> Result<Function> {
         let name = format!("@{}", self.rel_path.display());
-        lua.load(self.module_path.as_path())
-            .set_name(name)
-            .into_function()
+        lua.load(&*self.module_path).set_name(name).into_function()
     }
 }
 
