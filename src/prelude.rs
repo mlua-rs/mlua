@@ -28,6 +28,9 @@ pub use crate::{
     NavigateError as LuaNavigateError, Require as LuaRequire, Vector as LuaVector,
 };
 
+#[cfg(feature = "luau")]
+pub use crate::LuauContinuationStatus;
+
 #[cfg(feature = "async")]
 #[doc(no_inline)]
 pub use crate::{AsyncThread as LuaAsyncThread, LuaNativeAsyncFn};

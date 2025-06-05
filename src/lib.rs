@@ -126,6 +126,9 @@ pub use crate::value::{Nil, Value};
 #[cfg(not(feature = "luau"))]
 pub use crate::hook::HookTriggers;
 
+#[cfg(feature = "luau")]
+pub use crate::thread::LuauContinuationStatus;
+
 #[cfg(any(feature = "luau", doc))]
 #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
 pub use crate::{
