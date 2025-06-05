@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use crate::error::{Error, Result};
 use crate::state::{ExtraData, RawLua};
-use crate::util::{self, get_internal_metatable, WrappedFailure};
+use crate::util::{self, check_stack, get_internal_metatable, WrappedFailure};
 
 struct StateGuard<'a>(&'a RawLua, *mut ffi::lua_State);
 
@@ -204,6 +204,17 @@ where
                             //
                             // Even outside of luau, clearing the stack is probably desirable
                             ffi::lua_pop(state, -1);
+                            if let Err(err) = check_stack(state, nargs) {
+                                let wrapped_error = prealloc_failure.r#use(state, extra);
+                                ptr::write(
+                                    wrapped_error,
+                                    WrappedFailure::Error(Error::external(err.to_string())),
+                                );
+                                get_internal_metatable::<WrappedFailure>(state);
+                                ffi::lua_setmetatable(state, -2);
+
+                                ffi::lua_error(state)
+                            }
                             ffi::lua_xmove(raw.state(), state, nargs);
                         }
                         return ffi::lua_yield(state, nargs);
