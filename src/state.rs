@@ -1292,13 +1292,21 @@ impl Lua {
         }))
     }
 
-    /// Same as ``create_function`` but with support for continuations.
+    /// Same as ``create_function`` but with support for luau-style continuations.
     ///
-    /// Currently only luau-style continuations are supported at this time.
+    /// Other Lua versions have completely different continuation semantics and are both
+    /// not supported at this time, much more complicated to support within mlua and cannot
+    /// be supported with this API in any case.
     ///
-    /// The values passed to the continuation will either be the yielded arguments
-    /// from the function or the arguments from resuming the thread. Yielded values
-    /// from a continuation become the resume args.
+    /// The values passed to the continuation will be the yielded arguments
+    /// from the function for the initial continuation call. If yielding from a continuation,
+    /// the yielded results will be returned to the ``Thread::resume`` caller. The arguments
+    /// passed in the next ``Thread::resume`` call will then be the arguments passed to the yielding
+    /// continuation upon resumption.
+    ///
+    /// Returning a value from a continuation without setting yield
+    /// arguments will then be returned as the final return value of the Luau function call.
+    /// Values returned in a function in which there is also yielding will be ignored
     #[cfg(feature = "luau")]
     pub fn create_function_with_luau_continuation<F, FC, A, AC, R, RC>(
         &self,
@@ -2143,16 +2151,20 @@ impl Lua {
     }
 
     /// Sets the yields arguments. Note that ``Ok(())`` must be returned for the Rust function
-    /// to actually yield. This method is mostly useful with Luau continuations and Rust-Rust
-    /// yields
+    /// to actually yield. Any values returned in a function in which there is also yielding may
+    /// be ignored.
+    ///
+    /// This method is mostly useful with Luau continuations and Rust-Rust yields
+    /// due to the Rust/Lua boundary
     ///
     /// If this function cannot yield, it will raise a runtime error.
     ///
     /// Note: On lua 5.1, 5.2, and JIT, this function will unable to know if it can yield
     /// or not until it reaches the Lua state.
     ///
-    /// Potentially unsafe at this time. Use with caution.
-    pub unsafe fn set_yield_args(&self, args: impl IntoLuaMulti) -> Result<()> {
+    /// While this method *should be safe*, it is new and may have bugs lurking within. Use
+    /// with caution
+    pub fn set_yield_args(&self, args: impl IntoLuaMulti) -> Result<()> {
         let raw = self.lock();
         #[cfg(not(any(feature = "lua51", feature = "lua52", feature = "luajit")))]
         if !raw.is_yieldable() {

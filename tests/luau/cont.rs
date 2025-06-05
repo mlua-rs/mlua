@@ -30,7 +30,7 @@ fn test_luau_continuation() {
     // basic yield test before we go any further
     let always_yield = lua
         .create_function(|lua, ()| {
-            unsafe { lua.set_yield_args((42, "69420".to_string(), 45.6))? }
+            lua.set_yield_args((42, "69420".to_string(), 45.6))?;
             Ok(())
         })
         .unwrap();
@@ -45,12 +45,10 @@ fn test_luau_continuation() {
     let cont_func = lua
         .create_function_with_luau_continuation(
             |lua, a: u64| {
-                unsafe {
-                    match lua.set_yield_args(a) {
-                        Ok(()) => println!("set_yield_args called"),
-                        Err(e) => println!("{:?}", e),
-                    }
-                }
+                match lua.set_yield_args(a) {
+                    Ok(()) => println!("set_yield_args called"),
+                    Err(e) => println!("{:?}", e),
+                };
                 Ok(())
             },
             |_lua, _status, a: u64| {
@@ -70,6 +68,7 @@ fn test_luau_continuation() {
         )
         .into_function()
         .expect("Failed to create function");
+
     let th = lua
         .create_thread(luau_func)
         .expect("Failed to create luau thread");
@@ -84,7 +83,7 @@ fn test_luau_continuation() {
     let always_yield = lua
         .create_function_with_luau_continuation(
             |lua, ()| {
-                unsafe { lua.set_yield_args((42, "69420".to_string(), 45.6))? }
+                lua.set_yield_args((42, "69420".to_string(), 45.6))?;
                 Ok(())
             },
             |_lua, _, mv: mlua::MultiValue| {
@@ -108,11 +107,9 @@ fn test_luau_continuation() {
     let cont_func = lua
         .create_function_with_luau_continuation(
             |lua, a: u64| {
-                unsafe {
-                    match lua.set_yield_args((a + 1, 1)) {
-                        Ok(()) => println!("set_yield_args called"),
-                        Err(e) => println!("{:?}", e),
-                    }
+                match lua.set_yield_args((a + 1, 1)) {
+                    Ok(()) => println!("set_yield_args called"),
+                    Err(e) => println!("{:?}", e),
                 }
                 Ok(())
             },
@@ -123,7 +120,7 @@ fn test_luau_continuation() {
                     return 6_i32.into_lua_multi(lua);
                 }
 
-                unsafe { lua.set_yield_args((args.len() + 1, args))? } // thread state becomes Integer(2), Integer(1), Integer(8), Integer(9), Integer(10)
+                lua.set_yield_args((args.len() + 1, args))?; // thread state becomes Integer(2), Integer(1), Integer(8), Integer(9), Integer(10)
                 (1, 2, 3, 4, 5).into_lua_multi(lua) // this value is ignored
             },
         )

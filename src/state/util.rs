@@ -157,6 +157,9 @@ where
 }
 
 /// An yieldable version of `callback_error_ext`
+///
+/// Unlike ``callback_error_ext``, this method requires a c_int return
+/// and not a generic R
 pub(crate) unsafe fn callback_error_ext_yieldable<F>(
     state: *mut ffi::lua_State,
     mut extra: *mut ExtraData,
