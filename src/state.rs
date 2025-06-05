@@ -1292,11 +1292,19 @@ impl Lua {
         }))
     }
 
-    /// Same as ``create_function`` but with support for Luau continuations
+    /// Same as ``create_function`` but with support for continuations.
     ///
-    /// Note that yieldable luau continuations are not currently supported at this time
+    /// Currently only luau-style continuations are supported at this time.
+    ///
+    /// The values passed to the continuation will either be the yielded arguments
+    /// from the function or the arguments from resuming the thread. Yielded values
+    /// from a continuation become the resume args.
     #[cfg(feature = "luau")]
-    pub fn create_function_with_luau_continuation<F, FC, A, AC, R, RC>(&self, func: F, cont: FC) -> Result<Function> 
+    pub fn create_function_with_luau_continuation<F, FC, A, AC, R, RC>(
+        &self,
+        func: F,
+        cont: FC,
+    ) -> Result<Function>
     where
         F: Fn(&Lua, A) -> Result<R> + MaybeSend + 'static,
         FC: Fn(&Lua, LuauContinuationStatus, AC) -> Result<RC> + MaybeSend + 'static,
@@ -1316,7 +1324,7 @@ impl Lua {
                 cont(rawlua.lua(), status, args)?.push_into_stack_multi(rawlua)
             }),
         )
-    } 
+    }
 
     /// Wraps a Rust mutable closure, creating a callable Lua function handle to it.
     ///
@@ -2137,10 +2145,10 @@ impl Lua {
     /// Sets the yields arguments. Note that ``Ok(())`` must be returned for the Rust function
     /// to actually yield. This method is mostly useful with Luau continuations and Rust-Rust
     /// yields
-    /// 
+    ///
     /// If this function cannot yield, it will raise a runtime error.
-    /// 
-    /// Note: On lua 5.1, 5.2, and JIT, this function will unable to know if it can yield 
+    ///
+    /// Note: On lua 5.1, 5.2, and JIT, this function will unable to know if it can yield
     /// or not until it reaches the Lua state.
     ///
     /// Potentially unsafe at this time. Use with caution.
@@ -2148,7 +2156,7 @@ impl Lua {
         let raw = self.lock();
         #[cfg(not(any(feature = "lua51", feature = "lua52", feature = "luajit")))]
         if !raw.is_yieldable() {
-            return Err(Error::runtime("cannot yield across Rust/Lua boundary."))
+            return Err(Error::runtime("cannot yield across Rust/Lua boundary."));
         }
         unsafe {
             raw.extra.get().as_mut().unwrap_unchecked().yielded_values = args.into_lua_multi(self)?;
@@ -2157,7 +2165,7 @@ impl Lua {
     }
 
     /// Checks if Lua is currently allowed to yield.
-    #[cfg(not(any(feature = "lua51", feature="lua52", feature = "luajit")))]
+    #[cfg(not(any(feature = "lua51", feature = "lua52", feature = "luajit")))]
     #[inline]
     pub fn is_yieldable(&self) -> bool {
         self.lock().is_yieldable()

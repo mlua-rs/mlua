@@ -1,9 +1,9 @@
+use crate::IntoLuaMulti;
 use std::mem::take;
 use std::os::raw::c_int;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::ptr;
 use std::sync::Arc;
-use crate::IntoLuaMulti;
 
 use crate::error::{Error, Result};
 use crate::state::{ExtraData, RawLua};
@@ -40,7 +40,7 @@ where
     }
 
     let nargs = ffi::lua_gettop(state);
-    
+
     enum PreallocatedFailure {
         New(*mut WrappedFailure),
         Reserved,
@@ -164,14 +164,14 @@ pub(crate) unsafe fn callback_error_ext_yieldable<F>(
     f: F,
 ) -> c_int
 where
-    F: FnOnce(*mut ExtraData, c_int) -> Result<c_int>,
+    F: FnOnce(*mut ExtraData, *mut ffi::lua_State, c_int) -> Result<c_int>,
 {
     if extra.is_null() {
         extra = ExtraData::get(state);
     }
 
     let nargs = ffi::lua_gettop(state);
-    
+
     enum PreallocatedFailure {
         New(*mut WrappedFailure),
         Reserved,
@@ -238,7 +238,7 @@ where
     match catch_unwind(AssertUnwindSafe(|| {
         let rawlua = (*extra).raw_lua();
         let _guard = StateGuard::new(rawlua, state);
-        f(extra, nargs)
+        f(extra, state, nargs)
     })) {
         Ok(Ok(r)) => {
             let raw = extra.as_ref().unwrap_unchecked().raw_lua();
@@ -247,9 +247,10 @@ where
             if !values.is_empty() {
                 match values.push_into_stack_multi(raw) {
                     Ok(nargs) => {
+                        ffi::lua_pop(state, -1);
                         ffi::lua_xmove(raw.state(), state, nargs);
                         return ffi::lua_yield(state, nargs);
-                    },
+                    }
                     Err(err) => {
                         let wrapped_error = prealloc_failure.r#use(state, extra);
                         ptr::write(
@@ -260,11 +261,9 @@ where
                         ffi::lua_setmetatable(state, -2);
 
                         ffi::lua_error(state)
-
                     }
                 }
             }
-
 
             // Return unused `WrappedFailure` to the pool
             prealloc_failure.release(state, extra);
