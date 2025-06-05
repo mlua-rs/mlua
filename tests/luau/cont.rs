@@ -148,9 +148,11 @@ fn test_luau_continuation() {
     let v = th
         .resume::<mlua::MultiValue>(v)
         .expect("Failed to load continuation");
+    println!("v={:?}", v);
     let v = th
         .resume::<mlua::MultiValue>(v)
         .expect("Failed to load continuation");
+    println!("v={:?}", v);
     let v = th
         .resume::<mlua::MultiValue>(v)
         .expect("Failed to load continuation");
