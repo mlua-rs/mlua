@@ -96,7 +96,7 @@ pub(crate) struct ExtraData {
     pub(super) enable_jit: bool,
 
     // Values currently being yielded from Lua.yield()
-    pub(super) yielded_values: MultiValue,
+    pub(super) yielded_values: Option<MultiValue>,
 }
 
 impl Drop for ExtraData {
@@ -198,7 +198,7 @@ impl ExtraData {
             enable_jit: true,
             #[cfg(feature = "luau")]
             running_gc: false,
-            yielded_values: MultiValue::with_capacity(0),
+            yielded_values: None,
         }));
 
         // Store it in the registry

@@ -4,10 +4,84 @@ use mlua::Lua;
 
 #[test]
 fn test_luau_continuation() {
-    // Yielding continuation
-    mlua::Lua::set_fflag("LuauYieldableContinuations", true).unwrap();
-
     let lua = Lua::new();
+    // No yielding continuation fflag test
+    let cont_func = lua
+        .create_function_with_luau_continuation(
+            |lua, a: u64| {
+                match lua.set_yield_args(a) {
+                    Ok(()) => println!("set_yield_args called"),
+                    Err(e) => println!("{:?}", e),
+                };
+                Ok(())
+            },
+            |_lua, _status, a: u64| {
+                println!("Reached cont");
+                Ok(a + 39)
+            },
+        )
+        .expect("Failed to create cont_func");
+
+    let luau_func = lua
+        .load(
+            "
+        local cont_func = ...
+        local res = cont_func(1)
+        return res + 1
+    ",
+        )
+        .into_function()
+        .expect("Failed to create function");
+
+    let th = lua
+        .create_thread(luau_func)
+        .expect("Failed to create luau thread");
+
+    let v = th
+        .resume::<mlua::MultiValue>(cont_func)
+        .expect("Failed to resume");
+    let v = th.resume::<i32>(v).expect("Failed to load continuation");
+
+    assert_eq!(v, 41);
+
+    // empty yield args test
+    let cont_func = lua
+        .create_function_with_luau_continuation(
+            |lua, _: ()| {
+                match lua.set_yield_args(()) {
+                    Ok(()) => println!("set_yield_args called"),
+                    Err(e) => println!("{:?}", e),
+                };
+                Ok(())
+            },
+            |_lua, _status, mv: mlua::MultiValue| Ok(mv.len()),
+        )
+        .expect("Failed to create cont_func");
+
+    let luau_func = lua
+        .load(
+            "
+        local cont_func = ...
+        local res = cont_func(1)
+        return res - 1
+    ",
+        )
+        .into_function()
+        .expect("Failed to create function");
+
+    let th = lua
+        .create_thread(luau_func)
+        .expect("Failed to create luau thread");
+
+    let v = th
+        .resume::<mlua::MultiValue>(cont_func)
+        .expect("Failed to resume");
+    assert!(v.is_empty());
+    let v = th.resume::<i32>(v).expect("Failed to load continuation");
+    assert_eq!(v, -1);
+
+    // Yielding continuation fflag test
+    mlua::Lua::set_fflag("LuauYieldableContinuations", true).unwrap();
 
     let cont_func = lua
         .create_function_with_luau_continuation(

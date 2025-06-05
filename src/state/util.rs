@@ -188,7 +188,7 @@ where
             let raw = extra.as_ref().unwrap_unchecked().raw_lua();
             let values = take(&mut extra.as_mut().unwrap_unchecked().yielded_values);
 
-            if !values.is_empty() {
+            if let Some(values) = values {
                 if raw.state() == state {
                     // Edge case: main thread is being yielded
                     //

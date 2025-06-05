@@ -2171,7 +2171,7 @@ impl Lua {
             return Err(Error::runtime("cannot yield across Rust/Lua boundary."));
         }
         unsafe {
-            raw.extra.get().as_mut().unwrap_unchecked().yielded_values = args.into_lua_multi(self)?;
+            raw.extra.get().as_mut().unwrap_unchecked().yielded_values = Some(args.into_lua_multi(self)?);
         }
         Ok(())
     }
