@@ -113,8 +113,6 @@ where
         f(extra, nargs)
     })) {
         Ok(Ok(r)) => {
-            take(&mut extra.as_mut().unwrap_unchecked().yielded_values);
-
             // Return unused `WrappedFailure` to the pool
             prealloc_failure.release(state, extra);
             r
