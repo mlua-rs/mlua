@@ -12,7 +12,9 @@ use crate::chunk::ChunkMode;
 use crate::error::{Error, Result};
 use crate::function::Function;
 use crate::memory::{MemoryState, ALLOCATOR};
-use crate::state::util::{callback_error_ext, callback_error_ext_yieldable, ref_stack_pop};
+#[allow(unused_imports)]
+use crate::state::util::callback_error_ext;
+use crate::state::util::{callback_error_ext_yieldable, ref_stack_pop};
 use crate::stdlib::StdLib;
 use crate::string::String;
 use crate::table::Table;

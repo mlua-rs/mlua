@@ -2146,10 +2146,29 @@ impl Lua {
         &*self.raw.data_ptr()
     }
 
-    /// Helper method to set the yield arguments, returning a Error::Yield.
+    /// Helper method to set the yield arguments, returning a ``Error::Yield``.
+    ///
+    /// Internally, this method is equivalent to ``Err(Error::Yield(args.into_lua_multi(self)?))``
     ///
     /// This method is mostly useful with continuations and Rust-Rust yields
     /// due to the Rust/Lua boundary
+    ///
+    /// Example:
+    ///
+    /// ```rust
+    /// fn test() -> mlua::Result<()> {
+    ///     let lua = mlua::Lua::new();
+    ///     let always_yield = lua.create_function(|lua, ()| lua.yield_with((42, "69420".to_string(), 45.6)))?;
+    ///
+    ///     let thread = lua.create_thread(always_yield)?;
+    ///     assert_eq!(
+    ///         thread.resume::<(i32, String, f32)>(())?,
+    ///         (42, String::from("69420"), 45.6)
+    ///     );
+    ///
+    ///     Ok(())
+    /// }
+    /// ```
     pub fn yield_with(&self, args: impl IntoLuaMulti) -> Result<()> {
         Err(Error::Yield(args.into_lua_multi(self)?))
     }

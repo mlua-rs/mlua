@@ -206,7 +206,7 @@ pub enum Error {
         /// Underlying error.
         cause: Arc<Error>,
     },
-    /// A special error variant that tells Rust to yield to Lua with the specified args
+    /// A special error variant that tells Rust to yield to Lua with the specified arguments
     Yield(MultiValue),
 }
 
