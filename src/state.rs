@@ -1295,7 +1295,7 @@ impl Lua {
     /// Same as ``create_function`` but with an added continuation function.
     ///
     /// The values passed to the continuation will be the yielded arguments
-    /// from the function for the initial continuation call. On Luau, if yielding from a
+    /// from the function for the initial continuation call. If yielding from a
     /// continuation, the yielded results will be returned to the ``Thread::resume`` caller. The
     /// arguments passed in the next ``Thread::resume`` call will then be the arguments passed
     /// to the yielding continuation upon resumption.
@@ -1303,8 +1303,6 @@ impl Lua {
     /// Returning a value from a continuation without setting yield
     /// arguments will then be returned as the final return value of the Lua function call.
     /// Values returned in a function in which there is also yielding will be ignored
-    ///
-    /// Note that yielding in continuations is only supported on Luau
     #[cfg(all(not(feature = "lua51"), not(feature = "luajit")))]
     pub fn create_function_with_continuation<F, FC, A, AC, R, RC>(
         &self,
