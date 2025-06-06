@@ -20,7 +20,7 @@ use crate::table::Table;
 use crate::thread::Thread;
 
 #[cfg(feature = "luau")]
-use crate::thread::LuauContinuationStatus;
+use crate::thread::ContinuationStatus;
 
 use crate::traits::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti};
 use crate::types::{
@@ -1295,8 +1295,7 @@ impl Lua {
     /// Same as ``create_function`` but with support for luau-style continuations.
     ///
     /// Other Lua versions have completely different continuation semantics and are both
-    /// not supported at this time, much more complicated to support within mlua and cannot
-    /// be supported with this API in any case.
+    /// not supported at this time.
     ///
     /// The values passed to the continuation will be the yielded arguments
     /// from the function for the initial continuation call. If yielding from a continuation,
@@ -1308,19 +1307,24 @@ impl Lua {
     /// arguments will then be returned as the final return value of the Luau function call.
     /// Values returned in a function in which there is also yielding will be ignored
     #[cfg(feature = "luau")]
-    pub fn create_function_with_luau_continuation<F, FC, A, AC, R, RC>(
+    pub fn create_function_with_continuation<F, FC, A, AC, R, RC>(
         &self,
         func: F,
         cont: FC,
     ) -> Result<Function>
     where
         F: Fn(&Lua, A) -> Result<R> + MaybeSend + 'static,
-        FC: Fn(&Lua, LuauContinuationStatus, AC) -> Result<RC> + MaybeSend + 'static,
+        FC: Fn(&Lua, ContinuationStatus, AC) -> Result<RC> + MaybeSend + 'static,
         A: FromLuaMulti,
         AC: FromLuaMulti,
         R: IntoLuaMulti,
         RC: IntoLuaMulti,
     {
+        // On luau, use a callback with luau continuation
+        //
+        // For other lua versions (in future), this will instead
+        // make a wrapper function that at the end calls lua_yieldk
+        #[cfg(feature = "luau")]
         (self.lock()).create_callback_with_luau_continuation(
             Box::new(move |rawlua, nargs| unsafe {
                 let args = A::from_stack_args(nargs, 1, None, rawlua)?;
@@ -1328,7 +1332,7 @@ impl Lua {
             }),
             Box::new(move |rawlua, nargs, status| unsafe {
                 let args = AC::from_stack_args(nargs, 1, None, rawlua)?;
-                let status = LuauContinuationStatus::from_status(status);
+                let status = ContinuationStatus::from_status(status);
                 cont(rawlua.lua(), status, args)?.push_into_stack_multi(rawlua)
             }),
         )

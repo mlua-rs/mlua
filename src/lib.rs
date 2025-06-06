@@ -110,7 +110,7 @@ pub use crate::state::{GCMode, Lua, LuaOptions, WeakLua};
 pub use crate::stdlib::StdLib;
 pub use crate::string::{BorrowedBytes, BorrowedStr, String};
 pub use crate::table::{Table, TablePairs, TableSequence};
-pub use crate::thread::{Thread, ThreadStatus};
+pub use crate::thread::{ContinuationStatus, Thread, ThreadStatus};
 pub use crate::traits::{
     FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, LuaNativeFn, LuaNativeFnMut, ObjectLike,
 };
@@ -125,9 +125,6 @@ pub use crate::value::{Nil, Value};
 
 #[cfg(not(feature = "luau"))]
 pub use crate::hook::HookTriggers;
-
-#[cfg(feature = "luau")]
-pub use crate::thread::LuauContinuationStatus;
 
 #[cfg(any(feature = "luau", doc))]
 #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]

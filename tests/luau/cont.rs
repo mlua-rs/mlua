@@ -7,7 +7,7 @@ fn test_luau_continuation() {
     let lua = Lua::new();
     // No yielding continuation fflag test
     let cont_func = lua
-        .create_function_with_luau_continuation(
+        .create_function_with_continuation(
             |lua, a: u64| {
                 match lua.set_yield_args(a) {
                     Ok(()) => println!("set_yield_args called"),
@@ -46,7 +46,7 @@ fn test_luau_continuation() {
 
     // empty yield args test
     let cont_func = lua
-        .create_function_with_luau_continuation(
+        .create_function_with_continuation(
             |lua, _: ()| {
                 match lua.set_yield_args(()) {
                     Ok(()) => println!("set_yield_args called"),
@@ -84,7 +84,7 @@ fn test_luau_continuation() {
     mlua::Lua::set_fflag("LuauYieldableContinuations", true).unwrap();
 
     let cont_func = lua
-        .create_function_with_luau_continuation(
+        .create_function_with_continuation(
             |_lua, a: u64| Ok(a + 1),
             |_lua, _status, a: u64| {
                 println!("Reached cont");
@@ -117,7 +117,7 @@ fn test_luau_continuation() {
 
     // Trigger the continuation
     let cont_func = lua
-        .create_function_with_luau_continuation(
+        .create_function_with_continuation(
             |lua, a: u64| {
                 match lua.set_yield_args(a) {
                     Ok(()) => println!("set_yield_args called"),
@@ -155,7 +155,7 @@ fn test_luau_continuation() {
     assert_eq!(v, 41);
 
     let always_yield = lua
-        .create_function_with_luau_continuation(
+        .create_function_with_continuation(
             |lua, ()| {
                 lua.set_yield_args((42, "69420".to_string(), 45.6))?;
                 Ok(())
@@ -179,7 +179,7 @@ fn test_luau_continuation() {
         .starts_with("a3"));
 
     let cont_func = lua
-        .create_function_with_luau_continuation(
+        .create_function_with_continuation(
             |lua, a: u64| {
                 match lua.set_yield_args((a + 1, 1)) {
                     Ok(()) => println!("set_yield_args called"),
@@ -191,7 +191,7 @@ fn test_luau_continuation() {
                 println!("Reached cont recursive: {:?}", args);
 
                 if args.len() == 5 {
-                    assert_eq!(status, mlua::LuauContinuationStatus::Ok);
+                    assert_eq!(status, mlua::ContinuationStatus::Ok);
                     return 6_i32.into_lua_multi(lua);
                 }
 
@@ -241,7 +241,7 @@ fn test_luau_continuation() {
 
     // test panics
     let cont_func = lua
-        .create_function_with_luau_continuation(
+        .create_function_with_continuation(
             |lua, a: u64| {
                 match lua.set_yield_args(a) {
                     Ok(()) => println!("set_yield_args called"),

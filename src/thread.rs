@@ -26,17 +26,15 @@ use {
     },
 };
 
-/// Luau continuation final status
-#[cfg(feature = "luau")]
+/// Continuation thread status. Can either be Ok, Yielded (rare, but can happen) or Error
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
-pub enum LuauContinuationStatus {
+pub enum ContinuationStatus {
     Ok,
     Yielded,
     Error,
 }
 
-#[cfg(feature = "luau")]
-impl LuauContinuationStatus {
+impl ContinuationStatus {
     pub(crate) fn from_status(status: c_int) -> Self {
         match status {
             ffi::LUA_YIELD => Self::Yielded,
