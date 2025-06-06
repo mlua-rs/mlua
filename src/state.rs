@@ -19,7 +19,7 @@ use crate::string::String;
 use crate::table::Table;
 use crate::thread::Thread;
 
-#[cfg(feature = "luau")]
+#[cfg(all(not(feature = "lua51"), not(feature = "luajit")))]
 use crate::thread::ContinuationStatus;
 
 use crate::traits::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti};
@@ -1292,21 +1292,20 @@ impl Lua {
         }))
     }
 
-    /// Same as ``create_function`` but with support for luau-style continuations.
-    ///
-    /// Other Lua versions have completely different continuation semantics and are both
-    /// not supported at this time.
+    /// Same as ``create_function`` but with an added continuation function.
     ///
     /// The values passed to the continuation will be the yielded arguments
-    /// from the function for the initial continuation call. If yielding from a continuation,
-    /// the yielded results will be returned to the ``Thread::resume`` caller. The arguments
-    /// passed in the next ``Thread::resume`` call will then be the arguments passed to the yielding
-    /// continuation upon resumption.
+    /// from the function for the initial continuation call. On Luau, if yielding from a
+    /// continuation, the yielded results will be returned to the ``Thread::resume`` caller. The
+    /// arguments passed in the next ``Thread::resume`` call will then be the arguments passed
+    /// to the yielding continuation upon resumption.
     ///
     /// Returning a value from a continuation without setting yield
-    /// arguments will then be returned as the final return value of the Luau function call.
+    /// arguments will then be returned as the final return value of the Lua function call.
     /// Values returned in a function in which there is also yielding will be ignored
-    #[cfg(feature = "luau")]
+    ///
+    /// Note that yielding in continuations is only supported on Luau
+    #[cfg(all(not(feature = "lua51"), not(feature = "luajit")))]
     pub fn create_function_with_continuation<F, FC, A, AC, R, RC>(
         &self,
         func: F,
@@ -1320,12 +1319,7 @@ impl Lua {
         R: IntoLuaMulti,
         RC: IntoLuaMulti,
     {
-        // On luau, use a callback with luau continuation
-        //
-        // For other lua versions (in future), this will instead
-        // make a wrapper function that at the end calls lua_yieldk
-        #[cfg(feature = "luau")]
-        (self.lock()).create_callback_with_luau_continuation(
+        (self.lock()).create_callback_with_continuation(
             Box::new(move |rawlua, nargs| unsafe {
                 let args = A::from_stack_args(nargs, 1, None, rawlua)?;
                 func(rawlua.lua(), args)?.push_into_stack_multi(rawlua)

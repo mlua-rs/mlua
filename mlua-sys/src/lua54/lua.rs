@@ -299,6 +299,11 @@ pub unsafe fn lua_yield(L: *mut lua_State, n: c_int) -> c_int {
     lua_yieldk(L, n, 0, None)
 }
 
+#[inline(always)]
+pub unsafe fn lua_yieldc(L: *mut lua_State, n: c_int, k: lua_KFunction) -> c_int {
+    lua_yieldk(L, n, 0, Some(k))
+}
+
 //
 // Warning-related functions
 //

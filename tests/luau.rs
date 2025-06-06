@@ -449,6 +449,3 @@ fn test_typeof_error() -> Result<()> {
 
 #[path = "luau/require.rs"]
 mod require;
-
-#[path = "luau/cont.rs"]
-mod cont;

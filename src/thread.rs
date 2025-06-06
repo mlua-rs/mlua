@@ -35,6 +35,7 @@ pub enum ContinuationStatus {
 }
 
 impl ContinuationStatus {
+    #[allow(dead_code)]
     pub(crate) fn from_status(status: c_int) -> Self {
         match status {
             ffi::LUA_YIELD => Self::Yielded,
