@@ -115,8 +115,6 @@ where
         Ok(Ok(r)) => {
             // Ensure yielded values are cleared
             take(&mut extra.as_mut().unwrap_unchecked().yielded_values);
-            #[cfg(all(not(feature = "luau"), not(feature = "lua51"), not(feature = "luajit")))]
-            take(&mut extra.as_mut().unwrap_unchecked().yield_continuation);
 
             // Return unused `WrappedFailure` to the pool
             prealloc_failure.release(state, extra);
@@ -170,6 +168,7 @@ pub(crate) unsafe fn callback_error_ext_yieldable<F>(
     mut extra: *mut ExtraData,
     wrap_error: bool,
     f: F,
+    in_callback_with_continuation: bool,
 ) -> c_int
 where
     F: FnOnce(*mut ExtraData, c_int) -> Result<c_int>,
@@ -192,9 +191,6 @@ where
         Ok(Ok(r)) => {
             let raw = extra.as_ref().unwrap_unchecked().raw_lua();
             let values = take(&mut extra.as_mut().unwrap_unchecked().yielded_values);
-
-            #[cfg(all(not(feature = "luau"), not(feature = "lua51"), not(feature = "luajit")))]
-            let yield_cont = take(&mut extra.as_mut().unwrap_unchecked().yield_continuation);
 
             if let Some(values) = values {
                 if raw.state() == state {
@@ -230,7 +226,7 @@ where
                         {
                             // Yield to a continuation. Unlike luau, we need to do this manually and on the
                             // fly using a yieldk call
-                            if yield_cont {
+                            if in_callback_with_continuation {
                                 // On Lua 5.2, status and ctx are not present, so use 0 as status for
                                 // compatibility
                                 #[cfg(feature = "lua52")]
@@ -253,6 +249,7 @@ where
                                                 None => Err(Error::CallbackDestructed),
                                             }
                                         },
+                                        true,
                                     )
                                 }
 
@@ -279,6 +276,7 @@ where
                                                 None => Err(Error::CallbackDestructed),
                                             }
                                         },
+                                        true,
                                     )
                                 }
 
