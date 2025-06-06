@@ -222,12 +222,13 @@ where
                             // Even outside of luau, clearing the stack is probably desirable
                             ffi::lua_pop(state, -1);
                             if let Err(err) = check_stack(state, nargs) {
-                                // Unfortunately, we can't do a wrapped error here
-                                // due to the lua_pop call, so just push a CString
-                                // manually instead (todo: look into a better way here)
-                                let cs = std::ffi::CString::new(err.to_string()).unwrap_unchecked();
-                                ffi::lua_pushstring(state, cs.as_ptr());
-                                ffi::lua_error(state)
+                                // Make a *new* preallocated failure, and then do normal error
+                                let prealloc_failure = PreallocatedFailure::reserve(state, extra);
+                                let wrapped_panic = prealloc_failure.r#use(state, extra);
+                                ptr::write(wrapped_panic, WrappedFailure::Error(err));
+                                get_internal_metatable::<WrappedFailure>(state);
+                                ffi::lua_setmetatable(state, -2);
+                                ffi::lua_error(state);
                             }
                             ffi::lua_xmove(raw.state(), state, nargs);
                         }
@@ -297,12 +298,13 @@ where
                         return ffi::lua_yield(state, nargs);
                     }
                     Err(err) => {
-                        // Unfortunately, we can't do a wrapped error here
-                        // due to the above lua_pop call, so just push a CString
-                        // manually instead (todo: look into a better way here)
-                        let cs = std::ffi::CString::new(err.to_string()).unwrap_unchecked();
-                        ffi::lua_pushstring(state, cs.as_ptr());
-                        ffi::lua_error(state)
+                        // Make a *new* preallocated failure, and then do normal wrap_error
+                        let prealloc_failure = PreallocatedFailure::reserve(state, extra);
+                        let wrapped_panic = prealloc_failure.r#use(state, extra);
+                        ptr::write(wrapped_panic, WrappedFailure::Error(err));
+                        get_internal_metatable::<WrappedFailure>(state);
+                        ffi::lua_setmetatable(state, -2);
+                        ffi::lua_error(state);
                     }
                 }
             }
