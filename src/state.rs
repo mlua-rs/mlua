@@ -2146,33 +2146,18 @@ impl Lua {
         &*self.raw.data_ptr()
     }
 
-    /// Sets the yields arguments. Note that ``Ok(())`` must be returned for the Rust function
-    /// to actually yield. Any values returned in a function in which there is also yielding may
-    /// be ignored.
+    /// Helper method to set the yield arguments, returning a Error::Yield.
     ///
-    /// This method is mostly useful with Luau continuations and Rust-Rust yields
+    /// This method is mostly useful with continuations and Rust-Rust yields
     /// due to the Rust/Lua boundary
-    ///
-    /// If this function cannot yield, it will raise a runtime error.
-    ///
-    /// Note: On lua 5.1, 5.2, and JIT, this function will unable to know if it can yield
-    /// or not until it reaches the Lua state.
-    ///
-    /// While this method *should be safe*, it is new and may have bugs lurking within. Use
-    /// with caution
-    pub fn set_yield_args(&self, args: impl IntoLuaMulti) -> Result<()> {
-        let raw = self.lock();
-        #[cfg(not(any(feature = "lua51", feature = "lua52", feature = "luajit")))]
-        if !raw.is_yieldable() {
-            return Err(Error::runtime("cannot yield across Rust/Lua boundary."));
-        }
-        unsafe {
-            raw.extra.get().as_mut().unwrap_unchecked().yielded_values = Some(args.into_lua_multi(self)?);
-        }
-        Ok(())
+    pub fn yield_with(&self, args: impl IntoLuaMulti) -> Result<()> {
+        Err(Error::Yield(args.into_lua_multi(self)?))
     }
 
-    /// Checks if Lua is currently allowed to yield.
+    /// Checks if Lua could be allowed to yield.
+    ///
+    /// Note that this method is not fool proof and is prone to false negatives
+    /// especially when continuations are involved
     #[cfg(not(any(feature = "lua51", feature = "lua52", feature = "luajit")))]
     #[inline]
     pub fn is_yieldable(&self) -> bool {

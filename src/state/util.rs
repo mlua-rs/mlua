@@ -1,5 +1,4 @@
 use crate::IntoLuaMulti;
-use std::mem::take;
 use std::os::raw::c_int;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::ptr;
@@ -113,9 +112,6 @@ where
         f(extra, nargs)
     })) {
         Ok(Ok(r)) => {
-            // Ensure yielded values are cleared
-            take(&mut extra.as_mut().unwrap_unchecked().yielded_values);
-
             // Return unused `WrappedFailure` to the pool
             prealloc_failure.release(state, extra);
             r
@@ -163,13 +159,13 @@ where
 ///
 /// Unlike ``callback_error_ext``, this method requires a c_int return
 /// and not a generic R
+#[allow(unused_variables)]
 pub(crate) unsafe fn callback_error_ext_yieldable<F>(
     state: *mut ffi::lua_State,
     mut extra: *mut ExtraData,
     wrap_error: bool,
     f: F,
-    #[cfg(feature = "luau")] _in_callback_with_continuation: bool,
-    #[cfg(not(feature = "luau"))] in_callback_with_continuation: bool,
+    in_callback_with_continuation: bool,
 ) -> c_int
 where
     F: FnOnce(*mut ExtraData, c_int) -> Result<c_int>,
@@ -190,10 +186,14 @@ where
         f(extra, nargs)
     })) {
         Ok(Ok(r)) => {
-            let raw = extra.as_ref().unwrap_unchecked().raw_lua();
-            let values = take(&mut extra.as_mut().unwrap_unchecked().yielded_values);
+            // Return unused `WrappedFailure` to the pool
+            prealloc_failure.release(state, extra);
+            r
+        }
+        Ok(Err(err)) => {
+            if let Error::Yield(values) = err {
+                let raw = extra.as_ref().unwrap_unchecked().raw_lua();
 
-            if let Some(values) = values {
                 // A note on Luau
                 //
                 // When using the yieldable continuations fflag (and in future when the fflag gets removed and
@@ -311,11 +311,6 @@ where
                 }
             }
 
-            // Return unused `WrappedFailure` to the pool
-            prealloc_failure.release(state, extra);
-            r
-        }
-        Ok(Err(err)) => {
             let wrapped_error = prealloc_failure.r#use(state, extra);
 
             if !wrap_error {

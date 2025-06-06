@@ -2,8 +2,6 @@ use std::panic::catch_unwind;
 
 use mlua::{Error, Function, Lua, Result, Thread, ThreadStatus};
 
-use mlua::IntoLuaMulti;
-
 #[test]
 fn test_thread() -> Result<()> {
     let lua = Lua::new();
@@ -258,10 +256,7 @@ fn test_thread_resume_error() -> Result<()> {
 #[test]
 fn test_thread_yield_args() -> Result<()> {
     let lua = Lua::new();
-    let always_yield = lua.create_function(|lua, ()| {
-        lua.set_yield_args((42, "69420".to_string(), 45.6))?;
-        Ok(())
-    })?;
+    let always_yield = lua.create_function(|lua, ()| lua.yield_with((42, "69420".to_string(), 45.6)))?;
 
     let thread = lua.create_thread(always_yield)?;
     assert_eq!(
@@ -279,13 +274,7 @@ fn test_continuation() {
     // No yielding continuation fflag test
     let cont_func = lua
         .create_function_with_continuation(
-            |lua, a: u64| {
-                match lua.set_yield_args(a) {
-                    Ok(()) => println!("set_yield_args called"),
-                    Err(e) => println!("{:?}", e),
-                };
-                Ok(())
-            },
+            |lua, a: u64| lua.yield_with(a),
             |_lua, _status, a: u64| {
                 println!("Reached cont");
                 Ok(a + 39)
@@ -318,13 +307,7 @@ fn test_continuation() {
     // empty yield args test
     let cont_func = lua
         .create_function_with_continuation(
-            |lua, _: ()| {
-                match lua.set_yield_args(()) {
-                    Ok(()) => println!("set_yield_args called"),
-                    Err(e) => println!("{:?}", e),
-                };
-                Ok(())
-            },
+            |lua, _: ()| lua.yield_with(()),
             |_lua, _status, mv: mlua::MultiValue| Ok(mv.len()),
         )
         .expect("Failed to create cont_func");
@@ -377,10 +360,7 @@ fn test_continuation() {
 
     // basic yield test before we go any further
     let always_yield = lua
-        .create_function(|lua, ()| {
-            lua.set_yield_args((42, "69420".to_string(), 45.6))?;
-            Ok(())
-        })
+        .create_function(|lua, ()| lua.yield_with((42, "69420".to_string(), 45.6)))
         .unwrap();
 
     let thread = lua.create_thread(always_yield).unwrap();
@@ -392,13 +372,7 @@ fn test_continuation() {
     // Trigger the continuation
     let cont_func = lua
         .create_function_with_continuation(
-            |lua, a: u64| {
-                match lua.set_yield_args(a) {
-                    Ok(()) => println!("set_yield_args called"),
-                    Err(e) => println!("{:?}", e),
-                };
-                Ok(())
-            },
+            |lua, a: u64| lua.yield_with(a),
             |_lua, _status, a: u64| {
                 println!("Reached cont");
                 Ok(a + 39)
@@ -430,10 +404,7 @@ fn test_continuation() {
 
     let always_yield = lua
         .create_function_with_continuation(
-            |lua, ()| {
-                lua.set_yield_args((42, "69420".to_string(), 45.6))?;
-                Ok(())
-            },
+            |lua, ()| lua.yield_with((42, "69420".to_string(), 45.6)),
             |_lua, _, mv: mlua::MultiValue| {
                 println!("Reached second continuation");
                 if mv.is_empty() {
@@ -454,15 +425,9 @@ fn test_continuation() {
 
     let cont_func = lua
         .create_function_with_continuation(
-            |lua, a: u64| {
-                match lua.set_yield_args((a + 1, 1)) {
-                    Ok(()) => println!("set_yield_args called"),
-                    Err(e) => println!("{:?}", e),
-                }
-                Ok(())
-            },
+            |lua, a: u64| lua.yield_with((a + 1, 1)),
             |lua, status, args: mlua::MultiValue| {
-                println!("Reached cont recursive: {:?}", args);
+                println!("Reached cont recursive/multiple: {:?}", args);
 
                 if args.len() == 5 {
                     if cfg!(any(feature = "luau", feature = "lua52")) {
@@ -470,11 +435,11 @@ fn test_continuation() {
                     } else {
                         assert_eq!(status, mlua::ContinuationStatus::Yielded);
                     }
-                    return 6_i32.into_lua_multi(lua);
+                    return Ok(6_i32);
                 }
 
-                lua.set_yield_args((args.len() + 1, args))?; // thread state becomes Integer(2), Integer(1), Integer(8), Integer(9), Integer(10)
-                (1, 2, 3, 4, 5).into_lua_multi(lua) // this value is ignored
+                lua.yield_with((args.len() + 1, args))?; // thread state becomes LEN, LEN-1... 1
+                unreachable!();
             },
         )
         .expect("Failed to create cont_func");
@@ -520,13 +485,7 @@ fn test_continuation() {
     // test panics
     let cont_func = lua
         .create_function_with_continuation(
-            |lua, a: u64| {
-                match lua.set_yield_args(a) {
-                    Ok(()) => println!("set_yield_args called"),
-                    Err(e) => println!("{:?}", e),
-                };
-                Ok(())
-            },
+            |lua, a: u64| lua.yield_with(a),
             |_lua, _status, _a: u64| {
                 panic!("Reached continuation which should panic!");
                 #[allow(unreachable_code)]
