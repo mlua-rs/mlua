@@ -2175,10 +2175,7 @@ impl Lua {
         Ok(())
     }
 
-    /// Checks if Lua could be allowed to yield.
-    ///
-    /// Note that this method is not fool proof and is prone to false negatives
-    /// especially when continuations are involved
+    /// Checks if Lua is be allowed to yield.
     #[cfg(not(any(feature = "lua51", feature = "lua52", feature = "luajit")))]
     #[inline]
     pub fn is_yieldable(&self) -> bool {

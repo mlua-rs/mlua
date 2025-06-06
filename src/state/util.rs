@@ -186,6 +186,12 @@ where
         f(extra, nargs)
     })) {
         Ok(Ok(r)) => {
+            // Return unused `WrappedFailure` to the pool
+            //
+            // In either case, we cannot use it in the yield case anyways due to the lua_pop call
+            // so drop it properly now while we can.
+            prealloc_failure.release(state, extra);
+
             let raw = extra.as_ref().unwrap_unchecked().raw_lua();
             let values = take(&mut extra.as_mut().unwrap_unchecked().yielded_values);
 
@@ -216,14 +222,11 @@ where
                             // Even outside of luau, clearing the stack is probably desirable
                             ffi::lua_pop(state, -1);
                             if let Err(err) = check_stack(state, nargs) {
-                                let wrapped_error = prealloc_failure.r#use(state, extra);
-                                ptr::write(
-                                    wrapped_error,
-                                    WrappedFailure::Error(Error::external(err.to_string())),
-                                );
-                                get_internal_metatable::<WrappedFailure>(state);
-                                ffi::lua_setmetatable(state, -2);
-
+                                // Unfortunately, we can't do a wrapped error here
+                                // due to the lua_pop call, so just push a CString
+                                // manually instead (todo: look into a better way here)
+                                let cs = std::ffi::CString::new(err.to_string()).unwrap_unchecked();
+                                ffi::lua_pushstring(state, cs.as_ptr());
                                 ffi::lua_error(state)
                             }
                             ffi::lua_xmove(raw.state(), state, nargs);
@@ -294,21 +297,16 @@ where
                         return ffi::lua_yield(state, nargs);
                     }
                     Err(err) => {
-                        let wrapped_error = prealloc_failure.r#use(state, extra);
-                        ptr::write(
-                            wrapped_error,
-                            WrappedFailure::Error(Error::external(err.to_string())),
-                        );
-                        get_internal_metatable::<WrappedFailure>(state);
-                        ffi::lua_setmetatable(state, -2);
-
+                        // Unfortunately, we can't do a wrapped error here
+                        // due to the above lua_pop call, so just push a CString
+                        // manually instead (todo: look into a better way here)
+                        let cs = std::ffi::CString::new(err.to_string()).unwrap_unchecked();
+                        ffi::lua_pushstring(state, cs.as_ptr());
                         ffi::lua_error(state)
                     }
                 }
             }
 
-            // Return unused `WrappedFailure` to the pool
-            prealloc_failure.release(state, extra);
             r
         }
         Ok(Err(err)) => {
