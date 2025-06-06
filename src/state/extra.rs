@@ -13,11 +13,13 @@ use crate::error::Result;
 use crate::state::RawLua;
 use crate::stdlib::StdLib;
 use crate::types::{AppData, ReentrantMutex, XRc};
+
 use crate::userdata::RawUserDataRegistry;
 use crate::util::{get_internal_metatable, push_internal_userdata, TypeKey, WrappedFailure};
 
 #[cfg(any(feature = "luau", doc))]
 use crate::chunk::Compiler;
+use crate::MultiValue;
 
 #[cfg(feature = "async")]
 use {futures_util::task::noop_waker_ref, std::ptr::NonNull, std::task::Waker};
@@ -93,6 +95,9 @@ pub(crate) struct ExtraData {
     pub(super) compiler: Option<Compiler>,
     #[cfg(feature = "luau-jit")]
     pub(super) enable_jit: bool,
+
+    // Values currently being yielded from Lua.yield()
+    pub(super) yielded_values: Option<MultiValue>,
 }
 
 impl Drop for ExtraData {
@@ -194,6 +199,7 @@ impl ExtraData {
             enable_jit: true,
             #[cfg(feature = "luau")]
             running_gc: false,
+            yielded_values: None,
         }));
 
         // Store it in the registry

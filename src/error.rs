@@ -321,7 +321,7 @@ impl fmt::Display for Error {
             Error::WithContext { context, cause } => {
                 writeln!(fmt, "{context}")?;
                 write!(fmt, "{cause}")
-            }
+            },
         }
     }
 }

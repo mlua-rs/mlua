@@ -12,7 +12,9 @@ use crate::chunk::ChunkMode;
 use crate::error::{Error, Result};
 use crate::function::Function;
 use crate::memory::{MemoryState, ALLOCATOR};
-use crate::state::util::{callback_error_ext, ref_stack_pop};
+#[allow(unused_imports)]
+use crate::state::util::callback_error_ext;
+use crate::state::util::{callback_error_ext_yieldable, ref_stack_pop};
 use crate::stdlib::StdLib;
 use crate::string::String;
 use crate::table::Table;
@@ -22,6 +24,12 @@ use crate::types::{
     AppDataRef, AppDataRefMut, Callback, CallbackUpvalue, DestructedUserdata, Integer, LightUserData,
     MaybeSend, ReentrantMutex, RegistryKey, ValueRef, XRc,
 };
+
+#[cfg(all(not(feature = "lua51"), not(feature = "luajit")))]
+use crate::types::Continuation;
+#[cfg(all(not(feature = "lua51"), not(feature = "luajit")))]
+use crate::types::ContinuationUpvalue;
+
 use crate::userdata::{
     init_userdata_metatable, AnyUserData, MetaMethod, RawUserDataRegistry, UserData, UserDataRegistry,
     UserDataStorage,
@@ -198,6 +206,8 @@ impl RawLua {
                 init_internal_metatable::<XRc<UnsafeCell<ExtraData>>>(state, None)?;
                 init_internal_metatable::<Callback>(state, None)?;
                 init_internal_metatable::<CallbackUpvalue>(state, None)?;
+                #[cfg(all(not(feature = "lua51"), not(feature = "luajit")))]
+                init_internal_metatable::<ContinuationUpvalue>(state, None)?;
                 #[cfg(not(feature = "luau"))]
                 init_internal_metatable::<HookCallback>(state, None)?;
                 #[cfg(feature = "async")]
@@ -1156,15 +1166,21 @@ impl RawLua {
     pub(crate) fn create_callback(&self, func: Callback) -> Result<Function> {
         unsafe extern "C-unwind" fn call_callback(state: *mut ffi::lua_State) -> c_int {
             let upvalue = get_userdata::<CallbackUpvalue>(state, ffi::lua_upvalueindex(1));
-            callback_error_ext(state, (*upvalue).extra.get(), true, |extra, nargs| {
-                // Lua ensures that `LUA_MINSTACK` stack spaces are available (after pushing arguments)
-                // The lock must be already held as the callback is executed
-                let rawlua = (*extra).raw_lua();
-                match (*upvalue).data {
-                    Some(ref func) => func(rawlua, nargs),
-                    None => Err(Error::CallbackDestructed),
-                }
-            })
+            callback_error_ext_yieldable(
+                state,
+                (*upvalue).extra.get(),
+                true,
+                |extra, nargs| {
+                    // Lua ensures that `LUA_MINSTACK` stack spaces are available (after pushing arguments)
+                    // The lock must be already held as the callback is executed
+                    let rawlua = (*extra).raw_lua();
+                    match (*upvalue).data {
+                        Some(ref func) => func(rawlua, nargs),
+                        None => Err(Error::CallbackDestructed),
+                    }
+                },
+                false,
+            )
         }
 
         let state = self.state();
@@ -1185,6 +1201,124 @@ impl RawLua {
             }
 
             Ok(Function(self.pop_ref()))
+        }
+    }
+
+    // Creates a Function out of a Callback and a continuation containing a 'static Fn.
+    //
+    // In Luau, uses pushcclosurek
+    //
+    // In Lua 5.2/5.3/5.4/JIT, makes a normal function that then yields to the continuation via yieldk
+    #[cfg(all(not(feature = "lua51"), not(feature = "luajit")))]
+    pub(crate) fn create_callback_with_continuation(
+        &self,
+        func: Callback,
+        cont: Continuation,
+    ) -> Result<Function> {
+        #[cfg(feature = "luau")]
+        {
+            unsafe extern "C-unwind" fn call_callback(state: *mut ffi::lua_State) -> c_int {
+                let upvalue = get_userdata::<ContinuationUpvalue>(state, ffi::lua_upvalueindex(1));
+                callback_error_ext_yieldable(
+                    state,
+                    (*upvalue).extra.get(),
+                    true,
+                    |extra, nargs| {
+                        // Lua ensures that `LUA_MINSTACK` stack spaces are available (after pushing
+                        // arguments) The lock must be already held as the callback is
+                        // executed
+                        let rawlua = (*extra).raw_lua();
+                        match (*upvalue).data {
+                            Some(ref func) => (func.0)(rawlua, nargs),
+                            None => Err(Error::CallbackDestructed),
+                        }
+                    },
+                    true,
+                )
+            }
+
+            unsafe extern "C-unwind" fn cont_callback(state: *mut ffi::lua_State, status: c_int) -> c_int {
+                let upvalue = get_userdata::<ContinuationUpvalue>(state, ffi::lua_upvalueindex(1));
+                callback_error_ext_yieldable(
+                    state,
+                    (*upvalue).extra.get(),
+                    true,
+                    |extra, nargs| {
+                        // Lua ensures that `LUA_MINSTACK` stack spaces are available (after pushing
+                        // arguments) The lock must be already held as the callback is
+                        // executed
+                        let rawlua = (*extra).raw_lua();
+                        match (*upvalue).data {
+                            Some(ref func) => (func.1)(rawlua, nargs, status),
+                            None => Err(Error::CallbackDestructed),
+                        }
+                    },
+                    true,
+                )
+            }
+
+            let state = self.state();
+            unsafe {
+                let _sg = StackGuard::new(state);
+                check_stack(state, 4)?;
+
+                let func = Some((func, cont));
+                let extra = XRc::clone(&self.extra);
+                let protect = !self.unlikely_memory_error();
+                push_internal_userdata(state, ContinuationUpvalue { data: func, extra }, protect)?;
+                if protect {
+                    protect_lua!(state, 1, 1, fn(state) {
+                        ffi::lua_pushcclosurec(state, call_callback, cont_callback, 1);
+                    })?;
+                } else {
+                    ffi::lua_pushcclosurec(state, call_callback, cont_callback, 1);
+                }
+
+                Ok(Function(self.pop_ref()))
+            }
+        }
+
+        #[cfg(not(feature = "luau"))]
+        {
+            unsafe extern "C-unwind" fn call_callback(state: *mut ffi::lua_State) -> c_int {
+                let upvalue = get_userdata::<ContinuationUpvalue>(state, ffi::lua_upvalueindex(1));
+                callback_error_ext_yieldable(
+                    state,
+                    (*upvalue).extra.get(),
+                    true,
+                    |extra, nargs| {
+                        // Lua ensures that `LUA_MINSTACK` stack spaces are available (after pushing
+                        // arguments) The lock must be already held as the callback is
+                        // executed
+                        let rawlua = (*extra).raw_lua();
+                        match (*upvalue).data {
+                            Some((ref func, _)) => func(rawlua, nargs),
+                            None => Err(Error::CallbackDestructed),
+                        }
+                    },
+                    true,
+                )
+            }
+
+            let state = self.state();
+            unsafe {
+                let _sg = StackGuard::new(state);
+                check_stack(state, 4)?;
+
+                let func = Some((func, cont));
+                let extra = XRc::clone(&self.extra);
+                let protect = !self.unlikely_memory_error();
+                push_internal_userdata(state, ContinuationUpvalue { data: func, extra }, protect)?;
+                if protect {
+                    protect_lua!(state, 1, 1, fn(state) {
+                        ffi::lua_pushcclosure(state, call_callback, 1);
+                    })?;
+                } else {
+                    ffi::lua_pushcclosure(state, call_callback, 1);
+                }
+
+                Ok(Function(self.pop_ref()))
+            }
         }
     }
 
@@ -1347,6 +1481,12 @@ impl RawLua {
     #[inline]
     pub(crate) unsafe fn set_waker(&self, waker: NonNull<Waker>) -> NonNull<Waker> {
         mem::replace(&mut (*self.extra.get()).waker, waker)
+    }
+
+    #[cfg(not(any(feature = "lua51", feature = "lua52", feature = "luajit")))]
+    #[inline]
+    pub(crate) fn is_yieldable(&self) -> bool {
+        unsafe { ffi::lua_isyieldable(self.state()) != 0 }
     }
 }
 
