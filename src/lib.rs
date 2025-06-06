@@ -132,7 +132,7 @@ pub use crate::{
     buffer::Buffer,
     chunk::{CompileConstant, Compiler},
     function::CoverageInfo,
-    luau::{NavigateError, Require},
+    luau::{NavigateError, Require, TextRequirer},
     vector::Vector,
 };
 

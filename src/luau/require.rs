@@ -8,32 +8,42 @@ use std::path::{Component, Path, PathBuf};
 use std::result::Result as StdResult;
 use std::{env, fmt, fs, mem, ptr};
 
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::function::Function;
 use crate::state::{callback_error_ext, Lua};
 use crate::table::Table;
 use crate::types::MaybeSend;
 
 /// An error that can occur during navigation in the Luau `require` system.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg(any(feature = "luau", doc))]
+#[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
+#[derive(Debug, Clone)]
 pub enum NavigateError {
     Ambiguous,
     NotFound,
+    Other(Error),
 }
 
 #[cfg(feature = "luau")]
 trait IntoNavigateResult {
-    fn into_nav_result(self) -> ffi::luarequire_NavigateResult;
+    fn into_nav_result(self) -> Result<ffi::luarequire_NavigateResult>;
 }
 
 #[cfg(feature = "luau")]
 impl IntoNavigateResult for StdResult<(), NavigateError> {
-    fn into_nav_result(self) -> ffi::luarequire_NavigateResult {
+    fn into_nav_result(self) -> Result<ffi::luarequire_NavigateResult> {
         match self {
-            Ok(()) => ffi::luarequire_NavigateResult::Success,
-            Err(NavigateError::Ambiguous) => ffi::luarequire_NavigateResult::Ambiguous,
-            Err(NavigateError::NotFound) => ffi::luarequire_NavigateResult::NotFound,
+            Ok(()) => Ok(ffi::luarequire_NavigateResult::Success),
+            Err(NavigateError::Ambiguous) => Ok(ffi::luarequire_NavigateResult::Ambiguous),
+            Err(NavigateError::NotFound) => Ok(ffi::luarequire_NavigateResult::NotFound),
+            Err(NavigateError::Other(err)) => Err(err),
         }
+    }
+}
+
+impl From<Error> for NavigateError {
+    fn from(err: Error) -> Self {
+        NavigateError::Other(err)
     }
 }
 
@@ -41,6 +51,8 @@ impl IntoNavigateResult for StdResult<(), NavigateError> {
 type WriteResult = ffi::luarequire_WriteResult;
 
 /// A trait for handling modules loading and navigation in the Luau `require` system.
+#[cfg(any(feature = "luau", doc))]
+#[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
 pub trait Require: MaybeSend {
     /// Returns `true` if "require" is permitted for the given chunk name.
     fn is_require_allowed(&self, chunk_name: &str) -> bool;
@@ -92,15 +104,17 @@ impl fmt::Debug for dyn Require {
 }
 
 /// The standard implementation of Luau `require` navigation.
+#[doc(hidden)]
 #[derive(Default, Debug)]
-pub(super) struct TextRequirer {
+pub struct TextRequirer {
     abs_path: PathBuf,
     rel_path: PathBuf,
     module_path: PathBuf,
 }
 
 impl TextRequirer {
-    pub(super) fn new() -> Self {
+    /// Creates a new `TextRequirer` instance.
+    pub fn new() -> Self {
         Self::default()
     }
 
@@ -308,12 +322,12 @@ macro_rules! try_borrow_mut {
 }
 
 #[cfg(feature = "luau")]
-pub(super) unsafe extern "C" fn init_config(config: *mut ffi::luarequire_Configuration) {
+pub(super) unsafe extern "C-unwind" fn init_config(config: *mut ffi::luarequire_Configuration) {
     if config.is_null() {
         return;
     }
 
-    unsafe extern "C" fn is_require_allowed(
+    unsafe extern "C-unwind" fn is_require_allowed(
         state: *mut ffi::lua_State,
         ctx: *mut c_void,
         requirer_chunkname: *const c_char,
@@ -327,50 +341,58 @@ pub(super) unsafe extern "C" fn init_config(config: *mut ffi::luarequire_Configu
         this.is_require_allowed(&chunk_name)
     }
 
-    unsafe extern "C" fn reset(
+    unsafe extern "C-unwind" fn reset(
         state: *mut ffi::lua_State,
         ctx: *mut c_void,
         requirer_chunkname: *const c_char,
     ) -> ffi::luarequire_NavigateResult {
         let mut this = try_borrow_mut!(state, ctx);
         let chunk_name = CStr::from_ptr(requirer_chunkname).to_string_lossy();
-        this.reset(&chunk_name).into_nav_result()
+        callback_error_ext(state, ptr::null_mut(), true, move |_, _| {
+            this.reset(&chunk_name).into_nav_result()
+        })
     }
 
-    unsafe extern "C" fn jump_to_alias(
+    unsafe extern "C-unwind" fn jump_to_alias(
         state: *mut ffi::lua_State,
         ctx: *mut c_void,
         path: *const c_char,
     ) -> ffi::luarequire_NavigateResult {
         let mut this = try_borrow_mut!(state, ctx);
         let path = CStr::from_ptr(path).to_string_lossy();
-        this.jump_to_alias(&path).into_nav_result()
+        callback_error_ext(state, ptr::null_mut(), true, move |_, _| {
+            this.jump_to_alias(&path).into_nav_result()
+        })
     }
 
-    unsafe extern "C" fn to_parent(
+    unsafe extern "C-unwind" fn to_parent(
         state: *mut ffi::lua_State,
         ctx: *mut c_void,
     ) -> ffi::luarequire_NavigateResult {
         let mut this = try_borrow_mut!(state, ctx);
-        this.to_parent().into_nav_result()
+        callback_error_ext(state, ptr::null_mut(), true, move |_, _| {
+            this.to_parent().into_nav_result()
+        })
     }
 
-    unsafe extern "C" fn to_child(
+    unsafe extern "C-unwind" fn to_child(
         state: *mut ffi::lua_State,
         ctx: *mut c_void,
         name: *const c_char,
     ) -> ffi::luarequire_NavigateResult {
         let mut this = try_borrow_mut!(state, ctx);
         let name = CStr::from_ptr(name).to_string_lossy();
-        this.to_child(&name).into_nav_result()
+        callback_error_ext(state, ptr::null_mut(), true, move |_, _| {
+            this.to_child(&name).into_nav_result()
+        })
     }
 
-    unsafe extern "C" fn is_module_present(state: *mut ffi::lua_State, ctx: *mut c_void) -> bool {
+    unsafe extern "C-unwind" fn is_module_present(state: *mut ffi::lua_State, ctx: *mut c_void) -> bool {
         let this = try_borrow!(state, ctx);
         this.has_module()
     }
 
-    unsafe extern "C" fn get_chunkname(
+    unsafe extern "C-unwind" fn get_chunkname(
         _state: *mut ffi::lua_State,
         _ctx: *mut c_void,
         buffer: *mut c_char,
@@ -380,7 +402,7 @@ pub(super) unsafe extern "C" fn init_config(config: *mut ffi::luarequire_Configu
         write_to_buffer(buffer, buffer_size, size_out, &[])
     }
 
-    unsafe extern "C" fn get_loadname(
+    unsafe extern "C-unwind" fn get_loadname(
         _state: *mut ffi::lua_State,
         _ctx: *mut c_void,
         buffer: *mut c_char,
@@ -390,7 +412,7 @@ pub(super) unsafe extern "C" fn init_config(config: *mut ffi::luarequire_Configu
         write_to_buffer(buffer, buffer_size, size_out, &[])
     }
 
-    unsafe extern "C" fn get_cache_key(
+    unsafe extern "C-unwind" fn get_cache_key(
         state: *mut ffi::lua_State,
         ctx: *mut c_void,
         buffer: *mut c_char,
@@ -402,12 +424,12 @@ pub(super) unsafe extern "C" fn init_config(config: *mut ffi::luarequire_Configu
         write_to_buffer(buffer, buffer_size, size_out, cache_key.as_bytes())
     }
 
-    unsafe extern "C" fn is_config_present(state: *mut ffi::lua_State, ctx: *mut c_void) -> bool {
+    unsafe extern "C-unwind" fn is_config_present(state: *mut ffi::lua_State, ctx: *mut c_void) -> bool {
         let this = try_borrow!(state, ctx);
         this.has_config()
     }
 
-    unsafe extern "C" fn get_config(
+    unsafe extern "C-unwind" fn get_config(
         state: *mut ffi::lua_State,
         ctx: *mut c_void,
         buffer: *mut c_char,
@@ -415,9 +437,7 @@ pub(super) unsafe extern "C" fn init_config(config: *mut ffi::luarequire_Configu
         size_out: *mut usize,
     ) -> WriteResult {
         let this = try_borrow!(state, ctx);
-        let Ok(config) = this.config() else {
-            return WriteResult::Failure;
-        };
+        let config = callback_error_ext(state, ptr::null_mut(), true, move |_, _| Ok(this.config()?));
         write_to_buffer(buffer, buffer_size, size_out, &config)
     }
 
@@ -429,7 +449,7 @@ pub(super) unsafe extern "C" fn init_config(config: *mut ffi::luarequire_Configu
         _loadname: *const c_char,
     ) -> c_int {
         let this = try_borrow!(state, ctx);
-        callback_error_ext(state, ptr::null_mut(), false, move |extra, _| {
+        callback_error_ext(state, ptr::null_mut(), true, move |extra, _| {
             let rawlua = (*extra).raw_lua();
             let loader = this.loader(rawlua.lua())?;
             rawlua.push(loader)?;
