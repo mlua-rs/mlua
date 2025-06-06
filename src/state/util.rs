@@ -168,7 +168,8 @@ pub(crate) unsafe fn callback_error_ext_yieldable<F>(
     mut extra: *mut ExtraData,
     wrap_error: bool,
     f: F,
-    in_callback_with_continuation: bool,
+    #[cfg(feature = "luau")] _in_callback_with_continuation: bool,
+    #[cfg(not(feature = "luau"))] in_callback_with_continuation: bool,
 ) -> c_int
 where
     F: FnOnce(*mut ExtraData, c_int) -> Result<c_int>,

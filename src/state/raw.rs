@@ -1217,28 +1217,42 @@ impl RawLua {
         {
             unsafe extern "C-unwind" fn call_callback(state: *mut ffi::lua_State) -> c_int {
                 let upvalue = get_userdata::<ContinuationUpvalue>(state, ffi::lua_upvalueindex(1));
-                callback_error_ext_yieldable(state, (*upvalue).extra.get(), true, |extra, nargs| {
-                    // Lua ensures that `LUA_MINSTACK` stack spaces are available (after pushing arguments)
-                    // The lock must be already held as the callback is executed
-                    let rawlua = (*extra).raw_lua();
-                    match (*upvalue).data {
-                        Some(ref func) => (func.0)(rawlua, nargs),
-                        None => Err(Error::CallbackDestructed),
-                    }
-                })
+                callback_error_ext_yieldable(
+                    state,
+                    (*upvalue).extra.get(),
+                    true,
+                    |extra, nargs| {
+                        // Lua ensures that `LUA_MINSTACK` stack spaces are available (after pushing
+                        // arguments) The lock must be already held as the callback is
+                        // executed
+                        let rawlua = (*extra).raw_lua();
+                        match (*upvalue).data {
+                            Some(ref func) => (func.0)(rawlua, nargs),
+                            None => Err(Error::CallbackDestructed),
+                        }
+                    },
+                    true,
+                )
             }
 
             unsafe extern "C-unwind" fn cont_callback(state: *mut ffi::lua_State, status: c_int) -> c_int {
                 let upvalue = get_userdata::<ContinuationUpvalue>(state, ffi::lua_upvalueindex(1));
-                callback_error_ext_yieldable(state, (*upvalue).extra.get(), true, |extra, nargs| {
-                    // Lua ensures that `LUA_MINSTACK` stack spaces are available (after pushing arguments)
-                    // The lock must be already held as the callback is executed
-                    let rawlua = (*extra).raw_lua();
-                    match (*upvalue).data {
-                        Some(ref func) => (func.1)(rawlua, nargs, status),
-                        None => Err(Error::CallbackDestructed),
-                    }
-                })
+                callback_error_ext_yieldable(
+                    state,
+                    (*upvalue).extra.get(),
+                    true,
+                    |extra, nargs| {
+                        // Lua ensures that `LUA_MINSTACK` stack spaces are available (after pushing
+                        // arguments) The lock must be already held as the callback is
+                        // executed
+                        let rawlua = (*extra).raw_lua();
+                        match (*upvalue).data {
+                            Some(ref func) => (func.1)(rawlua, nargs, status),
+                            None => Err(Error::CallbackDestructed),
+                        }
+                    },
+                    true,
+                )
             }
 
             let state = self.state();
