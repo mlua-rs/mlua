@@ -377,7 +377,7 @@ impl Lua {
     ///
     /// This is similar to setting the [`package.preload[modname]`] field.
     ///
-    /// [`package.preload[modname]`]: https://www.lua.org/manual/5.4/manual.html#pdf-package.preload
+    /// [`package.preload[modname]`]: <https://www.lua.org/manual/5.4/manual.html#pdf-package.preload>
     #[cfg(not(feature = "luau"))]
     #[cfg_attr(docsrs, doc(cfg(not(feature = "luau"))))]
     pub fn preload_module(&self, modname: &str, func: Function) -> Result<()> {
@@ -636,7 +636,7 @@ impl Lua {
     /// Also this can be used to implement continuous execution limits by instructing Luau VM to
     /// yield by returning [`VmState::Yield`].
     ///
-    /// This is similar to [`Lua::set_hook`] but in more simplified form.
+    /// This is similar to `Lua::set_hook` but in more simplified form.
     ///
     /// # Example
     ///

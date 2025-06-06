@@ -263,6 +263,8 @@ impl Thread {
     /// You can have multiple hooks for different threads.
     ///
     /// To remove a hook call [`Thread::remove_hook`].
+    ///
+    /// [`Lua::set_hook`]: crate::Lua::set_hook
     #[cfg(not(feature = "luau"))]
     #[cfg_attr(docsrs, doc(cfg(not(feature = "luau"))))]
     pub fn set_hook<F>(&self, triggers: HookTriggers, callback: F) -> Result<()>
