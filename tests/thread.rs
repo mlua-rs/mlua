@@ -512,46 +512,46 @@ fn test_continuation() {
         let v = th.resume::<i32>(v).expect("Failed to load continuation");
 
         assert_eq!(v, 7);
+    }
 
-        // test panics
-        let cont_func = lua
-            .create_function_with_continuation(
-                |lua, a: u64| {
-                    match lua.set_yield_args(a) {
-                        Ok(()) => println!("set_yield_args called"),
-                        Err(e) => println!("{:?}", e),
-                    };
-                    Ok(())
-                },
-                |_lua, _status, _a: u64| {
-                    panic!("Reached continuation which should panic!");
-                    #[allow(unreachable_code)]
-                    Ok(())
-                },
-            )
-            .expect("Failed to create cont_func");
+    // test panics
+    let cont_func = lua
+        .create_function_with_continuation(
+            |lua, a: u64| {
+                match lua.set_yield_args(a) {
+                    Ok(()) => println!("set_yield_args called"),
+                    Err(e) => println!("{:?}", e),
+                };
+                Ok(())
+            },
+            |_lua, _status, _a: u64| {
+                panic!("Reached continuation which should panic!");
+                #[allow(unreachable_code)]
+                Ok(())
+            },
+        )
+        .expect("Failed to create cont_func");
 
-        let luau_func = lua
-            .load(
-                "
+    let luau_func = lua
+        .load(
+            "
                 local cont_func = ...
                 local ok, res = pcall(cont_func, 1)
                 assert(not ok)
                 return tostring(res)
             ",
-            )
-            .into_function()
-            .expect("Failed to create function");
+        )
+        .into_function()
+        .expect("Failed to create function");
 
-        let th = lua
-            .create_thread(luau_func)
-            .expect("Failed to create luau thread");
+    let th = lua
+        .create_thread(luau_func)
+        .expect("Failed to create luau thread");
 
-        let v = th
-            .resume::<mlua::MultiValue>(cont_func)
-            .expect("Failed to resume");
+    let v = th
+        .resume::<mlua::MultiValue>(cont_func)
+        .expect("Failed to resume");
 
-        let v = th.resume::<String>(v).expect("Failed to load continuation");
-        assert!(v.contains("Reached continuation which should panic!"));
-    }
+    let v = th.resume::<String>(v).expect("Failed to load continuation");
+    assert!(v.contains("Reached continuation which should panic!"));
 }
