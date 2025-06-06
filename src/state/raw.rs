@@ -12,7 +12,7 @@ use crate::chunk::ChunkMode;
 use crate::error::{Error, Result};
 use crate::function::Function;
 use crate::memory::{MemoryState, ALLOCATOR};
-#[cfg(not(feature = "luau"))]
+#[cfg(any(not(feature = "luau"), feature = "luau-vector4"))]
 use crate::state::util::callback_error_ext;
 use crate::state::util::{callback_error_ext_yieldable, ref_stack_pop};
 use crate::stdlib::StdLib;
