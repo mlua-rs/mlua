@@ -2146,9 +2146,7 @@ impl Lua {
         &*self.raw.data_ptr()
     }
 
-    /// Helper method to set the yield arguments, returning a ``Error::Yield``.
-    ///
-    /// Internally, this method is equivalent to ``Err(Error::Yield(args.into_lua_multi(self)?))``
+    /// Set the yield arguments. Note that Lua will not yield until you return from the function
     ///
     /// This method is mostly useful with continuations and Rust-Rust yields
     /// due to the Rust/Lua boundary
@@ -2170,7 +2168,11 @@ impl Lua {
     /// }
     /// ```
     pub fn yield_with(&self, args: impl IntoLuaMulti) -> Result<()> {
-        Err(Error::Yield(args.into_lua_multi(self)?))
+        let raw = self.lock();
+        unsafe {
+            raw.extra.get().as_mut().unwrap_unchecked().yielded_values = Some(args.into_lua_multi(self)?);
+        }
+        Ok(())
     }
 
     /// Checks if Lua could be allowed to yield.

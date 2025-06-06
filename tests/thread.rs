@@ -439,7 +439,7 @@ fn test_continuation() {
                 }
 
                 lua.yield_with((args.len() + 1, args))?; // thread state becomes LEN, LEN-1... 1
-                unreachable!();
+                Ok(1_i32) // this will be ignored
             },
         )
         .expect("Failed to create cont_func");

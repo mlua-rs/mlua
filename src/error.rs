@@ -1,4 +1,3 @@
-use crate::MultiValue;
 use std::error::Error as StdError;
 use std::fmt;
 use std::io::Error as IoError;
@@ -206,8 +205,6 @@ pub enum Error {
         /// Underlying error.
         cause: Arc<Error>,
     },
-    /// A special error variant that tells Rust to yield to Lua with the specified arguments
-    Yield(MultiValue),
 }
 
 /// A specialized `Result` type used by `mlua`'s API.
@@ -325,9 +322,6 @@ impl fmt::Display for Error {
                 writeln!(fmt, "{context}")?;
                 write!(fmt, "{cause}")
             },
-            Error::Yield(_) => {
-                write!(fmt, "attempt to yield within a context that does not support yielding")
-            }
         }
     }
 }
