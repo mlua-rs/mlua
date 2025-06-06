@@ -194,6 +194,16 @@ where
             let values = take(&mut extra.as_mut().unwrap_unchecked().yielded_values);
 
             if let Some(values) = values {
+                // A note on Luau
+                //
+                // When using the yieldable continuations fflag (and in future when the fflag gets removed and
+                // yieldable continuations) becomes default, we must either pop the top of the
+                // stack on the state we are resuming or somehow store the number of
+                // args on top of stack pre-yield and then subtract in the resume in order to get predictable
+                // behaviour here. See https://github.com/luau-lang/luau/issues/1867 for more information
+                //
+                // In this case, popping is easier and leads to less bugs/more ergonomic API.
+
                 if raw.state() == state {
                     // Edge case: main thread is being yielded
                     //
