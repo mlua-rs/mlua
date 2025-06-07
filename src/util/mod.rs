@@ -75,7 +75,6 @@ impl Drop for StackGuard {
         unsafe {
             let top = ffi::lua_gettop(self.state);
             if top < self.top {
-                println!("top={}, self.top={}", top, self.top);
                 mlua_panic!("{} too many stack values popped", self.top - top)
             }
             if top > self.top {

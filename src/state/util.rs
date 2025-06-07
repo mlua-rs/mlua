@@ -440,7 +440,6 @@ pub(crate) unsafe fn get_next_spot(extra: *mut ExtraData) -> (usize, c_int, bool
     // Find the first thread with a free slot
     for (i, ref_th) in extra.ref_thread.iter_mut().enumerate() {
         if let Some(free) = ref_th.free.pop() {
-            println!("{} {} {}", i, free, true);
             return (i, free, true);
         }
 
@@ -457,12 +456,10 @@ pub(crate) unsafe fn get_next_spot(extra: *mut ExtraData) -> (usize, c_int, bool
         }
 
         ref_th.stack_top += 1;
-        println!("{} {} {}", i, ref_th.stack_top, false);
         return (i, ref_th.stack_top, false);
     }
 
     // No free slots found, create a new one
-    println!("No free slots found, creating a new ref thread");
     let new_ref_thread = RefThread::new(extra.raw_lua().state());
     extra.ref_thread.push(new_ref_thread);
     return get_next_spot(extra);

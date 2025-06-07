@@ -1488,7 +1488,6 @@ fn test_gc_drop_ref_thread() -> Result<()> {
 #[cfg(not(feature = "luau"))]
 #[test]
 fn test_get_or_init_from_ptr() -> Result<()> {
-    println!("ABC");
     // This would not work with Luau, the state must be init by mlua internally
     let state = unsafe { ffi::luaL_newstate() };
 

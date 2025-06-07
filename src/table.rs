@@ -256,7 +256,6 @@ impl Table {
             value.push_into_stack(&lua)?;
 
             if lua.unlikely_memory_error() {
-                println!("Typeoftable: {}", ffi::lua_type(state, -3));
                 ffi::lua_rawset(state, -3);
                 ffi::lua_pop(state, 1);
                 Ok(())
