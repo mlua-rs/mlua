@@ -634,7 +634,7 @@ impl AnyUserData {
     #[inline]
     pub fn borrow<T: 'static>(&self) -> Result<UserDataRef<T>> {
         let lua = self.0.lua.lock();
-        unsafe { UserDataRef::borrow_from_stack(&lua, lua.ref_thread(), self.0.index) }
+        unsafe { UserDataRef::borrow_from_stack(&lua, lua.ref_thread(self.0.aux_thread), self.0.index) }
     }
 
     /// Borrow this userdata immutably if it is of type `T`, passing the borrowed value
@@ -645,7 +645,15 @@ impl AnyUserData {
         let lua = self.0.lua.lock();
         let type_id = lua.get_userdata_ref_type_id(&self.0)?;
         let type_hints = TypeIdHints::new::<T>();
-        unsafe { borrow_userdata_scoped(lua.ref_thread(), self.0.index, type_id, type_hints, f) }
+        unsafe {
+            borrow_userdata_scoped(
+                lua.ref_thread(self.0.aux_thread),
+                self.0.index,
+                type_id,
+                type_hints,
+                f,
+            )
+        }
     }
 
     /// Borrow this userdata mutably if it is of type `T`.
@@ -661,7 +669,7 @@ impl AnyUserData {
     #[inline]
     pub fn borrow_mut<T: 'static>(&self) -> Result<UserDataRefMut<T>> {
         let lua = self.0.lua.lock();
-        unsafe { UserDataRefMut::borrow_from_stack(&lua, lua.ref_thread(), self.0.index) }
+        unsafe { UserDataRefMut::borrow_from_stack(&lua, lua.ref_thread(self.0.aux_thread), self.0.index) }
     }
 
     /// Borrow this userdata mutably if it is of type `T`, passing the borrowed value
@@ -672,7 +680,15 @@ impl AnyUserData {
         let lua = self.0.lua.lock();
         let type_id = lua.get_userdata_ref_type_id(&self.0)?;
         let type_hints = TypeIdHints::new::<T>();
-        unsafe { borrow_userdata_scoped_mut(lua.ref_thread(), self.0.index, type_id, type_hints, f) }
+        unsafe {
+            borrow_userdata_scoped_mut(
+                lua.ref_thread(self.0.aux_thread),
+                self.0.index,
+                type_id,
+                type_hints,
+                f,
+            )
+        }
     }
 
     /// Takes the value out of this userdata.
@@ -685,7 +701,7 @@ impl AnyUserData {
         let lua = self.0.lua.lock();
         match lua.get_userdata_ref_type_id(&self.0)? {
             Some(type_id) if type_id == TypeId::of::<T>() => unsafe {
-                let ref_thread = lua.ref_thread();
+                let ref_thread = lua.ref_thread(self.0.aux_thread);
                 if (*get_userdata::<UserDataStorage<T>>(ref_thread, self.0.index)).has_exclusive_access() {
                     take_userdata::<UserDataStorage<T>>(ref_thread, self.0.index).into_inner()
                 } else {

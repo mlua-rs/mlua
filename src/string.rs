@@ -119,7 +119,7 @@ impl String {
         let lua = self.0.lua.upgrade();
         let slice = {
             let rawlua = lua.lock();
-            let ref_thread = rawlua.ref_thread();
+            let ref_thread = rawlua.ref_thread(self.0.aux_thread);
 
             mlua_debug_assert!(
                 ffi::lua_type(ref_thread, self.0.index) == ffi::LUA_TSTRING,

@@ -1,6 +1,7 @@
 use std::any::TypeId;
 use std::cell::{Cell, UnsafeCell};
 use std::ffi::CStr;
+use std::io::Write;
 use std::mem;
 use std::os::raw::{c_char, c_int, c_void};
 use std::panic::resume_unwind;
@@ -14,7 +15,7 @@ use crate::function::Function;
 use crate::memory::{MemoryState, ALLOCATOR};
 #[allow(unused_imports)]
 use crate::state::util::callback_error_ext;
-use crate::state::util::{callback_error_ext_yieldable, ref_stack_pop};
+use crate::state::util::{callback_error_ext_yieldable, get_next_spot};
 use crate::stdlib::StdLib;
 use crate::string::String;
 use crate::table::Table;
@@ -125,8 +126,24 @@ impl RawLua {
     }
 
     #[inline(always)]
-    pub(crate) fn ref_thread(&self) -> *mut ffi::lua_State {
-        unsafe { (*self.extra.get()).ref_thread }
+    pub(crate) fn ref_thread(&self, aux_thread: usize) -> *mut ffi::lua_State {
+        unsafe {
+            (*self.extra.get())
+                .ref_thread
+                .get(aux_thread)
+                .unwrap_unchecked()
+                .ref_thread
+        }
+    }
+
+    #[inline(always)]
+    pub(crate) fn ref_thread_internal(&self) -> *mut ffi::lua_State {
+        unsafe { (*self.extra.get()).ref_thread_internal.ref_thread }
+    }
+
+    #[inline(always)]
+    pub(crate) fn extra(&self) -> *mut ExtraData {
+        self.extra.get()
     }
 
     pub(super) unsafe fn new(libs: StdLib, options: &LuaOptions) -> XRc<ReentrantMutex<Self>> {
@@ -599,7 +616,7 @@ impl RawLua {
         self.set_thread_hook(thread_state, HookKind::Global)?;
 
         let thread = Thread(self.pop_ref(), thread_state);
-        ffi::lua_xpush(self.ref_thread(), thread_state, func.0.index);
+        ffi::lua_xpush(self.ref_thread(thread.0.aux_thread), thread_state, func.0.index);
         Ok(thread)
     }
 
@@ -607,8 +624,8 @@ impl RawLua {
     #[cfg(feature = "async")]
     pub(crate) unsafe fn create_recycled_thread(&self, func: &Function) -> Result<Thread> {
         if let Some(index) = (*self.extra.get()).thread_pool.pop() {
-            let thread_state = ffi::lua_tothread(self.ref_thread(), index);
-            ffi::lua_xpush(self.ref_thread(), thread_state, func.0.index);
+            let thread_state = ffi::lua_tothread(self.ref_thread(func.0.aux_thread), index);
+            ffi::lua_xpush(self.ref_thread(func.0.aux_thread), thread_state, func.0.index);
 
             #[cfg(feature = "luau")]
             {
@@ -689,6 +706,7 @@ impl RawLua {
     /// Uses 2 stack spaces, does not call checkstack.
     pub(crate) unsafe fn stack_value(&self, idx: c_int, type_hint: Option<c_int>) -> Value {
         let state = self.state();
+        println!("ABC");
         match type_hint.unwrap_or_else(|| ffi::lua_type(state, idx)) {
             ffi::LUA_TNIL => Nil,
 
@@ -727,18 +745,32 @@ impl RawLua {
             }
 
             ffi::LUA_TSTRING => {
-                ffi::lua_xpush(state, self.ref_thread(), idx);
-                Value::String(String(self.pop_ref_thread()))
+                println!("STRING");
+                let (aux_thread, idxs, replace) = get_next_spot(self.extra.get());
+                ffi::lua_xpush(state, self.ref_thread(aux_thread), idx);
+                if replace {
+                    ffi::lua_replace(self.ref_thread(aux_thread), idxs);
+                }
+                Value::String(String(self.new_value_ref(aux_thread, idxs)))
             }
 
             ffi::LUA_TTABLE => {
-                ffi::lua_xpush(state, self.ref_thread(), idx);
-                Value::Table(Table(self.pop_ref_thread()))
+                println!("TABLE");
+                let (aux_thread, idxs, replace) = get_next_spot(self.extra.get());
+                ffi::lua_xpush(state, self.ref_thread(aux_thread), idx);
+                if replace {
+                    ffi::lua_replace(self.ref_thread(aux_thread), idxs);
+                }
+                Value::Table(Table(self.new_value_ref(aux_thread, idxs)))
             }
 
             ffi::LUA_TFUNCTION => {
-                ffi::lua_xpush(state, self.ref_thread(), idx);
-                Value::Function(Function(self.pop_ref_thread()))
+                let (aux_thread, idxs, replace) = get_next_spot(self.extra.get());
+                ffi::lua_xpush(state, self.ref_thread(aux_thread), idx);
+                if replace {
+                    ffi::lua_replace(self.ref_thread(aux_thread), idxs);
+                }
+                Value::Function(Function(self.new_value_ref(aux_thread, idxs)))
             }
 
             ffi::LUA_TUSERDATA => {
@@ -754,27 +786,44 @@ impl RawLua {
                         Value::Nil
                     }
                     _ => {
-                        ffi::lua_xpush(state, self.ref_thread(), idx);
-                        Value::UserData(AnyUserData(self.pop_ref_thread()))
+                        let (aux_thread, idxs, replace) = get_next_spot(self.extra.get());
+                        ffi::lua_xpush(state, self.ref_thread(aux_thread), idx);
+                        if replace {
+                            ffi::lua_replace(self.ref_thread(aux_thread), idxs);
+                        }
+
+                        Value::UserData(AnyUserData(self.new_value_ref(aux_thread, idxs)))
                     }
                 }
             }
 
             ffi::LUA_TTHREAD => {
-                ffi::lua_xpush(state, self.ref_thread(), idx);
-                let thread_state = ffi::lua_tothread(self.ref_thread(), -1);
-                Value::Thread(Thread(self.pop_ref_thread(), thread_state))
+                let (aux_thread, idxs, replace) = get_next_spot(self.extra.get());
+                ffi::lua_xpush(state, self.ref_thread(aux_thread), idx);
+                let thread_state = ffi::lua_tothread(self.ref_thread(aux_thread), -1);
+                if replace {
+                    ffi::lua_replace(self.ref_thread(aux_thread), idxs);
+                }
+                Value::Thread(Thread(self.new_value_ref(aux_thread, idxs), thread_state))
             }
 
             #[cfg(feature = "luau")]
             ffi::LUA_TBUFFER => {
-                ffi::lua_xpush(state, self.ref_thread(), idx);
-                Value::Buffer(crate::Buffer(self.pop_ref_thread()))
+                let (aux_thread, idxs, replace) = get_next_spot(self.extra.get());
+                ffi::lua_xpush(state, self.ref_thread(aux_thread), idx);
+                if replace {
+                    ffi::lua_replace(self.ref_thread(aux_thread), idxs);
+                }
+                Value::Buffer(crate::Buffer(self.new_value_ref(aux_thread, idxs)))
             }
 
             _ => {
-                ffi::lua_xpush(state, self.ref_thread(), idx);
-                Value::Other(self.pop_ref_thread())
+                let (aux_thread, idxs, replace) = get_next_spot(self.extra.get());
+                ffi::lua_xpush(state, self.ref_thread(aux_thread), idx);
+                if replace {
+                    ffi::lua_replace(self.ref_thread(aux_thread), idxs);
+                }
+                Value::Other(self.new_value_ref(aux_thread, idxs))
             }
         }
     }
@@ -786,7 +835,7 @@ impl RawLua {
             self.weak() == &vref.lua,
             "Lua instance passed Value created from a different main Lua state"
         );
-        unsafe { ffi::lua_xpush(self.ref_thread(), self.state(), vref.index) };
+        unsafe { ffi::lua_xpush(self.ref_thread(vref.aux_thread), self.state(), vref.index) };
     }
 
     // Pops the topmost element of the stack and stores a reference to it. This pins the object,
@@ -798,41 +847,54 @@ impl RawLua {
     // used stack.
     #[inline]
     pub(crate) unsafe fn pop_ref(&self) -> ValueRef {
-        ffi::lua_xmove(self.state(), self.ref_thread(), 1);
-        let index = ref_stack_pop(self.extra.get());
-        ValueRef::new(self, index)
+        let (aux_thread, idx, replace) = get_next_spot(self.extra.get());
+        ffi::lua_xmove(self.state(), self.ref_thread(aux_thread), 1);
+        if replace {
+            ffi::lua_replace(self.ref_thread(aux_thread), idx);
+        }
+
+        ValueRef::new(self, aux_thread, idx)
     }
 
-    // Same as `pop_ref` but assumes the value is already on the reference thread
+    // Given a known aux_thread and index, creates a ValueRef.
     #[inline]
-    pub(crate) unsafe fn pop_ref_thread(&self) -> ValueRef {
-        let index = ref_stack_pop(self.extra.get());
-        ValueRef::new(self, index)
+    pub(crate) unsafe fn new_value_ref(&self, aux_thread: usize, index: c_int) -> ValueRef {
+        ValueRef::new(self, aux_thread, index)
     }
 
     #[inline]
     pub(crate) unsafe fn clone_ref(&self, vref: &ValueRef) -> ValueRef {
-        ffi::lua_pushvalue(self.ref_thread(), vref.index);
-        let index = ref_stack_pop(self.extra.get());
-        ValueRef::new(self, index)
+        let (aux_thread, index, replace) = get_next_spot(self.extra.get());
+        ffi::lua_xpush(
+            self.ref_thread(vref.aux_thread),
+            self.ref_thread(aux_thread),
+            vref.index,
+        );
+        if replace {
+            ffi::lua_replace(self.ref_thread(aux_thread), index);
+        }
+        ValueRef::new(self, aux_thread, index)
     }
 
     pub(crate) unsafe fn drop_ref(&self, vref: &ValueRef) {
-        let ref_thread = self.ref_thread();
+        let ref_thread = self.ref_thread(vref.aux_thread);
         mlua_debug_assert!(
             ffi::lua_gettop(ref_thread) >= vref.index,
             "GC finalizer is not allowed in ref_thread"
         );
+        println!("Trying to dropref");
         ffi::lua_pushnil(ref_thread);
         ffi::lua_replace(ref_thread, vref.index);
-        (*self.extra.get()).ref_free.push(vref.index);
+        (*self.extra.get()).ref_thread[vref.aux_thread]
+            .free
+            .push(vref.index);
     }
 
     #[inline]
     pub(crate) unsafe fn push_error_traceback(&self) {
         let state = self.state();
         #[cfg(any(feature = "lua51", feature = "luajit", feature = "luau"))]
-        ffi::lua_xpush(self.ref_thread(), state, ExtraData::ERROR_TRACEBACK_IDX);
+        ffi::lua_xpush(self.ref_thread_internal(), state, ExtraData::ERROR_TRACEBACK_IDX);
         // Lua 5.2+ support light C functions that does not require extra allocations
         #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
         ffi::lua_pushcfunction(state, crate::util::error_traceback);
@@ -1104,7 +1166,7 @@ impl RawLua {
     // Returns `None` if the userdata is registered but non-static.
     #[inline(always)]
     pub(crate) fn get_userdata_ref_type_id(&self, vref: &ValueRef) -> Result<Option<TypeId>> {
-        unsafe { self.get_userdata_type_id_inner(self.ref_thread(), vref.index) }
+        unsafe { self.get_userdata_type_id_inner(self.ref_thread(vref.aux_thread), vref.index) }
     }
 
     // Same as `get_userdata_ref_type_id` but assumes the userdata is already on the stack.
@@ -1157,7 +1219,7 @@ impl RawLua {
     // Pushes a ValueRef (userdata) value onto the stack, returning their `TypeId`.
     // Uses 1 stack space, does not call checkstack.
     pub(crate) unsafe fn push_userdata_ref(&self, vref: &ValueRef) -> Result<Option<TypeId>> {
-        let type_id = self.get_userdata_type_id_inner(self.ref_thread(), vref.index)?;
+        let type_id = self.get_userdata_type_id_inner(self.ref_thread(vref.aux_thread), vref.index)?;
         self.push_ref(vref);
         Ok(type_id)
     }

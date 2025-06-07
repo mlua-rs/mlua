@@ -14,6 +14,7 @@ use crate::hook::Debug;
 use crate::memory::MemoryState;
 use crate::multi::MultiValue;
 use crate::scope::Scope;
+use crate::state::util::get_next_spot;
 use crate::stdlib::StdLib;
 use crate::string::String;
 use crate::table::Table;
@@ -528,7 +529,7 @@ impl Lua {
                         ffi::luaL_sandboxthread(state);
                     } else {
                         // Restore original `LUA_GLOBALSINDEX`
-                        ffi::lua_xpush(lua.ref_thread(), state, ffi::LUA_GLOBALSINDEX);
+                        ffi::lua_xpush(lua.ref_thread_internal(), state, ffi::LUA_GLOBALSINDEX);
                         ffi::lua_replace(state, ffi::LUA_GLOBALSINDEX);
                         ffi::luaL_sandbox(state, 0);
                     }
@@ -768,8 +769,12 @@ impl Lua {
                 return; // Don't allow recursion
             }
             ffi::lua_pushthread(child);
-            ffi::lua_xmove(child, (*extra).ref_thread, 1);
-            let value = Thread((*extra).raw_lua().pop_ref_thread(), child);
+            let (aux_thread, index, replace) = get_next_spot(extra);
+            ffi::lua_xmove(child, (*extra).raw_lua().ref_thread(aux_thread), 1);
+            if replace {
+                ffi::lua_replace((*extra).raw_lua().ref_thread(aux_thread), index);
+            }
+            let value = Thread((*extra).raw_lua().new_value_ref(aux_thread, index), child);
             callback_error_ext(parent, extra, false, move |extra, _| {
                 callback((*extra).lua(), value)
             })
@@ -1225,7 +1230,6 @@ impl Lua {
                     ffi::lua_rawset(state, -3);
                 }
             }
-
             Ok(Table(lua.pop_ref()))
         }
     }
@@ -1351,8 +1355,13 @@ impl Lua {
     /// This function is unsafe because provides a way to execute unsafe C function.
     pub unsafe fn create_c_function(&self, func: ffi::lua_CFunction) -> Result<Function> {
         let lua = self.lock();
-        ffi::lua_pushcfunction(lua.ref_thread(), func);
-        Ok(Function(lua.pop_ref_thread()))
+        let (aux_thread, idx, replace) = get_next_spot(lua.extra());
+        ffi::lua_pushcfunction(lua.ref_thread(aux_thread), func);
+        if replace {
+            ffi::lua_replace(lua.ref_thread(aux_thread), idx);
+        }
+
+        Ok(Function(lua.new_value_ref(aux_thread, idx)))
     }
 
     /// Wraps a Rust async function or closure, creating a callable Lua function handle to it.

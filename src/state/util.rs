@@ -6,6 +6,7 @@ use std::ptr;
 use std::sync::Arc;
 
 use crate::error::{Error, Result};
+use crate::state::extra::RefThread;
 use crate::state::{ExtraData, RawLua};
 use crate::util::{self, check_stack, get_internal_metatable, WrappedFailure};
 
@@ -51,7 +52,7 @@ impl PreallocatedFailure {
 
     #[cold]
     unsafe fn r#use(&self, state: *mut ffi::lua_State, extra: *mut ExtraData) -> *mut WrappedFailure {
-        let ref_thread = (*extra).ref_thread;
+        let ref_thread = &(*extra).ref_thread_internal;
         match *self {
             PreallocatedFailure::New(ud) => {
                 ffi::lua_settop(state, 1);
@@ -62,22 +63,22 @@ impl PreallocatedFailure {
                 ffi::lua_settop(state, 0);
                 #[cfg(feature = "luau")]
                 ffi::lua_rawcheckstack(state, 2);
-                ffi::lua_xpush(ref_thread, state, index);
-                ffi::lua_pushnil(ref_thread);
-                ffi::lua_replace(ref_thread, index);
-                (*extra).ref_free.push(index);
+                ffi::lua_xpush(ref_thread.ref_thread, state, index);
+                ffi::lua_pushnil(ref_thread.ref_thread);
+                ffi::lua_replace(ref_thread.ref_thread, index);
+                (*extra).ref_thread_internal.free.push(index);
                 ffi::lua_touserdata(state, -1) as *mut WrappedFailure
             }
         }
     }
 
     unsafe fn release(self, state: *mut ffi::lua_State, extra: *mut ExtraData) {
-        let ref_thread = (*extra).ref_thread;
+        let ref_thread = &(*extra).ref_thread_internal;
         match self {
             PreallocatedFailure::New(_) => {
                 ffi::lua_rotate(state, 1, -1);
-                ffi::lua_xmove(state, ref_thread, 1);
-                let index = ref_stack_pop(extra);
+                ffi::lua_xmove(state, ref_thread.ref_thread, 1);
+                let index = ref_stack_pop_internal(extra);
                 (*extra).wrapped_failure_pool.push(index);
                 (*extra).wrapped_failure_top += 1;
             }
@@ -350,30 +351,121 @@ where
     }
 }
 
-pub(super) unsafe fn ref_stack_pop(extra: *mut ExtraData) -> c_int {
+pub(super) unsafe fn ref_stack_pop_internal(extra: *mut ExtraData) -> c_int {
     let extra = &mut *extra;
-    if let Some(free) = extra.ref_free.pop() {
-        ffi::lua_replace(extra.ref_thread, free);
+    let ref_th = &mut extra.ref_thread_internal;
+
+    if let Some(free) = ref_th.free.pop() {
+        ffi::lua_replace(ref_th.ref_thread, free);
         return free;
     }
 
     // Try to grow max stack size
-    if extra.ref_stack_top >= extra.ref_stack_size {
-        let mut inc = extra.ref_stack_size; // Try to double stack size
-        while inc > 0 && ffi::lua_checkstack(extra.ref_thread, inc) == 0 {
+    if ref_th.stack_top >= ref_th.stack_size {
+        let mut inc = ref_th.stack_size; // Try to double stack size
+        while inc > 0 && ffi::lua_checkstack(ref_th.ref_thread, inc) == 0 {
             inc /= 2;
         }
         if inc == 0 {
             // Pop item on top of the stack to avoid stack leaking and successfully run destructors
             // during unwinding.
-            ffi::lua_pop(extra.ref_thread, 1);
-            let top = extra.ref_stack_top;
+            ffi::lua_pop(ref_th.ref_thread, 1);
+            let top = ref_th.stack_top;
             // It is a user error to create enough references to exhaust the Lua max stack size for
-            // the ref thread.
-            panic!("cannot create a Lua reference, out of auxiliary stack space (used {top} slots)");
+            // the ref thread. This should never happen for the internal aux thread but still
+            panic!("internal error: cannot create a Lua reference, out of internal auxiliary stack space (used {top} slots)");
         }
-        extra.ref_stack_size += inc;
+        ref_th.stack_size += inc;
     }
-    extra.ref_stack_top += 1;
-    extra.ref_stack_top
+    ref_th.stack_top += 1;
+    return ref_th.stack_top;
+}
+
+// Run a comparison function on two Lua references from different auxiliary threads.
+pub(crate) unsafe fn compare_refs<R>(
+    extra: *mut ExtraData,
+    aux_thread_a: usize,
+    aux_thread_a_index: c_int,
+    aux_thread_b: usize,
+    aux_thread_b_index: c_int,
+    f: impl FnOnce(*mut ffi::lua_State, c_int, c_int) -> R,
+) -> R {
+    let extra = &mut *extra;
+
+    if aux_thread_a == aux_thread_b {
+        // If both threads are the same, just return the value at the index
+        let th = &mut extra.ref_thread[aux_thread_a];
+        return f(th.ref_thread, aux_thread_a_index, aux_thread_b_index);
+    }
+
+    let th_a = &extra.ref_thread[aux_thread_a];
+    let th_b = &extra.ref_thread[aux_thread_b];
+    let internal_thread = &mut extra.ref_thread_internal;
+
+    // 4 spaces needed: 1st element on A, idx element on A, 1st element on B, idx element on B
+    check_stack(internal_thread.ref_thread, 4)
+        .expect("internal error: cannot merge references, out of internal auxiliary stack space");
+
+    panic!("Unsupported");
+
+    // Push the first element from thread A to ensure we have enough stack space on thread A
+    ffi::lua_xmove(th_a.ref_thread, internal_thread.ref_thread, 1);
+    // Push the first element from thread B to ensure we have enough stack space on thread B
+    ffi::lua_xmove(th_b.ref_thread, internal_thread.ref_thread, 1);
+    // Push the index element from thread A to top
+    ffi::lua_pushvalue(th_a.ref_thread, aux_thread_a_index);
+    ffi::lua_xmove(th_a.ref_thread, internal_thread.ref_thread, 1);
+    // Push the index element from thread B to top
+    ffi::lua_pushvalue(th_b.ref_thread, aux_thread_b_index);
+    ffi::lua_xmove(th_b.ref_thread, internal_thread.ref_thread, 1);
+    // Now we have the following stack:
+    // - 1st element from thread A (4)
+    // - 1st element from thread B (3)
+    // - index element from thread A (2) [copy from pushvalue]
+    // - index element from thread B (1) [copy from pushvalue]
+    // We want to compare the index elements from both threads, so use 3 and 4 as indices
+    let result = f(internal_thread.ref_thread, 2, 1);
+
+    // Pop the top 2 elements to clean the copies
+    ffi::lua_pop(internal_thread.ref_thread, 2);
+    // Move the first element from thread B back to thread B
+    ffi::lua_xmove(internal_thread.ref_thread, th_b.ref_thread, 1);
+    // Move the first element from thread A back to thread A
+    ffi::lua_xmove(internal_thread.ref_thread, th_a.ref_thread, 1);
+
+    result
+}
+
+pub(crate) unsafe fn get_next_spot(extra: *mut ExtraData) -> (usize, c_int, bool) {
+    let extra = &mut *extra;
+
+    // Find the first thread with a free slot
+    for (i, ref_th) in extra.ref_thread.iter_mut().enumerate() {
+        if let Some(free) = ref_th.free.pop() {
+            println!("{} {} {}", i, free, true);
+            return (i, free, true);
+        }
+
+        // Try to grow max stack size
+        if ref_th.stack_top >= ref_th.stack_size {
+            let mut inc = ref_th.stack_size; // Try to double stack size
+            while inc > 0 && ffi::lua_checkstack(ref_th.ref_thread, inc + 1) == 0 {
+                inc /= 2;
+            }
+            if inc == 0 {
+                continue; // No stack space available, try next thread
+            }
+            ref_th.stack_size += inc;
+        }
+
+        ref_th.stack_top += 1;
+        println!("{} {} {}", i, ref_th.stack_top, false);
+        return (i, ref_th.stack_top, false);
+    }
+
+    // No free slots found, create a new one
+    println!("No free slots found, creating a new ref thread");
+    let new_ref_thread = RefThread::new(extra.raw_lua().state());
+    extra.ref_thread.push(new_ref_thread);
+    return get_next_spot(extra);
 }

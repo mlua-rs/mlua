@@ -516,4 +516,12 @@ fn test_continuation() {
 
     let v = th.resume::<String>(v).expect("Failed to load continuation");
     assert!(v.contains("Reached continuation which should panic!"));
+
+    let mut ths = Vec::new();
+    for i in 1..1000000 {
+        let th = lua
+            .create_thread(lua.create_function(|_, ()| Ok(())).unwrap())
+            .expect("Failed to create thread");
+        ths.push(th);
+    }
 }

@@ -330,7 +330,7 @@ impl Thread {
             self.reset_inner(status)?;
 
             // Push function to the top of the thread stack
-            ffi::lua_xpush(lua.ref_thread(), thread_state, func.0.index);
+            ffi::lua_xpush(lua.ref_thread(func.0.aux_thread), thread_state, func.0.index);
 
             #[cfg(feature = "luau")]
             {

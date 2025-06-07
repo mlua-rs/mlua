@@ -256,6 +256,7 @@ impl Table {
             value.push_into_stack(&lua)?;
 
             if lua.unlikely_memory_error() {
+                println!("Typeoftable: {}", ffi::lua_type(state, -3));
                 ffi::lua_rawset(state, -3);
                 ffi::lua_pop(state, 1);
                 Ok(())
@@ -406,7 +407,7 @@ impl Table {
             #[cfg(feature = "luau")]
             {
                 self.check_readonly_write(&lua)?;
-                ffi::lua_cleartable(lua.ref_thread(), self.0.index);
+                ffi::lua_cleartable(lua.ref_thread(self.0.aux_thread), self.0.index);
             }
 
             #[cfg(not(feature = "luau"))]
@@ -461,7 +462,7 @@ impl Table {
     /// Returns the result of the Lua `#` operator, without invoking the `__len` metamethod.
     pub fn raw_len(&self) -> usize {
         let lua = self.0.lua.lock();
-        unsafe { ffi::lua_rawlen(lua.ref_thread(), self.0.index) }
+        unsafe { ffi::lua_rawlen(lua.ref_thread(self.0.aux_thread), self.0.index) }
     }
 
     /// Returns `true` if the table is empty, without invoking metamethods.
@@ -469,7 +470,7 @@ impl Table {
     /// It checks both the array part and the hash part.
     pub fn is_empty(&self) -> bool {
         let lua = self.0.lua.lock();
-        let ref_thread = lua.ref_thread();
+        let ref_thread = lua.ref_thread(self.0.aux_thread);
         unsafe {
             ffi::lua_pushnil(ref_thread);
             if ffi::lua_next(ref_thread, self.0.index) == 0 {
@@ -533,7 +534,7 @@ impl Table {
     #[inline]
     pub fn has_metatable(&self) -> bool {
         let lua = self.0.lua.lock();
-        unsafe { !get_metatable_ptr(lua.ref_thread(), self.0.index).is_null() }
+        unsafe { !get_metatable_ptr(lua.ref_thread(self.0.aux_thread), self.0.index).is_null() }
     }
 
     /// Sets `readonly` attribute on the table.
@@ -541,7 +542,7 @@ impl Table {
     #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
     pub fn set_readonly(&self, enabled: bool) {
         let lua = self.0.lua.lock();
-        let ref_thread = lua.ref_thread();
+        let ref_thread = lua.ref_thread(self.0.aux_thread);
         unsafe {
             ffi::lua_setreadonly(ref_thread, self.0.index, enabled as _);
             if !enabled {
@@ -556,7 +557,7 @@ impl Table {
     #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
     pub fn is_readonly(&self) -> bool {
         let lua = self.0.lua.lock();
-        let ref_thread = lua.ref_thread();
+        let ref_thread = lua.ref_thread(self.0.aux_thread);
         unsafe { ffi::lua_getreadonly(ref_thread, self.0.index) != 0 }
     }
 
@@ -573,7 +574,7 @@ impl Table {
     #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
     pub fn set_safeenv(&self, enabled: bool) {
         let lua = self.0.lua.lock();
-        unsafe { ffi::lua_setsafeenv(lua.ref_thread(), self.0.index, enabled as _) };
+        unsafe { ffi::lua_setsafeenv(lua.ref_thread(self.0.aux_thread), self.0.index, enabled as _) };
     }
 
     /// Converts this table to a generic C pointer.
@@ -755,7 +756,7 @@ impl Table {
     #[cfg(feature = "luau")]
     #[inline(always)]
     fn check_readonly_write(&self, lua: &RawLua) -> Result<()> {
-        if unsafe { ffi::lua_getreadonly(lua.ref_thread(), self.0.index) != 0 } {
+        if unsafe { ffi::lua_getreadonly(lua.ref_thread(self.0.aux_thread), self.0.index) != 0 } {
             return Err(Error::runtime("attempt to modify a readonly table"));
         }
         Ok(())
