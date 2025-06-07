@@ -517,11 +517,27 @@ fn test_continuation() {
     let v = th.resume::<String>(v).expect("Failed to load continuation");
     assert!(v.contains("Reached continuation which should panic!"));
 
+    let th1 = lua
+        .create_thread(lua.create_function(|lua, _: ()| Ok(())).unwrap())
+        .unwrap();
     let mut ths = Vec::new();
-    for i in 1..1000000 {
+    for i in 1..2000000 {
         let th = lua
             .create_thread(lua.create_function(|_, ()| Ok(())).unwrap())
             .expect("Failed to create thread");
         ths.push(th);
+    }
+    let th2 = lua
+        .create_thread(lua.create_function(|lua, _: ()| Ok(())).unwrap())
+        .unwrap();
+
+    for rth in ths {
+        assert!(
+            th1 != rth && th2 != rth,
+            "Thread {:?} is equal to th1 ({:?}) or th2 ({:?})",
+            rth,
+            th1,
+            th2
+        );
     }
 }

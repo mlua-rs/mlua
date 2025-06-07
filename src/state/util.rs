@@ -411,18 +411,16 @@ pub(crate) unsafe fn compare_refs<R>(
     // Push the first element from thread B to ensure we have enough stack space on thread B
     ffi::lua_xmove(th_b.ref_thread, internal_thread.ref_thread, 1);
     // Push the index element from thread A to top
-    ffi::lua_pushvalue(th_a.ref_thread, aux_thread_a_index);
-    ffi::lua_xmove(th_a.ref_thread, internal_thread.ref_thread, 1);
+    ffi::lua_xpush(th_a.ref_thread, internal_thread.ref_thread, aux_thread_a_index);
     // Push the index element from thread B to top
-    ffi::lua_pushvalue(th_b.ref_thread, aux_thread_b_index);
-    ffi::lua_xmove(th_b.ref_thread, internal_thread.ref_thread, 1);
+    ffi::lua_xpush(th_b.ref_thread, internal_thread.ref_thread, aux_thread_b_index);
     // Now we have the following stack:
-    // - 1st element from thread A (4)
-    // - 1st element from thread B (3)
-    // - index element from thread A (2) [copy from pushvalue]
-    // - index element from thread B (1) [copy from pushvalue]
+    // - index element from thread A (1) [copy from pushvalue]
+    // - index element from thread B (2) [copy from pushvalue]
+    // - 1st element from thread A (3)
+    // - 1st element from thread B (4)
     // We want to compare the index elements from both threads, so use 3 and 4 as indices
-    let result = f(internal_thread.ref_thread, 2, 1);
+    let result = f(internal_thread.ref_thread, 3, 4);
 
     // Pop the top 2 elements to clean the copies
     ffi::lua_pop(internal_thread.ref_thread, 2);
