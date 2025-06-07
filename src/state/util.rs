@@ -406,8 +406,6 @@ pub(crate) unsafe fn compare_refs<R>(
     check_stack(internal_thread.ref_thread, 4)
         .expect("internal error: cannot merge references, out of internal auxiliary stack space");
 
-    panic!("Unsupported");
-
     // Push the first element from thread A to ensure we have enough stack space on thread A
     ffi::lua_xmove(th_a.ref_thread, internal_thread.ref_thread, 1);
     // Push the first element from thread B to ensure we have enough stack space on thread B

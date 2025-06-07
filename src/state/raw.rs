@@ -623,8 +623,8 @@ impl RawLua {
     /// Wraps a Lua function into a new or recycled thread (coroutine).
     #[cfg(feature = "async")]
     pub(crate) unsafe fn create_recycled_thread(&self, func: &Function) -> Result<Thread> {
-        if let Some(index) = (*self.extra.get()).thread_pool.pop() {
-            let thread_state = ffi::lua_tothread(self.ref_thread(func.0.aux_thread), index);
+        if let Some((aux_thread, index)) = (*self.extra.get()).thread_pool.pop() {
+            let thread_state = ffi::lua_tothread(self.ref_thread(aux_thread), index);
             ffi::lua_xpush(self.ref_thread(func.0.aux_thread), thread_state, func.0.index);
 
             #[cfg(feature = "luau")]
@@ -634,7 +634,7 @@ impl RawLua {
                 ffi::lua_replace(thread_state, ffi::LUA_GLOBALSINDEX);
             }
 
-            return Ok(Thread(ValueRef::new(self, index), thread_state));
+            return Ok(Thread(ValueRef::new(self, aux_thread, index), thread_state));
         }
 
         self.create_thread(func)
@@ -645,7 +645,7 @@ impl RawLua {
     pub(crate) unsafe fn recycle_thread(&self, thread: &mut Thread) {
         let extra = &mut *self.extra.get();
         if extra.thread_pool.len() < extra.thread_pool.capacity() {
-            extra.thread_pool.push(thread.0.index);
+            extra.thread_pool.push((thread.0.aux_thread, thread.0.index));
             thread.0.drop = false; // Prevent thread from being garbage collected
         }
     }

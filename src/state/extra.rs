@@ -107,7 +107,7 @@ pub(crate) struct ExtraData {
     pub(super) wrapped_failure_top: usize,
     // Pool of `Thread`s (coroutines) for async execution
     #[cfg(feature = "async")]
-    pub(super) thread_pool: Vec<c_int>,
+    pub(super) thread_pool: Vec<(usize, c_int)>,
 
     // Address of `WrappedFailure` metatable
     pub(super) wrapped_failure_mt_ptr: *const c_void,
