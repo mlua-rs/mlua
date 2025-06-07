@@ -3,6 +3,7 @@ use std::os::raw::{c_int, c_void};
 use std::{mem, ptr, slice};
 
 use crate::error::{Error, Result};
+use crate::state::util::get_next_spot;
 use crate::state::Lua;
 use crate::table::Table;
 use crate::traits::{FromLuaMulti, IntoLua, IntoLuaMulti, LuaNativeFn, LuaNativeFnMut};
@@ -494,14 +495,22 @@ impl Function {
     #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
     pub fn deep_clone(&self) -> Self {
         let lua = self.0.lua.lock();
-        let ref_thread = lua.ref_thread();
+        let ref_thread = lua.ref_thread(self.0.aux_thread);
         unsafe {
             if ffi::lua_iscfunction(ref_thread, self.0.index) != 0 {
                 return self.clone();
             }
 
             ffi::lua_clonefunction(ref_thread, self.0.index);
-            Function(lua.pop_ref_thread())
+
+            // Get the real next spot
+            let (aux_thread, index, replace) = get_next_spot(lua.extra());
+            ffi::lua_xpush(lua.ref_thread(self.0.aux_thread), lua.ref_thread(aux_thread), -1);
+            if replace {
+                ffi::lua_replace(lua.ref_thread(aux_thread), index);
+            }
+
+            Function(lua.new_value_ref(aux_thread, index))
         }
     }
 }

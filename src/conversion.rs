@@ -12,6 +12,7 @@ use num_traits::cast;
 
 use crate::error::{Error, Result};
 use crate::function::Function;
+use crate::state::util::get_next_spot;
 use crate::state::{Lua, RawLua};
 use crate::string::{BorrowedBytes, BorrowedStr, String};
 use crate::table::Table;
@@ -83,8 +84,12 @@ impl FromLua for String {
         let state = lua.state();
         let type_id = ffi::lua_type(state, idx);
         if type_id == ffi::LUA_TSTRING {
-            ffi::lua_xpush(state, lua.ref_thread(), idx);
-            return Ok(String(lua.pop_ref_thread()));
+            let (aux_thread, idxs, replace) = get_next_spot(lua.extra());
+            ffi::lua_xpush(state, lua.ref_thread(aux_thread), idx);
+            if replace {
+                ffi::lua_replace(lua.ref_thread(aux_thread), idxs);
+            }
+            return Ok(String(lua.new_value_ref(aux_thread, idxs)));
         }
         // Fallback to default
         Self::from_lua(lua.stack_value(idx, Some(type_id)), lua.lua())
