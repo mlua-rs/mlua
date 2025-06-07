@@ -424,10 +424,10 @@ pub(crate) unsafe fn compare_refs<R>(
 
     // Pop the top 2 elements to clean the copies
     ffi::lua_pop(internal_thread.ref_thread, 2);
-    // Move the first element from thread A back to thread A
-    ffi::lua_xmove(internal_thread.ref_thread, th_a.ref_thread, 1);
     // Move the first element from thread B back to thread B
     ffi::lua_xmove(internal_thread.ref_thread, th_b.ref_thread, 1);
+    // Move the first element from thread A back to thread A
+    ffi::lua_xmove(internal_thread.ref_thread, th_a.ref_thread, 1);
 
     result
 }
