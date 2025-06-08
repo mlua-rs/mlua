@@ -402,14 +402,10 @@ pub(crate) unsafe fn compare_refs<R>(
     let th_b = &extra.ref_thread[aux_thread_b];
     let internal_thread = &mut extra.ref_thread_internal;
 
-    // 4 spaces needed: 1st element on A, idx element on A, 1st element on B, idx element on B
-    check_stack(internal_thread.ref_thread, 4)
+    // 4 spaces needed: idx element on A, idx element on B
+    check_stack(internal_thread.ref_thread, 2)
         .expect("internal error: cannot merge references, out of internal auxiliary stack space");
 
-    // Push the first element from thread A to ensure we have enough stack space on thread A
-    ffi::lua_xmove(th_a.ref_thread, internal_thread.ref_thread, 1);
-    // Push the first element from thread B to ensure we have enough stack space on thread B
-    ffi::lua_xmove(th_b.ref_thread, internal_thread.ref_thread, 1);
     // Push the index element from thread A to top
     ffi::lua_xpush(th_a.ref_thread, internal_thread.ref_thread, aux_thread_a_index);
     // Push the index element from thread B to top
@@ -417,17 +413,11 @@ pub(crate) unsafe fn compare_refs<R>(
     // Now we have the following stack:
     // - index element from thread A (1) [copy from pushvalue]
     // - index element from thread B (2) [copy from pushvalue]
-    // - 1st element from thread A (3)
-    // - 1st element from thread B (4)
     // We want to compare the index elements from both threads, so use 3 and 4 as indices
     let result = f(internal_thread.ref_thread, 3, 4);
 
     // Pop the top 2 elements to clean the copies
     ffi::lua_pop(internal_thread.ref_thread, 2);
-    // Move the first element from thread B back to thread B
-    ffi::lua_xmove(internal_thread.ref_thread, th_b.ref_thread, 1);
-    // Move the first element from thread A back to thread A
-    ffi::lua_xmove(internal_thread.ref_thread, th_a.ref_thread, 1);
 
     result
 }
