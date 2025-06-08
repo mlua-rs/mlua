@@ -68,11 +68,6 @@ impl RefThread {
             free: Vec::new(),
         }
     }
-
-    #[inline(always)]
-    pub(crate) fn top(&self) -> c_int {
-        self.stack_top
-    }
 }
 
 /// Data associated with the Lua state.

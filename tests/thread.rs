@@ -516,10 +516,16 @@ fn test_continuation() {
 
     let v = th.resume::<String>(v).expect("Failed to load continuation");
     assert!(v.contains("Reached continuation which should panic!"));
+}
 
+#[test]
+fn test_large_thread_creation() {
+    let lua = Lua::new();
+    lua.set_memory_limit(100_000_000_000).unwrap();
     let th1 = lua
         .create_thread(lua.create_function(|lua, _: ()| Ok(())).unwrap())
         .unwrap();
+
     let mut ths = Vec::new();
     for i in 1..2000000 {
         let th = lua
@@ -532,6 +538,9 @@ fn test_continuation() {
         .unwrap();
 
     for rth in ths {
+        let dbg_a = format!("{:?}", rth);
+        let th_a = format!("{:?}", th1);
+        let th_b = format!("{:?}", th2);
         assert!(
             th1 != rth && th2 != rth,
             "Thread {:?} is equal to th1 ({:?}) or th2 ({:?})",
@@ -539,5 +548,14 @@ fn test_continuation() {
             th1,
             th2
         );
+        let dbg_b = format!("{:?}", rth);
+        let dbg_th1 = format!("{:?}", th1);
+        let dbg_th2 = format!("{:?}", th2);
+
+        // Ensure that the PartialEq across auxillary threads does not affect the values on stack
+        // themselves.
+        assert_eq!(dbg_a, dbg_b, "Thread {:?} debug format changed", rth);
+        assert_eq!(th_a, dbg_th1, "Thread {:?} debug format changed for th1", rth);
+        assert_eq!(th_b, dbg_th2, "Thread {:?} debug format changed for th2", rth);
     }
 }

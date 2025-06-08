@@ -1,7 +1,6 @@
 use std::any::TypeId;
 use std::cell::{Cell, UnsafeCell};
 use std::ffi::CStr;
-use std::io::Write;
 use std::mem;
 use std::os::raw::{c_char, c_int, c_void};
 use std::panic::resume_unwind;
@@ -137,6 +136,7 @@ impl RawLua {
     }
 
     #[inline(always)]
+    #[cfg(any(feature = "lua51", feature = "luajit", feature = "luau"))]
     pub(crate) fn ref_thread_internal(&self) -> *mut ffi::lua_State {
         unsafe { (*self.extra.get()).ref_thread_internal.ref_thread }
     }

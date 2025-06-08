@@ -3,6 +3,7 @@ use std::os::raw::{c_int, c_void};
 use std::{mem, ptr, slice};
 
 use crate::error::{Error, Result};
+#[cfg(feature = "luau")]
 use crate::state::util::get_next_spot;
 use crate::state::Lua;
 use crate::table::Table;
