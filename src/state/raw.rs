@@ -616,7 +616,7 @@ impl RawLua {
         self.set_thread_hook(thread_state, HookKind::Global)?;
 
         let thread = Thread(self.pop_ref(), thread_state);
-        ffi::lua_xpush(self.ref_thread(thread.0.aux_thread), thread_state, func.0.index);
+        ffi::lua_xpush(self.ref_thread(func.0.aux_thread), thread_state, func.0.index);
         Ok(thread)
     }
 
