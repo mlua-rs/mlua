@@ -406,8 +406,6 @@ pub(crate) unsafe fn compare_refs<R>(
     check_stack(internal_thread.ref_thread, 2)
         .expect("internal error: cannot merge references, out of internal auxiliary stack space");
 
-    println!("Using cref comparison across threads");
-
     // Push the index element from thread A to top
     ffi::lua_xpush(th_a.ref_thread, internal_thread.ref_thread, aux_thread_a_index);
     // Push the index element from thread B to top
