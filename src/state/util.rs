@@ -414,7 +414,7 @@ pub(crate) unsafe fn compare_refs<R>(
     // - index element from thread A (1) [copy from pushvalue]
     // - index element from thread B (2) [copy from pushvalue]
     // We want to compare the index elements from both threads, so use 3 and 4 as indices
-    let result = f(internal_thread.ref_thread, 3, 4);
+    let result = f(internal_thread.ref_thread, -1, -2);
 
     // Pop the top 2 elements to clean the copies
     ffi::lua_pop(internal_thread.ref_thread, 2);
