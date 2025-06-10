@@ -46,7 +46,7 @@ anyhow = ["dep:anyhow", "error-send"]
 userdata-wrappers = ["parking_lot/send_guard"]
 
 [dependencies]
-mlua_derive = { version = "=0.11.0-beta.1", optional = true, path = "mlua_derive" }
+mlua_derive = { version = "=0.11.0-beta.2", optional = true, path = "mlua_derive" }
 bstr = { version = "1.0", features = ["std"], default-features = false }
 either = "1.0"
 num-traits = { version = "0.2.14" }
@@ -59,7 +59,7 @@ parking_lot = { version = "0.12", features = ["arc_lock"] }
 anyhow = { version = "1.0", optional = true }
 rustversion = "1.0"
 
-ffi = { package = "mlua-sys", version = "0.7.0", path = "mlua-sys" }
+ffi = { package = "mlua-sys", version = "0.8.0", path = "mlua-sys" }
 
 [dev-dependencies]
 trybuild = "1.0"
@@ -75,8 +75,8 @@ tempfile = "3"
 static_assertions = "1.0"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
-criterion = { version = "0.5", features = ["async_tokio"] }
-rustyline = "15.0"
+criterion = { version = "0.6", features = ["async_tokio"] }
+rustyline = "16.0"
 tokio = { version = "1.0", features = ["full"] }
 
 [lints.rust]

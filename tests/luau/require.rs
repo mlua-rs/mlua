@@ -1,4 +1,7 @@
-use mlua::{IntoLua, Lua, MultiValue, Result, Value};
+use std::io::Result as IoResult;
+use std::result::Result as StdResult;
+
+use mlua::{Error, IntoLua, Lua, MultiValue, NavigateError, Require, Result, TextRequirer, Value};
 
 fn run_require(lua: &Lua, path: impl IntoLua) -> Result<Value> {
     lua.load(r#"return require(...)"#).call(path)
@@ -43,6 +46,58 @@ fn test_require_errors() {
         .eval::<Value>();
     assert!(res.is_err());
     assert!((res.unwrap_err().to_string()).contains("require is not supported in this context"));
+
+    // Test throwing mlua::Error
+    struct MyRequire(TextRequirer);
+
+    impl Require for MyRequire {
+        fn is_require_allowed(&self, chunk_name: &str) -> bool {
+            self.0.is_require_allowed(chunk_name)
+        }
+
+        fn reset(&mut self, _chunk_name: &str) -> StdResult<(), NavigateError> {
+            Err(Error::runtime("test error"))?
+        }
+
+        fn jump_to_alias(&mut self, path: &str) -> StdResult<(), NavigateError> {
+            self.0.jump_to_alias(path)
+        }
+
+        fn to_parent(&mut self) -> StdResult<(), NavigateError> {
+            self.0.to_parent()
+        }
+
+        fn to_child(&mut self, name: &str) -> StdResult<(), NavigateError> {
+            self.0.to_child(name)
+        }
+
+        fn has_module(&self) -> bool {
+            self.0.has_module()
+        }
+
+        fn cache_key(&self) -> String {
+            self.0.cache_key()
+        }
+
+        fn has_config(&self) -> bool {
+            self.0.has_config()
+        }
+
+        fn config(&self) -> IoResult<Vec<u8>> {
+            self.0.config()
+        }
+
+        fn loader(&self, lua: &Lua) -> Result<mlua::Function> {
+            self.0.loader(lua)
+        }
+    }
+
+    let require = lua
+        .create_require_function(MyRequire(TextRequirer::new()))
+        .unwrap();
+    lua.globals().set("require", require).unwrap();
+    let res = lua.load(r#"return require('./a/relative/path')"#).exec();
+    assert!((res.unwrap_err().to_string()).contains("test error"));
 }
 
 #[test]
