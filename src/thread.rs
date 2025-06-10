@@ -202,8 +202,6 @@ impl Thread {
         let state = lua.state();
         let thread_state = self.state();
         unsafe {
-            use std::os::unix::thread;
-
             let _sg = StackGuard::new(state);
             let _thread_sg = StackGuard::with_top(thread_state, 0);
 
