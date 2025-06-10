@@ -175,18 +175,12 @@ impl Thread {
             let _sg = StackGuard::new(state);
             let _thread_sg = StackGuard::with_top(thread_state, 0);
 
-            let nargs = args.push_into_stack_multi(&lua)?;
-            if nargs > 0 {
-                check_stack(thread_state, nargs)?;
-                ffi::lua_xmove(state, thread_state, nargs);
-                pushed_nargs += nargs;
-            }
+            let nargs = args.push_into_specified_stack_multi(&lua, thread_state)?;
+            pushed_nargs += nargs;
 
             let (_, nresults) = self.resume_inner(&lua, pushed_nargs)?;
-            check_stack(state, nresults + 1)?;
-            ffi::lua_xmove(thread_state, state, nresults);
 
-            R::from_stack_multi(nresults, &lua)
+            R::from_specified_stack_multi(nresults, &lua, thread_state)
         }
     }
 
@@ -208,18 +202,17 @@ impl Thread {
         let state = lua.state();
         let thread_state = self.state();
         unsafe {
+            use std::os::unix::thread;
+
             let _sg = StackGuard::new(state);
             let _thread_sg = StackGuard::with_top(thread_state, 0);
 
-            check_stack(state, 1)?;
-            error.push_into_stack(&lua)?;
-            ffi::lua_xmove(state, thread_state, 1);
+            check_stack(thread_state, 1)?;
+            error.push_into_specified_stack(&lua, thread_state)?;
 
             let (_, nresults) = self.resume_inner(&lua, ffi::LUA_RESUMEERROR)?;
-            check_stack(state, nresults + 1)?;
-            ffi::lua_xmove(thread_state, state, nresults);
 
-            R::from_stack_multi(nresults, &lua)
+            R::from_specified_stack_multi(nresults, &lua, thread_state)
         }
     }
 
@@ -441,11 +434,7 @@ impl Thread {
         unsafe {
             let _sg = StackGuard::new(state);
 
-            let nargs = args.push_into_stack_multi(&lua)?;
-            if nargs > 0 {
-                check_stack(thread_state, nargs)?;
-                ffi::lua_xmove(state, thread_state, nargs);
-            }
+            let nargs = args.push_into_specified_stack_multi(&lua, thread_state)?;
 
             Ok(AsyncThread {
                 thread: self,
@@ -590,10 +579,7 @@ impl<R: FromLuaMulti> Stream for AsyncThread<R> {
                 cx.waker().wake_by_ref();
             }
 
-            check_stack(state, nresults + 1)?;
-            ffi::lua_xmove(thread_state, state, nresults);
-
-            Poll::Ready(Some(R::from_stack_multi(nresults, &lua)))
+            Poll::Ready(Some(R::from_specified_stack_multi(nresults, &lua, thread_state)))
         }
     }
 }
@@ -626,10 +612,7 @@ impl<R: FromLuaMulti> Future for AsyncThread<R> {
                 return Poll::Pending;
             }
 
-            check_stack(state, nresults + 1)?;
-            ffi::lua_xmove(thread_state, state, nresults);
-
-            Poll::Ready(R::from_stack_multi(nresults, &lua))
+            Poll::Ready(R::from_specified_stack_multi(nresults, &lua, thread_state))
         }
     }
 }

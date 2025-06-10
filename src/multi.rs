@@ -23,10 +23,14 @@ impl<T: IntoLua, E: IntoLua> IntoLuaMulti for StdResult<T, E> {
     }
 
     #[inline]
-    unsafe fn push_into_stack_multi(self, lua: &RawLua) -> Result<c_int> {
+    unsafe fn push_into_specified_stack_multi(
+        self,
+        lua: &RawLua,
+        state: *mut ffi::lua_State,
+    ) -> Result<c_int> {
         match self {
-            Ok(val) => (val,).push_into_stack_multi(lua),
-            Err(err) => (Nil, err).push_into_stack_multi(lua),
+            Ok(val) => (val,).push_into_specified_stack_multi(lua, state),
+            Err(err) => (Nil, err).push_into_specified_stack_multi(lua, state),
         }
     }
 }
@@ -41,10 +45,14 @@ impl<E: IntoLua> IntoLuaMulti for StdResult<(), E> {
     }
 
     #[inline]
-    unsafe fn push_into_stack_multi(self, lua: &RawLua) -> Result<c_int> {
+    unsafe fn push_into_specified_stack_multi(
+        self,
+        lua: &RawLua,
+        state: *mut ffi::lua_State,
+    ) -> Result<c_int> {
         match self {
             Ok(_) => Ok(0),
-            Err(err) => (Nil, err).push_into_stack_multi(lua),
+            Err(err) => (Nil, err).push_into_specified_stack_multi(lua, state),
         }
     }
 }
@@ -58,8 +66,12 @@ impl<T: IntoLua> IntoLuaMulti for T {
     }
 
     #[inline]
-    unsafe fn push_into_stack_multi(self, lua: &RawLua) -> Result<c_int> {
-        self.push_into_stack(lua)?;
+    unsafe fn push_into_specified_stack_multi(
+        self,
+        lua: &RawLua,
+        state: *mut ffi::lua_State,
+    ) -> Result<c_int> {
+        self.push_into_specified_stack(lua, state)?;
         Ok(1)
     }
 }
@@ -76,19 +88,29 @@ impl<T: FromLua> FromLuaMulti for T {
     }
 
     #[inline]
-    unsafe fn from_stack_multi(nvals: c_int, lua: &RawLua) -> Result<Self> {
+    unsafe fn from_specified_stack_multi(
+        nvals: c_int,
+        lua: &RawLua,
+        state: *mut ffi::lua_State,
+    ) -> Result<Self> {
         if nvals == 0 {
             return T::from_lua(Nil, lua.lua());
         }
-        T::from_stack(-nvals, lua)
+        T::from_specified_stack(-nvals, lua, state)
     }
 
     #[inline]
-    unsafe fn from_stack_args(nargs: c_int, i: usize, to: Option<&str>, lua: &RawLua) -> Result<Self> {
+    unsafe fn from_specified_stack_args(
+        nargs: c_int,
+        i: usize,
+        to: Option<&str>,
+        lua: &RawLua,
+        state: *mut ffi::lua_State,
+    ) -> Result<Self> {
         if nargs == 0 {
             return T::from_lua_arg(Nil, i, to, lua.lua());
         }
-        T::from_stack_arg(-nargs, i, to, lua)
+        T::from_specified_stack_arg(-nargs, i, to, lua, state)
     }
 }
 
@@ -319,7 +341,11 @@ macro_rules! impl_tuple {
             }
 
             #[inline]
-            unsafe fn push_into_stack_multi(self, _lua: &RawLua) -> Result<c_int> {
+            unsafe fn push_into_specified_stack_multi(
+                self,
+                _lua: &RawLua,
+                _state: *mut ffi::lua_State,
+            ) -> Result<c_int> {
                 Ok(0)
             }
         }
@@ -331,7 +357,7 @@ macro_rules! impl_tuple {
             }
 
             #[inline]
-            unsafe fn from_stack_multi(_nvals: c_int, _lua: &RawLua) -> Result<Self> {
+            unsafe fn from_specified_stack_multi(_nvals: c_int, _lua: &RawLua, _state: *mut ffi::lua_State) -> Result<Self> {
                 Ok(())
             }
         }
@@ -354,7 +380,7 @@ macro_rules! impl_tuple {
 
             #[allow(non_snake_case)]
             #[inline]
-            unsafe fn push_into_stack_multi(self, lua: &RawLua) -> Result<c_int> {
+            unsafe fn push_into_specified_stack_multi(self, lua: &RawLua, state: *mut ffi::lua_State) -> Result<c_int> {
                 let ($($name,)* $last,) = self;
                 let mut nresults = 0;
                 $(
@@ -363,9 +389,9 @@ macro_rules! impl_tuple {
                 )*
                 check_stack(lua.state(), nresults + 1)?;
                 $(
-                    $name.push_into_stack(lua)?;
+                    $name.push_into_specified_stack(lua, state)?;
                 )*
-                nresults += $last.push_into_stack_multi(lua)?;
+                nresults += $last.push_into_specified_stack_multi(lua, state)?;
                 Ok(nresults)
             }
         }
@@ -395,32 +421,32 @@ macro_rules! impl_tuple {
 
             #[allow(unused_mut, non_snake_case)]
             #[inline]
-            unsafe fn from_stack_multi(mut nvals: c_int, lua: &RawLua) -> Result<Self> {
+            unsafe fn from_specified_stack_multi(mut nvals: c_int, lua: &RawLua, state: *mut ffi::lua_State) -> Result<Self> {
                 $(
                     let $name = if nvals > 0 {
                         nvals -= 1;
-                        FromLua::from_stack(-(nvals + 1), lua)
+                        FromLua::from_specified_stack(-(nvals + 1), lua, state)
                     } else {
                         FromLua::from_lua(Nil, lua.lua())
                     }?;
                 )*
-                let $last = FromLuaMulti::from_stack_multi(nvals, lua)?;
+                let $last = FromLuaMulti::from_specified_stack_multi(nvals, lua, state)?;
                 Ok(($($name,)* $last,))
             }
 
             #[allow(unused_mut, non_snake_case)]
             #[inline]
-            unsafe fn from_stack_args(mut nargs: c_int, mut i: usize, to: Option<&str>, lua: &RawLua) -> Result<Self> {
+            unsafe fn from_specified_stack_args(mut nargs: c_int, mut i: usize, to: Option<&str>, lua: &RawLua, state: *mut ffi::lua_State) -> Result<Self> {
                 $(
                     let $name = if nargs > 0 {
                         nargs -= 1;
-                        FromLua::from_stack_arg(-(nargs + 1), i, to, lua)
+                        FromLua::from_specified_stack_arg(-(nargs + 1), i, to, lua, state)
                     } else {
                         FromLua::from_lua_arg(Nil, i, to, lua.lua())
                     }?;
                     i += 1;
                 )*
-                let $last = FromLuaMulti::from_stack_args(nargs, i, to, lua)?;
+                let $last = FromLuaMulti::from_specified_stack_args(nargs, i, to, lua, state)?;
                 Ok(($($name,)* $last,))
             }
         }

@@ -724,7 +724,7 @@ impl AnyUserData {
             let _sg = StackGuard::new(state);
             check_stack(state, 3)?;
 
-            lua.push_userdata_ref(&self.0)?;
+            lua.push_userdata_ref_at(&self.0, state)?;
             protect_lua!(state, 1, 1, fn(state) {
                 if ffi::luaL_callmeta(state, -1, cstr!("__gc")) == 0 {
                     ffi::lua_pushboolean(state, 0);
@@ -780,8 +780,8 @@ impl AnyUserData {
             let _sg = StackGuard::new(state);
             check_stack(state, 5)?;
 
-            lua.push_userdata_ref(&self.0)?;
-            lua.push(v)?;
+            lua.push_userdata_ref_at(&self.0, state)?;
+            lua.push_at(state, v)?;
 
             // Multiple (extra) user values are emulated by storing them in a table
             protect_lua!(state, 2, 0, |state| {
@@ -818,7 +818,7 @@ impl AnyUserData {
             let _sg = StackGuard::new(state);
             check_stack(state, 4)?;
 
-            lua.push_userdata_ref(&self.0)?;
+            lua.push_userdata_ref_at(&self.0, state)?;
 
             // Multiple (extra) user values are emulated by storing them in a table
             if ffi::lua_getuservalue(state, -1) != ffi::LUA_TTABLE {
@@ -826,7 +826,7 @@ impl AnyUserData {
             }
             ffi::lua_rawgeti(state, -1, n as ffi::lua_Integer);
 
-            V::from_lua(lua.pop_value(), lua.lua())
+            V::from_lua(lua.pop_value_at(state), lua.lua())
         }
     }
 
@@ -842,8 +842,8 @@ impl AnyUserData {
             let _sg = StackGuard::new(state);
             check_stack(state, 5)?;
 
-            lua.push_userdata_ref(&self.0)?;
-            lua.push(v)?;
+            lua.push_userdata_ref_at(&self.0, state)?;
+            lua.push_at(state, v)?;
 
             // Multiple (extra) user values are emulated by storing them in a table
             protect_lua!(state, 2, 0, |state| {
@@ -873,7 +873,7 @@ impl AnyUserData {
             let _sg = StackGuard::new(state);
             check_stack(state, 4)?;
 
-            lua.push_userdata_ref(&self.0)?;
+            lua.push_userdata_ref_at(&self.0, state)?;
 
             // Multiple (extra) user values are emulated by storing them in a table
             if ffi::lua_getuservalue(state, -1) != ffi::LUA_TTABLE {
@@ -904,7 +904,7 @@ impl AnyUserData {
             let _sg = StackGuard::new(state);
             check_stack(state, 3)?;
 
-            lua.push_userdata_ref(&self.0)?;
+            lua.push_userdata_ref_at(&self.0, state)?;
             ffi::lua_getmetatable(state, -1); // Checked that non-empty on the previous call
             Ok(Table(lua.pop_ref()))
         }
@@ -937,7 +937,7 @@ impl AnyUserData {
             let _sg = StackGuard::new(state);
             check_stack(state, 3)?;
 
-            lua.push_userdata_ref(&self.0)?;
+            lua.push_userdata_ref_at(&self.0, state)?;
             let protect = !lua.unlikely_memory_error();
             let name_type = if protect {
                 protect_lua!(state, 1, 1, |state| {

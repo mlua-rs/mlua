@@ -340,7 +340,7 @@ impl Lua {
         check_stack(state, 3)?;
         protect_lua_closure::<_, ()>(state, nargs, ffi::LUA_MULTRET, f)?;
         let nresults = ffi::lua_gettop(state) - stack_start;
-        R::from_stack_multi(nresults, &lua)
+        R::from_specified_stack_multi(nresults, &lua, state)
     }
 
     /// Loads the specified subset of the standard libraries into an existing Lua state.
@@ -461,7 +461,7 @@ impl Lua {
         callback_error_ext(state, ptr::null_mut(), true, move |extra, nargs| {
             let rawlua = (*extra).raw_lua();
             let args = A::from_stack_args(nargs, 1, None, rawlua)?;
-            func(rawlua.lua(), args)?.push_into_stack(rawlua)?;
+            func(rawlua.lua(), args)?.push_into_specified_stack(rawlua, state)?;
             Ok(1)
         })
     }
@@ -1222,8 +1222,8 @@ impl Lua {
             let protect = !lua.unlikely_memory_error();
             push_table(state, 0, lower_bound, protect)?;
             for (k, v) in iter {
-                lua.push(k)?;
-                lua.push(v)?;
+                lua.push_at(state, k)?;
+                lua.push_at(state, v)?;
                 if protect {
                     protect_lua!(state, 3, 1, fn(state) ffi::lua_rawset(state, -3))?;
                 } else {
@@ -1589,7 +1589,7 @@ impl Lua {
                     ffi::lua_pushstring(state, b"\0" as *const u8 as *const _);
                 }
                 ffi::LUA_TFUNCTION => match self.load("function() end").eval::<Function>() {
-                    Ok(func) => lua.push_ref(&func.0),
+                    Ok(func) => lua.push_ref_at(&func.0, state),
                     Err(_) => return,
                 },
                 ffi::LUA_TTHREAD => {
@@ -1602,7 +1602,7 @@ impl Lua {
                 _ => return,
             }
             match metatable {
-                Some(metatable) => lua.push_ref(&metatable.0),
+                Some(metatable) => lua.push_ref_at(&metatable.0, state),
                 None => ffi::lua_pushnil(state),
             }
             ffi::lua_setmetatable(state, -2);
@@ -1670,7 +1670,7 @@ impl Lua {
                 let _sg = StackGuard::new(state);
                 check_stack(state, 4)?;
 
-                lua.push_value(&v)?;
+                lua.push_value_at(&v, state)?;
                 let res = if lua.unlikely_memory_error() {
                     ffi::lua_tolstring(state, -1, ptr::null_mut())
                 } else {
@@ -1702,7 +1702,7 @@ impl Lua {
                 let _sg = StackGuard::new(state);
                 check_stack(state, 2)?;
 
-                lua.push_value(&v)?;
+                lua.push_value_at(&v, state)?;
                 let mut isint = 0;
                 let i = ffi::lua_tointegerx(state, -1, &mut isint);
                 if isint == 0 {
@@ -1728,7 +1728,7 @@ impl Lua {
                 let _sg = StackGuard::new(state);
                 check_stack(state, 2)?;
 
-                lua.push_value(&v)?;
+                lua.push_value_at(&v, state)?;
                 let mut isnum = 0;
                 let n = ffi::lua_tonumberx(state, -1, &mut isnum);
                 if isnum == 0 {
@@ -1781,7 +1781,7 @@ impl Lua {
             let _sg = StackGuard::new(state);
             check_stack(state, 5)?;
 
-            lua.push(t)?;
+            lua.push_at(state, t)?;
             rawset_field(state, ffi::LUA_REGISTRYINDEX, key)
         }
     }
@@ -1831,7 +1831,7 @@ impl Lua {
             let _sg = StackGuard::new(state);
             check_stack(state, 4)?;
 
-            lua.push(t)?;
+            lua.push_at(state, t)?;
 
             let unref_list = (*lua.extra.get()).registry_unref_list.clone();
 
@@ -1933,7 +1933,7 @@ impl Lua {
                 }
                 (value, registry_id) => {
                     // It must be safe to replace the value without triggering memory error
-                    lua.push_value(&value)?;
+                    lua.push_value_at(&value, state)?;
                     ffi::lua_rawseti(state, ffi::LUA_REGISTRYINDEX, registry_id as Integer);
                 }
             }

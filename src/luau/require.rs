@@ -449,7 +449,7 @@ pub(super) unsafe extern "C" fn init_config(config: *mut ffi::luarequire_Configu
         callback_error_ext(state, ptr::null_mut(), false, move |extra, _| {
             let rawlua = (*extra).raw_lua();
             let loader = this.loader(rawlua.lua())?;
-            rawlua.push(loader)?;
+            rawlua.push_at(state, loader)?;
             Ok(1)
         })
     }

@@ -18,14 +18,14 @@ pub trait IntoLua: Sized {
     /// Performs the conversion.
     fn into_lua(self, lua: &Lua) -> Result<Value>;
 
-    /// Pushes the value into the Lua stack.
+    /// Pushes the value directly into a Lua stack
     ///
     /// # Safety
     /// This method does not check Lua stack space.
     #[doc(hidden)]
     #[inline]
-    unsafe fn push_into_stack(self, lua: &RawLua) -> Result<()> {
-        lua.push_value(&self.into_lua(lua.lua())?)
+    unsafe fn push_into_specified_stack(self, lua: &RawLua, state: *mut ffi::lua_State) -> Result<()> {
+        lua.push_value_at(&self.into_lua(lua.lua())?, state)
     }
 }
 
@@ -53,14 +53,34 @@ pub trait FromLua: Sized {
     #[doc(hidden)]
     #[inline]
     unsafe fn from_stack(idx: c_int, lua: &RawLua) -> Result<Self> {
-        Self::from_lua(lua.stack_value(idx, None), lua.lua())
+        Self::from_specified_stack(idx, lua, lua.state())
+    }
+
+    /// Performs the conversion for a value in the Lua stack at index `idx`.
+    #[doc(hidden)]
+    #[inline]
+    unsafe fn from_specified_stack(idx: c_int, lua: &RawLua, state: *mut ffi::lua_State) -> Result<Self> {
+        Self::from_lua(lua.stack_value_at(idx, None, state), lua.lua())
     }
 
     /// Same as `from_lua_arg` but for a value in the Lua stack at index `idx`.
     #[doc(hidden)]
     #[inline]
     unsafe fn from_stack_arg(idx: c_int, i: usize, to: Option<&str>, lua: &RawLua) -> Result<Self> {
-        Self::from_stack(idx, lua).map_err(|err| Error::BadArgument {
+        Self::from_specified_stack_arg(idx, i, to, lua, lua.state())
+    }
+
+    /// Same as `from_lua_arg` but for a value in the Lua stack at index `idx`.
+    #[doc(hidden)]
+    #[inline]
+    unsafe fn from_specified_stack_arg(
+        idx: c_int,
+        i: usize,
+        to: Option<&str>,
+        lua: &RawLua,
+        state: *mut ffi::lua_State,
+    ) -> Result<Self> {
+        Self::from_specified_stack(idx, lua, state).map_err(|err| Error::BadArgument {
             to: to.map(|s| s.to_string()),
             pos: i,
             name: None,
@@ -88,7 +108,28 @@ pub trait IntoLuaMulti: Sized {
         unsafe {
             check_stack(lua.state(), len + 1)?;
             for val in &values {
-                lua.push_value(val)?;
+                lua.push_value_at(val, lua.state())?;
+            }
+        }
+        Ok(len)
+    }
+
+    /// Pushes the values directly into a Lua stack
+    ///
+    /// Returns number of pushed values.
+    #[doc(hidden)]
+    #[inline]
+    unsafe fn push_into_specified_stack_multi(
+        self,
+        lua: &RawLua,
+        state: *mut ffi::lua_State,
+    ) -> Result<c_int> {
+        let values = self.into_lua_multi(lua.lua())?;
+        let len: c_int = values.len().try_into().unwrap();
+        unsafe {
+            check_stack(state, len + 1)?;
+            for val in &values {
+                lua.push_value_at(val, state)?;
             }
         }
         Ok(len)
@@ -124,9 +165,20 @@ pub trait FromLuaMulti: Sized {
     #[doc(hidden)]
     #[inline]
     unsafe fn from_stack_multi(nvals: c_int, lua: &RawLua) -> Result<Self> {
+        Self::from_specified_stack_multi(nvals, lua, lua.state())
+    }
+
+    /// Performs the conversion for a number of values in the specified Lua stack.
+    #[doc(hidden)]
+    #[inline]
+    unsafe fn from_specified_stack_multi(
+        nvals: c_int,
+        lua: &RawLua,
+        state: *mut ffi::lua_State,
+    ) -> Result<Self> {
         let mut values = MultiValue::with_capacity(nvals as usize);
         for idx in 0..nvals {
-            values.push_back(lua.stack_value(-nvals + idx, None));
+            values.push_back(lua.stack_value_at(-nvals + idx, None, state));
         }
         Self::from_lua_multi(values, lua.lua())
     }
@@ -136,7 +188,26 @@ pub trait FromLuaMulti: Sized {
     #[inline]
     unsafe fn from_stack_args(nargs: c_int, i: usize, to: Option<&str>, lua: &RawLua) -> Result<Self> {
         let _ = (i, to);
-        Self::from_stack_multi(nargs, lua)
+        Self::from_specified_stack_args(nargs, i, to, lua, lua.state())
+    }
+
+    /// Same as `from_lua_args` but for a number of values in the specified Lua stack.
+    #[doc(hidden)]
+    #[inline]
+    unsafe fn from_specified_stack_args(
+        nvals: c_int,
+        i: usize,
+        to: Option<&str>,
+        lua: &RawLua,
+        state: *mut ffi::lua_State,
+    ) -> Result<Self> {
+        let _ = (i, to);
+        Self::from_specified_stack_multi(nvals, lua, state).map_err(|err| Error::BadArgument {
+            to: to.map(|s| s.to_string()),
+            pos: i,
+            name: None,
+            cause: Arc::new(err),
+        })
     }
 }
 
