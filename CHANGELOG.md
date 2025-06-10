@@ -1,3 +1,14 @@
+## v0.11.0-beta.2 (Jun ?, 2025)
+
+- Lua 5.4 updated to 5.4.8
+- Terminate Rust `Future` when `AsyncThread` is dropped (without relying on Lua GC)
+- Added `loadstring` function to Luau
+- Make `AsChunk` trait dyn-friendly
+- Luau `Require` trait synced with Luau 0.674
+- Luau `Require` trait methods now can return `Error` variant (in `NavigateError` enum)
+- Added `__type` to `Error`'s userdata metatable (for `typeof` function)
+- `parking_log/send_guard` is moved to `userdata-wrappers` feature flag
+
 ## v0.11.0-beta.1 (May 7th, 2025)
 
 - New "require-by-string" for Luau (with `Require` trait and async support)

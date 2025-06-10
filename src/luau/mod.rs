@@ -8,7 +8,7 @@ use crate::function::Function;
 use crate::state::{callback_error_ext, Lua};
 use crate::traits::{FromLuaMulti, IntoLua};
 
-pub use require::{NavigateError, Require};
+pub use require::{NavigateError, Require, TextRequirer};
 
 // Since Luau has some missing standard functions, we re-implement them here
 

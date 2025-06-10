@@ -8,31 +8,42 @@ use std::path::{Component, Path, PathBuf};
 use std::result::Result as StdResult;
 use std::{env, fmt, fs, mem, ptr};
 
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::function::Function;
 use crate::state::{callback_error_ext, Lua};
 use crate::table::Table;
 use crate::types::MaybeSend;
 
 /// An error that can occur during navigation in the Luau `require` system.
+#[cfg(any(feature = "luau", doc))]
+#[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
+#[derive(Debug, Clone)]
 pub enum NavigateError {
     Ambiguous,
     NotFound,
+    Other(Error),
 }
 
 #[cfg(feature = "luau")]
 trait IntoNavigateResult {
-    fn into_nav_result(self) -> ffi::luarequire_NavigateResult;
+    fn into_nav_result(self) -> Result<ffi::luarequire_NavigateResult>;
 }
 
 #[cfg(feature = "luau")]
 impl IntoNavigateResult for StdResult<(), NavigateError> {
-    fn into_nav_result(self) -> ffi::luarequire_NavigateResult {
+    fn into_nav_result(self) -> Result<ffi::luarequire_NavigateResult> {
         match self {
-            Ok(()) => ffi::luarequire_NavigateResult::Success,
-            Err(NavigateError::Ambiguous) => ffi::luarequire_NavigateResult::Ambiguous,
-            Err(NavigateError::NotFound) => ffi::luarequire_NavigateResult::NotFound,
+            Ok(()) => Ok(ffi::luarequire_NavigateResult::Success),
+            Err(NavigateError::Ambiguous) => Ok(ffi::luarequire_NavigateResult::Ambiguous),
+            Err(NavigateError::NotFound) => Ok(ffi::luarequire_NavigateResult::NotFound),
+            Err(NavigateError::Other(err)) => Err(err),
         }
+    }
+}
+
+impl From<Error> for NavigateError {
+    fn from(err: Error) -> Self {
+        NavigateError::Other(err)
     }
 }
 
@@ -40,6 +51,8 @@ impl IntoNavigateResult for StdResult<(), NavigateError> {
 type WriteResult = ffi::luarequire_WriteResult;
 
 /// A trait for handling modules loading and navigation in the Luau `require` system.
+#[cfg(any(feature = "luau", doc))]
+#[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
 pub trait Require: MaybeSend {
     /// Returns `true` if "require" is permitted for the given chunk name.
     fn is_require_allowed(&self, chunk_name: &str) -> bool;
@@ -91,15 +104,17 @@ impl fmt::Debug for dyn Require {
 }
 
 /// The standard implementation of Luau `require` navigation.
-#[derive(Default)]
-pub(super) struct TextRequirer {
+#[doc(hidden)]
+#[derive(Default, Debug)]
+pub struct TextRequirer {
     abs_path: PathBuf,
     rel_path: PathBuf,
     module_path: PathBuf,
 }
 
 impl TextRequirer {
-    pub(super) fn new() -> Self {
+    /// Creates a new `TextRequirer` instance.
+    pub fn new() -> Self {
         Self::default()
     }
 
@@ -141,35 +156,25 @@ impl TextRequirer {
         components.into_iter().collect()
     }
 
-    fn find_module_path(path: &Path) -> StdResult<PathBuf, NavigateError> {
+    fn find_module(path: &Path) -> StdResult<PathBuf, NavigateError> {
         let mut found_path = None;
 
-        if path.components().last() != Some(Component::Normal("init".as_ref())) {
+        if path.components().next_back() != Some(Component::Normal("init".as_ref())) {
             let current_ext = (path.extension().and_then(|s| s.to_str()))
                 .map(|s| format!("{s}."))
                 .unwrap_or_default();
             for ext in ["luau", "lua"] {
                 let candidate = path.with_extension(format!("{current_ext}{ext}"));
-                if candidate.is_file() {
-                    if found_path.is_some() {
-                        return Err(NavigateError::Ambiguous);
-                    }
-                    found_path = Some(candidate);
+                if candidate.is_file() && found_path.replace(candidate).is_some() {
+                    return Err(NavigateError::Ambiguous);
                 }
             }
         }
         if path.is_dir() {
-            if found_path.is_some() {
-                return Err(NavigateError::Ambiguous);
-            }
-
             for component in ["init.luau", "init.lua"] {
                 let candidate = path.join(component);
-                if candidate.is_file() {
-                    if found_path.is_some() {
-                        return Err(NavigateError::Ambiguous);
-                    }
-                    found_path = Some(candidate);
+                if candidate.is_file() && found_path.replace(candidate).is_some() {
+                    return Err(NavigateError::Ambiguous);
                 }
             }
 
@@ -191,36 +196,30 @@ impl Require for TextRequirer {
         if !chunk_name.starts_with('@') {
             return Err(NavigateError::NotFound);
         }
-        let chunk_name = &Self::normalize_chunk_name(chunk_name)[1..];
-        let path = Self::normalize_path(chunk_name.as_ref());
+        let chunk_name = Self::normalize_chunk_name(&chunk_name[1..]);
+        let chunk_path = Self::normalize_path(chunk_name.as_ref());
 
-        if path.extension() == Some("rs".as_ref()) {
-            let cwd = match env::current_dir() {
-                Ok(cwd) => cwd,
-                Err(_) => return Err(NavigateError::NotFound),
-            };
-            self.abs_path = Self::normalize_path(&cwd.join(&path));
-            self.rel_path = path;
+        if chunk_path.extension() == Some("rs".as_ref()) {
+            let cwd = env::current_dir().map_err(|_| NavigateError::NotFound)?;
+            self.abs_path = Self::normalize_path(&cwd.join(&chunk_path));
+            self.rel_path = chunk_path;
             self.module_path = PathBuf::new();
 
             return Ok(());
         }
 
-        if path.is_absolute() {
-            let module_path = Self::find_module_path(&path)?;
-            self.abs_path = path.clone();
-            self.rel_path = path;
+        if chunk_path.is_absolute() {
+            let module_path = Self::find_module(&chunk_path)?;
+            self.abs_path = chunk_path.clone();
+            self.rel_path = chunk_path;
             self.module_path = module_path;
         } else {
             // Relative path
-            let cwd = match env::current_dir() {
-                Ok(cwd) => cwd,
-                Err(_) => return Err(NavigateError::NotFound),
-            };
-            let abs_path = cwd.join(&path);
-            let module_path = Self::find_module_path(&abs_path)?;
-            self.abs_path = Self::normalize_path(&abs_path);
-            self.rel_path = path;
+            let cwd = env::current_dir().map_err(|_| NavigateError::NotFound)?;
+            let abs_path = Self::normalize_path(&cwd.join(&chunk_path));
+            let module_path = Self::find_module(&abs_path)?;
+            self.abs_path = abs_path;
+            self.rel_path = chunk_path;
             self.module_path = module_path;
         }
 
@@ -229,7 +228,7 @@ impl Require for TextRequirer {
 
     fn jump_to_alias(&mut self, path: &str) -> StdResult<(), NavigateError> {
         let path = Self::normalize_path(path.as_ref());
-        let module_path = Self::find_module_path(&path)?;
+        let module_path = Self::find_module(&path)?;
 
         self.abs_path = path.clone();
         self.rel_path = path;
@@ -245,7 +244,7 @@ impl Require for TextRequirer {
         }
         let mut rel_parent = self.rel_path.clone();
         rel_parent.pop();
-        let module_path = Self::find_module_path(&abs_path)?;
+        let module_path = Self::find_module(&abs_path)?;
 
         self.abs_path = abs_path;
         self.rel_path = Self::normalize_path(&rel_parent);
@@ -257,7 +256,7 @@ impl Require for TextRequirer {
     fn to_child(&mut self, name: &str) -> StdResult<(), NavigateError> {
         let abs_path = self.abs_path.join(name);
         let rel_path = self.rel_path.join(name);
-        let module_path = Self::find_module_path(&abs_path)?;
+        let module_path = Self::find_module(&abs_path)?;
 
         self.abs_path = abs_path;
         self.rel_path = rel_path;
@@ -275,7 +274,7 @@ impl Require for TextRequirer {
     }
 
     fn has_config(&self) -> bool {
-        self.abs_path.join(".luaurc").is_file()
+        self.abs_path.is_dir() && self.abs_path.join(".luaurc").is_file()
     }
 
     fn config(&self) -> IoResult<Vec<u8>> {
@@ -284,9 +283,7 @@ impl Require for TextRequirer {
 
     fn loader(&self, lua: &Lua) -> Result<Function> {
         let name = format!("@{}", self.rel_path.display());
-        lua.load(self.module_path.as_path())
-            .set_name(name)
-            .into_function()
+        lua.load(&*self.module_path).set_name(name).into_function()
     }
 }
 
@@ -325,12 +322,12 @@ macro_rules! try_borrow_mut {
 }
 
 #[cfg(feature = "luau")]
-pub(super) unsafe extern "C" fn init_config(config: *mut ffi::luarequire_Configuration) {
+pub(super) unsafe extern "C-unwind" fn init_config(config: *mut ffi::luarequire_Configuration) {
     if config.is_null() {
         return;
     }
 
-    unsafe extern "C" fn is_require_allowed(
+    unsafe extern "C-unwind" fn is_require_allowed(
         state: *mut ffi::lua_State,
         ctx: *mut c_void,
         requirer_chunkname: *const c_char,
@@ -344,50 +341,58 @@ pub(super) unsafe extern "C" fn init_config(config: *mut ffi::luarequire_Configu
         this.is_require_allowed(&chunk_name)
     }
 
-    unsafe extern "C" fn reset(
+    unsafe extern "C-unwind" fn reset(
         state: *mut ffi::lua_State,
         ctx: *mut c_void,
         requirer_chunkname: *const c_char,
     ) -> ffi::luarequire_NavigateResult {
         let mut this = try_borrow_mut!(state, ctx);
         let chunk_name = CStr::from_ptr(requirer_chunkname).to_string_lossy();
-        this.reset(&chunk_name).into_nav_result()
+        callback_error_ext(state, ptr::null_mut(), true, move |_, _| {
+            this.reset(&chunk_name).into_nav_result()
+        })
     }
 
-    unsafe extern "C" fn jump_to_alias(
+    unsafe extern "C-unwind" fn jump_to_alias(
         state: *mut ffi::lua_State,
         ctx: *mut c_void,
         path: *const c_char,
     ) -> ffi::luarequire_NavigateResult {
         let mut this = try_borrow_mut!(state, ctx);
         let path = CStr::from_ptr(path).to_string_lossy();
-        this.jump_to_alias(&path).into_nav_result()
+        callback_error_ext(state, ptr::null_mut(), true, move |_, _| {
+            this.jump_to_alias(&path).into_nav_result()
+        })
     }
 
-    unsafe extern "C" fn to_parent(
+    unsafe extern "C-unwind" fn to_parent(
         state: *mut ffi::lua_State,
         ctx: *mut c_void,
     ) -> ffi::luarequire_NavigateResult {
         let mut this = try_borrow_mut!(state, ctx);
-        this.to_parent().into_nav_result()
+        callback_error_ext(state, ptr::null_mut(), true, move |_, _| {
+            this.to_parent().into_nav_result()
+        })
     }
 
-    unsafe extern "C" fn to_child(
+    unsafe extern "C-unwind" fn to_child(
         state: *mut ffi::lua_State,
         ctx: *mut c_void,
         name: *const c_char,
     ) -> ffi::luarequire_NavigateResult {
         let mut this = try_borrow_mut!(state, ctx);
         let name = CStr::from_ptr(name).to_string_lossy();
-        this.to_child(&name).into_nav_result()
+        callback_error_ext(state, ptr::null_mut(), true, move |_, _| {
+            this.to_child(&name).into_nav_result()
+        })
     }
 
-    unsafe extern "C" fn is_module_present(state: *mut ffi::lua_State, ctx: *mut c_void) -> bool {
+    unsafe extern "C-unwind" fn is_module_present(state: *mut ffi::lua_State, ctx: *mut c_void) -> bool {
         let this = try_borrow!(state, ctx);
         this.has_module()
     }
 
-    unsafe extern "C" fn get_chunkname(
+    unsafe extern "C-unwind" fn get_chunkname(
         _state: *mut ffi::lua_State,
         _ctx: *mut c_void,
         buffer: *mut c_char,
@@ -397,7 +402,7 @@ pub(super) unsafe extern "C" fn init_config(config: *mut ffi::luarequire_Configu
         write_to_buffer(buffer, buffer_size, size_out, &[])
     }
 
-    unsafe extern "C" fn get_loadname(
+    unsafe extern "C-unwind" fn get_loadname(
         _state: *mut ffi::lua_State,
         _ctx: *mut c_void,
         buffer: *mut c_char,
@@ -407,7 +412,7 @@ pub(super) unsafe extern "C" fn init_config(config: *mut ffi::luarequire_Configu
         write_to_buffer(buffer, buffer_size, size_out, &[])
     }
 
-    unsafe extern "C" fn get_cache_key(
+    unsafe extern "C-unwind" fn get_cache_key(
         state: *mut ffi::lua_State,
         ctx: *mut c_void,
         buffer: *mut c_char,
@@ -419,12 +424,12 @@ pub(super) unsafe extern "C" fn init_config(config: *mut ffi::luarequire_Configu
         write_to_buffer(buffer, buffer_size, size_out, cache_key.as_bytes())
     }
 
-    unsafe extern "C" fn is_config_present(state: *mut ffi::lua_State, ctx: *mut c_void) -> bool {
+    unsafe extern "C-unwind" fn is_config_present(state: *mut ffi::lua_State, ctx: *mut c_void) -> bool {
         let this = try_borrow!(state, ctx);
         this.has_config()
     }
 
-    unsafe extern "C" fn get_config(
+    unsafe extern "C-unwind" fn get_config(
         state: *mut ffi::lua_State,
         ctx: *mut c_void,
         buffer: *mut c_char,
@@ -432,9 +437,7 @@ pub(super) unsafe extern "C" fn init_config(config: *mut ffi::luarequire_Configu
         size_out: *mut usize,
     ) -> WriteResult {
         let this = try_borrow!(state, ctx);
-        let Ok(config) = this.config() else {
-            return WriteResult::Failure;
-        };
+        let config = callback_error_ext(state, ptr::null_mut(), true, move |_, _| Ok(this.config()?));
         write_to_buffer(buffer, buffer_size, size_out, &config)
     }
 
@@ -446,7 +449,7 @@ pub(super) unsafe extern "C" fn init_config(config: *mut ffi::luarequire_Configu
         _loadname: *const c_char,
     ) -> c_int {
         let this = try_borrow!(state, ctx);
-        callback_error_ext(state, ptr::null_mut(), false, move |extra, _| {
+        callback_error_ext(state, ptr::null_mut(), true, move |extra, _| {
             let rawlua = (*extra).raw_lua();
             let loader = this.loader(rawlua.lua())?;
             rawlua.push_at(state, loader)?;

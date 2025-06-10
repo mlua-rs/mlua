@@ -1,6 +1,6 @@
 [package]
 name = "mlua_derive"
-version = "0.11.0-beta.1"
+version = "0.11.0-beta.2"
 authors = ["Aleksandr Orlenko <zxteam@pm.me>"]
 edition = "2021"
 description = "Procedural macros for the mlua crate."
