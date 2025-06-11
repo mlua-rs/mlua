@@ -24,9 +24,7 @@ use crate::types::{
     ReentrantMutexGuard, RegistryKey, VmState, XRc, XWeak,
 };
 use crate::userdata::{AnyUserData, UserData, UserDataProxy, UserDataRegistry, UserDataStorage};
-use crate::util::{
-    assert_stack, check_stack, protect_lua_closure, push_string, push_table, rawset_field, StackGuard,
-};
+use crate::util::{assert_stack, check_stack, protect_lua_closure, push_string, rawset_field, StackGuard};
 use crate::value::{Nil, Value};
 
 #[cfg(not(feature = "luau"))]
@@ -1202,28 +1200,7 @@ impl Lua {
         K: IntoLua,
         V: IntoLua,
     {
-        let lua = self.lock();
-        let state = lua.state();
-        unsafe {
-            let _sg = StackGuard::new(state);
-            check_stack(state, 6)?;
-
-            let iter = iter.into_iter();
-            let lower_bound = iter.size_hint().0;
-            let protect = !lua.unlikely_memory_error();
-            push_table(state, 0, lower_bound, protect)?;
-            for (k, v) in iter {
-                lua.push(k)?;
-                lua.push(v)?;
-                if protect {
-                    protect_lua!(state, 3, 1, fn(state) ffi::lua_rawset(state, -3))?;
-                } else {
-                    ffi::lua_rawset(state, -3);
-                }
-            }
-
-            Ok(Table(lua.pop_ref()))
-        }
+        unsafe { self.lock().create_table_from(iter) }
     }
 
     /// Creates a table from an iterator of values, using `1..` as the keys.

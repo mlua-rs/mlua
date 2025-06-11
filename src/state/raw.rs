@@ -537,6 +537,34 @@ impl RawLua {
         Ok(Table(self.pop_ref()))
     }
 
+    /// See [`Lua::create_table_from`]
+    pub(crate) unsafe fn create_table_from<I, K, V>(&self, iter: I) -> Result<Table>
+    where
+        I: IntoIterator<Item = (K, V)>,
+        K: IntoLua,
+        V: IntoLua,
+    {
+        let state = self.state();
+        let _sg = StackGuard::new(state);
+        check_stack(state, 6)?;
+
+        let iter = iter.into_iter();
+        let lower_bound = iter.size_hint().0;
+        let protect = !self.unlikely_memory_error();
+        push_table(state, 0, lower_bound, protect)?;
+        for (k, v) in iter {
+            self.push(k)?;
+            self.push(v)?;
+            if protect {
+                protect_lua!(state, 3, 1, fn(state) ffi::lua_rawset(state, -3))?;
+            } else {
+                ffi::lua_rawset(state, -3);
+            }
+        }
+
+        Ok(Table(self.pop_ref()))
+    }
+
     /// See [`Lua::create_sequence_from`]
     pub(crate) unsafe fn create_sequence_from<T, I>(&self, iter: I) -> Result<Table>
     where
