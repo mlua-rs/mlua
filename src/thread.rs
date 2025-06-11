@@ -259,11 +259,19 @@ impl Thread {
             return ThreadStatusInner::Running;
         }
         let status = unsafe { ffi::lua_status(thread_state) };
-        let top = unsafe { ffi::lua_gettop(thread_state) };
         match status {
-            ffi::LUA_YIELD => ThreadStatusInner::Yielded(top),
-            ffi::LUA_OK if top > 0 => ThreadStatusInner::New(top - 1),
-            ffi::LUA_OK => ThreadStatusInner::Finished,
+            ffi::LUA_YIELD => {
+                let top = unsafe { ffi::lua_gettop(thread_state) };
+                ThreadStatusInner::Yielded(top)
+            }
+            ffi::LUA_OK => {
+                let top = unsafe { ffi::lua_gettop(thread_state) };
+                if top > 0 {
+                    ThreadStatusInner::New(top - 1)
+                } else {
+                    ThreadStatusInner::Finished
+                }
+            }
             _ => ThreadStatusInner::Error,
         }
     }
@@ -477,7 +485,6 @@ impl Thread {
     /// ```
     #[cfg(any(feature = "luau", doc))]
     #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
-    #[doc(hidden)]
     pub fn sandbox(&self) -> Result<()> {
         let lua = self.0.lua.lock();
         let state = lua.state();

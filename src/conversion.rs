@@ -415,7 +415,7 @@ impl FromLua for bool {
     }
 
     #[inline]
-    unsafe fn from_specified_stack(idx: c_int, lua: &RawLua, state: *mut ffi::lua_State) -> Result<Self> {
+    unsafe fn from_specified_stack(idx: c_int, _lua: &RawLua, state: *mut ffi::lua_State) -> Result<Self> {
         Ok(ffi::lua_toboolean(state, idx) != 0)
     }
 }
