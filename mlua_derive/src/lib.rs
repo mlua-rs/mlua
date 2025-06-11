@@ -120,7 +120,7 @@ pub fn chunk(input: TokenStream) -> TokenStream {
                 Some(ChunkMode::Text)
             }
 
-            fn source<'a>(self) -> IoResult<Cow<'a, [u8]>> {
+            fn source<'a>(&self) -> IoResult<Cow<'a, [u8]>> {
                 Ok(Cow::Borrowed((#source).as_bytes()))
             }
         }

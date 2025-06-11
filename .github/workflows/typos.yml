@@ -2,7 +2,7 @@ name: Typos Check
 on:
   pull_request:
   workflow_dispatch:
-  
+
 jobs:
   run:
     name: Spell Check with Typos
@@ -14,4 +14,4 @@ jobs:
     - name: Check spelling
       uses: crate-ci/typos@master
       with:
-        config: ./_typos.toml
+        config: ./typos.toml

@@ -28,7 +28,7 @@ use super::{Lua, WeakLua};
 static EXTRA_REGISTRY_KEY: u8 = 0;
 
 const WRAPPED_FAILURE_POOL_DEFAULT_CAPACITY: usize = 64;
-const REF_STACK_RESERVE: c_int = 1;
+const REF_STACK_RESERVE: c_int = 2;
 
 /// Data associated with the Lua state.
 pub(crate) struct ExtraData {
@@ -80,7 +80,13 @@ pub(crate) struct ExtraData {
     pub(super) warn_callback: Option<crate::types::WarnCallback>,
     #[cfg(feature = "luau")]
     pub(super) interrupt_callback: Option<crate::types::InterruptCallback>,
+    #[cfg(feature = "luau")]
+    pub(super) thread_creation_callback: Option<crate::types::ThreadCreationCallback>,
+    #[cfg(feature = "luau")]
+    pub(super) thread_collection_callback: Option<crate::types::ThreadCollectionCallback>,
 
+    #[cfg(feature = "luau")]
+    pub(crate) running_gc: bool,
     #[cfg(feature = "luau")]
     pub(super) sandboxed: bool,
     #[cfg(feature = "luau")]
@@ -177,11 +183,17 @@ impl ExtraData {
             #[cfg(feature = "luau")]
             interrupt_callback: None,
             #[cfg(feature = "luau")]
+            thread_creation_callback: None,
+            #[cfg(feature = "luau")]
+            thread_collection_callback: None,
+            #[cfg(feature = "luau")]
             sandboxed: false,
             #[cfg(feature = "luau")]
             compiler: None,
             #[cfg(feature = "luau-jit")]
             enable_jit: true,
+            #[cfg(feature = "luau")]
+            running_gc: false,
         }));
 
         // Store it in the registry
@@ -195,9 +207,6 @@ impl ExtraData {
             raw: XRc::clone(raw),
             collect_garbage: false,
         });
-        if self.owned {
-            XRc::decrement_strong_count(XRc::as_ptr(raw));
-        }
         self.weak.write(WeakLua(XRc::downgrade(raw)));
     }
 
@@ -240,7 +249,7 @@ impl ExtraData {
     }
 
     #[inline(always)]
-    pub(super) unsafe fn raw_lua(&self) -> &RawLua {
+    pub(crate) unsafe fn raw_lua(&self) -> &RawLua {
         &*self.lua.assume_init_ref().raw.data_ptr()
     }
 

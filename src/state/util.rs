@@ -7,10 +7,10 @@ use crate::error::{Error, Result};
 use crate::state::{ExtraData, RawLua};
 use crate::util::{self, get_internal_metatable, WrappedFailure};
 
-pub(super) struct StateGuard<'a>(&'a RawLua, *mut ffi::lua_State);
+struct StateGuard<'a>(&'a RawLua, *mut ffi::lua_State);
 
 impl<'a> StateGuard<'a> {
-    pub(super) fn new(inner: &'a RawLua, mut state: *mut ffi::lua_State) -> Self {
+    fn new(inner: &'a RawLua, mut state: *mut ffi::lua_State) -> Self {
         state = inner.state.replace(state);
         Self(inner, state)
     }
@@ -24,9 +24,10 @@ impl Drop for StateGuard<'_> {
 
 // An optimized version of `callback_error` that does not allocate `WrappedFailure` userdata
 // and instead reuses unused values from previous calls (or allocates new).
-pub(super) unsafe fn callback_error_ext<F, R>(
+pub(crate) unsafe fn callback_error_ext<F, R>(
     state: *mut ffi::lua_State,
     mut extra: *mut ExtraData,
+    wrap_error: bool,
     f: F,
 ) -> R
 where
@@ -51,7 +52,7 @@ where
             }
 
             // We need to check stack for Luau in case when callback is called from interrupt
-            // See https://github.com/Roblox/luau/issues/446 and mlua #142 and #153
+            // See https://github.com/luau-lang/luau/issues/446 and mlua #142 and #153
             #[cfg(feature = "luau")]
             ffi::lua_rawcheckstack(state, 2);
             // Place it to the beginning of the stack
@@ -101,7 +102,11 @@ where
     // to store a wrapped failure (error or panic) *before* we proceed.
     let prealloc_failure = PreallocatedFailure::reserve(state, extra);
 
-    match catch_unwind(AssertUnwindSafe(|| f(extra, nargs))) {
+    match catch_unwind(AssertUnwindSafe(|| {
+        let rawlua = (*extra).raw_lua();
+        let _guard = StateGuard::new(rawlua, state);
+        f(extra, nargs)
+    })) {
         Ok(Ok(r)) => {
             // Return unused `WrappedFailure` to the pool
             prealloc_failure.release(state, extra);
@@ -109,6 +114,13 @@ where
         }
         Ok(Err(err)) => {
             let wrapped_error = prealloc_failure.r#use(state, extra);
+
+            if !wrap_error {
+                ptr::write(wrapped_error, WrappedFailure::Error(err));
+                get_internal_metatable::<WrappedFailure>(state);
+                ffi::lua_setmetatable(state, -2);
+                ffi::lua_error(state)
+            }
 
             // Build `CallbackError` with traceback
             let traceback = if ffi::lua_checkstack(state, ffi::LUA_TRACEBACK_STACK) != 0 {

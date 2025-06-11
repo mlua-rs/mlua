@@ -9,10 +9,10 @@ use super::lua::{self, lua_CFunction, lua_Integer, lua_Number, lua_State};
 pub const LUA_ERRFILE: c_int = lua::LUA_ERRERR + 1;
 
 // Key, in the registry, for table of loaded modules
-pub const LUA_LOADED_TABLE: &str = "_LOADED";
+pub const LUA_LOADED_TABLE: *const c_char = cstr!("_LOADED");
 
 // Key, in the registry, for table of preloaded loaders
-pub const LUA_PRELOAD_TABLE: &str = "_PRELOAD";
+pub const LUA_PRELOAD_TABLE: *const c_char = cstr!("_PRELOAD");
 
 #[repr(C)]
 pub struct luaL_Reg {
@@ -21,7 +21,7 @@ pub struct luaL_Reg {
 }
 
 #[cfg_attr(all(windows, raw_dylib), link(name = "lua53", kind = "raw-dylib"))]
-extern "C-unwind" {
+unsafe extern "C-unwind" {
     pub fn luaL_checkversion_(L: *mut lua_State, ver: lua_Number, sz: usize);
 
     pub fn luaL_getmetafield(L: *mut lua_State, obj: c_int, e: *const c_char) -> c_int;
@@ -65,7 +65,7 @@ pub const LUA_NOREF: c_int = -2;
 pub const LUA_REFNIL: c_int = -1;
 
 #[cfg_attr(all(windows, raw_dylib), link(name = "lua53", kind = "raw-dylib"))]
-extern "C-unwind" {
+unsafe extern "C-unwind" {
     pub fn luaL_ref(L: *mut lua_State, t: c_int) -> c_int;
     pub fn luaL_unref(L: *mut lua_State, t: c_int, r#ref: c_int);
 
@@ -78,7 +78,7 @@ pub unsafe fn luaL_loadfile(L: *mut lua_State, f: *const c_char) -> c_int {
 }
 
 #[cfg_attr(all(windows, raw_dylib), link(name = "lua53", kind = "raw-dylib"))]
-extern "C-unwind" {
+unsafe extern "C-unwind" {
     pub fn luaL_loadbufferx(
         L: *mut lua_State,
         buff: *const c_char,

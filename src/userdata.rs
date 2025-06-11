@@ -26,9 +26,13 @@ use {
 
 // Re-export for convenience
 pub(crate) use cell::UserDataStorage;
-pub use cell::{UserDataRef, UserDataRefMut};
+pub use r#ref::{UserDataRef, UserDataRefMut};
 pub use registry::UserDataRegistry;
 pub(crate) use registry::{RawUserDataRegistry, UserDataProxy};
+pub(crate) use util::{
+    borrow_userdata_scoped, borrow_userdata_scoped_mut, collect_userdata, init_userdata_metatable,
+    TypeIdHints,
+};
 
 /// Kinds of metamethods that can be overridden.
 ///
@@ -52,30 +56,32 @@ pub enum MetaMethod {
     /// The unary minus (`-`) operator.
     Unm,
     /// The floor division (//) operator.
-    /// Requires `feature = "lua54/lua53/luau"`
     #[cfg(any(feature = "lua54", feature = "lua53", feature = "luau"))]
+    #[cfg_attr(docsrs, doc(cfg(any(feature = "lua54", feature = "lua53", feature = "luau"))))]
     IDiv,
     /// The bitwise AND (&) operator.
-    /// Requires `feature = "lua54/lua53"`
     #[cfg(any(feature = "lua54", feature = "lua53"))]
+    #[cfg_attr(docsrs, doc(cfg(any(feature = "lua54", feature = "lua53"))))]
     BAnd,
     /// The bitwise OR (|) operator.
-    /// Requires `feature = "lua54/lua53"`
     #[cfg(any(feature = "lua54", feature = "lua53"))]
+    #[cfg_attr(docsrs, doc(cfg(any(feature = "lua54", feature = "lua53"))))]
     BOr,
     /// The bitwise XOR (binary ~) operator.
-    /// Requires `feature = "lua54/lua53"`
     #[cfg(any(feature = "lua54", feature = "lua53"))]
+    #[cfg_attr(docsrs, doc(cfg(any(feature = "lua54", feature = "lua53"))))]
     BXor,
     /// The bitwise NOT (unary ~) operator.
-    /// Requires `feature = "lua54/lua53"`
     #[cfg(any(feature = "lua54", feature = "lua53"))]
+    #[cfg_attr(docsrs, doc(cfg(any(feature = "lua54", feature = "lua53"))))]
     BNot,
     /// The bitwise left shift (<<) operator.
     #[cfg(any(feature = "lua54", feature = "lua53"))]
+    #[cfg_attr(docsrs, doc(cfg(any(feature = "lua54", feature = "lua53"))))]
     Shl,
     /// The bitwise right shift (>>) operator.
     #[cfg(any(feature = "lua54", feature = "lua53"))]
+    #[cfg_attr(docsrs, doc(cfg(any(feature = "lua54", feature = "lua53"))))]
     Shr,
     /// The string concatenation operator `..`.
     Concat,
@@ -100,15 +106,15 @@ pub enum MetaMethod {
     /// The `__pairs` metamethod.
     ///
     /// This is not an operator, but it will be called by the built-in `pairs` function.
-    ///
-    /// Requires `feature = "lua54/lua53/lua52"`
-    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "luajit52",))]
+    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "luajit52"))]
+    #[cfg_attr(
+        docsrs,
+        doc(cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "luajit52")))
+    )]
     Pairs,
     /// The `__ipairs` metamethod.
     ///
     /// This is not an operator, but it will be called by the built-in [`ipairs`] function.
-    ///
-    /// Requires `feature = "lua52"`
     ///
     /// [`ipairs`]: https://www.lua.org/manual/5.2/manual.html#pdf-ipairs
     #[cfg(any(feature = "lua52", feature = "luajit52", doc))]
@@ -118,8 +124,6 @@ pub enum MetaMethod {
     ///
     /// Executed before the iteration begins, and should return an iterator function like `next`
     /// (or a custom one).
-    ///
-    /// Requires `feature = "lua"`
     #[cfg(any(feature = "luau", doc))]
     #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
     Iter,
@@ -129,8 +133,6 @@ pub enum MetaMethod {
     ///
     /// More information about to-be-closed variables can be found in the Lua 5.4
     /// [documentation][lua_doc].
-    ///
-    /// Requires `feature = "lua54"`
     ///
     /// [lua_doc]: https://www.lua.org/manual/5.4/manual.html#3.3.8
     #[cfg(feature = "lua54")]
@@ -217,9 +219,7 @@ impl MetaMethod {
     pub(crate) const fn as_cstr(self) -> &'static CStr {
         match self {
             #[rustfmt::skip]
-            MetaMethod::Type => unsafe {
-                CStr::from_bytes_with_nul_unchecked(if cfg!(feature = "luau") { b"__type\0" } else { b"__name\0" })
-            },
+            MetaMethod::Type => if cfg!(feature = "luau") { c"__type" } else { c"__name" },
             _ => unreachable!(),
         }
     }
@@ -270,8 +270,6 @@ pub trait UserDataMethods<T> {
     ///
     /// Refer to [`add_method`] for more information about the implementation.
     ///
-    /// Requires `feature = "async"`
-    ///
     /// [`add_method`]: UserDataMethods::add_method
     #[cfg(feature = "async")]
     #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
@@ -286,8 +284,6 @@ pub trait UserDataMethods<T> {
     /// Add an async method which accepts a `&mut T` as the first parameter and returns [`Future`].
     ///
     /// Refer to [`add_method`] for more information about the implementation.
-    ///
-    /// Requires `feature = "async"`
     ///
     /// [`add_method`]: UserDataMethods::add_method
     #[cfg(feature = "async")]
@@ -326,8 +322,6 @@ pub trait UserDataMethods<T> {
     /// [`Future`].
     ///
     /// This is an async version of [`add_function`].
-    ///
-    /// Requires `feature = "async"`
     ///
     /// [`add_function`]: UserDataMethods::add_function
     #[cfg(feature = "async")]
@@ -371,11 +365,12 @@ pub trait UserDataMethods<T> {
     ///
     /// This is an async version of [`add_meta_method`].
     ///
-    /// Requires `feature = "async"`
-    ///
     /// [`add_meta_method`]: UserDataMethods::add_meta_method
     #[cfg(all(feature = "async", not(any(feature = "lua51", feature = "luau"))))]
-    #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
+    #[cfg_attr(
+        docsrs,
+        doc(cfg(all(feature = "async", not(any(feature = "lua51", feature = "luau")))))
+    )]
     fn add_async_meta_method<M, A, MR, R>(&mut self, name: impl ToString, method: M)
     where
         T: 'static,
@@ -388,8 +383,6 @@ pub trait UserDataMethods<T> {
     /// [`Future`].
     ///
     /// This is an async version of [`add_meta_method_mut`].
-    ///
-    /// Requires `feature = "async"`
     ///
     /// [`add_meta_method_mut`]: UserDataMethods::add_meta_method_mut
     #[cfg(all(feature = "async", not(any(feature = "lua51", feature = "luau"))))]
@@ -428,11 +421,12 @@ pub trait UserDataMethods<T> {
     ///
     /// This is an async version of [`add_meta_function`].
     ///
-    /// Requires `feature = "async"`
-    ///
     /// [`add_meta_function`]: UserDataMethods::add_meta_function
     #[cfg(all(feature = "async", not(any(feature = "lua51", feature = "luau"))))]
-    #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
+    #[cfg_attr(
+        docsrs,
+        doc(cfg(all(feature = "async", not(any(feature = "lua51", feature = "luau")))))
+    )]
     fn add_async_meta_function<F, A, FR, R>(&mut self, name: impl ToString, function: F)
     where
         F: Fn(Lua, A) -> FR + MaybeSend + 'static,
@@ -622,7 +616,9 @@ impl AnyUserData {
     /// Checks whether the type of this userdata is `T`.
     #[inline]
     pub fn is<T: 'static>(&self) -> bool {
-        self.inspect::<T, _, _>(|_| Ok(())).is_ok()
+        let type_id = self.type_id();
+        // We do not use wrapped types here, rather prefer to check the "real" type of the userdata
+        matches!(type_id, Some(type_id) if type_id == TypeId::of::<T>())
     }
 
     /// Borrow this userdata immutably if it is of type `T`.
@@ -637,7 +633,8 @@ impl AnyUserData {
     /// [`DataTypeMismatch`]: crate::Error::UserDataTypeMismatch
     #[inline]
     pub fn borrow<T: 'static>(&self) -> Result<UserDataRef<T>> {
-        self.inspect(|ud| ud.try_borrow_owned())
+        let lua = self.0.lua.lock();
+        unsafe { UserDataRef::borrow_from_stack(&lua, lua.ref_thread(), self.0.index) }
     }
 
     /// Borrow this userdata immutably if it is of type `T`, passing the borrowed value
@@ -645,7 +642,10 @@ impl AnyUserData {
     ///
     /// This method is the only way to borrow scoped userdata (created inside [`Lua::scope`]).
     pub fn borrow_scoped<T: 'static, R>(&self, f: impl FnOnce(&T) -> R) -> Result<R> {
-        self.inspect(|ud| ud.try_borrow_scoped(|ud| f(ud)))
+        let lua = self.0.lua.lock();
+        let type_id = lua.get_userdata_ref_type_id(&self.0)?;
+        let type_hints = TypeIdHints::new::<T>();
+        unsafe { borrow_userdata_scoped(lua.ref_thread(), self.0.index, type_id, type_hints, f) }
     }
 
     /// Borrow this userdata mutably if it is of type `T`.
@@ -660,7 +660,8 @@ impl AnyUserData {
     /// [`UserDataTypeMismatch`]: crate::Error::UserDataTypeMismatch
     #[inline]
     pub fn borrow_mut<T: 'static>(&self) -> Result<UserDataRefMut<T>> {
-        self.inspect(|ud| ud.try_borrow_owned_mut())
+        let lua = self.0.lua.lock();
+        unsafe { UserDataRefMut::borrow_from_stack(&lua, lua.ref_thread(), self.0.index) }
     }
 
     /// Borrow this userdata mutably if it is of type `T`, passing the borrowed value
@@ -668,7 +669,10 @@ impl AnyUserData {
     ///
     /// This method is the only way to borrow scoped userdata (created inside [`Lua::scope`]).
     pub fn borrow_mut_scoped<T: 'static, R>(&self, f: impl FnOnce(&mut T) -> R) -> Result<R> {
-        self.inspect(|ud| ud.try_borrow_scoped_mut(|ud| f(ud)))
+        let lua = self.0.lua.lock();
+        let type_id = lua.get_userdata_ref_type_id(&self.0)?;
+        let type_hints = TypeIdHints::new::<T>();
+        unsafe { borrow_userdata_scoped_mut(lua.ref_thread(), self.0.index, type_id, type_hints, f) }
     }
 
     /// Takes the value out of this userdata.
@@ -679,20 +683,16 @@ impl AnyUserData {
     /// Keeps associated user values unchanged (they will be collected by Lua's GC).
     pub fn take<T: 'static>(&self) -> Result<T> {
         let lua = self.0.lua.lock();
-        let state = lua.state();
-        unsafe {
-            let _sg = StackGuard::new(state);
-            check_stack(state, 2)?;
-
-            let type_id = lua.push_userdata_ref(&self.0)?;
-            match type_id {
-                Some(type_id) if type_id == TypeId::of::<T>() => {
-                    // Try to borrow userdata exclusively
-                    let _ = (*get_userdata::<UserDataStorage<T>>(state, -1)).try_borrow_mut()?;
-                    take_userdata::<UserDataStorage<T>>(state).into_inner()
+        match lua.get_userdata_ref_type_id(&self.0)? {
+            Some(type_id) if type_id == TypeId::of::<T>() => unsafe {
+                let ref_thread = lua.ref_thread();
+                if (*get_userdata::<UserDataStorage<T>>(ref_thread, self.0.index)).has_exclusive_access() {
+                    take_userdata::<UserDataStorage<T>>(ref_thread, self.0.index).into_inner()
+                } else {
+                    Err(Error::UserDataBorrowMutError)
                 }
-                _ => Err(Error::UserDataTypeMismatch),
-            }
+            },
+            _ => Err(Error::UserDataTypeMismatch),
         }
     }
 
@@ -881,12 +881,6 @@ impl AnyUserData {
         self.raw_metatable().map(UserDataMetatable)
     }
 
-    #[doc(hidden)]
-    #[deprecated(since = "0.10.0", note = "please use `metatable` instead")]
-    pub fn get_metatable(&self) -> Result<UserDataMetatable> {
-        self.metatable()
-    }
-
     fn raw_metatable(&self) -> Result<Table> {
         let lua = self.0.lua.lock();
         let state = lua.state();
@@ -908,6 +902,15 @@ impl AnyUserData {
     #[inline]
     pub fn to_pointer(&self) -> *const c_void {
         self.0.to_pointer()
+    }
+
+    /// Returns [`TypeId`] of this userdata if it is registered and `'static`.
+    ///
+    /// This method is not available for scoped userdata.
+    #[inline]
+    pub fn type_id(&self) -> Option<TypeId> {
+        let lua = self.0.lua.lock();
+        lua.get_userdata_ref_type_id(&self.0).ok().flatten()
     }
 
     /// Returns a type name of this `UserData` (from a metatable field).
@@ -964,24 +967,6 @@ impl AnyUserData {
             Ok::<_, Error>((*ud).is_serializable())
         };
         is_serializable().unwrap_or(false)
-    }
-
-    pub(crate) fn inspect<T, F, R>(&self, func: F) -> Result<R>
-    where
-        T: 'static,
-        F: FnOnce(&UserDataStorage<T>) -> Result<R>,
-    {
-        let lua = self.0.lua.lock();
-        unsafe {
-            let type_id = lua.get_userdata_ref_type_id(&self.0)?;
-            match type_id {
-                Some(type_id) if type_id == TypeId::of::<T>() => {
-                    let ud = get_userdata::<UserDataStorage<T>>(lua.ref_thread(), self.0.index);
-                    func(&*ud)
-                }
-                _ => Err(Error::UserDataTypeMismatch),
-            }
-        }
     }
 }
 
@@ -1106,6 +1091,7 @@ where
 mod cell;
 mod lock;
 mod object;
+mod r#ref;
 mod registry;
 mod util;
 

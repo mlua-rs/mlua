@@ -79,8 +79,6 @@ unsafe impl Sync for Thread {}
 
 /// Thread (coroutine) representation as an async [`Future`] or [`Stream`].
 ///
-/// Requires `feature = "async"`
-///
 /// [`Future`]: std::future::Future
 /// [`Stream`]: futures_util::stream::Stream
 #[cfg(feature = "async")]
@@ -307,29 +305,10 @@ impl Thread {
     pub fn reset(&self, func: Function) -> Result<()> {
         let lua = self.0.lua.lock();
         let thread_state = self.state();
-        match self.status_inner(&lua) {
-            ThreadStatusInner::Running => return Err(Error::runtime("cannot reset a running thread")),
-            // Any Lua can reuse new or finished thread
-            ThreadStatusInner::New(_) => unsafe { ffi::lua_settop(thread_state, 0) },
-            ThreadStatusInner::Finished => {}
-            #[cfg(not(any(feature = "lua54", feature = "luau")))]
-            _ => return Err(Error::runtime("cannot reset non-finished thread")),
-            #[cfg(any(feature = "lua54", feature = "luau"))]
-            _ => unsafe {
-                #[cfg(all(feature = "lua54", not(feature = "vendored")))]
-                let status = ffi::lua_resetthread(thread_state);
-                #[cfg(all(feature = "lua54", feature = "vendored"))]
-                let status = ffi::lua_closethread(thread_state, lua.state());
-                #[cfg(feature = "lua54")]
-                if status != ffi::LUA_OK {
-                    return Err(pop_error(thread_state, status));
-                }
-                #[cfg(feature = "luau")]
-                ffi::lua_resetthread(thread_state);
-            },
-        }
-
         unsafe {
+            let status = self.status_inner(&lua);
+            self.reset_inner(status)?;
+
             // Push function to the top of the thread stack
             ffi::lua_xpush(lua.ref_thread(), thread_state, func.0.index);
 
@@ -344,6 +323,42 @@ impl Thread {
         }
     }
 
+    unsafe fn reset_inner(&self, status: ThreadStatusInner) -> Result<()> {
+        match status {
+            ThreadStatusInner::New(_) => {
+                // The thread is new, so we can just set the top to 0
+                ffi::lua_settop(self.state(), 0);
+                Ok(())
+            }
+            ThreadStatusInner::Running => Err(Error::runtime("cannot reset a running thread")),
+            ThreadStatusInner::Finished => Ok(()),
+            #[cfg(not(any(feature = "lua54", feature = "luau")))]
+            ThreadStatusInner::Yielded(_) | ThreadStatusInner::Error => {
+                Err(Error::runtime("cannot reset non-finished thread"))
+            }
+            #[cfg(any(feature = "lua54", feature = "luau"))]
+            ThreadStatusInner::Yielded(_) | ThreadStatusInner::Error => {
+                let thread_state = self.state();
+
+                #[cfg(all(feature = "lua54", not(feature = "vendored")))]
+                let status = ffi::lua_resetthread(thread_state);
+                #[cfg(all(feature = "lua54", feature = "vendored"))]
+                let status = {
+                    let lua = self.0.lua.lock();
+                    ffi::lua_closethread(thread_state, lua.state())
+                };
+                #[cfg(feature = "lua54")]
+                if status != ffi::LUA_OK {
+                    return Err(pop_error(thread_state, status));
+                }
+                #[cfg(feature = "luau")]
+                ffi::lua_resetthread(thread_state);
+
+                Ok(())
+            }
+        }
+    }
+
     /// Converts [`Thread`] to an [`AsyncThread`] which implements [`Future`] and [`Stream`] traits.
     ///
     /// Only resumable threads can be converted to [`AsyncThread`].
@@ -355,8 +370,6 @@ impl Thread {
     /// Using [`AsyncThread`] as a [`Stream`] allow to iterate through [`coroutine.yield`]
     /// values whereas [`Future`] version discards that values and poll until the final
     /// one (returned from the thread function).
-    ///
-    /// Requires `feature = "async"`
     ///
     /// [`Future`]: std::future::Future
     /// [`Stream`]: futures_util::stream::Stream
@@ -445,7 +458,7 @@ impl Thread {
     ///     Ok(())
     /// })?)?;
     /// thread.sandbox()?;
-    /// thread.resume(())?;
+    /// thread.resume::<()>(())?;
     ///
     /// // The global environment should be unchanged
     /// assert_eq!(lua.globals().get::<Option<u32>>("var")?, None);
@@ -455,8 +468,6 @@ impl Thread {
     /// # #[cfg(not(feature = "luau"))]
     /// # fn main() { }
     /// ```
-    ///
-    /// Requires `feature = "luau"`
     #[cfg(any(feature = "luau", doc))]
     #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
     #[doc(hidden)]
@@ -511,8 +522,21 @@ impl<R> Drop for AsyncThread<R> {
     fn drop(&mut self) {
         if self.recycle {
             if let Some(lua) = self.thread.0.lua.try_lock() {
-                // For Lua 5.4 this also closes all pending to-be-closed variables
-                unsafe { lua.recycle_thread(&mut self.thread) };
+                unsafe {
+                    let mut status = self.thread.status_inner(&lua);
+                    if matches!(status, ThreadStatusInner::Yielded(0)) {
+                        // The thread is dropped while yielded, resume it with the "terminate" signal
+                        ffi::lua_pushlightuserdata(self.thread.1, crate::Lua::poll_terminate().0);
+                        if let Ok((new_status, _)) = self.thread.resume_inner(&lua, 1) {
+                            status = new_status;
+                        }
+                    }
+
+                    // For Lua 5.4 this also closes all pending to-be-closed variables
+                    if self.thread.reset_inner(status).is_ok() {
+                        lua.recycle_thread(&mut self.thread);
+                    }
+                }
             }
         }
     }

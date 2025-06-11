@@ -76,7 +76,7 @@ pub type lua_LibraryMemberConstantCallback = unsafe extern "C-unwind" fn(
     constant: *mut lua_CompileConstant,
 );
 
-extern "C" {
+unsafe extern "C" {
     pub fn luau_set_compile_constant_nil(cons: *mut lua_CompileConstant);
     pub fn luau_set_compile_constant_boolean(cons: *mut lua_CompileConstant, b: c_int);
     pub fn luau_set_compile_constant_number(cons: *mut lua_CompileConstant, n: f64);
@@ -84,7 +84,7 @@ extern "C" {
     pub fn luau_set_compile_constant_string(cons: *mut lua_CompileConstant, s: *const c_char, l: usize);
 }
 
-extern "C-unwind" {
+unsafe extern "C-unwind" {
     #[link_name = "luau_compile"]
     pub fn luau_compile_(
         source: *const c_char,
@@ -94,7 +94,7 @@ extern "C-unwind" {
     ) -> *mut c_char;
 }
 
-extern "C" {
+unsafe extern "C" {
     fn free(p: *mut c_void);
 }
 

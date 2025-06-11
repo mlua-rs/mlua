@@ -18,15 +18,32 @@ pub(crate) struct MemoryState {
 }
 
 impl MemoryState {
+    #[cfg(feature = "luau")]
     #[inline]
     pub(crate) unsafe fn get(state: *mut ffi::lua_State) -> *mut Self {
         let mut mem_state = ptr::null_mut();
-        #[cfg(feature = "luau")]
-        {
-            ffi::lua_getallocf(state, &mut mem_state);
-            mlua_assert!(!mem_state.is_null(), "Luau state has no allocator userdata");
+        ffi::lua_getallocf(state, &mut mem_state);
+        mlua_assert!(!mem_state.is_null(), "Luau state has no allocator userdata");
+        mem_state as *mut MemoryState
+    }
+
+    #[cfg(not(feature = "luau"))]
+    #[rustversion::since(1.85)]
+    #[inline]
+    #[allow(clippy::incompatible_msrv)]
+    pub(crate) unsafe fn get(state: *mut ffi::lua_State) -> *mut Self {
+        let mut mem_state = ptr::null_mut();
+        if !ptr::fn_addr_eq(ffi::lua_getallocf(state, &mut mem_state), ALLOCATOR) {
+            mem_state = ptr::null_mut();
         }
-        #[cfg(not(feature = "luau"))]
+        mem_state as *mut MemoryState
+    }
+
+    #[cfg(not(feature = "luau"))]
+    #[rustversion::before(1.85)]
+    #[inline]
+    pub(crate) unsafe fn get(state: *mut ffi::lua_State) -> *mut Self {
+        let mut mem_state = ptr::null_mut();
         if ffi::lua_getallocf(state, &mut mem_state) != ALLOCATOR {
             mem_state = ptr::null_mut();
         }
@@ -80,7 +97,7 @@ impl MemoryState {
     }
 }
 
-unsafe extern "C-unwind" fn allocator(
+unsafe extern "C" fn allocator(
     extra: *mut c_void,
     ptr: *mut c_void,
     osize: usize,

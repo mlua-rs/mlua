@@ -175,8 +175,6 @@ pub trait ObjectLike: Sealed {
     /// Gets the function associated to key `name` from the object and asynchronously calls it,
     /// passing the object itself along with `args` as function arguments.
     ///
-    /// Requires `feature = "async"`
-    ///
     /// This might invoke the `__index` metamethod.
     #[cfg(feature = "async")]
     #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
@@ -194,8 +192,6 @@ pub trait ObjectLike: Sealed {
 
     /// Gets the function associated to key `name` from the object and asynchronously calls it,
     /// passing `args` as function arguments.
-    ///
-    /// Requires `feature = "async"`
     ///
     /// This might invoke the `__index` metamethod.
     #[cfg(feature = "async")]

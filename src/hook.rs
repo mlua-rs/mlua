@@ -265,14 +265,18 @@ pub struct DebugStack {
     /// Number of upvalues.
     pub num_ups: u8,
     /// Number of parameters.
-    ///
-    /// Requires `feature = "lua54/lua53/lua52/luau"`
     #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "luau"))]
+    #[cfg_attr(
+        docsrs,
+        doc(cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "luau")))
+    )]
     pub num_params: u8,
     /// Whether the function is a vararg function.
-    ///
-    /// Requires `feature = "lua54/lua53/lua52/luau"`
     #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "luau"))]
+    #[cfg_attr(
+        docsrs,
+        doc(cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "luau")))
+    )]
     pub is_vararg: bool,
 }
 

@@ -61,7 +61,7 @@ pub(crate) type AsyncCallback =
 pub(crate) type AsyncCallbackUpvalue = Upvalue<AsyncCallback>;
 
 #[cfg(feature = "async")]
-pub(crate) type AsyncPollUpvalue = Upvalue<BoxFuture<'static, Result<c_int>>>;
+pub(crate) type AsyncPollUpvalue = Upvalue<Option<BoxFuture<'static, Result<c_int>>>>;
 
 /// Type to set next Lua VM action after executing interrupt or hook function.
 pub enum VmState {
@@ -89,6 +89,18 @@ pub(crate) type InterruptCallback = XRc<dyn Fn(&Lua) -> Result<VmState> + Send>;
 
 #[cfg(all(not(feature = "send"), feature = "luau"))]
 pub(crate) type InterruptCallback = XRc<dyn Fn(&Lua) -> Result<VmState>>;
+
+#[cfg(all(feature = "send", feature = "luau"))]
+pub(crate) type ThreadCreationCallback = XRc<dyn Fn(&Lua, crate::Thread) -> Result<()> + Send>;
+
+#[cfg(all(not(feature = "send"), feature = "luau"))]
+pub(crate) type ThreadCreationCallback = XRc<dyn Fn(&Lua, crate::Thread) -> Result<()>>;
+
+#[cfg(all(feature = "send", feature = "luau"))]
+pub(crate) type ThreadCollectionCallback = XRc<dyn Fn(crate::LightUserData) + Send>;
+
+#[cfg(all(not(feature = "send"), feature = "luau"))]
+pub(crate) type ThreadCollectionCallback = XRc<dyn Fn(crate::LightUserData)>;
 
 #[cfg(all(feature = "send", feature = "lua54"))]
 pub(crate) type WarnCallback = XRc<dyn Fn(&Lua, &str, bool) -> Result<()> + Send>;

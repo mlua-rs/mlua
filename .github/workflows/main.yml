@@ -129,8 +129,8 @@ jobs:
       - name: Run compile tests (macos lua54)
         if: ${{ matrix.os == 'macos-latest' && matrix.lua == 'lua54' }}
         run: |
-          TRYBUILD=overwrite cargo test --features "${{ matrix.lua }},vendored" -- --ignored
-          TRYBUILD=overwrite cargo test --features "${{ matrix.lua }},vendored,async,send,serialize,macros" -- --ignored
+          TRYBUILD=overwrite cargo test --features "${{ matrix.lua }},vendored" --tests -- --ignored
+          TRYBUILD=overwrite cargo test --features "${{ matrix.lua }},vendored,async,send,serialize,macros" --tests -- --ignored
         shell: bash
 
   test_with_sanitizer:
@@ -194,7 +194,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest]
         rust: [stable]
-        lua: [lua54, lua53, lua52, lua51, luajit, luau]
+        lua: [lua54, lua53, lua52, lua51, luajit]
         include:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu

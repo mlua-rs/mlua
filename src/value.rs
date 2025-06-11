@@ -272,7 +272,10 @@ impl Value {
     /// If the value is a Lua [`Integer`], try to convert it to `i64` or return `None` otherwise.
     #[inline]
     pub fn as_i64(&self) -> Option<i64> {
-        self.as_integer().map(i64::from)
+        #[cfg(target_pointer_width = "64")]
+        return self.as_integer();
+        #[cfg(not(target_pointer_width = "64"))]
+        return self.as_integer().map(i64::from);
     }
 
     /// Cast the value to `u64`.
@@ -695,6 +698,15 @@ impl<'a> SerializableValue<'a> {
     #[must_use]
     pub const fn sort_keys(mut self, enabled: bool) -> Self {
         self.options.sort_keys = enabled;
+        self
+    }
+
+    /// If true, empty Lua tables will be encoded as array, instead of map.
+    ///
+    /// Default: **false**
+    #[must_use]
+    pub const fn encode_empty_tables_as_array(mut self, enabled: bool) -> Self {
+        self.options.encode_empty_tables_as_array = enabled;
         self
     }
 }

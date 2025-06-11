@@ -808,15 +808,9 @@ macro_rules! lua_convert_int {
         impl IntoLua for $x {
             #[inline]
             fn into_lua(self, _: &Lua) -> Result<Value> {
-                cast(self)
+                Ok(cast(self)
                     .map(Value::Integer)
-                    .or_else(|| cast(self).map(Value::Number))
-                    // This is impossible error because conversion to Number never fails
-                    .ok_or_else(|| Error::ToLuaConversionError {
-                        from: stringify!($x).to_string(),
-                        to: "number",
-                        message: Some("out of range".to_owned()),
-                    })
+                    .unwrap_or_else(|| Value::Number(self as ffi::lua_Number)))
             }
 
             #[inline]
@@ -899,13 +893,7 @@ macro_rules! lua_convert_float {
         impl IntoLua for $x {
             #[inline]
             fn into_lua(self, _: &Lua) -> Result<Value> {
-                cast(self)
-                    .ok_or_else(|| Error::ToLuaConversionError {
-                        from: stringify!($x).to_string(),
-                        to: "number",
-                        message: Some("out of range".to_string()),
-                    })
-                    .map(Value::Number)
+                Ok(Value::Number(self as _))
             }
         }
 
@@ -914,17 +902,11 @@ macro_rules! lua_convert_float {
             fn from_lua(value: Value, lua: &Lua) -> Result<Self> {
                 let ty = value.type_name();
                 lua.coerce_number(value)?
+                    .map(|n| n as $x)
                     .ok_or_else(|| Error::FromLuaConversionError {
                         from: ty,
                         to: stringify!($x).to_string(),
                         message: Some("expected number or string coercible to number".to_string()),
-                    })
-                    .and_then(|n| {
-                        cast(n).ok_or_else(|| Error::FromLuaConversionError {
-                            from: ty,
-                            to: stringify!($x).to_string(),
-                            message: Some("number out of range".to_string()),
-                        })
                     })
             }
 
@@ -932,15 +914,7 @@ macro_rules! lua_convert_float {
                 let state = lua.state();
                 let type_id = ffi::lua_type(state, idx);
                 if type_id == ffi::LUA_TNUMBER {
-                    let mut ok = 0;
-                    let i = ffi::lua_tonumberx(state, idx, &mut ok);
-                    if ok != 0 {
-                        return cast(i).ok_or_else(|| Error::FromLuaConversionError {
-                            from: "number",
-                            to: stringify!($x).to_string(),
-                            message: Some("out of range".to_owned()),
-                        });
-                    }
+                    return Ok(ffi::lua_tonumber(state, idx) as _);
                 }
                 // Fallback to default
                 Self::from_lua(lua.stack_value(idx, Some(type_id)), lua.lua())

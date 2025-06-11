@@ -38,28 +38,28 @@ pub trait AsChunk {
     }
 
     /// Returns chunk data (can be text or binary)
-    fn source<'a>(self) -> IoResult<Cow<'a, [u8]>>
+    fn source<'a>(&self) -> IoResult<Cow<'a, [u8]>>
     where
         Self: 'a;
 }
 
 impl AsChunk for &str {
-    fn source<'a>(self) -> IoResult<Cow<'a, [u8]>>
+    fn source<'a>(&self) -> IoResult<Cow<'a, [u8]>>
     where
         Self: 'a,
     {
-        Ok(Cow::Borrowed(self.as_ref()))
+        Ok(Cow::Borrowed(self.as_bytes()))
     }
 }
 
 impl AsChunk for StdString {
-    fn source<'a>(self) -> IoResult<Cow<'a, [u8]>> {
-        Ok(Cow::Owned(self.into_bytes()))
+    fn source<'a>(&self) -> IoResult<Cow<'a, [u8]>> {
+        Ok(Cow::Owned(self.clone().into_bytes()))
     }
 }
 
 impl AsChunk for &StdString {
-    fn source<'a>(self) -> IoResult<Cow<'a, [u8]>>
+    fn source<'a>(&self) -> IoResult<Cow<'a, [u8]>>
     where
         Self: 'a,
     {
@@ -68,7 +68,7 @@ impl AsChunk for &StdString {
 }
 
 impl AsChunk for &[u8] {
-    fn source<'a>(self) -> IoResult<Cow<'a, [u8]>>
+    fn source<'a>(&self) -> IoResult<Cow<'a, [u8]>>
     where
         Self: 'a,
     {
@@ -77,13 +77,13 @@ impl AsChunk for &[u8] {
 }
 
 impl AsChunk for Vec<u8> {
-    fn source<'a>(self) -> IoResult<Cow<'a, [u8]>> {
-        Ok(Cow::Owned(self))
+    fn source<'a>(&self) -> IoResult<Cow<'a, [u8]>> {
+        Ok(Cow::Owned(self.clone()))
     }
 }
 
 impl AsChunk for &Vec<u8> {
-    fn source<'a>(self) -> IoResult<Cow<'a, [u8]>>
+    fn source<'a>(&self) -> IoResult<Cow<'a, [u8]>>
     where
         Self: 'a,
     {
@@ -96,7 +96,7 @@ impl AsChunk for &Path {
         Some(format!("@{}", self.display()))
     }
 
-    fn source<'a>(self) -> IoResult<Cow<'a, [u8]>> {
+    fn source<'a>(&self) -> IoResult<Cow<'a, [u8]>> {
         std::fs::read(self).map(Cow::Owned)
     }
 }
@@ -106,8 +106,29 @@ impl AsChunk for PathBuf {
         Some(format!("@{}", self.display()))
     }
 
-    fn source<'a>(self) -> IoResult<Cow<'a, [u8]>> {
+    fn source<'a>(&self) -> IoResult<Cow<'a, [u8]>> {
         std::fs::read(self).map(Cow::Owned)
+    }
+}
+
+impl<C: AsChunk + ?Sized> AsChunk for Box<C> {
+    fn name(&self) -> Option<StdString> {
+        (**self).name()
+    }
+
+    fn environment(&self, lua: &Lua) -> Result<Option<Table>> {
+        (**self).environment(lua)
+    }
+
+    fn mode(&self) -> Option<ChunkMode> {
+        (**self).mode()
+    }
+
+    fn source<'a>(&self) -> IoResult<Cow<'a, [u8]>>
+    where
+        Self: 'a,
+    {
+        (**self).source()
     }
 }
 
@@ -428,6 +449,11 @@ impl Compiler {
 }
 
 impl Chunk<'_> {
+    /// Returns the name of this chunk.
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
     /// Sets the name of this chunk, which results in more informative error traces.
     ///
     /// Possible name prefixes:
@@ -437,6 +463,11 @@ impl Chunk<'_> {
     pub fn set_name(mut self, name: impl Into<String>) -> Self {
         self.name = name.into();
         self
+    }
+
+    /// Returns the environment of this chunk.
+    pub fn environment(&self) -> Option<&Table> {
+        self.env.as_ref().ok()?.as_ref()
     }
 
     /// Sets the environment of the loaded chunk to the given value.
@@ -455,6 +486,11 @@ impl Chunk<'_> {
         self
     }
 
+    /// Returns the mode (auto-detected by default) of this chunk.
+    pub fn mode(&self) -> ChunkMode {
+        self.detect_mode()
+    }
+
     /// Sets whether the chunk is text or binary (autodetected by default).
     ///
     /// Be aware, Lua does not check the consistency of the code inside binary chunks.
@@ -467,8 +503,6 @@ impl Chunk<'_> {
     /// Sets or overwrites a Luau compiler used for this chunk.
     ///
     /// See [`Compiler`] for details and possible options.
-    ///
-    /// Requires `feature = "luau"`
     #[cfg(any(feature = "luau", doc))]
     #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
     pub fn set_compiler(mut self, compiler: Compiler) -> Self {
@@ -486,8 +520,6 @@ impl Chunk<'_> {
     /// Asynchronously execute this chunk of code.
     ///
     /// See [`exec`] for more details.
-    ///
-    /// Requires `feature = "async"`
     ///
     /// [`exec`]: Chunk::exec
     #[cfg(feature = "async")]
@@ -519,8 +551,6 @@ impl Chunk<'_> {
     ///
     /// See [`eval`] for more details.
     ///
-    /// Requires `feature = "async"`
-    ///
     /// [`eval`]: Chunk::eval
     #[cfg(feature = "async")]
     #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
@@ -547,8 +577,6 @@ impl Chunk<'_> {
     /// Load the chunk function and asynchronously call it with the given arguments.
     ///
     /// See [`call`] for more details.
-    ///
-    /// Requires `feature = "async"`
     ///
     /// [`call`]: Chunk::call
     #[cfg(feature = "async")]

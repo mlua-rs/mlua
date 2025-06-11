@@ -1,11 +1,51 @@
 pub(crate) trait UserDataLock {
     const INIT: Self;
 
+    fn is_locked(&self) -> bool;
     fn try_lock_shared(&self) -> bool;
     fn try_lock_exclusive(&self) -> bool;
 
     unsafe fn unlock_shared(&self);
     unsafe fn unlock_exclusive(&self);
+
+    fn try_lock_shared_guarded(&self) -> Result<LockGuard<'_, Self>, ()> {
+        if self.try_lock_shared() {
+            Ok(LockGuard {
+                lock: self,
+                exclusive: false,
+            })
+        } else {
+            Err(())
+        }
+    }
+
+    fn try_lock_exclusive_guarded(&self) -> Result<LockGuard<'_, Self>, ()> {
+        if self.try_lock_exclusive() {
+            Ok(LockGuard {
+                lock: self,
+                exclusive: true,
+            })
+        } else {
+            Err(())
+        }
+    }
+}
+
+pub(crate) struct LockGuard<'a, L: UserDataLock + ?Sized> {
+    lock: &'a L,
+    exclusive: bool,
+}
+
+impl<L: UserDataLock + ?Sized> Drop for LockGuard<'_, L> {
+    fn drop(&mut self) {
+        unsafe {
+            if self.exclusive {
+                self.lock.unlock_exclusive();
+            } else {
+                self.lock.unlock_shared();
+            }
+        }
+    }
 }
 
 pub(crate) use lock_impl::RawLock;
@@ -24,6 +64,11 @@ mod lock_impl {
     impl super::UserDataLock for RawLock {
         #[allow(clippy::declare_interior_mutable_const)]
         const INIT: Self = Cell::new(UNUSED);
+
+        #[inline(always)]
+        fn is_locked(&self) -> bool {
+            self.get() != UNUSED
+        }
 
         #[inline(always)]
         fn try_lock_shared(&self) -> bool {
@@ -70,6 +115,11 @@ mod lock_impl {
     impl super::UserDataLock for RawLock {
         #[allow(clippy::declare_interior_mutable_const)]
         const INIT: Self = <Self as parking_lot::lock_api::RawRwLock>::INIT;
+
+        #[inline(always)]
+        fn is_locked(&self) -> bool {
+            RawRwLock::is_locked(self)
+        }
 
         #[inline(always)]
         fn try_lock_shared(&self) -> bool {

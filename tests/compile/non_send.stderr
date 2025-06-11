@@ -8,7 +8,7 @@ error[E0277]: `Rc<Cell<i32>>` cannot be sent between threads safely
    |         |               within this `{closure@$DIR/tests/compile/non_send.rs:11:25: 11:37}`
    |         required by a bound introduced by this call
    |
-   = help: within `{closure@$DIR/tests/compile/non_send.rs:11:25: 11:37}`, the trait `Send` is not implemented for `Rc<Cell<i32>>`, which is required by `{closure@$DIR/tests/compile/non_send.rs:11:25: 11:37}: MaybeSend`
+   = help: within `{closure@$DIR/tests/compile/non_send.rs:11:25: 11:37}`, the trait `Send` is not implemented for `Rc<Cell<i32>>`
 note: required because it's used within this closure
   --> tests/compile/non_send.rs:11:25
    |

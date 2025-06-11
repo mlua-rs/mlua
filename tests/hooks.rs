@@ -1,6 +1,5 @@
 #![cfg(not(feature = "luau"))]
 
-use std::ops::Deref;
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::{Arc, Mutex};
 
@@ -104,14 +103,10 @@ fn test_error_within_hook() -> Result<()> {
     })?;
 
     let err = lua.load("x = 1").exec().expect_err("panic didn't propagate");
-
     match err {
-        Error::CallbackError { cause, .. } => match cause.deref() {
-            Error::RuntimeError(s) => assert_eq!(s, "Something happened in there!"),
-            _ => panic!("wrong callback error kind caught"),
-        },
-        _ => panic!("wrong error kind caught"),
-    };
+        Error::RuntimeError(msg) => assert_eq!(msg, "Something happened in there!"),
+        err => panic!("expected `RuntimeError` with a specific message, got {err:?}"),
+    }
 
     Ok(())
 }

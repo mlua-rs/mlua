@@ -1,5 +1,6 @@
 //! Contains definitions from `lua.h`.
 
+use std::ffi::CStr;
 use std::marker::{PhantomData, PhantomPinned};
 use std::os::raw::{c_char, c_double, c_int, c_uchar, c_uint, c_void};
 use std::ptr;
@@ -88,13 +89,13 @@ pub type lua_Reader =
 pub type lua_Writer =
     unsafe extern "C-unwind" fn(L: *mut lua_State, p: *const c_void, sz: usize, ud: *mut c_void) -> c_int;
 
-/// Type for memory-allocation functions
+/// Type for memory-allocation functions (no unwinding)
 #[rustfmt::skip]
 pub type lua_Alloc =
-    unsafe extern "C-unwind" fn(ud: *mut c_void, ptr: *mut c_void, osize: usize, nsize: usize) -> *mut c_void;
+    unsafe extern "C" fn(ud: *mut c_void, ptr: *mut c_void, osize: usize, nsize: usize) -> *mut c_void;
 
 #[cfg_attr(all(windows, raw_dylib), link(name = "lua52", kind = "raw-dylib"))]
-extern "C-unwind" {
+unsafe extern "C-unwind" {
     //
     // State manipulation
     //
@@ -160,14 +161,14 @@ pub const LUA_OPLT: c_int = 1;
 pub const LUA_OPLE: c_int = 2;
 
 #[cfg_attr(all(windows, raw_dylib), link(name = "lua52", kind = "raw-dylib"))]
-extern "C-unwind" {
+unsafe extern "C-unwind" {
     pub fn lua_arith(L: *mut lua_State, op: c_int);
     pub fn lua_rawequal(L: *mut lua_State, idx1: c_int, idx2: c_int) -> c_int;
     pub fn lua_compare(L: *mut lua_State, idx1: c_int, idx2: c_int, op: c_int) -> c_int;
 }
 
 #[cfg_attr(all(windows, raw_dylib), link(name = "lua52", kind = "raw-dylib"))]
-extern "C-unwind" {
+unsafe extern "C-unwind" {
     //
     // Push functions (C -> stack)
     //
@@ -256,7 +257,7 @@ pub unsafe fn lua_pcall(L: *mut lua_State, n: c_int, r: c_int, f: c_int) -> c_in
 }
 
 #[cfg_attr(all(windows, raw_dylib), link(name = "lua52", kind = "raw-dylib"))]
-extern "C-unwind" {
+unsafe extern "C-unwind" {
     //
     // Coroutine functions
     //
@@ -288,12 +289,12 @@ pub const LUA_GCGEN: c_int = 10;
 pub const LUA_GCINC: c_int = 11;
 
 #[cfg_attr(all(windows, raw_dylib), link(name = "lua52", kind = "raw-dylib"))]
-extern "C-unwind" {
+unsafe extern "C-unwind" {
     pub fn lua_gc(L: *mut lua_State, what: c_int, data: c_int) -> c_int;
 }
 
 #[cfg_attr(all(windows, raw_dylib), link(name = "lua52", kind = "raw-dylib"))]
-extern "C-unwind" {
+unsafe extern "C-unwind" {
     //
     // Miscellaneous functions
     //
@@ -395,10 +396,8 @@ pub unsafe fn lua_isnoneornil(L: *mut lua_State, n: c_int) -> c_int {
 }
 
 #[inline(always)]
-pub unsafe fn lua_pushliteral(L: *mut lua_State, s: &'static str) -> *const c_char {
-    use std::ffi::CString;
-    let c_str = CString::new(s).unwrap();
-    lua_pushlstring_(L, c_str.as_ptr(), c_str.as_bytes().len())
+pub unsafe fn lua_pushliteral(L: *mut lua_State, s: &'static CStr) {
+    lua_pushstring(L, s.as_ptr());
 }
 
 #[inline(always)]
@@ -449,7 +448,7 @@ pub const LUA_MASKCOUNT: c_int = 1 << (LUA_HOOKCOUNT as usize);
 pub type lua_Hook = unsafe extern "C-unwind" fn(L: *mut lua_State, ar: *mut lua_Debug);
 
 #[cfg_attr(all(windows, raw_dylib), link(name = "lua52", kind = "raw-dylib"))]
-extern "C-unwind" {
+unsafe extern "C-unwind" {
     pub fn lua_getstack(L: *mut lua_State, level: c_int, ar: *mut lua_Debug) -> c_int;
     pub fn lua_getinfo(L: *mut lua_State, what: *const c_char, ar: *mut lua_Debug) -> c_int;
     pub fn lua_getlocal(L: *mut lua_State, ar: *const lua_Debug, n: c_int) -> *const c_char;

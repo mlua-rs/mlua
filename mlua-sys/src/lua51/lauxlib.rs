@@ -8,6 +8,9 @@ use super::lua::{self, lua_CFunction, lua_Integer, lua_Number, lua_State};
 // Extra error code for 'luaL_load'
 pub const LUA_ERRFILE: c_int = lua::LUA_ERRERR + 1;
 
+// Key, in the registry, for table of loaded modules
+pub const LUA_LOADED_TABLE: *const c_char = cstr!("_LOADED");
+
 #[repr(C)]
 pub struct luaL_Reg {
     pub name: *const c_char,
@@ -15,7 +18,7 @@ pub struct luaL_Reg {
 }
 
 #[cfg_attr(all(windows, raw_dylib), link(name = "lua51", kind = "raw-dylib"))]
-extern "C-unwind" {
+unsafe extern "C-unwind" {
     pub fn luaL_register(L: *mut lua_State, libname: *const c_char, l: *const luaL_Reg);
     #[link_name = "luaL_getmetafield"]
     pub fn luaL_getmetafield_(L: *mut lua_State, obj: c_int, e: *const c_char) -> c_int;
@@ -58,7 +61,7 @@ pub const LUA_NOREF: c_int = -2;
 pub const LUA_REFNIL: c_int = -1;
 
 #[cfg_attr(all(windows, raw_dylib), link(name = "lua51", kind = "raw-dylib"))]
-extern "C-unwind" {
+unsafe extern "C-unwind" {
     pub fn luaL_ref(L: *mut lua_State, t: c_int) -> c_int;
     pub fn luaL_unref(L: *mut lua_State, t: c_int, r#ref: c_int);
 

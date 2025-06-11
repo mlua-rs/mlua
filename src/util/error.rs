@@ -9,9 +9,8 @@ use std::sync::Arc;
 use crate::error::{Error, Result};
 use crate::memory::MemoryState;
 use crate::util::{
-    check_stack, get_internal_metatable, get_internal_userdata, init_internal_metatable,
-    push_internal_userdata, push_string, push_table, rawset_field, to_string, TypeKey,
-    DESTRUCTED_USERDATA_METATABLE,
+    check_stack, get_internal_userdata, init_internal_metatable, push_internal_userdata, push_string,
+    push_table, rawset_field, to_string, TypeKey, DESTRUCTED_USERDATA_METATABLE,
 };
 
 static WRAPPED_FAILURE_TYPE_KEY: u8 = 0;
@@ -31,12 +30,8 @@ impl TypeKey for WrappedFailure {
 
 impl WrappedFailure {
     pub(crate) unsafe fn new_userdata(state: *mut ffi::lua_State) -> *mut Self {
-        #[cfg(feature = "luau")]
-        let ud = ffi::lua_newuserdata_t::<Self>(state);
-        #[cfg(not(feature = "luau"))]
-        let ud = ffi::lua_newuserdata(state, std::mem::size_of::<Self>()) as *mut Self;
-        ptr::write(ud, WrappedFailure::None);
-        ud
+        // Unprotected calls always return `Ok`
+        push_internal_userdata(state, WrappedFailure::None, false).unwrap()
     }
 }
 
@@ -90,16 +85,11 @@ where
             let cause = Arc::new(err);
             let wrapped_error = WrappedFailure::Error(Error::CallbackError { traceback, cause });
             ptr::write(ud, wrapped_error);
-            get_internal_metatable::<WrappedFailure>(state);
-            ffi::lua_setmetatable(state, -2);
-
             ffi::lua_error(state)
         }
         Err(p) => {
             ffi::lua_settop(state, 1);
             ptr::write(ud, WrappedFailure::Panic(Some(p)));
-            get_internal_metatable::<WrappedFailure>(state);
-            ffi::lua_setmetatable(state, -2);
             ffi::lua_error(state)
         }
     }
@@ -262,7 +252,7 @@ where
 
 pub(crate) unsafe extern "C-unwind" fn error_traceback(state: *mut ffi::lua_State) -> c_int {
     // Luau calls error handler for memory allocation errors, skip it
-    // See https://github.com/Roblox/luau/issues/880
+    // See https://github.com/luau-lang/luau/issues/880
     #[cfg(feature = "luau")]
     if MemoryState::limit_reached(state) {
         return 0;
@@ -325,7 +315,7 @@ pub(crate) unsafe fn init_error_registry(state: *mut ffi::lua_State) -> Result<(
                     let _ = write!(&mut (*err_buf), "{error}");
                     Ok(err_buf)
                 }
-                Some(WrappedFailure::Panic(Some(ref panic))) => {
+                Some(WrappedFailure::Panic(Some(panic))) => {
                     let err_buf_key = &ERROR_PRINT_BUFFER_KEY as *const u8 as *const c_void;
                     ffi::lua_rawgetp(state, ffi::LUA_REGISTRYINDEX, err_buf_key);
                     let err_buf = ffi::lua_touserdata(state, -1) as *mut String;
@@ -359,7 +349,11 @@ pub(crate) unsafe fn init_error_registry(state: *mut ffi::lua_State) -> Result<(
         state,
         Some(|state| {
             ffi::lua_pushcfunction(state, error_tostring);
-            rawset_field(state, -2, "__tostring")
+            ffi::lua_setfield(state, -2, cstr!("__tostring"));
+
+            // This is mostly for Luau typeof() function
+            ffi::lua_pushstring(state, cstr!("error"));
+            ffi::lua_setfield(state, -2, cstr!("__type"));
         }),
     )?;
 

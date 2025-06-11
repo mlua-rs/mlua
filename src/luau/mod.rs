@@ -1,16 +1,31 @@
 use std::ffi::CStr;
 use std::os::raw::c_int;
+use std::ptr;
 
+use crate::chunk::ChunkMode;
 use crate::error::Result;
-use crate::state::Lua;
+use crate::function::Function;
+use crate::state::{callback_error_ext, Lua};
+use crate::traits::{FromLuaMulti, IntoLua};
+
+pub use require::{NavigateError, Require, TextRequirer};
 
 // Since Luau has some missing standard functions, we re-implement them here
 
 impl Lua {
+    /// Create a custom Luau `require` function using provided [`Require`] implementation to find
+    /// and load modules.
+    #[cfg(any(feature = "luau", doc))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
+    pub fn create_require_function<R: Require + 'static>(&self, require: R) -> Result<Function> {
+        require::create_require_function(self, require)
+    }
+
     pub(crate) unsafe fn configure_luau(&self) -> Result<()> {
         let globals = self.globals();
 
         globals.raw_set("collectgarbage", self.create_c_function(lua_collectgarbage)?)?;
+        globals.raw_set("loadstring", self.create_c_function(lua_loadstring)?)?;
 
         // Set `_VERSION` global to include version number
         // The environment variable `LUAU_VERSION` set by the build script
@@ -18,11 +33,10 @@ impl Lua {
             globals.raw_set("_VERSION", format!("Luau {version}"))?;
         }
 
-        Ok(())
-    }
+        // Enable default `require` implementation
+        let require = self.create_require_function(require::TextRequirer::new())?;
+        self.globals().raw_set("require", require)?;
 
-    pub(crate) fn disable_c_modules(&self) -> Result<()> {
-        package::disable_dylibs(self);
         Ok(())
     }
 }
@@ -51,7 +65,7 @@ unsafe extern "C-unwind" fn lua_collectgarbage(state: *mut ffi::lua_State) -> c_
             1
         }
         Ok("step") => {
-            let res = ffi::lua_gc(state, ffi::LUA_GCSTEP, arg);
+            let res = ffi::lua_gc(state, ffi::LUA_GCSTEP, arg as _);
             ffi::lua_pushboolean(state, res);
             1
         }
@@ -64,6 +78,20 @@ unsafe extern "C-unwind" fn lua_collectgarbage(state: *mut ffi::lua_State) -> c_
     }
 }
 
-pub(crate) use package::register_package_module;
+unsafe extern "C-unwind" fn lua_loadstring(state: *mut ffi::lua_State) -> c_int {
+    callback_error_ext(state, ptr::null_mut(), false, move |extra, nargs| {
+        let rawlua = (*extra).raw_lua();
+        let (chunk, chunk_name) =
+            <(String, Option<String>)>::from_stack_args(nargs, 1, Some("loadstring"), rawlua)?;
+        let chunk_name = chunk_name.as_deref().unwrap_or("=(loadstring)");
+        (rawlua.lua())
+            .load(chunk)
+            .set_name(chunk_name)
+            .set_mode(ChunkMode::Text)
+            .into_function()?
+            .push_into_stack(rawlua)?;
+        Ok(1)
+    })
+}
 
-mod package;
+mod require;

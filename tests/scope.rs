@@ -235,12 +235,14 @@ fn test_scope_userdata_values() -> Result<()> {
 
 #[test]
 fn test_scope_userdata_mismatch() -> Result<()> {
-    struct MyUserData<'a>(&'a Cell<i64>);
+    struct MyUserData<'a>(&'a mut i64);
 
     impl<'a> UserData for MyUserData<'a> {
         fn register(reg: &mut UserDataRegistry<Self>) {
-            reg.add_method("inc", |_, data, ()| {
-                data.0.set(data.0.get() + 1);
+            reg.add_method("get", |_, data, ()| Ok(*data.0));
+
+            reg.add_method_mut("inc", |_, data, ()| {
+                *data.0 = data.0.wrapping_add(1);
                 Ok(())
             });
         }
@@ -251,30 +253,53 @@ fn test_scope_userdata_mismatch() -> Result<()> {
     lua.load(
         r#"
         function inc(a, b) a.inc(b) end
+        function get(a, b) a.get(b) end
     "#,
     )
     .exec()?;
 
-    let a = Cell::new(1);
-    let b = Cell::new(1);
+    let mut a = 1;
+    let mut b = 1;
 
-    let inc: Function = lua.globals().get("inc")?;
     lua.scope(|scope| {
-        let au = scope.create_userdata(MyUserData(&a))?;
-        let bu = scope.create_userdata(MyUserData(&b))?;
-        assert!(inc.call::<()>((&au, &au)).is_ok());
-        match inc.call::<()>((&au, &bu)) {
-            Err(Error::CallbackError { ref cause, .. }) => match cause.as_ref() {
-                Error::BadArgument { to, pos, name, cause } => {
-                    assert_eq!(to.as_deref(), Some("MyUserData.inc"));
-                    assert_eq!(*pos, 1);
-                    assert_eq!(name.as_deref(), Some("self"));
-                    assert!(matches!(*cause.as_ref(), Error::UserDataTypeMismatch));
-                }
+        let au = scope.create_userdata(MyUserData(&mut a))?;
+        let bu = scope.create_userdata(MyUserData(&mut b))?;
+        for method_name in ["get", "inc"] {
+            let f: Function = lua.globals().get(method_name)?;
+            let full_name = format!("MyUserData.{method_name}");
+            let full_name = full_name.as_str();
+
+            assert!(f.call::<()>((&au, &au)).is_ok());
+            match f.call::<()>((&au, &bu)) {
+                Err(Error::CallbackError { ref cause, .. }) => match cause.as_ref() {
+                    Error::BadArgument { to, pos, name, cause } => {
+                        assert_eq!(to.as_deref(), Some(full_name));
+                        assert_eq!(*pos, 1);
+                        assert_eq!(name.as_deref(), Some("self"));
+                        assert!(matches!(*cause.as_ref(), Error::UserDataTypeMismatch));
+                    }
+                    other => panic!("wrong error type {other:?}"),
+                },
+                Err(other) => panic!("wrong error type {other:?}"),
+                Ok(_) => panic!("incorrectly returned Ok"),
+            }
+
+            // Pass non-userdata type
+            let err = f.call::<()>((&au, 321)).err().unwrap();
+            match err {
+                Error::CallbackError { ref cause, .. } => match cause.as_ref() {
+                    Error::BadArgument { to, pos, name, cause } => {
+                        assert_eq!(to.as_deref(), Some(full_name));
+                        assert_eq!(*pos, 1);
+                        assert_eq!(name.as_deref(), Some("self"));
+                        assert!(matches!(*cause.as_ref(), Error::FromLuaConversionError { .. }));
+                    }
+                    other => panic!("wrong error type {other:?}"),
+                },
                 other => panic!("wrong error type {other:?}"),
-            },
-            Err(other) => panic!("wrong error type {other:?}"),
-            Ok(_) => panic!("incorrectly returned Ok"),
+            }
+            let err_msg = format!("bad argument `self` to `{full_name}`: error converting Lua number to userdata (expected userdata of type 'MyUserData')");
+            assert!(err.to_string().contains(&err_msg));
         }
         Ok(())
     })?;

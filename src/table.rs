@@ -468,26 +468,16 @@ impl Table {
     ///
     /// It checks both the array part and the hash part.
     pub fn is_empty(&self) -> bool {
-        // Check array part
-        if self.raw_len() != 0 {
-            return false;
-        }
-
-        // Check hash part
         let lua = self.0.lua.lock();
-        let state = lua.state();
+        let ref_thread = lua.ref_thread();
         unsafe {
-            let _sg = StackGuard::new(state);
-            assert_stack(state, 4);
-
-            lua.push_ref(&self.0);
-            ffi::lua_pushnil(state);
-            if ffi::lua_next(state, -2) != 0 {
-                return false;
+            ffi::lua_pushnil(ref_thread);
+            if ffi::lua_next(ref_thread, self.0.index) == 0 {
+                return true;
             }
+            ffi::lua_pop(ref_thread, 2);
         }
-
-        true
+        false
     }
 
     /// Returns a reference to the metatable of this table, or `None` if no metatable is set.
@@ -509,13 +499,6 @@ impl Table {
                 Some(Table(lua.pop_ref()))
             }
         }
-    }
-
-    #[doc(hidden)]
-    #[deprecated(since = "0.10.0", note = "please use `metatable` instead")]
-    #[cfg(not(tarpaulin_include))]
-    pub fn get_metatable(&self) -> Option<Table> {
-        self.metatable()
     }
 
     /// Sets or removes the metatable of this table.
@@ -554,8 +537,6 @@ impl Table {
     }
 
     /// Sets `readonly` attribute on the table.
-    ///
-    /// Requires `feature = "luau"`
     #[cfg(any(feature = "luau", doc))]
     #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
     pub fn set_readonly(&self, enabled: bool) {
@@ -571,8 +552,6 @@ impl Table {
     }
 
     /// Returns `readonly` attribute of the table.
-    ///
-    /// Requires `feature = "luau"`
     #[cfg(any(feature = "luau", doc))]
     #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
     pub fn is_readonly(&self) -> bool {
@@ -590,8 +569,6 @@ impl Table {
     /// - Fast-path for some built-in functions (fastcall).
     ///
     /// For `safeenv` environments, monkey patching or modifying values may not work as expected.
-    ///
-    /// Requires `feature = "luau"`
     #[cfg(any(feature = "luau", doc))]
     #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
     pub fn set_safeenv(&self, enabled: bool) {
@@ -1030,7 +1007,10 @@ impl Serialize for SerializableTable<'_> {
 
         // Array
         let len = self.table.raw_len();
-        if len > 0 || self.table.is_array() {
+        if len > 0
+            || self.table.is_array()
+            || (self.options.encode_empty_tables_as_array && self.table.is_empty())
+        {
             let mut seq = serializer.serialize_seq(Some(len))?;
             let mut serialize_err = None;
             let res = self.table.for_each_value::<Value>(|value| {

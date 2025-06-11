@@ -66,6 +66,8 @@
 // warnings at all.
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![cfg_attr(not(send), allow(clippy::arc_with_non_send_sync))]
+#![allow(clippy::ptr_eq)]
+#![allow(unsafe_op_in_unsafe_fn)]
 
 #[macro_use]
 mod macros;
@@ -76,7 +78,7 @@ mod conversion;
 mod error;
 mod function;
 mod hook;
-#[cfg(feature = "luau")]
+#[cfg(any(feature = "luau", doc))]
 mod luau;
 mod memory;
 mod multi;
@@ -104,7 +106,7 @@ pub use crate::function::{Function, FunctionInfo};
 pub use crate::hook::{Debug, DebugEvent, DebugNames, DebugSource, DebugStack};
 pub use crate::multi::{MultiValue, Variadic};
 pub use crate::scope::Scope;
-pub use crate::state::{GCMode, Lua, LuaOptions};
+pub use crate::state::{GCMode, Lua, LuaOptions, WeakLua};
 pub use crate::stdlib::StdLib;
 pub use crate::string::{BorrowedBytes, BorrowedStr, String};
 pub use crate::table::{Table, TablePairs, TableSequence};
@@ -130,6 +132,7 @@ pub use crate::{
     buffer::Buffer,
     chunk::{CompileConstant, Compiler},
     function::CoverageInfo,
+    luau::{NavigateError, Require, TextRequirer},
     vector::Vector,
 };
 
@@ -214,7 +217,7 @@ pub use mlua_derive::FromLua;
 ///
 /// You can register multiple entrypoints as required.
 ///
-/// ```
+/// ```ignore
 /// use mlua::{Lua, Result, Table};
 ///
 /// #[mlua::lua_module]
@@ -251,7 +254,7 @@ pub use mlua_derive::FromLua;
 ///     ...
 /// }
 /// ```
-#[cfg(any(feature = "module", docsrs))]
+#[cfg(all(feature = "mlua_derive", any(feature = "module", doc)))]
 #[cfg_attr(docsrs, doc(cfg(feature = "module")))]
 pub use mlua_derive::lua_module;
 

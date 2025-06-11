@@ -250,6 +250,26 @@ fn test_serialize_same_table_twice() -> LuaResult<()> {
 }
 
 #[test]
+fn test_serialize_empty_table() -> LuaResult<()> {
+    let lua = Lua::new();
+
+    let table = Value::Table(lua.create_table()?);
+    let json = serde_json::to_string(&table.to_serializable()).unwrap();
+    assert_eq!(json, "{}");
+
+    // Set the option to encode empty tables as array
+    let json = serde_json::to_string(&table.to_serializable().encode_empty_tables_as_array(true)).unwrap();
+    assert_eq!(json, "[]");
+
+    // Check hashmap table with this option
+    table.as_table().unwrap().set("hello", "world")?;
+    let json = serde_json::to_string(&table.to_serializable().encode_empty_tables_as_array(true)).unwrap();
+    assert_eq!(json, r#"{"hello":"world"}"#);
+
+    Ok(())
+}
+
+#[test]
 fn test_to_value_struct() -> LuaResult<()> {
     let lua = Lua::new();
     let globals = lua.globals();
@@ -663,6 +683,37 @@ fn test_from_value_userdata() -> Result<(), Box<dyn StdError>> {
         Ok(_) => {}
         Err(err) => panic!("expected no errors, got {err:?}"),
     };
+
+    Ok(())
+}
+
+#[test]
+fn test_from_value_empty_table() -> Result<(), Box<dyn StdError>> {
+    let lua = Lua::new();
+
+    // By default we encode empty tables as objects
+    let t = lua.create_table()?;
+    let got = lua.from_value::<serde_json::Value>(Value::Table(t.clone()))?;
+    assert_eq!(got, serde_json::json!({}));
+
+    // Set the option to encode empty tables as array
+    let got = lua
+        .from_value_with::<serde_json::Value>(
+            Value::Table(t.clone()),
+            DeserializeOptions::new().encode_empty_tables_as_array(true),
+        )
+        .unwrap();
+    assert_eq!(got, serde_json::json!([]));
+
+    // Check hashmap table with this option
+    t.raw_set("hello", "world")?;
+    let got = lua
+        .from_value_with::<serde_json::Value>(
+            Value::Table(t),
+            DeserializeOptions::new().encode_empty_tables_as_array(true),
+        )
+        .unwrap();
+    assert_eq!(got, serde_json::json!({"hello": "world"}));
 
     Ok(())
 }
