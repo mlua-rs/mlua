@@ -8,7 +8,7 @@ fn create_lua() {
     println!("{th:#?}");
 }
 
-//#[test]
+#[test]
 fn test_byte_string_round_trip() -> Result<()> {
     let lua = Lua::new();
 

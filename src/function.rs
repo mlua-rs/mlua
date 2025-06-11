@@ -118,7 +118,7 @@ impl Function {
             let stack_start = ffi::lua_gettop(state);
             // Push function and the arguments
             lua.push_ref_at(&self.0, state);
-            let nargs = args.push_into_stack_multi(&lua)?;
+            let nargs = args.push_into_specified_stack_multi(&lua, state)?;
             // Call the function
             let ret = ffi::lua_pcall(state, nargs, ffi::LUA_MULTRET, stack_start);
             if ret != ffi::LUA_OK {
@@ -532,8 +532,9 @@ impl Function {
         R: IntoLuaMulti,
     {
         WrappedFunction(Box::new(move |lua, nargs| unsafe {
-            let args = A::from_stack_args(nargs, 1, None, lua)?;
-            func.call(args)?.push_into_stack_multi(lua)
+            let state = lua.state();
+            let args = A::from_specified_stack_args(nargs, 1, None, lua, state)?;
+            func.call(args)?.push_into_specified_stack_multi(lua, state)
         }))
     }
 
@@ -547,8 +548,9 @@ impl Function {
         let func = RefCell::new(func);
         WrappedFunction(Box::new(move |lua, nargs| unsafe {
             let mut func = func.try_borrow_mut().map_err(|_| Error::RecursiveMutCallback)?;
-            let args = A::from_stack_args(nargs, 1, None, lua)?;
-            func.call(args)?.push_into_stack_multi(lua)
+            let state = lua.state();
+            let args = A::from_specified_stack_args(nargs, 1, None, lua, state)?;
+            func.call(args)?.push_into_specified_stack_multi(lua, state)
         }))
     }
 
@@ -564,8 +566,9 @@ impl Function {
         A: FromLuaMulti,
     {
         WrappedFunction(Box::new(move |lua, nargs| unsafe {
-            let args = A::from_stack_args(nargs, 1, None, lua)?;
-            func.call(args).push_into_stack_multi(lua)
+            let state = lua.state();
+            let args = A::from_specified_stack_args(nargs, 1, None, lua, state)?;
+            func.call(args).push_into_specified_stack_multi(lua, state)
         }))
     }
 
@@ -582,8 +585,9 @@ impl Function {
         let func = RefCell::new(func);
         WrappedFunction(Box::new(move |lua, nargs| unsafe {
             let mut func = func.try_borrow_mut().map_err(|_| Error::RecursiveMutCallback)?;
-            let args = A::from_stack_args(nargs, 1, None, lua)?;
-            func.call(args).push_into_stack_multi(lua)
+            let state = lua.state();
+            let args = A::from_specified_stack_args(nargs, 1, None, lua, state)?;
+            func.call(args).push_into_specified_stack_multi(lua, state)
         }))
     }
 
@@ -598,13 +602,17 @@ impl Function {
         R: IntoLuaMulti,
     {
         WrappedAsyncFunction(Box::new(move |rawlua, nargs| unsafe {
-            let args = match A::from_stack_args(nargs, 1, None, rawlua) {
+            let state = rawlua.state();
+            let args = match A::from_specified_stack_args(nargs, 1, None, rawlua, state) {
                 Ok(args) => args,
                 Err(e) => return Box::pin(future::ready(Err(e))),
             };
             let lua = rawlua.lua();
             let fut = func.call(args);
-            Box::pin(async move { fut.await?.push_into_stack_multi(lua.raw_lua()) })
+            Box::pin(async move {
+                fut.await?
+                    .push_into_specified_stack_multi(lua.raw_lua(), lua.raw_lua().state())
+            })
         }))
     }
 
@@ -621,13 +629,16 @@ impl Function {
         A: FromLuaMulti,
     {
         WrappedAsyncFunction(Box::new(move |rawlua, nargs| unsafe {
-            let args = match A::from_stack_args(nargs, 1, None, rawlua) {
+            let args = match A::from_specified_stack_args(nargs, 1, None, rawlua, rawlua.state()) {
                 Ok(args) => args,
                 Err(e) => return Box::pin(future::ready(Err(e))),
             };
             let lua = rawlua.lua();
             let fut = func.call(args);
-            Box::pin(async move { fut.await.push_into_stack_multi(lua.raw_lua()) })
+            Box::pin(async move {
+                fut.await
+                    .push_into_specified_stack_multi(lua.raw_lua(), lua.raw_lua().state())
+            })
         }))
     }
 }

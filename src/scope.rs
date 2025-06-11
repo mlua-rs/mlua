@@ -53,8 +53,9 @@ impl<'scope, 'env: 'scope> Scope<'scope, 'env> {
     {
         unsafe {
             self.create_callback(Box::new(move |rawlua, nargs| {
-                let args = A::from_stack_args(nargs, 1, None, rawlua)?;
-                func(rawlua.lua(), args)?.push_into_stack_multi(rawlua)
+                let state = rawlua.state();
+                let args = A::from_specified_stack_args(nargs, 1, None, rawlua, state)?;
+                func(rawlua.lua(), args)?.push_into_specified_stack_multi(rawlua, state)
             }))
         }
     }

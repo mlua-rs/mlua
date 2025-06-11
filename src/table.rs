@@ -127,7 +127,7 @@ impl Table {
             key.push_into_specified_stack(&lua, state)?;
             protect_lua!(state, 2, 1, fn(state) ffi::lua_gettable(state, -2))?;
 
-            V::from_stack(-1, &lua)
+            V::from_specified_stack(-1, &lua, state)
         }
     }
 
@@ -185,7 +185,7 @@ impl Table {
                 ffi::lua_pushnil(state);
                 ffi::lua_seti(state, -3, len);
             })?;
-            V::from_stack(-1, &lua)
+            V::from_specified_stack(-1, &lua, state)
         }
     }
 
@@ -277,7 +277,7 @@ impl Table {
             key.push_into_specified_stack(&lua, state)?;
             ffi::lua_rawget(state, -2);
 
-            V::from_stack(-1, &lua)
+            V::from_specified_stack(-1, &lua, state)
         }
     }
 
@@ -356,7 +356,7 @@ impl Table {
             ffi::lua_pushnil(state);
             ffi::lua_rawseti(state, -3, len);
 
-            V::from_stack(-1, &lua)
+            V::from_specified_stack(-1, &lua, state)
         }
     }
 
@@ -640,8 +640,8 @@ impl Table {
             lua.push_ref_at(&self.0, state);
             ffi::lua_pushnil(state);
             while ffi::lua_next(state, -2) != 0 {
-                let k = K::from_stack(-2, &lua)?;
-                let v = V::from_stack(-1, &lua)?;
+                let k = K::from_specified_stack(-2, &lua, state)?;
+                let v = V::from_specified_stack(-1, &lua, state)?;
                 f(k, v)?;
                 // Keep key for next iteration
                 ffi::lua_pop(state, 1);
@@ -703,7 +703,7 @@ impl Table {
             let len = ffi::lua_rawlen(state, -1);
             for i in 1..=len {
                 ffi::lua_rawgeti(state, -1, i as _);
-                f(V::from_stack(-1, &lua)?)?;
+                f(V::from_specified_stack(-1, &lua, state)?)?;
                 ffi::lua_pop(state, 1);
             }
         }
@@ -1107,7 +1107,7 @@ where
                     Ok(Some((
                         key.clone(),
                         K::from_lua(key, lua.lua())?,
-                        V::from_stack(-1, lua)?,
+                        V::from_specified_stack(-1, lua, state)?,
                     )))
                 } else {
                     Ok(None)
@@ -1160,7 +1160,7 @@ where
                 ffi::LUA_TNIL => None,
                 _ => {
                     self.index += 1;
-                    Some(V::from_stack(-1, lua))
+                    Some(V::from_specified_stack(-1, lua, state))
                 }
             }
         }

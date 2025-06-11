@@ -81,8 +81,13 @@ unsafe extern "C-unwind" fn lua_collectgarbage(state: *mut ffi::lua_State) -> c_
 unsafe extern "C-unwind" fn lua_loadstring(state: *mut ffi::lua_State) -> c_int {
     callback_error_ext(state, ptr::null_mut(), false, move |extra, nargs| {
         let rawlua = (*extra).raw_lua();
-        let (chunk, chunk_name) =
-            <(String, Option<String>)>::from_stack_args(nargs, 1, Some("loadstring"), rawlua)?;
+        let (chunk, chunk_name) = <(String, Option<String>)>::from_specified_stack_args(
+            nargs,
+            1,
+            Some("loadstring"),
+            rawlua,
+            state,
+        )?;
         let chunk_name = chunk_name.as_deref().unwrap_or("=(loadstring)");
         (rawlua.lua())
             .load(chunk)
