@@ -5,7 +5,6 @@ use std::mem;
 use std::os::raw::{c_char, c_int, c_void};
 use std::panic::resume_unwind;
 use std::ptr::{self, NonNull};
-use std::result::Result as StdResult;
 use std::sync::Arc;
 
 use crate::chunk::ChunkMode;
@@ -307,27 +306,27 @@ impl RawLua {
         res
     }
 
-    /// See [`Lua::try_set_app_data`]
+    /// Private version of [`Lua::try_set_app_data`]
     #[inline]
-    pub(crate) fn try_set_app_data<T: MaybeSend + 'static>(&self, data: T) -> StdResult<Option<T>, T> {
+    pub(crate) fn set_priv_app_data<T: MaybeSend + 'static>(&self, data: T) -> Option<T> {
         let extra = unsafe { &*self.extra.get() };
-        extra.app_data.try_insert(data)
+        extra.app_data_priv.insert(data)
     }
 
-    /// See [`Lua::app_data_ref`]
+    /// Private version of [`Lua::app_data_ref`]
     #[track_caller]
     #[inline]
-    pub(crate) fn app_data_ref_unguarded<T: 'static>(&self) -> Option<AppDataRef<T>> {
+    pub(crate) fn priv_app_data_ref<T: 'static>(&self) -> Option<AppDataRef<T>> {
         let extra = unsafe { &*self.extra.get() };
-        extra.app_data.borrow(None)
+        extra.app_data_priv.borrow(None)
     }
 
-    /// See [`Lua::app_data_mut`]
+    /// Private version of [`Lua::app_data_mut`]
     #[track_caller]
     #[inline]
-    pub(crate) fn app_data_mut_unguarded<T: 'static>(&self) -> Option<AppDataRefMut<T>> {
+    pub(crate) fn priv_app_data_mut<T: 'static>(&self) -> Option<AppDataRefMut<T>> {
         let extra = unsafe { &*self.extra.get() };
-        extra.app_data.borrow_mut(None)
+        extra.app_data_priv.borrow_mut(None)
     }
 
     /// See [`Lua::create_registry_value`]
