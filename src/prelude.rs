@@ -32,7 +32,7 @@ pub use crate::{
 #[doc(no_inline)]
 pub use crate::{AsyncThread as LuaAsyncThread, LuaNativeAsyncFn};
 
-#[cfg(feature = "serialize")]
+#[cfg(feature = "serde")]
 #[doc(no_inline)]
 pub use crate::{
     DeserializeOptions as LuaDeserializeOptions, LuaSerdeExt, SerializeOptions as LuaSerializeOptions,

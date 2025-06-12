@@ -1,4 +1,4 @@
-#![cfg(feature = "serialize")]
+#![cfg(feature = "serde")]
 
 use std::collections::HashMap;
 use std::error::Error as StdError;

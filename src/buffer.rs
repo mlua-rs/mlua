@@ -1,4 +1,4 @@
-#[cfg(feature = "serialize")]
+#[cfg(feature = "serde")]
 use serde::ser::{Serialize, Serializer};
 
 use crate::types::ValueRef;
@@ -73,7 +73,7 @@ impl Buffer {
     }
 }
 
-#[cfg(feature = "serialize")]
+#[cfg(feature = "serde")]
 impl Serialize for Buffer {
     fn serialize<S: Serializer>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error> {
         serializer.serialize_bytes(unsafe { self.as_slice() })

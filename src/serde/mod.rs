@@ -13,7 +13,7 @@ use crate::util::check_stack;
 use crate::value::Value;
 
 /// Trait for serializing/deserializing Lua values using Serde.
-#[cfg_attr(docsrs, doc(cfg(feature = "serialize")))]
+#[cfg_attr(docsrs, doc(cfg(feature = "serde")))]
 pub trait LuaSerdeExt: Sealed {
     /// A special value (lightuserdata) to encode/decode optional (none) values.
     ///

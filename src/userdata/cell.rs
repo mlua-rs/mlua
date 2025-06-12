@@ -1,6 +1,6 @@
 use std::cell::{RefCell, UnsafeCell};
 
-#[cfg(feature = "serialize")]
+#[cfg(feature = "serde")]
 use serde::ser::{Serialize, Serializer};
 
 use crate::error::{Error, Result};
@@ -9,10 +9,10 @@ use crate::types::XRc;
 use super::lock::{RawLock, UserDataLock};
 use super::r#ref::{UserDataRef, UserDataRefMut};
 
-#[cfg(all(feature = "serialize", not(feature = "send")))]
+#[cfg(all(feature = "serde", not(feature = "send")))]
 type DynSerialize = dyn erased_serde::Serialize;
 
-#[cfg(all(feature = "serialize", feature = "send"))]
+#[cfg(all(feature = "serde", feature = "send"))]
 type DynSerialize = dyn erased_serde::Serialize + Send;
 
 pub(crate) enum UserDataStorage<T> {
@@ -24,7 +24,7 @@ pub(crate) enum UserDataStorage<T> {
 // It's stored inside a Lua VM and protected by the outer `ReentrantMutex`.
 pub(crate) enum UserDataVariant<T> {
     Default(XRc<UserDataCell<T>>),
-    #[cfg(feature = "serialize")]
+    #[cfg(feature = "serde")]
     Serializable(XRc<UserDataCell<Box<DynSerialize>>>, bool), // bool is `is_sync`
 }
 
@@ -33,7 +33,7 @@ impl<T> Clone for UserDataVariant<T> {
     fn clone(&self) -> Self {
         match self {
             Self::Default(inner) => Self::Default(XRc::clone(inner)),
-            #[cfg(feature = "serialize")]
+            #[cfg(feature = "serde")]
             Self::Serializable(inner, is_sync) => Self::Serializable(XRc::clone(inner), *is_sync),
         }
     }
@@ -79,7 +79,7 @@ impl<T> UserDataVariant<T> {
         }
         Ok(match self {
             Self::Default(inner) => XRc::into_inner(inner).unwrap().value.into_inner(),
-            #[cfg(feature = "serialize")]
+            #[cfg(feature = "serde")]
             Self::Serializable(inner, _) => unsafe {
                 let raw = Box::into_raw(XRc::into_inner(inner).unwrap().value.into_inner());
                 *Box::from_raw(raw as *mut T)
@@ -91,7 +91,7 @@ impl<T> UserDataVariant<T> {
     fn strong_count(&self) -> usize {
         match self {
             Self::Default(inner) => XRc::strong_count(inner),
-            #[cfg(feature = "serialize")]
+            #[cfg(feature = "serde")]
             Self::Serializable(inner, _) => XRc::strong_count(inner),
         }
     }
@@ -100,7 +100,7 @@ impl<T> UserDataVariant<T> {
     pub(super) fn raw_lock(&self) -> &RawLock {
         match self {
             Self::Default(inner) => &inner.raw_lock,
-            #[cfg(feature = "serialize")]
+            #[cfg(feature = "serde")]
             Self::Serializable(inner, _) => &inner.raw_lock,
         }
     }
@@ -109,13 +109,13 @@ impl<T> UserDataVariant<T> {
     pub(super) fn as_ptr(&self) -> *mut T {
         match self {
             Self::Default(inner) => inner.value.get(),
-            #[cfg(feature = "serialize")]
+            #[cfg(feature = "serde")]
             Self::Serializable(inner, _) => unsafe { &mut **(inner.value.get() as *mut Box<T>) },
         }
     }
 }
 
-#[cfg(feature = "serialize")]
+#[cfg(feature = "serde")]
 impl Serialize for UserDataStorage<()> {
     fn serialize<S: Serializer>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error> {
         match self {
@@ -197,7 +197,7 @@ impl<T: 'static> UserDataStorage<T> {
         Self::Scoped(ScopedUserDataVariant::RefMut(RefCell::new(data)))
     }
 
-    #[cfg(feature = "serialize")]
+    #[cfg(feature = "serde")]
     #[inline(always)]
     pub(crate) fn new_ser(data: T) -> Self
     where
@@ -209,7 +209,7 @@ impl<T: 'static> UserDataStorage<T> {
         Self::Owned(variant)
     }
 
-    #[cfg(feature = "serialize")]
+    #[cfg(feature = "serde")]
     #[inline(always)]
     pub(crate) fn is_serializable(&self) -> bool {
         matches!(self, Self::Owned(UserDataVariant::Serializable(..)))

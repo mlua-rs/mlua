@@ -183,12 +183,12 @@ pub enum Error {
     /// and returned again.
     PreviouslyResumedPanic,
     /// Serialization error.
-    #[cfg(feature = "serialize")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "serialize")))]
+    #[cfg(feature = "serde")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "serde")))]
     SerializeError(StdString),
     /// Deserialization error.
-    #[cfg(feature = "serialize")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "serialize")))]
+    #[cfg(feature = "serde")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "serde")))]
     DeserializeError(StdString),
     /// A custom error.
     ///
@@ -309,11 +309,11 @@ impl fmt::Display for Error {
             Error::PreviouslyResumedPanic => {
                 write!(fmt, "previously resumed panic returned again")
             }
-            #[cfg(feature = "serialize")]
+            #[cfg(feature = "serde")]
             Error::SerializeError(err) => {
                 write!(fmt, "serialize error: {err}")
             },
-            #[cfg(feature = "serialize")]
+            #[cfg(feature = "serde")]
             Error::DeserializeError(err) => {
                 write!(fmt, "deserialize error: {err}")
             },
@@ -494,14 +494,14 @@ impl From<Utf8Error> for Error {
     }
 }
 
-#[cfg(feature = "serialize")]
+#[cfg(feature = "serde")]
 impl serde::ser::Error for Error {
     fn custom<T: fmt::Display>(msg: T) -> Self {
         Self::SerializeError(msg.to_string())
     }
 }
 
-#[cfg(feature = "serialize")]
+#[cfg(feature = "serde")]
 impl serde::de::Error for Error {
     fn custom<T: fmt::Display>(msg: T) -> Self {
         Self::DeserializeError(msg.to_string())

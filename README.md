@@ -56,7 +56,7 @@ Below is a list of the available feature flags. By default `mlua` does not enabl
 * `async`: enable async/await support (any executor can be used, eg. [tokio] or [async-std])
 * `send`: make `mlua::Lua: Send + Sync` (adds [`Send`] requirement to `mlua::Function` and `mlua::UserData`)
 * `error-send`: make `mlua:Error: Send + Sync`
-* `serialize`: add serialization and deserialization support to `mlua` types using [serde]
+* `serde`: add serialization and deserialization support to `mlua` types using [serde]
 * `macros`: enable procedural macros (such as `chunk!`)
 * `anyhow`: enable `anyhow::Error` conversion into Lua
 * `userdata-wrappers`: opt into `impl UserData` for `Rc<T>`/`Arc<T>`/`Rc<RefCell<T>>`/`Arc<Mutex<T>>` where `T: UserData`
@@ -93,7 +93,7 @@ This works using Lua [coroutines](https://www.lua.org/manual/5.3/manual.html#2.6
 cargo run --example async_http_client --features=lua54,async,macros
 
 # async http client (reqwest)
-cargo run --example async_http_reqwest --features=lua54,async,macros,serialize
+cargo run --example async_http_reqwest --features=lua54,async,macros,serde
 
 # async http server
 cargo run --example async_http_server --features=lua54,async,macros,send
@@ -102,7 +102,7 @@ curl -v http://localhost:3000
 
 ### Serialization (serde) support
 
-With the `serialize` feature flag enabled, `mlua` allows you to serialize/deserialize any type that implements [`serde::Serialize`] and [`serde::Deserialize`] into/from [`mlua::Value`]. In addition, `mlua` provides the [`serde::Serialize`] trait implementation for it (including `UserData` support).
+With the `serde` feature flag enabled, `mlua` allows you to serialize/deserialize any type that implements [`serde::Serialize`] and [`serde::Deserialize`] into/from [`mlua::Value`]. In addition, `mlua` provides the [`serde::Serialize`] trait implementation for it (including `UserData` support).
 
 [Example](examples/serialize.rs)
 

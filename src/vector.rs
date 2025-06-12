@@ -1,6 +1,6 @@
 use std::fmt;
 
-#[cfg(feature = "serialize")]
+#[cfg(feature = "serde")]
 use serde::ser::{Serialize, SerializeTupleStruct, Serializer};
 
 /// A Luau vector type.
@@ -66,7 +66,7 @@ impl Vector {
     }
 }
 
-#[cfg(feature = "serialize")]
+#[cfg(feature = "serde")]
 impl Serialize for Vector {
     fn serialize<S: Serializer>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error> {
         let mut ts = serializer.serialize_tuple_struct("Vector", Self::SIZE)?;

@@ -35,7 +35,7 @@
 //! The [`Value`] enum and other types implement [`serde::Serialize`] trait to support serializing
 //! Lua values into Rust values.
 //!
-//! Requires `feature = "serialize"`.
+//! Requires `feature = "serde"`.
 //!
 //! # Async/await support
 //!
@@ -140,12 +140,12 @@ pub use crate::{
 #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
 pub use crate::{thread::AsyncThread, traits::LuaNativeAsyncFn};
 
-#[cfg(feature = "serialize")]
+#[cfg(feature = "serde")]
 #[doc(inline)]
 pub use crate::serde::{de::Options as DeserializeOptions, ser::Options as SerializeOptions, LuaSerdeExt};
 
-#[cfg(feature = "serialize")]
-#[cfg_attr(docsrs, doc(cfg(feature = "serialize")))]
+#[cfg(feature = "serde")]
+#[cfg_attr(docsrs, doc(cfg(feature = "serde")))]
 pub mod serde;
 
 #[cfg(feature = "mlua_derive")]
