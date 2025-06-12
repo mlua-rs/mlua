@@ -472,7 +472,6 @@ impl Thread {
     /// ```
     #[cfg(any(feature = "luau", doc))]
     #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
-    #[doc(hidden)]
     pub fn sandbox(&self) -> Result<()> {
         let lua = self.0.lua.lock();
         let state = lua.state();

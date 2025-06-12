@@ -38,7 +38,6 @@ impl Vector {
     }
 
     /// Creates a new vector with all components set to `0.0`.
-    #[doc(hidden)]
     pub const fn zero() -> Self {
         Self([0.0; Self::SIZE])
     }

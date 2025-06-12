@@ -25,7 +25,6 @@ impl Buffer {
     }
 
     /// Returns `true` if the buffer is empty.
-    #[doc(hidden)]
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
