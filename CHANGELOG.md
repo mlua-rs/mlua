@@ -1,4 +1,4 @@
-## v0.11.0-beta.2 (Jun ?, 2025)
+## v0.11.0-beta.2 (Jun 12, 2025)
 
 - Lua 5.4 updated to 5.4.8
 - Terminate Rust `Future` when `AsyncThread` is dropped (without relying on Lua GC)
@@ -8,6 +8,7 @@
 - Luau `Require` trait methods now can return `Error` variant (in `NavigateError` enum)
 - Added `__type` to `Error`'s userdata metatable (for `typeof` function)
 - `parking_log/send_guard` is moved to `userdata-wrappers` feature flag
+- New `serde` feature flag to replace `serialize` (the old one is still available)
 
 ## v0.11.0-beta.1 (May 7th, 2025)
 
