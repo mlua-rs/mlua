@@ -23,12 +23,12 @@
 >
 > See v0.10 [release notes](https://github.com/mlua-rs/mlua/blob/main/docs/release_notes/v0.10.md).
 
-`mlua` is bindings to [Lua](https://www.lua.org) programming language for Rust with a goal to provide
-_safe_ (as far as it's possible), high level, easy to use, practical and flexible API.
+`mlua` is a set of bindings to the [Lua](https://www.lua.org) programming language for Rust with a goal to provide a
+_safe_ (as much as possible), high level, easy to use, practical and flexible API.
 
-Started as `rlua` fork, `mlua` supports Lua 5.4, 5.3, 5.2, 5.1 (including LuaJIT) and [Luau] and allows to write native Lua modules in Rust as well as use Lua in a standalone mode.
+Started as an `rlua` fork, `mlua` supports Lua 5.4, 5.3, 5.2, 5.1 (including LuaJIT) and [Luau] and allows writing native Lua modules in Rust as well as using Lua in a standalone mode.
 
-`mlua` tested on Windows/macOS/Linux including module mode in [GitHub Actions] on `x86_64` platform and cross-compilation to `aarch64` (other targets are also supported).
+`mlua` is tested on Windows/macOS/Linux including module mode in [GitHub Actions] on `x86_64` platforms and cross-compilation to `aarch64` (other targets are also supported).
 
 WebAssembly (WASM) is supported through `wasm32-unknown-emscripten` target for all Lua/Luau versions excluding JIT.
 
@@ -39,7 +39,7 @@ WebAssembly (WASM) is supported through `wasm32-unknown-emscripten` target for a
 
 ### Feature flags
 
-`mlua` uses feature flags to reduce the amount of dependencies, compiled code and allow to choose only required set of features.
+`mlua` uses feature flags to reduce the amount of dependencies and compiled code, and allow to choose only required set of features.
 Below is a list of the available feature flags. By default `mlua` does not enable any features.
 
 * `lua54`: enable Lua [5.4] support
@@ -51,12 +51,12 @@ Below is a list of the available feature flags. By default `mlua` does not enabl
 * `luau`: enable [Luau] support (auto vendored mode)
 * `luau-jit`: enable [Luau] support with JIT backend.
 * `luau-vector4`: enable [Luau] support with 4-dimensional vector.
-* `vendored`: build static Lua(JIT) library from sources during `mlua` compilation using [lua-src] or [luajit-src] crates
+* `vendored`: build static Lua(JIT) libraries from sources during `mlua` compilation using [lua-src] or [luajit-src]
 * `module`: enable module mode (building loadable `cdylib` library for Lua)
 * `async`: enable async/await support (any executor can be used, eg. [tokio] or [async-std])
 * `send`: make `mlua::Lua: Send + Sync` (adds [`Send`] requirement to `mlua::Function` and `mlua::UserData`)
 * `error-send`: make `mlua:Error: Send + Sync`
-* `serialize`: add serialization and deserialization support to `mlua` types using [serde] framework
+* `serde`: add serialization and deserialization support to `mlua` types using [serde]
 * `macros`: enable procedural macros (such as `chunk!`)
 * `anyhow`: enable `anyhow::Error` conversion into Lua
 * `userdata-wrappers`: opt into `impl UserData` for `Rc<T>`/`Arc<T>`/`Rc<RefCell<T>>`/`Arc<Mutex<T>>` where `T: UserData`
@@ -78,7 +78,7 @@ Below is a list of the available feature flags. By default `mlua` does not enabl
 
 `mlua` supports async/await for all Lua versions including Luau.
 
-This works using Lua [coroutines](https://www.lua.org/manual/5.3/manual.html#2.6) and require running [Thread](https://docs.rs/mlua/latest/mlua/struct.Thread.html) along with enabling `feature = "async"` in `Cargo.toml`.
+This works using Lua [coroutines](https://www.lua.org/manual/5.3/manual.html#2.6) and requires running [Thread](https://docs.rs/mlua/latest/mlua/struct.Thread.html) along with enabling `feature = "async"` in `Cargo.toml`.
 
 **Examples**:
 - [HTTP Client](examples/async_http_client.rs)
@@ -93,7 +93,7 @@ This works using Lua [coroutines](https://www.lua.org/manual/5.3/manual.html#2.6
 cargo run --example async_http_client --features=lua54,async,macros
 
 # async http client (reqwest)
-cargo run --example async_http_reqwest --features=lua54,async,macros,serialize
+cargo run --example async_http_reqwest --features=lua54,async,macros,serde
 
 # async http server
 cargo run --example async_http_server --features=lua54,async,macros,send
@@ -102,7 +102,7 @@ curl -v http://localhost:3000
 
 ### Serialization (serde) support
 
-With `serialize` feature flag enabled, `mlua` allows you to serialize/deserialize any type that implements [`serde::Serialize`] and [`serde::Deserialize`] into/from [`mlua::Value`]. In addition `mlua` provides [`serde::Serialize`] trait implementation for it (including `UserData` support).
+With the `serde` feature flag enabled, `mlua` allows you to serialize/deserialize any type that implements [`serde::Serialize`] and [`serde::Deserialize`] into/from [`mlua::Value`]. In addition, `mlua` provides the [`serde::Serialize`] trait implementation for it (including `UserData` support).
 
 [Example](examples/serialize.rs)
 
@@ -114,24 +114,24 @@ With `serialize` feature flag enabled, `mlua` allows you to serialize/deserializ
 
 You have to enable one of the features: `lua54`, `lua53`, `lua52`, `lua51`, `luajit(52)` or `luau`, according to the chosen Lua version.
 
-By default `mlua` uses `pkg-config` tool to find lua includes and libraries for the chosen Lua version.
-In most cases it works as desired, although sometimes could be more preferable to use a custom lua library.
-To achieve this, mlua supports `LUA_LIB`, `LUA_LIB_NAME` and `LUA_LINK` environment variables.
+By default `mlua` uses `pkg-config` to find Lua includes and libraries for the chosen Lua version.
+In most cases it works as desired, although sometimes it may be preferable to use a custom Lua library.
+To achieve this, mlua supports the `LUA_LIB`, `LUA_LIB_NAME` and `LUA_LINK` environment variables.
 `LUA_LINK` is optional and may be `dylib` (a dynamic library) or `static` (a static library, `.a` archive).
 
-An example how to use them:
+An example of how to use them:
 ``` sh
 my_project $ LUA_LIB=$HOME/tmp/lua-5.2.4/src LUA_LIB_NAME=lua LUA_LINK=static cargo build
 ```
 
-`mlua` also supports vendored lua/luajit using the auxiliary crates [lua-src](https://crates.io/crates/lua-src) and
+`mlua` also supports vendored Lua/LuaJIT using the auxiliary crates [lua-src](https://crates.io/crates/lua-src) and
 [luajit-src](https://crates.io/crates/luajit-src).
-Just enable the `vendored` feature and cargo will automatically build and link specified lua/luajit version. This is the easiest way to get started with `mlua`.
+Just enable the `vendored` feature and cargo will automatically build and link the specified Lua/LuaJIT version. This is the easiest way to get started with `mlua`.
 
 ### Standalone mode
-In a standalone mode `mlua` allows to add to your application scripting support with a gently configured Lua runtime to ensure  safety and soundness.
+In standalone mode, `mlua` allows adding scripting support to your application with a gently configured Lua runtime to ensure safety and soundness.
 
-Add to `Cargo.toml` :
+Add to `Cargo.toml`:
 
 ``` toml
 [dependencies]
@@ -159,11 +159,11 @@ fn main() -> LuaResult<()> {
 ```
 
 ### Module mode
-In a module mode `mlua` allows to create a compiled Lua module that can be loaded from Lua code using [`require`](https://www.lua.org/manual/5.4/manual.html#pdf-require). In this case `mlua` uses an external Lua runtime which could lead to potential unsafety due to unpredictability of the Lua environment and usage of libraries such as [`debug`](https://www.lua.org/manual/5.4/manual.html#6.10).
+In module mode, `mlua` allows creating a compiled Lua module that can be loaded from Lua code using [`require`](https://www.lua.org/manual/5.4/manual.html#pdf-require). In this case `mlua` uses an external Lua runtime which could lead to potential unsafety due to the unpredictability of the Lua environment and usage of libraries such as [`debug`](https://www.lua.org/manual/5.4/manual.html#6.10).
 
 [Example](examples/module)
 
-Add to `Cargo.toml` :
+Add to `Cargo.toml`:
 
 ``` toml
 [lib]
@@ -173,7 +173,7 @@ crate-type = ["cdylib"]
 mlua = { version = "0.10", features = ["lua54", "module"] }
 ```
 
-`lib.rs` :
+`lib.rs`:
 
 ``` rust
 use mlua::prelude::*;
@@ -216,14 +216,14 @@ rustflags = [
 ```
 On Linux you can build modules normally with `cargo build --release`.
 
-On Windows the target module will be linked with `lua5x.dll` library (depending on your feature flags).
+On Windows the target module will be linked with the `lua5x.dll` library (depending on your feature flags).
 Your main application should provide this library.
 
-Module builds don't require Lua lib or headers to be installed on the system.
+Module builds don't require Lua binaries or headers to be installed on the system.
 
 ### Publishing to luarocks.org
 
-There is a LuaRocks build backend for mlua modules [`luarocks-build-rust-mlua`].
+There is a LuaRocks build backend for mlua modules: [`luarocks-build-rust-mlua`].
 
 Modules written in Rust and published to luarocks:
 - [`decasify`](https://github.com/alerque/decasify)
@@ -236,10 +236,10 @@ Modules written in Rust and published to luarocks:
 
 ## Safety
 
-One of the `mlua` goals is to provide *safe* API between Rust and Lua.
-Every place where the Lua C API may trigger an error longjmp in any way is protected by `lua_pcall`,
-and the user of the library is protected from directly interacting with unsafe things like the Lua stack,
-and there is overhead associated with this safety.
+One of `mlua`'s goals is to provide a *safe* API between Rust and Lua.
+Every place where the Lua C API may trigger an error longjmp is protected by `lua_pcall`,
+and the user of the library is protected from directly interacting with unsafe things like the Lua stack.
+There is overhead associated with this safety.
 
 Unfortunately, `mlua` does not provide absolute safety even without using `unsafe` .
 This library contains a huge amount of unsafe code. There are almost certainly bugs still lurking in this library!
@@ -247,8 +247,8 @@ It is surprisingly, fiendishly difficult to use the Lua C API without the potent
 
 ## Panic handling
 
-`mlua` wraps panics that are generated inside Rust callbacks in a regular Lua error. Panics could be
-resumed then by returning or propagating the Lua error to Rust code.
+`mlua` wraps panics that are generated inside Rust callbacks in a regular Lua error. Panics can then be
+resumed by returning or propagating the Lua error to Rust code.
 
 For example:
 ``` rust
@@ -267,12 +267,12 @@ let _ = lua.load(r#"
 unreachable!()
 ```
 
-Optionally `mlua` can disable Rust panics catching in Lua via `pcall`/`xpcall` and automatically resume
+Optionally, `mlua` can disable Rust panic catching in Lua via `pcall`/`xpcall` and automatically resume
 them across the Lua API boundary. This is controlled via `LuaOptions` and done by wrapping the Lua `pcall`/`xpcall`
-functions on a way to prevent catching errors that are wrapped Rust panics.
+functions to prevent catching errors that are wrapped Rust panics.
 
 `mlua` should also be panic safe in another way as well, which is that any `Lua` instances or handles
-remains usable after a user generated panic, and such panics should not break internal invariants or
+remain usable after a user generated panic, and such panics should not break internal invariants or
 leak Lua stack space. This is mostly important to safely use `mlua` types in Drop impls, as you should not be
 using panics for general error handling.
 
@@ -289,12 +289,12 @@ If you encounter them, a bug report would be very welcome:
 
 ## Sandboxing
 
-Please check the [Luau Sandboxing] page if you are interested in running untrusted Lua scripts in controlled environment.
+Please check the [Luau Sandboxing] page if you are interested in running untrusted Lua scripts in a controlled environment.
 
-`mlua` provides `Lua::sandbox` method for enabling sandbox mode (Luau only).
+`mlua` provides the `Lua::sandbox` method for enabling sandbox mode (Luau only).
 
 [Luau Sandboxing]: https://luau.org/sandbox
 
 ## License
 
-This project is licensed under the [MIT license](LICENSE)
+This project is licensed under the [MIT license](LICENSE).

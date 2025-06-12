@@ -27,8 +27,8 @@ jobs:
       - name: Build ${{ matrix.lua }} vendored
         run: |
           cargo build --features "${{ matrix.lua }},vendored"
-          cargo build --features "${{ matrix.lua }},vendored,async,serialize,macros,anyhow,userdata-wrappers"
-          cargo build --features "${{ matrix.lua }},vendored,async,serialize,macros,anyhow,userdata-wrappers,send"
+          cargo build --features "${{ matrix.lua }},vendored,async,serde,macros,anyhow,userdata-wrappers"
+          cargo build --features "${{ matrix.lua }},vendored,async,serde,macros,anyhow,userdata-wrappers,send"
         shell: bash
       - name: Build ${{ matrix.lua }} pkg-config
         if: ${{ matrix.os == 'ubuntu-latest' }}
@@ -51,7 +51,7 @@ jobs:
           toolchain: stable
           target: aarch64-apple-darwin
       - name: Cross-compile
-        run: cargo build --target aarch64-apple-darwin --features "${{ matrix.lua }},vendored,async,send,serialize,macros,anyhow,userdata-wrappers"
+        run: cargo build --target aarch64-apple-darwin --features "${{ matrix.lua }},vendored,async,send,serde,macros,anyhow,userdata-wrappers"
 
   build_aarch64_cross_ubuntu:
     name: Cross-compile to aarch64-unknown-linux-gnu
@@ -72,7 +72,7 @@ jobs:
           sudo apt-get install -y --no-install-recommends gcc-aarch64-linux-gnu libc6-dev-arm64-cross
         shell: bash
       - name: Cross-compile
-        run: cargo build --target aarch64-unknown-linux-gnu --features "${{ matrix.lua }},vendored,async,send,serialize,macros,anyhow,userdata-wrappers"
+        run: cargo build --target aarch64-unknown-linux-gnu --features "${{ matrix.lua }},vendored,async,send,serde,macros,anyhow,userdata-wrappers"
         shell: bash
 
   build_armv7_cross_ubuntu:
@@ -94,7 +94,7 @@ jobs:
           sudo apt-get install -y --no-install-recommends gcc-arm-linux-gnueabihf libc-dev-armhf-cross
         shell: bash
       - name: Cross-compile
-        run: cargo build --target armv7-unknown-linux-gnueabihf --features "${{ matrix.lua }},vendored,async,send,serialize,macros,anyhow,userdata-wrappers"
+        run: cargo build --target armv7-unknown-linux-gnueabihf --features "${{ matrix.lua }},vendored,async,send,serde,macros,anyhow,userdata-wrappers"
         shell: bash
 
   test:
@@ -123,14 +123,14 @@ jobs:
       - name: Run ${{ matrix.lua }} tests
         run: |
           cargo test --features "${{ matrix.lua }},vendored"
-          cargo test --features "${{ matrix.lua }},vendored,async,serialize,macros,anyhow,userdata-wrappers"
-          cargo test --features "${{ matrix.lua }},vendored,async,serialize,macros,anyhow,userdata-wrappers,send"
+          cargo test --features "${{ matrix.lua }},vendored,async,serde,macros,anyhow,userdata-wrappers"
+          cargo test --features "${{ matrix.lua }},vendored,async,serde,macros,anyhow,userdata-wrappers,send"
         shell: bash
       - name: Run compile tests (macos lua54)
         if: ${{ matrix.os == 'macos-latest' && matrix.lua == 'lua54' }}
         run: |
           TRYBUILD=overwrite cargo test --features "${{ matrix.lua }},vendored" --tests -- --ignored
-          TRYBUILD=overwrite cargo test --features "${{ matrix.lua }},vendored,async,send,serialize,macros" --tests -- --ignored
+          TRYBUILD=overwrite cargo test --features "${{ matrix.lua }},vendored,async,send,serde,macros" --tests -- --ignored
         shell: bash
 
   test_with_sanitizer:
@@ -154,8 +154,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Run ${{ matrix.lua }} tests with address sanitizer
         run: |
-          cargo test --tests --features "${{ matrix.lua }},vendored,async,serialize,macros,anyhow" --target x86_64-unknown-linux-gnu -- --skip test_too_many_recursions
-          cargo test --tests --features "${{ matrix.lua }},vendored,async,serialize,macros,anyhow,userdata-wrappers,send" --target x86_64-unknown-linux-gnu -- --skip test_too_many_recursions
+          cargo test --tests --features "${{ matrix.lua }},vendored,async,serde,macros,anyhow" --target x86_64-unknown-linux-gnu -- --skip test_too_many_recursions
+          cargo test --tests --features "${{ matrix.lua }},vendored,async,serde,macros,anyhow,userdata-wrappers,send" --target x86_64-unknown-linux-gnu -- --skip test_too_many_recursions
         shell: bash
         env:
           RUSTFLAGS: -Z sanitizer=address
@@ -181,7 +181,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Run ${{ matrix.lua }} tests with forced memory limit
         run: |
-          cargo test --tests --features "${{ matrix.lua }},vendored,async,send,serialize,macros,anyhow,userdata-wrappers"
+          cargo test --tests --features "${{ matrix.lua }},vendored,async,send,serde,macros,anyhow,userdata-wrappers"
         shell: bash
         env:
           RUSTFLAGS: --cfg=force_memory_limit
@@ -254,7 +254,7 @@ jobs:
       - name: Run ${{ matrix.lua }} tests
         run: |
           cargo test --tests --features "${{ matrix.lua }},vendored"
-          cargo test --tests --features "${{ matrix.lua }},vendored,async,serialize,macros,anyhow,userdata-wrappers"
+          cargo test --tests --features "${{ matrix.lua }},vendored,async,serde,macros,anyhow,userdata-wrappers"
 
   rustfmt:
     name: Rustfmt
@@ -281,4 +281,4 @@ jobs:
       - uses: giraffate/clippy-action@v1
         with:
           reporter: 'github-pr-review'
-          clippy_flags: --features "${{ matrix.lua }},vendored,async,send,serialize,macros,anyhow,userdata-wrappers"
+          clippy_flags: --features "${{ matrix.lua }},vendored,async,send,serde,macros,anyhow,userdata-wrappers"

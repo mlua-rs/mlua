@@ -18,7 +18,7 @@ use crate::value::Value;
 #[cfg(feature = "async")]
 use std::future::Future;
 
-#[cfg(feature = "serialize")]
+#[cfg(feature = "serde")]
 use {
     serde::ser::{self, Serialize, Serializer},
     std::result::Result as StdResult,
@@ -957,7 +957,7 @@ impl AnyUserData {
 
     /// Returns `true` if this [`AnyUserData`] is serializable (e.g. was created using
     /// [`Lua::create_ser_userdata`]).
-    #[cfg(feature = "serialize")]
+    #[cfg(feature = "serde")]
     pub(crate) fn is_serializable(&self) -> bool {
         let lua = self.0.lua.lock();
         let is_serializable = || unsafe {
@@ -1041,7 +1041,7 @@ where
     }
 }
 
-#[cfg(feature = "serialize")]
+#[cfg(feature = "serde")]
 impl Serialize for AnyUserData {
     fn serialize<S>(&self, serializer: S) -> StdResult<S::Ok, S::Error>
     where
@@ -1072,8 +1072,8 @@ impl AnyUserData {
     /// [`IntoLua`] trait.
     ///
     /// This function uses [`Lua::create_ser_any_userdata`] under the hood.
-    #[cfg(feature = "serialize")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "serialize")))]
+    #[cfg(feature = "serde")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "serde")))]
     pub fn wrap_ser<T: Serialize + MaybeSend + 'static>(data: T) -> impl IntoLua {
         WrappedUserdata(move |lua| lua.create_ser_any_userdata(data))
     }

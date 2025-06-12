@@ -28,9 +28,7 @@ use crate::types::{
     ReentrantMutexGuard, RegistryKey, VmState, XRc, XWeak,
 };
 use crate::userdata::{AnyUserData, UserData, UserDataProxy, UserDataRegistry, UserDataStorage};
-use crate::util::{
-    assert_stack, check_stack, protect_lua_closure, push_string, push_table, rawset_field, StackGuard,
-};
+use crate::util::{assert_stack, check_stack, protect_lua_closure, push_string, rawset_field, StackGuard};
 use crate::value::{Nil, Value};
 
 #[cfg(not(feature = "luau"))]
@@ -45,7 +43,7 @@ use {
     std::future::{self, Future},
 };
 
-#[cfg(feature = "serialize")]
+#[cfg(feature = "serde")]
 use serde::Serialize;
 
 pub(crate) use extra::ExtraData;
@@ -381,7 +379,7 @@ impl Lua {
     ///
     /// This is similar to setting the [`package.preload[modname]`] field.
     ///
-    /// [`package.preload[modname]`]: https://www.lua.org/manual/5.4/manual.html#pdf-package.preload
+    /// [`package.preload[modname]`]: <https://www.lua.org/manual/5.4/manual.html#pdf-package.preload>
     #[cfg(not(feature = "luau"))]
     #[cfg_attr(docsrs, doc(cfg(not(feature = "luau"))))]
     pub fn preload_module(&self, modname: &str, func: Function) -> Result<()> {
@@ -640,7 +638,7 @@ impl Lua {
     /// Also this can be used to implement continuous execution limits by instructing Luau VM to
     /// yield by returning [`VmState::Yield`].
     ///
-    /// This is similar to [`Lua::set_hook`] but in more simplified form.
+    /// This is similar to `Lua::set_hook` but in more simplified form.
     ///
     /// # Example
     ///
@@ -1206,28 +1204,7 @@ impl Lua {
         K: IntoLua,
         V: IntoLua,
     {
-        let lua = self.lock();
-        let state = lua.state();
-        unsafe {
-            let _sg = StackGuard::new(state);
-            check_stack(state, 6)?;
-
-            let iter = iter.into_iter();
-            let lower_bound = iter.size_hint().0;
-            let protect = !lua.unlikely_memory_error();
-            push_table(state, 0, lower_bound, protect)?;
-            for (k, v) in iter {
-                lua.push(k)?;
-                lua.push(v)?;
-                if protect {
-                    protect_lua!(state, 3, 1, fn(state) ffi::lua_rawset(state, -3))?;
-                } else {
-                    ffi::lua_rawset(state, -3);
-                }
-            }
-
-            Ok(Table(lua.pop_ref()))
-        }
+        unsafe { self.lock().create_table_from(iter) }
     }
 
     /// Creates a table from an iterator of values, using `1..` as the keys.
@@ -1432,8 +1409,8 @@ impl Lua {
     }
 
     /// Creates a Lua userdata object from a custom serializable userdata type.
-    #[cfg(feature = "serialize")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "serialize")))]
+    #[cfg(feature = "serde")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "serde")))]
     #[inline]
     pub fn create_ser_userdata<T>(&self, data: T) -> Result<AnyUserData>
     where
@@ -1460,8 +1437,8 @@ impl Lua {
     /// Creates a Lua userdata object from a custom serializable Rust type.
     ///
     /// See [`Lua::create_any_userdata`] for more details.
-    #[cfg(feature = "serialize")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "serialize")))]
+    #[cfg(feature = "serde")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "serde")))]
     #[inline]
     pub fn create_ser_any_userdata<T>(&self, data: T) -> Result<AnyUserData>
     where
