@@ -127,8 +127,7 @@ impl RawLua {
     #[inline(always)]
     pub(crate) fn ref_thread(&self, aux_thread: usize) -> *mut ffi::lua_State {
         unsafe {
-            (&(*self.extra())
-                .ref_thread)
+            (&(*self.extra()).ref_thread)
                 .get(aux_thread)
                 .unwrap_unchecked()
                 .ref_thread
