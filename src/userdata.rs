@@ -1008,7 +1008,7 @@ impl UserDataMetatable {
     /// The pairs are wrapped in a [`Result`], since they are lazily converted to `V` type.
     ///
     /// [`Result`]: crate::Result
-    pub fn pairs<V: FromLua>(&self) -> UserDataMetatablePairs<V> {
+    pub fn pairs<V: FromLua>(&self) -> UserDataMetatablePairs<'_, V> {
         UserDataMetatablePairs(self.0.pairs())
     }
 }

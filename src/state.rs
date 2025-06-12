@@ -876,7 +876,7 @@ impl Lua {
     /// not count in the stack).
     ///
     /// [`Debug`]: crate::hook::Debug
-    pub fn inspect_stack(&self, level: usize) -> Option<Debug> {
+    pub fn inspect_stack(&self, level: usize) -> Option<Debug<'_>> {
         let lua = self.lock();
         unsafe {
             let mut ar: ffi::lua_Debug = mem::zeroed();
@@ -1955,7 +1955,7 @@ impl Lua {
     /// Panics if the data object of type `T` is currently mutably borrowed. Multiple immutable
     /// reads can be taken out at the same time.
     #[track_caller]
-    pub fn app_data_ref<T: 'static>(&self) -> Option<AppDataRef<T>> {
+    pub fn app_data_ref<T: 'static>(&self) -> Option<AppDataRef<'_, T>> {
         let guard = self.lock_arc();
         let extra = unsafe { &*guard.extra.get() };
         extra.app_data.borrow(Some(guard))
@@ -1963,7 +1963,7 @@ impl Lua {
 
     /// Tries to get a reference to an application data object stored by [`Lua::set_app_data`] of
     /// type `T`.
-    pub fn try_app_data_ref<T: 'static>(&self) -> StdResult<Option<AppDataRef<T>>, BorrowError> {
+    pub fn try_app_data_ref<T: 'static>(&self) -> StdResult<Option<AppDataRef<'_, T>>, BorrowError> {
         let guard = self.lock_arc();
         let extra = unsafe { &*guard.extra.get() };
         extra.app_data.try_borrow(Some(guard))
@@ -1976,7 +1976,7 @@ impl Lua {
     ///
     /// Panics if the data object of type `T` is currently borrowed.
     #[track_caller]
-    pub fn app_data_mut<T: 'static>(&self) -> Option<AppDataRefMut<T>> {
+    pub fn app_data_mut<T: 'static>(&self) -> Option<AppDataRefMut<'_, T>> {
         let guard = self.lock_arc();
         let extra = unsafe { &*guard.extra.get() };
         extra.app_data.borrow_mut(Some(guard))
@@ -1984,7 +1984,7 @@ impl Lua {
 
     /// Tries to get a mutable reference to an application data object stored by
     /// [`Lua::set_app_data`] of type `T`.
-    pub fn try_app_data_mut<T: 'static>(&self) -> StdResult<Option<AppDataRefMut<T>>, BorrowMutError> {
+    pub fn try_app_data_mut<T: 'static>(&self) -> StdResult<Option<AppDataRefMut<'_, T>>, BorrowMutError> {
         let guard = self.lock_arc();
         let extra = unsafe { &*guard.extra.get() };
         extra.app_data.try_borrow_mut(Some(guard))
@@ -2058,7 +2058,7 @@ impl Lua {
     }
 
     #[inline(always)]
-    pub(crate) fn lock(&self) -> ReentrantMutexGuard<RawLua> {
+    pub(crate) fn lock(&self) -> ReentrantMutexGuard<'_, RawLua> {
         let rawlua = self.raw.lock();
         #[cfg(feature = "luau")]
         if unsafe { (*rawlua.extra.get()).running_gc } {

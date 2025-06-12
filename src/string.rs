@@ -43,7 +43,7 @@ impl String {
     /// # }
     /// ```
     #[inline]
-    pub fn to_str(&self) -> Result<BorrowedStr> {
+    pub fn to_str(&self) -> Result<BorrowedStr<'_>> {
         BorrowedStr::try_from(self)
     }
 
@@ -102,12 +102,12 @@ impl String {
     /// # }
     /// ```
     #[inline]
-    pub fn as_bytes(&self) -> BorrowedBytes {
+    pub fn as_bytes(&self) -> BorrowedBytes<'_> {
         BorrowedBytes::from(self)
     }
 
     /// Get the bytes that make up this string, including the trailing nul byte.
-    pub fn as_bytes_with_nul(&self) -> BorrowedBytes {
+    pub fn as_bytes_with_nul(&self) -> BorrowedBytes<'_> {
         let BorrowedBytes { buf, borrow, _lua } = BorrowedBytes::from(self);
         // Include the trailing nul byte (it's always present but excluded by default)
         let buf = unsafe { slice::from_raw_parts((*buf).as_ptr(), (*buf).len() + 1) };

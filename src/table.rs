@@ -613,7 +613,7 @@ impl Table {
     /// ```
     ///
     /// [Lua manual]: http://www.lua.org/manual/5.4/manual.html#pdf-next
-    pub fn pairs<K: FromLua, V: FromLua>(&self) -> TablePairs<K, V> {
+    pub fn pairs<K: FromLua, V: FromLua>(&self) -> TablePairs<'_, K, V> {
         TablePairs {
             guard: self.0.lua.lock(),
             table: self,
@@ -678,7 +678,7 @@ impl Table {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn sequence_values<V: FromLua>(&self) -> TableSequence<V> {
+    pub fn sequence_values<V: FromLua>(&self) -> TableSequence<'_, V> {
         TableSequence {
             guard: self.0.lua.lock(),
             table: self,

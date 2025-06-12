@@ -357,7 +357,7 @@ impl Value {
     /// If the value is a Lua [`String`], try to convert it to [`BorrowedStr`] or return `None`
     /// otherwise.
     #[inline]
-    pub fn as_str(&self) -> Option<BorrowedStr> {
+    pub fn as_str(&self) -> Option<BorrowedStr<'_>> {
         self.as_string().and_then(|s| s.to_str().ok())
     }
 
@@ -484,7 +484,7 @@ impl Value {
     #[cfg(feature = "serde")]
     #[cfg_attr(docsrs, doc(cfg(feature = "serde")))]
     #[doc(hidden)]
-    pub fn to_serializable(&self) -> SerializableValue {
+    pub fn to_serializable(&self) -> SerializableValue<'_> {
         SerializableValue::new(self, Default::default(), None)
     }
 
