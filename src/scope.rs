@@ -267,7 +267,7 @@ impl<'scope, 'env: 'scope> Scope<'scope, 'env> {
         let f = self.lua.create_callback(f)?;
 
         let destructor: DestructorCallback = Box::new(|rawlua, vref| {
-            let ref_thread = rawlua.ref_thread();
+            let ref_thread = rawlua.ref_thread(vref.aux_thread);
             ffi::lua_getupvalue(ref_thread, vref.index, 1);
             let upvalue = get_userdata::<CallbackUpvalue>(ref_thread, -1);
             let data = (*upvalue).data.take();
@@ -287,13 +287,13 @@ impl<'scope, 'env: 'scope> Scope<'scope, 'env> {
                 Ok(Some(_)) => {}
                 Ok(None) => {
                     // Deregister metatable
-                    let mt_ptr = get_metatable_ptr(rawlua.ref_thread(), vref.index);
+                    let mt_ptr = get_metatable_ptr(rawlua.ref_thread(vref.aux_thread), vref.index);
                     rawlua.deregister_userdata_metatable(mt_ptr);
                 }
                 Err(_) => return vec![],
             }
 
-            let data = take_userdata::<UserDataStorage<T>>(rawlua.ref_thread(), vref.index);
+            let data = take_userdata::<UserDataStorage<T>>(rawlua.ref_thread(vref.aux_thread), vref.index);
             vec![Box::new(move || drop(data))]
         });
         self.destructors.0.borrow_mut().push((ud.0.clone(), destructor));

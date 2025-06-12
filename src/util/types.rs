@@ -3,6 +3,9 @@ use std::os::raw::c_void;
 
 use crate::types::{Callback, CallbackUpvalue};
 
+#[cfg(all(not(feature = "lua51"), not(feature = "luajit")))]
+use crate::types::ContinuationUpvalue;
+
 #[cfg(feature = "async")]
 use crate::types::{AsyncCallback, AsyncCallbackUpvalue, AsyncPollUpvalue};
 
@@ -31,6 +34,15 @@ impl TypeKey for CallbackUpvalue {
     fn type_key() -> *const c_void {
         static CALLBACK_UPVALUE_TYPE_KEY: u8 = 0;
         &CALLBACK_UPVALUE_TYPE_KEY as *const u8 as *const c_void
+    }
+}
+
+#[cfg(all(not(feature = "lua51"), not(feature = "luajit")))]
+impl TypeKey for ContinuationUpvalue {
+    #[inline(always)]
+    fn type_key() -> *const c_void {
+        static CONTINUATION_UPVALUE_TYPE_KEY: u8 = 0;
+        &CONTINUATION_UPVALUE_TYPE_KEY as *const u8 as *const c_void
     }
 }
 
