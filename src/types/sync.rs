@@ -31,7 +31,7 @@ mod inner {
         }
 
         #[inline(always)]
-        pub(crate) fn lock(&self) -> ReentrantMutexGuard<T> {
+        pub(crate) fn lock(&self) -> ReentrantMutexGuard<'_, T> {
             ReentrantMutexGuard(&self.0)
         }
 
