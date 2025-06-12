@@ -629,7 +629,7 @@ impl Chunk<'_> {
     /// Fetches compiled bytecode of this chunk from the cache.
     ///
     /// If not found, compiles the source code and stores it on the cache.
-    pub(crate) fn try_cache(mut self) -> Self {
+    pub fn try_cache(mut self) -> Self {
         struct ChunksCache(HashMap<Vec<u8>, Vec<u8>>);
 
         // Try to fetch compiled chunk from cache

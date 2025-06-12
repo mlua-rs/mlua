@@ -53,8 +53,9 @@ impl<'scope, 'env: 'scope> Scope<'scope, 'env> {
     {
         unsafe {
             self.create_callback(Box::new(move |rawlua, nargs| {
-                let args = A::from_stack_args(nargs, 1, None, rawlua)?;
-                func(rawlua.lua(), args)?.push_into_stack_multi(rawlua)
+                let state = rawlua.state();
+                let args = A::from_specified_stack_args(nargs, 1, None, rawlua, state)?;
+                func(rawlua.lua(), args)?.push_into_specified_stack_multi(rawlua, state)
             }))
         }
     }
@@ -174,7 +175,8 @@ impl<'scope, 'env: 'scope> Scope<'scope, 'env> {
             // Push the metatable and register it with no TypeId
             let mut registry = UserDataRegistry::new_unique(self.lua.lua(), ud_ptr as *mut _);
             T::register(&mut registry);
-            self.lua.push_userdata_metatable(registry.into_raw())?;
+            self.lua
+                .push_userdata_metatable_at(registry.into_raw(), self.lua.state())?;
             let mt_ptr = ffi::lua_topointer(state, -1);
             self.lua.register_userdata_metatable(mt_ptr, None);
 
@@ -222,7 +224,8 @@ impl<'scope, 'env: 'scope> Scope<'scope, 'env> {
             // Push the metatable and register it with no TypeId
             let mut registry = UserDataRegistry::new_unique(self.lua.lua(), ud_ptr as *mut _);
             register(&mut registry);
-            self.lua.push_userdata_metatable(registry.into_raw())?;
+            self.lua
+                .push_userdata_metatable_at(registry.into_raw(), self.lua.state())?;
             let mt_ptr = ffi::lua_topointer(state, -1);
             self.lua.register_userdata_metatable(mt_ptr, None);
 

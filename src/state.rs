@@ -334,11 +334,11 @@ impl Lua {
         let state = lua.state();
         let _sg = StackGuard::new(state);
         let stack_start = ffi::lua_gettop(state);
-        let nargs = args.push_into_stack_multi(&lua)?;
+        let nargs = args.push_into_specified_stack_multi(&lua, state)?;
         check_stack(state, 3)?;
         protect_lua_closure::<_, ()>(state, nargs, ffi::LUA_MULTRET, f)?;
         let nresults = ffi::lua_gettop(state) - stack_start;
-        R::from_stack_multi(nresults, &lua)
+        R::from_specified_stack_multi(nresults, &lua, state)
     }
 
     /// Loads the specified subset of the standard libraries into an existing Lua state.
@@ -458,8 +458,8 @@ impl Lua {
 
         callback_error_ext(state, ptr::null_mut(), true, move |extra, nargs| {
             let rawlua = (*extra).raw_lua();
-            let args = A::from_stack_args(nargs, 1, None, rawlua)?;
-            func(rawlua.lua(), args)?.push_into_stack(rawlua)?;
+            let args = A::from_specified_stack_args(nargs, 1, None, rawlua, state)?;
+            func(rawlua.lua(), args)?.push_into_specified_stack(rawlua, state)?;
             Ok(1)
         })
     }
@@ -1269,8 +1269,9 @@ impl Lua {
         R: IntoLuaMulti,
     {
         (self.lock()).create_callback(Box::new(move |rawlua, nargs| unsafe {
-            let args = A::from_stack_args(nargs, 1, None, rawlua)?;
-            func(rawlua.lua(), args)?.push_into_stack_multi(rawlua)
+            let state = rawlua.state();
+            let args = A::from_specified_stack_args(nargs, 1, None, rawlua, state)?;
+            func(rawlua.lua(), args)?.push_into_specified_stack_multi(rawlua, state)
         }))
     }
 
@@ -1301,13 +1302,15 @@ impl Lua {
     {
         (self.lock()).create_callback_with_continuation(
             Box::new(move |rawlua, nargs| unsafe {
-                let args = A::from_stack_args(nargs, 1, None, rawlua)?;
-                func(rawlua.lua(), args)?.push_into_stack_multi(rawlua)
+                let state = rawlua.state();
+                let args = A::from_specified_stack_args(nargs, 1, None, rawlua, state)?;
+                func(rawlua.lua(), args)?.push_into_specified_stack_multi(rawlua, state)
             }),
             Box::new(move |rawlua, nargs, status| unsafe {
-                let args = AC::from_stack_args(nargs, 1, None, rawlua)?;
+                let state = rawlua.state();
+                let args = AC::from_specified_stack_args(nargs, 1, None, rawlua, state)?;
                 let status = ContinuationStatus::from_status(status);
-                cont(rawlua.lua(), status, args)?.push_into_stack_multi(rawlua)
+                cont(rawlua.lua(), status, args)?.push_into_specified_stack_multi(rawlua, state)
             }),
         )
     }
@@ -1390,13 +1393,16 @@ impl Lua {
         // In future we should switch to async closures when they are stable to capture `&Lua`
         // See https://rust-lang.github.io/rfcs/3668-async-closures.html
         (self.lock()).create_async_callback(Box::new(move |rawlua, nargs| unsafe {
-            let args = match A::from_stack_args(nargs, 1, None, rawlua) {
+            let args = match A::from_specified_stack_args(nargs, 1, None, rawlua, rawlua.state()) {
                 Ok(args) => args,
                 Err(e) => return Box::pin(future::ready(Err(e))),
             };
             let lua = rawlua.lua();
             let fut = func(lua.clone(), args);
-            Box::pin(async move { fut.await?.push_into_stack_multi(lua.raw_lua()) })
+            Box::pin(async move {
+                fut.await?
+                    .push_into_specified_stack_multi(lua.raw_lua(), lua.raw_lua().state())
+            })
         }))
     }
 
@@ -1567,7 +1573,7 @@ impl Lua {
                     ffi::lua_pushstring(state, b"\0" as *const u8 as *const _);
                 }
                 ffi::LUA_TFUNCTION => match self.load("function() end").eval::<Function>() {
-                    Ok(func) => lua.push_ref(&func.0),
+                    Ok(func) => lua.push_ref_at(&func.0, state),
                     Err(_) => return,
                 },
                 ffi::LUA_TTHREAD => {
@@ -1580,7 +1586,7 @@ impl Lua {
                 _ => return,
             }
             match metatable {
-                Some(metatable) => lua.push_ref(&metatable.0),
+                Some(metatable) => lua.push_ref_at(&metatable.0, state),
                 None => ffi::lua_pushnil(state),
             }
             ffi::lua_setmetatable(state, -2);
@@ -1648,7 +1654,7 @@ impl Lua {
                 let _sg = StackGuard::new(state);
                 check_stack(state, 4)?;
 
-                lua.push_value(&v)?;
+                lua.push_value_at(&v, state)?;
                 let res = if lua.unlikely_memory_error() {
                     ffi::lua_tolstring(state, -1, ptr::null_mut())
                 } else {
@@ -1680,7 +1686,7 @@ impl Lua {
                 let _sg = StackGuard::new(state);
                 check_stack(state, 2)?;
 
-                lua.push_value(&v)?;
+                lua.push_value_at(&v, state)?;
                 let mut isint = 0;
                 let i = ffi::lua_tointegerx(state, -1, &mut isint);
                 if isint == 0 {
@@ -1706,7 +1712,7 @@ impl Lua {
                 let _sg = StackGuard::new(state);
                 check_stack(state, 2)?;
 
-                lua.push_value(&v)?;
+                lua.push_value_at(&v, state)?;
                 let mut isnum = 0;
                 let n = ffi::lua_tonumberx(state, -1, &mut isnum);
                 if isnum == 0 {
@@ -1759,7 +1765,7 @@ impl Lua {
             let _sg = StackGuard::new(state);
             check_stack(state, 5)?;
 
-            lua.push(t)?;
+            lua.push_at(state, t)?;
             rawset_field(state, ffi::LUA_REGISTRYINDEX, key)
         }
     }
@@ -1782,7 +1788,7 @@ impl Lua {
             push_string(state, key.as_bytes(), protect)?;
             ffi::lua_rawget(state, ffi::LUA_REGISTRYINDEX);
 
-            T::from_stack(-1, &lua)
+            T::from_specified_stack(-1, &lua, state)
         }
     }
 
@@ -1809,7 +1815,7 @@ impl Lua {
             let _sg = StackGuard::new(state);
             check_stack(state, 4)?;
 
-            lua.push(t)?;
+            lua.push_at(state, t)?;
 
             let unref_list = (*lua.extra.get()).registry_unref_list.clone();
 
@@ -1856,7 +1862,7 @@ impl Lua {
                 check_stack(state, 1)?;
 
                 ffi::lua_rawgeti(state, ffi::LUA_REGISTRYINDEX, registry_id as Integer);
-                T::from_stack(-1, &lua)
+                T::from_specified_stack(-1, &lua, state)
             },
         }
     }
@@ -1911,7 +1917,7 @@ impl Lua {
                 }
                 (value, registry_id) => {
                     // It must be safe to replace the value without triggering memory error
-                    lua.push_value(&value)?;
+                    lua.push_value_at(&value, state)?;
                     ffi::lua_rawseti(state, ffi::LUA_REGISTRYINDEX, registry_id as Integer);
                 }
             }

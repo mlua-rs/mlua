@@ -207,33 +207,11 @@ where
                 //
                 // In this case, popping is easier and leads to less bugs/more ergonomic API.
 
-                if raw.state() == state {
-                    // Edge case: main thread is being yielded
-                    //
-                    // We need to pop/clear stack early, then push args
-                    ffi::lua_pop(state, -1);
-                }
+                // We need to pop/clear stack early, then push args
+                ffi::lua_pop(state, -1);
 
-                match values.push_into_stack_multi(raw) {
+                match values.push_into_specified_stack_multi(raw, state) {
                     Ok(nargs) => {
-                        // If not main thread, then clear and xmove to target thread
-                        if raw.state() != state {
-                            // luau preserves the stack making yieldable continuations ugly and leaky
-                            //
-                            // Even outside of luau, clearing the stack is probably desirable
-                            ffi::lua_pop(state, -1);
-                            if let Err(err) = check_stack(state, nargs) {
-                                // Make a *new* preallocated failure, and then do normal error
-                                let prealloc_failure = PreallocatedFailure::reserve(state, extra);
-                                let wrapped_panic = prealloc_failure.r#use(state, extra);
-                                ptr::write(wrapped_panic, WrappedFailure::Error(err));
-                                get_internal_metatable::<WrappedFailure>(state);
-                                ffi::lua_setmetatable(state, -2);
-                                ffi::lua_error(state);
-                            }
-                            ffi::lua_xmove(raw.state(), state, nargs);
-                        }
-
                         #[cfg(all(not(feature = "luau"), not(feature = "lua51"), not(feature = "luajit")))]
                         {
                             // Yield to a continuation. Unlike luau, we need to do this manually and on the
