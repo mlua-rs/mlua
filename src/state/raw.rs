@@ -579,8 +579,8 @@ impl RawLua {
         let protect = !self.unlikely_memory_error();
         push_table(state, 0, lower_bound, protect)?;
         for (k, v) in iter {
-            self.push(k)?;
-            self.push(v)?;
+            self.push_at(state, k)?;
+            self.push_at(state, v)?;
             if protect {
                 protect_lua!(state, 3, 1, fn(state) ffi::lua_rawset(state, -3))?;
             } else {
