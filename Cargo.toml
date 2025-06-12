@@ -16,7 +16,7 @@ with async/await features and support of writing native Lua modules in Rust.
 """
 
 [package.metadata.docs.rs]
-features = ["lua54", "vendored", "async", "send", "serialize", "macros"]
+features = ["lua54", "vendored", "async", "send", "serde", "macros"]
 rustdoc-args = ["--cfg", "docsrs"]
 
 [workspace]
@@ -40,10 +40,13 @@ module = ["mlua_derive", "ffi/module"]
 async = ["dep:futures-util"]
 send = ["error-send"]
 error-send = []
-serialize = ["dep:serde", "dep:erased-serde", "dep:serde-value", "bstr/serde"]
+serde = ["dep:serde", "dep:erased-serde", "dep:serde-value", "bstr/serde"]
 macros = ["mlua_derive/macros"]
 anyhow = ["dep:anyhow", "error-send"]
 userdata-wrappers = ["parking_lot/send_guard"]
+
+# deprecated features
+serialize = ["serde"]
 
 [dependencies]
 mlua_derive = { version = "=0.11.0-beta.2", optional = true, path = "mlua_derive" }
@@ -90,7 +93,7 @@ required-features = ["async"]
 [[bench]]
 name = "serde"
 harness = false
-required-features = ["serialize"]
+required-features = ["serde"]
 
 [[example]]
 name = "async_http_client"
@@ -98,7 +101,7 @@ required-features = ["async", "macros"]
 
 [[example]]
 name = "async_http_reqwest"
-required-features = ["async", "serialize", "macros"]
+required-features = ["async", "serde", "macros"]
 
 [[example]]
 name = "async_http_server"
@@ -113,8 +116,8 @@ name = "guided_tour"
 required-features = ["macros"]
 
 [[example]]
-name = "serialize"
-required-features = ["serialize"]
+name = "serde"
+required-features = ["serde"]
 
 [[example]]
 name = "userdata"

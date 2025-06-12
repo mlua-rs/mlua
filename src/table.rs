@@ -15,7 +15,7 @@ use crate::value::{Nil, Value};
 #[cfg(feature = "async")]
 use futures_util::future::{self, Either, Future};
 
-#[cfg(feature = "serialize")]
+#[cfg(feature = "serde")]
 use {
     rustc_hash::FxHashSet,
     serde::ser::{Serialize, SerializeMap, SerializeSeq, Serializer},
@@ -735,7 +735,7 @@ impl Table {
         Ok(())
     }
 
-    #[cfg(feature = "serialize")]
+    #[cfg(feature = "serde")]
     pub(crate) fn is_array(&self) -> bool {
         let lua = self.0.lua.lock();
         let state = lua.state();
@@ -954,14 +954,14 @@ impl ObjectLike for Table {
 }
 
 /// A wrapped [`Table`] with customized serialization behavior.
-#[cfg(feature = "serialize")]
+#[cfg(feature = "serde")]
 pub(crate) struct SerializableTable<'a> {
     table: &'a Table,
     options: crate::serde::de::Options,
     visited: Rc<RefCell<FxHashSet<*const c_void>>>,
 }
 
-#[cfg(feature = "serialize")]
+#[cfg(feature = "serde")]
 impl Serialize for Table {
     #[inline]
     fn serialize<S: Serializer>(&self, serializer: S) -> StdResult<S::Ok, S::Error> {
@@ -969,7 +969,7 @@ impl Serialize for Table {
     }
 }
 
-#[cfg(feature = "serialize")]
+#[cfg(feature = "serde")]
 impl<'a> SerializableTable<'a> {
     #[inline]
     pub(crate) fn new(
@@ -985,7 +985,7 @@ impl<'a> SerializableTable<'a> {
     }
 }
 
-#[cfg(feature = "serialize")]
+#[cfg(feature = "serde")]
 impl Serialize for SerializableTable<'_> {
     fn serialize<S>(&self, serializer: S) -> StdResult<S::Ok, S::Error>
     where

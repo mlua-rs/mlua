@@ -84,8 +84,9 @@ pub(crate) struct ExtraData {
     // When Lua instance dropped, setting `None` would prevent collecting `RegistryKey`s
     pub(super) registry_unref_list: Arc<Mutex<Option<Vec<c_int>>>>,
 
-    // Container to store arbitrary data (extensions)
+    // Containers to store arbitrary data (extensions)
     pub(super) app_data: AppData,
+    pub(super) app_data_priv: AppData,
 
     pub(super) safe: bool,
     pub(super) libs: StdLib,
@@ -183,6 +184,7 @@ impl ExtraData {
             last_checked_userdata_mt: (ptr::null(), None),
             registry_unref_list: Arc::new(Mutex::new(Some(Vec::new()))),
             app_data: AppData::default(),
+            app_data_priv: AppData::default(),
             safe: false,
             libs: StdLib::NONE,
             skip_memory_check: false,
