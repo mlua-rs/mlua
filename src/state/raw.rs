@@ -5,7 +5,6 @@ use std::mem;
 use std::os::raw::{c_char, c_int, c_void};
 use std::panic::resume_unwind;
 use std::ptr::{self, NonNull};
-use std::result::Result as StdResult;
 use std::sync::Arc;
 
 use crate::chunk::ChunkMode;
@@ -236,7 +235,7 @@ impl RawLua {
                 }
 
                 // Init serde metatables
-                #[cfg(feature = "serialize")]
+                #[cfg(feature = "serde")]
                 crate::serde::init_metatables(state)?;
 
                 Ok::<_, Error>(())
@@ -334,27 +333,27 @@ impl RawLua {
         res
     }
 
-    /// See [`Lua::try_set_app_data`]
+    /// Private version of [`Lua::try_set_app_data`]
     #[inline]
-    pub(crate) fn try_set_app_data<T: MaybeSend + 'static>(&self, data: T) -> StdResult<Option<T>, T> {
+    pub(crate) fn set_priv_app_data<T: MaybeSend + 'static>(&self, data: T) -> Option<T> {
         let extra = unsafe { &*self.extra.get() };
-        extra.app_data.try_insert(data)
+        extra.app_data_priv.insert(data)
     }
 
-    /// See [`Lua::app_data_ref`]
+    /// Private version of [`Lua::app_data_ref`]
     #[track_caller]
     #[inline]
-    pub(crate) fn app_data_ref_unguarded<T: 'static>(&self) -> Option<AppDataRef<T>> {
+    pub(crate) fn priv_app_data_ref<T: 'static>(&self) -> Option<AppDataRef<T>> {
         let extra = unsafe { &*self.extra.get() };
-        extra.app_data.borrow(None)
+        extra.app_data_priv.borrow(None)
     }
 
-    /// See [`Lua::app_data_mut`]
+    /// Private version of [`Lua::app_data_mut`]
     #[track_caller]
     #[inline]
-    pub(crate) fn app_data_mut_unguarded<T: 'static>(&self) -> Option<AppDataRefMut<T>> {
+    pub(crate) fn priv_app_data_mut<T: 'static>(&self) -> Option<AppDataRefMut<T>> {
         let extra = unsafe { &*self.extra.get() };
-        extra.app_data.borrow_mut(None)
+        extra.app_data_priv.borrow_mut(None)
     }
 
     /// See [`Lua::create_registry_value`]
@@ -562,6 +561,34 @@ impl RawLua {
         let _sg = StackGuard::new(state);
         check_stack(state, 3)?;
         push_table(state, narr, nrec, true)?;
+        Ok(Table(self.pop_ref()))
+    }
+
+    /// See [`Lua::create_table_from`]
+    pub(crate) unsafe fn create_table_from<I, K, V>(&self, iter: I) -> Result<Table>
+    where
+        I: IntoIterator<Item = (K, V)>,
+        K: IntoLua,
+        V: IntoLua,
+    {
+        let state = self.state();
+        let _sg = StackGuard::new(state);
+        check_stack(state, 6)?;
+
+        let iter = iter.into_iter();
+        let lower_bound = iter.size_hint().0;
+        let protect = !self.unlikely_memory_error();
+        push_table(state, 0, lower_bound, protect)?;
+        for (k, v) in iter {
+            self.push(k)?;
+            self.push(v)?;
+            if protect {
+                protect_lua!(state, 3, 1, fn(state) ffi::lua_rawset(state, -3))?;
+            } else {
+                ffi::lua_rawset(state, -3);
+            }
+        }
+
         Ok(Table(self.pop_ref()))
     }
 

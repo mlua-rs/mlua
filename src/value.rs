@@ -15,7 +15,7 @@ use crate::types::{Integer, LightUserData, Number, ValueRef};
 use crate::userdata::AnyUserData;
 use crate::util::{check_stack, StackGuard};
 
-#[cfg(feature = "serialize")]
+#[cfg(feature = "serde")]
 use {
     crate::table::SerializableTable,
     rustc_hash::FxHashSet,
@@ -481,8 +481,8 @@ impl Value {
     /// Wrap reference to this Value into [`SerializableValue`].
     ///
     /// This allows customizing serialization behavior using serde.
-    #[cfg(feature = "serialize")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "serialize")))]
+    #[cfg(feature = "serde")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "serde")))]
     #[doc(hidden)]
     pub fn to_serializable(&self) -> SerializableValue {
         SerializableValue::new(self, Default::default(), None)
@@ -630,8 +630,8 @@ impl PartialEq for Value {
 }
 
 /// A wrapped [`Value`] with customized serialization behavior.
-#[cfg(feature = "serialize")]
-#[cfg_attr(docsrs, doc(cfg(feature = "serialize")))]
+#[cfg(feature = "serde")]
+#[cfg_attr(docsrs, doc(cfg(feature = "serde")))]
 pub struct SerializableValue<'a> {
     value: &'a Value,
     options: crate::serde::de::Options,
@@ -639,7 +639,7 @@ pub struct SerializableValue<'a> {
     visited: Option<Rc<RefCell<FxHashSet<*const c_void>>>>,
 }
 
-#[cfg(feature = "serialize")]
+#[cfg(feature = "serde")]
 impl Serialize for Value {
     #[inline]
     fn serialize<S: Serializer>(&self, serializer: S) -> StdResult<S::Ok, S::Error> {
@@ -647,7 +647,7 @@ impl Serialize for Value {
     }
 }
 
-#[cfg(feature = "serialize")]
+#[cfg(feature = "serde")]
 impl<'a> SerializableValue<'a> {
     #[inline]
     pub(crate) fn new(
@@ -711,7 +711,7 @@ impl<'a> SerializableValue<'a> {
     }
 }
 
-#[cfg(feature = "serialize")]
+#[cfg(feature = "serde")]
 impl Serialize for SerializableValue<'_> {
     fn serialize<S>(&self, serializer: S) -> StdResult<S::Ok, S::Error>
     where

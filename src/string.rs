@@ -11,7 +11,7 @@ use crate::traits::IntoLua;
 use crate::types::{LuaType, ValueRef};
 use crate::value::Value;
 
-#[cfg(feature = "serialize")]
+#[cfg(feature = "serde")]
 use {
     serde::ser::{Serialize, Serializer},
     std::result::Result as StdResult,
@@ -211,7 +211,7 @@ impl Hash for String {
     }
 }
 
-#[cfg(feature = "serialize")]
+#[cfg(feature = "serde")]
 impl Serialize for String {
     fn serialize<S>(&self, serializer: S) -> StdResult<S::Ok, S::Error>
     where
