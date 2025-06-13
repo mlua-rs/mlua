@@ -39,6 +39,11 @@ pub(crate) type Callback = Box<dyn Fn(&RawLua, c_int) -> Result<c_int> + Send + 
 
 #[cfg(not(feature = "send"))]
 pub(crate) type Callback = Box<dyn Fn(&RawLua, c_int) -> Result<c_int> + 'static>;
+#[cfg(all(feature = "send", not(feature = "lua51"), not(feature = "luajit")))]
+pub(crate) type Continuation = Box<dyn Fn(&RawLua, c_int, c_int) -> Result<c_int> + Send + 'static>;
+
+#[cfg(all(not(feature = "send"), not(feature = "lua51"), not(feature = "luajit")))]
+pub(crate) type Continuation = Box<dyn Fn(&RawLua, c_int, c_int) -> Result<c_int> + 'static>;
 
 pub(crate) type ScopedCallback<'s> = Box<dyn Fn(&RawLua, c_int) -> Result<c_int> + 's>;
 
@@ -48,6 +53,8 @@ pub(crate) struct Upvalue<T> {
 }
 
 pub(crate) type CallbackUpvalue = Upvalue<Option<Callback>>;
+#[cfg(all(not(feature = "lua51"), not(feature = "luajit")))]
+pub(crate) type ContinuationUpvalue = Upvalue<Option<(Callback, Continuation)>>;
 
 #[cfg(all(feature = "async", feature = "send"))]
 pub(crate) type AsyncCallback =
