@@ -80,8 +80,8 @@ impl<T: 'static> FromLua for UserDataRef<T> {
     }
 
     #[inline]
-    unsafe fn from_stack(idx: c_int, lua: &RawLua) -> Result<Self> {
-        Self::borrow_from_stack(lua, lua.state(), idx)
+    unsafe fn from_specified_stack(idx: c_int, lua: &RawLua, state: *mut ffi::lua_State) -> Result<Self> {
+        Self::borrow_from_stack(lua, state, idx)
     }
 }
 
@@ -295,8 +295,8 @@ impl<T: 'static> FromLua for UserDataRefMut<T> {
         try_value_to_userdata::<T>(value)?.borrow_mut()
     }
 
-    unsafe fn from_stack(idx: c_int, lua: &RawLua) -> Result<Self> {
-        Self::borrow_from_stack(lua, lua.state(), idx)
+    unsafe fn from_specified_stack(idx: c_int, lua: &RawLua, state: *mut ffi::lua_State) -> Result<Self> {
+        Self::borrow_from_stack(lua, state, idx)
     }
 }
 

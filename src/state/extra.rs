@@ -13,11 +13,13 @@ use crate::error::Result;
 use crate::state::RawLua;
 use crate::stdlib::StdLib;
 use crate::types::{AppData, ReentrantMutex, XRc};
+
 use crate::userdata::RawUserDataRegistry;
 use crate::util::{get_internal_metatable, push_internal_userdata, TypeKey, WrappedFailure};
 
 #[cfg(any(feature = "luau", doc))]
 use crate::chunk::Compiler;
+use crate::MultiValue;
 
 #[cfg(feature = "async")]
 use {futures_util::task::noop_waker_ref, std::ptr::NonNull, std::task::Waker};
@@ -29,6 +31,44 @@ static EXTRA_REGISTRY_KEY: u8 = 0;
 
 const WRAPPED_FAILURE_POOL_DEFAULT_CAPACITY: usize = 64;
 const REF_STACK_RESERVE: c_int = 2;
+
+pub(crate) struct RefThread {
+    pub(super) ref_thread: *mut ffi::lua_State,
+    pub(super) stack_size: c_int,
+    pub(super) stack_top: c_int,
+    pub(super) free: Vec<c_int>,
+}
+
+impl RefThread {
+    #[inline(always)]
+    pub(crate) unsafe fn new(state: *mut ffi::lua_State) -> Self {
+        // Create ref stack thread and place it in the registry to prevent it
+        // from being garbage collected.
+        let ref_thread = mlua_expect!(
+            protect_lua!(state, 0, 0, |state| {
+                let thread = ffi::lua_newthread(state);
+                ffi::luaL_ref(state, ffi::LUA_REGISTRYINDEX);
+                thread
+            }),
+            "Error while creating ref thread",
+        );
+
+        // Store `error_traceback` function on the ref stack
+        #[cfg(any(feature = "lua51", feature = "luajit", feature = "luau"))]
+        {
+            ffi::lua_pushcfunction(ref_thread, crate::util::error_traceback);
+            assert_eq!(ffi::lua_gettop(ref_thread), ExtraData::ERROR_TRACEBACK_IDX);
+        }
+
+        RefThread {
+            ref_thread,
+            // We need some reserved stack space to move values in and out of the ref stack.
+            stack_size: ffi::LUA_MINSTACK - REF_STACK_RESERVE,
+            stack_top: ffi::lua_gettop(ref_thread),
+            free: Vec::new(),
+        }
+    }
+}
 
 /// Data associated with the Lua state.
 pub(crate) struct ExtraData {
@@ -53,18 +93,17 @@ pub(crate) struct ExtraData {
     // Used in module mode
     pub(super) skip_memory_check: bool,
 
-    // Auxiliary thread to store references
-    pub(super) ref_thread: *mut ffi::lua_State,
-    pub(super) ref_stack_size: c_int,
-    pub(super) ref_stack_top: c_int,
-    pub(super) ref_free: Vec<c_int>,
+    // Auxiliary threads to store references
+    pub(super) ref_thread: Vec<RefThread>,
+    // Special auxillary thread for mlua internal use
+    pub(super) ref_thread_internal: RefThread,
 
     // Pool of `WrappedFailure` enums in the ref thread (as userdata)
     pub(super) wrapped_failure_pool: Vec<c_int>,
     pub(super) wrapped_failure_top: usize,
     // Pool of `Thread`s (coroutines) for async execution
     #[cfg(feature = "async")]
-    pub(super) thread_pool: Vec<c_int>,
+    pub(super) thread_pool: Vec<(usize, c_int)>,
 
     // Address of `WrappedFailure` metatable
     pub(super) wrapped_failure_mt_ptr: *const c_void,
@@ -94,6 +133,9 @@ pub(crate) struct ExtraData {
     pub(super) compiler: Option<Compiler>,
     #[cfg(feature = "luau-jit")]
     pub(super) enable_jit: bool,
+
+    // Values currently being yielded from Lua.yield()
+    pub(super) yielded_values: Option<MultiValue>,
 }
 
 impl Drop for ExtraData {
@@ -124,30 +166,12 @@ impl ExtraData {
     pub(super) const ERROR_TRACEBACK_IDX: c_int = 1;
 
     pub(super) unsafe fn init(state: *mut ffi::lua_State, owned: bool) -> XRc<UnsafeCell<Self>> {
-        // Create ref stack thread and place it in the registry to prevent it
-        // from being garbage collected.
-        let ref_thread = mlua_expect!(
-            protect_lua!(state, 0, 0, |state| {
-                let thread = ffi::lua_newthread(state);
-                ffi::luaL_ref(state, ffi::LUA_REGISTRYINDEX);
-                thread
-            }),
-            "Error while creating ref thread",
-        );
-
         let wrapped_failure_mt_ptr = {
             get_internal_metatable::<WrappedFailure>(state);
             let ptr = ffi::lua_topointer(state, -1);
             ffi::lua_pop(state, 1);
             ptr
         };
-
-        // Store `error_traceback` function on the ref stack
-        #[cfg(any(feature = "lua51", feature = "luajit", feature = "luau"))]
-        {
-            ffi::lua_pushcfunction(ref_thread, crate::util::error_traceback);
-            assert_eq!(ffi::lua_gettop(ref_thread), Self::ERROR_TRACEBACK_IDX);
-        }
 
         #[allow(clippy::arc_with_non_send_sync)]
         let extra = XRc::new(UnsafeCell::new(ExtraData {
@@ -164,11 +188,8 @@ impl ExtraData {
             safe: false,
             libs: StdLib::NONE,
             skip_memory_check: false,
-            ref_thread,
-            // We need some reserved stack space to move values in and out of the ref stack.
-            ref_stack_size: ffi::LUA_MINSTACK - REF_STACK_RESERVE,
-            ref_stack_top: ffi::lua_gettop(ref_thread),
-            ref_free: Vec::new(),
+            ref_thread: vec![RefThread::new(state)],
+            ref_thread_internal: RefThread::new(state),
             wrapped_failure_pool: Vec::with_capacity(WRAPPED_FAILURE_POOL_DEFAULT_CAPACITY),
             wrapped_failure_top: 0,
             #[cfg(feature = "async")]
@@ -196,6 +217,7 @@ impl ExtraData {
             enable_jit: true,
             #[cfg(feature = "luau")]
             running_gc: false,
+            yielded_values: None,
         }));
 
         // Store it in the registry

@@ -452,7 +452,7 @@ pub(super) unsafe extern "C-unwind" fn init_config(config: *mut ffi::luarequire_
         callback_error_ext(state, ptr::null_mut(), true, move |extra, _| {
             let rawlua = (*extra).raw_lua();
             let loader = this.loader(rawlua.lua())?;
-            rawlua.push(loader)?;
+            rawlua.push_at(state, loader)?;
             Ok(1)
         })
     }

@@ -12,6 +12,7 @@ use num_traits::cast;
 
 use crate::error::{Error, Result};
 use crate::function::Function;
+use crate::state::util::get_next_spot;
 use crate::state::{Lua, RawLua};
 use crate::string::{BorrowedBytes, BorrowedStr, String};
 use crate::table::Table;
@@ -35,8 +36,8 @@ impl IntoLua for &Value {
     }
 
     #[inline]
-    unsafe fn push_into_stack(self, lua: &RawLua) -> Result<()> {
-        lua.push_value(self)
+    unsafe fn push_into_specified_stack(self, lua: &RawLua, state: *mut ffi::lua_State) -> Result<()> {
+        lua.push_value_at(self, state)
     }
 }
 
@@ -61,8 +62,8 @@ impl IntoLua for &String {
     }
 
     #[inline]
-    unsafe fn push_into_stack(self, lua: &RawLua) -> Result<()> {
-        lua.push_ref(&self.0);
+    unsafe fn push_into_specified_stack(self, lua: &RawLua, state: *mut ffi::lua_State) -> Result<()> {
+        lua.push_ref_at(&self.0, state);
         Ok(())
     }
 }
@@ -79,15 +80,18 @@ impl FromLua for String {
             })
     }
 
-    unsafe fn from_stack(idx: c_int, lua: &RawLua) -> Result<Self> {
-        let state = lua.state();
+    unsafe fn from_specified_stack(idx: c_int, lua: &RawLua, state: *mut ffi::lua_State) -> Result<Self> {
         let type_id = ffi::lua_type(state, idx);
         if type_id == ffi::LUA_TSTRING {
-            ffi::lua_xpush(state, lua.ref_thread(), idx);
-            return Ok(String(lua.pop_ref_thread()));
+            let (aux_thread, idxs, replace) = get_next_spot(lua.extra());
+            ffi::lua_xpush(state, lua.ref_thread(aux_thread), idx);
+            if replace {
+                ffi::lua_replace(lua.ref_thread(aux_thread), idxs);
+            }
+            return Ok(String(lua.new_value_ref(aux_thread, idxs)));
         }
         // Fallback to default
-        Self::from_lua(lua.stack_value(idx, Some(type_id)), lua.lua())
+        Self::from_lua(lua.stack_value_at(idx, Some(type_id), state), lua.lua())
     }
 }
 
@@ -98,8 +102,8 @@ impl IntoLua for BorrowedStr<'_> {
     }
 
     #[inline]
-    unsafe fn push_into_stack(self, lua: &RawLua) -> Result<()> {
-        lua.push_ref(&self.borrow.0);
+    unsafe fn push_into_specified_stack(self, lua: &RawLua, state: *mut ffi::lua_State) -> Result<()> {
+        lua.push_ref_at(&self.borrow.0, state);
         Ok(())
     }
 }
@@ -111,8 +115,8 @@ impl IntoLua for &BorrowedStr<'_> {
     }
 
     #[inline]
-    unsafe fn push_into_stack(self, lua: &RawLua) -> Result<()> {
-        lua.push_ref(&self.borrow.0);
+    unsafe fn push_into_specified_stack(self, lua: &RawLua, state: *mut ffi::lua_State) -> Result<()> {
+        lua.push_ref_at(&self.borrow.0, state);
         Ok(())
     }
 }
@@ -126,8 +130,8 @@ impl FromLua for BorrowedStr<'_> {
         Ok(Self { buf, borrow, _lua })
     }
 
-    unsafe fn from_stack(idx: c_int, lua: &RawLua) -> Result<Self> {
-        let s = String::from_stack(idx, lua)?;
+    unsafe fn from_specified_stack(idx: c_int, lua: &RawLua, state: *mut ffi::lua_State) -> Result<Self> {
+        let s = String::from_specified_stack(idx, lua, state)?;
         let BorrowedStr { buf, _lua, .. } = BorrowedStr::try_from(&s)?;
         let buf = unsafe { mem::transmute::<&str, &'static str>(buf) };
         let borrow = Cow::Owned(s);
@@ -142,8 +146,8 @@ impl IntoLua for BorrowedBytes<'_> {
     }
 
     #[inline]
-    unsafe fn push_into_stack(self, lua: &RawLua) -> Result<()> {
-        lua.push_ref(&self.borrow.0);
+    unsafe fn push_into_specified_stack(self, lua: &RawLua, state: *mut ffi::lua_State) -> Result<()> {
+        lua.push_ref_at(&self.borrow.0, state);
         Ok(())
     }
 }
@@ -155,8 +159,8 @@ impl IntoLua for &BorrowedBytes<'_> {
     }
 
     #[inline]
-    unsafe fn push_into_stack(self, lua: &RawLua) -> Result<()> {
-        lua.push_ref(&self.borrow.0);
+    unsafe fn push_into_specified_stack(self, lua: &RawLua, state: *mut ffi::lua_State) -> Result<()> {
+        lua.push_ref_at(&self.borrow.0, state);
         Ok(())
     }
 }
@@ -170,8 +174,8 @@ impl FromLua for BorrowedBytes<'_> {
         Ok(Self { buf, borrow, _lua })
     }
 
-    unsafe fn from_stack(idx: c_int, lua: &RawLua) -> Result<Self> {
-        let s = String::from_stack(idx, lua)?;
+    unsafe fn from_specified_stack(idx: c_int, lua: &RawLua, state: *mut ffi::lua_State) -> Result<Self> {
+        let s = String::from_specified_stack(idx, lua, state)?;
         let BorrowedBytes { buf, _lua, .. } = BorrowedBytes::from(&s);
         let buf = unsafe { mem::transmute::<&[u8], &'static [u8]>(buf) };
         let borrow = Cow::Owned(s);
@@ -193,8 +197,8 @@ impl IntoLua for &Table {
     }
 
     #[inline]
-    unsafe fn push_into_stack(self, lua: &RawLua) -> Result<()> {
-        lua.push_ref(&self.0);
+    unsafe fn push_into_specified_stack(self, lua: &RawLua, state: *mut ffi::lua_State) -> Result<()> {
+        lua.push_ref_at(&self.0, state);
         Ok(())
     }
 }
@@ -227,8 +231,8 @@ impl IntoLua for &Function {
     }
 
     #[inline]
-    unsafe fn push_into_stack(self, lua: &RawLua) -> Result<()> {
-        lua.push_ref(&self.0);
+    unsafe fn push_into_specified_stack(self, lua: &RawLua, state: *mut ffi::lua_State) -> Result<()> {
+        lua.push_ref_at(&self.0, state);
         Ok(())
     }
 }
@@ -261,8 +265,8 @@ impl IntoLua for &Thread {
     }
 
     #[inline]
-    unsafe fn push_into_stack(self, lua: &RawLua) -> Result<()> {
-        lua.push_ref(&self.0);
+    unsafe fn push_into_specified_stack(self, lua: &RawLua, state: *mut ffi::lua_State) -> Result<()> {
+        lua.push_ref_at(&self.0, state);
         Ok(())
     }
 }
@@ -295,8 +299,8 @@ impl IntoLua for &AnyUserData {
     }
 
     #[inline]
-    unsafe fn push_into_stack(self, lua: &RawLua) -> Result<()> {
-        lua.push_ref(&self.0);
+    unsafe fn push_into_specified_stack(self, lua: &RawLua, state: *mut ffi::lua_State) -> Result<()> {
+        lua.push_ref_at(&self.0, state);
         Ok(())
     }
 }
@@ -354,8 +358,8 @@ impl IntoLua for RegistryKey {
     }
 
     #[inline]
-    unsafe fn push_into_stack(self, lua: &RawLua) -> Result<()> {
-        <&RegistryKey>::push_into_stack(&self, lua)
+    unsafe fn push_into_specified_stack(self, lua: &RawLua, state: *mut ffi::lua_State) -> Result<()> {
+        <&RegistryKey>::push_into_specified_stack(&self, lua, state)
     }
 }
 
@@ -365,15 +369,15 @@ impl IntoLua for &RegistryKey {
         lua.registry_value(self)
     }
 
-    unsafe fn push_into_stack(self, lua: &RawLua) -> Result<()> {
+    unsafe fn push_into_specified_stack(self, lua: &RawLua, state: *mut ffi::lua_State) -> Result<()> {
         if !lua.owns_registry_value(self) {
             return Err(Error::MismatchedRegistryKey);
         }
 
         match self.id() {
-            ffi::LUA_REFNIL => ffi::lua_pushnil(lua.state()),
+            ffi::LUA_REFNIL => ffi::lua_pushnil(state),
             id => {
-                ffi::lua_rawgeti(lua.state(), ffi::LUA_REGISTRYINDEX, id as _);
+                ffi::lua_rawgeti(state, ffi::LUA_REGISTRYINDEX, id as _);
             }
         }
         Ok(())
@@ -394,8 +398,8 @@ impl IntoLua for bool {
     }
 
     #[inline]
-    unsafe fn push_into_stack(self, lua: &RawLua) -> Result<()> {
-        ffi::lua_pushboolean(lua.state(), self as c_int);
+    unsafe fn push_into_specified_stack(self, _lua: &RawLua, state: *mut ffi::lua_State) -> Result<()> {
+        ffi::lua_pushboolean(state, self as c_int);
         Ok(())
     }
 }
@@ -411,8 +415,8 @@ impl FromLua for bool {
     }
 
     #[inline]
-    unsafe fn from_stack(idx: c_int, lua: &RawLua) -> Result<Self> {
-        Ok(ffi::lua_toboolean(lua.state(), idx) != 0)
+    unsafe fn from_specified_stack(idx: c_int, _lua: &RawLua, state: *mut ffi::lua_State) -> Result<Self> {
+        Ok(ffi::lua_toboolean(state, idx) != 0)
     }
 }
 
@@ -476,8 +480,8 @@ impl IntoLua for &crate::Buffer {
     }
 
     #[inline]
-    unsafe fn push_into_stack(self, lua: &RawLua) -> Result<()> {
-        lua.push_ref(&self.0);
+    unsafe fn push_into_specified_stack(self, lua: &RawLua, state: *mut ffi::lua_State) -> Result<()> {
+        lua.push_ref_at(&self.0, state);
         Ok(())
     }
 }
@@ -504,8 +508,8 @@ impl IntoLua for StdString {
     }
 
     #[inline]
-    unsafe fn push_into_stack(self, lua: &RawLua) -> Result<()> {
-        push_bytes_into_stack(self, lua)
+    unsafe fn push_into_specified_stack(self, lua: &RawLua, state: *mut ffi::lua_State) -> Result<()> {
+        push_bytes_into_stack(self, lua, state)
     }
 }
 
@@ -525,8 +529,7 @@ impl FromLua for StdString {
     }
 
     #[inline]
-    unsafe fn from_stack(idx: c_int, lua: &RawLua) -> Result<Self> {
-        let state = lua.state();
+    unsafe fn from_specified_stack(idx: c_int, lua: &RawLua, state: *mut ffi::lua_State) -> Result<Self> {
         let type_id = ffi::lua_type(state, idx);
         if type_id == ffi::LUA_TSTRING {
             let mut size = 0;
@@ -541,7 +544,7 @@ impl FromLua for StdString {
                 });
         }
         // Fallback to default
-        Self::from_lua(lua.stack_value(idx, Some(type_id)), lua.lua())
+        Self::from_lua(lua.stack_value_at(idx, Some(type_id), state), lua.lua())
     }
 }
 
@@ -552,8 +555,8 @@ impl IntoLua for &str {
     }
 
     #[inline]
-    unsafe fn push_into_stack(self, lua: &RawLua) -> Result<()> {
-        push_bytes_into_stack(self, lua)
+    unsafe fn push_into_specified_stack(self, lua: &RawLua, state: *mut ffi::lua_State) -> Result<()> {
+        push_bytes_into_stack(self, lua, state)
     }
 }
 
@@ -658,8 +661,7 @@ impl FromLua for BString {
         }
     }
 
-    unsafe fn from_stack(idx: c_int, lua: &RawLua) -> Result<Self> {
-        let state = lua.state();
+    unsafe fn from_specified_stack(idx: c_int, lua: &RawLua, state: *mut ffi::lua_State) -> Result<Self> {
         match ffi::lua_type(state, idx) {
             ffi::LUA_TSTRING => {
                 let mut size = 0;
@@ -675,7 +677,7 @@ impl FromLua for BString {
             }
             type_id => {
                 // Fallback to default
-                Self::from_lua(lua.stack_value(idx, Some(type_id)), lua.lua())
+                Self::from_lua(lua.stack_value_at(idx, Some(type_id), state), lua.lua())
             }
         }
     }
@@ -789,18 +791,18 @@ impl FromLua for char {
 }
 
 #[inline]
-unsafe fn push_bytes_into_stack<T>(this: T, lua: &RawLua) -> Result<()>
+unsafe fn push_bytes_into_stack<T>(this: T, lua: &RawLua, state: *mut ffi::lua_State) -> Result<()>
 where
     T: IntoLua + AsRef<[u8]>,
 {
     let bytes = this.as_ref();
     if lua.unlikely_memory_error() && bytes.len() < (1 << 30) {
         // Fast path: push directly into the Lua stack.
-        ffi::lua_pushlstring(lua.state(), bytes.as_ptr() as *const _, bytes.len());
+        ffi::lua_pushlstring(state, bytes.as_ptr() as *const _, bytes.len());
         return Ok(());
     }
     // Fallback to default
-    lua.push_value(&T::into_lua(this, lua.lua())?)
+    lua.push_value_at(&T::into_lua(this, lua.lua())?, state)
 }
 
 macro_rules! lua_convert_int {
@@ -814,10 +816,14 @@ macro_rules! lua_convert_int {
             }
 
             #[inline]
-            unsafe fn push_into_stack(self, lua: &RawLua) -> Result<()> {
+            unsafe fn push_into_specified_stack(
+                self,
+                _lua: &RawLua,
+                state: *mut ffi::lua_State,
+            ) -> Result<()> {
                 match cast(self) {
-                    Some(i) => ffi::lua_pushinteger(lua.state(), i),
-                    None => ffi::lua_pushnumber(lua.state(), self as ffi::lua_Number),
+                    Some(i) => ffi::lua_pushinteger(state, i),
+                    None => ffi::lua_pushnumber(state, self as ffi::lua_Number),
                 }
                 Ok(())
             }
@@ -854,8 +860,11 @@ macro_rules! lua_convert_int {
                 })
             }
 
-            unsafe fn from_stack(idx: c_int, lua: &RawLua) -> Result<Self> {
-                let state = lua.state();
+            unsafe fn from_specified_stack(
+                idx: c_int,
+                lua: &RawLua,
+                state: *mut ffi::lua_State,
+            ) -> Result<Self> {
                 let type_id = ffi::lua_type(state, idx);
                 if type_id == ffi::LUA_TNUMBER {
                     let mut ok = 0;
@@ -869,7 +878,7 @@ macro_rules! lua_convert_int {
                     }
                 }
                 // Fallback to default
-                Self::from_lua(lua.stack_value(idx, Some(type_id)), lua.lua())
+                Self::from_lua(lua.stack_value_at(idx, Some(type_id), state), lua.lua())
             }
         }
     };
@@ -910,14 +919,17 @@ macro_rules! lua_convert_float {
                     })
             }
 
-            unsafe fn from_stack(idx: c_int, lua: &RawLua) -> Result<Self> {
-                let state = lua.state();
+            unsafe fn from_specified_stack(
+                idx: c_int,
+                lua: &RawLua,
+                state: *mut ffi::lua_State,
+            ) -> Result<Self> {
                 let type_id = ffi::lua_type(state, idx);
                 if type_id == ffi::LUA_TNUMBER {
                     return Ok(ffi::lua_tonumber(state, idx) as _);
                 }
                 // Fallback to default
-                Self::from_lua(lua.stack_value(idx, Some(type_id)), lua.lua())
+                Self::from_lua(lua.stack_value_at(idx, Some(type_id), state), lua.lua())
             }
         }
     };
@@ -1120,10 +1132,10 @@ impl<T: IntoLua> IntoLua for Option<T> {
     }
 
     #[inline]
-    unsafe fn push_into_stack(self, lua: &RawLua) -> Result<()> {
+    unsafe fn push_into_specified_stack(self, lua: &RawLua, state: *mut ffi::lua_State) -> Result<()> {
         match self {
-            Some(val) => val.push_into_stack(lua)?,
-            None => ffi::lua_pushnil(lua.state()),
+            Some(val) => val.push_into_specified_stack(lua, state)?,
+            None => ffi::lua_pushnil(state),
         }
         Ok(())
     }
@@ -1139,10 +1151,10 @@ impl<T: FromLua> FromLua for Option<T> {
     }
 
     #[inline]
-    unsafe fn from_stack(idx: c_int, lua: &RawLua) -> Result<Self> {
-        match ffi::lua_type(lua.state(), idx) {
+    unsafe fn from_specified_stack(idx: c_int, lua: &RawLua, state: *mut ffi::lua_State) -> Result<Self> {
+        match ffi::lua_type(state, idx) {
             ffi::LUA_TNIL => Ok(None),
-            _ => Ok(Some(T::from_stack(idx, lua)?)),
+            _ => Ok(Some(T::from_specified_stack(idx, lua, state)?)),
         }
     }
 }
@@ -1157,10 +1169,10 @@ impl<L: IntoLua, R: IntoLua> IntoLua for Either<L, R> {
     }
 
     #[inline]
-    unsafe fn push_into_stack(self, lua: &RawLua) -> Result<()> {
+    unsafe fn push_into_specified_stack(self, lua: &RawLua, state: *mut ffi::lua_State) -> Result<()> {
         match self {
-            Either::Left(l) => l.push_into_stack(lua),
-            Either::Right(r) => r.push_into_stack(lua),
+            Either::Left(l) => l.push_into_specified_stack(lua, state),
+            Either::Right(r) => r.push_into_specified_stack(lua, state),
         }
     }
 }
@@ -1185,13 +1197,13 @@ impl<L: FromLua, R: FromLua> FromLua for Either<L, R> {
     }
 
     #[inline]
-    unsafe fn from_stack(idx: c_int, lua: &RawLua) -> Result<Self> {
-        match L::from_stack(idx, lua) {
+    unsafe fn from_specified_stack(idx: c_int, lua: &RawLua, state: *mut ffi::lua_State) -> Result<Self> {
+        match L::from_specified_stack(idx, lua, state) {
             Ok(l) => Ok(Either::Left(l)),
-            Err(_) => match R::from_stack(idx, lua).map(Either::Right) {
+            Err(_) => match R::from_specified_stack(idx, lua, state).map(Either::Right) {
                 Ok(r) => Ok(r),
                 Err(_) => {
-                    let value_type_name = CStr::from_ptr(ffi::luaL_typename(lua.state(), idx));
+                    let value_type_name = CStr::from_ptr(ffi::luaL_typename(state, idx));
                     Err(Error::FromLuaConversionError {
                         from: value_type_name.to_str().unwrap(),
                         to: Self::type_name(),

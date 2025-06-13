@@ -76,9 +76,9 @@ impl Table {
             let _sg = StackGuard::new(state);
             check_stack(state, 5)?;
 
-            lua.push_ref(&self.0);
-            key.push_into_stack(&lua)?;
-            value.push_into_stack(&lua)?;
+            lua.push_ref_at(&self.0, state);
+            key.push_into_specified_stack(&lua, state)?;
+            value.push_into_specified_stack(&lua, state)?;
             protect_lua!(state, 3, 0, fn(state) ffi::lua_settable(state, -3))
         }
     }
@@ -123,11 +123,11 @@ impl Table {
             let _sg = StackGuard::new(state);
             check_stack(state, 4)?;
 
-            lua.push_ref(&self.0);
-            key.push_into_stack(&lua)?;
+            lua.push_ref_at(&self.0, state);
+            key.push_into_specified_stack(&lua, state)?;
             protect_lua!(state, 2, 1, fn(state) ffi::lua_gettable(state, -2))?;
 
-            V::from_stack(-1, &lua)
+            V::from_specified_stack(-1, &lua, state)
         }
     }
 
@@ -153,8 +153,8 @@ impl Table {
             let _sg = StackGuard::new(state);
             check_stack(state, 4)?;
 
-            lua.push_ref(&self.0);
-            value.push_into_stack(&lua)?;
+            lua.push_ref_at(&self.0, state);
+            value.push_into_specified_stack(&lua, state)?;
             protect_lua!(state, 2, 0, fn(state) {
                 let len = ffi::luaL_len(state, -2) as Integer;
                 ffi::lua_seti(state, -2, len + 1);
@@ -178,14 +178,14 @@ impl Table {
             let _sg = StackGuard::new(state);
             check_stack(state, 4)?;
 
-            lua.push_ref(&self.0);
+            lua.push_ref_at(&self.0, state);
             protect_lua!(state, 1, 1, fn(state) {
                 let len = ffi::luaL_len(state, -1) as Integer;
                 ffi::lua_geti(state, -1, len);
                 ffi::lua_pushnil(state);
                 ffi::lua_seti(state, -3, len);
             })?;
-            V::from_stack(-1, &lua)
+            V::from_specified_stack(-1, &lua, state)
         }
     }
 
@@ -251,9 +251,9 @@ impl Table {
             let _sg = StackGuard::new(state);
             check_stack(state, 5)?;
 
-            lua.push_ref(&self.0);
-            key.push_into_stack(&lua)?;
-            value.push_into_stack(&lua)?;
+            lua.push_ref_at(&self.0, state);
+            key.push_into_specified_stack(&lua, state)?;
+            value.push_into_specified_stack(&lua, state)?;
 
             if lua.unlikely_memory_error() {
                 ffi::lua_rawset(state, -3);
@@ -273,11 +273,11 @@ impl Table {
             let _sg = StackGuard::new(state);
             check_stack(state, 3)?;
 
-            lua.push_ref(&self.0);
-            key.push_into_stack(&lua)?;
+            lua.push_ref_at(&self.0, state);
+            key.push_into_specified_stack(&lua, state)?;
             ffi::lua_rawget(state, -2);
 
-            V::from_stack(-1, &lua)
+            V::from_specified_stack(-1, &lua, state)
         }
     }
 
@@ -297,8 +297,8 @@ impl Table {
             let _sg = StackGuard::new(state);
             check_stack(state, 5)?;
 
-            lua.push_ref(&self.0);
-            value.push_into_stack(&lua)?;
+            lua.push_ref_at(&self.0, state);
+            value.push_into_specified_stack(&lua, state)?;
             protect_lua!(state, 2, 0, |state| {
                 for i in (idx..=size).rev() {
                     // table[i+1] = table[i]
@@ -321,8 +321,8 @@ impl Table {
             let _sg = StackGuard::new(state);
             check_stack(state, 4)?;
 
-            lua.push_ref(&self.0);
-            value.push_into_stack(&lua)?;
+            lua.push_ref_at(&self.0, state);
+            value.push_into_specified_stack(&lua, state)?;
 
             unsafe fn callback(state: *mut ffi::lua_State) {
                 let len = ffi::lua_rawlen(state, -2) as Integer;
@@ -349,14 +349,14 @@ impl Table {
             let _sg = StackGuard::new(state);
             check_stack(state, 3)?;
 
-            lua.push_ref(&self.0);
+            lua.push_ref_at(&self.0, state);
             let len = ffi::lua_rawlen(state, -1) as Integer;
             ffi::lua_rawgeti(state, -1, len);
             // Set slot to nil (it must be safe to do)
             ffi::lua_pushnil(state);
             ffi::lua_rawseti(state, -3, len);
 
-            V::from_stack(-1, &lua)
+            V::from_specified_stack(-1, &lua, state)
         }
     }
 
@@ -381,7 +381,7 @@ impl Table {
                     let _sg = StackGuard::new(state);
                     check_stack(state, 4)?;
 
-                    lua.push_ref(&self.0);
+                    lua.push_ref_at(&self.0, state);
                     protect_lua!(state, 1, 0, |state| {
                         for i in idx..size {
                             ffi::lua_rawgeti(state, -1, i + 1);
@@ -406,7 +406,7 @@ impl Table {
             #[cfg(feature = "luau")]
             {
                 self.check_readonly_write(&lua)?;
-                ffi::lua_cleartable(lua.ref_thread(), self.0.index);
+                ffi::lua_cleartable(lua.ref_thread(self.0.aux_thread), self.0.index);
             }
 
             #[cfg(not(feature = "luau"))]
@@ -414,7 +414,7 @@ impl Table {
                 let state = lua.state();
                 check_stack(state, 4)?;
 
-                lua.push_ref(&self.0);
+                lua.push_ref_at(&self.0, state);
 
                 // Clear array part
                 for i in 1..=ffi::lua_rawlen(state, -1) {
@@ -453,7 +453,7 @@ impl Table {
             let _sg = StackGuard::new(state);
             check_stack(state, 4)?;
 
-            lua.push_ref(&self.0);
+            lua.push_ref_at(&self.0, state);
             protect_lua!(state, 1, 0, |state| ffi::luaL_len(state, -1))
         }
     }
@@ -461,7 +461,7 @@ impl Table {
     /// Returns the result of the Lua `#` operator, without invoking the `__len` metamethod.
     pub fn raw_len(&self) -> usize {
         let lua = self.0.lua.lock();
-        unsafe { ffi::lua_rawlen(lua.ref_thread(), self.0.index) }
+        unsafe { ffi::lua_rawlen(lua.ref_thread(self.0.aux_thread), self.0.index) }
     }
 
     /// Returns `true` if the table is empty, without invoking metamethods.
@@ -469,7 +469,7 @@ impl Table {
     /// It checks both the array part and the hash part.
     pub fn is_empty(&self) -> bool {
         let lua = self.0.lua.lock();
-        let ref_thread = lua.ref_thread();
+        let ref_thread = lua.ref_thread(self.0.aux_thread);
         unsafe {
             ffi::lua_pushnil(ref_thread);
             if ffi::lua_next(ref_thread, self.0.index) == 0 {
@@ -492,7 +492,7 @@ impl Table {
             let _sg = StackGuard::new(state);
             assert_stack(state, 2);
 
-            lua.push_ref(&self.0);
+            lua.push_ref_at(&self.0, state);
             if ffi::lua_getmetatable(state, -1) == 0 {
                 None
             } else {
@@ -518,9 +518,9 @@ impl Table {
             let _sg = StackGuard::new(state);
             assert_stack(state, 2);
 
-            lua.push_ref(&self.0);
+            lua.push_ref_at(&self.0, state);
             if let Some(metatable) = metatable {
-                lua.push_ref(&metatable.0);
+                lua.push_ref_at(&metatable.0, state);
             } else {
                 ffi::lua_pushnil(state);
             }
@@ -533,7 +533,7 @@ impl Table {
     #[inline]
     pub fn has_metatable(&self) -> bool {
         let lua = self.0.lua.lock();
-        unsafe { !get_metatable_ptr(lua.ref_thread(), self.0.index).is_null() }
+        unsafe { !get_metatable_ptr(lua.ref_thread(self.0.aux_thread), self.0.index).is_null() }
     }
 
     /// Sets `readonly` attribute on the table.
@@ -541,7 +541,7 @@ impl Table {
     #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
     pub fn set_readonly(&self, enabled: bool) {
         let lua = self.0.lua.lock();
-        let ref_thread = lua.ref_thread();
+        let ref_thread = lua.ref_thread(self.0.aux_thread);
         unsafe {
             ffi::lua_setreadonly(ref_thread, self.0.index, enabled as _);
             if !enabled {
@@ -556,7 +556,7 @@ impl Table {
     #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
     pub fn is_readonly(&self) -> bool {
         let lua = self.0.lua.lock();
-        let ref_thread = lua.ref_thread();
+        let ref_thread = lua.ref_thread(self.0.aux_thread);
         unsafe { ffi::lua_getreadonly(ref_thread, self.0.index) != 0 }
     }
 
@@ -573,7 +573,7 @@ impl Table {
     #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
     pub fn set_safeenv(&self, enabled: bool) {
         let lua = self.0.lua.lock();
-        unsafe { ffi::lua_setsafeenv(lua.ref_thread(), self.0.index, enabled as _) };
+        unsafe { ffi::lua_setsafeenv(lua.ref_thread(self.0.aux_thread), self.0.index, enabled as _) };
     }
 
     /// Converts this table to a generic C pointer.
@@ -637,11 +637,11 @@ impl Table {
             let _sg = StackGuard::new(state);
             check_stack(state, 5)?;
 
-            lua.push_ref(&self.0);
+            lua.push_ref_at(&self.0, state);
             ffi::lua_pushnil(state);
             while ffi::lua_next(state, -2) != 0 {
-                let k = K::from_stack(-2, &lua)?;
-                let v = V::from_stack(-1, &lua)?;
+                let k = K::from_specified_stack(-2, &lua, state)?;
+                let v = V::from_specified_stack(-1, &lua, state)?;
                 f(k, v)?;
                 // Keep key for next iteration
                 ffi::lua_pop(state, 1);
@@ -699,11 +699,11 @@ impl Table {
             let _sg = StackGuard::new(state);
             check_stack(state, 4)?;
 
-            lua.push_ref(&self.0);
+            lua.push_ref_at(&self.0, state);
             let len = ffi::lua_rawlen(state, -1);
             for i in 1..=len {
                 ffi::lua_rawgeti(state, -1, i as _);
-                f(V::from_stack(-1, &lua)?)?;
+                f(V::from_specified_stack(-1, &lua, state)?)?;
                 ffi::lua_pop(state, 1);
             }
         }
@@ -722,8 +722,8 @@ impl Table {
             let _sg = StackGuard::new(state);
             check_stack(state, 5)?;
 
-            lua.push_ref(&self.0);
-            value.push_into_stack(&lua)?;
+            lua.push_ref_at(&self.0, state);
+            value.push_into_specified_stack(&lua, state)?;
 
             let idx = idx.try_into().unwrap();
             if lua.unlikely_memory_error() {
@@ -743,7 +743,7 @@ impl Table {
             let _sg = StackGuard::new(state);
             assert_stack(state, 3);
 
-            lua.push_ref(&self.0);
+            lua.push_ref_at(&self.0, state);
             if ffi::lua_getmetatable(state, -1) == 0 {
                 return false;
             }
@@ -755,7 +755,7 @@ impl Table {
     #[cfg(feature = "luau")]
     #[inline(always)]
     fn check_readonly_write(&self, lua: &RawLua) -> Result<()> {
-        if unsafe { ffi::lua_getreadonly(lua.ref_thread(), self.0.index) != 0 } {
+        if unsafe { ffi::lua_getreadonly(lua.ref_thread(self.0.aux_thread), self.0.index) != 0 } {
             return Err(Error::runtime("attempt to modify a readonly table"));
         }
         Ok(())
@@ -832,12 +832,12 @@ where
             let _sg = StackGuard::new(state);
             assert_stack(state, 4);
 
-            lua.push_ref(&self.0);
+            lua.push_ref_at(&self.0, state);
 
             let len = ffi::lua_rawlen(state, -1);
             for i in 0..len {
                 ffi::lua_rawgeti(state, -1, (i + 1) as _);
-                let val = lua.pop_value();
+                let val = lua.pop_value_at(state);
                 if val == Nil {
                     return i == other.len();
                 }
@@ -1096,18 +1096,18 @@ where
                 let _sg = StackGuard::new(state);
                 check_stack(state, 5)?;
 
-                lua.push_ref(&self.table.0);
-                lua.push_value(&prev_key)?;
+                lua.push_ref_at(&self.table.0, state);
+                lua.push_value_at(&prev_key, state)?;
 
                 // It must be safe to call `lua_next` unprotected as deleting a key from a table is
                 // a permitted operation.
                 // It fails only if the key is not found (never existed) which seems impossible scenario.
                 if ffi::lua_next(state, -2) != 0 {
-                    let key = lua.stack_value(-2, None);
+                    let key = lua.stack_value_at(-2, None, state);
                     Ok(Some((
                         key.clone(),
                         K::from_lua(key, lua.lua())?,
-                        V::from_stack(-1, lua)?,
+                        V::from_specified_stack(-1, lua, state)?,
                     )))
                 } else {
                     Ok(None)
@@ -1155,12 +1155,12 @@ where
                 return Some(Err(err));
             }
 
-            lua.push_ref(&self.table.0);
+            lua.push_ref_at(&self.table.0, state);
             match ffi::lua_rawgeti(state, -1, self.index) {
                 ffi::LUA_TNIL => None,
                 _ => {
                     self.index += 1;
-                    Some(V::from_stack(-1, lua))
+                    Some(V::from_specified_stack(-1, lua, state))
                 }
             }
         }

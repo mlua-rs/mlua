@@ -7,6 +7,7 @@ use serde::ser::Serialize;
 
 use crate::error::Result;
 use crate::private::Sealed;
+use crate::state::util::get_next_spot;
 use crate::state::Lua;
 use crate::table::Table;
 use crate::util::check_stack;
@@ -183,8 +184,14 @@ impl LuaSerdeExt for Lua {
     fn array_metatable(&self) -> Table {
         let lua = self.lock();
         unsafe {
-            push_array_metatable(lua.ref_thread());
-            Table(lua.pop_ref_thread())
+            let (aux_thread, index, replace) = get_next_spot(lua.extra());
+            push_array_metatable(lua.state());
+            ffi::lua_xmove(lua.state(), lua.ref_thread(aux_thread), 1);
+            if replace {
+                ffi::lua_replace(lua.ref_thread(aux_thread), index);
+            }
+
+            Table(lua.new_value_ref(aux_thread, index))
         }
     }
 
