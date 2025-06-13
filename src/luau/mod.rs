@@ -5,7 +5,7 @@ use std::ptr;
 use crate::chunk::ChunkMode;
 use crate::error::Result;
 use crate::function::Function;
-use crate::state::{callback_error_ext, Lua};
+use crate::state::{callback_error_ext, ExtraData, Lua};
 use crate::traits::{FromLuaMulti, IntoLua};
 
 pub use require::{NavigateError, Require, TextRequirer};
@@ -45,16 +45,17 @@ unsafe extern "C-unwind" fn lua_collectgarbage(state: *mut ffi::lua_State) -> c_
     let option = ffi::luaL_optstring(state, 1, cstr!("collect"));
     let option = CStr::from_ptr(option);
     let arg = ffi::luaL_optinteger(state, 2, 0);
+    let is_sandboxed = (*ExtraData::get(state)).sandboxed;
     match option.to_str() {
-        Ok("collect") => {
+        Ok("collect") if !is_sandboxed => {
             ffi::lua_gc(state, ffi::LUA_GCCOLLECT, 0);
             0
         }
-        Ok("stop") => {
+        Ok("stop") if !is_sandboxed => {
             ffi::lua_gc(state, ffi::LUA_GCSTOP, 0);
             0
         }
-        Ok("restart") => {
+        Ok("restart") if !is_sandboxed => {
             ffi::lua_gc(state, ffi::LUA_GCRESTART, 0);
             0
         }
@@ -64,12 +65,12 @@ unsafe extern "C-unwind" fn lua_collectgarbage(state: *mut ffi::lua_State) -> c_
             ffi::lua_pushnumber(state, kbytes + kbytes_rem / 1024.0);
             1
         }
-        Ok("step") => {
+        Ok("step") if !is_sandboxed => {
             let res = ffi::lua_gc(state, ffi::LUA_GCSTEP, arg as _);
             ffi::lua_pushboolean(state, res);
             1
         }
-        Ok("isrunning") => {
+        Ok("isrunning") if !is_sandboxed => {
             let res = ffi::lua_gc(state, ffi::LUA_GCISRUNNING, 0);
             ffi::lua_pushboolean(state, res);
             1

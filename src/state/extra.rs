@@ -89,7 +89,7 @@ pub(crate) struct ExtraData {
     #[cfg(feature = "luau")]
     pub(crate) running_gc: bool,
     #[cfg(feature = "luau")]
-    pub(super) sandboxed: bool,
+    pub(crate) sandboxed: bool,
     #[cfg(feature = "luau")]
     pub(super) compiler: Option<Compiler>,
     #[cfg(feature = "luau-jit")]
@@ -212,7 +212,7 @@ impl ExtraData {
         self.weak.write(WeakLua(XRc::downgrade(raw)));
     }
 
-    pub(super) unsafe fn get(state: *mut ffi::lua_State) -> *mut Self {
+    pub(crate) unsafe fn get(state: *mut ffi::lua_State) -> *mut Self {
         #[cfg(feature = "luau")]
         if cfg!(not(feature = "module")) {
             // In the main app we can use `lua_callbacks` to access ExtraData
