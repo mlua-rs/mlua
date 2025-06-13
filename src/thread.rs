@@ -26,6 +26,25 @@ use {
     },
 };
 
+/// Continuation thread status. Can either be Ok, Yielded (rare, but can happen) or Error
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub enum ContinuationStatus {
+    Ok,
+    Yielded,
+    Error,
+}
+
+impl ContinuationStatus {
+    #[allow(dead_code)]
+    pub(crate) fn from_status(status: c_int) -> Self {
+        match status {
+            ffi::LUA_YIELD => Self::Yielded,
+            ffi::LUA_OK => Self::Ok,
+            _ => Self::Error,
+        }
+    }
+}
+
 /// Status of a Lua thread (coroutine).
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum ThreadStatus {
@@ -215,6 +234,7 @@ impl Thread {
         let ret = ffi::lua_resume(thread_state, state, nargs, &mut nresults as *mut c_int);
         #[cfg(feature = "luau")]
         let ret = ffi::lua_resumex(thread_state, state, nargs, &mut nresults as *mut c_int);
+
         match ret {
             ffi::LUA_OK => Ok((ThreadStatusInner::Finished, nresults)),
             ffi::LUA_YIELD => Ok((ThreadStatusInner::Yielded(0), nresults)),
@@ -312,7 +332,7 @@ impl Thread {
             self.reset_inner(status)?;
 
             // Push function to the top of the thread stack
-            ffi::lua_xpush(lua.ref_thread(), thread_state, func.0.index);
+            ffi::lua_xpush(lua.ref_thread(func.0.aux_thread), thread_state, func.0.index);
 
             #[cfg(feature = "luau")]
             {
