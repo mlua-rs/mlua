@@ -89,7 +89,7 @@ where
                 PreallocatedFailure::New(_) => {
                     ffi::lua_rotate(state, 1, -1);
                     ffi::lua_xmove(state, ref_thread, 1);
-                    let index = ref_stack_pop(extra);
+                    let index = (*extra).ref_stack_pop();
                     (*extra).wrapped_failure_pool.push(index);
                     (*extra).wrapped_failure_top += 1;
                 }
@@ -149,32 +149,4 @@ where
             ffi::lua_error(state)
         }
     }
-}
-
-pub(super) unsafe fn ref_stack_pop(extra: *mut ExtraData) -> c_int {
-    let extra = &mut *extra;
-    if let Some(free) = extra.ref_free.pop() {
-        ffi::lua_replace(extra.ref_thread, free);
-        return free;
-    }
-
-    // Try to grow max stack size
-    if extra.ref_stack_top >= extra.ref_stack_size {
-        let mut inc = extra.ref_stack_size; // Try to double stack size
-        while inc > 0 && ffi::lua_checkstack(extra.ref_thread, inc) == 0 {
-            inc /= 2;
-        }
-        if inc == 0 {
-            // Pop item on top of the stack to avoid stack leaking and successfully run destructors
-            // during unwinding.
-            ffi::lua_pop(extra.ref_thread, 1);
-            let top = extra.ref_stack_top;
-            // It is a user error to create enough references to exhaust the Lua max stack size for
-            // the ref thread.
-            panic!("cannot create a Lua reference, out of auxiliary stack space (used {top} slots)");
-        }
-        extra.ref_stack_size += inc;
-    }
-    extra.ref_stack_top += 1;
-    extra.ref_stack_top
 }
