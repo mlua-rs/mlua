@@ -702,8 +702,6 @@ impl RawLua {
     }
 
     /// Returns value at given stack index without popping it.
-    ///
-    /// Uses 2 stack spaces, does not call checkstack.
     pub(crate) unsafe fn stack_value(&self, idx: c_int, type_hint: Option<c_int>) -> Value {
         let state = self.state();
         match type_hint.unwrap_or_else(|| ffi::lua_type(state, idx)) {
@@ -759,21 +757,25 @@ impl RawLua {
             }
 
             ffi::LUA_TUSERDATA => {
+                let ref_thread = self.ref_thread();
+                ffi::lua_xpush(state, ref_thread, idx);
+
                 // If the userdata is `WrappedFailure`, process it as an error or panic.
                 let failure_mt_ptr = (*self.extra.get()).wrapped_failure_mt_ptr;
-                match get_internal_userdata::<WrappedFailure>(state, idx, failure_mt_ptr).as_mut() {
-                    Some(WrappedFailure::Error(err)) => Value::Error(Box::new(err.clone())),
+                match get_internal_userdata::<WrappedFailure>(ref_thread, -1, failure_mt_ptr).as_mut() {
+                    Some(WrappedFailure::Error(err)) => {
+                        ffi::lua_pop(ref_thread, 1);
+                        Value::Error(Box::new(err.clone()))
+                    },
                     Some(WrappedFailure::Panic(panic)) => {
+                        ffi::lua_pop(ref_thread, 1);
                         if let Some(panic) = panic.take() {
                             resume_unwind(panic);
                         }
                         // Previously resumed panic?
                         Value::Nil
                     }
-                    _ => {
-                        ffi::lua_xpush(state, self.ref_thread(), idx);
-                        Value::UserData(AnyUserData(self.pop_ref_thread()))
-                    }
+                    _ => Value::UserData(AnyUserData(self.pop_ref_thread())),
                 }
             }
 
