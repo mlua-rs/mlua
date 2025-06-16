@@ -73,7 +73,7 @@ pub(crate) unsafe fn init_internal_metatable<T: TypeKey>(
     Ok(())
 }
 
-// Uses 2 stack spaces, does not call checkstack
+// Uses up to 1 stack space, does not call `checkstack`
 pub(crate) unsafe fn get_internal_userdata<T: TypeKey>(
     state: *mut ffi::lua_State,
     index: c_int,
