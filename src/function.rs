@@ -492,16 +492,24 @@ impl Function {
     /// This function returns shallow clone (same handle) for Rust/C functions.
     #[cfg(any(feature = "luau", doc))]
     #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
-    pub fn deep_clone(&self) -> Self {
+    pub fn deep_clone(&self) -> Result<Self> {
         let lua = self.0.lua.lock();
-        let ref_thread = lua.ref_thread();
+        let state = lua.state();
         unsafe {
-            if ffi::lua_iscfunction(ref_thread, self.0.index) != 0 {
-                return self.clone();
+            let _sg = StackGuard::new(state);
+            check_stack(state, 2)?;
+
+            lua.push_ref(&self.0);
+            if ffi::lua_iscfunction(state, -1) != 0 {
+                return Ok(self.clone());
             }
 
-            ffi::lua_clonefunction(ref_thread, self.0.index);
-            Function(lua.pop_ref_thread())
+            if lua.unlikely_memory_error() {
+                ffi::lua_clonefunction(state, -1);
+            } else {
+                protect_lua!(state, 1, 1, fn(state) ffi::lua_clonefunction(state, -1))?;
+            }
+            Ok(Function(lua.pop_ref()))
         }
     }
 }
