@@ -18,6 +18,10 @@ use crate::stdlib::StdLib;
 use crate::string::String;
 use crate::table::Table;
 use crate::thread::Thread;
+
+#[cfg(all(not(feature = "lua51"), not(feature = "luajit")))]
+use crate::thread::ContinuationStatus;
+
 use crate::traits::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti};
 use crate::types::{
     AppDataRef, AppDataRefMut, ArcReentrantMutexGuard, Integer, LuaType, MaybeSend, Number, ReentrantMutex,
@@ -1266,6 +1270,44 @@ impl Lua {
         }))
     }
 
+    /// Same as ``create_function`` but with an added continuation function.
+    ///
+    /// The values passed to the continuation will be the yielded arguments
+    /// from the function for the initial continuation call. If yielding from a
+    /// continuation, the yielded results will be returned to the ``Thread::resume`` caller. The
+    /// arguments passed in the next ``Thread::resume`` call will then be the arguments passed
+    /// to the yielding continuation upon resumption.
+    ///
+    /// Returning a value from a continuation without setting yield
+    /// arguments will then be returned as the final return value of the Lua function call.
+    /// Values returned in a function in which there is also yielding will be ignored
+    #[cfg(all(not(feature = "lua51"), not(feature = "luajit")))]
+    pub fn create_function_with_continuation<F, FC, A, AC, R, RC>(
+        &self,
+        func: F,
+        cont: FC,
+    ) -> Result<Function>
+    where
+        F: Fn(&Lua, A) -> Result<R> + MaybeSend + 'static,
+        FC: Fn(&Lua, ContinuationStatus, AC) -> Result<RC> + MaybeSend + 'static,
+        A: FromLuaMulti,
+        AC: FromLuaMulti,
+        R: IntoLuaMulti,
+        RC: IntoLuaMulti,
+    {
+        (self.lock()).create_callback_with_continuation(
+            Box::new(move |rawlua, nargs| unsafe {
+                let args = A::from_stack_args(nargs, 1, None, rawlua)?;
+                func(rawlua.lua(), args)?.push_into_stack_multi(rawlua)
+            }),
+            Box::new(move |rawlua, nargs, status| unsafe {
+                let args = AC::from_stack_args(nargs, 1, None, rawlua)?;
+                let status = ContinuationStatus::from_status(status);
+                cont(rawlua.lua(), status, args)?.push_into_stack_multi(rawlua)
+            }),
+        )
+    }
+
     /// Wraps a Rust mutable closure, creating a callable Lua function handle to it.
     ///
     /// This is a version of [`Lua::create_function`] that accepts a `FnMut` argument.
@@ -2080,6 +2122,42 @@ impl Lua {
     #[inline(always)]
     pub(crate) unsafe fn raw_lua(&self) -> &RawLua {
         &*self.raw.data_ptr()
+    }
+
+    /// Set the yield arguments. Note that Lua will not yield until you return from the function
+    ///
+    /// This method is mostly useful with continuations and Rust-Rust yields
+    /// due to the Rust/Lua boundary
+    ///
+    /// Example:
+    ///
+    /// ```rust
+    /// fn test() -> mlua::Result<()> {
+    ///     let lua = mlua::Lua::new();
+    ///     let always_yield = lua.create_function(|lua, ()| lua.yield_with((42, "69420".to_string(), 45.6)))?;
+    ///
+    ///     let thread = lua.create_thread(always_yield)?;
+    ///     assert_eq!(
+    ///         thread.resume::<(i32, String, f32)>(())?,
+    ///         (42, String::from("69420"), 45.6)
+    ///     );
+    ///
+    ///     Ok(())
+    /// }
+    /// ```
+    pub fn yield_with(&self, args: impl IntoLuaMulti) -> Result<()> {
+        let raw = self.lock();
+        unsafe {
+            raw.extra.get().as_mut().unwrap_unchecked().yielded_values = Some(args.into_lua_multi(self)?);
+        }
+        Ok(())
+    }
+
+    /// Checks if Lua is be allowed to yield.
+    #[cfg(not(any(feature = "lua51", feature = "lua52", feature = "luajit")))]
+    #[inline]
+    pub fn is_yieldable(&self) -> bool {
+        self.lock().is_yieldable()
     }
 }
 
