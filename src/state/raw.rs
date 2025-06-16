@@ -766,7 +766,7 @@ impl RawLua {
                     Some(WrappedFailure::Error(err)) => {
                         ffi::lua_pop(ref_thread, 1);
                         Value::Error(Box::new(err.clone()))
-                    },
+                    }
                     Some(WrappedFailure::Panic(panic)) => {
                         ffi::lua_pop(ref_thread, 1);
                         if let Some(panic) = panic.take() {
