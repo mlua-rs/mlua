@@ -529,6 +529,7 @@ impl<R> Drop for AsyncThread<R> {
                         // The thread is dropped while yielded, resume it with the "terminate" signal
                         ffi::lua_pushlightuserdata(self.thread.1, crate::Lua::poll_terminate().0);
                         if let Ok((new_status, _)) = self.thread.resume_inner(&lua, 1) {
+                            // `new_status` should always be `ThreadStatusInner::Yielded(0)`
                             status = new_status;
                         }
                     }

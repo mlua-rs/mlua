@@ -611,6 +611,36 @@ async fn test_async_task() -> Result<()> {
 }
 
 #[tokio::test]
+async fn test_async_task_abort() -> Result<()> {
+    let lua = Lua::new();
+
+    let sleep = lua.create_async_function(move |_lua, n: u64| async move {
+        sleep_ms(n).await;
+        Ok(())
+    })?;
+    lua.globals().set("sleep", sleep)?;
+
+    let local = tokio::task::LocalSet::new();
+    local
+        .run_until(async {
+            let lua2 = lua.clone();
+            let jh = tokio::task::spawn_local(async move {
+                lua2.load("sleep(200) result = 'done'")
+                    .exec_async()
+                    .await
+                    .unwrap();
+            });
+            sleep_ms(100).await; // Wait for the task to start
+            jh.abort();
+        })
+        .await;
+    local.await;
+    assert_eq!(lua.globals().get::<Value>("result")?, Value::Nil);
+
+    Ok(())
+}
+
+#[tokio::test]
 #[cfg(not(feature = "luau"))]
 async fn test_async_hook() -> Result<()> {
     use std::sync::atomic::{AtomicBool, Ordering};

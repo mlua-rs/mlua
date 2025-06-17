@@ -1262,7 +1262,7 @@ impl RawLua {
                 if nargs == 1 && ffi::lua_tolightuserdata(state, -1) == Lua::poll_terminate().0 {
                     // Destroy the future and terminate the Lua thread
                     (*upvalue).data.take();
-                    ffi::lua_pushinteger(state, 0);
+                    ffi::lua_pushinteger(state, -1);
                     return Ok(1);
                 }
 
@@ -1347,6 +1347,10 @@ impl RawLua {
                         return res
                     elseif nres == 2 then
                         return res, res2
+                    elseif nres < 0 then
+                        -- Negative `nres` means that the future is terminated
+                        -- It must stay yielded and never be resumed again
+                        yield()
                     else
                         return unpack(res, nres)
                     end
