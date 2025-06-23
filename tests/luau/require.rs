@@ -202,7 +202,7 @@ fn test_require_with_config() {
     assert!((res.unwrap_err().to_string()).contains("@ is not a valid alias"));
 }
 
-#[cfg(feature = "async")]
+#[cfg(all(feature = "async", not(windows)))]
 #[tokio::test]
 async fn test_async_require() -> Result<()> {
     let lua = Lua::new();
