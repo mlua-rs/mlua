@@ -225,14 +225,19 @@ async fn test_async_require() -> Result<()> {
             Ok(())
         })?,
     )?;
+    lua.globals().set("tmp_dir", temp_dir.path().to_str().unwrap())?;
+    lua.globals().set(
+        "curr_dir_components",
+        std::env::current_dir().unwrap().components().count(),
+    )?;
 
     lua.load(
         r#"
-        local result = require("./async_chunk")
+        local path_to_root = string.rep("/..", curr_dir_components - 1)
+        local result = require(`.{path_to_root}{tmp_dir}/async_chunk`)
         assert(result == "result_after_async_sleep")
         "#,
     )
-    .set_name(format!("@{}", temp_dir.path().join("require.rs").display()))
     .exec_async()
     .await
 }
