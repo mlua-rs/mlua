@@ -1,6 +1,6 @@
 [package]
 name = "mlua-sys"
-version = "0.8.0"
+version = "0.8.1"
 authors = ["Aleksandr Orlenko <zxteam@pm.me>"]
 rust-version = "1.71"
 edition = "2021"
