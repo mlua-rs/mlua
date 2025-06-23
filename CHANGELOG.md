@@ -1,3 +1,10 @@
+## v0.11.0-beta.3 (Jun 23, 2025)
+
+- Luau in sandboxed mode has reduced options in `collectgarbage` function (to follow the official doc)
+- `Function::deep_clone` now returns `Result<Function>` as this operation can trigger memory errors
+- Luau "Require" resolves included Lua files relative to the current directory (#605)
+- Fixed bug when finalizing `AsyncThread` on drop (`call_async` methods family)
+
 ## v0.11.0-beta.2 (Jun 12, 2025)
 
 - Lua 5.4 updated to 5.4.8
