@@ -200,9 +200,11 @@ impl Require for TextRequirer {
         let chunk_path = Self::normalize_path(chunk_name.as_ref());
 
         if chunk_path.extension() == Some("rs".as_ref()) {
+            // Special case for Rust source files, reset to the current directory
+            let chunk_filename = chunk_path.file_name().unwrap();
             let cwd = env::current_dir().map_err(|_| NavigateError::NotFound)?;
-            self.abs_path = Self::normalize_path(&cwd.join(&chunk_path));
-            self.rel_path = chunk_path;
+            self.abs_path = Self::normalize_path(&cwd.join(chunk_filename));
+            self.rel_path = ([Component::CurDir, Component::Normal(chunk_filename)].into_iter()).collect();
             self.module_path = PathBuf::new();
 
             return Ok(());
