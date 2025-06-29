@@ -1,5 +1,4 @@
 use std::borrow::Cow;
-use std::cell::UnsafeCell;
 use std::ops::Deref;
 #[cfg(not(feature = "luau"))]
 use std::ops::{BitOr, BitOrAssign};
@@ -51,14 +50,18 @@ impl<'a> Debug<'a> {
     pub(crate) fn new(lua: &'a RawLua, ar: *mut lua_Debug) -> Self {
         Debug {
             lua: EitherLua::Borrowed(lua),
-            ar: ActivationRecord::Borrowed(ar),
+            ar: ActivationRecord(ar, false),
         }
     }
 
-    pub(crate) fn new_owned(guard: ReentrantMutexGuard<'a, RawLua>, _level: c_int, ar: lua_Debug) -> Self {
+    pub(crate) fn new_owned(
+        guard: ReentrantMutexGuard<'a, RawLua>,
+        _level: c_int,
+        ar: Box<lua_Debug>,
+    ) -> Self {
         Debug {
             lua: EitherLua::Owned(guard),
-            ar: ActivationRecord::Owned(UnsafeCell::new(ar)),
+            ar: ActivationRecord(Box::into_raw(ar), true),
             #[cfg(feature = "luau")]
             level: _level,
         }
@@ -207,19 +210,19 @@ impl<'a> Debug<'a> {
     }
 }
 
-enum ActivationRecord {
-    #[cfg(not(feature = "luau"))]
-    Borrowed(*mut lua_Debug),
-    Owned(UnsafeCell<lua_Debug>),
-}
+struct ActivationRecord(*mut lua_Debug, bool);
 
 impl ActivationRecord {
     #[inline]
     fn get(&self) -> *mut lua_Debug {
-        match self {
-            #[cfg(not(feature = "luau"))]
-            ActivationRecord::Borrowed(x) => *x,
-            ActivationRecord::Owned(x) => x.get(),
+        self.0
+    }
+}
+
+impl Drop for ActivationRecord {
+    fn drop(&mut self) {
+        if self.1 {
+            drop(unsafe { Box::from_raw(self.0) });
         }
     }
 }

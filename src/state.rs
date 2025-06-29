@@ -880,14 +880,14 @@ impl Lua {
     pub fn inspect_stack(&self, level: usize) -> Option<Debug<'_>> {
         let lua = self.lock();
         unsafe {
-            let mut ar: ffi::lua_Debug = mem::zeroed();
+            let mut ar = Box::new(mem::zeroed::<ffi::lua_Debug>());
             let level = level as c_int;
             #[cfg(not(feature = "luau"))]
-            if ffi::lua_getstack(lua.state(), level, &mut ar) == 0 {
+            if ffi::lua_getstack(lua.state(), level, &mut *ar) == 0 {
                 return None;
             }
             #[cfg(feature = "luau")]
-            if ffi::lua_getinfo(lua.state(), level, cstr!(""), &mut ar) == 0 {
+            if ffi::lua_getinfo(lua.state(), level, cstr!(""), &mut *ar) == 0 {
                 return None;
             }
             Some(Debug::new_owned(lua, level, ar))
