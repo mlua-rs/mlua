@@ -75,9 +75,9 @@ mod macros;
 mod buffer;
 mod chunk;
 mod conversion;
+mod debug;
 mod error;
 mod function;
-mod hook;
 #[cfg(any(feature = "luau", doc))]
 mod luau;
 mod memory;
@@ -101,9 +101,9 @@ pub use bstr::BString;
 pub use ffi::{self, lua_CFunction, lua_State};
 
 pub use crate::chunk::{AsChunk, Chunk, ChunkMode};
+pub use crate::debug::{Debug, DebugEvent, DebugNames, DebugSource, DebugStack};
 pub use crate::error::{Error, ErrorContext, ExternalError, ExternalResult, Result};
 pub use crate::function::{Function, FunctionInfo};
-pub use crate::hook::{Debug, DebugEvent, DebugNames, DebugSource, DebugStack};
 pub use crate::multi::{MultiValue, Variadic};
 pub use crate::scope::Scope;
 pub use crate::state::{GCMode, Lua, LuaOptions, WeakLua};
@@ -124,7 +124,7 @@ pub use crate::userdata::{
 pub use crate::value::{Nil, Value};
 
 #[cfg(not(feature = "luau"))]
-pub use crate::hook::HookTriggers;
+pub use crate::debug::HookTriggers;
 
 #[cfg(any(feature = "luau", doc))]
 #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]

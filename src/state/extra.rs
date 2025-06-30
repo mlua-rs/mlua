@@ -76,7 +76,7 @@ pub(crate) struct ExtraData {
     #[cfg(not(feature = "luau"))]
     pub(super) hook_callback: Option<crate::types::HookCallback>,
     #[cfg(not(feature = "luau"))]
-    pub(super) hook_triggers: crate::hook::HookTriggers,
+    pub(super) hook_triggers: crate::debug::HookTriggers,
     #[cfg(feature = "lua54")]
     pub(super) warn_callback: Option<crate::types::WarnCallback>,
     #[cfg(feature = "luau")]

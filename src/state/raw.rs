@@ -38,7 +38,7 @@ use super::{Lua, LuaOptions, WeakLua};
 
 #[cfg(not(feature = "luau"))]
 use crate::{
-    hook::Debug,
+    debug::Debug,
     types::{HookCallback, HookKind, VmState},
 };
 
@@ -435,7 +435,7 @@ impl RawLua {
                 match (*extra).hook_callback.clone() {
                     Some(hook_callback) => {
                         let rawlua = (*extra).raw_lua();
-                        let debug = Debug::new(rawlua, ar);
+                        let debug = Debug::new(rawlua, 0, ar);
                         hook_callback((*extra).lua(), debug)
                     }
                     None => {
@@ -465,7 +465,7 @@ impl RawLua {
 
             let status = callback_error_ext(state, ptr::null_mut(), false, |extra, _| {
                 let rawlua = (*extra).raw_lua();
-                let debug = Debug::new(rawlua, ar);
+                let debug = Debug::new(rawlua, 0, ar);
                 let hook_callback = (*hook_callback_ptr).clone();
                 hook_callback((*extra).lua(), debug)
             });

@@ -1,9 +1,9 @@
 use std::cell::UnsafeCell;
 use std::os::raw::{c_int, c_void};
 
-use crate::error::Result;
 #[cfg(not(feature = "luau"))]
-use crate::hook::{Debug, HookTriggers};
+use crate::debug::{Debug, HookTriggers};
+use crate::error::Result;
 use crate::state::{ExtraData, Lua, RawLua};
 
 // Re-export mutex wrappers

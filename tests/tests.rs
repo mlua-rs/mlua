@@ -1251,14 +1251,18 @@ fn test_inspect_stack() -> Result<()> {
     let lua = Lua::new();
 
     // Not inside any function
-    assert!(lua.inspect_stack(0).is_none());
+    assert!(lua.inspect_stack(0, |_| ()).is_none());
 
     let logline = lua.create_function(|lua, msg: StdString| {
-        let debug = lua.inspect_stack(1).unwrap(); // caller
-        let source = debug.source().short_src;
-        let source = source.as_deref().unwrap_or("?");
-        let line = debug.curr_line();
-        Ok(format!("{}:{} {}", source, line, msg))
+        let r = lua
+            .inspect_stack(1, |debug| {
+                let source = debug.source().short_src;
+                let source = source.as_deref().unwrap_or("?");
+                let line = debug.curr_line();
+                format!("{}:{} {}", source, line, msg)
+            })
+            .unwrap();
+        Ok(r)
     })?;
     lua.globals().set("logline", logline)?;
 
@@ -1281,8 +1285,7 @@ fn test_inspect_stack() -> Result<()> {
     .exec()?;
 
     let stack_info = lua.create_function(|lua, ()| {
-        let debug = lua.inspect_stack(1).unwrap(); // caller
-        let stack_info = debug.stack();
+        let stack_info = lua.inspect_stack(1, |debug| debug.stack()).unwrap();
         Ok(format!("{stack_info:?}"))
     })?;
     lua.globals().set("stack_info", stack_info)?;

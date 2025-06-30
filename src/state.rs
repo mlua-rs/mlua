@@ -8,9 +8,9 @@ use std::result::Result as StdResult;
 use std::{fmt, mem, ptr};
 
 use crate::chunk::{AsChunk, Chunk};
+use crate::debug::Debug;
 use crate::error::{Error, Result};
 use crate::function::Function;
-use crate::hook::Debug;
 use crate::memory::MemoryState;
 use crate::multi::MultiValue;
 use crate::scope::Scope;
@@ -28,7 +28,7 @@ use crate::util::{assert_stack, check_stack, protect_lua_closure, push_string, r
 use crate::value::{Nil, Value};
 
 #[cfg(not(feature = "luau"))]
-use crate::{hook::HookTriggers, types::HookKind};
+use crate::{debug::HookTriggers, types::HookKind};
 
 #[cfg(any(feature = "luau", doc))]
 use crate::{buffer::Buffer, chunk::Compiler};
@@ -869,28 +869,27 @@ impl Lua {
         }
     }
 
-    /// Gets information about the interpreter runtime stack.
+    /// Gets information about the interpreter runtime stack at a given level.
     ///
-    /// This function returns [`Debug`] structure that can be used to get information about the
-    /// function executing at a given level. Level `0` is the current running function, whereas
-    /// level `n+1` is the function that has called level `n` (except for tail calls, which do
-    /// not count in the stack).
-    ///
-    /// [`Debug`]: crate::hook::Debug
-    pub fn inspect_stack(&self, level: usize) -> Option<Debug<'_>> {
+    /// This function calls callback `f`, passing the [`Debug`] structure that can be used to get
+    /// information about the function executing at a given level.
+    /// Level `0` is the current running function, whereas level `n+1` is the function that has
+    /// called level `n` (except for tail calls, which do not count in the stack).
+    pub fn inspect_stack<R>(&self, level: usize, f: impl FnOnce(Debug) -> R) -> Option<R> {
         let lua = self.lock();
         unsafe {
-            let mut ar = Box::new(mem::zeroed::<ffi::lua_Debug>());
+            let mut ar = mem::zeroed::<ffi::lua_Debug>();
             let level = level as c_int;
             #[cfg(not(feature = "luau"))]
-            if ffi::lua_getstack(lua.state(), level, &mut *ar) == 0 {
+            if ffi::lua_getstack(lua.state(), level, &mut ar) == 0 {
                 return None;
             }
             #[cfg(feature = "luau")]
-            if ffi::lua_getinfo(lua.state(), level, cstr!(""), &mut *ar) == 0 {
+            if ffi::lua_getinfo(lua.state(), level, cstr!(""), &mut ar) == 0 {
                 return None;
             }
-            Some(Debug::new_owned(lua, level, ar))
+
+            Some(f(Debug::new(&lua, level, &mut ar)))
         }
     }
 

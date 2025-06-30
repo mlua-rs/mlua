@@ -1,13 +1,9 @@
 use std::borrow::Cow;
-use std::ops::Deref;
-#[cfg(not(feature = "luau"))]
-use std::ops::{BitOr, BitOrAssign};
 use std::os::raw::c_int;
 
 use ffi::lua_Debug;
 
 use crate::state::RawLua;
-use crate::types::ReentrantMutexGuard;
 use crate::util::{linenumber_to_usize, ptr_to_lossy_str, ptr_to_str};
 
 /// Contains information about currently executing Lua code.
@@ -20,51 +16,15 @@ use crate::util::{linenumber_to_usize, ptr_to_lossy_str, ptr_to_str};
 /// [documentation]: https://www.lua.org/manual/5.4/manual.html#lua_Debug
 /// [`Lua::set_hook`]: crate::Lua::set_hook
 pub struct Debug<'a> {
-    lua: EitherLua<'a>,
-    ar: ActivationRecord,
-    #[cfg(feature = "luau")]
+    lua: &'a RawLua,
+    #[cfg_attr(not(feature = "luau"), allow(unused))]
     level: c_int,
-}
-
-enum EitherLua<'a> {
-    Owned(ReentrantMutexGuard<'a, RawLua>),
-    #[cfg(not(feature = "luau"))]
-    Borrowed(&'a RawLua),
-}
-
-impl Deref for EitherLua<'_> {
-    type Target = RawLua;
-
-    fn deref(&self) -> &Self::Target {
-        match self {
-            EitherLua::Owned(guard) => guard,
-            #[cfg(not(feature = "luau"))]
-            EitherLua::Borrowed(lua) => lua,
-        }
-    }
+    ar: *mut lua_Debug,
 }
 
 impl<'a> Debug<'a> {
-    // We assume the lock is held when this function is called.
-    #[cfg(not(feature = "luau"))]
-    pub(crate) fn new(lua: &'a RawLua, ar: *mut lua_Debug) -> Self {
-        Debug {
-            lua: EitherLua::Borrowed(lua),
-            ar: ActivationRecord(ar, false),
-        }
-    }
-
-    pub(crate) fn new_owned(
-        guard: ReentrantMutexGuard<'a, RawLua>,
-        _level: c_int,
-        ar: Box<lua_Debug>,
-    ) -> Self {
-        Debug {
-            lua: EitherLua::Owned(guard),
-            ar: ActivationRecord(Box::into_raw(ar), true),
-            #[cfg(feature = "luau")]
-            level: _level,
-        }
+    pub(crate) fn new(lua: &'a RawLua, level: c_int, ar: *mut lua_Debug) -> Self {
+        Debug { lua, ar, level }
     }
 
     /// Returns the specific event that triggered the hook.
@@ -77,7 +37,7 @@ impl<'a> Debug<'a> {
     #[cfg_attr(docsrs, doc(cfg(not(feature = "luau"))))]
     pub fn event(&self) -> DebugEvent {
         unsafe {
-            match (*self.ar.get()).event {
+            match (*self.ar).event {
                 ffi::LUA_HOOKCALL => DebugEvent::Call,
                 ffi::LUA_HOOKRET => DebugEvent::Ret,
                 ffi::LUA_HOOKTAILCALL => DebugEvent::TailCall,
@@ -93,19 +53,19 @@ impl<'a> Debug<'a> {
         unsafe {
             #[cfg(not(feature = "luau"))]
             mlua_assert!(
-                ffi::lua_getinfo(self.lua.state(), cstr!("n"), self.ar.get()) != 0,
+                ffi::lua_getinfo(self.lua.state(), cstr!("n"), self.ar) != 0,
                 "lua_getinfo failed with `n`"
             );
             #[cfg(feature = "luau")]
             mlua_assert!(
-                ffi::lua_getinfo(self.lua.state(), self.level, cstr!("n"), self.ar.get()) != 0,
+                ffi::lua_getinfo(self.lua.state(), self.level, cstr!("n"), self.ar) != 0,
                 "lua_getinfo failed with `n`"
             );
 
             DebugNames {
-                name: ptr_to_lossy_str((*self.ar.get()).name),
+                name: ptr_to_lossy_str((*self.ar).name),
                 #[cfg(not(feature = "luau"))]
-                name_what: match ptr_to_str((*self.ar.get()).namewhat) {
+                name_what: match ptr_to_str((*self.ar).namewhat) {
                     Some("") => None,
                     val => val,
                 },
@@ -120,27 +80,27 @@ impl<'a> Debug<'a> {
         unsafe {
             #[cfg(not(feature = "luau"))]
             mlua_assert!(
-                ffi::lua_getinfo(self.lua.state(), cstr!("S"), self.ar.get()) != 0,
+                ffi::lua_getinfo(self.lua.state(), cstr!("S"), self.ar) != 0,
                 "lua_getinfo failed with `S`"
             );
             #[cfg(feature = "luau")]
             mlua_assert!(
-                ffi::lua_getinfo(self.lua.state(), self.level, cstr!("s"), self.ar.get()) != 0,
+                ffi::lua_getinfo(self.lua.state(), self.level, cstr!("s"), self.ar) != 0,
                 "lua_getinfo failed with `s`"
             );
 
             DebugSource {
-                source: ptr_to_lossy_str((*self.ar.get()).source),
+                source: ptr_to_lossy_str((*self.ar).source),
                 #[cfg(not(feature = "luau"))]
-                short_src: ptr_to_lossy_str((*self.ar.get()).short_src.as_ptr()),
+                short_src: ptr_to_lossy_str((*self.ar).short_src.as_ptr()),
                 #[cfg(feature = "luau")]
-                short_src: ptr_to_lossy_str((*self.ar.get()).short_src),
-                line_defined: linenumber_to_usize((*self.ar.get()).linedefined),
+                short_src: ptr_to_lossy_str((*self.ar).short_src),
+                line_defined: linenumber_to_usize((*self.ar).linedefined),
                 #[cfg(not(feature = "luau"))]
-                last_line_defined: linenumber_to_usize((*self.ar.get()).lastlinedefined),
+                last_line_defined: linenumber_to_usize((*self.ar).lastlinedefined),
                 #[cfg(feature = "luau")]
                 last_line_defined: None,
-                what: ptr_to_str((*self.ar.get()).what).unwrap_or("main"),
+                what: ptr_to_str((*self.ar).what).unwrap_or("main"),
             }
         }
     }
@@ -150,16 +110,16 @@ impl<'a> Debug<'a> {
         unsafe {
             #[cfg(not(feature = "luau"))]
             mlua_assert!(
-                ffi::lua_getinfo(self.lua.state(), cstr!("l"), self.ar.get()) != 0,
+                ffi::lua_getinfo(self.lua.state(), cstr!("l"), self.ar) != 0,
                 "lua_getinfo failed with `l`"
             );
             #[cfg(feature = "luau")]
             mlua_assert!(
-                ffi::lua_getinfo(self.lua.state(), self.level, cstr!("l"), self.ar.get()) != 0,
+                ffi::lua_getinfo(self.lua.state(), self.level, cstr!("l"), self.ar) != 0,
                 "lua_getinfo failed with `l`"
             );
 
-            (*self.ar.get()).currentline
+            (*self.ar).currentline
         }
     }
 
@@ -170,10 +130,10 @@ impl<'a> Debug<'a> {
     pub fn is_tail_call(&self) -> bool {
         unsafe {
             mlua_assert!(
-                ffi::lua_getinfo(self.lua.state(), cstr!("t"), self.ar.get()) != 0,
+                ffi::lua_getinfo(self.lua.state(), cstr!("t"), self.ar) != 0,
                 "lua_getinfo failed with `t`"
             );
-            (*self.ar.get()).currentline != 0
+            (*self.ar).currentline != 0
         }
     }
 
@@ -182,47 +142,30 @@ impl<'a> Debug<'a> {
         unsafe {
             #[cfg(not(feature = "luau"))]
             mlua_assert!(
-                ffi::lua_getinfo(self.lua.state(), cstr!("u"), self.ar.get()) != 0,
+                ffi::lua_getinfo(self.lua.state(), cstr!("u"), self.ar) != 0,
                 "lua_getinfo failed with `u`"
             );
             #[cfg(feature = "luau")]
             mlua_assert!(
-                ffi::lua_getinfo(self.lua.state(), self.level, cstr!("au"), self.ar.get()) != 0,
+                ffi::lua_getinfo(self.lua.state(), self.level, cstr!("au"), self.ar) != 0,
                 "lua_getinfo failed with `au`"
             );
 
             #[cfg(not(feature = "luau"))]
             let stack = DebugStack {
-                num_ups: (*self.ar.get()).nups as _,
+                num_ups: (*self.ar).nups as _,
                 #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
-                num_params: (*self.ar.get()).nparams as _,
+                num_params: (*self.ar).nparams as _,
                 #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
-                is_vararg: (*self.ar.get()).isvararg != 0,
+                is_vararg: (*self.ar).isvararg != 0,
             };
             #[cfg(feature = "luau")]
             let stack = DebugStack {
-                num_ups: (*self.ar.get()).nupvals,
-                num_params: (*self.ar.get()).nparams,
-                is_vararg: (*self.ar.get()).isvararg != 0,
+                num_ups: (*self.ar).nupvals,
+                num_params: (*self.ar).nparams,
+                is_vararg: (*self.ar).isvararg != 0,
             };
             stack
-        }
-    }
-}
-
-struct ActivationRecord(*mut lua_Debug, bool);
-
-impl ActivationRecord {
-    #[inline]
-    fn get(&self) -> *mut lua_Debug {
-        self.0
-    }
-}
-
-impl Drop for ActivationRecord {
-    fn drop(&mut self) {
-        if self.1 {
-            drop(unsafe { Box::from_raw(self.0) });
         }
     }
 }
@@ -385,7 +328,7 @@ impl HookTriggers {
 }
 
 #[cfg(not(feature = "luau"))]
-impl BitOr for HookTriggers {
+impl std::ops::BitOr for HookTriggers {
     type Output = Self;
 
     fn bitor(mut self, rhs: Self) -> Self::Output {
@@ -400,7 +343,7 @@ impl BitOr for HookTriggers {
 }
 
 #[cfg(not(feature = "luau"))]
-impl BitOrAssign for HookTriggers {
+impl std::ops::BitOrAssign for HookTriggers {
     fn bitor_assign(&mut self, rhs: Self) {
         *self = *self | rhs;
     }
