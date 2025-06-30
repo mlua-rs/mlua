@@ -436,7 +436,7 @@ impl RawLua {
                     Some(hook_callback) => {
                         let rawlua = (*extra).raw_lua();
                         let debug = Debug::new(rawlua, 0, ar);
-                        hook_callback((*extra).lua(), debug)
+                        hook_callback((*extra).lua(), &debug)
                     }
                     None => {
                         ffi::lua_sethook(state, None, 0, 0);
@@ -467,7 +467,7 @@ impl RawLua {
                 let rawlua = (*extra).raw_lua();
                 let debug = Debug::new(rawlua, 0, ar);
                 let hook_callback = (*hook_callback_ptr).clone();
-                hook_callback((*extra).lua(), debug)
+                hook_callback((*extra).lua(), &debug)
             });
             process_status(state, (*ar).event, status)
         }

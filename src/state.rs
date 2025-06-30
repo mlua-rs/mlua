@@ -544,7 +544,7 @@ impl Lua {
     #[cfg_attr(docsrs, doc(cfg(not(feature = "luau"))))]
     pub fn set_global_hook<F>(&self, triggers: HookTriggers, callback: F) -> Result<()>
     where
-        F: Fn(&Lua, Debug) -> Result<VmState> + MaybeSend + 'static,
+        F: Fn(&Lua, &Debug) -> Result<VmState> + MaybeSend + 'static,
     {
         let lua = self.lock();
         unsafe {
@@ -594,7 +594,7 @@ impl Lua {
     #[cfg_attr(docsrs, doc(cfg(not(feature = "luau"))))]
     pub fn set_hook<F>(&self, triggers: HookTriggers, callback: F) -> Result<()>
     where
-        F: Fn(&Lua, Debug) -> Result<VmState> + MaybeSend + 'static,
+        F: Fn(&Lua, &Debug) -> Result<VmState> + MaybeSend + 'static,
     {
         let lua = self.lock();
         unsafe { lua.set_thread_hook(lua.state(), HookKind::Thread(triggers, XRc::new(callback))) }

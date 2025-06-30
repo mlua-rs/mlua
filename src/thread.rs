@@ -269,7 +269,7 @@ impl Thread {
     #[cfg_attr(docsrs, doc(cfg(not(feature = "luau"))))]
     pub fn set_hook<F>(&self, triggers: HookTriggers, callback: F) -> Result<()>
     where
-        F: Fn(&crate::Lua, Debug) -> Result<crate::VmState> + crate::MaybeSend + 'static,
+        F: Fn(&crate::Lua, &Debug) -> Result<crate::VmState> + crate::MaybeSend + 'static,
     {
         let lua = self.0.lua.lock();
         unsafe {

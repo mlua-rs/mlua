@@ -79,10 +79,10 @@ pub(crate) enum HookKind {
 }
 
 #[cfg(all(feature = "send", not(feature = "luau")))]
-pub(crate) type HookCallback = XRc<dyn Fn(&Lua, Debug) -> Result<VmState> + Send>;
+pub(crate) type HookCallback = XRc<dyn Fn(&Lua, &Debug) -> Result<VmState> + Send>;
 
 #[cfg(all(not(feature = "send"), not(feature = "luau")))]
-pub(crate) type HookCallback = XRc<dyn Fn(&Lua, Debug) -> Result<VmState>>;
+pub(crate) type HookCallback = XRc<dyn Fn(&Lua, &Debug) -> Result<VmState>>;
 
 #[cfg(all(feature = "send", feature = "luau"))]
 pub(crate) type InterruptCallback = XRc<dyn Fn(&Lua) -> Result<VmState> + Send>;
