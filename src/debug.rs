@@ -3,29 +3,32 @@ use std::os::raw::c_int;
 
 use ffi::{lua_Debug, lua_State};
 
+use crate::function::Function;
 use crate::state::RawLua;
-use crate::util::{linenumber_to_usize, ptr_to_lossy_str, ptr_to_str};
+use crate::util::{assert_stack, linenumber_to_usize, ptr_to_lossy_str, ptr_to_str, StackGuard};
 
 /// Contains information about currently executing Lua code.
 ///
-/// The `Debug` structure is provided as a parameter to the hook function set with
-/// [`Lua::set_hook`]. You may call the methods on this structure to retrieve information about the
-/// Lua code executing at the time that the hook function was called. Further information can be
-/// found in the Lua [documentation].
+/// You may call the methods on this structure to retrieve information about the Lua code executing
+/// at the specific level. Further information can be found in the Lua [documentation].
 ///
 /// [documentation]: https://www.lua.org/manual/5.4/manual.html#lua_Debug
-/// [`Lua::set_hook`]: crate::Lua::set_hook
-pub struct Debug {
+pub struct Debug<'a> {
     state: *mut lua_State,
+    lua: &'a RawLua,
     #[cfg_attr(not(feature = "luau"), allow(unused))]
     level: c_int,
     ar: *mut lua_Debug,
 }
 
-impl Debug {
-    pub(crate) fn new(lua: &RawLua, level: c_int, ar: *mut lua_Debug) -> Self {
-        let state = lua.state();
-        Debug { state, ar, level }
+impl<'a> Debug<'a> {
+    pub(crate) fn new(lua: &'a RawLua, level: c_int, ar: *mut lua_Debug) -> Self {
+        Debug {
+            state: lua.state(),
+            lua,
+            ar,
+            level,
+        }
     }
 
     /// Returns the specific event that triggered the hook.
@@ -49,7 +52,31 @@ impl Debug {
         }
     }
 
-    /// Corresponds to the `n` what mask.
+    /// Returns the function that is running at the given level.
+    ///
+    /// Corresponds to the `f` "what" mask.
+    pub fn function(&self) -> Function {
+        unsafe {
+            let _sg = StackGuard::new(self.state);
+            assert_stack(self.state, 1);
+
+            #[cfg(not(feature = "luau"))]
+            mlua_assert!(
+                ffi::lua_getinfo(self.state, cstr!("f"), self.ar) != 0,
+                "lua_getinfo failed with `f`"
+            );
+            #[cfg(feature = "luau")]
+            mlua_assert!(
+                ffi::lua_getinfo(self.state, self.level, cstr!("f"), self.ar) != 0,
+                "lua_getinfo failed with `f`"
+            );
+
+            ffi::lua_xmove(self.state, self.lua.ref_thread(), 1);
+            Function(self.lua.pop_ref_thread())
+        }
+    }
+
+    /// Corresponds to the `n` "what" mask.
     pub fn names(&self) -> DebugNames<'_> {
         unsafe {
             #[cfg(not(feature = "luau"))]
@@ -76,7 +103,7 @@ impl Debug {
         }
     }
 
-    /// Corresponds to the `S` what mask.
+    /// Corresponds to the `S` "what" mask.
     pub fn source(&self) -> DebugSource<'_> {
         unsafe {
             #[cfg(not(feature = "luau"))]
@@ -106,7 +133,7 @@ impl Debug {
         }
     }
 
-    /// Corresponds to the `l` what mask. Returns the current line.
+    /// Corresponds to the `l` "what" mask. Returns the current line.
     pub fn curr_line(&self) -> i32 {
         unsafe {
             #[cfg(not(feature = "luau"))]
@@ -124,8 +151,8 @@ impl Debug {
         }
     }
 
-    /// Corresponds to the `t` what mask. Returns true if the hook is in a function tail call, false
-    /// otherwise.
+    /// Corresponds to the `t` "what" mask. Returns true if the hook is in a function tail call,
+    /// false otherwise.
     #[cfg(not(feature = "luau"))]
     #[cfg_attr(docsrs, doc(cfg(not(feature = "luau"))))]
     pub fn is_tail_call(&self) -> bool {
@@ -138,7 +165,7 @@ impl Debug {
         }
     }
 
-    /// Corresponds to the `u` what mask.
+    /// Corresponds to the `u` "what" mask.
     pub fn stack(&self) -> DebugStack {
         unsafe {
             #[cfg(not(feature = "luau"))]

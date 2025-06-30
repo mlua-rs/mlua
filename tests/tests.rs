@@ -1315,6 +1315,20 @@ fn test_inspect_stack() -> Result<()> {
     )
     .exec()?;
 
+    // Test retrieving currently running function
+    let running_function =
+        lua.create_function(|lua, ()| Ok(lua.inspect_stack(1, |debug| debug.function())))?;
+    lua.globals().set("running_function", running_function)?;
+    lua.load(
+        r#"
+        local function baz()
+            return running_function()
+        end
+        assert(baz() == baz)
+    "#,
+    )
+    .exec()?;
+
     Ok(())
 }
 
