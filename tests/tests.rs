@@ -1324,7 +1324,12 @@ fn test_inspect_stack() -> Result<()> {
         local function baz()
             return running_function()
         end
-        assert(baz() == baz)
+        if jit == nil then
+            assert(baz() == baz)
+        else
+            -- luajit inline the "baz" function and returns the chunk itself
+            assert(baz() == running_function())
+        end
     "#,
     )
     .exec()?;
