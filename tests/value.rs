@@ -255,16 +255,7 @@ fn test_value_conversions() -> Result<()> {
         Value::String(lua.create_string("hello")?).as_string().unwrap(),
         "hello"
     );
-    assert_eq!(
-        Value::String(lua.create_string("hello")?).as_str().unwrap(),
-        "hello"
-    );
-    assert_eq!(
-        Value::String(lua.create_string("hello")?)
-            .as_string_lossy()
-            .unwrap(),
-        "hello"
-    );
+    assert_eq!(Value::String(lua.create_string("hello")?).to_string()?, "hello");
     assert!(Value::Table(lua.create_table()?).is_table());
     assert!(Value::Table(lua.create_table()?).as_table().is_some());
     assert!(Value::Function(lua.create_function(|_, ()| Ok(())).unwrap()).is_function());

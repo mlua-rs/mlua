@@ -43,12 +43,12 @@ fn test_result_conversions() -> Result<()> {
     let multi_err1 = err1.into_lua_multi(&lua)?;
     assert_eq!(multi_err1.len(), 2);
     assert_eq!(multi_err1[0], Value::Nil);
-    assert_eq!(multi_err1[1].as_str().unwrap(), "failure1");
+    assert_eq!(multi_err1[1].as_string().unwrap(), "failure1");
 
     let ok2 = Ok::<_, Error>("!");
     let multi_ok2 = ok2.into_lua_multi(&lua)?;
     assert_eq!(multi_ok2.len(), 1);
-    assert_eq!(multi_ok2[0].as_str().unwrap(), "!");
+    assert_eq!(multi_ok2[0].as_string().unwrap(), "!");
     let err2 = Err::<String, _>("failure2".into_lua_err());
     let multi_err2 = err2.into_lua_multi(&lua)?;
     assert_eq!(multi_err2.len(), 2);

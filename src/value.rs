@@ -356,6 +356,10 @@ impl Value {
     ///
     /// If the value is a Lua [`String`], try to convert it to [`BorrowedStr`] or return `None`
     /// otherwise.
+    #[deprecated(
+        since = "0.11.0",
+        note = "This method does not follow Rust naming convention. Use `as_string().and_then(|s| s.to_str().ok())` instead."
+    )]
     #[inline]
     pub fn as_str(&self) -> Option<BorrowedStr<'_>> {
         self.as_string().and_then(|s| s.to_str().ok())
@@ -364,6 +368,10 @@ impl Value {
     /// Cast the value to [`StdString`].
     ///
     /// If the value is a Lua [`String`], converts it to [`StdString`] or returns `None` otherwise.
+    #[deprecated(
+        since = "0.11.0",
+        note = "This method does not follow Rust naming convention. Use `as_string().map(|s| s.to_string_lossy())` instead."
+    )]
     #[inline]
     pub fn as_string_lossy(&self) -> Option<StdString> {
         self.as_string().map(|s| s.to_string_lossy())
