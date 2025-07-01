@@ -529,8 +529,8 @@ impl ser::SerializeStruct for SerializeStruct<'_> {
     fn end(self) -> Result<Value> {
         match self.inner {
             Some(table @ Value::Table(_)) => Ok(table),
-            Some(value) if self.options.detect_serde_json_arbitrary_precision => {
-                let number_s = value.as_str().expect("not an arbitrary precision number");
+            Some(value @ Value::String(_)) if self.options.detect_serde_json_arbitrary_precision => {
+                let number_s = value.to_string()?;
                 if number_s.contains(['.', 'e', 'E']) {
                     if let Ok(number) = number_s.parse().map(Value::Number) {
                         return Ok(number);
