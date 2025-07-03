@@ -25,7 +25,8 @@ pub use crate::HookTriggers as LuaHookTriggers;
 #[doc(no_inline)]
 pub use crate::{
     CompileConstant as LuaCompileConstant, CoverageInfo as LuaCoverageInfo,
-    NavigateError as LuaNavigateError, Require as LuaRequire, Vector as LuaVector,
+    NavigateError as LuaNavigateError, Require as LuaRequire, TextRequirer as LuaTextRequirer,
+    Vector as LuaVector,
 };
 
 #[cfg(feature = "async")]
