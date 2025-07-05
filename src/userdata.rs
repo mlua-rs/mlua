@@ -888,16 +888,17 @@ impl AnyUserData {
         self.raw_metatable().map(UserDataMetatable)
     }
 
+    /// Returns a raw metatable of this [`AnyUserData`].
     fn raw_metatable(&self) -> Result<Table> {
         let lua = self.0.lua.lock();
-        let state = lua.state();
+        let ref_thread = lua.ref_thread();
         unsafe {
-            let _sg = StackGuard::new(state);
-            check_stack(state, 3)?;
+            // Check that userdata is registered and not destructed
+            // All registered userdata types have a non-empty metatable
+            let _type_id = lua.get_userdata_ref_type_id(&self.0)?;
 
-            lua.push_userdata_ref(&self.0)?;
-            ffi::lua_getmetatable(state, -1); // Checked that non-empty on the previous call
-            Ok(Table(lua.pop_ref()))
+            ffi::lua_getmetatable(ref_thread, self.0.index);
+            Ok(Table(lua.pop_ref_thread()))
         }
     }
 
