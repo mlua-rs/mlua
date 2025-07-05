@@ -365,101 +365,101 @@ fn get_function_name<T>(name: &str) -> StdString {
 }
 
 impl<T> UserDataFields<T> for UserDataRegistry<T> {
-    fn add_field<V>(&mut self, name: impl ToString, value: V)
+    fn add_field<V>(&mut self, name: impl Into<StdString>, value: V)
     where
         V: IntoLua + 'static,
     {
-        let name = name.to_string();
+        let name = name.into();
         self.raw.fields.push((name, value.into_lua(self.lua.lua())));
     }
 
-    fn add_field_method_get<M, R>(&mut self, name: impl ToString, method: M)
+    fn add_field_method_get<M, R>(&mut self, name: impl Into<StdString>, method: M)
     where
         M: Fn(&Lua, &T) -> Result<R> + MaybeSend + 'static,
         R: IntoLua,
     {
-        let name = name.to_string();
+        let name = name.into();
         let callback = self.box_method(&name, move |lua, data, ()| method(lua, data));
         self.raw.field_getters.push((name, callback));
     }
 
-    fn add_field_method_set<M, A>(&mut self, name: impl ToString, method: M)
+    fn add_field_method_set<M, A>(&mut self, name: impl Into<StdString>, method: M)
     where
         M: FnMut(&Lua, &mut T, A) -> Result<()> + MaybeSend + 'static,
         A: FromLua,
     {
-        let name = name.to_string();
+        let name = name.into();
         let callback = self.box_method_mut(&name, method);
         self.raw.field_setters.push((name, callback));
     }
 
-    fn add_field_function_get<F, R>(&mut self, name: impl ToString, function: F)
+    fn add_field_function_get<F, R>(&mut self, name: impl Into<StdString>, function: F)
     where
         F: Fn(&Lua, AnyUserData) -> Result<R> + MaybeSend + 'static,
         R: IntoLua,
     {
-        let name = name.to_string();
+        let name = name.into();
         let callback = self.box_function(&name, function);
         self.raw.field_getters.push((name, callback));
     }
 
-    fn add_field_function_set<F, A>(&mut self, name: impl ToString, mut function: F)
+    fn add_field_function_set<F, A>(&mut self, name: impl Into<StdString>, mut function: F)
     where
         F: FnMut(&Lua, AnyUserData, A) -> Result<()> + MaybeSend + 'static,
         A: FromLua,
     {
-        let name = name.to_string();
+        let name = name.into();
         let callback = self.box_function_mut(&name, move |lua, (data, val)| function(lua, data, val));
         self.raw.field_setters.push((name, callback));
     }
 
-    fn add_meta_field<V>(&mut self, name: impl ToString, value: V)
+    fn add_meta_field<V>(&mut self, name: impl Into<StdString>, value: V)
     where
         V: IntoLua + 'static,
     {
         let lua = self.lua.lua();
-        let name = name.to_string();
+        let name = name.into();
         let field = Self::check_meta_field(lua, &name, value).and_then(|v| v.into_lua(lua));
         self.raw.meta_fields.push((name, field));
     }
 
-    fn add_meta_field_with<F, R>(&mut self, name: impl ToString, f: F)
+    fn add_meta_field_with<F, R>(&mut self, name: impl Into<StdString>, f: F)
     where
         F: FnOnce(&Lua) -> Result<R> + 'static,
         R: IntoLua,
     {
         let lua = self.lua.lua();
-        let name = name.to_string();
+        let name = name.into();
         let field = f(lua).and_then(|v| Self::check_meta_field(lua, &name, v).and_then(|v| v.into_lua(lua)));
         self.raw.meta_fields.push((name, field));
     }
 }
 
 impl<T> UserDataMethods<T> for UserDataRegistry<T> {
-    fn add_method<M, A, R>(&mut self, name: impl ToString, method: M)
+    fn add_method<M, A, R>(&mut self, name: impl Into<StdString>, method: M)
     where
         M: Fn(&Lua, &T, A) -> Result<R> + MaybeSend + 'static,
         A: FromLuaMulti,
         R: IntoLuaMulti,
     {
-        let name = name.to_string();
+        let name = name.into();
         let callback = self.box_method(&name, method);
         self.raw.methods.push((name, callback));
     }
 
-    fn add_method_mut<M, A, R>(&mut self, name: impl ToString, method: M)
+    fn add_method_mut<M, A, R>(&mut self, name: impl Into<StdString>, method: M)
     where
         M: FnMut(&Lua, &mut T, A) -> Result<R> + MaybeSend + 'static,
         A: FromLuaMulti,
         R: IntoLuaMulti,
     {
-        let name = name.to_string();
+        let name = name.into();
         let callback = self.box_method_mut(&name, method);
         self.raw.methods.push((name, callback));
     }
 
     #[cfg(feature = "async")]
-    fn add_async_method<M, A, MR, R>(&mut self, name: impl ToString, method: M)
+    fn add_async_method<M, A, MR, R>(&mut self, name: impl Into<StdString>, method: M)
     where
         T: 'static,
         M: Fn(Lua, UserDataRef<T>, A) -> MR + MaybeSend + 'static,
@@ -467,13 +467,13 @@ impl<T> UserDataMethods<T> for UserDataRegistry<T> {
         MR: Future<Output = Result<R>> + MaybeSend + 'static,
         R: IntoLuaMulti,
     {
-        let name = name.to_string();
+        let name = name.into();
         let callback = self.box_async_method(&name, method);
         self.raw.async_methods.push((name, callback));
     }
 
     #[cfg(feature = "async")]
-    fn add_async_method_mut<M, A, MR, R>(&mut self, name: impl ToString, method: M)
+    fn add_async_method_mut<M, A, MR, R>(&mut self, name: impl Into<StdString>, method: M)
     where
         T: 'static,
         M: Fn(Lua, UserDataRefMut<T>, A) -> MR + MaybeSend + 'static,
@@ -481,70 +481,70 @@ impl<T> UserDataMethods<T> for UserDataRegistry<T> {
         MR: Future<Output = Result<R>> + MaybeSend + 'static,
         R: IntoLuaMulti,
     {
-        let name = name.to_string();
+        let name = name.into();
         let callback = self.box_async_method_mut(&name, method);
         self.raw.async_methods.push((name, callback));
     }
 
-    fn add_function<F, A, R>(&mut self, name: impl ToString, function: F)
+    fn add_function<F, A, R>(&mut self, name: impl Into<StdString>, function: F)
     where
         F: Fn(&Lua, A) -> Result<R> + MaybeSend + 'static,
         A: FromLuaMulti,
         R: IntoLuaMulti,
     {
-        let name = name.to_string();
+        let name = name.into();
         let callback = self.box_function(&name, function);
         self.raw.methods.push((name, callback));
     }
 
-    fn add_function_mut<F, A, R>(&mut self, name: impl ToString, function: F)
+    fn add_function_mut<F, A, R>(&mut self, name: impl Into<StdString>, function: F)
     where
         F: FnMut(&Lua, A) -> Result<R> + MaybeSend + 'static,
         A: FromLuaMulti,
         R: IntoLuaMulti,
     {
-        let name = name.to_string();
+        let name = name.into();
         let callback = self.box_function_mut(&name, function);
         self.raw.methods.push((name, callback));
     }
 
     #[cfg(feature = "async")]
-    fn add_async_function<F, A, FR, R>(&mut self, name: impl ToString, function: F)
+    fn add_async_function<F, A, FR, R>(&mut self, name: impl Into<StdString>, function: F)
     where
         F: Fn(Lua, A) -> FR + MaybeSend + 'static,
         A: FromLuaMulti,
         FR: Future<Output = Result<R>> + MaybeSend + 'static,
         R: IntoLuaMulti,
     {
-        let name = name.to_string();
+        let name = name.into();
         let callback = self.box_async_function(&name, function);
         self.raw.async_methods.push((name, callback));
     }
 
-    fn add_meta_method<M, A, R>(&mut self, name: impl ToString, method: M)
+    fn add_meta_method<M, A, R>(&mut self, name: impl Into<StdString>, method: M)
     where
         M: Fn(&Lua, &T, A) -> Result<R> + MaybeSend + 'static,
         A: FromLuaMulti,
         R: IntoLuaMulti,
     {
-        let name = name.to_string();
+        let name = name.into();
         let callback = self.box_method(&name, method);
         self.raw.meta_methods.push((name, callback));
     }
 
-    fn add_meta_method_mut<M, A, R>(&mut self, name: impl ToString, method: M)
+    fn add_meta_method_mut<M, A, R>(&mut self, name: impl Into<StdString>, method: M)
     where
         M: FnMut(&Lua, &mut T, A) -> Result<R> + MaybeSend + 'static,
         A: FromLuaMulti,
         R: IntoLuaMulti,
     {
-        let name = name.to_string();
+        let name = name.into();
         let callback = self.box_method_mut(&name, method);
         self.raw.meta_methods.push((name, callback));
     }
 
     #[cfg(all(feature = "async", not(any(feature = "lua51", feature = "luau"))))]
-    fn add_async_meta_method<M, A, MR, R>(&mut self, name: impl ToString, method: M)
+    fn add_async_meta_method<M, A, MR, R>(&mut self, name: impl Into<StdString>, method: M)
     where
         T: 'static,
         M: Fn(Lua, UserDataRef<T>, A) -> MR + MaybeSend + 'static,
@@ -552,13 +552,13 @@ impl<T> UserDataMethods<T> for UserDataRegistry<T> {
         MR: Future<Output = Result<R>> + MaybeSend + 'static,
         R: IntoLuaMulti,
     {
-        let name = name.to_string();
+        let name = name.into();
         let callback = self.box_async_method(&name, method);
         self.raw.async_meta_methods.push((name, callback));
     }
 
     #[cfg(all(feature = "async", not(any(feature = "lua51", feature = "luau"))))]
-    fn add_async_meta_method_mut<M, A, MR, R>(&mut self, name: impl ToString, method: M)
+    fn add_async_meta_method_mut<M, A, MR, R>(&mut self, name: impl Into<StdString>, method: M)
     where
         T: 'static,
         M: Fn(Lua, UserDataRefMut<T>, A) -> MR + MaybeSend + 'static,
@@ -566,42 +566,42 @@ impl<T> UserDataMethods<T> for UserDataRegistry<T> {
         MR: Future<Output = Result<R>> + MaybeSend + 'static,
         R: IntoLuaMulti,
     {
-        let name = name.to_string();
+        let name = name.into();
         let callback = self.box_async_method_mut(&name, method);
         self.raw.async_meta_methods.push((name, callback));
     }
 
-    fn add_meta_function<F, A, R>(&mut self, name: impl ToString, function: F)
+    fn add_meta_function<F, A, R>(&mut self, name: impl Into<StdString>, function: F)
     where
         F: Fn(&Lua, A) -> Result<R> + MaybeSend + 'static,
         A: FromLuaMulti,
         R: IntoLuaMulti,
     {
-        let name = name.to_string();
+        let name = name.into();
         let callback = self.box_function(&name, function);
         self.raw.meta_methods.push((name, callback));
     }
 
-    fn add_meta_function_mut<F, A, R>(&mut self, name: impl ToString, function: F)
+    fn add_meta_function_mut<F, A, R>(&mut self, name: impl Into<StdString>, function: F)
     where
         F: FnMut(&Lua, A) -> Result<R> + MaybeSend + 'static,
         A: FromLuaMulti,
         R: IntoLuaMulti,
     {
-        let name = name.to_string();
+        let name = name.into();
         let callback = self.box_function_mut(&name, function);
         self.raw.meta_methods.push((name, callback));
     }
 
     #[cfg(all(feature = "async", not(any(feature = "lua51", feature = "luau"))))]
-    fn add_async_meta_function<F, A, FR, R>(&mut self, name: impl ToString, function: F)
+    fn add_async_meta_function<F, A, FR, R>(&mut self, name: impl Into<StdString>, function: F)
     where
         F: Fn(Lua, A) -> FR + MaybeSend + 'static,
         A: FromLuaMulti,
         FR: Future<Output = Result<R>> + MaybeSend + 'static,
         R: IntoLuaMulti,
     {
-        let name = name.to_string();
+        let name = name.into();
         let callback = self.box_async_function(&name, function);
         self.raw.async_meta_methods.push((name, callback));
     }
