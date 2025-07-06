@@ -386,7 +386,7 @@ async fn test_async_table_object_like() -> Result<()> {
             table.get::<i64>("val")
         })?,
     )?;
-    table.set_metatable(Some(metatable));
+    table.set_metatable(Some(metatable))?;
     assert_eq!(table.call_async::<i64>(()).await.unwrap(), 15);
 
     match table.call_async_method::<()>("non_existent", ()).await {

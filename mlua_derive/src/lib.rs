@@ -129,13 +129,13 @@ pub fn chunk(input: TokenStream) -> TokenStream {
             let globals = lua.globals();
             let env = lua.create_table()?;
             let meta = lua.create_table()?;
-            meta.raw_set("__index", globals.clone())?;
-            meta.raw_set("__newindex", globals)?;
+            meta.raw_set("__index", &globals)?;
+            meta.raw_set("__newindex", &globals)?;
 
             // Add captured variables
             #(#caps)*
 
-            env.set_metatable(Some(meta));
+            env.set_metatable(Some(meta))?;
             Ok(env)
         };
 

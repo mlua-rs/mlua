@@ -298,10 +298,10 @@ fn test_metatable() -> Result<()> {
     let table = lua.create_table()?;
     let metatable = lua.create_table()?;
     metatable.set("__index", lua.create_function(|_, ()| Ok("index_value"))?)?;
-    table.set_metatable(Some(metatable));
+    table.set_metatable(Some(metatable))?;
     assert_eq!(table.get::<String>("any_key")?, "index_value");
     assert_eq!(table.raw_get::<Value>("any_key")?, Value::Nil);
-    table.set_metatable(None);
+    table.set_metatable(None)?;
     assert_eq!(table.get::<Value>("any_key")?, Value::Nil);
 
     Ok(())

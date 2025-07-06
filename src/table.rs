@@ -211,7 +211,7 @@ impl Table {
     ///
     /// let always_equals_mt = lua.create_table()?;
     /// always_equals_mt.set("__eq", lua.create_function(|_, (_t1, _t2): (Table, Table)| Ok(true))?)?;
-    /// table2.set_metatable(Some(always_equals_mt));
+    /// table2.set_metatable(Some(always_equals_mt))?;
     ///
     /// assert!(table1.equals(&table1.clone())?);
     /// assert!(table1.equals(&table2)?);
@@ -501,27 +501,23 @@ impl Table {
     ///
     /// If `metatable` is `None`, the metatable is removed (if no metatable is set, this does
     /// nothing).
-    pub fn set_metatable(&self, metatable: Option<Table>) {
-        // Workaround to throw readonly error without returning Result
+    pub fn set_metatable(&self, metatable: Option<Table>) -> Result<()> {
         #[cfg(feature = "luau")]
         if self.is_readonly() {
-            panic!("attempt to modify a readonly table");
+            return Err(Error::runtime("attempt to modify a readonly table"));
         }
 
         let lua = self.0.lua.lock();
-        let state = lua.state();
+        let ref_thread = lua.ref_thread();
         unsafe {
-            let _sg = StackGuard::new(state);
-            assert_stack(state, 2);
-
-            lua.push_ref(&self.0);
             if let Some(metatable) = metatable {
-                lua.push_ref(&metatable.0);
+                ffi::lua_pushvalue(ref_thread, metatable.0.index);
             } else {
-                ffi::lua_pushnil(state);
+                ffi::lua_pushnil(ref_thread);
             }
-            ffi::lua_setmetatable(state, -2);
+            ffi::lua_setmetatable(ref_thread, self.0.index);
         }
+        Ok(())
     }
 
     /// Returns true if the table has metatable attached.

@@ -3,7 +3,6 @@
 use std::cell::Cell;
 use std::fmt::Debug;
 use std::os::raw::c_void;
-use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::atomic::{AtomicBool, AtomicPtr, AtomicU64, Ordering};
 use std::sync::Arc;
 
@@ -120,7 +119,7 @@ fn test_vector_metatable() -> Result<()> {
     "#,
         )
         .eval::<Table>()?;
-    vector_mt.set_metatable(Some(vector_mt.clone()));
+    vector_mt.set_metatable(Some(vector_mt.clone()))?;
     lua.set_type_metatable::<Vector>(Some(vector_mt.clone()));
     lua.globals().set("Vector3", vector_mt)?;
 
@@ -167,9 +166,9 @@ fn test_readonly_table() -> Result<()> {
     check_readonly_error(t.raw_pop::<Value>());
 
     // Special case
-    match catch_unwind(AssertUnwindSafe(|| t.set_metatable(None))) {
-        Ok(_) => panic!("expected panic, got nothing"),
-        Err(_) => {}
+    match t.set_metatable(None) {
+        Err(Error::RuntimeError(e)) if e.contains("attempt to modify a readonly table") => {}
+        r => panic!("expected RuntimeError(...) with a specific message, got {r:?}"),
     }
 
     Ok(())

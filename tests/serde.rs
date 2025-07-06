@@ -25,7 +25,7 @@ fn test_serialize() -> Result<(), Box<dyn StdError>> {
     globals.set("null", lua.null())?;
 
     let empty_array = lua.create_table()?;
-    empty_array.set_metatable(Some(lua.array_metatable()));
+    empty_array.set_metatable(Some(lua.array_metatable()))?;
     globals.set("empty_array", empty_array)?;
 
     let val = lua
@@ -173,7 +173,7 @@ fn test_serialize_sorted() -> LuaResult<()> {
     globals.set("null", lua.null())?;
 
     let empty_array = lua.create_table()?;
-    empty_array.set_metatable(Some(lua.array_metatable()));
+    empty_array.set_metatable(Some(lua.array_metatable()))?;
     globals.set("empty_array", empty_array)?;
 
     let value = lua
