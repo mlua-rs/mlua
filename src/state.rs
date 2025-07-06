@@ -1550,6 +1550,39 @@ impl Lua {
         }
     }
 
+    /// Sets the global environment.
+    ///
+    /// This will replace the current global environment with the provided `globals` table.
+    ///
+    /// For Lua 5.2+ the globals table is stored in the registry and shared between all threads.
+    /// For Lua 5.1 and Luau the globals table is stored in each thread.
+    ///
+    /// Please note that any existing Lua functions have cached global environment and will not
+    /// see the changes made by this method.
+    /// To update the environment for existing Lua functions, use [`Function::set_environment`].
+    pub fn set_globals(&self, globals: Table) -> Result<()> {
+        let lua = self.lock();
+        let state = lua.state();
+        unsafe {
+            #[cfg(feature = "luau")]
+            if (*lua.extra.get()).sandboxed {
+                return Err(Error::runtime("cannot change globals in a sandboxed Lua state"));
+            }
+
+            let _sg = StackGuard::new(state);
+            check_stack(state, 1)?;
+
+            lua.push_ref(&globals.0);
+
+            #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+            ffi::lua_rawseti(state, ffi::LUA_REGISTRYINDEX, ffi::LUA_RIDX_GLOBALS);
+            #[cfg(any(feature = "lua51", feature = "luajit", feature = "luau"))]
+            ffi::lua_replace(state, ffi::LUA_GLOBALSINDEX);
+        }
+
+        Ok(())
+    }
+
     /// Returns a handle to the active `Thread`.
     ///
     /// For calls to `Lua` this will be the main Lua thread, for parameters given to a callback,

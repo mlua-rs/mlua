@@ -148,6 +148,31 @@ fn test_eval() -> Result<()> {
 }
 
 #[test]
+fn test_replace_globals() -> Result<()> {
+    let lua = Lua::new();
+
+    let globals = lua.create_table()?;
+    globals.set("foo", "bar")?;
+
+    lua.set_globals(globals.clone())?;
+    let val = lua.load("return foo").eval::<StdString>()?;
+    assert_eq!(val, "bar");
+
+    // Updating globals in sandboxed Lua state is not allowed
+    #[cfg(feature = "luau")]
+    {
+        lua.sandbox(true)?;
+        match lua.set_globals(globals) {
+            Err(Error::RuntimeError(msg))
+                if msg.contains("cannot change globals in a sandboxed Lua state") => {}
+            r => panic!("expected RuntimeError(...) with a specific error message, got {r:?}"),
+        }
+    }
+
+    Ok(())
+}
+
+#[test]
 fn test_load_mode() -> Result<()> {
     let lua = unsafe { Lua::unsafe_new() };
 
