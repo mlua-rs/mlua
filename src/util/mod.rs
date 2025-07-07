@@ -88,7 +88,7 @@ impl Drop for StackGuard {
 #[inline(always)]
 pub(crate) unsafe fn push_string(state: *mut ffi::lua_State, s: &[u8], protect: bool) -> Result<()> {
     // Always use protected mode if the string is too long
-    if protect || s.len() > (1 << 30) {
+    if protect || s.len() >= const { 1 << 30 } {
         protect_lua!(state, 0, 1, |state| {
             ffi::lua_pushlstring(state, s.as_ptr() as *const c_char, s.len());
         })
@@ -122,7 +122,7 @@ pub(crate) unsafe fn push_table(
 ) -> Result<()> {
     let narr: c_int = narr.try_into().unwrap_or(c_int::MAX);
     let nrec: c_int = nrec.try_into().unwrap_or(c_int::MAX);
-    if protect {
+    if protect || narr >= const { 1 << 30 } || nrec >= const { 1 << 27 } {
         protect_lua!(state, 0, 1, |state| ffi::lua_createtable(state, narr, nrec))
     } else {
         ffi::lua_createtable(state, narr, nrec);
