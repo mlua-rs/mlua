@@ -53,7 +53,7 @@ type WriteResult = ffi::luarequire_WriteResult;
 /// A trait for handling modules loading and navigation in the Luau `require-by-string` system.
 #[cfg(any(feature = "luau", doc))]
 #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
-pub trait Require: MaybeSend {
+pub trait Require {
     /// Returns `true` if "require" is permitted for the given chunk name.
     fn is_require_allowed(&self, chunk_name: &str) -> bool;
 
@@ -517,7 +517,10 @@ unsafe fn write_to_buffer(
 }
 
 #[cfg(feature = "luau")]
-pub(super) fn create_require_function<R: Require + 'static>(lua: &Lua, require: R) -> Result<Function> {
+pub(super) fn create_require_function<R: Require + MaybeSend + 'static>(
+    lua: &Lua,
+    require: R,
+) -> Result<Function> {
     unsafe extern "C-unwind" fn find_current_file(state: *mut ffi::lua_State) -> c_int {
         let mut ar: ffi::lua_Debug = mem::zeroed();
         for level in 2.. {
