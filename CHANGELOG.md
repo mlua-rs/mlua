@@ -1,3 +1,14 @@
+## v0.11.0 (Jul 8, 2025)
+
+Changes since v0.11.0-beta.3
+- `Lua::inspect_stack` takes a callback passing `&Debug` arguments, instead of returning `Debug` directly
+- Added `Debug::function` method to get function running at a given level
+- Added `Lua::set_globals` method to replace global environment
+- `Table::set_metatable` now returns `Result<()>` (this operation can fail in sandboxed Luau mode)
+- `impl ToString` replaced with `Into<StdString>`  in `UserData` registration
+- `Value::as_str` and `Value::as_string_lossy` methods are deprecated (as they are non-idiomatic)
+- Bugfixes and improvements
+
 ## v0.11.0-beta.3 (Jun 23, 2025)
 
 - Luau in sandboxed mode has reduced options in `collectgarbage` function (to follow the official doc)
