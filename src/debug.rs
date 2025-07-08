@@ -133,8 +133,14 @@ impl<'a> Debug<'a> {
         }
     }
 
-    /// Corresponds to the `l` "what" mask. Returns the current line.
+    #[doc(hidden)]
+    #[deprecated(note = "Use `current_line` instead")]
     pub fn curr_line(&self) -> i32 {
+        self.current_line().map(|n| n as i32).unwrap_or(-1)
+    }
+
+    /// Corresponds to the `l` "what" mask. Returns the current line.
+    pub fn current_line(&self) -> Option<usize> {
         unsafe {
             #[cfg(not(feature = "luau"))]
             mlua_assert!(
@@ -147,7 +153,7 @@ impl<'a> Debug<'a> {
                 "lua_getinfo failed with `l`"
             );
 
-            (*self.ar).currentline
+            linenumber_to_usize((*self.ar).currentline)
         }
     }
 

@@ -577,7 +577,7 @@ impl Lua {
     /// # fn main() -> Result<()> {
     /// let lua = Lua::new();
     /// lua.set_hook(HookTriggers::EVERY_LINE, |_lua, debug| {
-    ///     println!("line {}", debug.curr_line());
+    ///     println!("line {:?}", debug.current_line());
     ///     Ok(VmState::Continue)
     /// });
     ///

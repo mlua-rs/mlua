@@ -1283,7 +1283,7 @@ fn test_inspect_stack() -> Result<()> {
             .inspect_stack(1, |debug| {
                 let source = debug.source().short_src;
                 let source = source.as_deref().unwrap_or("?");
-                let line = debug.curr_line();
+                let line = debug.current_line().unwrap();
                 format!("{}:{} {}", source, line, msg)
             })
             .unwrap();
