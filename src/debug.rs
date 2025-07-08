@@ -153,15 +153,18 @@ impl<'a> Debug<'a> {
 
     /// Corresponds to the `t` "what" mask. Returns true if the hook is in a function tail call,
     /// false otherwise.
-    #[cfg(not(feature = "luau"))]
-    #[cfg_attr(docsrs, doc(cfg(not(feature = "luau"))))]
+    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+    #[cfg_attr(
+        docsrs,
+        doc(cfg(any(feature = "lua54", feature = "lua53", feature = "lua52")))
+    )]
     pub fn is_tail_call(&self) -> bool {
         unsafe {
             mlua_assert!(
                 ffi::lua_getinfo(self.state, cstr!("t"), self.ar) != 0,
                 "lua_getinfo failed with `t`"
             );
-            (*self.ar).currentline != 0
+            (*self.ar).istailcall != 0
         }
     }
 
