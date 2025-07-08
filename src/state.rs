@@ -2062,7 +2062,6 @@ impl Lua {
         WeakLua(XRc::downgrade(&self.raw))
     }
 
-    // Luau version located in `luau/mod.rs`
     #[cfg(not(feature = "luau"))]
     fn disable_c_modules(&self) -> Result<()> {
         let package: Table = self.globals().get("package")?;
@@ -2085,7 +2084,9 @@ impl Lua {
 
         // The third and fourth searchers looks for a loader as a C library
         searchers.raw_set(3, loader)?;
-        searchers.raw_remove(4)?;
+        if searchers.raw_len() >= 4 {
+            searchers.raw_remove(4)?;
+        }
 
         Ok(())
     }

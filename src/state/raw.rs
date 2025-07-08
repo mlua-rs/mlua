@@ -296,7 +296,7 @@ impl RawLua {
         if is_safe {
             let curr_libs = (*self.extra.get()).libs;
             if (curr_libs ^ (curr_libs | libs)).contains(StdLib::PACKAGE) {
-                mlua_expect!(self.lua().disable_c_modules(), "Error during disabling C modules");
+                mlua_expect!(self.lua().disable_c_modules(), "Error disabling C modules");
             }
         }
         #[cfg(feature = "luau")]
