@@ -122,9 +122,9 @@ fn test_compiler() -> Result<()> {
         .set_vector_lib("vector")
         .set_vector_ctor("new")
         .set_vector_type("vector")
-        .set_mutable_globals(vec!["mutable_global"])
-        .set_userdata_types(vec!["MyUserdata"])
-        .set_disabled_builtins(vec!["tostring"]);
+        .set_mutable_globals(["mutable_global"])
+        .set_userdata_types(["MyUserdata"])
+        .set_disabled_builtins(["tostring"]);
 
     assert!(compiler.compile("return tostring(vector.new(1, 2, 3))").is_ok());
 
@@ -142,16 +142,14 @@ fn test_compiler() -> Result<()> {
 #[cfg(feature = "luau")]
 #[test]
 fn test_compiler_library_constants() {
-    use mlua::{CompileConstant, Compiler, Vector};
+    use mlua::{Compiler, Vector};
 
     let compiler = Compiler::new()
         .set_optimization_level(2)
-        .set_library_constants(vec![
-            ("mylib", "const_bool", CompileConstant::Boolean(true)),
-            ("mylib", "const_num", CompileConstant::Number(123.0)),
-            ("mylib", "const_vec", CompileConstant::Vector(Vector::zero())),
-            ("mylib", "const_str", "value1".into()),
-        ]);
+        .add_library_constant("mylib", "const_bool", true)
+        .add_library_constant("mylib", "const_num", 123.0)
+        .add_library_constant("mylib", "const_vec", Vector::zero())
+        .add_library_constant("mylib", "const_str", "value1");
 
     let lua = Lua::new();
     lua.set_compiler(compiler);
