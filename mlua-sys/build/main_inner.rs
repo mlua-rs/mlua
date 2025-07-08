@@ -24,7 +24,7 @@ fn main() {
     println!("cargo:rerun-if-changed=build");
 
     // Check if compilation and linking is handled by external crate
-    if !cfg!(feature = "external") {
+    if cfg!(not(feature = "external")) {
         let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap();
         if target_os == "windows" && cfg!(feature = "module") {
             if !std::env::var("LUA_LIB_NAME").unwrap_or_default().is_empty() {

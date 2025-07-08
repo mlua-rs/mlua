@@ -63,7 +63,7 @@ impl<T> TryFrom<UserDataVariant<T>> for UserDataRef<T> {
 
     #[inline]
     fn try_from(variant: UserDataVariant<T>) -> Result<Self> {
-        let guard = if !cfg!(feature = "send") || is_sync::<T>() {
+        let guard = if cfg!(not(feature = "send")) || is_sync::<T>() {
             variant.raw_lock().try_lock_shared_guarded()
         } else {
             variant.raw_lock().try_lock_exclusive_guarded()
