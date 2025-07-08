@@ -160,7 +160,7 @@ pub enum CompileConstant {
     Boolean(bool),
     Number(crate::Number),
     Vector(crate::Vector),
-    String(String),
+    String(StdString),
 }
 
 #[cfg(any(feature = "luau", doc))]
@@ -192,7 +192,7 @@ impl From<&str> for CompileConstant {
 }
 
 #[cfg(any(feature = "luau", doc))]
-type LibraryMemberConstantMap = HashMap<(String, String), CompileConstant>;
+type LibraryMemberConstantMap = HashMap<(StdString, StdString), CompileConstant>;
 
 /// Luau compiler
 #[cfg(any(feature = "luau", doc))]
@@ -203,14 +203,14 @@ pub struct Compiler {
     debug_level: u8,
     type_info_level: u8,
     coverage_level: u8,
-    vector_lib: Option<String>,
-    vector_ctor: Option<String>,
-    vector_type: Option<String>,
-    mutable_globals: Vec<String>,
-    userdata_types: Vec<String>,
-    libraries_with_known_members: Vec<String>,
+    vector_lib: Option<StdString>,
+    vector_ctor: Option<StdString>,
+    vector_type: Option<StdString>,
+    mutable_globals: Vec<StdString>,
+    userdata_types: Vec<StdString>,
+    libraries_with_known_members: Vec<StdString>,
     library_constants: Option<LibraryMemberConstantMap>,
-    disabled_builtins: Vec<String>,
+    disabled_builtins: Vec<StdString>,
 }
 
 #[cfg(any(feature = "luau", doc))]
@@ -290,21 +290,21 @@ impl Compiler {
 
     #[doc(hidden)]
     #[must_use]
-    pub fn set_vector_lib(mut self, lib: impl Into<String>) -> Self {
+    pub fn set_vector_lib(mut self, lib: impl Into<StdString>) -> Self {
         self.vector_lib = Some(lib.into());
         self
     }
 
     #[doc(hidden)]
     #[must_use]
-    pub fn set_vector_ctor(mut self, ctor: impl Into<String>) -> Self {
+    pub fn set_vector_ctor(mut self, ctor: impl Into<StdString>) -> Self {
         self.vector_ctor = Some(ctor.into());
         self
     }
 
     #[doc(hidden)]
     #[must_use]
-    pub fn set_vector_type(mut self, r#type: impl Into<String>) -> Self {
+    pub fn set_vector_type(mut self, r#type: impl Into<StdString>) -> Self {
         self.vector_type = Some(r#type.into());
         self
     }
@@ -484,7 +484,7 @@ impl Compiler {
         if bytecode.first() == Some(&0) {
             // The rest of the bytecode is the error message starting with `:`
             // See https://github.com/luau-lang/luau/blob/0.640/Compiler/src/Compiler.cpp#L4336
-            let message = String::from_utf8_lossy(&bytecode[2..]).to_string();
+            let message = StdString::from_utf8_lossy(&bytecode[2..]).into_owned();
             return Err(Error::SyntaxError {
                 incomplete_input: message.ends_with("<eof>"),
                 message,
@@ -507,7 +507,7 @@ impl Chunk<'_> {
     /// - `@` - file path (when truncation is needed, the end of the file path is kept, as this is
     ///   more useful for identifying the file)
     /// - `=` - custom chunk name (when truncation is needed, the beginning of the name is kept)
-    pub fn set_name(mut self, name: impl Into<String>) -> Self {
+    pub fn set_name(mut self, name: impl Into<StdString>) -> Self {
         self.name = name.into();
         self
     }
@@ -755,7 +755,7 @@ impl Chunk<'_> {
         ChunkMode::Text
     }
 
-    fn convert_name(name: String) -> Result<CString> {
+    fn convert_name(name: StdString) -> Result<CString> {
         CString::new(name).map_err(|err| Error::runtime(format!("invalid name: {err}")))
     }
 
