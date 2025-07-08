@@ -145,10 +145,10 @@ fn test_compiler_library_constants() {
 
     let compiler = Compiler::new()
         .set_optimization_level(2)
-        .add_library_constant("mylib", "const_bool", true)
-        .add_library_constant("mylib", "const_num", 123.0)
-        .add_library_constant("mylib", "const_vec", Vector::zero())
-        .add_library_constant("mylib", "const_str", "value1");
+        .add_library_constant("mylib.const_bool", true)
+        .add_library_constant("mylib.const_num", 123.0)
+        .add_library_constant("mylib.const_vec", Vector::zero())
+        .add_library_constant("mylib.const_str", "value1");
 
     let lua = Lua::new();
     lua.set_compiler(compiler);
