@@ -288,20 +288,23 @@ impl Compiler {
         self
     }
 
-    #[doc(hidden)]
-    #[must_use]
-    pub fn set_vector_lib(mut self, lib: impl Into<StdString>) -> Self {
-        self.vector_lib = Some(lib.into());
-        self
-    }
-
+    /// Sets alternative global builtin to construct vectors, in addition to default builtin
+    /// `vector.create`.
+    ///
+    /// To set the library and method name, use the `lib.ctor` format.
     #[doc(hidden)]
     #[must_use]
     pub fn set_vector_ctor(mut self, ctor: impl Into<StdString>) -> Self {
-        self.vector_ctor = Some(ctor.into());
+        let ctor = ctor.into();
+        let lib_ctor = ctor.split_once('.');
+        self.vector_lib = lib_ctor.as_ref().map(|&(lib, _)| lib.to_owned());
+        self.vector_ctor = (lib_ctor.as_ref())
+            .map(|&(_, ctor)| ctor.to_owned())
+            .or(Some(ctor));
         self
     }
 
+    /// Sets alternative vector type name for type tables, in addition to default type `vector`.
     #[doc(hidden)]
     #[must_use]
     pub fn set_vector_type(mut self, r#type: impl Into<StdString>) -> Self {
