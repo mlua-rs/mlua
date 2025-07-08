@@ -3,6 +3,7 @@
 Changes since v0.11.0-beta.3
 - `Lua::inspect_stack` takes a callback passing `&Debug` arguments, instead of returning `Debug` directly
 - Added `Debug::function` method to get function running at a given level
+- `Debug::curr_line` is deprecated in favour of `Debug::current_line` that returns `Option<usize>`
 - Added `Lua::set_globals` method to replace global environment
 - `Table::set_metatable` now returns `Result<()>` (this operation can fail in sandboxed Luau mode)
 - `impl ToString` replaced with `Into<StdString>`  in `UserData` registration
