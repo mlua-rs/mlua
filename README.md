@@ -100,11 +100,11 @@ cargo run --example async_http_server --features=lua54,async,macros,send
 curl -v http://localhost:3000
 ```
 
-### Serialization (serde) support
+### Serde support
 
-With the `serde` feature flag enabled, `mlua` allows you to serialize/deserialize any type that implements [`serde::Serialize`] and [`serde::Deserialize`] into/from [`mlua::Value`]. In addition, `mlua` provides the [`serde::Serialize`] trait implementation for it (including `UserData` support).
+With the `serde` feature flag enabled, `mlua` allows you to serialize/deserialize any type that implements [`serde::Serialize`] and [`serde::Deserialize`] into/from [`mlua::Value`]. In addition, `mlua` provides the [`serde::Serialize`] trait implementation for `mlua::Value` (including `UserData` support).
 
-[Example](examples/serialize.rs)
+[Example](examples/serde.rs)
 
 [`serde::Serialize`]: https://docs.serde.rs/serde/ser/trait.Serialize.html
 [`serde::Deserialize`]: https://docs.serde.rs/serde/de/trait.Deserialize.html
