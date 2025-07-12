@@ -1,6 +1,7 @@
 #[cfg(feature = "serde")]
 use serde::ser::{Serialize, Serializer};
 
+use crate::state::RawLua;
 use crate::types::ValueRef;
 
 /// A Luau buffer type.
@@ -16,12 +17,14 @@ pub struct Buffer(pub(crate) ValueRef);
 impl Buffer {
     /// Copies the buffer data into a new `Vec<u8>`.
     pub fn to_vec(&self) -> Vec<u8> {
-        unsafe { self.as_slice().to_vec() }
+        let lua = self.0.lua.lock();
+        self.as_slice(&lua).to_vec()
     }
 
     /// Returns the length of the buffer.
     pub fn len(&self) -> usize {
-        unsafe { self.as_slice().len() }
+        let lua = self.0.lua.lock();
+        self.as_slice(&lua).len()
     }
 
     /// Returns `true` if the buffer is empty.
@@ -34,7 +37,8 @@ impl Buffer {
     /// Offset is 0-based.
     #[track_caller]
     pub fn read_bytes<const N: usize>(&self, offset: usize) -> [u8; N] {
-        let data = unsafe { self.as_slice() };
+        let lua = self.0.lua.lock();
+        let data = self.as_slice(&lua);
         let mut bytes = [0u8; N];
         bytes.copy_from_slice(&data[offset..offset + N]);
         bytes
@@ -45,21 +49,23 @@ impl Buffer {
     /// Offset is 0-based.
     #[track_caller]
     pub fn write_bytes(&self, offset: usize, bytes: &[u8]) {
+        let lua = self.0.lua.lock();
         let data = unsafe {
-            let (buf, size) = self.as_raw_parts();
+            let (buf, size) = self.as_raw_parts(&lua);
             std::slice::from_raw_parts_mut(buf, size)
         };
         data[offset..offset + bytes.len()].copy_from_slice(bytes);
     }
 
-    pub(crate) unsafe fn as_slice(&self) -> &[u8] {
-        let (buf, size) = self.as_raw_parts();
-        std::slice::from_raw_parts(buf, size)
+    pub(crate) fn as_slice(&self, lua: &RawLua) -> &[u8] {
+        unsafe {
+            let (buf, size) = self.as_raw_parts(lua);
+            std::slice::from_raw_parts(buf, size)
+        }
     }
 
     #[cfg(feature = "luau")]
-    unsafe fn as_raw_parts(&self) -> (*mut u8, usize) {
-        let lua = self.0.lua.lock();
+    unsafe fn as_raw_parts(&self, lua: &RawLua) -> (*mut u8, usize) {
         let mut size = 0usize;
         let buf = ffi::lua_tobuffer(lua.ref_thread(), self.0.index, &mut size);
         mlua_assert!(!buf.is_null(), "invalid Luau buffer");
@@ -67,7 +73,7 @@ impl Buffer {
     }
 
     #[cfg(not(feature = "luau"))]
-    unsafe fn as_raw_parts(&self) -> (*mut u8, usize) {
+    unsafe fn as_raw_parts(&self, lua: &RawLua) -> (*mut u8, usize) {
         unreachable!()
     }
 }
@@ -75,7 +81,8 @@ impl Buffer {
 #[cfg(feature = "serde")]
 impl Serialize for Buffer {
     fn serialize<S: Serializer>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error> {
-        serializer.serialize_bytes(unsafe { self.as_slice() })
+        let lua = self.0.lua.lock();
+        serializer.serialize_bytes(self.as_slice(&lua))
     }
 }
 

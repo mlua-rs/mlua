@@ -165,7 +165,10 @@ impl<'de> serde::Deserializer<'de> for Deserializer {
                 serde_userdata(ud, |value| value.deserialize_any(visitor))
             }
             #[cfg(feature = "luau")]
-            Value::Buffer(buf) => visitor.visit_bytes(unsafe { buf.as_slice() }),
+            Value::Buffer(buf) => {
+                let lua = buf.0.lua.lock();
+                visitor.visit_bytes(buf.as_slice(&lua))
+            }
             Value::Function(_)
             | Value::Thread(_)
             | Value::UserData(_)

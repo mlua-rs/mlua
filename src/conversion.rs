@@ -645,7 +645,7 @@ impl FromLua for BString {
         match value {
             Value::String(s) => Ok((*s.as_bytes()).into()),
             #[cfg(feature = "luau")]
-            Value::Buffer(buf) => unsafe { Ok(buf.as_slice().into()) },
+            Value::Buffer(buf) => Ok(buf.to_vec().into()),
             _ => Ok((*lua
                 .coerce_string(value)?
                 .ok_or_else(|| Error::FromLuaConversionError {
