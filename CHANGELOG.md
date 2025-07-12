@@ -1,4 +1,4 @@
-## v0.11.0 (Jul 9, 2025)
+## v0.11.0 (Jul 13, 2025)
 
 Changes since v0.11.0-beta.3
 
