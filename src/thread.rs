@@ -86,7 +86,7 @@ unsafe impl Sync for Thread {}
 #[must_use = "futures do nothing unless you `.await` or poll them"]
 pub struct AsyncThread<R> {
     thread: Thread,
-    ret: PhantomData<R>,
+    ret: PhantomData<fn() -> R>,
     recycle: bool,
 }
 
