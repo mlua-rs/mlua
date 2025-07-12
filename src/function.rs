@@ -658,6 +658,13 @@ impl LuaType for Function {
 pub struct AsyncCallFuture<R: FromLuaMulti>(Result<AsyncThread<R>>);
 
 #[cfg(feature = "async")]
+impl<R: FromLuaMulti> AsyncCallFuture<R> {
+    pub(crate) fn error(err: Error) -> Self {
+        AsyncCallFuture(Err(err))
+    }
+}
+
+#[cfg(feature = "async")]
 impl<R: FromLuaMulti> Future for AsyncCallFuture<R> {
     type Output = Result<R>;
 

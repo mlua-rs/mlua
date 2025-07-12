@@ -8,10 +8,7 @@ use crate::value::Value;
 use crate::Function;
 
 #[cfg(feature = "async")]
-use {
-    crate::types::MaybeSend,
-    futures_util::future::{self, Either, Future},
-};
+use crate::function::AsyncCallFuture;
 
 impl ObjectLike for AnyUserData {
     #[inline]
@@ -38,9 +35,9 @@ impl ObjectLike for AnyUserData {
 
     #[cfg(feature = "async")]
     #[inline]
-    fn call_async<R>(&self, args: impl IntoLuaMulti) -> impl Future<Output = Result<R>> + MaybeSend
+    fn call_async<R>(&self, args: impl IntoLuaMulti) -> AsyncCallFuture<R>
     where
-        R: FromLuaMulti + MaybeSend,
+        R: FromLuaMulti,
     {
         Function(self.0.copy()).call_async(args)
     }
@@ -54,13 +51,9 @@ impl ObjectLike for AnyUserData {
     }
 
     #[cfg(feature = "async")]
-    fn call_async_method<R>(
-        &self,
-        name: &str,
-        args: impl IntoLuaMulti,
-    ) -> impl Future<Output = Result<R>> + MaybeSend
+    fn call_async_method<R>(&self, name: &str, args: impl IntoLuaMulti) -> AsyncCallFuture<R>
     where
-        R: FromLuaMulti + MaybeSend,
+        R: FromLuaMulti,
     {
         self.call_async_function(name, (self, args))
     }
@@ -79,21 +72,17 @@ impl ObjectLike for AnyUserData {
     }
 
     #[cfg(feature = "async")]
-    fn call_async_function<R>(
-        &self,
-        name: &str,
-        args: impl IntoLuaMulti,
-    ) -> impl Future<Output = Result<R>> + MaybeSend
+    fn call_async_function<R>(&self, name: &str, args: impl IntoLuaMulti) -> AsyncCallFuture<R>
     where
-        R: FromLuaMulti + MaybeSend,
+        R: FromLuaMulti,
     {
         match self.get(name) {
-            Ok(Value::Function(func)) => Either::Left(func.call_async(args)),
+            Ok(Value::Function(func)) => func.call_async(args),
             Ok(val) => {
                 let msg = format!("attempt to call a {} value (function '{name}')", val.type_name());
-                Either::Right(future::ready(Err(Error::RuntimeError(msg))))
+                AsyncCallFuture::error(Error::RuntimeError(msg))
             }
-            Err(err) => Either::Right(future::ready(Err(err))),
+            Err(err) => AsyncCallFuture::error(err),
         }
     }
 
