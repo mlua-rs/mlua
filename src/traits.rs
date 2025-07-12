@@ -162,9 +162,9 @@ pub trait ObjectLike: Sealed {
     /// arguments.
     #[cfg(feature = "async")]
     #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
-    fn call_async<R>(&self, args: impl IntoLuaMulti) -> impl Future<Output = Result<R>>
+    fn call_async<R>(&self, args: impl IntoLuaMulti) -> impl Future<Output = Result<R>> + MaybeSend
     where
-        R: FromLuaMulti;
+        R: FromLuaMulti + MaybeSend;
 
     /// Gets the function associated to key `name` from the object and calls it,
     /// passing the object itself along with `args` as function arguments.
@@ -178,9 +178,13 @@ pub trait ObjectLike: Sealed {
     /// This might invoke the `__index` metamethod.
     #[cfg(feature = "async")]
     #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
-    fn call_async_method<R>(&self, name: &str, args: impl IntoLuaMulti) -> impl Future<Output = Result<R>>
+    fn call_async_method<R>(
+        &self,
+        name: &str,
+        args: impl IntoLuaMulti,
+    ) -> impl Future<Output = Result<R>> + MaybeSend
     where
-        R: FromLuaMulti;
+        R: FromLuaMulti + MaybeSend;
 
     /// Gets the function associated to key `name` from the object and calls it,
     /// passing `args` as function arguments.
@@ -196,9 +200,13 @@ pub trait ObjectLike: Sealed {
     /// This might invoke the `__index` metamethod.
     #[cfg(feature = "async")]
     #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
-    fn call_async_function<R>(&self, name: &str, args: impl IntoLuaMulti) -> impl Future<Output = Result<R>>
+    fn call_async_function<R>(
+        &self,
+        name: &str,
+        args: impl IntoLuaMulti,
+    ) -> impl Future<Output = Result<R>> + MaybeSend
     where
-        R: FromLuaMulti;
+        R: FromLuaMulti + MaybeSend;
 
     /// Converts the object to a string in a human-readable format.
     ///

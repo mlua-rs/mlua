@@ -8,7 +8,10 @@ use crate::value::Value;
 use crate::Function;
 
 #[cfg(feature = "async")]
-use futures_util::future::{self, Either, Future};
+use {
+    crate::types::MaybeSend,
+    futures_util::future::{self, Either, Future},
+};
 
 impl ObjectLike for AnyUserData {
     #[inline]
@@ -35,9 +38,9 @@ impl ObjectLike for AnyUserData {
 
     #[cfg(feature = "async")]
     #[inline]
-    fn call_async<R>(&self, args: impl IntoLuaMulti) -> impl Future<Output = Result<R>>
+    fn call_async<R>(&self, args: impl IntoLuaMulti) -> impl Future<Output = Result<R>> + MaybeSend
     where
-        R: FromLuaMulti,
+        R: FromLuaMulti + MaybeSend,
     {
         Function(self.0.copy()).call_async(args)
     }
@@ -51,9 +54,13 @@ impl ObjectLike for AnyUserData {
     }
 
     #[cfg(feature = "async")]
-    fn call_async_method<R>(&self, name: &str, args: impl IntoLuaMulti) -> impl Future<Output = Result<R>>
+    fn call_async_method<R>(
+        &self,
+        name: &str,
+        args: impl IntoLuaMulti,
+    ) -> impl Future<Output = Result<R>> + MaybeSend
     where
-        R: FromLuaMulti,
+        R: FromLuaMulti + MaybeSend,
     {
         self.call_async_function(name, (self, args))
     }
@@ -72,9 +79,13 @@ impl ObjectLike for AnyUserData {
     }
 
     #[cfg(feature = "async")]
-    fn call_async_function<R>(&self, name: &str, args: impl IntoLuaMulti) -> impl Future<Output = Result<R>>
+    fn call_async_function<R>(
+        &self,
+        name: &str,
+        args: impl IntoLuaMulti,
+    ) -> impl Future<Output = Result<R>> + MaybeSend
     where
-        R: FromLuaMulti,
+        R: FromLuaMulti + MaybeSend,
     {
         match self.get(name) {
             Ok(Value::Function(func)) => Either::Left(func.call_async(args)),
