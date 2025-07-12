@@ -434,7 +434,7 @@ impl Function {
     /// [`Compiler::set_coverage_level`]: crate::chunk::Compiler::set_coverage_level
     #[cfg(any(feature = "luau", doc))]
     #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
-    pub fn coverage<F>(&self, mut func: F)
+    pub fn coverage<F>(&self, func: F)
     where
         F: FnMut(CoverageInfo),
     {
@@ -454,13 +454,16 @@ impl Function {
             } else {
                 None
             };
-            let rust_callback = &mut *(data as *mut F);
-            rust_callback(CoverageInfo {
-                function,
-                line_defined,
-                depth,
-                hits: slice::from_raw_parts(hits, size).to_vec(),
-            });
+            let rust_callback = &*(data as *const RefCell<F>);
+            if let Ok(mut rust_callback) = rust_callback.try_borrow_mut() {
+                // Call the Rust callback with CoverageInfo
+                rust_callback(CoverageInfo {
+                    function,
+                    line_defined,
+                    depth,
+                    hits: slice::from_raw_parts(hits, size).to_vec(),
+                });
+            }
         }
 
         let lua = self.0.lua.lock();
@@ -470,7 +473,8 @@ impl Function {
             assert_stack(state, 1);
 
             lua.push_ref(&self.0);
-            let func_ptr = &mut func as *mut F as *mut c_void;
+            let func = RefCell::new(func);
+            let func_ptr = &func as *const RefCell<F> as *mut c_void;
             ffi::lua_getcoverage(state, -1, func_ptr, callback::<F>);
         }
     }
