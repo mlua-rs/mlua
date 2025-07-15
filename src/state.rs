@@ -1286,8 +1286,24 @@ impl Lua {
     /// This function is unsafe because provides a way to execute unsafe C function.
     pub unsafe fn create_c_function(&self, func: ffi::lua_CFunction) -> Result<Function> {
         let lua = self.lock();
-        ffi::lua_pushcfunction(lua.ref_thread(), func);
-        Ok(Function(lua.pop_ref_thread()))
+        if cfg!(any(feature = "lua54", feature = "lua53", feature = "lua52")) {
+            ffi::lua_pushcfunction(lua.ref_thread(), func);
+            return Ok(Function(lua.pop_ref_thread()));
+        }
+
+        // Lua <5.2 requires memory allocation to push a C function
+        let state = lua.state();
+        {
+            let _sg = StackGuard::new(state);
+            check_stack(state, 3)?;
+
+            if lua.unlikely_memory_error() {
+                ffi::lua_pushcfunction(state, func);
+            } else {
+                protect_lua!(state, 0, 1, |state| ffi::lua_pushcfunction(state, func))?;
+            }
+            Ok(Function(lua.pop_ref()))
+        }
     }
 
     /// Wraps a Rust async function or closure, creating a callable Lua function handle to it.
