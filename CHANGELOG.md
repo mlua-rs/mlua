@@ -1,3 +1,8 @@
+## v0.11.1 (Jul 15, 2025)
+
+- Fixed bug exhausting Lua auxiliary stack and leaving it without reserve (#615)
+- `Lua::push_c_function` now correctly handles OOM for Lua 5.1 and Luau
+
 ## v0.11.0 (Jul 14, 2025)
 
 Changes since v0.11.0-beta.3
