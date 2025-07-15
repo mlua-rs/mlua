@@ -270,7 +270,7 @@ impl ExtraData {
         // Try to grow max stack size
         if self.ref_stack_top >= self.ref_stack_size {
             let mut inc = self.ref_stack_size; // Try to double stack size
-            while inc > 0 && ffi::lua_checkstack(self.ref_thread, inc) == 0 {
+            while inc > 0 && ffi::lua_checkstack(self.ref_thread, inc + REF_STACK_RESERVE) == 0 {
                 inc /= 2;
             }
             if inc == 0 {
