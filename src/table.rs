@@ -510,7 +510,7 @@ impl Table {
         let lua = self.0.lua.lock();
         let ref_thread = lua.ref_thread();
         unsafe {
-            if let Some(metatable) = metatable {
+            if let Some(metatable) = &metatable {
                 ffi::lua_pushvalue(ref_thread, metatable.0.index);
             } else {
                 ffi::lua_pushnil(ref_thread);
