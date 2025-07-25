@@ -52,7 +52,7 @@ pub unsafe fn lua_isinteger(L: *mut lua_State, idx: c_int) -> c_int {
         let n = lua_tonumber(L, idx);
         let i = lua_tointeger(L, idx);
         // Lua 5.3+ returns "false" for `-0.0`
-        if (n - i as lua_Number).abs() < lua_Number::EPSILON && !(n == 0.0 && n.is_sign_negative()) {
+        if n.to_bits() == (i as lua_Number).to_bits() {
             return 1;
         }
     }

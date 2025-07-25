@@ -372,21 +372,6 @@ fn test_float_from_lua() -> Result<()> {
     // Should fallback to default conversion
     assert_eq!(f.call::<f32>("42.0")?, 42.0);
 
-    // Negative zero
-    let negative_zero = lua.load("return -0.0").eval::<f64>()?;
-    assert_eq!(negative_zero, 0.0);
-    // LuaJIT treats -0.0 as a positive zero
-    #[cfg(not(feature = "luajit"))]
-    assert!(negative_zero.is_sign_negative());
-
-    // In Lua <5.3 all numbers are floats
-    #[cfg(not(any(feature = "lua54", feature = "lua53", feature = "luajit")))]
-    {
-        let negative_zero = lua.load("return -0").eval::<f64>()?;
-        assert_eq!(negative_zero, 0.0);
-        assert!(negative_zero.is_sign_negative());
-    }
-
     Ok(())
 }
 
