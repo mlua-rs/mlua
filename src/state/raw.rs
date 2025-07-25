@@ -726,9 +726,13 @@ impl RawLua {
             ffi::LUA_TNUMBER => {
                 use crate::types::Number;
 
+                fn same(n: Number, i: Integer) -> bool {
+                    (n - (i as Number)).abs() < Number::EPSILON && !(n == 0.0 && n.is_sign_negative())
+                }
+
                 let n = ffi::lua_tonumber(state, idx);
                 match num_traits::cast(n) {
-                    Some(i) if (n - (i as Number)).abs() < Number::EPSILON => Value::Integer(i),
+                    Some(i) if same(n, i) => Value::Integer(i),
                     _ => Value::Number(n),
                 }
             }

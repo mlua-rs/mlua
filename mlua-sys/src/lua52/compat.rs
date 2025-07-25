@@ -51,7 +51,8 @@ pub unsafe fn lua_isinteger(L: *mut lua_State, idx: c_int) -> c_int {
     if lua_type(L, idx) == LUA_TNUMBER {
         let n = lua_tonumber(L, idx);
         let i = lua_tointeger(L, idx);
-        if (n - i as lua_Number).abs() < lua_Number::EPSILON {
+        // Lua 5.3+ returns "false" for `-0.0`
+        if (n - i as lua_Number).abs() < lua_Number::EPSILON && !(n == 0.0 && n.is_sign_negative()) {
             return 1;
         }
     }
