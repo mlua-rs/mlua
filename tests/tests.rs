@@ -1242,6 +1242,17 @@ fn test_register_module() -> Result<()> {
             res.unwrap_err().to_string(),
             "runtime error: module name must begin with '@'"
         );
+
+        // Luau registered modules (aliases) are case-insensitive
+        let res = lua.register_module("@My_Module", &t);
+        assert!(res.is_ok());
+        lua.load(
+            r#"
+            local my_module = require("@MY_MODule")
+            assert(my_module.name == "my_module")
+        "#,
+        )
+        .exec()?;
     }
 
     Ok(())

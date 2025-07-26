@@ -358,6 +358,8 @@ impl Lua {
         if cfg!(feature = "luau") && !modname.starts_with('@') {
             return Err(Error::runtime("module name must begin with '@'"));
         }
+        #[cfg(feature = "luau")]
+        let modname = modname.to_lowercase();
         unsafe {
             self.exec_raw::<()>(value, |state| {
                 ffi::luaL_getsubtable(state, ffi::LUA_REGISTRYINDEX, LOADED_MODULES_KEY);

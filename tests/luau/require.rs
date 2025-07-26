@@ -179,6 +179,11 @@ fn test_require_with_config() {
     let res = run_require(&lua, "./tests/luau/require/with_config/src/alias_requirer").unwrap();
     assert_eq!("result from dependency", get_str(&res, 1));
 
+    // RequirePathWithAlias (case-insensitive)
+    let res2 = run_require(&lua, "./tests/luau/require/with_config/src/alias_requirer_uc").unwrap();
+    assert_eq!("result from dependency", get_str(&res2, 1));
+    assert_eq!(res.to_pointer(), res2.to_pointer());
+
     // RequirePathWithParentAlias
     let res = run_require(&lua, "./tests/luau/require/with_config/src/parent_alias_requirer").unwrap();
     assert_eq!("result from other_dependency", get_str(&res, 1));

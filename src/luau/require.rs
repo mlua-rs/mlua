@@ -567,10 +567,20 @@ pub(super) fn create_require_function<R: Require + MaybeSend + 'static>(
         1
     }
 
-    let (error, r#type) = unsafe {
-        lua.exec_raw::<(Function, Function)>((), move |state| {
+    unsafe extern "C-unwind" fn to_lowercase(state: *mut ffi::lua_State) -> c_int {
+        let s = ffi::luaL_checkstring(state, 1);
+        let s = CStr::from_ptr(s);
+        callback_error_ext(state, ptr::null_mut(), true, |extra, _| {
+            let s = s.to_string_lossy().to_lowercase();
+            (*extra).raw_lua().push(s).map(|_| 1)
+        })
+    }
+
+    let (error, r#type, to_lowercase) = unsafe {
+        lua.exec_raw::<(Function, Function, Function)>((), move |state| {
             ffi::lua_pushcfunctiond(state, error, cstr!("error"));
             ffi::lua_pushcfunctiond(state, r#type, cstr!("type"));
+            ffi::lua_pushcfunctiond(state, to_lowercase, cstr!("to_lowercase"));
         })
     }?;
 
@@ -583,6 +593,7 @@ pub(super) fn create_require_function<R: Require + MaybeSend + 'static>(
     env.raw_set("LOADER_CACHE", loader_cache)?;
     env.raw_set("error", error)?;
     env.raw_set("type", r#type)?;
+    env.raw_set("to_lowercase", to_lowercase)?;
 
     lua.load(
         r#"
@@ -592,7 +603,7 @@ pub(super) fn create_require_function<R: Require + MaybeSend + 'static>(
         end
 
         -- Check if the module (path) is explicitly registered
-        local maybe_result = REGISTERED_MODULES[path]
+        local maybe_result = REGISTERED_MODULES[to_lowercase(path)]
         if maybe_result ~= nil then
             return maybe_result
         end
