@@ -62,7 +62,7 @@ parking_lot = { version = "0.12", features = ["arc_lock"] }
 anyhow = { version = "1.0", optional = true }
 rustversion = "1.0"
 
-ffi = { package = "mlua-sys", version = "0.8.0", path = "mlua-sys" }
+ffi = { package = "mlua-sys", version = "0.8.3", path = "mlua-sys" }
 
 [dev-dependencies]
 trybuild = "1.0"
@@ -78,8 +78,8 @@ tempfile = "3"
 static_assertions = "1.0"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
-criterion = { version = "0.6", features = ["async_tokio"] }
-rustyline = "16.0"
+criterion = { version = "0.7", features = ["async_tokio"] }
+rustyline = "17.0"
 tokio = { version = "1.0", features = ["full"] }
 
 [lints.rust]
