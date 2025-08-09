@@ -1,3 +1,10 @@
+## v0.11.2 (Aug 10, 2025)
+
+- Faster stack push for `Variadic<T>`
+- Fix handling Windows paths with drive letter in Luau require (#623)
+- Make Luau registered aliases ascii case-insensitive (#620)
+- Fix deserializing negative zeros `-0.0` (#618)
+
 ## v0.11.1 (Jul 15, 2025)
 
 - Fixed bug exhausting Lua auxiliary stack and leaving it without reserve (#615)
