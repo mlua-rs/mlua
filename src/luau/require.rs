@@ -570,8 +570,14 @@ pub(super) fn create_require_function<R: Require + MaybeSend + 'static>(
     unsafe extern "C-unwind" fn to_lowercase(state: *mut ffi::lua_State) -> c_int {
         let s = ffi::luaL_checkstring(state, 1);
         let s = CStr::from_ptr(s);
+        if !s.to_bytes().iter().any(|&c| c.is_ascii_uppercase()) {
+            // If the string does not contain any uppercase ASCII letters, return it as is
+            return 1;
+        }
         callback_error_ext(state, ptr::null_mut(), true, |extra, _| {
-            let s = s.to_string_lossy().to_lowercase();
+            let s = (s.to_bytes().iter())
+                .map(|&c| c.to_ascii_lowercase())
+                .collect::<bstr::BString>();
             (*extra).raw_lua().push(s).map(|_| 1)
         })
     }
