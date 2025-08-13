@@ -122,7 +122,7 @@ pub(crate) unsafe fn push_table(
 ) -> Result<()> {
     let narr: c_int = narr.try_into().unwrap_or(c_int::MAX);
     let nrec: c_int = nrec.try_into().unwrap_or(c_int::MAX);
-    if protect || narr >= const { 1 << 30 } || nrec >= const { 1 << 27 } {
+    if protect || narr >= const { 1 << 26 } || nrec >= const { 1 << 26 } {
         protect_lua!(state, 0, 1, |state| ffi::lua_createtable(state, narr, nrec))
     } else {
         ffi::lua_createtable(state, narr, nrec);
