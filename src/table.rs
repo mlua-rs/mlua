@@ -884,7 +884,7 @@ impl ObjectLike for Table {
         R: FromLuaMulti,
     {
         // Convert table to a function and call via pcall that respects the `__call` metamethod.
-        Function(self.0.copy()).call(args)
+        Function(self.0.clone()).call(args)
     }
 
     #[cfg(feature = "async")]
@@ -893,7 +893,7 @@ impl ObjectLike for Table {
     where
         R: FromLuaMulti,
     {
-        Function(self.0.copy()).call_async(args)
+        Function(self.0.clone()).call_async(args)
     }
 
     #[inline]
@@ -941,7 +941,7 @@ impl ObjectLike for Table {
 
     #[inline]
     fn to_string(&self) -> Result<StdString> {
-        Value::Table(Table(self.0.copy())).to_string()
+        Value::Table(Table(self.0.clone())).to_string()
     }
 }
 

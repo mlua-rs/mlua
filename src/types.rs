@@ -18,7 +18,7 @@ pub(crate) type BoxFuture<'a, T> = futures_util::future::LocalBoxFuture<'a, T>;
 pub use app_data::{AppData, AppDataRef, AppDataRefMut};
 pub use either::Either;
 pub use registry_key::RegistryKey;
-pub(crate) use value_ref::ValueRef;
+pub(crate) use value_ref::{ValueRef, ValueRefIndex};
 
 /// Type of Lua integer numbers.
 pub type Integer = ffi::lua_Integer;

@@ -128,6 +128,22 @@ fn table_traversal_sequence(c: &mut Criterion) {
     });
 }
 
+fn table_ref_clone(c: &mut Criterion) {
+    let lua = Lua::new();
+
+    let t = lua.create_table().unwrap();
+
+    c.bench_function("table [ref clone]", |b| {
+        b.iter_batched(
+            || collect_gc_twice(&lua),
+            |_| {
+                let _t2 = t.clone();
+            },
+            BatchSize::SmallInput,
+        );
+    });
+}
+
 fn function_create(c: &mut Criterion) {
     let lua = Lua::new();
 
@@ -399,6 +415,7 @@ criterion_group! {
         table_traversal_pairs,
         table_traversal_for_each,
         table_traversal_sequence,
+        table_ref_clone,
 
         function_create,
         function_call_sum,

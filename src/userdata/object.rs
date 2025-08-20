@@ -15,14 +15,14 @@ impl ObjectLike for AnyUserData {
     fn get<V: FromLua>(&self, key: impl IntoLua) -> Result<V> {
         // `lua_gettable` method used under the hood can work with any Lua value
         // that has `__index` metamethod
-        Table(self.0.copy()).get_protected(key)
+        Table(self.0.clone()).get_protected(key)
     }
 
     #[inline]
     fn set(&self, key: impl IntoLua, value: impl IntoLua) -> Result<()> {
         // `lua_settable` method used under the hood can work with any Lua value
         // that has `__newindex` metamethod
-        Table(self.0.copy()).set_protected(key, value)
+        Table(self.0.clone()).set_protected(key, value)
     }
 
     #[inline]
@@ -30,7 +30,7 @@ impl ObjectLike for AnyUserData {
     where
         R: FromLuaMulti,
     {
-        Function(self.0.copy()).call(args)
+        Function(self.0.clone()).call(args)
     }
 
     #[cfg(feature = "async")]
@@ -39,7 +39,7 @@ impl ObjectLike for AnyUserData {
     where
         R: FromLuaMulti,
     {
-        Function(self.0.copy()).call_async(args)
+        Function(self.0.clone()).call_async(args)
     }
 
     #[inline]
@@ -88,6 +88,6 @@ impl ObjectLike for AnyUserData {
 
     #[inline]
     fn to_string(&self) -> Result<StdString> {
-        Value::UserData(AnyUserData(self.0.copy())).to_string()
+        Value::UserData(AnyUserData(self.0.clone())).to_string()
     }
 }

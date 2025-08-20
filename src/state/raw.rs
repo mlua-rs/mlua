@@ -624,7 +624,7 @@ impl RawLua {
     #[cfg(feature = "async")]
     pub(crate) unsafe fn create_recycled_thread(&self, func: &Function) -> Result<Thread> {
         if let Some(index) = (*self.extra.get()).thread_pool.pop() {
-            let thread_state = ffi::lua_tothread(self.ref_thread(), index);
+            let thread_state = ffi::lua_tothread(self.ref_thread(), *index.0);
             ffi::lua_xpush(self.ref_thread(), thread_state, func.0.index);
 
             #[cfg(feature = "luau")]
@@ -645,8 +645,9 @@ impl RawLua {
     pub(crate) unsafe fn recycle_thread(&self, thread: &mut Thread) {
         let extra = &mut *self.extra.get();
         if extra.thread_pool.len() < extra.thread_pool.capacity() {
-            extra.thread_pool.push(thread.0.index);
-            thread.0.drop = false; // Prevent thread from being garbage collected
+            if let Some(index) = thread.0.index_count.take() {
+                extra.thread_pool.push(index);
+            }
         }
     }
 
@@ -823,13 +824,6 @@ impl RawLua {
     // Same as `pop_ref` but assumes the value is already on the reference thread
     #[inline]
     pub(crate) unsafe fn pop_ref_thread(&self) -> ValueRef {
-        let index = (*self.extra.get()).ref_stack_pop();
-        ValueRef::new(self, index)
-    }
-
-    #[inline]
-    pub(crate) unsafe fn clone_ref(&self, vref: &ValueRef) -> ValueRef {
-        ffi::lua_pushvalue(self.ref_thread(), vref.index);
         let index = (*self.extra.get()).ref_stack_pop();
         ValueRef::new(self, index)
     }
