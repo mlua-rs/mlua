@@ -382,7 +382,8 @@ fn test_scope_userdata_ref() -> Result<()> {
         modify_userdata(&lua, &ud)?;
 
         // We can only borrow userdata scoped
-        assert!((matches!(ud.borrow::<MyUserData>(), Err(Error::UserDataTypeMismatch))));
+        #[rustfmt::skip]
+        assert!(matches!(ud.borrow::<MyUserData>(), Err(Error::UserDataTypeMismatch)));
         ud.borrow_scoped::<MyUserData, ()>(|ud_inst| {
             assert_eq!(ud_inst.0.get(), 2);
         })?;
@@ -419,7 +420,8 @@ fn test_scope_userdata_ref_mut() -> Result<()> {
         let ud = scope.create_userdata_ref_mut(&mut data)?;
         modify_userdata(&lua, &ud)?;
 
-        assert!((matches!(ud.borrow_mut::<MyUserData>(), Err(Error::UserDataTypeMismatch))));
+        #[rustfmt::skip]
+        assert!(matches!(ud.borrow_mut::<MyUserData>(), Err(Error::UserDataTypeMismatch)));
         ud.borrow_mut_scoped::<MyUserData, ()>(|ud_inst| {
             ud_inst.0 += 10;
         })?;

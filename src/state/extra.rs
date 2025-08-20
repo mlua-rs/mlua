@@ -12,7 +12,7 @@ use rustc_hash::FxHashMap;
 use crate::error::Result;
 use crate::state::RawLua;
 use crate::stdlib::StdLib;
-use crate::types::{AppData, ReentrantMutex, ValueRefIndex, XRc};
+use crate::types::{AppData, ReentrantMutex, XRc};
 use crate::userdata::RawUserDataRegistry;
 use crate::util::{get_internal_metatable, push_internal_userdata, TypeKey, WrappedFailure};
 
@@ -64,7 +64,7 @@ pub(crate) struct ExtraData {
     pub(super) wrapped_failure_top: usize,
     // Pool of `Thread`s (coroutines) for async execution
     #[cfg(feature = "async")]
-    pub(super) thread_pool: Vec<ValueRefIndex>,
+    pub(super) thread_pool: Vec<crate::types::ValueRefIndex>,
 
     // Address of `WrappedFailure` metatable
     pub(super) wrapped_failure_mt_ptr: *const c_void,
