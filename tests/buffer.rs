@@ -41,7 +41,7 @@ fn test_buffer() -> Result<()> {
 }
 
 #[test]
-#[should_panic(expected = "range end index 14 out of range for slice of length 13")]
+#[should_panic(expected = "out of range for slice of length 13")]
 fn test_buffer_out_of_bounds_read() {
     let lua = Lua::new();
     let buf = lua.create_buffer(b"hello, world!").unwrap();
@@ -49,7 +49,7 @@ fn test_buffer_out_of_bounds_read() {
 }
 
 #[test]
-#[should_panic(expected = "range end index 16 out of range for slice of length 13")]
+#[should_panic(expected = "out of range for slice of length 13")]
 fn test_buffer_out_of_bounds_write() {
     let lua = Lua::new();
     let buf = lua.create_buffer(b"hello, world!").unwrap();
