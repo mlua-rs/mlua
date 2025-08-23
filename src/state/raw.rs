@@ -523,6 +523,20 @@ impl RawLua {
         Ok(String(self.pop_ref()))
     }
 
+    #[cfg(feature = "luau")]
+    pub(crate) unsafe fn create_buffer_with_capacity(&self, size: usize) -> Result<(*mut u8, crate::Buffer)> {
+        let state = self.state();
+        if self.unlikely_memory_error() {
+            let ptr = crate::util::push_buffer(state, size, false)?;
+            return Ok((ptr, crate::Buffer(self.pop_ref())));
+        }
+
+        let _sg = StackGuard::new(state);
+        check_stack(state, 3)?;
+        let ptr = crate::util::push_buffer(state, size, true)?;
+        Ok((ptr, crate::Buffer(self.pop_ref())))
+    }
+
     /// See [`Lua::create_table_with_capacity`]
     pub(crate) unsafe fn create_table_with_capacity(&self, narr: usize, nrec: usize) -> Result<Table> {
         let state = self.state();

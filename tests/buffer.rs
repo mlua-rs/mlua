@@ -55,3 +55,14 @@ fn test_buffer_out_of_bounds_write() {
     let buf = lua.create_buffer(b"hello, world!").unwrap();
     buf.write_bytes(14, b"!!");
 }
+
+#[test]
+fn create_large_buffer() {
+    let lua = Lua::new();
+    let err = lua.create_buffer_with_capacity(1_073_741_824 + 1).unwrap_err(); // 1GB
+    assert!(err.to_string().contains("memory allocation error"));
+
+    // Normal buffer is okay
+    let buf = lua.create_buffer_with_capacity(1024 * 1024).unwrap();
+    assert_eq!(buf.len(), 1024 * 1024);
+}

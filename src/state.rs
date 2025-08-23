@@ -1150,7 +1150,7 @@ impl Lua {
         }
     }
 
-    /// Create and return an interned Lua string.
+    /// Creates and returns an interned Lua string.
     ///
     /// Lua strings can be arbitrary `[u8]` data including embedded nulls, so in addition to `&str`
     /// and `&String`, you can also pass plain `&[u8]` here.
@@ -1159,25 +1159,30 @@ impl Lua {
         unsafe { self.lock().create_string(s) }
     }
 
-    /// Create and return a Luau [buffer] object from a byte slice of data.
+    /// Creates and returns a Luau [buffer] object from a byte slice of data.
     ///
     /// [buffer]: https://luau.org/library#buffer-library
     #[cfg(any(feature = "luau", doc))]
     #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
-    pub fn create_buffer(&self, buf: impl AsRef<[u8]>) -> Result<Buffer> {
+    pub fn create_buffer(&self, data: impl AsRef<[u8]>) -> Result<Buffer> {
         let lua = self.lock();
-        let state = lua.state();
+        let data = data.as_ref();
         unsafe {
-            if lua.unlikely_memory_error() {
-                crate::util::push_buffer(state, buf.as_ref(), false)?;
-                return Ok(Buffer(lua.pop_ref()));
-            }
-
-            let _sg = StackGuard::new(state);
-            check_stack(state, 3)?;
-            crate::util::push_buffer(state, buf.as_ref(), true)?;
-            Ok(Buffer(lua.pop_ref()))
+            let (ptr, buffer) = lua.create_buffer_with_capacity(data.len())?;
+            ptr.copy_from_nonoverlapping(data.as_ptr(), data.len());
+            Ok(buffer)
         }
+    }
+
+    /// Creates and returns a Luau [buffer] object with the specified size.
+    ///
+    /// Size limit is 1GB. All bytes will be initialized to zero.
+    ///
+    /// [buffer]: https://luau.org/library#buffer-library
+    #[cfg(any(feature = "luau", doc))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
+    pub fn create_buffer_with_capacity(&self, size: usize) -> Result<Buffer> {
+        unsafe { Ok(self.lock().create_buffer_with_capacity(size)?.1) }
     }
 
     /// Creates and returns a new empty table.
