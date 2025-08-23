@@ -1,6 +1,6 @@
-//! Mostly copied from [bevy_utils]
+//! Inspired by bevy's [disqualified]
 //!
-//! [bevy_utils]: https://github.com/bevyengine/bevy/blob/main/crates/bevy_utils/src/short_names.rs
+//! [disqualified]: https://github.com/bevyengine/disqualified/blob/main/src/short_name.rs
 
 use std::any::type_name;
 
@@ -23,8 +23,7 @@ pub(crate) fn short_type_name<T: ?Sized>() -> String {
     while index < end_of_string {
         let rest_of_string = full_name.get(index..end_of_string).unwrap_or_default();
 
-        // Collapse everything up to the next special character,
-        // then skip over it
+        // Collapse everything up to the next special character, then skip over it
         if let Some(special_character_index) =
             rest_of_string.find(|c: char| [' ', '<', '>', '(', ')', '[', ']', ',', ';'].contains(&c))
         {
@@ -32,11 +31,16 @@ pub(crate) fn short_type_name<T: ?Sized>() -> String {
             parsed_name += collapse_type_name(segment_to_collapse);
             // Insert the special character
             let special_character = &rest_of_string[special_character_index..=special_character_index];
-            parsed_name.push_str(special_character);
+            parsed_name += special_character;
+
+            // Remove lifetimes like <'_> or <'_, '_, ...>
+            if parsed_name.ends_with("<'_>") || parsed_name.ends_with("<'_, ") {
+                _ = parsed_name.split_off(parsed_name.len() - 4);
+            }
 
             match special_character {
                 ">" | ")" | "]" if rest_of_string[special_character_index + 1..].starts_with("::") => {
-                    parsed_name.push_str("::");
+                    parsed_name += "::";
                     // Move the index past the "::"
                     index += special_character_index + 3;
                 }
@@ -53,14 +57,18 @@ pub(crate) fn short_type_name<T: ?Sized>() -> String {
 }
 
 #[inline(always)]
-fn collapse_type_name(string: &str) -> &str {
-    string.rsplit("::").next().unwrap()
+fn collapse_type_name(segment: &str) -> &str {
+    segment.rsplit("::").next().unwrap()
 }
 
 #[cfg(test)]
 mod tests {
     use super::short_type_name;
     use std::collections::HashMap;
+    use std::marker::PhantomData;
+
+    struct MyData<'a, 'b>(PhantomData<&'a &'b ()>);
+    struct MyDataT<'a, T>(PhantomData<&'a T>);
 
     #[test]
     fn tests() {
@@ -73,5 +81,7 @@ mod tests {
             "HashMap<String, Option<[i32; 3]>>"
         );
         assert_eq!(short_type_name::<dyn Fn(i32) -> i32>(), "dyn Fn(i32) -> i32");
+        assert_eq!(short_type_name::<MyDataT<&str>>(), "MyDataT<&str>");
+        assert_eq!(short_type_name::<(&MyData, [MyData])>(), "(MyData, [MyData])");
     }
 }
