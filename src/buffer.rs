@@ -1,3 +1,5 @@
+use std::io;
+
 #[cfg(feature = "serde")]
 use serde::ser::{Serialize, Serializer};
 
@@ -50,17 +52,30 @@ impl Buffer {
     #[track_caller]
     pub fn write_bytes(&self, offset: usize, bytes: &[u8]) {
         let lua = self.0.lua.lock();
-        let data = unsafe {
-            let (buf, size) = self.as_raw_parts(&lua);
-            std::slice::from_raw_parts_mut(buf, size)
-        };
+        let data = self.as_slice_mut(&lua);
         data[offset..offset + bytes.len()].copy_from_slice(bytes);
+    }
+
+    /// Returns an adaptor implementing [`io::Read`], [`io::Write`] and [`io::Seek`] over the
+    /// buffer.
+    ///
+    /// Buffer operations are infallible, none of the read/write functions will return a Err.
+    pub fn cursor(self) -> impl io::Read + io::Write + io::Seek {
+        BufferCursor(self, 0)
     }
 
     pub(crate) fn as_slice(&self, lua: &RawLua) -> &[u8] {
         unsafe {
             let (buf, size) = self.as_raw_parts(lua);
             std::slice::from_raw_parts(buf, size)
+        }
+    }
+
+    #[allow(clippy::mut_from_ref)]
+    fn as_slice_mut(&self, lua: &RawLua) -> &mut [u8] {
+        unsafe {
+            let (buf, size) = self.as_raw_parts(lua);
+            std::slice::from_raw_parts_mut(buf, size)
         }
     }
 
@@ -75,6 +90,66 @@ impl Buffer {
     #[cfg(not(feature = "luau"))]
     unsafe fn as_raw_parts(&self, lua: &RawLua) -> (*mut u8, usize) {
         unreachable!()
+    }
+}
+
+struct BufferCursor(Buffer, usize);
+
+impl io::Read for BufferCursor {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        let lua = self.0 .0.lua.lock();
+        let data = self.0.as_slice(&lua);
+        if self.1 == data.len() {
+            return Ok(0);
+        }
+        let len = buf.len().min(data.len() - self.1);
+        buf[..len].copy_from_slice(&data[self.1..self.1 + len]);
+        self.1 += len;
+        Ok(len)
+    }
+}
+
+impl io::Write for BufferCursor {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        let lua = self.0 .0.lua.lock();
+        let data = self.0.as_slice_mut(&lua);
+        if self.1 == data.len() {
+            return Ok(0);
+        }
+        let len = buf.len().min(data.len() - self.1);
+        data[self.1..self.1 + len].copy_from_slice(&buf[..len]);
+        self.1 += len;
+        Ok(len)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
+impl io::Seek for BufferCursor {
+    fn seek(&mut self, pos: io::SeekFrom) -> io::Result<u64> {
+        let lua = self.0 .0.lua.lock();
+        let data = self.0.as_slice(&lua);
+        let new_offset = match pos {
+            io::SeekFrom::Start(offset) => offset as i64,
+            io::SeekFrom::End(offset) => data.len() as i64 + offset,
+            io::SeekFrom::Current(offset) => self.1 as i64 + offset,
+        };
+        if new_offset < 0 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "invalid seek to a negative position",
+            ));
+        }
+        if new_offset as usize > data.len() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "invalid seek to a position beyond the end of the buffer",
+            ));
+        }
+        self.1 = new_offset as usize;
+        Ok(self.1 as u64)
     }
 }
 

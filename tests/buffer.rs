@@ -1,5 +1,7 @@
 #![cfg(feature = "luau")]
 
+use std::io::{Read, Seek, SeekFrom, Write};
+
 use mlua::{Lua, Result, Value};
 
 #[test]
@@ -65,4 +67,57 @@ fn create_large_buffer() {
     // Normal buffer is okay
     let buf = lua.create_buffer_with_capacity(1024 * 1024).unwrap();
     assert_eq!(buf.len(), 1024 * 1024);
+}
+
+#[test]
+fn test_buffer_cursor() -> Result<()> {
+    let lua = Lua::new();
+    let mut cursor = lua.create_buffer(b"hello, world")?.cursor();
+
+    let mut data = Vec::new();
+    cursor.read_to_end(&mut data)?;
+    assert_eq!(data, b"hello, world");
+
+    // No more data to read
+    let mut one = [0u8; 1];
+    assert_eq!(cursor.read(&mut one)?, 0);
+
+    // Seek to start
+    cursor.seek(SeekFrom::Start(0))?;
+    cursor.read_exact(&mut one)?;
+    assert_eq!(one, [b'h']);
+
+    // Seek to end -5
+    cursor.seek(SeekFrom::End(-5))?;
+    let mut five = [0u8; 5];
+    cursor.read_exact(&mut five)?;
+    assert_eq!(&five, b"world");
+
+    // Seek to current -1
+    cursor.seek(SeekFrom::Current(-1))?;
+    cursor.read_exact(&mut one)?;
+    assert_eq!(one, [b'd']);
+
+    // Invalid seek
+    assert!(cursor.seek(SeekFrom::Current(-100)).is_err());
+    assert!(cursor.seek(SeekFrom::End(1)).is_err());
+
+    // Write data
+    let buf = lua.create_buffer_with_capacity(100)?;
+    cursor = buf.clone().cursor();
+
+    cursor.write_all(b"hello, ...")?;
+    cursor.seek(SeekFrom::Current(-3))?;
+    cursor.write_all(b"Rust!")?;
+
+    assert_eq!(&buf.read_bytes::<12>(0), b"hello, Rust!");
+
+    // Writing beyond the end of the buffer does nothing
+    cursor.seek(SeekFrom::End(0))?;
+    assert_eq!(cursor.write(b".")?, 0);
+
+    // Flush is no-op
+    cursor.flush()?;
+
+    Ok(())
 }
