@@ -1,6 +1,6 @@
 use std::panic::catch_unwind;
 
-use mlua::{Error, Function, Lua, Result, Thread, ThreadStatus};
+use mlua::{Error, Function, IntoLua, Lua, Result, Thread, ThreadStatus, Value};
 
 #[test]
 fn test_thread() -> Result<()> {
@@ -249,6 +249,27 @@ fn test_thread_resume_error() -> Result<()> {
     assert_eq!(thread.resume::<i64>(())?, 123);
     let status = thread.resume_error::<String>("myerror").unwrap();
     assert_eq!(status, "success");
+
+    Ok(())
+}
+
+#[test]
+fn test_thread_resume_bad_arg() -> Result<()> {
+    let lua = Lua::new();
+
+    struct BadArg;
+
+    impl IntoLua for BadArg {
+        fn into_lua(self, _lua: &Lua) -> Result<Value> {
+            Err(Error::runtime("bad arg"))
+        }
+    }
+
+    let f = lua.create_thread(lua.create_function(|_, ()| Ok("okay"))?)?;
+    let res = f.resume::<()>((123, BadArg));
+    assert!(matches!(res, Err(Error::RuntimeError(msg)) if msg == "bad arg"));
+    let res = f.resume::<String>(()).unwrap();
+    assert_eq!(res, "okay");
 
     Ok(())
 }
