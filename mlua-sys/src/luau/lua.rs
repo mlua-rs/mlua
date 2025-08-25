@@ -235,6 +235,7 @@ unsafe extern "C-unwind" {
     ) -> c_int;
     pub fn lua_call(L: *mut lua_State, nargs: c_int, nresults: c_int);
     pub fn lua_pcall(L: *mut lua_State, nargs: c_int, nresults: c_int, errfunc: c_int) -> c_int;
+    pub fn lua_cpcall(L: *mut lua_State, f: lua_CFunction, ud: *mut c_void) -> c_int;
 
     //
     // Coroutine functions
