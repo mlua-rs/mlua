@@ -330,6 +330,15 @@ fn test_interrupts() -> Result<()> {
     assert_eq!(yield_count.load(Ordering::Relaxed), 7);
     assert_eq!(co.status(), ThreadStatus::Finished);
 
+    // Test no yielding at non-yieldable points
+    yield_count.store(0, Ordering::Relaxed);
+    let co = lua.create_thread(lua.create_function(|lua, arg: Value| {
+        (lua.load("return (function(x) return x end)(...)")).call::<Value>(arg)
+    })?)?;
+    let res = co.resume::<String>("abc")?;
+    assert_eq!(res, "abc".to_string());
+    assert_eq!(yield_count.load(Ordering::Relaxed), 3);
+
     //
     // Test errors in interrupts
     //

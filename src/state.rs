@@ -631,13 +631,13 @@ impl Lua {
     ///
     /// Any Luau code is guaranteed to call this handler "eventually"
     /// (in practice this can happen at any function call or at any loop iteration).
+    /// This is similar to `Lua::set_hook` but in more simplified form.
     ///
     /// The provided interrupt function can error, and this error will be propagated through
     /// the Luau code that was executing at the time the interrupt was triggered.
     /// Also this can be used to implement continuous execution limits by instructing Luau VM to
-    /// yield by returning [`VmState::Yield`].
-    ///
-    /// This is similar to `Lua::set_hook` but in more simplified form.
+    /// yield by returning [`VmState::Yield`]. The yield will happen only at yieldable points
+    /// of execution (not across metamethod/C-call boundaries).
     ///
     /// # Example
     ///
@@ -695,7 +695,10 @@ impl Lua {
             match result {
                 VmState::Continue => {}
                 VmState::Yield => {
-                    ffi::lua_yield(state, 0);
+                    // We can yield only at yieldable points, otherwise ignore and continue
+                    if ffi::lua_isyieldable(state) != 0 {
+                        ffi::lua_yield(state, 0);
+                    }
                 }
             }
         }
