@@ -604,7 +604,7 @@ impl<R: FromLuaMulti> Future for AsyncThread<R> {
 
             if status.is_yielded() {
                 if !(nresults == 1 && is_poll_pending(thread_state)) {
-                    // Ignore value returned via yield()
+                    // Ignore values returned via yield()
                     cx.waker().wake_by_ref();
                 }
                 return Poll::Pending;
@@ -635,7 +635,7 @@ struct WakerGuard<'lua, 'a> {
 impl<'lua, 'a> WakerGuard<'lua, 'a> {
     #[inline]
     pub fn new(lua: &'lua RawLua, waker: &'a Waker) -> Result<WakerGuard<'lua, 'a>> {
-        let prev = unsafe { lua.set_waker(NonNull::from(waker)) };
+        let prev = lua.set_waker(NonNull::from(waker));
         Ok(WakerGuard {
             lua,
             prev,
@@ -647,7 +647,7 @@ impl<'lua, 'a> WakerGuard<'lua, 'a> {
 #[cfg(feature = "async")]
 impl Drop for WakerGuard<'_, '_> {
     fn drop(&mut self) {
-        unsafe { self.lua.set_waker(self.prev) };
+        self.lua.set_waker(self.prev);
     }
 }
 

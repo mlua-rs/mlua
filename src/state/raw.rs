@@ -1278,6 +1278,13 @@ impl RawLua {
                 let mut ctx = Context::from_waker(rawlua.waker());
                 match fut.as_mut().map(|fut| fut.as_mut().poll(&mut ctx)) {
                     Some(Poll::Pending) => {
+                        let fut_nvals = ffi::lua_gettop(state);
+                        if fut_nvals >= 3 && ffi::lua_tolightuserdata(state, -3) == Lua::poll_yield().0 {
+                            // We have some values to yield
+                            ffi::lua_pushnil(state);
+                            ffi::lua_replace(state, -4);
+                            return Ok(3);
+                        }
                         ffi::lua_pushnil(state);
                         ffi::lua_pushlightuserdata(state, Lua::poll_pending().0);
                         Ok(2)
@@ -1348,6 +1355,7 @@ impl RawLua {
             local poll = get_poll(...)
             local nres, res, res2 = poll()
             while true do
+                -- Poll::Ready branch, `nres` is the number of results
                 if nres ~= nil then
                     if nres == 0 then
                         return
@@ -1363,10 +1371,20 @@ impl RawLua {
                         return unpack(res, nres)
                     end
                 end
-                -- `res` is a "pending" value
-                -- `yield` can return a signal to drop the future that we should propagate
-                -- to the poller
-                nres, res, res2 = poll(yield(res))
+
+                -- Poll::Pending branch
+                if res2 == nil then
+                    -- `res` is a "pending" value
+                    -- `yield` can return a signal to drop the future that we should propagate
+                    -- to the poller
+                    nres, res, res2 = poll(yield(res))
+                elseif res2 == 0 then
+                    nres, res, res2 = poll(yield())
+                elseif res2 == 1 then
+                    nres, res, res2 = poll(yield(res))
+                else
+                    nres, res, res2 = poll(yield(unpack(res, res2)))
+                end
             end
             "#,
         )
@@ -1378,14 +1396,14 @@ impl RawLua {
 
     #[cfg(feature = "async")]
     #[inline]
-    pub(crate) unsafe fn waker(&self) -> &Waker {
-        (*self.extra.get()).waker.as_ref()
+    pub(crate) fn waker(&self) -> &Waker {
+        unsafe { (*self.extra.get()).waker.as_ref() }
     }
 
     #[cfg(feature = "async")]
     #[inline]
-    pub(crate) unsafe fn set_waker(&self, waker: NonNull<Waker>) -> NonNull<Waker> {
-        mem::replace(&mut (*self.extra.get()).waker, waker)
+    pub(crate) fn set_waker(&self, waker: NonNull<Waker>) -> NonNull<Waker> {
+        unsafe { mem::replace(&mut (*self.extra.get()).waker, waker) }
     }
 }
 

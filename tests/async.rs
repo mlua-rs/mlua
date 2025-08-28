@@ -8,7 +8,7 @@ use futures_util::stream::TryStreamExt;
 use tokio::sync::Mutex;
 
 use mlua::{
-    Error, Function, Lua, LuaOptions, MultiValue, ObjectLike, Result, StdLib, Table, UserData,
+    Error, Function, Lua, LuaOptions, MultiValue, ObjectLike, Result, StdLib, Table, ThreadStatus, UserData,
     UserDataMethods, UserDataRef, Value,
 };
 
@@ -664,6 +664,38 @@ async fn test_async_hook() -> Result<()> {
 
     lua.load(r"sleep(100)").exec_async().await?;
     assert!(HOOK_CALLED.load(Ordering::Relaxed));
+
+    Ok(())
+}
+
+#[test]
+fn test_async_yield_with() -> Result<()> {
+    let lua = Lua::new();
+
+    let func = lua.create_async_function(|lua, (mut a, mut b): (i32, i32)| async move {
+        let zero = lua.yield_with::<MultiValue>(()).await?;
+        assert!(zero.is_empty());
+        let one = lua.yield_with::<MultiValue>(a + b).await?;
+        assert_eq!(one.len(), 1);
+
+        for _ in 0..3 {
+            (a, b) = lua.yield_with((a + b, a * b)).await?;
+        }
+        Ok((0, 0))
+    })?;
+
+    let thread = lua.create_thread(func)?;
+
+    let zero = thread.resume::<MultiValue>((2, 3))?; // function arguments
+    assert!(zero.is_empty());
+    let one = thread.resume::<i32>(())?; // value of "zero" is passed here
+    assert_eq!(one, 5);
+
+    assert_eq!(thread.resume::<(i32, i32)>(1)?, (5, 6)); // value of "one" is passed here
+    assert_eq!(thread.resume::<(i32, i32)>((10, 11))?, (21, 110));
+    assert_eq!(thread.resume::<(i32, i32)>((11, 12))?, (23, 132));
+    assert_eq!(thread.resume::<(i32, i32)>((12, 13))?, (0, 0));
+    assert_eq!(thread.status(), ThreadStatus::Finished);
 
     Ok(())
 }

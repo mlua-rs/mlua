@@ -37,6 +37,7 @@ use crate::{buffer::Buffer, chunk::Compiler};
 use {
     crate::types::LightUserData,
     std::future::{self, Future},
+    std::task::Poll,
 };
 
 #[cfg(feature = "serde")]
@@ -2077,6 +2078,101 @@ impl Lua {
     pub(crate) fn poll_terminate() -> LightUserData {
         static ASYNC_POLL_TERMINATE: u8 = 0;
         LightUserData(&ASYNC_POLL_TERMINATE as *const u8 as *mut std::os::raw::c_void)
+    }
+
+    #[cfg(feature = "async")]
+    #[inline(always)]
+    pub(crate) fn poll_yield() -> LightUserData {
+        static ASYNC_POLL_YIELD: u8 = 0;
+        LightUserData(&ASYNC_POLL_YIELD as *const u8 as *mut std::os::raw::c_void)
+    }
+
+    /// Suspends the current async function, returning the provided arguments to caller.
+    ///
+    /// This function is similar to [`coroutine.yield`] but allow yeilding Rust functions
+    /// and passing values to the caller.
+    /// Please note that you cannot cross [`Thread`] boundaries (e.g. calling `yield_with` on one
+    /// thread and resuming on another).
+    ///
+    /// # Examples
+    ///
+    /// Async iterator:
+    ///
+    /// ```
+    /// # use mlua::{Lua, Result};
+    ///
+    /// async fn generator(lua: Lua, _: ()) -> Result<()> {
+    ///     for i in 0..10 {
+    ///         lua.yield_with::<()>(i).await?;
+    ///     }
+    ///     Ok(())
+    /// }
+    ///
+    /// fn main() -> Result<()> {
+    ///     let lua = Lua::new();
+    ///     lua.globals().set("generator", lua.create_async_function(generator)?)?;
+    ///
+    ///     lua.load(r#"
+    ///        local n = 0
+    ///        for i in coroutine.wrap(generator) do
+    ///            n = n + i
+    ///        end
+    ///        assert(n == 45)
+    ///     "#)
+    ///     .exec()
+    /// }
+    /// ```
+    ///
+    /// Exchange values on yield:
+    ///
+    /// ```
+    /// # use mlua::{Lua, Result, Value};
+    ///
+    /// async fn pingpong(lua: Lua, mut val: i32) -> Result<()> {
+    ///     loop {
+    ///         val = lua.yield_with::<i32>(val).await? + 1;
+    ///     }
+    ///     Ok(())
+    /// }
+    ///
+    /// # fn main() -> Result<()> {
+    /// let lua = Lua::new();
+    ///
+    /// let co = lua.create_thread(lua.create_async_function(pingpong)?)?;
+    /// assert_eq!(co.resume::<i32>(1)?, 1);
+    /// assert_eq!(co.resume::<i32>(2)?, 3);
+    /// assert_eq!(co.resume::<i32>(3)?, 4);
+    ///
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// [`coroutine.yield`]: https://www.lua.org/manual/5.4/manual.html#pdf-coroutine.yield
+    #[cfg(feature = "async")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
+    pub async fn yield_with<R: FromLuaMulti>(&self, args: impl IntoLuaMulti) -> Result<R> {
+        let mut args = Some(args.into_lua_multi(self)?);
+        future::poll_fn(move |_cx| match args.take() {
+            Some(args) => unsafe {
+                let lua = self.lock();
+                lua.push(Self::poll_yield())?; // yield marker
+                if args.len() <= 1 {
+                    lua.push(args.front())?;
+                } else {
+                    lua.push(lua.create_sequence_from(&args)?)?;
+                }
+                lua.push(args.len())?;
+                Poll::Pending
+            },
+            None => unsafe {
+                let lua = self.lock();
+                let state = lua.state();
+                let _sg = StackGuard::with_top(state, 0);
+                let nvals = ffi::lua_gettop(state);
+                Poll::Ready(R::from_stack_multi(nvals, &lua))
+            },
+        })
+        .await
     }
 
     /// Returns a weak reference to the Lua instance.
