@@ -366,6 +366,39 @@ fn userdata_call_method(c: &mut Criterion) {
     });
 }
 
+// A userdata method call that goes through an implicit `__index` function
+fn userdata_call_method_complex(c: &mut Criterion) {
+    struct UserData(u64);
+    impl LuaUserData for UserData {
+        fn register(registry: &mut LuaUserDataRegistry<Self>) {
+            registry.add_field_method_get("val", |_, this| Ok(this.0));
+            registry.add_method_mut("inc_by", |_, this, by: u64| {
+                this.0 += by;
+                Ok(this.0)
+            });
+        }
+    }
+
+    let lua = Lua::new();
+    let ud = lua.create_userdata(UserData(0)).unwrap();
+    let inc_by = lua
+        .load("function(ud, s) return ud:inc_by(s) end")
+        .eval::<LuaFunction>()
+        .unwrap();
+
+    c.bench_function("userdata [call method complex]", |b| {
+        b.iter_batched(
+            || {
+                collect_gc_twice(&lua);
+            },
+            |_| {
+                inc_by.call::<()>((&ud, 1)).unwrap();
+            },
+            BatchSize::SmallInput,
+        );
+    });
+}
+
 fn userdata_async_call_method(c: &mut Criterion) {
     struct UserData(i64);
     impl LuaUserData for UserData {
@@ -430,6 +463,7 @@ criterion_group! {
         userdata_create,
         userdata_call_index,
         userdata_call_method,
+        userdata_call_method_complex,
         userdata_async_call_method,
 }
 
