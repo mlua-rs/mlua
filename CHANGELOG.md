@@ -1,3 +1,12 @@
+## v0.11.3 (TBC, 2025)
+
+- Add `Lua::yield_with` to use as `coroutine.yield` functional replacement in async functions for any Lua
+- Do not try to yield at non-yielable points in Luau interrupt (#632)
+- Add `Buffer::cursor` method (Luau)
+- Add `Lua::create_buffer_with_capacity` method (Luau)
+- Make Lua reference values cheap to clone (only increments ref count)
+- Fix panic on large (>67M entries) table creation
+
 ## v0.11.2 (Aug 10, 2025)
 
 - Faster stack push for `Variadic<T>`
