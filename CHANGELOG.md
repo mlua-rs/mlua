@@ -1,4 +1,4 @@
-## v0.11.3 (TBC, 2025)
+## v0.11.3 (Aug 30, 2025)
 
 - Add `Lua::yield_with` to use as `coroutine.yield` functional replacement in async functions for any Lua
 - Do not try to yield at non-yielable points in Luau interrupt (#632)
