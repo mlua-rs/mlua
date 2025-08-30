@@ -2100,7 +2100,7 @@ impl Lua {
     ///
     /// ```
     /// # use mlua::{Lua, Result};
-    ///
+    /// #
     /// async fn generator(lua: Lua, _: ()) -> Result<()> {
     ///     for i in 0..10 {
     ///         lua.yield_with::<()>(i).await?;
@@ -2127,7 +2127,7 @@ impl Lua {
     ///
     /// ```
     /// # use mlua::{Lua, Result, Value};
-    ///
+    /// #
     /// async fn pingpong(lua: Lua, mut val: i32) -> Result<()> {
     ///     loop {
     ///         val = lua.yield_with::<i32>(val).await? + 1;
