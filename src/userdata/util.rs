@@ -4,8 +4,11 @@ use std::marker::PhantomData;
 use std::os::raw::c_int;
 use std::ptr;
 
+use rustc_hash::FxHashMap;
+
 use super::UserDataStorage;
 use crate::error::{Error, Result};
+use crate::types::CallbackPtr;
 use crate::util::{get_userdata, rawget_field, rawset_field, take_userdata};
 
 // This is a trick to check if a type is `Sync` or not.
@@ -244,6 +247,7 @@ pub(crate) unsafe fn init_userdata_metatable(
     field_getters: Option<c_int>,
     field_setters: Option<c_int>,
     methods: Option<c_int>,
+    _methods_map: Option<FxHashMap<Vec<u8>, CallbackPtr>>, // Used only in Luau for `__namecall`
 ) -> Result<()> {
     if field_getters.is_some() || methods.is_some() {
         // Push `__index` generator function
@@ -267,6 +271,13 @@ pub(crate) unsafe fn init_userdata_metatable(
         }
 
         rawset_field(state, metatable, "__index")?;
+
+        #[cfg(feature = "luau")]
+        if let Some(methods_map) = _methods_map {
+            // In Luau we can speedup method calls by providing a dedicated `__namecall` metamethod
+            push_userdata_metatable_namecall(state, methods_map)?;
+            rawset_field(state, metatable, "__namecall")?;
+        }
     }
 
     if let Some(field_setters) = field_setters {
@@ -422,6 +433,36 @@ unsafe fn init_userdata_metatable_newindex(state: *mut ffi::lua_State) -> Result
         // Store in the registry
         ffi::lua_pushvalue(state, -1);
         ffi::lua_rawsetp(state, ffi::LUA_REGISTRYINDEX, newindex_key);
+    })
+}
+
+#[cfg(feature = "luau")]
+unsafe fn push_userdata_metatable_namecall(
+    state: *mut ffi::lua_State,
+    methods_map: FxHashMap<Vec<u8>, CallbackPtr>,
+) -> Result<()> {
+    unsafe extern "C-unwind" fn namecall(state: *mut ffi::lua_State) -> c_int {
+        let name = ffi::lua_namecallatom(state, ptr::null_mut());
+        if name.is_null() {
+            ffi::luaL_error(state, cstr!("attempt to call an unknown method"));
+        }
+        let name_cs = std::ffi::CStr::from_ptr(name);
+        let methods_map = get_userdata::<FxHashMap<Vec<u8>, CallbackPtr>>(state, ffi::lua_upvalueindex(1));
+        let callback_ptr = match (*methods_map).get(name_cs.to_bytes()) {
+            Some(ptr) => *ptr,
+            #[rustfmt::skip]
+            None => ffi::luaL_error(state, cstr!("attempt to call an unknown method '%s'"), name),
+        };
+        crate::state::callback_error_ext(state, ptr::null_mut(), true, |extra, nargs| {
+            let rawlua = (*extra).raw_lua();
+            (*callback_ptr)(rawlua, nargs)
+        })
+    }
+
+    // Automatic destructor is provided for any Luau userdata
+    crate::util::push_userdata(state, methods_map, true)?;
+    protect_lua!(state, 1, 1, |state| {
+        ffi::lua_pushcclosured(state, namecall, cstr!("__namecall"), 1);
     })
 }
 

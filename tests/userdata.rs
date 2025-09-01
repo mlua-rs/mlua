@@ -1307,3 +1307,41 @@ fn test_userdata_wrappers() -> Result<()> {
 
     Ok(())
 }
+
+#[cfg(feature = "luau")]
+#[test]
+fn test_userdata_namecall() -> Result<()> {
+    let lua = Lua::new();
+
+    struct MyUserData;
+
+    impl UserData for MyUserData {
+        fn register(registry: &mut mlua::UserDataRegistry<Self>) {
+            registry.add_method("method", |_, _, ()| Ok("method called"));
+            registry.add_field_method_get("field", |_, _| Ok("field value"));
+
+            registry.add_meta_method(MetaMethod::Index, |_, _, key: StdString| Ok(key));
+
+            registry.enable_namecall();
+        }
+    }
+
+    let ud = lua.create_userdata(MyUserData)?;
+    lua.globals().set("ud", &ud)?;
+    lua.load(
+        r#"
+        assert(ud:method() == "method called")
+        assert(ud.field == "field value")
+        assert(ud.dynamic_field == "dynamic_field")
+        local ok, err = pcall(function() return ud:dynamic_field() end)
+        assert(tostring(err):find("attempt to call an unknown method 'dynamic_field'") ~= nil)
+        "#,
+    )
+    .exec()?;
+
+    ud.destroy()?;
+    let err = lua.load("ud:method()").exec().unwrap_err();
+    assert!(err.to_string().contains("userdata has been destructed"));
+
+    Ok(())
+}

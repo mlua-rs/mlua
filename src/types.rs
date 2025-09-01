@@ -38,10 +38,13 @@ unsafe impl Send for LightUserData {}
 unsafe impl Sync for LightUserData {}
 
 #[cfg(feature = "send")]
-pub(crate) type Callback = Box<dyn Fn(&RawLua, c_int) -> Result<c_int> + Send + 'static>;
+type CallbackFn<'a> = dyn Fn(&RawLua, c_int) -> Result<c_int> + Send + 'a;
 
 #[cfg(not(feature = "send"))]
-pub(crate) type Callback = Box<dyn Fn(&RawLua, c_int) -> Result<c_int> + 'static>;
+type CallbackFn<'a> = dyn Fn(&RawLua, c_int) -> Result<c_int> + 'a;
+
+pub(crate) type Callback = Box<CallbackFn<'static>>;
+pub(crate) type CallbackPtr = *const CallbackFn<'static>;
 
 pub(crate) type ScopedCallback<'s> = Box<dyn Fn(&RawLua, c_int) -> Result<c_int> + 's>;
 

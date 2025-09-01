@@ -402,6 +402,8 @@ pub(crate) unsafe fn init_error_registry(state: *mut ffi::lua_State) -> Result<(
         "__ipairs",
         #[cfg(feature = "luau")]
         "__iter",
+        #[cfg(feature = "luau")]
+        "__namecall",
         #[cfg(feature = "lua54")]
         "__close",
     ] {

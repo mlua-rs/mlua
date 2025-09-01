@@ -56,6 +56,9 @@ pub(crate) struct RawUserDataRegistry {
     pub(crate) destructor: ffi::lua_CFunction,
     pub(crate) type_id: Option<TypeId>,
     pub(crate) type_name: StdString,
+
+    #[cfg(feature = "luau")]
+    pub(crate) enable_namecall: bool,
 }
 
 impl UserDataType {
@@ -100,6 +103,8 @@ impl<T> UserDataRegistry<T> {
             destructor: super::util::destroy_userdata_storage::<T>,
             type_id: r#type.type_id(),
             type_name: short_type_name::<T>(),
+            #[cfg(feature = "luau")]
+            enable_namecall: false,
         };
 
         UserDataRegistry {
@@ -108,6 +113,23 @@ impl<T> UserDataRegistry<T> {
             r#type,
             _phantom: PhantomData,
         }
+    }
+
+    /// Enables support for the namecall optimization in Luau.
+    ///
+    /// This enables methods resolution optimization in Luau for complex userdata types with methods
+    /// and field getters. When enabled, Luau will use a faster lookup path for method calls when a
+    /// specific syntax is used (e.g. `obj:method()`.
+    ///
+    /// This optimization does not play well with async methods, custom `__index` metamethod and
+    /// field getters as functions. So, it is disabled by default.
+    ///
+    /// Use with caution.
+    #[doc(hidden)]
+    #[cfg(feature = "luau")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
+    pub fn enable_namecall(&mut self) {
+        self.raw.enable_namecall = true;
     }
 
     fn box_method<M, A, R>(&self, name: &str, method: M) -> Callback

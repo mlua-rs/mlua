@@ -28,8 +28,8 @@ use crate::userdata::{
 use crate::util::{
     assert_stack, check_stack, get_destructed_userdata_metatable, get_internal_userdata, get_main_state,
     get_metatable_ptr, get_userdata, init_error_registry, init_internal_metatable, pop_error,
-    push_internal_userdata, push_string, push_table, rawset_field, safe_pcall, safe_xpcall, short_type_name,
-    StackGuard, WrappedFailure,
+    push_internal_userdata, push_string, push_table, push_userdata, rawset_field, safe_pcall, safe_xpcall,
+    short_type_name, StackGuard, WrappedFailure,
 };
 use crate::value::{Nil, Value};
 
@@ -928,7 +928,7 @@ impl RawLua {
         // We generate metatable first to make sure it *always* available when userdata pushed
         let mt_id = get_metatable_id()?;
         let protect = !self.unlikely_memory_error();
-        crate::util::push_userdata(state, data, protect)?;
+        push_userdata(state, data, protect)?;
         ffi::lua_rawgeti(state, ffi::LUA_REGISTRYINDEX, mt_id);
         ffi::lua_setmetatable(state, -2);
 
@@ -1056,6 +1056,18 @@ impl RawLua {
             field_setters_index = Some(ffi::lua_absindex(state, -1));
         }
 
+        // Create methods namecall table
+        #[cfg_attr(not(feature = "luau"), allow(unused_mut))]
+        let mut methods_map = None;
+        #[cfg(feature = "luau")]
+        if registry.enable_namecall {
+            let map: &mut rustc_hash::FxHashMap<_, crate::types::CallbackPtr> =
+                methods_map.get_or_insert_with(Default::default);
+            for (k, m) in &registry.methods {
+                map.insert(k.as_bytes().to_vec(), &**m);
+            }
+        }
+
         let mut methods_index = None;
         let methods_nrec = registry.methods.len();
         #[cfg(feature = "async")]
@@ -1103,6 +1115,7 @@ impl RawLua {
             field_getters_index,
             field_setters_index,
             methods_index,
+            methods_map,
         )?;
 
         // Update stack guard to keep metatable after return
