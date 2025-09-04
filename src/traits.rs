@@ -5,9 +5,9 @@ use std::sync::Arc;
 use crate::error::{Error, Result};
 use crate::multi::MultiValue;
 use crate::private::Sealed;
-use crate::state::{Lua, RawLua};
+use crate::state::{Lua, RawLua, WeakLua};
 use crate::types::MaybeSend;
-use crate::util::{check_stack, short_type_name};
+use crate::util::{check_stack, parse_lookup_path, short_type_name};
 use crate::value::Value;
 
 #[cfg(feature = "async")]
@@ -200,10 +200,50 @@ pub trait ObjectLike: Sealed {
     where
         R: FromLuaMulti;
 
+    /// Look up a value by a path of keys.
+    ///
+    /// The syntax is similar to accessing nested tables in Lua, with additional support for
+    /// `?` operator to perform safe navigation.
+    ///
+    /// For example, the path `a[1].c` is equivalent to `table.a[1].c` in Lua.
+    /// With `?` operator, `a[1]?.c` is equivalent to `table.a[1] and table.a[1].c or nil` in Lua.
+    ///
+    /// Bracket notation rules:
+    /// - `[123]` - integer keys
+    /// - `["string key"]` or `['string key']` - string keys (must be quoted)
+    /// - String keys support escape sequences: `\"`, `\'`, `\\`
+    fn get_path<V: FromLua>(&self, path: &str) -> Result<V> {
+        let mut current = self.to_value();
+        for (key, safe_nil) in parse_lookup_path(path)? {
+            current = match current {
+                Value::Table(table) => table.get::<Value>(key),
+                Value::UserData(ud) => ud.get::<Value>(key),
+                _ => {
+                    let type_name = current.type_name();
+                    let err = format!("attempt to index a {type_name} value with key '{key}'");
+                    Err(Error::runtime(err))
+                }
+            }?;
+            if safe_nil && (current == Value::Nil || current == Value::NULL) {
+                break;
+            }
+        }
+
+        let lua = self.weak_lua().lock();
+        V::from_lua(current, lua.lua())
+    }
+
     /// Converts the object to a string in a human-readable format.
     ///
     /// This might invoke the `__tostring` metamethod.
     fn to_string(&self) -> Result<StdString>;
+
+    /// Converts the object to a Lua value.
+    fn to_value(&self) -> Value;
+
+    /// Gets a reference to the associated Lua state.
+    #[doc(hidden)]
+    fn weak_lua(&self) -> &WeakLua;
 }
 
 /// A trait for types that can be used as Lua functions.

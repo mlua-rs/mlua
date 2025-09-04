@@ -6,7 +6,7 @@ use std::string::String as StdString;
 
 use crate::error::{Error, Result};
 use crate::function::Function;
-use crate::state::{LuaGuard, RawLua};
+use crate::state::{LuaGuard, RawLua, WeakLua};
 use crate::traits::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, ObjectLike};
 use crate::types::{Integer, LuaType, ValueRef};
 use crate::util::{assert_stack, check_stack, get_metatable_ptr, StackGuard};
@@ -942,6 +942,16 @@ impl ObjectLike for Table {
     #[inline]
     fn to_string(&self) -> Result<StdString> {
         Value::Table(Table(self.0.clone())).to_string()
+    }
+
+    #[inline]
+    fn to_value(&self) -> Value {
+        Value::Table(self.clone())
+    }
+
+    #[inline]
+    fn weak_lua(&self) -> &WeakLua {
+        &self.0.lua
     }
 }
 

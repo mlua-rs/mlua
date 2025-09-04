@@ -9,6 +9,7 @@ pub(crate) use error::{
     error_traceback, error_traceback_thread, init_error_registry, pop_error, protect_lua_call,
     protect_lua_closure, WrappedFailure,
 };
+pub(crate) use path::parse_path as parse_lookup_path;
 pub(crate) use short_names::short_type_name;
 pub(crate) use types::TypeKey;
 pub(crate) use userdata::{
@@ -327,6 +328,7 @@ pub(crate) fn linenumber_to_usize(n: c_int) -> Option<usize> {
 }
 
 mod error;
+mod path;
 mod short_names;
 mod types;
 mod userdata;

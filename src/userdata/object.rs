@@ -1,6 +1,7 @@
 use std::string::String as StdString;
 
 use crate::error::{Error, Result};
+use crate::state::WeakLua;
 use crate::table::Table;
 use crate::traits::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, ObjectLike};
 use crate::userdata::AnyUserData;
@@ -88,6 +89,16 @@ impl ObjectLike for AnyUserData {
 
     #[inline]
     fn to_string(&self) -> Result<StdString> {
-        Value::UserData(AnyUserData(self.0.clone())).to_string()
+        Value::UserData(self.clone()).to_string()
+    }
+
+    #[inline]
+    fn to_value(&self) -> Value {
+        Value::UserData(self.clone())
+    }
+
+    #[inline]
+    fn weak_lua(&self) -> &WeakLua {
+        &self.0.lua
     }
 }

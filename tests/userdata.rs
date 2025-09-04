@@ -8,7 +8,7 @@ use std::sync::atomic::{AtomicI64, Ordering};
 
 use mlua::{
     AnyUserData, Error, ExternalError, Function, Lua, MetaMethod, Nil, ObjectLike, Result, String, UserData,
-    UserDataFields, UserDataMethods, UserDataRef, Value, Variadic,
+    UserDataFields, UserDataMethods, UserDataRef, UserDataRegistry, Value, Variadic,
 };
 
 #[test]
@@ -1342,6 +1342,23 @@ fn test_userdata_namecall() -> Result<()> {
     ud.destroy()?;
     let err = lua.load("ud:method()").exec().unwrap_err();
     assert!(err.to_string().contains("userdata has been destructed"));
+
+    Ok(())
+}
+
+#[test]
+fn test_userdata_get_path() -> Result<()> {
+    let lua = Lua::new();
+
+    struct MyUd;
+    impl UserData for MyUd {
+        fn register(registry: &mut UserDataRegistry<Self>) {
+            registry.add_field("value", "userdata_value");
+        }
+    }
+
+    let ud = lua.create_userdata(MyUd)?;
+    assert_eq!(ud.get_path::<String>(".value")?, "userdata_value");
 
     Ok(())
 }
