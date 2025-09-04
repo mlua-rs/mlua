@@ -17,14 +17,14 @@
 [Benchmarks]: https://github.com/khvzak/script-bench-rs
 [FAQ]: FAQ.md
 
-`mlua` is a set of bindings to the [Lua](https://www.lua.org) programming language for Rust with a goal to provide a
+`mlua` is a set of bindings to the [Lua](https://www.lua.org) programming language for Rust with a goal of providing a
 _safe_ (as much as possible), high level, easy to use, practical and flexible API.
 
 Started as an `rlua` fork, `mlua` supports Lua 5.4, 5.3, 5.2, 5.1 (including LuaJIT) and [Luau] and allows writing native Lua modules in Rust as well as using Lua in a standalone mode.
 
 `mlua` is tested on Windows/macOS/Linux including module mode in [GitHub Actions] on `x86_64` platforms and cross-compilation to `aarch64` (other targets are also supported).
 
-WebAssembly (WASM) is supported through `wasm32-unknown-emscripten` target for all Lua/Luau versions excluding JIT.
+WebAssembly (WASM) is supported through the `wasm32-unknown-emscripten` target for all Lua/Luau versions excluding JIT.
 
 [GitHub Actions]: https://github.com/mlua-rs/mlua/actions
 [Luau]: https://luau.org
@@ -33,7 +33,7 @@ WebAssembly (WASM) is supported through `wasm32-unknown-emscripten` target for a
 
 ### Feature flags
 
-`mlua` uses feature flags to reduce the amount of dependencies and compiled code, and allow to choose only required set of features.
+`mlua` uses feature flags to reduce the number of dependencies and compiled code, and allow choosing only the required set of features.
 Below is a list of the available feature flags. By default `mlua` does not enable any features.
 
 * `lua54`: enable Lua [5.4] support
@@ -270,7 +270,7 @@ remain usable after a user generated panic, and such panics should not break int
 leak Lua stack space. This is mostly important to safely use `mlua` types in Drop impls, as you should not be
 using panics for general error handling.
 
-Below is a list of `mlua` behaviors that should be considered a bug.
+Below is a list of `mlua` behaviors that should be considered bugs.
 If you encounter them, a bug report would be very welcome:
 
   + If you can cause UB with `mlua` without typing the word "unsafe", this is a bug.
