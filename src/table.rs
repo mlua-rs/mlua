@@ -416,14 +416,7 @@ impl Table {
 
                 lua.push_ref(&self.0);
 
-                // Clear array part
-                for i in 1..=ffi::lua_rawlen(state, -1) {
-                    ffi::lua_pushnil(state);
-                    ffi::lua_rawseti(state, -2, i as Integer);
-                }
-
-                // Clear hash part
-                // It must be safe as long as we don't use invalid keys
+                // This is safe as long as we don't assign new keys
                 ffi::lua_pushnil(state);
                 while ffi::lua_next(state, -2) != 0 {
                     ffi::lua_pop(state, 1); // pop value
