@@ -491,7 +491,6 @@ impl Value {
     /// This allows customizing serialization behavior using serde.
     #[cfg(feature = "serde")]
     #[cfg_attr(docsrs, doc(cfg(feature = "serde")))]
-    #[doc(hidden)]
     pub fn to_serializable(&self) -> SerializableValue<'_> {
         SerializableValue::new(self, Default::default(), None)
     }
