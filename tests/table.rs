@@ -273,6 +273,22 @@ fn test_table_for_each() -> Result<()> {
 }
 
 #[test]
+fn test_table_for_each_value() -> Result<()> {
+    let lua = Lua::new();
+
+    let table = lua.load("{1, 2, 3, 4, 5, nil, 7}").eval::<Table>()?;
+    let mut sum = 0;
+    table.for_each_value::<i32>(|v| {
+        sum += v;
+        Ok(())
+    })?;
+    // Iterations stops at the first nil
+    assert_eq!(sum, 1 + 2 + 3 + 4 + 5);
+
+    Ok(())
+}
+
+#[test]
 fn test_table_scope() -> Result<()> {
     let lua = Lua::new();
 
