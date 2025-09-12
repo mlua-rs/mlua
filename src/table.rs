@@ -668,16 +668,25 @@ impl Table {
             guard: self.0.lua.lock(),
             table: self,
             index: 1,
+            len: None,
             _phantom: PhantomData,
         }
     }
 
     /// Iterates over the sequence part of the table, invoking the given closure on each value.
+    ///
+    /// This methods is similar to [`Table::sequence_values`], but optimized for performance.
     #[doc(hidden)]
-    pub fn for_each_value<V>(&self, mut f: impl FnMut(V) -> Result<()>) -> Result<()>
-    where
-        V: FromLua,
-    {
+    pub fn for_each_value<V: FromLua>(&self, f: impl FnMut(V) -> Result<()>) -> Result<()> {
+        self.for_each_value_by_len(None, f)
+    }
+
+    fn for_each_value_by_len<V: FromLua>(
+        &self,
+        len: impl Into<Option<usize>>,
+        mut f: impl FnMut(V) -> Result<()>,
+    ) -> Result<()> {
+        let len = len.into();
         let lua = self.0.lua.lock();
         let state = lua.state();
         unsafe {
@@ -685,9 +694,14 @@ impl Table {
             check_stack(state, 4)?;
 
             lua.push_ref(&self.0);
-            let len = ffi::lua_rawlen(state, -1);
-            for i in 1..=len {
-                ffi::lua_rawgeti(state, -1, i as _);
+            for i in 1.. {
+                if len.map(|len| i > len).unwrap_or(false) {
+                    break;
+                }
+                let t = ffi::lua_rawgeti(state, -1, i as _);
+                if len.is_none() && t == ffi::LUA_TNIL {
+                    break;
+                }
                 f(V::from_stack(-1, &lua)?)?;
                 ffi::lua_pop(state, 1);
             }
@@ -720,8 +734,9 @@ impl Table {
         Ok(())
     }
 
+    /// Checks if the table has the array metatable attached.
     #[cfg(feature = "serde")]
-    pub(crate) fn is_array(&self) -> bool {
+    fn has_array_metatable(&self) -> bool {
         let lua = self.0.lua.lock();
         let state = lua.state();
         unsafe {
@@ -735,6 +750,70 @@ impl Table {
             crate::serde::push_array_metatable(state);
             ffi::lua_rawequal(state, -1, -2) != 0
         }
+    }
+
+    /// If the table is an array, returns the number of non-nil elements and max index.
+    ///
+    /// Returns `None` if the table is not an array.
+    ///
+    /// This operation has O(n) complexity.
+    #[cfg(feature = "serde")]
+    fn find_array_len(&self) -> Option<(usize, usize)> {
+        let lua = self.0.lua.lock();
+        let ref_thread = lua.ref_thread();
+        unsafe {
+            let _sg = StackGuard::new(ref_thread);
+
+            let (mut count, mut max_index) = (0, 0);
+            ffi::lua_pushnil(ref_thread);
+            while ffi::lua_next(ref_thread, self.0.index) != 0 {
+                if ffi::lua_type(ref_thread, -2) != ffi::LUA_TNUMBER {
+                    return None;
+                }
+
+                let k = ffi::lua_tonumber(ref_thread, -2);
+                if k.trunc() != k || k < 1.0 {
+                    return None;
+                }
+                max_index = std::cmp::max(max_index, k as usize);
+                count += 1;
+                ffi::lua_pop(ref_thread, 1);
+            }
+            Some((count, max_index))
+        }
+    }
+
+    /// Determines if the table should be encoded as an array or a map.
+    ///
+    /// The algorithm is the following:
+    /// 1. If `detect_mixed_tables` is enabled, iterate over all keys in the table checking is they
+    ///    all are positive integers. If non-array key is found, return `None` (encode as map).
+    ///    Otherwise check the sparsity of the array. Too sparse arrays are encoded as maps.
+    ///
+    /// 2. If `detect_mixed_tables` is disabled, check if the table has a positive length or has the
+    ///    array metatable. If so, encode as array. If the table is empty and
+    ///    `encode_empty_tables_as_array` is enabled, encode as array.
+    ///
+    /// Returns the length of the array if it should be encoded as an array.
+    #[cfg(feature = "serde")]
+    pub(crate) fn encode_as_array(&self, options: crate::serde::de::Options) -> Option<usize> {
+        if options.detect_mixed_tables {
+            if let Some((len, max_idx)) = self.find_array_len() {
+                // If the array is too sparse, serialize it as a map instead
+                if len < 10 || len * 2 >= max_idx {
+                    return Some(max_idx);
+                }
+            }
+        } else {
+            let len = self.raw_len();
+            if len > 0 || self.has_array_metatable() {
+                return Some(len);
+            }
+            if options.encode_empty_tables_as_array && self.is_empty() {
+                return Some(0);
+            }
+        }
+        None
     }
 
     #[cfg(feature = "luau")]
@@ -980,6 +1059,15 @@ impl<'a> SerializableTable<'a> {
     }
 }
 
+impl<V> TableSequence<'_, V> {
+    /// Sets the length (hint) of the sequence.
+    #[cfg(feature = "serde")]
+    pub(crate) fn with_len(mut self, len: usize) -> Self {
+        self.len = Some(len);
+        self
+    }
+}
+
 #[cfg(feature = "serde")]
 impl Serialize for SerializableTable<'_> {
     fn serialize<S>(&self, serializer: S) -> StdResult<S::Ok, S::Error>
@@ -1001,14 +1089,10 @@ impl Serialize for SerializableTable<'_> {
         let _guard = RecursionGuard::new(self.table, visited);
 
         // Array
-        let len = self.table.raw_len();
-        if len > 0
-            || self.table.is_array()
-            || (self.options.encode_empty_tables_as_array && self.table.is_empty())
-        {
+        if let Some(len) = self.table.encode_as_array(self.options) {
             let mut seq = serializer.serialize_seq(Some(len))?;
             let mut serialize_err = None;
-            let res = self.table.for_each_value::<Value>(|value| {
+            let res = self.table.for_each_value_by_len::<Value>(len, |value| {
                 let skip = check_value_for_skip(&value, self.options, visited)
                     .map_err(|err| Error::SerializeError(err.to_string()))?;
                 if skip {
@@ -1132,13 +1216,11 @@ pub struct TableSequence<'a, V> {
     guard: LuaGuard,
     table: &'a Table,
     index: Integer,
+    len: Option<usize>,
     _phantom: PhantomData<V>,
 }
 
-impl<V> Iterator for TableSequence<'_, V>
-where
-    V: FromLua,
-{
+impl<V: FromLua> Iterator for TableSequence<'_, V> {
     type Item = Result<V>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -1152,7 +1234,7 @@ where
 
             lua.push_ref(&self.table.0);
             match ffi::lua_rawgeti(state, -1, self.index) {
-                ffi::LUA_TNIL => None,
+                ffi::LUA_TNIL if self.index as usize > self.len.unwrap_or(0) => None,
                 _ => {
                     self.index += 1;
                     Some(V::from_stack(-1, lua))

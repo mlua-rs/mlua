@@ -717,6 +717,17 @@ impl<'a> SerializableValue<'a> {
         self.options.encode_empty_tables_as_array = enabled;
         self
     }
+
+    /// If true, enable detection of mixed tables.
+    ///
+    /// A mixed table is a table that has both array-like and map-like entries or several borders.
+    ///
+    /// Default: **false**
+    #[must_use]
+    pub const fn detect_mixed_tables(mut self, enabled: bool) -> Self {
+        self.options.detect_mixed_tables = enabled;
+        self
+    }
 }
 
 #[cfg(feature = "serde")]

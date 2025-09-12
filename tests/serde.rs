@@ -270,6 +270,45 @@ fn test_serialize_empty_table() -> LuaResult<()> {
 }
 
 #[test]
+fn test_serialize_mixed_table() -> LuaResult<()> {
+    let lua = Lua::new();
+
+    // Check that sparse array is serialized similarly when using direct serialization
+    // and via `Lua::from_value`
+    let table = lua.load("{1,2,3,nil,5}").eval::<Value>()?;
+    let json1 = serde_json::to_string(&table).unwrap();
+    let json2 = lua.from_value::<serde_json::Value>(table)?;
+    assert_eq!(json1, json2.to_string());
+
+    // A table with several borders should be correctly encoded when `detect_mixed_tables` is enabled
+    let table = lua
+        .load(
+            r#"
+        local t = {1,2,3,nil,5,6}
+        t[10] = 10
+        return t
+    "#,
+        )
+        .eval::<Value>()?;
+    let json = serde_json::to_string(&table.to_serializable().detect_mixed_tables(true)).unwrap();
+    assert_eq!(json, r#"[1,2,3,null,5,6,null,null,null,10]"#);
+
+    // A mixed table with both array-like and map-like entries
+    let table = lua.load(r#"{1,2,3, key="value"}"#).eval::<Value>()?;
+    let json = serde_json::to_string(&table).unwrap();
+    assert_eq!(json, r#"[1,2,3]"#);
+    let json = serde_json::to_string(&table.to_serializable().detect_mixed_tables(true)).unwrap();
+    assert_eq!(json, r#"{"1":1,"2":2,"3":3,"key":"value"}"#);
+
+    // A mixed table with duplicate keys of different types
+    let table = lua.load(r#"{1,2,3, ["1"]="value"}"#).eval::<Value>()?;
+    let json = serde_json::to_string(&table.to_serializable().detect_mixed_tables(true)).unwrap();
+    assert_eq!(json, r#"{"1":1,"2":2,"3":3,"1":"value"}"#);
+
+    Ok(())
+}
+
+#[test]
 fn test_to_value_struct() -> LuaResult<()> {
     let lua = Lua::new();
     let globals = lua.globals();
