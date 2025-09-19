@@ -18,7 +18,7 @@ use {
     crate::traits::LuaNativeAsyncFn,
     crate::types::AsyncCallback,
     std::future::{self, Future},
-    std::pin::Pin,
+    std::pin::{pin, Pin},
     std::task::{Context, Poll},
 };
 
@@ -669,13 +669,9 @@ impl<R: FromLuaMulti> Future for AsyncCallFuture<R> {
     type Output = Result<R>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        // Safety: We're not moving any pinned data
-        let this = unsafe { self.get_unchecked_mut() };
+        let this = self.get_mut();
         match &mut this.0 {
-            Ok(thread) => {
-                let pinned_thread = unsafe { Pin::new_unchecked(thread) };
-                pinned_thread.poll(cx)
-            }
+            Ok(thread) => pin!(thread).poll(cx),
             Err(err) => Poll::Ready(Err(err.clone())),
         }
     }
