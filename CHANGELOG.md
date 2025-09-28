@@ -1,3 +1,9 @@
+## v0.11.4 (Sep 29, 2025)
+
+- Make `Value::to_serializable` public
+- Add new serde option `detect_mixed_tables` (to encode mixed array+map tables)
+- Add `ObjectLike::get_path` helper (for tables and userdata)
+
 ## v0.11.3 (Aug 30, 2025)
 
 - Add `Lua::yield_with` to use as `coroutine.yield` functional replacement in async functions for any Lua
