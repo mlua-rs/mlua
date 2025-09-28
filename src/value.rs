@@ -28,9 +28,10 @@ use {
 /// The non-primitive variants (eg. string/table/function/thread/userdata) contain handle types
 /// into the internal Lua state. It is a logic error to mix handle types between separate
 /// `Lua` instances, and doing so will result in a panic.
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub enum Value {
     /// The Lua value `nil`.
+    #[default]
     Nil,
     /// The Lua value `true` or `false`.
     Boolean(bool),
@@ -576,12 +577,6 @@ impl Value {
             Value::Error(_) => write!(fmt, "error"),
             Value::Other(v) => write!(fmt, "other: {:?}", v.to_pointer()),
         }
-    }
-}
-
-impl Default for Value {
-    fn default() -> Self {
-        Self::Nil
     }
 }
 
