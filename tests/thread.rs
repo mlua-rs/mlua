@@ -199,6 +199,7 @@ fn test_coroutine_from_closure() -> Result<()> {
 }
 
 #[test]
+#[cfg(not(panic = "abort"))]
 fn test_coroutine_panic() {
     match catch_unwind(|| -> Result<()> {
         // check that coroutines propagate panics correctly

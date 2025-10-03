@@ -21,6 +21,7 @@ fn test_chunk_methods() -> Result<()> {
 }
 
 #[test]
+#[cfg(not(target_os = "wasi"))]
 fn test_chunk_path() -> Result<()> {
     let lua = Lua::new();
 
