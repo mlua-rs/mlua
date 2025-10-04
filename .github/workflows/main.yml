@@ -256,6 +256,41 @@ jobs:
           cargo test --tests --features "${{ matrix.lua }},vendored"
           cargo test --tests --features "${{ matrix.lua }},vendored,async,serde,macros,anyhow,userdata-wrappers"
 
+  test_wasm32_wasip2:
+    name: Test on wasm32-wasip2
+    runs-on: ubuntu-latest
+    needs: build
+    strategy:
+      matrix:
+        lua: [lua54, lua53, lua52, lua51]
+    steps:
+      - uses: actions/checkout@main
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: nightly-2025-10-02
+          target: wasm32-wasip2
+      - name: Install wasi-sdk/Wasmtime
+        working-directory: ${{ runner.tool_cache }}
+        run: |
+          wasi_sdk=27
+          wasmtime=v37.0.1
+
+          curl -LO https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-$wasi_sdk/wasi-sdk-$wasi_sdk.0-x86_64-linux.tar.gz
+          tar xf wasi-sdk-$wasi_sdk.0-x86_64-linux.tar.gz
+          WASI_SDK_PATH=`pwd`/wasi-sdk-$wasi_sdk.0-x86_64-linux
+          echo "WASI_SDK_PATH=$WASI_SDK_PATH" >> $GITHUB_ENV
+          echo "CC_wasm32_wasip2=$WASI_SDK_PATH/bin/clang" >> $GITHUB_ENV
+          echo "CARGO_TARGET_WASM32_WASIP2_LINKER=$WASI_SDK_PATH/bin/clang" >> $GITHUB_ENV
+          echo "CARGO_TARGET_WASM32_WASIP2_RUSTFLAGS=-Clink-arg=-Wl,--export=cabi_realloc" >> $GITHUB_ENV
+
+          curl -LO https://github.com/bytecodealliance/wasmtime/releases/download/$wasmtime/wasmtime-$wasmtime-x86_64-linux.tar.xz
+          tar xf wasmtime-$wasmtime-x86_64-linux.tar.xz
+          echo "CARGO_TARGET_WASM32_WASIP2_RUNNER=`pwd`/wasmtime-$wasmtime-x86_64-linux/wasmtime -W exceptions" >> $GITHUB_ENV
+      - name: Run ${{ matrix.lua }} tests
+        run: |
+          cargo test --target wasm32-wasip2 --tests --features "${{ matrix.lua }},vendored"
+          cargo test --target wasm32-wasip2 --tests --features "${{ matrix.lua }},vendored,serde,macros,anyhow,userdata-wrappers"
+
   rustfmt:
     name: Rustfmt
     runs-on: ubuntu-latest
