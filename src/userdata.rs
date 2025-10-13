@@ -739,7 +739,7 @@ impl AnyUserData {
                             return Ok(());
                         }
                         return Err(Error::UserDataBorrowMutError);
-                    },
+                    }
                     None => return Err(Error::UserDataTypeMismatch),
                 }
             }
