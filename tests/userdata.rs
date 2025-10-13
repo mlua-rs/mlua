@@ -627,6 +627,7 @@ fn test_metatable() -> Result<()> {
     let ud: AnyUserData = globals.get("ud")?;
     let metatable = ud.metatable()?;
 
+    #[cfg(not(feature = "luau"))]
     match metatable.get::<Value>("__gc") {
         Ok(_) => panic!("expected MetaMethodRestricted, got no error"),
         Err(Error::MetaMethodRestricted(_)) => {}

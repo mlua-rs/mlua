@@ -37,6 +37,8 @@ pub(crate) struct ExtraData {
     pub(super) owned: bool,
 
     pub(super) pending_userdata_reg: FxHashMap<TypeId, RawUserDataRegistry>,
+    #[cfg(feature = "luau")]
+    pub(super) registered_userdata_dtors: FxHashMap<TypeId, ffi::lua_CFunction>,
     pub(super) registered_userdata_t: FxHashMap<TypeId, c_int>,
     pub(super) registered_userdata_mt: FxHashMap<*const c_void, Option<TypeId>>,
     pub(super) last_checked_userdata_mt: (*const c_void, Option<TypeId>),
@@ -155,6 +157,8 @@ impl ExtraData {
             weak: MaybeUninit::uninit(),
             owned,
             pending_userdata_reg: FxHashMap::default(),
+            #[cfg(feature = "luau")]
+            registered_userdata_dtors: FxHashMap::default(),
             registered_userdata_t: FxHashMap::default(),
             registered_userdata_mt: FxHashMap::default(),
             last_checked_userdata_mt: (ptr::null(), None),
@@ -258,6 +262,12 @@ impl ExtraData {
     #[inline(always)]
     pub(super) unsafe fn weak(&self) -> &WeakLua {
         self.weak.assume_init_ref()
+    }
+
+    #[inline(always)]
+    #[cfg(feature = "luau")]
+    pub(crate) unsafe fn get_userdata_dtor(&self, type_id: TypeId) -> Option<ffi::lua_CFunction> {
+        self.registered_userdata_dtors.get(&type_id).copied()
     }
 
     /// Pops a reference from top of the auxiliary stack and move it to a first free slot.

@@ -951,6 +951,13 @@ impl RawLua {
         let state = self.state();
         let type_id = registry.type_id;
 
+        #[cfg(feature = "luau")]
+        if let Some(type_id) = type_id {
+            (*self.extra.get())
+                .registered_userdata_dtors
+                .insert(type_id, registry.destructor);
+        }
+
         self.push_userdata_metatable(registry)?;
 
         let mt_ptr = ffi::lua_topointer(state, -1);
@@ -1106,8 +1113,11 @@ impl RawLua {
             }
         }
 
-        ffi::lua_pushcfunction(state, registry.destructor);
-        rawset_field(state, metatable_index, "__gc")?;
+        #[cfg(not(feature = "luau"))]
+        {
+            ffi::lua_pushcfunction(state, registry.destructor);
+            rawset_field(state, metatable_index, "__gc")?;
+        }
 
         init_userdata_metatable(
             state,
