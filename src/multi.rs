@@ -204,6 +204,23 @@ impl IntoLuaMulti for MultiValue {
     }
 }
 
+impl IntoLuaMulti for &MultiValue {
+    #[inline]
+    fn into_lua_multi(self, _: &Lua) -> Result<MultiValue> {
+        Ok(self.clone())
+    }
+
+    #[inline]
+    unsafe fn push_into_stack_multi(self, lua: &RawLua) -> Result<c_int> {
+        let nresults = self.len() as i32;
+        check_stack(lua.state(), nresults + 1)?;
+        for value in &self.0 {
+            lua.push_value(value)?;
+        }
+        Ok(nresults)
+    }
+}
+
 impl FromLuaMulti for MultiValue {
     #[inline]
     fn from_lua_multi(values: MultiValue, _: &Lua) -> Result<Self> {

@@ -73,6 +73,26 @@ fn test_multivalue() {
 }
 
 #[test]
+fn test_multivalue_by_ref() -> Result<()> {
+    let lua = Lua::new();
+    let multi = MultiValue::from_vec(vec![
+        Value::Integer(3),
+        Value::String(lua.create_string("hello")?),
+        Value::Boolean(true),
+    ]);
+
+    let f = lua.create_function(|_, (i, s, b): (i32, String, bool)| {
+        assert_eq!(i, 3);
+        assert_eq!(s.to_str()?, "hello");
+        assert_eq!(b, true);
+        Ok(())
+    })?;
+    f.call::<()>(&multi)?;
+
+    Ok(())
+}
+
+#[test]
 fn test_variadic() {
     let mut var = Variadic::with_capacity(3);
     var.extend_from_slice(&[1, 2, 3]);
