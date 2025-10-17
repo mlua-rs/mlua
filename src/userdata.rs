@@ -921,8 +921,10 @@ impl AnyUserData {
         lua.get_userdata_ref_type_id(&self.0).ok().flatten()
     }
 
-    /// Returns a type name of this `UserData` (from a metatable field).
-    pub(crate) fn type_name(&self) -> Result<Option<StdString>> {
+    /// Returns a type name of this userdata (from a metatable field).
+    ///
+    /// If no type name is set, returns `None`.
+    pub fn type_name(&self) -> Result<Option<StdString>> {
         let lua = self.0.lua.lock();
         let state = lua.state();
         unsafe {
