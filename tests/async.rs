@@ -423,9 +423,9 @@ async fn test_async_thread_pool() -> Result<()> {
 
 #[tokio::test]
 async fn test_async_userdata() -> Result<()> {
-    struct MyUserData(u64);
+    struct MyUserdata(u64);
 
-    impl UserData for MyUserData {
+    impl UserData for MyUserdata {
         fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
             methods.add_async_method("get_value", |_, data, ()| async move {
                 sleep_ms(10).await;
@@ -436,6 +436,11 @@ async fn test_async_userdata() -> Result<()> {
                 sleep_ms(10).await;
                 data.0 = n;
                 Ok(())
+            });
+
+            methods.add_async_method_once("take_value", |_, data, ()| async move {
+                sleep_ms(10).await;
+                Ok(data.0)
             });
 
             methods.add_async_function("sleep", |_, n| async move {
@@ -479,7 +484,7 @@ async fn test_async_userdata() -> Result<()> {
     let lua = Lua::new();
     let globals = lua.globals();
 
-    let userdata = lua.create_userdata(MyUserData(11))?;
+    let userdata = lua.create_userdata(MyUserdata(11))?;
     globals.set("userdata", &userdata)?;
 
     lua.load(
@@ -517,6 +522,21 @@ async fn test_async_userdata() -> Result<()> {
 
     #[cfg(not(any(feature = "lua51", feature = "luau")))]
     assert_eq!(userdata.call_async::<String>(()).await?, "elapsed:24ms");
+
+    // Take value
+    let userdata2 = lua.create_userdata(MyUserdata(0))?;
+    globals.set("userdata2", userdata2)?;
+    lua.load("assert(userdata:take_value() == 24)")
+        .exec_async()
+        .await?;
+    match lua.load("userdata2.take_value(userdata)").exec_async().await {
+        Err(Error::CallbackError { cause, .. }) => {
+            let err = cause.to_string();
+            assert!(err.contains("bad argument `self` to `MyUserdata.take_value`"));
+            assert!(err.contains("userdata has been destructed"));
+        }
+        r => panic!("expected Err(CallbackError), got {r:?}"),
+    }
 
     Ok(())
 }

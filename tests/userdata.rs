@@ -429,6 +429,39 @@ fn test_userdata_destroy() -> Result<()> {
 }
 
 #[test]
+fn test_userdata_method_once() -> Result<()> {
+    struct MyUserdata(Arc<i64>);
+
+    impl UserData for MyUserdata {
+        fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
+            methods.add_method_once("take_value", |_, this, ()| Ok(*this.0));
+        }
+    }
+
+    let lua = Lua::new();
+    let rc = Arc::new(42);
+    let userdata = lua.create_userdata(MyUserdata(rc.clone()))?;
+    lua.globals().set("userdata", &userdata)?;
+
+    // Control userdata
+    let userdata2 = lua.create_userdata(MyUserdata(rc.clone()))?;
+    lua.globals().set("userdata2", userdata2)?;
+
+    assert_eq!(lua.load("userdata:take_value()").eval::<i64>()?, 42);
+    match lua.load("userdata2.take_value(userdata)").eval::<i64>() {
+        Err(Error::CallbackError { cause, .. }) => {
+            let err = cause.to_string();
+            assert!(err.contains("bad argument `self` to `MyUserdata.take_value`"));
+            assert!(err.contains("userdata has been destructed"));
+        }
+        r => panic!("expected Err(CallbackError), got {r:?}"),
+    }
+    assert_eq!(Arc::strong_count(&rc), 2);
+
+    Ok(())
+}
+
+#[test]
 fn test_user_values() -> Result<()> {
     struct MyUserData;
 

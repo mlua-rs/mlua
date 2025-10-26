@@ -12,7 +12,7 @@ use crate::string::String;
 use crate::table::{Table, TablePairs};
 use crate::traits::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti};
 use crate::types::{MaybeSend, ValueRef};
-use crate::util::{check_stack, get_userdata, push_string, take_userdata, StackGuard};
+use crate::util::{check_stack, get_userdata, push_string, short_type_name, take_userdata, StackGuard};
 use crate::value::Value;
 
 #[cfg(feature = "async")]
@@ -273,6 +273,29 @@ pub trait UserDataMethods<T> {
         A: FromLuaMulti,
         R: IntoLuaMulti;
 
+    /// Add a method which accepts `T` as the first parameter.
+    ///
+    /// The userdata `T` will be moved out of the userdata container. This is useful for
+    /// methods that need to consume the userdata.
+    ///
+    /// The method can be called only once per userdata instance, subsequent calls will result in a
+    /// [`Error::UserDataDestructed`] error.
+    #[doc(hidden)]
+    fn add_method_once<M, A, R>(&mut self, name: impl Into<StdString>, method: M)
+    where
+        T: 'static,
+        M: Fn(&Lua, T, A) -> Result<R> + MaybeSend + 'static,
+        A: FromLuaMulti,
+        R: IntoLuaMulti,
+    {
+        let name = name.into();
+        let method_name = format!("{}.{name}", short_type_name::<T>());
+        self.add_function(name, move |lua, (ud, args): (AnyUserData, A)| {
+            let this = (ud.take()).map_err(|err| Error::bad_self_argument(&method_name, err))?;
+            method(lua, this, args)
+        });
+    }
+
     /// Add an async method which accepts a `&T` as the first parameter and returns [`Future`].
     ///
     /// Refer to [`add_method`] for more information about the implementation.
@@ -302,6 +325,34 @@ pub trait UserDataMethods<T> {
         A: FromLuaMulti,
         MR: Future<Output = Result<R>> + MaybeSend + 'static,
         R: IntoLuaMulti;
+
+    /// Add an async method which accepts a `T` as the first parameter and returns [`Future`].
+    ///
+    /// The userdata `T` will be moved out of the userdata container. This is useful for
+    /// methods that need to consume the userdata.
+    ///
+    /// The method can be called only once per userdata instance, subsequent calls will result in a
+    /// [`Error::UserDataDestructed`] error.
+    #[cfg(feature = "async")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
+    #[doc(hidden)]
+    fn add_async_method_once<M, A, MR, R>(&mut self, name: impl Into<StdString>, method: M)
+    where
+        T: 'static,
+        M: Fn(Lua, T, A) -> MR + MaybeSend + 'static,
+        A: FromLuaMulti,
+        MR: Future<Output = Result<R>> + MaybeSend + 'static,
+        R: IntoLuaMulti,
+    {
+        let name = name.into();
+        let method_name = format!("{}.{name}", short_type_name::<T>());
+        self.add_async_function(name, move |lua, (ud, args): (AnyUserData, A)| {
+            match (ud.take()).map_err(|err| Error::bad_self_argument(&method_name, err)) {
+                Ok(this) => either::Either::Left(method(lua, this, args)),
+                Err(err) => either::Either::Right(async move { Err(err) }),
+            }
+        });
+    }
 
     /// Add a regular method as a function which accepts generic arguments.
     ///
