@@ -544,7 +544,7 @@ pub unsafe fn luaL_getsubtable(L: *mut lua_State, idx: c_int, fname: *const c_ch
 
 pub unsafe fn luaL_requiref(L: *mut lua_State, modname: *const c_char, openf: lua_CFunction, glb: c_int) {
     luaL_checkstack(L, 3, cstr!("not enough stack slots available"));
-    luaL_getsubtable(L, LUA_REGISTRYINDEX, cstr!("_LOADED"));
+    luaL_getsubtable(L, LUA_REGISTRYINDEX, LUA_LOADED_TABLE);
     if lua_getfield(L, -1, modname) == LUA_TNIL {
         lua_pop(L, 1);
         lua_pushcfunction(L, openf);

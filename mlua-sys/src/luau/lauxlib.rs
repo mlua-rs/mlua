@@ -5,6 +5,9 @@ use std::ptr;
 
 use super::lua::{self, lua_CFunction, lua_Number, lua_State, lua_Unsigned, LUA_REGISTRYINDEX};
 
+// Key, in the registry, for table of loaded modules
+pub const LUA_LOADED_TABLE: *const c_char = cstr!("_LOADED");
+
 #[repr(C)]
 pub struct luaL_Reg {
     pub name: *const c_char,
