@@ -85,6 +85,7 @@ unsafe fn compat53_pushfuncname(L: *mut lua_State, L1: *mut lua_State, level: c_
         lua_pushfstring(L, cstr!("function '%s'"), (*ar).name);
     } else if compat53_pushglobalfuncname(L, L1, level, ar) != 0 {
         lua_pushfstring(L, cstr!("function '%s'"), lua_tostring(L, -1));
+        lua_remove(L, -2); // remove name
     } else if *(*ar).what != b'C' as c_char {
         // for Lua functions, use <file:line>
         lua_pushfstring(L, cstr!("function <%s:%d>"), (*ar).short_src, (*ar).linedefined);
