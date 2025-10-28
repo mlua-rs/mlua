@@ -875,7 +875,7 @@ impl Lua {
         }
     }
 
-    /// Gets information about the interpreter runtime stack at a given level.
+    /// Gets information about the interpreter runtime stack at the given level.
     ///
     /// This function calls callback `f`, passing the [`Debug`] structure that can be used to get
     /// information about the function executing at a given level.
@@ -896,6 +896,26 @@ impl Lua {
             }
 
             Some(f(&Debug::new(&lua, level, &mut ar)))
+        }
+    }
+
+    /// Creates a traceback of the call stack at the given level.
+    ///
+    /// The `msg` parameter, if provided, is added at the beginning of the traceback.
+    /// The `level` parameter works the same way as in [`Lua::inspect_stack`].
+    pub fn traceback(&self, msg: Option<&str>, level: usize) -> Result<String> {
+        let lua = self.lock();
+        unsafe {
+            check_stack(lua.state(), 3)?;
+            protect_lua!(lua.state(), 0, 1, |state| {
+                let msg = match msg {
+                    Some(s) => ffi::lua_pushlstring(state, s.as_ptr() as *const c_char, s.len()),
+                    None => ptr::null(),
+                };
+                // `protect_lua` adds it's own call frame, so we need to increase level by 1
+                ffi::luaL_traceback(state, state, msg, (level + 1) as c_int);
+            })?;
+            Ok(String(lua.pop_ref()))
         }
     }
 

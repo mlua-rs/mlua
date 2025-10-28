@@ -2,6 +2,7 @@
 //!
 //! Based on github.com/keplerproject/lua-compat-5.3
 
+use std::ffi::CStr;
 use std::os::raw::{c_char, c_int, c_void};
 use std::{mem, ptr};
 
@@ -20,8 +21,8 @@ unsafe fn compat53_reverse(L: *mut lua_State, mut a: c_int, mut b: c_int) {
     }
 }
 
-const COMPAT53_LEVELS1: c_int = 12; // size of the first part of the stack
-const COMPAT53_LEVELS2: c_int = 10; // size of the second part of the stack
+const COMPAT53_LEVELS1: c_int = 10; // size of the first part of the stack
+const COMPAT53_LEVELS2: c_int = 11; // size of the second part of the stack
 
 unsafe fn compat53_countlevels(L: *mut lua_State) -> c_int {
     let mut ar: lua_Debug = mem::zeroed();
@@ -88,11 +89,10 @@ unsafe fn compat53_findfield(L: *mut lua_State, objidx: c_int, level: c_int) -> 
                 lua_pop(L, 1); // remove value (but keep name)
                 return 1;
             } else if compat53_findfield(L, objidx, level - 1) != 0 {
-                // try recursively
-                lua_remove(L, -2); // remove table (but keep name)
-                lua_pushliteral(L, c".");
-                lua_insert(L, -2); // place '.' between the two names
-                lua_concat(L, 3);
+                // stack: lib_name, lib_table, field_name (top)
+                lua_pushliteral(L, c"."); // place '.' between the two names
+                lua_replace(L, -3); // (in the slot occupied by table)
+                lua_concat(L, 3); // lib_name.field_name
                 return 1;
             }
         }
@@ -101,13 +101,20 @@ unsafe fn compat53_findfield(L: *mut lua_State, objidx: c_int, level: c_int) -> 
     0 // not found
 }
 
-unsafe fn compat53_pushglobalfuncname(L: *mut lua_State, ar: *mut lua_Debug) -> c_int {
+unsafe fn compat53_pushglobalfuncname(L: *mut lua_State, L1: *mut lua_State, ar: *mut lua_Debug) -> c_int {
     let top = lua_gettop(L);
-    lua_getinfo(L, cstr!("f"), ar); // push function
+    lua_getinfo(L1, cstr!("f"), ar); // push function
+    lua_xmove(L1, L, 1); // and move onto L
     lua_pushvalue(L, LUA_GLOBALSINDEX);
+    luaL_checkstack(L, 6, cstr!("not enough stack")); // slots for 'findfield'
     if compat53_findfield(L, top + 1, 2) != 0 {
+        let name = lua_tostring(L, -1);
+        if CStr::from_ptr(name).to_bytes().starts_with(b"_G.") {
+            lua_pushstring(L, name.add(3)); // push name without prefix
+            lua_remove(L, -2); // remove original name
+        }
         lua_copy(L, -1, top + 1); // move name to proper place
-        lua_pop(L, 2); // remove pushed values
+        lua_settop(L, top + 1); // remove pushed values
         1
     } else {
         lua_settop(L, top); // remove function and global table
@@ -115,27 +122,23 @@ unsafe fn compat53_pushglobalfuncname(L: *mut lua_State, ar: *mut lua_Debug) -> 
     }
 }
 
-unsafe fn compat53_pushfuncname(L: *mut lua_State, ar: *mut lua_Debug) {
-    if *(*ar).namewhat != b'\0' as c_char {
-        // is there a name?
-        lua_pushfstring(L, cstr!("function '%s'"), (*ar).name);
+unsafe fn compat53_pushfuncname(L: *mut lua_State, L1: *mut lua_State, ar: *mut lua_Debug) {
+    // try first a global name
+    if compat53_pushglobalfuncname(L, L1, ar) != 0 {
+        lua_pushfstring(L, cstr!("function '%s'"), lua_tostring(L, -1));
+        lua_remove(L, -2); // remove name
+    } else if *(*ar).namewhat != b'\0' as c_char {
+        // use name from code
+        lua_pushfstring(L, cstr!("%s '%s'"), (*ar).namewhat, (*ar).name);
     } else if *(*ar).what == b'm' as c_char {
         // main?
         lua_pushliteral(L, c"main chunk");
-    } else if *(*ar).what == b'C' as c_char {
-        if compat53_pushglobalfuncname(L, ar) != 0 {
-            lua_pushfstring(L, cstr!("function '%s'"), lua_tostring(L, -1));
-            lua_remove(L, -2); // remove name
-        } else {
-            lua_pushliteral(L, c"?");
-        }
+    } else if *(*ar).what != b'C' as c_char {
+        // for Lua functions, use <file:line>
+        let short_src = (*ar).short_src.as_ptr();
+        lua_pushfstring(L, cstr!("function <%s:%d>"), short_src, (*ar).linedefined);
     } else {
-        lua_pushfstring(
-            L,
-            cstr!("function <%s:%d>"),
-            (*ar).short_src.as_ptr(),
-            (*ar).linedefined,
-        );
+        lua_pushliteral(L, c"?");
     }
 }
 
@@ -459,32 +462,36 @@ pub unsafe fn luaL_traceback(L: *mut lua_State, L1: *mut lua_State, msg: *const 
     let mut ar: lua_Debug = mem::zeroed();
     let top = lua_gettop(L);
     let numlevels = compat53_countlevels(L1);
-    let mark = if numlevels > COMPAT53_LEVELS1 + COMPAT53_LEVELS2 {
-        COMPAT53_LEVELS1
-    } else {
-        0
-    };
+    #[rustfmt::skip]
+    let mut limit = if numlevels - level > COMPAT53_LEVELS1 + COMPAT53_LEVELS2 { COMPAT53_LEVELS1 } else { -1 };
 
     if !msg.is_null() {
         lua_pushfstring(L, cstr!("%s\n"), msg);
     }
     lua_pushliteral(L, c"stack traceback:");
     while lua_getstack(L1, level, &mut ar) != 0 {
-        level += 1;
-        if level == mark {
+        if limit == 0 {
             // too many levels?
-            lua_pushliteral(L, c"\n\t..."); // add a '...'
-            level = numlevels - COMPAT53_LEVELS2; // and skip to last ones
+            let n = numlevels - level - COMPAT53_LEVELS2;
+            // add warning about skip ("n + 1" because we skip current level too)
+            lua_pushfstring(L, cstr!("\n\t...\t(skipping %d levels)"), n + 1); // add warning about skip
+            level += n; // and skip to last levels
         } else {
-            lua_getinfo(L1, cstr!("Slnt"), &mut ar);
-            lua_pushfstring(L, cstr!("\n\t%s:"), ar.short_src.as_ptr());
-            if ar.currentline > 0 {
-                lua_pushfstring(L, cstr!("%d:"), ar.currentline);
+            lua_getinfo(L1, cstr!("Sln"), &mut ar);
+            if *ar.what != b't' as c_char {
+                if ar.currentline <= 0 {
+                    lua_pushfstring(L, cstr!("\n\t%s: in "), ar.short_src.as_ptr());
+                } else {
+                    lua_pushfstring(L, cstr!("\n\t%s:%d: in "), ar.short_src.as_ptr(), ar.currentline);
+                }
+                compat53_pushfuncname(L, L1, &mut ar);
+                lua_concat(L, lua_gettop(L) - top);
+            } else {
+                lua_pushstring(L, cstr!("\n\t(...tail calls...)"));
             }
-            lua_pushliteral(L, c" in ");
-            compat53_pushfuncname(L, &mut ar);
-            lua_concat(L, lua_gettop(L) - top);
         }
+        level += 1;
+        limit -= 1;
     }
     lua_concat(L, lua_gettop(L) - top);
 }
