@@ -19,7 +19,7 @@ use crate::thread::Thread;
 use crate::traits::IntoLua;
 use crate::types::{
     AppDataRef, AppDataRefMut, Callback, CallbackUpvalue, DestructedUserdata, Integer, LightUserData,
-    MaybeSend, ReentrantMutex, RegistryKey, ValueRef, XRc,
+    LuaType, MaybeSend, ReentrantMutex, RegistryKey, ValueRef, XRc,
 };
 use crate::userdata::{
     init_userdata_metatable, AnyUserData, MetaMethod, RawUserDataRegistry, UserData, UserDataRegistry,
@@ -663,6 +663,46 @@ impl RawLua {
                 extra.thread_pool.push(index);
             }
         }
+    }
+
+    /// Pushes a primitive type value onto the Lua stack.
+    pub(crate) unsafe fn push_primitive_type<T: LuaType>(&self) -> bool {
+        match T::TYPE_ID {
+            ffi::LUA_TBOOLEAN => {
+                ffi::lua_pushboolean(self.state(), 0);
+            }
+            ffi::LUA_TLIGHTUSERDATA => {
+                ffi::lua_pushlightuserdata(self.state(), ptr::null_mut());
+            }
+            ffi::LUA_TNUMBER => {
+                ffi::lua_pushnumber(self.state(), 0.);
+            }
+            #[cfg(feature = "luau")]
+            ffi::LUA_TVECTOR => {
+                #[cfg(not(feature = "luau-vector4"))]
+                ffi::lua_pushvector(self.state(), 0., 0., 0.);
+                #[cfg(feature = "luau-vector4")]
+                ffi::lua_pushvector(self.state(), 0., 0., 0., 0.);
+            }
+            ffi::LUA_TSTRING => {
+                ffi::lua_pushstring(self.state(), b"\0" as *const u8 as *const _);
+            }
+            ffi::LUA_TFUNCTION => {
+                unsafe extern "C-unwind" fn func(_state: *mut ffi::lua_State) -> c_int {
+                    0
+                }
+                ffi::lua_pushcfunction(self.state(), func);
+            }
+            ffi::LUA_TTHREAD => {
+                ffi::lua_pushthread(self.state());
+            }
+            #[cfg(feature = "luau")]
+            ffi::LUA_TBUFFER => {
+                ffi::lua_newbuffer(self.state(), 0);
+            }
+            _ => return false,
+        }
+        true
     }
 
     /// Pushes a value that implements `IntoLua` onto the Lua stack.

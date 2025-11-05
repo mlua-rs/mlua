@@ -1,14 +1,14 @@
 use std::collections::HashSet;
 use std::fmt;
 use std::marker::PhantomData;
-use std::os::raw::{c_int, c_void};
+use std::os::raw::c_void;
 use std::string::String as StdString;
 
 use crate::error::{Error, Result};
 use crate::function::Function;
 use crate::state::{LuaGuard, RawLua, WeakLua};
 use crate::traits::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, ObjectLike};
-use crate::types::{Integer, LuaType, ValueRef};
+use crate::types::{Integer, ValueRef};
 use crate::util::{assert_stack, check_stack, get_metatable_ptr, StackGuard};
 use crate::value::{Nil, Value};
 
@@ -933,10 +933,6 @@ where
     fn eq(&self, other: &[T; N]) -> bool {
         self == &other[..]
     }
-}
-
-impl LuaType for Table {
-    const TYPE_ID: c_int = ffi::LUA_TTABLE;
 }
 
 impl ObjectLike for Table {

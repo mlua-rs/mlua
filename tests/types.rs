@@ -31,7 +31,9 @@ fn test_boolean_type_metatable() -> Result<()> {
 
     let mt = lua.create_table()?;
     mt.set("__add", Function::wrap(|a, b| Ok(a || b)))?;
-    lua.set_type_metatable::<bool>(Some(mt));
+    assert_eq!(lua.type_metatable::<bool>(), None);
+    lua.set_type_metatable::<bool>(Some(mt.clone()));
+    assert_eq!(lua.type_metatable::<bool>().unwrap(), mt);
 
     lua.load(r#"assert(true + true == true)"#).exec().unwrap();
     lua.load(r#"assert(true + false == true)"#).exec().unwrap();
@@ -52,7 +54,8 @@ fn test_lightuserdata_type_metatable() -> Result<()> {
             Ok(LightUserData((a.0 as usize + b.0 as usize) as *mut c_void))
         }),
     )?;
-    lua.set_type_metatable::<LightUserData>(Some(mt));
+    lua.set_type_metatable::<LightUserData>(Some(mt.clone()));
+    assert_eq!(lua.type_metatable::<LightUserData>().unwrap(), mt);
 
     let res = lua
         .load(
@@ -77,7 +80,9 @@ fn test_number_type_metatable() -> Result<()> {
 
     let mt = lua.create_table()?;
     mt.set("__call", Function::wrap(|n1: f64, n2: f64| Ok(n1 * n2)))?;
-    lua.set_type_metatable::<Number>(Some(mt));
+    lua.set_type_metatable::<Number>(Some(mt.clone()));
+    assert_eq!(lua.type_metatable::<Number>().unwrap(), mt);
+
     lua.load(r#"assert((1.5)(3.0) == 4.5)"#).exec().unwrap();
     lua.load(r#"assert((5)(5) == 25)"#).exec().unwrap();
 
@@ -93,7 +98,8 @@ fn test_string_type_metatable() -> Result<()> {
         "__add",
         Function::wrap(|a: String, b: String| Ok(format!("{a}{b}"))),
     )?;
-    lua.set_type_metatable::<LuaString>(Some(mt));
+    lua.set_type_metatable::<LuaString>(Some(mt.clone()));
+    assert_eq!(lua.type_metatable::<LuaString>().unwrap(), mt);
 
     lua.load(r#"assert(("foo" + "bar") == "foobar")"#).exec().unwrap();
 
@@ -109,7 +115,8 @@ fn test_function_type_metatable() -> Result<()> {
         "__index",
         Function::wrap(|_: Function, key: String| Ok(format!("function.{key}"))),
     )?;
-    lua.set_type_metatable::<Function>(Some(mt));
+    lua.set_type_metatable::<Function>(Some(mt.clone()));
+    assert_eq!(lua.type_metatable::<Function>(), Some(mt));
 
     lua.load(r#"assert((function() end).foo == "function.foo")"#)
         .exec()
@@ -127,7 +134,8 @@ fn test_thread_type_metatable() -> Result<()> {
         "__index",
         Function::wrap(|_: Thread, key: String| Ok(format!("thread.{key}"))),
     )?;
-    lua.set_type_metatable::<Thread>(Some(mt));
+    lua.set_type_metatable::<Thread>(Some(mt.clone()));
+    assert_eq!(lua.type_metatable::<Thread>(), Some(mt));
 
     lua.load(r#"assert((coroutine.create(function() end)).foo == "thread.foo")"#)
         .exec()

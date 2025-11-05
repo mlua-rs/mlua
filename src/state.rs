@@ -1514,7 +1514,27 @@ impl Lua {
         unsafe { self.lock().make_userdata(UserDataStorage::new(ud)) }
     }
 
-    /// Sets the metatable for a Lua builtin type.
+    /// Gets the metatable of a Lua built-in (primitive) type.
+    ///
+    /// The metatable is shared by all values of the given type.
+    ///
+    /// See [`Lua::set_type_metatable`] for examples.
+    #[allow(private_bounds)]
+    pub fn type_metatable<T: LuaType>(&self) -> Option<Table> {
+        let lua = self.lock();
+        let state = lua.state();
+        unsafe {
+            let _sg = StackGuard::new(state);
+            assert_stack(state, 2);
+
+            if lua.push_primitive_type::<T>() && ffi::lua_getmetatable(state, -1) != 0 {
+                return Some(Table(lua.pop_ref()));
+            }
+        }
+        None
+    }
+
+    /// Sets the metatable for a Lua built-in (primitive) type.
     ///
     /// The metatable will be shared by all values of the given type.
     ///
@@ -1541,44 +1561,13 @@ impl Lua {
             let _sg = StackGuard::new(state);
             assert_stack(state, 2);
 
-            match T::TYPE_ID {
-                ffi::LUA_TBOOLEAN => {
-                    ffi::lua_pushboolean(state, 0);
+            if lua.push_primitive_type::<T>() {
+                match metatable {
+                    Some(metatable) => lua.push_ref(&metatable.0),
+                    None => ffi::lua_pushnil(state),
                 }
-                ffi::LUA_TLIGHTUSERDATA => {
-                    ffi::lua_pushlightuserdata(state, ptr::null_mut());
-                }
-                ffi::LUA_TNUMBER => {
-                    ffi::lua_pushnumber(state, 0.);
-                }
-                #[cfg(feature = "luau")]
-                ffi::LUA_TVECTOR => {
-                    #[cfg(not(feature = "luau-vector4"))]
-                    ffi::lua_pushvector(state, 0., 0., 0.);
-                    #[cfg(feature = "luau-vector4")]
-                    ffi::lua_pushvector(state, 0., 0., 0., 0.);
-                }
-                ffi::LUA_TSTRING => {
-                    ffi::lua_pushstring(state, b"\0" as *const u8 as *const _);
-                }
-                ffi::LUA_TFUNCTION => match self.load("function() end").eval::<Function>() {
-                    Ok(func) => lua.push_ref(&func.0),
-                    Err(_) => return,
-                },
-                ffi::LUA_TTHREAD => {
-                    ffi::lua_pushthread(state);
-                }
-                #[cfg(feature = "luau")]
-                ffi::LUA_TBUFFER => {
-                    ffi::lua_newbuffer(state, 0);
-                }
-                _ => return,
+                ffi::lua_setmetatable(state, -2);
             }
-            match metatable {
-                Some(metatable) => lua.push_ref(&metatable.0),
-                None => ffi::lua_pushnil(state),
-            }
-            ffi::lua_setmetatable(state, -2);
         }
     }
 
