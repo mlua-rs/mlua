@@ -1325,7 +1325,7 @@ impl RawLua {
                 let mut ctx = Context::from_waker(rawlua.waker());
                 match fut.as_mut().map(|fut| fut.as_mut().poll(&mut ctx)) {
                     Some(Poll::Pending) => {
-                        let fut_nvals = ffi::lua_gettop(state);
+                        let fut_nvals = ffi::lua_gettop(state) - 1; // Exclude the future itself
                         if fut_nvals >= 3 && ffi::lua_tolightuserdata(state, -3) == Lua::poll_yield().0 {
                             // We have some values to yield
                             ffi::lua_pushnil(state);
