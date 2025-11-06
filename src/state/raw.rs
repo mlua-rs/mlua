@@ -1287,7 +1287,7 @@ impl RawLua {
             }
         }
 
-        unsafe extern "C-unwind" fn call_callback(state: *mut ffi::lua_State) -> c_int {
+        unsafe extern "C-unwind" fn get_future_callback(state: *mut ffi::lua_State) -> c_int {
             // Async functions cannot be scoped and therefore destroyed,
             // so the first upvalue is always valid
             let upvalue = get_userdata::<AsyncCallbackUpvalue>(state, ffi::lua_upvalueindex(1));
@@ -1301,33 +1301,27 @@ impl RawLua {
                 let extra = XRc::clone(&(*upvalue).extra);
                 let protect = !rawlua.unlikely_memory_error();
                 push_internal_userdata(state, AsyncPollUpvalue { data: fut, extra }, protect)?;
-                if protect {
-                    protect_lua!(state, 1, 1, fn(state) {
-                        ffi::lua_pushcclosure(state, poll_future, 1);
-                    })?;
-                } else {
-                    ffi::lua_pushcclosure(state, poll_future, 1);
-                }
 
                 Ok(1)
             })
         }
 
         unsafe extern "C-unwind" fn poll_future(state: *mut ffi::lua_State) -> c_int {
-            let upvalue = get_userdata::<AsyncPollUpvalue>(state, ffi::lua_upvalueindex(1));
-            callback_error_ext(state, (*upvalue).extra.get(), true, |extra, nargs| {
+            // Future is always passed in the first argument
+            let future = get_userdata::<AsyncPollUpvalue>(state, 1);
+            callback_error_ext(state, (*future).extra.get(), true, |extra, nargs| {
                 // Lua ensures that `LUA_MINSTACK` stack spaces are available (after pushing arguments)
                 // The lock must be already held as the future is polled
                 let rawlua = (*extra).raw_lua();
 
-                if nargs == 1 && ffi::lua_tolightuserdata(state, -1) == Lua::poll_terminate().0 {
+                if nargs == 2 && ffi::lua_tolightuserdata(state, -1) == Lua::poll_terminate().0 {
                     // Destroy the future and terminate the Lua thread
-                    (*upvalue).data.take();
+                    (*future).data.take();
                     ffi::lua_pushinteger(state, -1);
                     return Ok(1);
                 }
 
-                let fut = &mut (*upvalue).data;
+                let fut = &mut (*future).data;
                 let mut ctx = Context::from_waker(rawlua.waker());
                 match fut.as_mut().map(|fut| fut.as_mut().poll(&mut ctx)) {
                     Some(Poll::Pending) => {
@@ -1366,7 +1360,7 @@ impl RawLua {
         }
 
         let state = self.state();
-        let get_poll = unsafe {
+        let get_future = unsafe {
             let _sg = StackGuard::new(state);
             check_stack(state, 4)?;
 
@@ -1376,10 +1370,10 @@ impl RawLua {
             push_internal_userdata(state, upvalue, protect)?;
             if protect {
                 protect_lua!(state, 1, 1, fn(state) {
-                    ffi::lua_pushcclosure(state, call_callback, 1);
+                    ffi::lua_pushcclosure(state, get_future_callback, 1);
                 })?;
             } else {
-                ffi::lua_pushcclosure(state, call_callback, 1);
+                ffi::lua_pushcclosure(state, get_future_callback, 1);
             }
 
             Function(self.pop_ref())
@@ -1398,15 +1392,17 @@ impl RawLua {
         let coroutine = lua.globals().get::<Table>("coroutine")?;
 
         // Prepare environment for the async poller
-        let env = lua.create_table_with_capacity(0, 3)?;
-        env.set("get_poll", get_poll)?;
+        let env = lua.create_table_with_capacity(0, 4)?;
+        env.set("get_future", get_future)?;
+        env.set("poll", unsafe { lua.create_c_function(poll_future)? })?;
         env.set("yield", coroutine.get::<Function>("yield")?)?;
         env.set("unpack", unsafe { lua.create_c_function(unpack)? })?;
 
         lua.load(
             r#"
-            local poll = get_poll(...)
-            local nres, res, res2 = poll()
+            local poll, yield = poll, yield
+            local future = get_future(...)
+            local nres, res, res2 = poll(future)
             while true do
                 -- Poll::Ready branch, `nres` is the number of results
                 if nres ~= nil then
@@ -1430,13 +1426,13 @@ impl RawLua {
                     -- `res` is a "pending" value
                     -- `yield` can return a signal to drop the future that we should propagate
                     -- to the poller
-                    nres, res, res2 = poll(yield(res))
+                    nres, res, res2 = poll(future, yield(res))
                 elseif res2 == 0 then
-                    nres, res, res2 = poll(yield())
+                    nres, res, res2 = poll(future, yield())
                 elseif res2 == 1 then
-                    nres, res, res2 = poll(yield(res))
+                    nres, res, res2 = poll(future, yield(res))
                 else
-                    nres, res, res2 = poll(yield(unpack(res, res2)))
+                    nres, res, res2 = poll(future, yield(unpack(res, res2)))
                 end
             end
             "#,

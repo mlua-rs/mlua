@@ -2176,9 +2176,13 @@ impl Lua {
             None => unsafe {
                 let lua = self.lock();
                 let state = lua.state();
-                let _sg = StackGuard::with_top(state, 0);
-                let nvals = ffi::lua_gettop(state);
-                Poll::Ready(R::from_stack_multi(nvals, &lua))
+                let top = ffi::lua_gettop(state);
+                if top == 0 || ffi::lua_type(state, 1) != ffi::LUA_TUSERDATA {
+                    // This must be impossible scenario if used correctly
+                    return Poll::Ready(R::from_stack_multi(0, &lua));
+                }
+                let _sg = StackGuard::with_top(state, 1);
+                Poll::Ready(R::from_stack_multi(top - 1, &lua))
             },
         })
         .await
