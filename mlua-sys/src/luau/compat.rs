@@ -203,9 +203,7 @@ pub unsafe fn lua_rawgeti(L: *mut lua_State, idx: c_int, n: lua_Integer) -> c_in
 
 #[inline(always)]
 pub unsafe fn lua_rawgetp(L: *mut lua_State, idx: c_int, p: *const c_void) -> c_int {
-    let abs_i = lua_absindex(L, idx);
-    lua_pushlightuserdata(L, p as *mut c_void);
-    lua_rawget(L, abs_i)
+    lua_rawgetptagged(L, idx, p, 0)
 }
 
 #[inline(always)]
@@ -239,11 +237,7 @@ pub unsafe fn lua_rawseti(L: *mut lua_State, idx: c_int, n: lua_Integer) {
 
 #[inline(always)]
 pub unsafe fn lua_rawsetp(L: *mut lua_State, idx: c_int, p: *const c_void) {
-    let abs_i = lua_absindex(L, idx);
-    luaL_checkstack(L, 1, cstr!("not enough stack slots available"));
-    lua_pushlightuserdata(L, p as *mut c_void);
-    lua_insert(L, -2);
-    lua_rawset(L, abs_i);
+    lua_rawsetptagged(L, idx, p, 0)
 }
 
 #[inline(always)]

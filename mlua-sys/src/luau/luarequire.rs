@@ -23,6 +23,16 @@ pub enum luarequire_WriteResult {
     Failure,
 }
 
+/// Represents whether a configuration file is present, and if so, its syntax.
+#[repr(C)]
+pub enum luarequire_ConfigStatus {
+    Absent,
+    // Signals the presence of multiple configuration files
+    Ambiguous,
+    PresentJson,
+    PresentLuau,
+}
+
 #[repr(C)]
 pub struct luarequire_Configuration {
     // Returns whether requires are permitted from the given chunkname.
@@ -90,13 +100,14 @@ pub struct luarequire_Configuration {
         size_out: *mut usize,
     ) -> luarequire_WriteResult,
 
-    // Returns whether a configuration file is present in the current context.
-    // If not, require-by-string will call to_parent until either a configuration file is present or
+    // Returns whether a configuration file is present in the current context, and if so, its syntax.
+    // If not present, require-by-string will call to_parent until either a configuration file is present or
     // NAVIGATE_FAILURE is returned (at root).
-    pub is_config_present: unsafe extern "C-unwind" fn(L: *mut lua_State, ctx: *mut c_void) -> bool,
+    pub get_config_status:
+        unsafe extern "C-unwind" fn(L: *mut lua_State, ctx: *mut c_void) -> luarequire_ConfigStatus,
 
     // Parses the configuration file in the current context for the given alias and returns its
-    // value or WRITE_FAILURE if not found. This function is only called if is_config_present
+    // value or WRITE_FAILURE if not found. This function is only called if get_config_status
     // returns true. If this function pointer is set, get_config must not be set. Opting in to this
     // function pointer disables parsing configuration files internally and can be used for finer
     // control over the configuration file parsing process.
@@ -111,9 +122,10 @@ pub struct luarequire_Configuration {
         ) -> luarequire_WriteResult,
     >,
 
-    // Provides the contents of the configuration file in the current context. This function is only called
-    // if is_config_present returns true. If this function pointer is set, get_alias must not be set. Opting
-    // in to this function pointer enables parsing configuration files internally.
+    // Provides the contents of the configuration file in the current context.
+    // This function is only called if get_config_status does not return CONFIG_ABSENT. If this function
+    // pointer is set, get_alias must not be set. Opting in to this function pointer enables parsing
+    // configuration files internally.
     pub get_config: Option<
         unsafe extern "C-unwind" fn(
             L: *mut lua_State,
@@ -123,6 +135,13 @@ pub struct luarequire_Configuration {
             size_out: *mut usize,
         ) -> luarequire_WriteResult,
     >,
+
+    // Returns the maximum number of milliseconds to allow for executing a given Luau-syntax configuration
+    // file. This function is only called if get_config_status returns CONFIG_PRESENT_LUAU and can be left
+    // undefined if support for Luau-syntax configuration files is not needed. A default value of 2000ms is
+    // used. Negative values are treated as infinite.
+    pub get_luau_config_timeout:
+        Option<unsafe extern "C-unwind" fn(L: *mut lua_State, ctx: *mut c_void) -> c_int>,
 
     // Executes the module and places the result on the stack. Returns the number of results placed on the
     // stack.

@@ -203,6 +203,7 @@ unsafe extern "C-unwind" {
     pub fn lua_rawget(L: *mut lua_State, idx: c_int) -> c_int;
     #[link_name = "lua_rawgeti"]
     pub fn lua_rawgeti_(L: *mut lua_State, idx: c_int, n: c_int) -> c_int;
+    pub fn lua_rawgetptagged(L: *mut lua_State, idx: c_int, p: *const c_void, tag: c_int) -> c_int;
     pub fn lua_createtable(L: *mut lua_State, narr: c_int, nrec: c_int);
 
     pub fn lua_setreadonly(L: *mut lua_State, idx: c_int, enabled: c_int);
@@ -220,6 +221,7 @@ unsafe extern "C-unwind" {
     pub fn lua_rawset(L: *mut lua_State, idx: c_int);
     #[link_name = "lua_rawseti"]
     pub fn lua_rawseti_(L: *mut lua_State, idx: c_int, n: c_int);
+    pub fn lua_rawsetptagged(L: *mut lua_State, idx: c_int, p: *const c_void, tag: c_int);
     pub fn lua_setmetatable(L: *mut lua_State, objindex: c_int) -> c_int;
     pub fn lua_setfenv(L: *mut lua_State, idx: c_int) -> c_int;
 
@@ -545,4 +547,9 @@ unsafe extern "C" {
 unsafe extern "C" {
     pub fn luau_setfflag(name: *const c_char, value: c_int) -> c_int;
     pub fn lua_getmetatablepointer(L: *mut lua_State, idx: c_int) -> *const c_void;
+    pub fn lua_gcdump(
+        L: *mut lua_State,
+        file: *mut c_void,
+        category_name: Option<unsafe extern "C" fn(L: *mut lua_State, memcat: u8) -> *const c_char>,
+    );
 }
