@@ -957,6 +957,7 @@ fn test_nested_userdata_gc() -> Result<()> {
 }
 
 #[cfg(feature = "userdata-wrappers")]
+#[rustversion::stable]
 #[test]
 fn test_userdata_wrappers() -> Result<()> {
     #[derive(Debug)]

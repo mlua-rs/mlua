@@ -47,6 +47,7 @@ fn test_userdata_multithread_access_send_only() -> Result<()> {
     Ok(())
 }
 
+#[rustversion::stable]
 #[test]
 fn test_userdata_multithread_access_sync() -> Result<()> {
     let lua = Lua::new();
