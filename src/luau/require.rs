@@ -16,8 +16,6 @@ use crate::types::MaybeSend;
 pub use fs::TextRequirer;
 
 /// An error that can occur during navigation in the Luau `require-by-string` system.
-#[cfg(any(feature = "luau", doc))]
-#[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
 #[derive(Debug, Clone)]
 pub enum NavigateError {
     Ambiguous,
@@ -55,8 +53,6 @@ type WriteResult = ffi::luarequire_WriteResult;
 type ConfigStatus = ffi::luarequire_ConfigStatus;
 
 /// A trait for handling modules loading and navigation in the Luau `require-by-string` system.
-#[cfg(any(feature = "luau", doc))]
-#[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
 pub trait Require {
     /// Returns `true` if "require" is permitted for the given chunk name.
     fn is_require_allowed(&self, chunk_name: &str) -> bool;
@@ -316,6 +312,7 @@ pub(super) unsafe extern "C-unwind" fn init_config(config: *mut ffi::luarequire_
 }
 
 /// Detect configuration file format (JSON or Luau)
+#[cfg(feature = "luau")]
 fn detect_config_format(data: &[u8]) -> ConfigStatus {
     let data = data.trim_ascii();
     if data.starts_with(b"{") {
