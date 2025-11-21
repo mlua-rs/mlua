@@ -94,6 +94,8 @@ pub(crate) struct ExtraData {
     pub(super) compiler: Option<Compiler>,
     #[cfg(feature = "luau-jit")]
     pub(super) enable_jit: bool,
+    #[cfg(feature = "luau")]
+    pub(crate) mem_categories: Vec<std::ffi::CString>,
 }
 
 impl Drop for ExtraData {
@@ -196,6 +198,8 @@ impl ExtraData {
             enable_jit: true,
             #[cfg(feature = "luau")]
             running_gc: false,
+            #[cfg(feature = "luau")]
+            mem_categories: vec![std::ffi::CString::new("main").unwrap()],
         }));
 
         // Store it in the registry

@@ -61,6 +61,7 @@ serde-value = { version = "0.7", optional = true }
 parking_lot = { version = "0.12", features = ["arc_lock"] }
 anyhow = { version = "1.0", optional = true }
 rustversion = "1.0"
+libc = "0.2"
 
 ffi = { package = "mlua-sys", version = "0.9.0", path = "mlua-sys" }
 

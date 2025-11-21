@@ -470,5 +470,70 @@ fn test_typeof_error() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn test_memory_category() -> Result<()> {
+    let lua = Lua::new();
+
+    lua.set_memory_category("main").unwrap();
+
+    // Invalid category names should be rejected
+    let err = lua.set_memory_category("invalid$");
+    assert!(err.is_err());
+
+    for i in 0..254 {
+        let name = format!("category_{}", i);
+        lua.set_memory_category(&name).unwrap();
+    }
+    // 255th category should fail
+    let err = lua.set_memory_category("category_254");
+    assert!(err.is_err());
+
+    Ok(())
+}
+
+#[test]
+fn test_heap_dump() -> Result<()> {
+    let lua = Lua::new();
+
+    // Assign a new memory category and create few objects
+    lua.set_memory_category("test_category")?;
+    let _t = lua.create_table()?;
+    let _ud = lua.create_any_userdata("hello, world")?;
+
+    let dump = lua.heap_dump()?;
+
+    assert!(dump.size() > 0);
+    let size_by_category = dump.size_by_category();
+    assert_eq!(size_by_category.len(), 2);
+    assert!(size_by_category.contains_key("test_category"));
+    assert!(size_by_category["main"] < dump.size());
+
+    // Check size by type within the category
+    let size_by_type = dump.size_by_type(Some("test_category"));
+    assert!(!size_by_type.is_empty());
+    assert!(size_by_type.contains_key("table"));
+    assert!(size_by_type.contains_key("userdata"));
+    // Try non-existent category
+    let size_by_type2 = dump.size_by_type(Some("non_existent_category"));
+    assert!(size_by_type2.is_empty());
+    // Remove category filter
+    let size_by_type_all = dump.size_by_type(None);
+    assert!(size_by_type.len() < size_by_type_all.len());
+
+    // Check size by userdata type within the category
+    let size_by_udtype = dump.size_by_userdata(Some("test_category"));
+    assert_eq!(size_by_udtype.len(), 1);
+    assert!(size_by_udtype.contains_key("&str"));
+    assert_eq!(size_by_udtype["&str"].0, 1);
+    // Try non-existent category
+    let size_by_udtype2 = dump.size_by_userdata(Some("non_existent_category"));
+    assert!(size_by_udtype2.is_empty());
+    // Remove category filter
+    let size_by_udtype_all = dump.size_by_userdata(None);
+    assert!(size_by_udtype.len() < size_by_udtype_all.len());
+
+    Ok(())
+}
+
 #[path = "luau/require.rs"]
 mod require;
