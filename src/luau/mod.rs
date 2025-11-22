@@ -27,6 +27,8 @@ impl Lua {
     ///
     /// The category "main" is reserved for the default memory category.
     /// Maximum of 255 categories can be registered.
+    /// The category is set per Lua thread (state) and affects all allocations made from that
+    /// thread.
     ///
     /// Return error if too many categories are registered or if the category name is invalid.
     ///
@@ -55,12 +57,12 @@ impl Lua {
                 }
             }
         };
-        unsafe { ffi::lua_setmemcat(lua.main_state(), cat_id as i32) };
+        unsafe { ffi::lua_setmemcat(lua.state(), cat_id as i32) };
 
         Ok(())
     }
 
-    /// Dumps the current Lua heap state.
+    /// Dumps the current Lua VM heap state.
     ///
     /// The returned `HeapDump` can be used to analyze memory usage.
     /// It's recommended to call [`Lua::gc_collect`] before dumping the heap.
@@ -68,9 +70,7 @@ impl Lua {
     #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
     pub fn heap_dump(&self) -> Result<HeapDump> {
         let lua = self.lock();
-        unsafe {
-            heap_dump::HeapDump::new(lua.main_state()).ok_or_else(|| Error::runtime("unable to dump heap"))
-        }
+        unsafe { heap_dump::HeapDump::new(lua.state()).ok_or_else(|| Error::runtime("unable to dump heap")) }
     }
 
     pub(crate) unsafe fn configure_luau(&self) -> Result<()> {
