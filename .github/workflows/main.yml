@@ -272,8 +272,8 @@ jobs:
       - name: Install wasi-sdk/Wasmtime
         working-directory: ${{ runner.tool_cache }}
         run: |
-          wasi_sdk=27
-          wasmtime=v37.0.1
+          wasi_sdk=29
+          wasmtime=v39.0.0
 
           curl -LO https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-$wasi_sdk/wasi-sdk-$wasi_sdk.0-x86_64-linux.tar.gz
           tar xf wasi-sdk-$wasi_sdk.0-x86_64-linux.tar.gz
