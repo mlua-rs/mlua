@@ -1,3 +1,14 @@
+## v0.11.5 (Nov 22, 2025)
+
+- Luau updated to 0.701
+- Added `Lua::set_memory_category` and `Lua::heap_dump` functions to profile (Luau) memory
+- Added `Lua::type_metatable` helper to get metatable of a primitive type
+- Added `Lua::traceback` function to generate stack traces at different levels
+- Added `add_method_once` /`add_async_method_once` UserData methods (experimental)
+- Make `AnyUserData::type_name` public
+- impl `IntoLuaMulti` for `&MultiValue`
+- Bugfixes and async perf improvements
+
 ## v0.11.4 (Sep 29, 2025)
 
 - Make `Value::to_serializable` public
