@@ -438,7 +438,7 @@ fn test_panic() -> Result<()> {
     {
         let lua = make_lua(LuaOptions::default())?;
         match catch_unwind(AssertUnwindSafe(|| -> Result<()> {
-            let _catched_panic = lua
+            let _caught_panic = lua
                 .load(
                     r#"
                     -- Set global

@@ -1,5 +1,5 @@
 [default]
-extend-ignore-identifiers-re = ["catched", "2nd", "ser"]
+extend-ignore-identifiers-re = ["2nd", "ser"]
 
 [default.extend-words]
 thr = "thr"
