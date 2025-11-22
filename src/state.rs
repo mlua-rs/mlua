@@ -1180,7 +1180,7 @@ impl Lua {
     /// and `&String`, you can also pass plain `&[u8]` here.
     #[inline]
     pub fn create_string(&self, s: impl AsRef<[u8]>) -> Result<String> {
-        unsafe { self.lock().create_string(s) }
+        unsafe { self.lock().create_string(s.as_ref()) }
     }
 
     /// Creates and returns a Luau [buffer] object from a byte slice of data.

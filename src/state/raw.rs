@@ -510,16 +510,16 @@ impl RawLua {
     }
 
     /// See [`Lua::create_string`]
-    pub(crate) unsafe fn create_string(&self, s: impl AsRef<[u8]>) -> Result<String> {
+    pub(crate) unsafe fn create_string(&self, s: &[u8]) -> Result<String> {
         let state = self.state();
         if self.unlikely_memory_error() {
-            push_string(state, s.as_ref(), false)?;
+            push_string(state, s, false)?;
             return Ok(String(self.pop_ref()));
         }
 
         let _sg = StackGuard::new(state);
         check_stack(state, 3)?;
-        push_string(state, s.as_ref(), true)?;
+        push_string(state, s, true)?;
         Ok(String(self.pop_ref()))
     }
 
