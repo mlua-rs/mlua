@@ -299,6 +299,7 @@ pub(super) unsafe extern "C-unwind" fn init_config(config: *mut ffi::luarequire_
     (*config).is_require_allowed = is_require_allowed;
     (*config).reset = reset;
     (*config).jump_to_alias = jump_to_alias;
+    (*config).to_alias_fallback = None;
     (*config).to_parent = to_parent;
     (*config).to_child = to_child;
     (*config).is_module_present = is_module_present;
