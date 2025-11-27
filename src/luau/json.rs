@@ -313,8 +313,8 @@ mod tests {
     fn test_error_cases() {
         assert!(parse("").is_err());
         assert!(parse("nul").is_err());
-        assert!(parse("tru").is_err());
-        assert!(parse("fals").is_err());
+        assert!(parse("tru").is_err()); // spellchecker:disable-line
+        assert!(parse("fals").is_err()); // spellchecker:disable-line
         assert!(parse(r#""unterminated"#).is_err());
         assert!(parse("[1,2,]").is_err());
         assert!(parse(r#"{"key""#).is_err());

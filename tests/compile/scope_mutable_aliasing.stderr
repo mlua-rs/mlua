@@ -10,3 +10,9 @@ error[E0499]: cannot borrow `i` as mutable more than once at a time
    |                  argument requires that `i` is borrowed for `'1`
 12 |         let _b = scope.create_userdata(MyUserData(&mut i)).unwrap();
    |                                                   ^^^^^^ second mutable borrow occurs here
+   |
+note: requirement that the value outlives `'1` introduced here
+  --> src/scope.rs
+   |
+   |         T: UserData + 'env,
+   |                       ^^^^
