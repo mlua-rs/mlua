@@ -40,14 +40,22 @@ pub const LUA_MAX_UPVALUES: c_int = 200;
 #[doc(hidden)]
 pub const LUA_TRACEBACK_STACK: c_int = 11;
 
-// Copied from https://github.com/rust-lang/rust/blob/master/library/std/src/sys/pal/common/alloc.rs
-// The minimum alignment guaranteed by the architecture. This value is used to
-// add fast paths for low alignment values.
-#[cfg(any(
+// The minimum alignment guaranteed by the architecture.
+// Copied from https://github.com/rust-lang/rust/blob/main/library/std/src/sys/alloc/mod.rs
+#[doc(hidden)]
+#[rustfmt::skip]
+pub const SYS_MIN_ALIGN: usize = if cfg!(any(
+    all(target_arch = "riscv32", any(target_os = "espidf", target_os = "zkvm")),
+    all(target_arch = "xtensa", target_os = "espidf"),
+)) {
+    // The allocator on the esp-idf and zkvm platforms guarantees 4 byte alignment.
+    4
+} else if cfg!(any(
     target_arch = "x86",
     target_arch = "arm",
     target_arch = "m68k",
     target_arch = "csky",
+    target_arch = "loongarch32",
     target_arch = "mips",
     target_arch = "mips32r6",
     target_arch = "powerpc",
@@ -55,12 +63,11 @@ pub const LUA_TRACEBACK_STACK: c_int = 11;
     target_arch = "sparc",
     target_arch = "wasm32",
     target_arch = "hexagon",
-    all(target_arch = "riscv32", not(any(target_os = "espidf", target_os = "zkvm"))),
-    all(target_arch = "xtensa", not(target_os = "espidf")),
-))]
-#[doc(hidden)]
-pub const SYS_MIN_ALIGN: usize = 8;
-#[cfg(any(
+    target_arch = "riscv32",
+    target_arch = "xtensa",
+)) {
+    8
+} else if cfg!(any(
     target_arch = "x86_64",
     target_arch = "aarch64",
     target_arch = "arm64ec",
@@ -71,16 +78,11 @@ pub const SYS_MIN_ALIGN: usize = 8;
     target_arch = "sparc64",
     target_arch = "riscv64",
     target_arch = "wasm64",
-))]
-#[doc(hidden)]
-pub const SYS_MIN_ALIGN: usize = 16;
-// The allocator on the esp-idf and zkvm platforms guarantee 4 byte alignment.
-#[cfg(any(
-    all(target_arch = "riscv32", any(target_os = "espidf", target_os = "zkvm")),
-    all(target_arch = "xtensa", target_os = "espidf"),
-))]
-#[doc(hidden)]
-pub const SYS_MIN_ALIGN: usize = 4;
+)) {
+    16
+} else {
+    panic!("no value for SYS_MIN_ALIGN")
+};
 
 #[macro_use]
 mod macros;
