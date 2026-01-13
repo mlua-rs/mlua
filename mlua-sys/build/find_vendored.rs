@@ -1,6 +1,9 @@
 #![allow(dead_code)]
 
 pub fn probe_lua() {
+    #[cfg(feature = "lua55")]
+    let artifacts = lua_src::Build::new().build(lua_src::Lua55);
+
     #[cfg(feature = "lua54")]
     let artifacts = lua_src::Build::new().build(lua_src::Lua54);
 
