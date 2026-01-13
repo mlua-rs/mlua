@@ -731,6 +731,9 @@ fn test_userdata_proxy() -> Result<()> {
     let globals = lua.globals();
     globals.set("MyUserData", lua.create_proxy::<MyUserData>()?)?;
 
+    assert!(!globals.get::<AnyUserData>("MyUserData")?.is_proxy::<()>());
+    assert!(globals.get::<AnyUserData>("MyUserData")?.is_proxy::<MyUserData>());
+
     lua.load(
         r#"
         assert(MyUserData.static_field == 123)
