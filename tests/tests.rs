@@ -581,7 +581,7 @@ fn test_num_conversion() -> Result<()> {
 
     assert_eq!(lua.load("1.0").eval::<i64>()?, 1);
     assert_eq!(lua.load("1.0").eval::<f64>()?, 1.0);
-    #[cfg(any(feature = "lua54", feature = "lua53"))]
+    #[cfg(any(feature = "lua55", feature = "lua54", feature = "lua53"))]
     assert_eq!(lua.load("1.0").eval::<String>()?, "1.0");
     #[cfg(any(feature = "lua52", feature = "lua51", feature = "luajit", feature = "luau"))]
     assert_eq!(lua.load("1.0").eval::<String>()?, "1");
@@ -611,7 +611,7 @@ fn test_num_conversion() -> Result<()> {
     assert!(negative_zero.is_sign_negative());
 
     // In Lua <5.3 all numbers are floats
-    #[cfg(not(any(feature = "lua54", feature = "lua53", feature = "luajit")))]
+    #[cfg(not(any(feature = "lua55", feature = "lua54", feature = "lua53", feature = "luajit")))]
     {
         let negative_zero = lua.load("-0").eval::<f64>()?;
         assert_eq!(negative_zero, 0.0);
@@ -675,7 +675,7 @@ fn test_pcall_xpcall() -> Result<()> {
     assert_eq!(globals.get::<String>("pcall_error")?, "testerror");
 
     assert_eq!(globals.get::<bool>("xpcall_statusr")?, false);
-    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "luajit"))]
+    #[cfg(any(feature = "lua55", feature = "lua54", feature = "lua53", feature = "lua52", feature = "luajit"))]
     assert_eq!(globals.get::<std::string::String>("xpcall_error")?, "testerror");
     #[cfg(feature = "lua51")]
     assert!(globals
@@ -1167,7 +1167,7 @@ fn test_context_thread() -> Result<()> {
         )
         .into_function()?;
 
-    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "luajit52"))]
+    #[cfg(any(feature = "lua55", feature = "lua54", feature = "lua53", feature = "lua52", feature = "luajit52"))]
     f.call::<()>(lua.current_thread())?;
 
     #[cfg(any(
@@ -1343,7 +1343,7 @@ fn test_inspect_stack() -> Result<()> {
     })?;
     lua.globals().set("stack_info", stack_info)?;
 
-    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "luau"))]
+    #[cfg(any(feature = "lua55", feature = "lua54", feature = "lua53", feature = "lua52", feature = "luau"))]
     lua.load(
         r#"
         local stack_info = stack_info
@@ -1483,7 +1483,7 @@ fn test_multi_states() -> Result<()> {
 }
 
 #[test]
-#[cfg(feature = "lua54")]
+#[cfg(any(feature = "lua55", feature = "lua54"))]
 fn test_warnings() -> Result<()> {
     let lua = Lua::new();
     lua.set_app_data::<Vec<(StdString, bool)>>(Vec::new());

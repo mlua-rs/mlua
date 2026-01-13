@@ -77,7 +77,7 @@ pub(crate) struct ExtraData {
     pub(super) hook_callback: Option<crate::types::HookCallback>,
     #[cfg(not(feature = "luau"))]
     pub(super) hook_triggers: crate::debug::HookTriggers,
-    #[cfg(feature = "lua54")]
+    #[cfg(any(feature = "lua55", feature = "lua54"))]
     pub(super) warn_callback: Option<crate::types::WarnCallback>,
     #[cfg(feature = "luau")]
     pub(super) interrupt_callback: Option<crate::types::InterruptCallback>,
@@ -182,7 +182,7 @@ impl ExtraData {
             hook_callback: None,
             #[cfg(not(feature = "luau"))]
             hook_triggers: Default::default(),
-            #[cfg(feature = "lua54")]
+            #[cfg(any(feature = "lua55", feature = "lua54"))]
             warn_callback: None,
             #[cfg(feature = "luau")]
             interrupt_callback: None,

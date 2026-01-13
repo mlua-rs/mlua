@@ -336,22 +336,22 @@ impl Thread {
             }
             ThreadStatusInner::Running => Err(Error::runtime("cannot reset a running thread")),
             ThreadStatusInner::Finished => Ok(()),
-            #[cfg(not(any(feature = "lua54", feature = "luau")))]
+            #[cfg(not(any(feature = "lua55", feature = "lua54", feature = "luau")))]
             ThreadStatusInner::Yielded(_) | ThreadStatusInner::Error => {
                 Err(Error::runtime("cannot reset non-finished thread"))
             }
-            #[cfg(any(feature = "lua54", feature = "luau"))]
+            #[cfg(any(feature = "lua55", feature = "lua54", feature = "luau"))]
             ThreadStatusInner::Yielded(_) | ThreadStatusInner::Error => {
                 let thread_state = self.state();
 
                 #[cfg(all(feature = "lua54", not(feature = "vendored")))]
                 let status = ffi::lua_resetthread(thread_state);
-                #[cfg(all(feature = "lua54", feature = "vendored"))]
+                #[cfg(any(feature = "lua55", all(feature = "lua54", feature = "vendored")))]
                 let status = {
                     let lua = self.0.lua.lock();
                     ffi::lua_closethread(thread_state, lua.state())
                 };
-                #[cfg(feature = "lua54")]
+                #[cfg(any(feature = "lua55", feature = "lua54"))]
                 if status != ffi::LUA_OK {
                     return Err(pop_error(thread_state, status));
                 }

@@ -274,7 +274,7 @@ fn test_hook_yield() -> Result<()> {
 
     co.set_hook(HookTriggers::EVERY_LINE, move |_lua, _debug| Ok(VmState::Yield))?;
 
-    #[cfg(any(feature = "lua54", feature = "lua53"))]
+    #[cfg(any(feature = "lua55", feature = "lua54", feature = "lua53"))]
     {
         assert!(co.resume::<()>(()).is_ok());
         assert!(co.resume::<()>(()).is_ok());

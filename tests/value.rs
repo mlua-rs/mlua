@@ -239,7 +239,7 @@ fn test_value_conversions() -> Result<()> {
     assert_eq!(Value::Integer(1).as_u32(), Some(1u32));
     assert_eq!(Value::Integer(1).as_i64(), Some(1i64));
     assert_eq!(Value::Integer(1).as_u64(), Some(1u64));
-    #[cfg(any(feature = "lua54", feature = "lua53"))]
+    #[cfg(any(feature = "lua55", feature = "lua54", feature = "lua53"))]
     {
         assert_eq!(Value::Integer(mlua::Integer::MAX).as_i32(), None);
         assert_eq!(Value::Integer(mlua::Integer::MAX).as_u32(), None);

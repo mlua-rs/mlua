@@ -276,7 +276,7 @@ impl Function {
 
             #[cfg(any(feature = "lua51", feature = "luajit", feature = "luau"))]
             ffi::lua_getfenv(state, -1);
-            #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+            #[cfg(any(feature = "lua55", feature = "lua54", feature = "lua53", feature = "lua52"))]
             for i in 1..=255 {
                 // Traverse upvalues until we find the _ENV one
                 match ffi::lua_getupvalue(state, -1, i) {
@@ -316,7 +316,7 @@ impl Function {
                 lua.push_ref(&env.0);
                 ffi::lua_setfenv(state, -2);
             }
-            #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+            #[cfg(any(feature = "lua55", feature = "lua54", feature = "lua53", feature = "lua52"))]
             for i in 1..=255 {
                 match ffi::lua_getupvalue(state, -1, i) {
                     s if s.is_null() => return Ok(false),
@@ -400,11 +400,14 @@ impl Function {
             _state: *mut ffi::lua_State,
             buf: *const c_void,
             buf_len: usize,
-            data: *mut c_void,
+            data_ptr: *mut c_void,
         ) -> c_int {
-            let data = &mut *(data as *mut Vec<u8>);
-            let buf = slice::from_raw_parts(buf as *const u8, buf_len);
-            data.extend_from_slice(buf);
+            // If `data` is null, then it's a signal that write is finished.
+            if !data_ptr.is_null() && buf_len > 0 {
+                let data = &mut *(data_ptr as *mut Vec<u8>);
+                let buf = slice::from_raw_parts(buf as *const u8, buf_len);
+                data.extend_from_slice(buf);
+            }
             0
         }
 

@@ -56,32 +56,53 @@ pub enum MetaMethod {
     /// The unary minus (`-`) operator.
     Unm,
     /// The floor division (//) operator.
-    #[cfg(any(feature = "lua54", feature = "lua53", feature = "luau"))]
-    #[cfg_attr(docsrs, doc(cfg(any(feature = "lua54", feature = "lua53", feature = "luau"))))]
+    #[cfg(any(feature = "lua55", feature = "lua54", feature = "lua53", feature = "luau"))]
+    #[cfg_attr(
+        docsrs,
+        doc(cfg(any(feature = "lua55", feature = "lua54", feature = "lua53", feature = "luau")))
+    )]
     IDiv,
     /// The bitwise AND (&) operator.
-    #[cfg(any(feature = "lua54", feature = "lua53"))]
-    #[cfg_attr(docsrs, doc(cfg(any(feature = "lua54", feature = "lua53"))))]
+    #[cfg(any(feature = "lua55", feature = "lua54", feature = "lua53"))]
+    #[cfg_attr(
+        docsrs,
+        doc(cfg(any(feature = "lua55", feature = "lua54", feature = "lua53")))
+    )]
     BAnd,
     /// The bitwise OR (|) operator.
-    #[cfg(any(feature = "lua54", feature = "lua53"))]
-    #[cfg_attr(docsrs, doc(cfg(any(feature = "lua54", feature = "lua53"))))]
+    #[cfg(any(feature = "lua55", feature = "lua54", feature = "lua53"))]
+    #[cfg_attr(
+        docsrs,
+        doc(cfg(any(feature = "lua55", feature = "lua54", feature = "lua53")))
+    )]
     BOr,
     /// The bitwise XOR (binary ~) operator.
-    #[cfg(any(feature = "lua54", feature = "lua53"))]
-    #[cfg_attr(docsrs, doc(cfg(any(feature = "lua54", feature = "lua53"))))]
+    #[cfg(any(feature = "lua55", feature = "lua54", feature = "lua53"))]
+    #[cfg_attr(
+        docsrs,
+        doc(cfg(any(feature = "lua55", feature = "lua54", feature = "lua53")))
+    )]
     BXor,
     /// The bitwise NOT (unary ~) operator.
-    #[cfg(any(feature = "lua54", feature = "lua53"))]
-    #[cfg_attr(docsrs, doc(cfg(any(feature = "lua54", feature = "lua53"))))]
+    #[cfg(any(feature = "lua55", feature = "lua54", feature = "lua53"))]
+    #[cfg_attr(
+        docsrs,
+        doc(cfg(any(feature = "lua55", feature = "lua54", feature = "lua53")))
+    )]
     BNot,
     /// The bitwise left shift (<<) operator.
-    #[cfg(any(feature = "lua54", feature = "lua53"))]
-    #[cfg_attr(docsrs, doc(cfg(any(feature = "lua54", feature = "lua53"))))]
+    #[cfg(any(feature = "lua55", feature = "lua54", feature = "lua53"))]
+    #[cfg_attr(
+        docsrs,
+        doc(cfg(any(feature = "lua55", feature = "lua54", feature = "lua53")))
+    )]
     Shl,
     /// The bitwise right shift (>>) operator.
-    #[cfg(any(feature = "lua54", feature = "lua53"))]
-    #[cfg_attr(docsrs, doc(cfg(any(feature = "lua54", feature = "lua53"))))]
+    #[cfg(any(feature = "lua55", feature = "lua54", feature = "lua53"))]
+    #[cfg_attr(
+        docsrs,
+        doc(cfg(any(feature = "lua55", feature = "lua54", feature = "lua53")))
+    )]
     Shr,
     /// The string concatenation operator `..`.
     Concat,
@@ -106,10 +127,22 @@ pub enum MetaMethod {
     /// The `__pairs` metamethod.
     ///
     /// This is not an operator, but it will be called by the built-in `pairs` function.
-    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "luajit52"))]
+    #[cfg(any(
+        feature = "lua55",
+        feature = "lua54",
+        feature = "lua53",
+        feature = "lua52",
+        feature = "luajit52"
+    ))]
     #[cfg_attr(
         docsrs,
-        doc(cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "luajit52")))
+        doc(cfg(any(
+            feature = "lua55",
+            feature = "lua54",
+            feature = "lua53",
+            feature = "lua52",
+            feature = "luajit52"
+        )))
     )]
     Pairs,
     /// The `__ipairs` metamethod.
@@ -135,8 +168,8 @@ pub enum MetaMethod {
     /// [documentation][lua_doc].
     ///
     /// [lua_doc]: https://www.lua.org/manual/5.4/manual.html#3.3.8
-    #[cfg(feature = "lua54")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "lua54")))]
+    #[cfg(any(feature = "lua55", feature = "lua54"))]
+    #[cfg_attr(docsrs, doc(cfg(any(feature = "lua55", feature = "lua54"))))]
     Close,
     /// The `__name`/`__type` metafield.
     ///
@@ -176,19 +209,19 @@ impl MetaMethod {
             MetaMethod::Pow => "__pow",
             MetaMethod::Unm => "__unm",
 
-            #[cfg(any(feature = "lua54", feature = "lua53", feature = "luau"))]
+            #[cfg(any(feature = "lua55", feature = "lua54", feature = "lua53", feature = "luau"))]
             MetaMethod::IDiv => "__idiv",
-            #[cfg(any(feature = "lua54", feature = "lua53"))]
+            #[cfg(any(feature = "lua55", feature = "lua54", feature = "lua53"))]
             MetaMethod::BAnd => "__band",
-            #[cfg(any(feature = "lua54", feature = "lua53"))]
+            #[cfg(any(feature = "lua55", feature = "lua54", feature = "lua53"))]
             MetaMethod::BOr => "__bor",
-            #[cfg(any(feature = "lua54", feature = "lua53"))]
+            #[cfg(any(feature = "lua55", feature = "lua54", feature = "lua53"))]
             MetaMethod::BXor => "__bxor",
-            #[cfg(any(feature = "lua54", feature = "lua53"))]
+            #[cfg(any(feature = "lua55", feature = "lua54", feature = "lua53"))]
             MetaMethod::BNot => "__bnot",
-            #[cfg(any(feature = "lua54", feature = "lua53"))]
+            #[cfg(any(feature = "lua55", feature = "lua54", feature = "lua53"))]
             MetaMethod::Shl => "__shl",
-            #[cfg(any(feature = "lua54", feature = "lua53"))]
+            #[cfg(any(feature = "lua55", feature = "lua54", feature = "lua53"))]
             MetaMethod::Shr => "__shr",
 
             MetaMethod::Concat => "__concat",
@@ -201,14 +234,20 @@ impl MetaMethod {
             MetaMethod::Call => "__call",
             MetaMethod::ToString => "__tostring",
 
-            #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "luajit52"))]
+            #[cfg(any(
+                feature = "lua55",
+                feature = "lua54",
+                feature = "lua53",
+                feature = "lua52",
+                feature = "luajit52"
+            ))]
             MetaMethod::Pairs => "__pairs",
             #[cfg(any(feature = "lua52", feature = "luajit52"))]
             MetaMethod::IPairs => "__ipairs",
             #[cfg(feature = "luau")]
             MetaMethod::Iter => "__iter",
 
-            #[cfg(feature = "lua54")]
+            #[cfg(any(feature = "lua55", feature = "lua54"))]
             MetaMethod::Close => "__close",
 
             #[rustfmt::skip]

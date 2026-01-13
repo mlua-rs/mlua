@@ -159,10 +159,10 @@ impl<'a> Debug<'a> {
 
     /// Corresponds to the `t` "what" mask. Returns true if the hook is in a function tail call,
     /// false otherwise.
-    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+    #[cfg(any(feature = "lua55", feature = "lua54", feature = "lua53", feature = "lua52"))]
     #[cfg_attr(
         docsrs,
-        doc(cfg(any(feature = "lua54", feature = "lua53", feature = "lua52")))
+        doc(cfg(any(feature = "lua55", feature = "lua54", feature = "lua53", feature = "lua52")))
     )]
     pub fn is_tail_call(&self) -> bool {
         unsafe {
@@ -191,9 +191,9 @@ impl<'a> Debug<'a> {
             #[cfg(not(feature = "luau"))]
             let stack = DebugStack {
                 num_ups: (*self.ar).nups as _,
-                #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+                #[cfg(any(feature = "lua55", feature = "lua54", feature = "lua53", feature = "lua52"))]
                 num_params: (*self.ar).nparams as _,
-                #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+                #[cfg(any(feature = "lua55", feature = "lua54", feature = "lua53", feature = "lua52"))]
                 is_vararg: (*self.ar).isvararg != 0,
             };
             #[cfg(feature = "luau")]
@@ -248,17 +248,41 @@ pub struct DebugStack {
     /// Number of upvalues.
     pub num_ups: u8,
     /// Number of parameters.
-    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "luau"))]
+    #[cfg(any(
+        feature = "lua55",
+        feature = "lua54",
+        feature = "lua53",
+        feature = "lua52",
+        feature = "luau"
+    ))]
     #[cfg_attr(
         docsrs,
-        doc(cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "luau")))
+        doc(cfg(any(
+            feature = "lua55",
+            feature = "lua54",
+            feature = "lua53",
+            feature = "lua52",
+            feature = "luau"
+        )))
     )]
     pub num_params: u8,
     /// Whether the function is a vararg function.
-    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "luau"))]
+    #[cfg(any(
+        feature = "lua55",
+        feature = "lua54",
+        feature = "lua53",
+        feature = "lua52",
+        feature = "luau"
+    ))]
     #[cfg_attr(
         docsrs,
-        doc(cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "luau")))
+        doc(cfg(any(
+            feature = "lua55",
+            feature = "lua54",
+            feature = "lua53",
+            feature = "lua52",
+            feature = "luau"
+        )))
     )]
     pub is_vararg: bool,
 }

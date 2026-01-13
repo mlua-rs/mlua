@@ -42,6 +42,7 @@ fn test_module_error() -> Result<()> {
 }
 
 #[cfg(any(
+    feature = "lua55",
     feature = "lua54",
     feature = "lua53",
     feature = "lua52",
@@ -70,6 +71,7 @@ fn test_module_from_thread() -> Result<()> {
 }
 
 #[cfg(any(
+    feature = "lua55",
     feature = "lua54",
     feature = "lua53",
     feature = "lua52",

@@ -83,7 +83,7 @@ impl MemoryState {
     }
 
     // Does nothing apart from calling `f()`, we don't need to bypass any limits
-    #[cfg(any(feature = "lua52", feature = "lua53", feature = "lua54"))]
+    #[cfg(any(feature = "lua55", feature = "lua54", feature = "lua53", feature = "lua52"))]
     #[inline]
     pub(crate) unsafe fn relax_limit_with(_state: *mut ffi::lua_State, f: impl FnOnce()) {
         f();

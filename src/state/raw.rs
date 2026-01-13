@@ -122,6 +122,12 @@ impl RawLua {
 
     pub(super) unsafe fn new(libs: StdLib, options: &LuaOptions) -> XRc<ReentrantMutex<Self>> {
         let mem_state: *mut MemoryState = Box::into_raw(Box::default());
+        #[cfg(feature = "lua55")]
+        let mut state = {
+            let seed = ffi::luaL_makeseed(ptr::null_mut());
+            ffi::lua_newstate(ALLOCATOR, mem_state as *mut c_void, seed)
+        };
+        #[cfg(not(feature = "lua55"))]
         let mut state = ffi::lua_newstate(ALLOCATOR, mem_state as *mut c_void);
         // If state is null then switch to Lua internal allocator
         if state.is_null() {
@@ -153,7 +159,7 @@ impl RawLua {
                 (|| -> Result<()> {
                     let _sg = StackGuard::new(state);
 
-                    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+                    #[cfg(any(feature = "lua55", feature = "lua54", feature = "lua53", feature = "lua52"))]
                     ffi::lua_rawgeti(state, ffi::LUA_REGISTRYINDEX, ffi::LUA_RIDX_GLOBALS);
                     #[cfg(any(feature = "lua51", feature = "luajit", feature = "luau"))]
                     ffi::lua_pushvalue(state, ffi::LUA_GLOBALSINDEX);
@@ -416,7 +422,7 @@ impl RawLua {
                 VmState::Yield => {
                     // Only count and line events can yield
                     if event == ffi::LUA_HOOKCOUNT || event == ffi::LUA_HOOKLINE {
-                        #[cfg(any(feature = "lua54", feature = "lua53"))]
+                        #[cfg(any(feature = "lua55", feature = "lua54", feature = "lua53"))]
                         if ffi::lua_isyieldable(state) != 0 {
                             ffi::lua_yield(state, 0);
                         }
@@ -768,7 +774,7 @@ impl RawLua {
 
             ffi::LUA_TLIGHTUSERDATA => Value::LightUserData(LightUserData(ffi::lua_touserdata(state, idx))),
 
-            #[cfg(any(feature = "lua54", feature = "lua53"))]
+            #[cfg(any(feature = "lua55", feature = "lua54", feature = "lua53"))]
             ffi::LUA_TNUMBER => {
                 if ffi::lua_isinteger(state, idx) != 0 {
                     Value::Integer(ffi::lua_tointeger(state, idx))
@@ -899,7 +905,7 @@ impl RawLua {
         #[cfg(any(feature = "lua51", feature = "luajit", feature = "luau"))]
         ffi::lua_xpush(self.ref_thread(), state, ExtraData::ERROR_TRACEBACK_IDX);
         // Lua 5.2+ support light C functions that does not require extra allocations
-        #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+        #[cfg(any(feature = "lua55", feature = "lua54", feature = "lua53", feature = "lua52"))]
         ffi::lua_pushcfunction(state, crate::util::error_traceback);
     }
 
@@ -1279,7 +1285,13 @@ impl RawLua {
     #[cfg(feature = "async")]
     pub(crate) fn create_async_callback(&self, func: AsyncCallback) -> Result<Function> {
         // Ensure that the coroutine library is loaded
-        #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "luau"))]
+        #[cfg(any(
+            feature = "lua55",
+            feature = "lua54",
+            feature = "lua53",
+            feature = "lua52",
+            feature = "luau"
+        ))]
         unsafe {
             if !(*self.extra.get()).libs.contains(StdLib::COROUTINE) {
                 load_std_libs(self.main_state(), StdLib::COROUTINE)?;
@@ -1492,7 +1504,13 @@ unsafe fn load_std_libs(state: *mut ffi::lua_State, libs: StdLib) -> Result<()> 
     #[cfg(feature = "luajit")]
     let _gc_guard = GcGuard::new(state);
 
-    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "luau"))]
+    #[cfg(any(
+        feature = "lua55",
+        feature = "lua54",
+        feature = "lua53",
+        feature = "lua52",
+        feature = "luau"
+    ))]
     {
         if libs.contains(StdLib::COROUTINE) {
             requiref(state, ffi::LUA_COLIBNAME, ffi::luaopen_coroutine, 1)?;
@@ -1516,7 +1534,7 @@ unsafe fn load_std_libs(state: *mut ffi::lua_State, libs: StdLib) -> Result<()> 
         requiref(state, ffi::LUA_STRLIBNAME, ffi::luaopen_string, 1)?;
     }
 
-    #[cfg(any(feature = "lua54", feature = "lua53", feature = "luau"))]
+    #[cfg(any(feature = "lua55", feature = "lua54", feature = "lua53", feature = "luau"))]
     {
         if libs.contains(StdLib::UTF8) {
             requiref(state, ffi::LUA_UTF8LIBNAME, ffi::luaopen_utf8, 1)?;

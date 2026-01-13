@@ -73,8 +73,8 @@ pub(crate) struct LuaGuard(ArcReentrantMutexGuard<RawLua>);
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum GCMode {
     Incremental,
-    #[cfg(feature = "lua54")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "lua54")))]
+    #[cfg(any(feature = "lua55", feature = "lua54"))]
+    #[cfg_attr(docsrs, doc(cfg(any(feature = "lua55", feature = "lua54"))))]
     Generational,
 }
 
@@ -249,7 +249,7 @@ impl Lua {
             ffi::luaL_loadstring as _,
             ffi::luaL_openlibs as _,
         ]);
-        #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+        #[cfg(any(feature = "lua55", feature = "lua54", feature = "lua53", feature = "lua52"))]
         {
             _symbols.push(ffi::lua_getglobal as _);
             _symbols.push(ffi::lua_setglobal as _);
@@ -382,7 +382,7 @@ impl Lua {
     #[cfg(not(feature = "luau"))]
     #[cfg_attr(docsrs, doc(cfg(not(feature = "luau"))))]
     pub fn preload_module(&self, modname: &str, func: Function) -> Result<()> {
-        #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+        #[cfg(any(feature = "lua55", feature = "lua54", feature = "lua53", feature = "lua52"))]
         let preload = unsafe {
             self.exec_raw::<Option<Table>>((), |state| {
                 ffi::lua_getfield(state, ffi::LUA_REGISTRYINDEX, ffi::LUA_PRELOAD_TABLE);
@@ -814,8 +814,8 @@ impl Lua {
     }
 
     /// Sets the warning function to be used by Lua to emit warnings.
-    #[cfg(feature = "lua54")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "lua54")))]
+    #[cfg(any(feature = "lua55", feature = "lua54"))]
+    #[cfg_attr(docsrs, doc(cfg(any(feature = "lua55", feature = "lua54"))))]
     pub fn set_warning_function<F>(&self, callback: F)
     where
         F: Fn(&Lua, &str, bool) -> Result<()> + MaybeSend + 'static,
@@ -847,8 +847,8 @@ impl Lua {
     /// Removes warning function previously set by `set_warning_function`.
     ///
     /// This function has no effect if a warning function was not previously set.
-    #[cfg(feature = "lua54")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "lua54")))]
+    #[cfg(any(feature = "lua55", feature = "lua54"))]
+    #[cfg_attr(docsrs, doc(cfg(any(feature = "lua55", feature = "lua54"))))]
     pub fn remove_warning_function(&self) {
         let lua = self.lock();
         unsafe {
@@ -861,8 +861,8 @@ impl Lua {
     ///
     /// A message in a call with `incomplete` set to `true` should be continued in
     /// another call to this function.
-    #[cfg(feature = "lua54")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "lua54")))]
+    #[cfg(any(feature = "lua55", feature = "lua54"))]
+    #[cfg_attr(docsrs, doc(cfg(any(feature = "lua55", feature = "lua54"))))]
     pub fn warning(&self, msg: impl AsRef<str>, incomplete: bool) {
         let msg = msg.as_ref();
         let mut bytes = vec![0; msg.len() + 1];
@@ -954,7 +954,13 @@ impl Lua {
     }
 
     /// Returns `true` if the garbage collector is currently running automatically.
-    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "luau"))]
+    #[cfg(any(
+        feature = "lua55",
+        feature = "lua54",
+        feature = "lua53",
+        feature = "lua52",
+        feature = "luau"
+    ))]
     pub fn gc_is_running(&self) -> bool {
         let lua = self.lock();
         unsafe { ffi::lua_gc(lua.main_state(), ffi::LUA_GCISRUNNING, 0) != 0 }
@@ -1019,8 +1025,12 @@ impl Lua {
         let lua = self.lock();
         let state = lua.main_state();
         unsafe {
-            #[cfg(not(feature = "luau"))]
+            #[cfg(feature = "lua55")]
+            return ffi::lua_gc(state, ffi::LUA_GCPARAM, ffi::LUA_GCPPAUSE, pause);
+
+            #[cfg(not(any(feature = "lua55", feature = "luau")))]
             return ffi::lua_gc(state, ffi::LUA_GCSETPAUSE, pause);
+
             #[cfg(feature = "luau")]
             return ffi::lua_gc(state, ffi::LUA_GCSETGOAL, pause);
         }
@@ -1034,7 +1044,18 @@ impl Lua {
     /// [documentation]: https://www.lua.org/manual/5.4/manual.html#2.5
     pub fn gc_set_step_multiplier(&self, step_multiplier: c_int) -> c_int {
         let lua = self.lock();
-        unsafe { ffi::lua_gc(lua.main_state(), ffi::LUA_GCSETSTEPMUL, step_multiplier) }
+        unsafe {
+            #[cfg(feature = "lua55")]
+            return ffi::lua_gc(
+                lua.main_state(),
+                ffi::LUA_GCPARAM,
+                ffi::LUA_GCPSTEPMUL,
+                step_multiplier,
+            );
+
+            #[cfg(not(feature = "lua55"))]
+            return ffi::lua_gc(lua.main_state(), ffi::LUA_GCSETSTEPMUL, step_multiplier);
+        }
     }
 
     /// Changes the collector to incremental mode with the given parameters.
@@ -1073,12 +1094,19 @@ impl Lua {
             #[cfg(not(feature = "luau"))]
             let _ = step_size; // Ignored
 
-            GCMode::Incremental
+            return GCMode::Incremental;
         }
 
+        #[cfg(feature = "lua55")]
+        let prev_mode = unsafe {
+            ffi::lua_gc(state, ffi::LUA_GCPARAM, ffi::LUA_GCPPAUSE, pause);
+            ffi::lua_gc(state, ffi::LUA_GCPARAM, ffi::LUA_GCPSTEPMUL, step_multiplier);
+            ffi::lua_gc(state, ffi::LUA_GCPARAM, ffi::LUA_GCPSTEPSIZE, step_size);
+            ffi::lua_gc(state, ffi::LUA_GCINC)
+        };
         #[cfg(feature = "lua54")]
         let prev_mode = unsafe { ffi::lua_gc(state, ffi::LUA_GCINC, pause, step_multiplier, step_size) };
-        #[cfg(feature = "lua54")]
+        #[cfg(any(feature = "lua55", feature = "lua54"))]
         match prev_mode {
             ffi::LUA_GCINC => GCMode::Incremental,
             ffi::LUA_GCGEN => GCMode::Generational,
@@ -1092,11 +1120,19 @@ impl Lua {
     /// can be found in the Lua 5.4 [documentation][lua_doc].
     ///
     /// [lua_doc]: https://www.lua.org/manual/5.4/manual.html#2.5.2
-    #[cfg(feature = "lua54")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "lua54")))]
+    #[cfg(any(feature = "lua55", feature = "lua54"))]
+    #[cfg_attr(docsrs, doc(cfg(any(feature = "lua55", feature = "lua54"))))]
     pub fn gc_gen(&self, minor_multiplier: c_int, major_multiplier: c_int) -> GCMode {
         let lua = self.lock();
         let state = lua.main_state();
+        #[cfg(feature = "lua55")]
+        let prev_mode = unsafe {
+            ffi::lua_gc(state, ffi::LUA_GCPARAM, ffi::LUA_GCPMINORMUL, minor_multiplier);
+            ffi::lua_gc(state, ffi::LUA_GCPARAM, ffi::LUA_GCPMINORMAJOR, major_multiplier);
+            // TODO: LUA_GCPMAJORMINOR
+            ffi::lua_gc(state, ffi::LUA_GCGEN)
+        };
+        #[cfg(not(feature = "lua55"))]
         let prev_mode = unsafe { ffi::lua_gc(state, ffi::LUA_GCGEN, minor_multiplier, major_multiplier) };
         match prev_mode {
             ffi::LUA_GCGEN => GCMode::Generational,
@@ -1317,7 +1353,12 @@ impl Lua {
     /// This function is unsafe because provides a way to execute unsafe C function.
     pub unsafe fn create_c_function(&self, func: ffi::lua_CFunction) -> Result<Function> {
         let lua = self.lock();
-        if cfg!(any(feature = "lua54", feature = "lua53", feature = "lua52")) {
+        if cfg!(any(
+            feature = "lua55",
+            feature = "lua54",
+            feature = "lua53",
+            feature = "lua52"
+        )) {
             ffi::lua_pushcfunction(lua.ref_thread(), func);
             return Ok(Function(lua.pop_ref_thread()));
         }
@@ -1578,7 +1619,7 @@ impl Lua {
         unsafe {
             let _sg = StackGuard::new(state);
             assert_stack(state, 1);
-            #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+            #[cfg(any(feature = "lua55", feature = "lua54", feature = "lua53", feature = "lua52"))]
             ffi::lua_rawgeti(state, ffi::LUA_REGISTRYINDEX, ffi::LUA_RIDX_GLOBALS);
             #[cfg(any(feature = "lua51", feature = "luajit", feature = "luau"))]
             ffi::lua_pushvalue(state, ffi::LUA_GLOBALSINDEX);
@@ -1610,7 +1651,7 @@ impl Lua {
 
             lua.push_ref(&globals.0);
 
-            #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+            #[cfg(any(feature = "lua55", feature = "lua54", feature = "lua53", feature = "lua52"))]
             ffi::lua_rawseti(state, ffi::LUA_REGISTRYINDEX, ffi::LUA_RIDX_GLOBALS);
             #[cfg(any(feature = "lua51", feature = "luajit", feature = "luau"))]
             ffi::lua_replace(state, ffi::LUA_GLOBALSINDEX);
@@ -2210,7 +2251,7 @@ impl Lua {
             })?,
         )?;
 
-        #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52"))]
+        #[cfg(any(feature = "lua55", feature = "lua54", feature = "lua53", feature = "lua52"))]
         let searchers: Table = package.get("searchers")?;
         #[cfg(any(feature = "lua51", feature = "luajit"))]
         let searchers: Table = package.get("loaders")?;

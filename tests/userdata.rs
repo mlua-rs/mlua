@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::string::String as StdString;
 use std::sync::Arc;
 
-#[cfg(feature = "lua54")]
+#[cfg(any(feature = "lua55", feature = "lua54"))]
 use std::sync::atomic::{AtomicI64, Ordering};
 
 use mlua::{
@@ -138,7 +138,13 @@ fn test_metamethods() -> Result<()> {
                     Err("no such custom index".into_lua_err())
                 }
             });
-            #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "luajit52"))]
+            #[cfg(any(
+                feature = "lua55",
+                feature = "lua54",
+                feature = "lua53",
+                feature = "lua52",
+                feature = "luajit52"
+            ))]
             methods.add_meta_method(MetaMethod::Pairs, |lua, data, ()| {
                 use std::iter::FromIterator;
                 let stateless_iter = lua.create_function(|_, (data, i): (UserDataRef<Self>, i64)| {
@@ -165,7 +171,13 @@ fn test_metamethods() -> Result<()> {
         10
     );
 
-    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "luajit52"))]
+    #[cfg(any(
+        feature = "lua55",
+        feature = "lua54",
+        feature = "lua53",
+        feature = "lua52",
+        feature = "luajit52"
+    ))]
     let pairs_it = lua
         .load(
             r#"
@@ -190,7 +202,13 @@ fn test_metamethods() -> Result<()> {
     assert_eq!(lua.load("userdata2.inner").eval::<i64>()?, 3);
     assert!(lua.load("userdata2.nonexist_field").eval::<()>().is_err());
 
-    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "luajit52"))]
+    #[cfg(any(
+        feature = "lua55",
+        feature = "lua54",
+        feature = "lua53",
+        feature = "lua52",
+        feature = "luajit52"
+    ))]
     assert_eq!(pairs_it.call::<i64>(())?, 28);
 
     let userdata2: Value = globals.get("userdata2")?;
@@ -209,7 +227,7 @@ fn test_metamethods() -> Result<()> {
     Ok(())
 }
 
-#[cfg(feature = "lua54")]
+#[cfg(any(feature = "lua55", feature = "lua54"))]
 #[test]
 fn test_metamethod_close() -> Result<()> {
     #[derive(Clone)]
@@ -651,7 +669,7 @@ fn test_metatable() -> Result<()> {
     globals.set("ud", MyUserData)?;
     lua.load(r#"assert(ud:my_type_name() == "MyUserData")"#).exec()?;
 
-    #[cfg(any(feature = "lua54", feature = "lua53", feature = "luau"))]
+    #[cfg(any(feature = "lua55", feature = "lua54", feature = "lua53", feature = "luau"))]
     lua.load(r#"assert(tostring(ud):sub(1, 11) == "MyUserData:")"#)
         .exec()?;
     #[cfg(feature = "luau")]

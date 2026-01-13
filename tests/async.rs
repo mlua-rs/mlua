@@ -249,7 +249,7 @@ async fn test_async_return_async_closure() -> Result<()> {
     Ok(())
 }
 
-#[cfg(feature = "lua54")]
+#[cfg(any(feature = "lua55", feature = "lua54"))]
 #[tokio::test]
 async fn test_async_lua54_to_be_closed() -> Result<()> {
     let lua = Lua::new();
@@ -670,7 +670,7 @@ async fn test_async_hook() -> Result<()> {
     static HOOK_CALLED: AtomicBool = AtomicBool::new(false);
     lua.set_global_hook(mlua::HookTriggers::new().every_line(), move |_, _| {
         if !HOOK_CALLED.swap(true, Ordering::Relaxed) {
-            #[cfg(any(feature = "lu53", feature = "lua54"))]
+            #[cfg(any(feature = "lua55", feature = "lua54", feature = "lua53"))]
             return Ok(mlua::VmState::Yield);
         }
         Ok(mlua::VmState::Continue)

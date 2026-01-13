@@ -6,10 +6,22 @@ pub struct StdLib(u32);
 
 impl StdLib {
     /// [`coroutine`](https://www.lua.org/manual/5.4/manual.html#6.2) library
-    #[cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "luau"))]
+    #[cfg(any(
+        feature = "lua55",
+        feature = "lua54",
+        feature = "lua53",
+        feature = "lua52",
+        feature = "luau"
+    ))]
     #[cfg_attr(
         docsrs,
-        doc(cfg(any(feature = "lua54", feature = "lua53", feature = "lua52", feature = "luau")))
+        doc(cfg(any(
+            feature = "lua55",
+            feature = "lua54",
+            feature = "lua53",
+            feature = "lua52",
+            feature = "luau"
+        )))
     )]
     pub const COROUTINE: StdLib = StdLib(1);
 
@@ -28,8 +40,11 @@ impl StdLib {
     pub const STRING: StdLib = StdLib(1 << 4);
 
     /// [`utf8`](https://www.lua.org/manual/5.4/manual.html#6.5) library
-    #[cfg(any(feature = "lua54", feature = "lua53", feature = "luau"))]
-    #[cfg_attr(docsrs, doc(cfg(any(feature = "lua54", feature = "lua53", feature = "luau"))))]
+    #[cfg(any(feature = "lua55", feature = "lua54", feature = "lua53", feature = "luau"))]
+    #[cfg_attr(
+        docsrs,
+        doc(cfg(any(feature = "lua55", feature = "lua54", feature = "lua53", feature = "luau")))
+    )]
     pub const UTF8: StdLib = StdLib(1 << 5);
 
     /// [`bit`](https://www.lua.org/manual/5.2/manual.html#6.7) library

@@ -20,7 +20,7 @@
 `mlua` is a set of bindings to the [Lua](https://www.lua.org) programming language for Rust with a goal of providing a
 _safe_ (as much as possible), high level, easy to use, practical and flexible API.
 
-Started as an `rlua` fork, `mlua` supports Lua 5.4, 5.3, 5.2, 5.1 (including LuaJIT) and [Luau] and allows writing native Lua modules in Rust as well as using Lua in a standalone mode.
+Started as an `rlua` fork, `mlua` supports Lua 5.5, 5.4, 5.3, 5.2, 5.1 (including LuaJIT) and [Luau] and allows writing native Lua modules in Rust as well as using Lua in a standalone mode.
 
 `mlua` is tested on Windows/macOS/Linux including module mode in [GitHub Actions] on `x86_64` platforms and cross-compilation to `aarch64` (other targets are also supported).
 
@@ -36,6 +36,7 @@ WebAssembly (WASM) is supported through the `wasm32-unknown-emscripten` target f
 `mlua` uses feature flags to reduce the number of dependencies and compiled code, and allow choosing only the required set of features.
 Below is a list of the available feature flags. By default `mlua` does not enable any features.
 
+* `lua55`: enable Lua [5.5] support
 * `lua54`: enable Lua [5.4] support
 * `lua53`: enable Lua [5.3] support
 * `lua52`: enable Lua [5.2] support
@@ -55,6 +56,7 @@ Below is a list of the available feature flags. By default `mlua` does not enabl
 * `anyhow`: enable `anyhow::Error` conversion into Lua
 * `userdata-wrappers`: opt into `impl UserData` for `Rc<T>`/`Arc<T>`/`Rc<RefCell<T>>`/`Arc<Mutex<T>>` where `T: UserData`
 
+[5.5]: https://www.lua.org/manual/5.5/manual.html
 [5.4]: https://www.lua.org/manual/5.4/manual.html
 [5.3]: https://www.lua.org/manual/5.3/manual.html
 [5.2]: https://www.lua.org/manual/5.2/manual.html

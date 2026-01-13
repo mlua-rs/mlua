@@ -108,10 +108,12 @@ pub(crate) type ThreadCollectionCallback = XRc<dyn Fn(crate::LightUserData) + Se
 #[cfg(all(not(feature = "send"), feature = "luau"))]
 pub(crate) type ThreadCollectionCallback = XRc<dyn Fn(crate::LightUserData)>;
 
-#[cfg(all(feature = "send", feature = "lua54"))]
+#[cfg(feature = "send")]
+#[cfg(any(feature = "lua55", feature = "lua54"))]
 pub(crate) type WarnCallback = XRc<dyn Fn(&Lua, &str, bool) -> Result<()> + Send>;
 
-#[cfg(all(not(feature = "send"), feature = "lua54"))]
+#[cfg(not(feature = "send"))]
+#[cfg(any(feature = "lua55", feature = "lua54"))]
 pub(crate) type WarnCallback = XRc<dyn Fn(&Lua, &str, bool) -> Result<()>>;
 
 /// A trait that adds `Send` requirement if `send` feature is enabled.
