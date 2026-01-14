@@ -50,6 +50,15 @@ pub struct FunctionInfo {
     pub line_defined: Option<usize>,
     /// The line number where the definition of the function ends (not set by Luau).
     pub last_line_defined: Option<usize>,
+    /// Number of function parameters
+    #[cfg(any(not(any(feature = "lua51", feature = "luajit")), doc))]
+    pub num_params: usize,
+    /// True if function accepts variable args
+    #[cfg(any(not(any(feature = "lua51", feature = "luajit")), doc))]
+    pub is_vararg: bool,
+    /// Number of upvalues
+    #[cfg(any(not(feature = "luau"), doc))]
+    pub nups: usize,
 }
 
 /// Luau function coverage snapshot.
@@ -343,7 +352,8 @@ impl Function {
 
     /// Returns information about the function.
     ///
-    /// Corresponds to the `>Sn` what mask for [`lua_getinfo`] when applied to the function.
+    /// Corresponds to the `>Snu` (`>Sn` for Luau) what mask for
+    /// [`lua_getinfo`] when applied to the function.
     ///
     /// [`lua_getinfo`]: https://www.lua.org/manual/5.4/manual.html#lua_getinfo
     pub fn info(&self) -> FunctionInfo {
@@ -356,7 +366,7 @@ impl Function {
             let mut ar: ffi::lua_Debug = mem::zeroed();
             lua.push_ref(&self.0);
             #[cfg(not(feature = "luau"))]
-            let res = ffi::lua_getinfo(state, cstr!(">Sn"), &mut ar);
+            let res = ffi::lua_getinfo(state, cstr!(">Snu"), &mut ar);
             #[cfg(feature = "luau")]
             let res = ffi::lua_getinfo(state, -1, cstr!("sn"), &mut ar);
             mlua_assert!(res != 0, "lua_getinfo failed with `>Sn`");
@@ -381,6 +391,12 @@ impl Function {
                 last_line_defined: linenumber_to_usize(ar.lastlinedefined),
                 #[cfg(feature = "luau")]
                 last_line_defined: None,
+                #[cfg(not(any(feature = "lua51", feature = "luajit")))]
+                num_params: ar.nparams as usize,
+                #[cfg(not(any(feature = "lua51", feature = "luajit")))]
+                is_vararg: ar.isvararg != 0,
+                #[cfg(not(feature = "luau"))]
+                nups: ar.nups as usize,
             }
         }
     }
