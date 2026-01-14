@@ -31,27 +31,11 @@ jobs:
           cargo build --features "${{ matrix.lua }},vendored,async,serde,macros,anyhow,userdata-wrappers,send"
         shell: bash
       - name: Build ${{ matrix.lua }} pkg-config
-        if: ${{ matrix.os == 'ubuntu-latest' }}
+        if: ${{ matrix.os == 'ubuntu-latest' && matrix.lua != 'lua55' }}
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends liblua5.4-dev liblua5.3-dev liblua5.2-dev liblua5.1-0-dev libluajit-5.1-dev
           cargo build --features "${{ matrix.lua }}"
-
-  build_aarch64_cross_macos:
-    name: Cross-compile to aarch64-apple-darwin
-    runs-on: macos-latest
-    needs: build
-    strategy:
-      matrix:
-        lua: [lua55, lua54, lua53, lua52, lua51, luajit]
-    steps:
-      - uses: actions/checkout@main
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: stable
-          target: aarch64-apple-darwin
-      - name: Cross-compile
-        run: cargo build --target aarch64-apple-darwin --features "${{ matrix.lua }},vendored,async,send,serde,macros,anyhow,userdata-wrappers"
 
   build_aarch64_cross_ubuntu:
     name: Cross-compile to aarch64-unknown-linux-gnu
@@ -219,7 +203,7 @@ jobs:
     needs: build
     strategy:
       matrix:
-        lua: [lua55, lua54, luajit]
+        lua: [lua54, luajit]
     defaults:
       run:
         shell: msys2 {0}
