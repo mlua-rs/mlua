@@ -9,7 +9,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
         rust: [stable]
-        lua: [lua54, lua53, lua52, lua51, luajit, luau, luau-jit, luau-vector4]
+        lua: [lua55, lua54, lua53, lua52, lua51, luajit, luau, luau-jit, luau-vector4]
         include:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
@@ -43,7 +43,7 @@ jobs:
     needs: build
     strategy:
       matrix:
-        lua: [lua54, lua53, lua52, lua51, luajit]
+        lua: [lua55, lua54, lua53, lua52, lua51, luajit]
     steps:
       - uses: actions/checkout@main
       - uses: dtolnay/rust-toolchain@stable
@@ -59,7 +59,7 @@ jobs:
     needs: build
     strategy:
       matrix:
-        lua: [lua54, lua53, lua52, lua51, luajit]
+        lua: [lua55, lua54, lua53, lua52, lua51, luajit]
     steps:
       - uses: actions/checkout@main
       - uses: dtolnay/rust-toolchain@stable
@@ -81,7 +81,7 @@ jobs:
     needs: build
     strategy:
       matrix:
-        lua: [lua54, lua53, lua52, lua51]
+        lua: [lua55, lua54, lua53, lua52, lua51]
     steps:
       - uses: actions/checkout@main
       - uses: dtolnay/rust-toolchain@stable
@@ -105,7 +105,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
         rust: [stable, nightly]
-        lua: [lua54, lua53, lua52, lua51, luajit, luajit52, luau, luau-jit, luau-vector4]
+        lua: [lua55, lua54, lua53, lua52, lua51, luajit, luajit52, luau, luau-jit, luau-vector4]
         include:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
@@ -126,8 +126,8 @@ jobs:
           cargo test --features "${{ matrix.lua }},vendored,async,serde,macros,anyhow,userdata-wrappers"
           cargo test --features "${{ matrix.lua }},vendored,async,serde,macros,anyhow,userdata-wrappers,send"
         shell: bash
-      - name: Run compile tests (macos lua54)
-        if: ${{ matrix.os == 'macos-latest' && matrix.lua == 'lua54' }}
+      - name: Run compile tests (macos lua55)
+        if: ${{ matrix.os == 'macos-latest' && matrix.lua == 'lua55' }}
         run: |
           TRYBUILD=overwrite cargo test --features "${{ matrix.lua }},vendored" --tests -- --ignored
           TRYBUILD=overwrite cargo test --features "${{ matrix.lua }},vendored,async,send,serde,macros" --tests -- --ignored
@@ -141,7 +141,7 @@ jobs:
       matrix:
         os: [ubuntu-latest]
         rust: [nightly]
-        lua: [lua54, lua53, lua52, lua51, luajit, luau, luau-jit, luau-vector4]
+        lua: [lua55, lua54, lua53, lua52, lua51, luajit, luau, luau-jit, luau-vector4]
         include:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
@@ -168,7 +168,7 @@ jobs:
       matrix:
         os: [ubuntu-latest]
         rust: [nightly]
-        lua: [lua54, lua53, lua52, lua51, luajit, luau, luau-jit, luau-vector4]
+        lua: [lua55, lua54, lua53, lua52, lua51, luajit, luau, luau-jit, luau-vector4]
         include:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
@@ -194,7 +194,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest]
         rust: [stable]
-        lua: [lua54, lua53, lua52, lua51, luajit]
+        lua: [lua55, lua54, lua53, lua52, lua51, luajit]
         include:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
@@ -219,7 +219,7 @@ jobs:
     needs: build
     strategy:
       matrix:
-        lua: [lua54, luajit]
+        lua: [lua55, lua54, luajit]
     defaults:
       run:
         shell: msys2 {0}
@@ -240,7 +240,7 @@ jobs:
     needs: build
     strategy:
       matrix:
-        lua: [lua54, lua53, lua52, lua51, luau]
+        lua: [lua55, lua54, lua53, lua52, lua51, luau]
     steps:
       - uses: actions/checkout@main
       - uses: dtolnay/rust-toolchain@stable
@@ -262,7 +262,7 @@ jobs:
     needs: build
     strategy:
       matrix:
-        lua: [lua54, lua53, lua52, lua51]
+        lua: [lua55, lua54, lua53, lua52, lua51]
     steps:
       - uses: actions/checkout@main
       - uses: dtolnay/rust-toolchain@stable
@@ -273,7 +273,7 @@ jobs:
         working-directory: ${{ runner.tool_cache }}
         run: |
           wasi_sdk=29
-          wasmtime=v39.0.0
+          wasmtime=v40.0.1
 
           curl -LO https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-$wasi_sdk/wasi-sdk-$wasi_sdk.0-x86_64-linux.tar.gz
           tar xf wasi-sdk-$wasi_sdk.0-x86_64-linux.tar.gz
@@ -306,7 +306,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        lua: [lua54, lua53, lua52, lua51, luajit, luau, luau-jit, luau-vector4]
+        lua: [lua55, lua54, lua53, lua52, lua51, luajit, luau, luau-jit, luau-vector4]
     steps:
       - uses: actions/checkout@main
       - uses: dtolnay/rust-toolchain@stable

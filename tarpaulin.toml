@@ -1,11 +1,11 @@
-[lua54]
-features = "lua54,vendored,async,send,serde,macros,anyhow,userdata-wrappers"
+[lua55]
+features = "lua55,vendored,async,send,serde,macros,anyhow,userdata-wrappers"
 
-[lua54_non_send]
-features = "lua54,vendored,async,serde,macros,anyhow,userdata-wrappers"
+[lua55_non_send]
+features = "lua55,vendored,async,serde,macros,anyhow,userdata-wrappers"
 
-[lua54_with_memory_limit]
-features = "lua54,vendored,async,send,serde,macros,anyhow,userdata-wrappers"
+[lua55_with_memory_limit]
+features = "lua55,vendored,async,send,serde,macros,anyhow,userdata-wrappers"
 rustflags = "--cfg force_memory_limit"
 
 [lua51]
