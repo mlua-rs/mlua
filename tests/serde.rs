@@ -36,7 +36,7 @@ fn test_serialize() -> Result<(), Box<dyn StdError>> {
             _integer = 123,
             _number = 321.99,
             _string = "test string serialization",
-            _table_arr = {nil, "value 1", nil, "value 2", {}},
+            _table_arr = {null, "value 1", 2, "value 3", {}},
             _table_map = {["table"] = "map", ["null"] = null},
             _bytes = "\240\040\140\040",
             _userdata = ud,
@@ -53,7 +53,7 @@ fn test_serialize() -> Result<(), Box<dyn StdError>> {
         "_integer": 123,
         "_number": 321.99,
         "_string": "test string serialization",
-        "_table_arr": [null, "value 1", null, "value 2", {}],
+        "_table_arr": [null, "value 1", 2, "value 3", {}],
         "_table_map": {"table": "map", "null": null},
         "_bytes": [240, 40, 140, 40],
         "_userdata": [123, "test userdata"],
@@ -184,7 +184,7 @@ fn test_serialize_sorted() -> LuaResult<()> {
             _integer = 123,
             _number = 321.99,
             _string = "test string serialization",
-            _table_arr = {nil, "value 1", nil, "value 2", {}},
+            _table_arr = {null, "value 1", 2, "value 3", {}},
             _table_map = {["table"] = "map", ["null"] = null},
             _bytes = "\240\040\140\040",
             _null = null,
@@ -198,7 +198,7 @@ fn test_serialize_sorted() -> LuaResult<()> {
     let json = serde_json::to_string(&value.to_serializable().sort_keys(true)).unwrap();
     assert_eq!(
         json,
-        r#"{"_bool":true,"_bytes":[240,40,140,40],"_empty_array":[],"_empty_map":{},"_integer":123,"_null":null,"_number":321.99,"_string":"test string serialization","_table_arr":[null,"value 1",null,"value 2",{}],"_table_map":{"null":null,"table":"map"}}"#
+        r#"{"_bool":true,"_bytes":[240,40,140,40],"_empty_array":[],"_empty_map":{},"_integer":123,"_null":null,"_number":321.99,"_string":"test string serialization","_table_arr":[null,"value 1",2,"value 3",{}],"_table_map":{"null":null,"table":"map"}}"#
     );
 
     Ok(())

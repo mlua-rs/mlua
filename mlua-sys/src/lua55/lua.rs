@@ -13,7 +13,7 @@ pub const LUA_MULTRET: c_int = -1;
 
 // Size of the Lua stack
 #[doc(hidden)]
-pub const LUAI_MAXSTACK: c_int = libc::INT_MAX;
+pub const LUAI_MAXSTACK: c_int = c_int::MAX;
 
 // Size of a raw memory area associated with  a Lua state with very fast access.
 pub const LUA_EXTRASPACE: usize = mem::size_of::<*const ()>();
@@ -21,7 +21,7 @@ pub const LUA_EXTRASPACE: usize = mem::size_of::<*const ()>();
 //
 // Pseudo-indices
 //
-pub const LUA_REGISTRYINDEX: c_int = -(libc::INT_MAX / 2 + 1000);
+pub const LUA_REGISTRYINDEX: c_int = -(c_int::MAX / 2 + 1000);
 
 pub const fn lua_upvalueindex(i: c_int) -> c_int {
     LUA_REGISTRYINDEX - i
