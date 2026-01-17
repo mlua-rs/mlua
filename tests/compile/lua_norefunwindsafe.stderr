@@ -1,17 +1,14 @@
-error[E0277]: the type `UnsafeCell<*mut lua_State>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+error[E0277]: the type `UnsafeCell<*mut lua_State>` may contain interior mutability and a reference may not be safely transferable across a catch_unwind boundary
  --> tests/compile/lua_norefunwindsafe.rs:7:18
   |
 7 |     catch_unwind(|| lua.create_table().unwrap());
-  |     ------------ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `UnsafeCell<*mut lua_State>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+  |     ------------ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `UnsafeCell<*mut lua_State>` may contain interior mutability and a reference may not be safely transferable across a catch_unwind boundary
   |     |
   |     required by a bound introduced by this call
   |
   = help: within `mlua::types::sync::inner::ReentrantMutex<mlua::state::raw::RawLua>`, the trait `RefUnwindSafe` is not implemented for `UnsafeCell<*mut lua_State>`
 note: required because it appears within the type `Cell<*mut lua_State>`
  --> $RUST/core/src/cell.rs
-  |
-  | pub struct Cell<T: ?Sized> {
-  |            ^^^^
 note: required because it appears within the type `mlua::state::raw::RawLua`
  --> src/state/raw.rs
   |
@@ -36,15 +33,12 @@ note: required because it's used within this closure
   |                  ^^
 note: required by a bound in `std::panic::catch_unwind`
  --> $RUST/std/src/panic.rs
-  |
-  | pub fn catch_unwind<F: FnOnce() -> R + UnwindSafe, R>(f: F) -> Result<R> {
-  |                                        ^^^^^^^^^^ required by this bound in `catch_unwind`
 
-error[E0277]: the type `UnsafeCell<mlua::state::extra::ExtraData>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+error[E0277]: the type `UnsafeCell<mlua::state::extra::ExtraData>` may contain interior mutability and a reference may not be safely transferable across a catch_unwind boundary
  --> tests/compile/lua_norefunwindsafe.rs:7:18
   |
 7 |     catch_unwind(|| lua.create_table().unwrap());
-  |     ------------ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `UnsafeCell<mlua::state::extra::ExtraData>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+  |     ------------ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `UnsafeCell<mlua::state::extra::ExtraData>` may contain interior mutability and a reference may not be safely transferable across a catch_unwind boundary
   |     |
   |     required by a bound introduced by this call
   |
@@ -74,6 +68,3 @@ note: required because it's used within this closure
   |                  ^^
 note: required by a bound in `std::panic::catch_unwind`
  --> $RUST/std/src/panic.rs
-  |
-  | pub fn catch_unwind<F: FnOnce() -> R + UnwindSafe, R>(f: F) -> Result<R> {
-  |                                        ^^^^^^^^^^ required by this bound in `catch_unwind`

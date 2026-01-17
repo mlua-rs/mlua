@@ -1,5 +1,9 @@
 [default]
 extend-ignore-identifiers-re = ["2nd", "ser"]
+# Enable inline disable comments: // spellchecker:disable-line
+extend-ignore-re = [
+    "(?Rm)^.*//\\s*spellchecker:disable-line$",
+]
 
 [default.extend-words]
 thr = "thr"

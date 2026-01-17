@@ -1,7 +1,7 @@
 error[E0373]: closure may outlive the current function, but it borrows `test.field`, which is owned by the current function
   --> tests/compile/scope_invariance.rs:13:39
    |
-9  |     lua.scope(|scope| {
+ 9 |     lua.scope(|scope| {
    |                ----- has type `&'1 mlua::Scope<'1, '_>`
 ...
 13 |             scope.create_function_mut(|_, ()| {
