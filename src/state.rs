@@ -1219,6 +1219,17 @@ impl Lua {
         unsafe { self.lock().create_string(s.as_ref()) }
     }
 
+    /// Creates and returns an external Lua string.
+    ///
+    /// External string is a string where the memory is managed by Rust code, and Lua only holds a
+    /// reference to it. This can be used to avoid copying large strings into Lua memory.
+    #[cfg(feature = "lua55")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "lua55")))]
+    #[inline]
+    pub fn create_external_string(&self, s: impl Into<Vec<u8>>) -> Result<String> {
+        unsafe { self.lock().create_external_string(s.into()) }
+    }
+
     /// Creates and returns a Luau [buffer] object from a byte slice of data.
     ///
     /// [buffer]: https://luau.org/library#buffer-library

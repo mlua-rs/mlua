@@ -99,6 +99,38 @@ pub(crate) unsafe fn push_string(state: *mut ffi::lua_State, s: &[u8], protect: 
     }
 }
 
+// Uses 3 (or 1 if unprotected) stack spaces, does not call checkstack.
+#[cfg(feature = "lua55")]
+pub(crate) unsafe fn push_external_string(
+    state: *mut ffi::lua_State,
+    mut bytes: Vec<u8>,
+    protect: bool,
+) -> Result<()> {
+    bytes.push(0);
+    let s_len = bytes.len() - 1; // exclude null terminator
+    let s_ptr = bytes.as_ptr() as *const c_char;
+    let bytes_ud = Box::into_raw(Box::new(bytes));
+
+    unsafe extern "C" fn dealloc(ud: *mut c_void, _: *mut c_void, _: usize, _: usize) -> *mut c_void {
+        drop(Box::from_raw(ud as *mut Vec<u8>));
+        ptr::null_mut()
+    }
+
+    if protect {
+        let res = protect_lua!(state, 0, 1, move |state| {
+            ffi::lua_pushexternalstring(state, s_ptr, s_len, Some(dealloc), bytes_ud as *mut _);
+        });
+        if res.is_err() {
+            // Deallocate on error
+            drop(Box::from_raw(bytes_ud));
+            return res;
+        }
+    } else {
+        ffi::lua_pushexternalstring(state, s_ptr, s_len, Some(dealloc), bytes_ud as *mut _);
+    }
+    Ok(())
+}
+
 // Uses 3 stack spaces (when protect), does not call checkstack.
 #[cfg(feature = "luau")]
 #[inline(always)]

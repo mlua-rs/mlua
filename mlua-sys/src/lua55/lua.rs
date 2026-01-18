@@ -204,7 +204,7 @@ unsafe extern "C-unwind" {
         L: *mut lua_State,
         s: *const c_char,
         len: usize,
-        falloc: lua_Alloc,
+        falloc: Option<lua_Alloc>,
         ud: *mut c_void,
     ) -> *const c_char;
     pub fn lua_pushstring(L: *mut lua_State, s: *const c_char) -> *const c_char;

@@ -500,11 +500,21 @@ impl FromLua for crate::Buffer {
 impl IntoLua for StdString {
     #[inline]
     fn into_lua(self, lua: &Lua) -> Result<Value> {
+        #[cfg(feature = "lua55")]
+        if true {
+            return Ok(Value::String(lua.create_external_string(self)?));
+        }
+
         Ok(Value::String(lua.create_string(self)?))
     }
 
     #[inline]
     unsafe fn push_into_stack(self, lua: &RawLua) -> Result<()> {
+        #[cfg(feature = "lua55")]
+        if lua.unlikely_memory_error() {
+            return crate::util::push_external_string(lua.state(), self.into(), false);
+        }
+
         push_bytes_into_stack(self, lua)
     }
 }
@@ -591,6 +601,11 @@ impl FromLua for Box<str> {
 impl IntoLua for CString {
     #[inline]
     fn into_lua(self, lua: &Lua) -> Result<Value> {
+        #[cfg(feature = "lua55")]
+        if true {
+            return Ok(Value::String(lua.create_external_string(self)?));
+        }
+
         Ok(Value::String(lua.create_string(self.as_bytes())?))
     }
 }
@@ -635,6 +650,11 @@ impl IntoLua for Cow<'_, CStr> {
 impl IntoLua for BString {
     #[inline]
     fn into_lua(self, lua: &Lua) -> Result<Value> {
+        #[cfg(feature = "lua55")]
+        if true {
+            return Ok(Value::String(lua.create_external_string(self)?));
+        }
+
         Ok(Value::String(lua.create_string(self)?))
     }
 }

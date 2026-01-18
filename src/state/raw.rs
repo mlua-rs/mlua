@@ -529,6 +529,23 @@ impl RawLua {
         Ok(String(self.pop_ref()))
     }
 
+    /// Creates an external string, that is, a string that uses memory not managed by Lua.
+    ///
+    /// Modifies the input data to add `\0` terminator.
+    #[cfg(feature = "lua55")]
+    pub(crate) unsafe fn create_external_string(&self, bytes: Vec<u8>) -> Result<String> {
+        let state = self.state();
+        if self.unlikely_memory_error() {
+            crate::util::push_external_string(state, bytes, false)?;
+            return Ok(String(self.pop_ref()));
+        }
+
+        let _sg = StackGuard::new(state);
+        check_stack(state, 3)?;
+        crate::util::push_external_string(state, bytes, true)?;
+        Ok(String(self.pop_ref()))
+    }
+
     #[cfg(feature = "luau")]
     pub(crate) unsafe fn create_buffer_with_capacity(&self, size: usize) -> Result<(*mut u8, crate::Buffer)> {
         let state = self.state();
