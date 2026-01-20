@@ -1,7 +1,7 @@
 //! Contains definitions from `lauxlib.h`.
 
 use std::os::raw::{c_char, c_int, c_void};
-use std::ptr;
+use std::{mem, ptr};
 
 use super::lua::{self, lua_CFunction, lua_Integer, lua_Number, lua_State};
 
@@ -166,13 +166,72 @@ pub unsafe fn luaL_tolstring(L: *mut lua_State, idx: c_int, len: *mut usize) -> 
     luaL_tolstring_(L, lua::lua_absindex(L, idx), len)
 }
 
-// luaL_opt would be implemented here but it is undocumented, so it's omitted
-
 #[inline(always)]
 pub unsafe fn luaL_loadbuffer(L: *mut lua_State, s: *const c_char, sz: usize, n: *const c_char) -> c_int {
     luaL_loadbufferx(L, s, sz, n, ptr::null())
 }
 
+#[inline(always)]
+pub unsafe fn luaL_opt<T>(
+    L: *mut lua_State,
+    f: unsafe extern "C-unwind" fn(*mut lua_State, c_int) -> T,
+    n: c_int,
+    d: T,
+) -> T {
+    if lua::lua_isnoneornil(L, n) != 0 {
+        d
+    } else {
+        f(L, n)
+    }
+}
+
 //
-// TODO: Generic Buffer Manipulation
+// Generic Buffer Manipulation
 //
+
+// The buffer size used by the lauxlib buffer system.
+// In Lua 5.3: LUAL_BUFFERSIZE = (int)(0x80 * sizeof(void*) * sizeof(lua_Integer))
+#[rustfmt::skip]
+pub const LUAL_BUFFERSIZE: usize = 0x80 * mem::size_of::<*const ()>() * mem::size_of::<lua_Integer>();
+
+#[repr(C)]
+pub struct luaL_Buffer {
+    pub b: *mut c_char, // buffer address
+    pub size: usize,    // buffer size
+    pub n: usize,       // number of characters in buffer
+    pub L: *mut lua_State,
+    pub initb: [c_char; LUAL_BUFFERSIZE], // initial buffer space
+}
+
+#[cfg_attr(all(windows, raw_dylib), link(name = "lua53", kind = "raw-dylib"))]
+unsafe extern "C-unwind" {
+    pub fn luaL_buffinit(L: *mut lua_State, B: *mut luaL_Buffer);
+    pub fn luaL_prepbuffsize(B: *mut luaL_Buffer, sz: usize) -> *mut c_char;
+    pub fn luaL_addlstring(B: *mut luaL_Buffer, s: *const c_char, l: usize);
+    pub fn luaL_addstring(B: *mut luaL_Buffer, s: *const c_char);
+    pub fn luaL_addvalue(B: *mut luaL_Buffer);
+    pub fn luaL_pushresult(B: *mut luaL_Buffer);
+    pub fn luaL_pushresultsize(B: *mut luaL_Buffer, sz: usize);
+    pub fn luaL_buffinitsize(L: *mut lua_State, B: *mut luaL_Buffer, sz: usize) -> *mut c_char;
+}
+
+// Macro implementations as inline functions
+
+#[inline(always)]
+pub unsafe fn luaL_prepbuffer(B: *mut luaL_Buffer) -> *mut c_char {
+    luaL_prepbuffsize(B, LUAL_BUFFERSIZE)
+}
+
+#[inline(always)]
+pub unsafe fn luaL_addchar(B: *mut luaL_Buffer, c: c_char) {
+    if (*B).n >= (*B).size {
+        luaL_prepbuffsize(B, 1);
+    }
+    *(*B).b.add((*B).n) = c;
+    (*B).n += 1;
+}
+
+#[inline(always)]
+pub unsafe fn luaL_addsize(B: *mut luaL_Buffer, n: usize) {
+    (*B).n += n;
+}
