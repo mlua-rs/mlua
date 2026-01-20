@@ -173,6 +173,67 @@ pub unsafe fn luaL_loadbuffer(L: *mut lua_State, s: *const c_char, sz: usize, n:
     luaL_loadbufferx(L, s, sz, n, ptr::null())
 }
 
+#[inline(always)]
+pub unsafe fn luaL_opt<T>(
+    L: *mut lua_State,
+    f: unsafe extern "C-unwind" fn(*mut lua_State, c_int) -> T,
+    n: c_int,
+    d: T,
+) -> T {
+    if lua::lua_isnoneornil(L, n) != 0 {
+        d
+    } else {
+        f(L, n)
+    }
+}
+
 //
-// TODO: Generic Buffer Manipulation
+// Generic Buffer Manipulation
 //
+
+// The buffer size used by the lauxlib buffer system.
+// The "16384" workaround is taken from the LuaJIT source code.
+#[rustfmt::skip]
+pub const LUAL_BUFFERSIZE: usize = if libc::BUFSIZ > 16384 { 8192 } else { libc::BUFSIZ as usize };
+
+#[repr(C)]
+pub struct luaL_Buffer {
+    pub b: *mut c_char, // buffer address
+    pub size: usize,    // buffer size
+    pub n: usize,       // number of characters in buffer
+    pub L: *mut lua_State,
+    pub initb: [c_char; LUAL_BUFFERSIZE], // initial buffer space
+}
+
+#[cfg_attr(all(windows, raw_dylib), link(name = "lua52", kind = "raw-dylib"))]
+unsafe extern "C-unwind" {
+    pub fn luaL_buffinit(L: *mut lua_State, B: *mut luaL_Buffer);
+    pub fn luaL_prepbuffsize(B: *mut luaL_Buffer, sz: usize) -> *mut c_char;
+    pub fn luaL_addlstring(B: *mut luaL_Buffer, s: *const c_char, l: usize);
+    pub fn luaL_addstring(B: *mut luaL_Buffer, s: *const c_char);
+    pub fn luaL_addvalue(B: *mut luaL_Buffer);
+    pub fn luaL_pushresult(B: *mut luaL_Buffer);
+    pub fn luaL_pushresultsize(B: *mut luaL_Buffer, sz: usize);
+    pub fn luaL_buffinitsize(L: *mut lua_State, B: *mut luaL_Buffer, sz: usize) -> *mut c_char;
+}
+
+// Macro implementations as inline functions
+
+#[inline(always)]
+pub unsafe fn luaL_prepbuffer(B: *mut luaL_Buffer) -> *mut c_char {
+    luaL_prepbuffsize(B, LUAL_BUFFERSIZE)
+}
+
+#[inline(always)]
+pub unsafe fn luaL_addchar(B: *mut luaL_Buffer, c: c_char) {
+    if (*B).n >= (*B).size {
+        luaL_prepbuffsize(B, 1);
+    }
+    *(*B).b.add((*B).n) = c;
+    (*B).n += 1;
+}
+
+#[inline(always)]
+pub unsafe fn luaL_addsize(B: *mut luaL_Buffer, n: usize) {
+    (*B).n += n;
+}
