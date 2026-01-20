@@ -166,8 +166,6 @@ pub unsafe fn luaL_getmetatable(L: *mut lua_State, n: *const c_char) {
     lua::lua_getfield_(L, lua::LUA_REGISTRYINDEX, n);
 }
 
-// luaL_opt would be implemented here but it is undocumented, so it's omitted
-
 #[inline(always)]
 pub unsafe fn luaL_loadbuffer(L: *mut lua_State, s: *const c_char, sz: usize, n: *const c_char) -> c_int {
     luaL_loadbufferx(L, s, sz, n, ptr::null())

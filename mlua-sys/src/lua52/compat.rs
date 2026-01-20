@@ -125,7 +125,7 @@ pub unsafe fn lua_rawget(L: *mut lua_State, idx: c_int) -> c_int {
 
 #[inline(always)]
 pub unsafe fn lua_rawgeti(L: *mut lua_State, idx: c_int, n: lua_Integer) -> c_int {
-    let n = n.try_into().expect("cannot convert index to lua_Integer");
+    let n = n.try_into().expect("cannot convert index to c_int");
     lua_rawgeti_(L, idx, n);
     lua_type(L, -1)
 }
@@ -153,7 +153,7 @@ pub unsafe fn lua_seti(L: *mut lua_State, mut idx: c_int, n: lua_Integer) {
 
 #[inline(always)]
 pub unsafe fn lua_rawseti(L: *mut lua_State, idx: c_int, n: lua_Integer) {
-    let n = n.try_into().expect("cannot convert index from lua_Integer");
+    let n = n.try_into().expect("cannot convert index to c_int");
     lua_rawseti_(L, idx, n)
 }
 
