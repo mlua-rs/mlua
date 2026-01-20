@@ -58,6 +58,18 @@ pub struct luarequire_Configuration {
         path: *const c_char,
     ) -> luarequire_NavigateResult,
 
+    // Provides an initial alias override opportunity prior to searching for configuration files.
+    // If NAVIGATE_SUCCESS is returned, the internal state must be updated to point at the
+    // aliased location.
+    // Can be left undefined.
+    pub to_alias_override: Option<
+        unsafe extern "C-unwind" fn(
+            L: *mut lua_State,
+            ctx: *mut c_void,
+            alias_unprefixed: *const c_char,
+        ) -> luarequire_NavigateResult,
+    >,
+
     // Provides a final override opportunity if an alias cannot be found in configuration files. If
     // NAVIGATE_SUCCESS is returned, this must update the internal state to point at the aliased module.
     // Can be left undefined.

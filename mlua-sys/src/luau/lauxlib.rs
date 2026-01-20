@@ -85,6 +85,9 @@ unsafe extern "C-unwind" {
 
     pub fn luaL_callyieldable(L: *mut lua_State, nargs: c_int, nresults: c_int) -> c_int;
 
+    #[link_name = "luaL_traceback"]
+    pub fn luaL_traceback_(L: *mut lua_State, L1: *mut lua_State, msg: *const c_char, level: c_int);
+
     // sandbox libraries and globals
     #[link_name = "luaL_sandbox"]
     pub fn luaL_sandbox_(L: *mut lua_State);

@@ -43,7 +43,7 @@ cfg-if = "1.0"
 pkg-config = "0.3.17"
 lua-src = { version = ">= 550.0.0, < 550.1.0", optional = true }
 luajit-src = { version = ">= 210.6.0, < 210.7.0", optional = true }
-luau0-src = { version = "0.17.0", optional = true }
+luau0-src = { version = "0.18.0", optional = true }
 
 [lints.rust]
 unexpected_cfgs = { level = "allow", check-cfg = ['cfg(raw_dylib)'] }
