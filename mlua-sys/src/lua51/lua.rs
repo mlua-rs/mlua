@@ -270,7 +270,10 @@ pub unsafe fn lua_pushcfunction(L: *mut lua_State, f: lua_CFunction) {
     lua_pushcclosure(L, f, 0)
 }
 
-// TODO: lua_strlen
+#[inline(always)]
+pub unsafe fn lua_strlen(L: *mut lua_State, i: c_int) -> usize {
+    lua_objlen(L, i)
+}
 
 #[inline(always)]
 pub unsafe fn lua_isfunction(L: *mut lua_State, n: c_int) -> c_int {
