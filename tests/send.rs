@@ -47,8 +47,8 @@ fn test_userdata_multithread_access_send_only() -> Result<()> {
     Ok(())
 }
 
-#[rustversion::stable]
 #[test]
+#[ignore = "rust change https://github.com/rust-lang/rust/pull/135634"]
 fn test_userdata_multithread_access_sync() -> Result<()> {
     let lua = Lua::new();
 
