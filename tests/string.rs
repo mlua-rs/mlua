@@ -157,3 +157,18 @@ fn test_bytes_into_iter() -> Result<()> {
 
     Ok(())
 }
+
+#[cfg(feature = "lua55")]
+#[test]
+fn test_external_string() -> Result<()> {
+    let lua = Lua::new();
+
+    let s = lua.create_external_string(b"abc\0")?;
+    assert_eq!(
+        s.as_bytes(),
+        b"abc\0",
+        "Trailing null byte should be preserved if present explicitly"
+    );
+
+    Ok(())
+}
