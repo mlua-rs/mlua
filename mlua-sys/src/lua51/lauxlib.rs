@@ -154,10 +154,14 @@ pub unsafe fn luaL_opt<T>(
 // Generic Buffer Manipulation
 //
 
+#[cfg(target_arch = "wasm32")]
+const BUFSIZ: usize = 1024; // WASI libc's BUFSIZ is 1024
+#[cfg(not(target_arch = "wasm32"))]
+const BUFSIZ: usize = libc::BUFSIZ as usize;
+
 // The buffer size used by the lauxlib buffer system.
 // The "16384" workaround is taken from the LuaJIT source code.
-#[rustfmt::skip]
-pub const LUAL_BUFFERSIZE: usize = if libc::BUFSIZ > 16384 { 8192 } else { libc::BUFSIZ as usize };
+pub const LUAL_BUFFERSIZE: usize = if BUFSIZ > 16384 { 8192 } else { BUFSIZ };
 
 #[repr(C)]
 pub struct luaL_Buffer {
