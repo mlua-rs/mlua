@@ -48,7 +48,6 @@ fn test_userdata_multithread_access_send_only() -> Result<()> {
 }
 
 #[test]
-#[ignore = "rust change https://github.com/rust-lang/rust/pull/135634"]
 fn test_userdata_multithread_access_sync() -> Result<()> {
     let lua = Lua::new();
 
@@ -76,11 +75,13 @@ fn test_userdata_multithread_access_sync() -> Result<()> {
     std::thread::scope(|s| {
         s.spawn(|| {
             // Getting another shared reference for `Sync` type is allowed.
-            let _ = lua.globals().get::<UserDataRef<MyUserData>>("ud").unwrap();
+            // FIXME: does not work due to https://github.com/rust-lang/rust/pull/135634
+            // let _ = lua.globals().get::<UserDataRef<MyUserData>>("ud").unwrap();
         });
     });
 
-    lua.load("ud:method()").exec().unwrap();
+    // FIXME: does not work due to https://github.com/rust-lang/rust/pull/135634
+    // lua.load("ud:method()").exec().unwrap();
 
     Ok(())
 }
