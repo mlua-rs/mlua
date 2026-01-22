@@ -31,7 +31,7 @@ unsafe extern "C-unwind" {
     pub fn luaL_argerror(L: *mut lua_State, arg: c_int, extramsg: *const c_char) -> c_int;
     pub fn luaL_checklstring(L: *mut lua_State, arg: c_int, l: *mut usize) -> *const c_char;
     pub fn luaL_optlstring(L: *mut lua_State, arg: c_int, def: *const c_char, l: *mut usize)
-        -> *const c_char;
+    -> *const c_char;
     pub fn luaL_checknumber(L: *mut lua_State, arg: c_int) -> lua_Number;
     pub fn luaL_optnumber(L: *mut lua_State, arg: c_int, def: lua_Number) -> lua_Number;
     pub fn luaL_checkinteger(L: *mut lua_State, arg: c_int) -> lua_Integer;

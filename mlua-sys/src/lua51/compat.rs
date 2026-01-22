@@ -55,11 +55,7 @@ unsafe fn compat53_checkmode(
         while *st != 0 && *st != c {
             st = st.offset(1);
         }
-        if *st == c {
-            st
-        } else {
-            ptr::null()
-        }
+        if *st == c { st } else { ptr::null() }
     }
 
     if !mode.is_null() && strchr(mode, *modename).is_null() {

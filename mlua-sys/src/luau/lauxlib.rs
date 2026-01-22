@@ -3,7 +3,7 @@
 use std::os::raw::{c_char, c_float, c_int, c_void};
 use std::ptr;
 
-use super::lua::{self, lua_CFunction, lua_Number, lua_State, lua_Unsigned, LUA_REGISTRYINDEX};
+use super::lua::{self, LUA_REGISTRYINDEX, lua_CFunction, lua_Number, lua_State, lua_Unsigned};
 
 // Key, in the registry, for table of loaded modules
 pub const LUA_LOADED_TABLE: *const c_char = cstr!("_LOADED");

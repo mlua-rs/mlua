@@ -155,7 +155,12 @@ unsafe extern "C-unwind" {
     pub fn lua_toboolean(L: *mut lua_State, idx: c_int) -> c_int;
     pub fn lua_tolstring(L: *mut lua_State, idx: c_int, len: *mut usize) -> *const c_char;
     pub fn lua_tostringatom(L: *mut lua_State, idx: c_int, atom: *mut c_int) -> *const c_char;
-    pub fn lua_tolstringatom(L: *mut lua_State, idx: c_int, len: *mut usize, atom: *mut c_int) -> *const c_char;
+    pub fn lua_tolstringatom(
+        L: *mut lua_State,
+        idx: c_int,
+        len: *mut usize,
+        atom: *mut c_int,
+    ) -> *const c_char;
     pub fn lua_namecallatom(L: *mut lua_State, atom: *mut c_int) -> *const c_char;
     #[link_name = "lua_objlen"]
     pub fn lua_objlen_(L: *mut lua_State, idx: c_int) -> c_int;
