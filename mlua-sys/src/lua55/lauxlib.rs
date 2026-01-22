@@ -1,7 +1,7 @@
 //! Contains definitions from `lauxlib.h`.
 
-use std::os::raw::{c_char, c_int, c_uint, c_void};
-use std::ptr;
+use std::os::raw::{c_char, c_double, c_int, c_long, c_uint, c_void};
+use std::{mem, ptr};
 
 use super::lua::{self, lua_CFunction, lua_Integer, lua_Number, lua_State};
 
@@ -95,7 +95,7 @@ unsafe extern "C-unwind" {
 
     pub fn luaL_len(L: *mut lua_State, idx: c_int) -> lua_Integer;
 
-    // TODO: luaL_addgsub
+    pub fn luaL_addgsub(B: *mut luaL_Buffer, s: *const c_char, p: *const c_char, r: *const c_char);
 
     pub fn luaL_gsub(
         L: *mut lua_State,
@@ -166,8 +166,6 @@ pub unsafe fn luaL_getmetatable(L: *mut lua_State, n: *const c_char) {
     lua::lua_getfield(L, lua::LUA_REGISTRYINDEX, n);
 }
 
-// luaL_opt would be implemented here but it is undocumented, so it's omitted
-
 #[inline(always)]
 pub unsafe fn luaL_loadbuffer(L: *mut lua_State, s: *const c_char, sz: usize, n: *const c_char) -> c_int {
     luaL_loadbufferx(L, s, sz, n, ptr::null())
@@ -206,6 +204,96 @@ pub unsafe fn luaL_makeseed(L: *mut lua_State) -> c_uint {
     luaL_makeseed_(L)
 }
 
+#[inline(always)]
+pub unsafe fn luaL_opt<T>(
+    L: *mut lua_State,
+    f: unsafe extern "C-unwind" fn(*mut lua_State, c_int) -> T,
+    n: c_int,
+    d: T,
+) -> T {
+    if lua::lua_isnoneornil(L, n) != 0 {
+        d
+    } else {
+        f(L, n)
+    }
+}
+
 //
-// TODO: Generic Buffer Manipulation
+// Generic Buffer Manipulation
 //
+
+// The buffer size used by the lauxlib buffer system.
+// LUAL_BUFFERSIZE = (int)(16 * sizeof(void*) * sizeof(lua_Number))
+#[rustfmt::skip]
+pub const LUAL_BUFFERSIZE: usize = 16 * mem::size_of::<*const ()>() * mem::size_of::<lua_Number>();
+
+// Union used for the initial buffer with maximum alignment.
+// This ensures proper alignment for the buffer data.
+#[repr(C)]
+pub union luaL_BufferInit {
+    // Alignment matches LUAI_MAXALIGN
+    pub _align_n: lua_Number,
+    pub _align_u: c_double,
+    pub _align_s: *mut c_void,
+    pub _align_i: lua_Integer,
+    pub _align_l: c_long,
+    // Initial buffer space
+    pub b: [c_char; LUAL_BUFFERSIZE],
+}
+
+#[repr(C)]
+pub struct luaL_Buffer {
+    pub b: *mut c_char, // buffer address
+    pub size: usize,    // buffer size
+    pub n: usize,       // number of characters in buffer
+    pub L: *mut lua_State,
+    pub init: luaL_BufferInit, // initial buffer (union with alignment)
+}
+
+#[cfg_attr(all(windows, raw_dylib), link(name = "lua55", kind = "raw-dylib"))]
+unsafe extern "C-unwind" {
+    pub fn luaL_buffinit(L: *mut lua_State, B: *mut luaL_Buffer);
+    pub fn luaL_prepbuffsize(B: *mut luaL_Buffer, sz: usize) -> *mut c_char;
+    pub fn luaL_addlstring(B: *mut luaL_Buffer, s: *const c_char, l: usize);
+    pub fn luaL_addstring(B: *mut luaL_Buffer, s: *const c_char);
+    pub fn luaL_addvalue(B: *mut luaL_Buffer);
+    pub fn luaL_pushresult(B: *mut luaL_Buffer);
+    pub fn luaL_pushresultsize(B: *mut luaL_Buffer, sz: usize);
+    pub fn luaL_buffinitsize(L: *mut lua_State, B: *mut luaL_Buffer, sz: usize) -> *mut c_char;
+}
+
+// Macro implementations as inline functions
+
+#[inline(always)]
+pub unsafe fn luaL_prepbuffer(B: *mut luaL_Buffer) -> *mut c_char {
+    luaL_prepbuffsize(B, LUAL_BUFFERSIZE)
+}
+
+#[inline(always)]
+pub unsafe fn luaL_addchar(B: *mut luaL_Buffer, c: c_char) {
+    if (*B).n >= (*B).size {
+        luaL_prepbuffsize(B, 1);
+    }
+    *(*B).b.add((*B).n) = c;
+    (*B).n += 1;
+}
+
+#[inline(always)]
+pub unsafe fn luaL_addsize(B: *mut luaL_Buffer, n: usize) {
+    (*B).n += n;
+}
+
+#[inline(always)]
+pub unsafe fn luaL_buffsub(B: *mut luaL_Buffer, n: usize) {
+    (*B).n -= n;
+}
+
+#[inline(always)]
+pub unsafe fn luaL_bufflen(B: *mut luaL_Buffer) -> usize {
+    (*B).n
+}
+
+#[inline(always)]
+pub unsafe fn luaL_buffaddr(B: *mut luaL_Buffer) -> *mut c_char {
+    (*B).b
+}
