@@ -122,7 +122,19 @@ pub unsafe fn luaL_optstring(L: *mut lua_State, n: c_int, d: *const c_char) -> *
     luaL_optlstring(L, n, d, ptr::null_mut())
 }
 
-// TODO: luaL_opt
+#[inline(always)]
+pub unsafe fn luaL_opt<T>(
+    L: *mut lua_State,
+    f: unsafe extern "C-unwind" fn(*mut lua_State, c_int) -> T,
+    n: c_int,
+    d: T,
+) -> T {
+    if lua::lua_isnoneornil(L, n) != 0 {
+        d
+    } else {
+        f(L, n)
+    }
+}
 
 #[inline(always)]
 pub unsafe fn luaL_getmetatable(L: *mut lua_State, n: *const c_char) -> c_int {
