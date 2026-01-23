@@ -2150,7 +2150,7 @@ impl Lua {
 
     /// Suspends the current async function, returning the provided arguments to caller.
     ///
-    /// This function is similar to [`coroutine.yield`] but allow yeilding Rust functions
+    /// This function is similar to [`coroutine.yield`] but allow yielding Rust functions
     /// and passing values to the caller.
     /// Please note that you cannot cross [`Thread`] boundaries (e.g. calling `yield_with` on one
     /// thread and resuming on another).

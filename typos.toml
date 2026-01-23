@@ -1,5 +1,13 @@
 [default]
 extend-ignore-identifiers-re = ["2nd", "ser"]
+extend-ignore-re = [
+  # Custom ignore regex patterns: https://github.com/crate-ci/typos/blob/master/docs/reference.md#defaultextend-ignore-re
+  ".*(?:#|--|//|/*).*(?:spellchecker|typos):\\s?ignore[^\\n]*\\n",
+  ".*(?:spellchecker|typos):\\s?ignore-next-line[^\\n]*\\n[^\\n]*",
+]
+
+[files]
+extend-exclude = ["tests/compile/*.stderr"]
 
 [default.extend-words]
 thr = "thr"
