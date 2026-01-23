@@ -13,3 +13,9 @@ error[E0597]: `ibad` does not live long enough
    |             argument requires that `ibad` is borrowed for `'1`
 16 |         };
    |         - `ibad` dropped here while still borrowed
+   |
+note: requirement that the value outlives `'1` introduced here
+  --> src/scope.rs
+   |
+   |         T: UserData + 'env,
+   |                       ^^^^

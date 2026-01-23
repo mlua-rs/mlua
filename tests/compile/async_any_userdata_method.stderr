@@ -1,15 +1,19 @@
 error[E0596]: cannot borrow `s` as mutable, as it is a captured variable in a `Fn` closure
   --> tests/compile/async_any_userdata_method.rs:9:49
    |
-9  |         reg.add_async_method("t", |_, this, ()| async {
-   |                                                 ^^^^^ cannot borrow as mutable
+ 8 |         let mut s = &s;
+   |             ----- `s` declared here, outside the closure
+ 9 |         reg.add_async_method("t", |_, this, ()| async {
+   |                                   ------------- ^^^^^ cannot borrow as mutable
+   |                                   |
+   |                                   in this closure
 10 |             s = &*this;
    |             - mutable borrow occurs due to use of `s` in closure
 
 error[E0373]: async block may outlive the current function, but it borrows `this`, which is owned by the current function
   --> tests/compile/async_any_userdata_method.rs:9:49
    |
-9  |         reg.add_async_method("t", |_, this, ()| async {
+ 9 |         reg.add_async_method("t", |_, this, ()| async {
    |                                                 ^^^^^ may outlive borrowed value `this`
 10 |             s = &*this;
    |                   ---- `this` is borrowed here
@@ -17,7 +21,7 @@ error[E0373]: async block may outlive the current function, but it borrows `this
 note: async block is returned here
   --> tests/compile/async_any_userdata_method.rs:9:49
    |
-9  |           reg.add_async_method("t", |_, this, ()| async {
+ 9 |           reg.add_async_method("t", |_, this, ()| async {
    |  _________________________________________________^
 10 | |             s = &*this;
 11 | |             Ok(())
@@ -25,13 +29,13 @@ note: async block is returned here
    | |_________^
 help: to force the async block to take ownership of `this` (and any other referenced variables), use the `move` keyword
    |
-9  |         reg.add_async_method("t", |_, this, ()| async move {
+ 9 |         reg.add_async_method("t", |_, this, ()| async move {
    |                                                       ++++
 
 error: lifetime may not live long enough
   --> tests/compile/async_any_userdata_method.rs:9:49
    |
-9  |           reg.add_async_method("t", |_, this, ()| async {
+ 9 |           reg.add_async_method("t", |_, this, ()| async {
    |  ___________________________________-------------_^
    | |                                   |           |
    | |                                   |           return type of closure `{async block@$DIR/tests/compile/async_any_userdata_method.rs:9:49: 9:54}` contains a lifetime `'2`
@@ -46,22 +50,28 @@ error: lifetime may not live long enough
 error[E0597]: `s` does not live long enough
   --> tests/compile/async_any_userdata_method.rs:8:21
    |
-7  |           let s = String::new();
+ 7 |           let s = String::new();
    |               - binding `s` declared here
-8  |           let mut s = &s;
+ 8 |           let mut s = &s;
    |                       ^^ borrowed value does not live long enough
-9  | /         reg.add_async_method("t", |_, this, ()| async {
+ 9 | /         reg.add_async_method("t", |_, this, ()| async {
 10 | |             s = &*this;
 11 | |             Ok(())
 12 | |         });
    | |__________- argument requires that `s` is borrowed for `'static`
 13 |       })
    |       - `s` dropped here while still borrowed
+   |
+note: requirement that the value outlives `'static` introduced here
+  --> src/userdata.rs
+   |
+   |         M: Fn(Lua, UserDataRef<T>, A) -> MR + MaybeSend + 'static,
+   |                                                           ^^^^^^^
 
 error[E0373]: closure may outlive the current function, but it borrows `s`, which is owned by the current function
   --> tests/compile/async_any_userdata_method.rs:9:35
    |
-9  |         reg.add_async_method("t", |_, this, ()| async {
+ 9 |         reg.add_async_method("t", |_, this, ()| async {
    |                                   ^^^^^^^^^^^^^ may outlive borrowed value `s`
 10 |             s = &*this;
    |             - `s` is borrowed here
@@ -69,12 +79,12 @@ error[E0373]: closure may outlive the current function, but it borrows `s`, whic
 note: function requires argument type to outlive `'static`
   --> tests/compile/async_any_userdata_method.rs:9:9
    |
-9  | /         reg.add_async_method("t", |_, this, ()| async {
+ 9 | /         reg.add_async_method("t", |_, this, ()| async {
 10 | |             s = &*this;
 11 | |             Ok(())
 12 | |         });
    | |__________^
 help: to force the closure to take ownership of `s` (and any other referenced variables), use the `move` keyword
    |
-9  |         reg.add_async_method("t", move |_, this, ()| async {
+ 9 |         reg.add_async_method("t", move |_, this, ()| async {
    |                                   ++++

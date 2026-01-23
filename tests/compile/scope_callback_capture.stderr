@@ -1,24 +1,24 @@
 error[E0373]: closure may outlive the current function, but it borrows `inner`, which is owned by the current function
   --> tests/compile/scope_callback_capture.rs:7:43
    |
-5  |     lua.scope(|scope| {
+ 5 |     lua.scope(|scope| {
    |                ----- has type `&'1 mlua::Scope<'1, '_>`
-6  |         let mut inner: Option<Table> = None;
-7  |         let f = scope.create_function_mut(|_, t: Table| {
+ 6 |         let mut inner: Option<Table> = None;
+ 7 |         let f = scope.create_function_mut(|_, t: Table| {
    |                                           ^^^^^^^^^^^^^ may outlive borrowed value `inner`
-8  |             inner = Some(t);
+ 8 |             inner = Some(t);
    |             ----- `inner` is borrowed here
    |
 note: function requires argument type to outlive `'1`
   --> tests/compile/scope_callback_capture.rs:7:17
    |
-7  |           let f = scope.create_function_mut(|_, t: Table| {
+ 7 |           let f = scope.create_function_mut(|_, t: Table| {
    |  _________________^
-8  | |             inner = Some(t);
-9  | |             Ok(())
+ 8 | |             inner = Some(t);
+ 9 | |             Ok(())
 10 | |         })?;
    | |__________^
 help: to force the closure to take ownership of `inner` (and any other referenced variables), use the `move` keyword
    |
-7  |         let f = scope.create_function_mut(move |_, t: Table| {
+ 7 |         let f = scope.create_function_mut(move |_, t: Table| {
    |                                           ++++
