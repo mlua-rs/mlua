@@ -32,6 +32,7 @@ pub struct Function(pub(crate) ValueRef);
 ///
 /// [`Lua Debug Interface`]: https://www.lua.org/manual/5.4/manual.html#4.7
 #[derive(Clone, Debug)]
+#[non_exhaustive]
 pub struct FunctionInfo {
     /// A (reasonable) name of the function (`None` if the name cannot be found).
     pub name: Option<String>,
@@ -50,15 +51,16 @@ pub struct FunctionInfo {
     pub line_defined: Option<usize>,
     /// The line number where the definition of the function ends (not set by Luau).
     pub last_line_defined: Option<usize>,
-    /// Number of function parameters
+    /// The number of upvalues of the function.
+    pub num_upvalues: u8,
+    /// The number of parameters of the function (always 0 for C).
     #[cfg(any(not(any(feature = "lua51", feature = "luajit")), doc))]
-    pub num_params: usize,
-    /// True if function accepts variable args
+    #[cfg_attr(docsrs, doc(cfg(not(any(feature = "lua51", feature = "luajit")))))]
+    pub num_params: u8,
+    /// Whether the function is a variadic function (always true for C).
     #[cfg(any(not(any(feature = "lua51", feature = "luajit")), doc))]
+    #[cfg_attr(docsrs, doc(cfg(not(any(feature = "lua51", feature = "luajit")))))]
     pub is_vararg: bool,
-    /// Number of upvalues
-    #[cfg(any(not(feature = "luau"), doc))]
-    pub nups: usize,
 }
 
 /// Luau function coverage snapshot.
@@ -365,11 +367,16 @@ impl Function {
 
             let mut ar: ffi::lua_Debug = mem::zeroed();
             lua.push_ref(&self.0);
+
             #[cfg(not(feature = "luau"))]
             let res = ffi::lua_getinfo(state, cstr!(">Snu"), &mut ar);
+            #[cfg(not(feature = "luau"))]
+            mlua_assert!(res != 0, "lua_getinfo failed with `>Snu`");
+
             #[cfg(feature = "luau")]
-            let res = ffi::lua_getinfo(state, -1, cstr!("sn"), &mut ar);
-            mlua_assert!(res != 0, "lua_getinfo failed with `>Sn`");
+            let res = ffi::lua_getinfo(state, -1, cstr!("snau"), &mut ar);
+            #[cfg(feature = "luau")]
+            mlua_assert!(res != 0, "lua_getinfo failed with `snau`");
 
             FunctionInfo {
                 name: ptr_to_lossy_str(ar.name).map(|s| s.into_owned()),
@@ -391,12 +398,14 @@ impl Function {
                 last_line_defined: linenumber_to_usize(ar.lastlinedefined),
                 #[cfg(feature = "luau")]
                 last_line_defined: None,
+                #[cfg(not(feature = "luau"))]
+                num_upvalues: ar.nups as _,
+                #[cfg(feature = "luau")]
+                num_upvalues: ar.nupvals,
                 #[cfg(not(any(feature = "lua51", feature = "luajit")))]
-                num_params: ar.nparams as usize,
+                num_params: ar.nparams,
                 #[cfg(not(any(feature = "lua51", feature = "luajit")))]
                 is_vararg: ar.isvararg != 0,
-                #[cfg(not(feature = "luau"))]
-                nups: ar.nups as usize,
             }
         }
     }

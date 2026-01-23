@@ -194,6 +194,25 @@ fn test_function_info() -> Result<()> {
     assert_eq!(print_info.what, "C");
     assert_eq!(print_info.line_defined, None);
 
+    // Function with upvalues and params
+    #[cfg(not(any(feature = "lua51", feature = "luajit")))]
+    {
+        let func_with_upvalues = lua
+            .load(
+                r#"
+        local x, y = ...
+        return function(a, ...)
+            return a*x + y
+        end
+    "#,
+            )
+            .call::<Function>((10, 20))?;
+        let func_with_upvalues_info = func_with_upvalues.info();
+        assert_eq!(func_with_upvalues_info.num_upvalues, 2);
+        assert_eq!(func_with_upvalues_info.num_params, 1);
+        assert_eq!(func_with_upvalues_info.is_vararg, true);
+    }
+
     Ok(())
 }
 
