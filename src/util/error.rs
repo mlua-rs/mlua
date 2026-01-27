@@ -208,7 +208,7 @@ where
         F: FnOnce(*mut ffi::lua_State) -> R,
         R: Copy,
     {
-        let params = ffi::lua_touserdata(state, -1) as *mut Params<F, R>;
+        let params = ffi::lua_tolightuserdata(state, -1) as *mut Params<F, R>;
         ffi::lua_pop(state, 1);
 
         let f = (*params).function.take().unwrap();
@@ -239,7 +239,7 @@ where
 
     ffi::lua_pushlightuserdata(state, &mut params as *mut Params<F, R> as *mut c_void);
     let ret = ffi::lua_pcall(state, nargs + 1, nresults, stack_start + 1);
-    ffi::lua_remove(state, stack_start + 1);
+    ffi::lua_remove(state, stack_start + 1); // remove error handler
 
     if ret == ffi::LUA_OK {
         // `LUA_OK` is only returned when the `do_call` function has completed successfully, so

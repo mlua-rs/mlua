@@ -732,14 +732,14 @@ impl RawLua {
     ///
     /// Uses up to 2 stack spaces to push a single value, does not call `checkstack`.
     #[inline(always)]
-    pub(crate) unsafe fn push(&self, value: impl IntoLua) -> Result<()> {
+    pub unsafe fn push(&self, value: impl IntoLua) -> Result<()> {
         value.push_into_stack(self)
     }
 
     /// Pushes a `Value` (by reference) onto the Lua stack.
     ///
     /// Uses 2 stack spaces, does not call `checkstack`.
-    pub(crate) unsafe fn push_value(&self, value: &Value) -> Result<()> {
+    pub unsafe fn push_value(&self, value: &Value) -> Result<()> {
         let state = self.state();
         match value {
             Value::Nil => ffi::lua_pushnil(state),
@@ -773,7 +773,8 @@ impl RawLua {
     /// Pops a value from the Lua stack.
     ///
     /// Uses up to 1 stack spaces, does not call `checkstack`.
-    pub(crate) unsafe fn pop_value(&self) -> Value {
+    #[inline]
+    pub unsafe fn pop_value(&self) -> Value {
         let value = self.stack_value(-1, None);
         ffi::lua_pop(self.state(), 1);
         value
