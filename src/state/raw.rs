@@ -1219,7 +1219,10 @@ impl RawLua {
             Ok(type_id) => Ok(type_id),
             Err(Error::UserDataTypeMismatch) if ffi::lua_type(state, idx) != ffi::LUA_TUSERDATA => {
                 // Report `FromLuaConversionError` instead
-                let idx_type_name = CStr::from_ptr(ffi::luaL_typename(state, idx));
+                // In Luau `luaL_typename` return heap-allocated string that is valid only for
+                // the `state` lifetime.
+                // `lua_typename` is used instead to get a truly static string.
+                let idx_type_name = CStr::from_ptr(ffi::lua_typename(state, ffi::lua_type(state, idx)));
                 let idx_type_name = idx_type_name.to_str().unwrap();
                 let message = format!("expected userdata of type '{}'", short_type_name::<T>());
                 Err(Error::from_lua_conversion(idx_type_name, "userdata", message))

@@ -1211,7 +1211,8 @@ impl<L: FromLua, R: FromLua> FromLua for Either<L, R> {
             Err(_) => match R::from_stack(idx, lua).map(Either::Right) {
                 Ok(r) => Ok(r),
                 Err(_) => {
-                    let value_type_name = CStr::from_ptr(ffi::luaL_typename(lua.state(), idx));
+                    let value_type_name =
+                        CStr::from_ptr(ffi::lua_typename(lua.state(), ffi::lua_type(lua.state(), idx)));
                     Err(Error::FromLuaConversionError {
                         from: value_type_name.to_str().unwrap(),
                         to: Self::type_name(),
