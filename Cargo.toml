@@ -1,8 +1,8 @@
 [package]
 name = "mlua"
-version = "0.11.5" # remember to update mlua_derive
+version = "0.11.6" # remember to update mlua_derive
 authors = ["Aleksandr Orlenko <zxteam@pm.me>", "kyren <catherine@kyju.org>"]
-rust-version = "1.80.0"
+rust-version = "1.85.0"
 edition = "2021"
 repository = "https://github.com/mlua-rs/mlua"
 documentation = "https://docs.rs/mlua"
@@ -64,7 +64,7 @@ anyhow = { version = "1.0", optional = true }
 rustversion = "1.0"
 libc = "0.2"
 
-ffi = { package = "mlua-sys", version = "0.9.0", path = "mlua-sys" }
+ffi = { package = "mlua-sys", version = "0.10.0", path = "mlua-sys" }
 
 [dev-dependencies]
 trybuild = "1.0"
