@@ -1,3 +1,10 @@
+## v0.11.6 (Jan 27, 2026)
+
+- Added Lua 5.5 support (`lua55` feature flag)
+- Luau updated to 0.705+
+- Added `AnyUserData::is_proxy` method to check if userdata is a proxy
+- Added `num_params`, `num_upvalues`, `is_vararg` to `FunctionInfo`
+
 ## v0.11.5 (Nov 22, 2025)
 
 - Luau updated to 0.701
