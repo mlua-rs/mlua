@@ -337,10 +337,11 @@ impl Lua {
         R::from_stack_multi(nresults, &lua)
     }
 
-    /// Runs callback with the inner RawLua value. It can be used to manually push and get values on the stack.
+    /// Runs callback with the inner RawLua value. It can be used to manually push and get values on
+    /// the stack.
     ///
     /// This function is safe because all unsafe actions with RawLua can only be done with unsafe
-    ///     
+    ///
     /// # Example
     /// ```
     /// # use mlua::{Lua, Result, FromLua, IntoLua};
