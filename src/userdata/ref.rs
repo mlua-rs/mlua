@@ -446,11 +446,11 @@ impl<T> DerefMut for UserDataRefMutInner<T> {
 fn try_value_to_userdata<T>(value: Value) -> Result<AnyUserData> {
     match value {
         Value::UserData(ud) => Ok(ud),
-        _ => Err(Error::FromLuaConversionError {
-            from: value.type_name(),
-            to: "userdata".to_string(),
-            message: Some(format!("expected userdata of type {}", type_name::<T>())),
-        }),
+        _ => Err(Error::from_lua_conversion(
+            value.type_name(),
+            "userdata",
+            format!("expected userdata of type {}", type_name::<T>()),
+        )),
     }
 }
 

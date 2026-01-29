@@ -382,6 +382,7 @@ impl Error {
         }
     }
 
+    #[inline]
     pub(crate) fn from_lua_conversion(
         from: &'static str,
         to: impl ToString,

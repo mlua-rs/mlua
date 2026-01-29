@@ -307,11 +307,8 @@ impl<'a> TryFrom<&'a LuaString> for BorrowedStr<'a> {
     #[inline]
     fn try_from(value: &'a LuaString) -> Result<Self> {
         let BorrowedBytes { buf, borrow, _lua } = BorrowedBytes::from(value);
-        let buf = str::from_utf8(buf).map_err(|e| Error::FromLuaConversionError {
-            from: "string",
-            to: "&str".to_string(),
-            message: Some(e.to_string()),
-        })?;
+        let buf =
+            str::from_utf8(buf).map_err(|e| Error::from_lua_conversion("string", "&str", e.to_string()))?;
         Ok(Self { buf, borrow, _lua })
     }
 }
