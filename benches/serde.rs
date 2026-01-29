@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
+use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
 
 use mlua::prelude::*;
 

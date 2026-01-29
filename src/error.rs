@@ -225,7 +225,7 @@ impl fmt::Display for Error {
             }
             Error::SafetyError(msg) => {
                 write!(fmt, "safety error: {msg}")
-            },
+            }
             Error::MemoryControlNotAvailable => {
                 write!(fmt, "memory control is not available")
             }
@@ -238,10 +238,7 @@ impl fmt::Display for Error {
                 fmt,
                 "out of Lua stack, too many arguments to a Lua function or too many return values from a callback"
             ),
-            Error::BindError => write!(
-                fmt,
-                "too many arguments to Function::bind"
-            ),
+            Error::BindError => write!(fmt, "too many arguments to Function::bind"),
             Error::BadArgument { to, pos, name, cause } => {
                 if let Some(name) = name {
                     write!(fmt, "bad argument `{name}`")?;
@@ -252,7 +249,7 @@ impl fmt::Display for Error {
                     write!(fmt, " to `{to}`")?;
                 }
                 write!(fmt, ": {cause}")
-            },
+            }
             Error::ToLuaConversionError { from, to, message } => {
                 write!(fmt, "error converting {from} to Lua {to}")?;
                 match message {
@@ -273,7 +270,11 @@ impl fmt::Display for Error {
             Error::UserDataBorrowError => write!(fmt, "error borrowing userdata"),
             Error::UserDataBorrowMutError => write!(fmt, "error mutably borrowing userdata"),
             Error::MetaMethodRestricted(method) => write!(fmt, "metamethod {method} is restricted"),
-            Error::MetaMethodTypeError { method, type_name, message } => {
+            Error::MetaMethodTypeError {
+                method,
+                type_name,
+                message,
+            } => {
                 write!(fmt, "metamethod {method} has unsupported type {type_name}")?;
                 match message {
                     None => Ok(()),
@@ -286,7 +287,11 @@ impl fmt::Display for Error {
             Error::CallbackError { cause, traceback } => {
                 // Trace errors down to the root
                 let (mut cause, mut full_traceback) = (cause, None);
-                while let Error::CallbackError { cause: cause2, traceback: traceback2 } = &**cause {
+                while let Error::CallbackError {
+                    cause: cause2,
+                    traceback: traceback2,
+                } = &**cause
+                {
                     cause = cause2;
                     full_traceback = Some(traceback2);
                 }
@@ -312,11 +317,11 @@ impl fmt::Display for Error {
             #[cfg(feature = "serde")]
             Error::SerializeError(err) => {
                 write!(fmt, "serialize error: {err}")
-            },
+            }
             #[cfg(feature = "serde")]
             Error::DeserializeError(err) => {
                 write!(fmt, "deserialize error: {err}")
-            },
+            }
             Error::ExternalError(err) => err.fmt(fmt),
             Error::WithContext { context, cause } => {
                 writeln!(fmt, "{context}")?;

@@ -196,7 +196,7 @@ fn unquote_string<'a>(path: &'a str, chars: &mut Peekable<CharIndices<'a>>) -> R
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_path, PathKey};
+    use super::{PathKey, parse_path};
 
     #[test]
     fn test_parse_path() {

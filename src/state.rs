@@ -24,7 +24,7 @@ use crate::types::{
     ReentrantMutexGuard, RegistryKey, VmState, XRc, XWeak,
 };
 use crate::userdata::{AnyUserData, UserData, UserDataProxy, UserDataRegistry, UserDataStorage};
-use crate::util::{assert_stack, check_stack, protect_lua_closure, push_string, rawset_field, StackGuard};
+use crate::util::{StackGuard, assert_stack, check_stack, protect_lua_closure, push_string, rawset_field};
 use crate::value::{Nil, Value};
 
 #[cfg(not(feature = "luau"))]
@@ -1127,7 +1127,7 @@ impl Lua {
             #[cfg(not(feature = "luau"))]
             let _ = step_size; // Ignored
 
-            return GCMode::Incremental;
+            GCMode::Incremental
         }
 
         #[cfg(feature = "lua55")]
@@ -1205,10 +1205,10 @@ impl Lua {
     #[doc(hidden)]
     #[allow(clippy::result_unit_err)]
     pub fn set_fflag(name: &str, enabled: bool) -> StdResult<(), ()> {
-        if let Ok(name) = std::ffi::CString::new(name) {
-            if unsafe { ffi::luau_setfflag(name.as_ptr(), enabled as c_int) != 0 } {
-                return Ok(());
-            }
+        if let Ok(name) = std::ffi::CString::new(name)
+            && unsafe { ffi::luau_setfflag(name.as_ptr(), enabled as c_int) != 0 }
+        {
+            return Ok(());
         }
         Err(())
     }
@@ -1785,11 +1785,7 @@ impl Lua {
                 lua.push_value(&v)?;
                 let mut isint = 0;
                 let i = ffi::lua_tointegerx(state, -1, &mut isint);
-                if isint == 0 {
-                    None
-                } else {
-                    Some(i)
-                }
+                if isint == 0 { None } else { Some(i) }
             },
         })
     }
@@ -1811,11 +1807,7 @@ impl Lua {
                 lua.push_value(&v)?;
                 let mut isnum = 0;
                 let n = ffi::lua_tonumberx(state, -1, &mut isnum);
-                if isnum == 0 {
-                    None
-                } else {
-                    Some(n)
-                }
+                if isnum == 0 { None } else { Some(n) }
             },
         })
     }

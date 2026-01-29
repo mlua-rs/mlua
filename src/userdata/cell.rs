@@ -173,10 +173,10 @@ pub(crate) enum ScopedUserDataVariant<T> {
 impl<T> Drop for ScopedUserDataVariant<T> {
     #[inline]
     fn drop(&mut self) {
-        if let Self::Boxed(value) = self {
-            if let Ok(value) = value.try_borrow_mut() {
-                unsafe { drop(Box::from_raw(*value)) };
-            }
+        if let Self::Boxed(value) = self
+            && let Ok(value) = value.try_borrow_mut()
+        {
+            unsafe { drop(Box::from_raw(*value)) }
         }
     }
 }

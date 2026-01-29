@@ -6,16 +6,16 @@ use std::{ptr, slice, str};
 use crate::error::{Error, Result};
 
 pub(crate) use error::{
-    error_traceback, error_traceback_thread, init_error_registry, pop_error, protect_lua_call,
-    protect_lua_closure, WrappedFailure,
+    WrappedFailure, error_traceback, error_traceback_thread, init_error_registry, pop_error,
+    protect_lua_call, protect_lua_closure,
 };
 pub(crate) use path::parse_path as parse_lookup_path;
 pub(crate) use short_names::short_type_name;
 pub(crate) use types::TypeKey;
 pub(crate) use userdata::{
-    get_destructed_userdata_metatable, get_internal_metatable, get_internal_userdata, get_userdata,
-    init_internal_metatable, push_internal_userdata, push_userdata, take_userdata,
-    DESTRUCTED_USERDATA_METATABLE,
+    DESTRUCTED_USERDATA_METATABLE, get_destructed_userdata_metatable, get_internal_metatable,
+    get_internal_userdata, get_userdata, init_internal_metatable, push_internal_userdata, push_userdata,
+    take_userdata,
 };
 
 #[cfg(not(feature = "luau"))]
@@ -264,11 +264,7 @@ pub(crate) unsafe fn get_main_state(state: *mut ffi::lua_State) -> Option<*mut f
         // Check the current state first
         let is_main_state = ffi::lua_pushthread(state) == 1;
         ffi::lua_pop(state, 1);
-        if is_main_state {
-            Some(state)
-        } else {
-            None
-        }
+        if is_main_state { Some(state) } else { None }
     }
     #[cfg(feature = "luau")]
     Some(ffi::lua_mainthread(state))

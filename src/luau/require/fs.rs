@@ -42,10 +42,10 @@ impl TextRequirer {
     }
 
     fn normalize_chunk_name(chunk_name: &str) -> &str {
-        if let Some((path, line)) = chunk_name.rsplit_once(':') {
-            if line.parse::<u32>().is_ok() {
-                return path;
-            }
+        if let Some((path, line)) = chunk_name.rsplit_once(':')
+            && line.parse::<u32>().is_ok()
+        {
+            return path;
         }
         chunk_name
     }

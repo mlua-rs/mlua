@@ -66,7 +66,6 @@
 // warnings at all.
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![cfg_attr(not(send), allow(clippy::arc_with_non_send_sync))]
-#![allow(clippy::ptr_eq)]
 #![allow(unsafe_op_in_unsafe_fn)]
 
 #[macro_use]
@@ -143,7 +142,7 @@ pub use crate::{thread::AsyncThread, traits::LuaNativeAsyncFn};
 #[cfg(feature = "serde")]
 #[doc(inline)]
 pub use crate::{
-    serde::{de::Options as DeserializeOptions, ser::Options as SerializeOptions, LuaSerdeExt},
+    serde::{LuaSerdeExt, de::Options as DeserializeOptions, ser::Options as SerializeOptions},
     value::SerializableValue,
 };
 

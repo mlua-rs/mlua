@@ -13,7 +13,7 @@ use crate::table::Table;
 use crate::thread::Thread;
 use crate::types::{Integer, LightUserData, Number, ValueRef};
 use crate::userdata::AnyUserData;
-use crate::util::{check_stack, StackGuard};
+use crate::util::{StackGuard, check_stack};
 
 #[cfg(feature = "serde")]
 use {

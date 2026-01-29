@@ -1,4 +1,4 @@
-use mlua::{chunk, Lua, MetaMethod, Result, UserData};
+use mlua::{Lua, MetaMethod, Result, UserData, chunk};
 
 #[derive(Default)]
 struct Rectangle {

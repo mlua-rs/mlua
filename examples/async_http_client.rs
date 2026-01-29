@@ -5,7 +5,7 @@ use hyper::body::Incoming;
 use hyper_util::client::legacy::Client as HyperClient;
 use hyper_util::rt::TokioExecutor;
 
-use mlua::{chunk, ExternalResult, Lua, Result, UserData, UserDataMethods};
+use mlua::{ExternalResult, Lua, Result, UserData, UserDataMethods, chunk};
 
 struct BodyReader(Incoming);
 

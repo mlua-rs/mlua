@@ -4,7 +4,7 @@ use std::net::SocketAddr;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 
-use mlua::{chunk, BString, Function, Lua, UserData, UserDataMethods};
+use mlua::{BString, Function, Lua, UserData, UserDataMethods, chunk};
 
 struct LuaTcpStream(TcpStream);
 

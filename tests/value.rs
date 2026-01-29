@@ -259,9 +259,11 @@ fn test_value_conversions() -> Result<()> {
     assert!(Value::Table(lua.create_table()?).is_table());
     assert!(Value::Table(lua.create_table()?).as_table().is_some());
     assert!(Value::Function(lua.create_function(|_, ()| Ok(())).unwrap()).is_function());
-    assert!(Value::Function(lua.create_function(|_, ()| Ok(())).unwrap())
-        .as_function()
-        .is_some());
+    assert!(
+        Value::Function(lua.create_function(|_, ()| Ok(())).unwrap())
+            .as_function()
+            .is_some()
+    );
     assert!(Value::Thread(lua.create_thread(lua.load("function() end").eval()?)?).is_thread());
     assert!(
         Value::Thread(lua.create_thread(lua.load("function() end").eval()?)?)

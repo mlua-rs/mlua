@@ -1,4 +1,4 @@
-use std::collections::{vec_deque, VecDeque};
+use std::collections::{VecDeque, vec_deque};
 use std::iter::FromIterator;
 use std::mem;
 use std::ops::{Deref, DerefMut};

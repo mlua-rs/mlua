@@ -1,4 +1,4 @@
-use std::any::{type_name, TypeId};
+use std::any::{TypeId, type_name};
 use std::ops::{Deref, DerefMut};
 use std::os::raw::c_int;
 use std::{fmt, mem};

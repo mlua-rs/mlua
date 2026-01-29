@@ -477,11 +477,11 @@ impl Compiler {
             options.mutableGlobals = mutable_globals_ptr;
             options.userdataTypes = userdata_types_ptr;
             options.librariesWithKnownMembers = libraries_with_known_members_ptr;
-            if let Some(map) = self.library_constants.as_ref() {
-                if !self.libraries_with_known_members.is_empty() {
-                    LIBRARY_MEMBER_CONSTANT_MAP.with_borrow_mut(|gmap| *gmap = map.clone());
-                    options.libraryMemberConstantCallback = Some(library_member_constant_callback);
-                }
+            if let Some(map) = self.library_constants.as_ref()
+                && !self.libraries_with_known_members.is_empty()
+            {
+                LIBRARY_MEMBER_CONSTANT_MAP.with_borrow_mut(|gmap| *gmap = map.clone());
+                options.libraryMemberConstantCallback = Some(library_member_constant_callback);
             }
             options.disabledBuiltins = disabled_builtins_ptr;
             ffi::luau_compile(source.as_ref(), options)
@@ -662,19 +662,19 @@ impl Chunk<'_> {
     ///
     /// It does nothing if the chunk is already binary or invalid.
     fn compile(&mut self) {
-        if let Ok(ref source) = self.source {
-            if self.detect_mode() == ChunkMode::Text {
-                #[cfg(feature = "luau")]
-                if let Ok(data) = self.compiler.get_or_insert_with(Default::default).compile(source) {
-                    self.source = Ok(Cow::Owned(data));
-                    self.mode = Some(ChunkMode::Binary);
-                }
-                #[cfg(not(feature = "luau"))]
-                if let Ok(func) = self.lua.lock().load_chunk(None, None, None, source.as_ref()) {
-                    let data = func.dump(false);
-                    self.source = Ok(Cow::Owned(data));
-                    self.mode = Some(ChunkMode::Binary);
-                }
+        if let Ok(ref source) = self.source
+            && self.detect_mode() == ChunkMode::Text
+        {
+            #[cfg(feature = "luau")]
+            if let Ok(data) = self.compiler.get_or_insert_with(Default::default).compile(source) {
+                self.source = Ok(Cow::Owned(data));
+                self.mode = Some(ChunkMode::Binary);
+            }
+            #[cfg(not(feature = "luau"))]
+            if let Ok(func) = self.lua.lock().load_chunk(None, None, None, source.as_ref()) {
+                let data = func.dump(false);
+                self.source = Ok(Cow::Owned(data));
+                self.mode = Some(ChunkMode::Binary);
             }
         }
     }
@@ -687,33 +687,33 @@ impl Chunk<'_> {
 
         // Try to fetch compiled chunk from cache
         let mut text_source = None;
-        if let Ok(ref source) = self.source {
-            if self.detect_mode() == ChunkMode::Text {
-                let lua = self.lua.lock();
-                if let Some(cache) = lua.priv_app_data_ref::<ChunksCache>() {
-                    if let Some(data) = cache.0.get(source.as_ref()) {
-                        self.source = Ok(Cow::Owned(data.clone()));
-                        self.mode = Some(ChunkMode::Binary);
-                        return self;
-                    }
-                }
-                text_source = Some(source.as_ref().to_vec());
+        if let Ok(ref source) = self.source
+            && self.detect_mode() == ChunkMode::Text
+        {
+            let lua = self.lua.lock();
+            if let Some(cache) = lua.priv_app_data_ref::<ChunksCache>()
+                && let Some(data) = cache.0.get(source.as_ref())
+            {
+                self.source = Ok(Cow::Owned(data.clone()));
+                self.mode = Some(ChunkMode::Binary);
+                return self;
             }
+            text_source = Some(source.as_ref().to_vec());
         }
 
         // Compile and cache the chunk
         if let Some(text_source) = text_source {
             self.compile();
-            if let Ok(ref binary_source) = self.source {
-                if self.detect_mode() == ChunkMode::Binary {
-                    let lua = self.lua.lock();
-                    if let Some(mut cache) = lua.priv_app_data_mut::<ChunksCache>() {
-                        cache.0.insert(text_source, binary_source.to_vec());
-                    } else {
-                        let mut cache = ChunksCache(HashMap::new());
-                        cache.0.insert(text_source, binary_source.to_vec());
-                        lua.set_priv_app_data(cache);
-                    };
+            if let Ok(ref binary_source) = self.source
+                && self.detect_mode() == ChunkMode::Binary
+            {
+                let lua = self.lua.lock();
+                if let Some(mut cache) = lua.priv_app_data_mut::<ChunksCache>() {
+                    cache.0.insert(text_source, binary_source.to_vec());
+                } else {
+                    let mut cache = ChunksCache(HashMap::new());
+                    cache.0.insert(text_source, binary_source.to_vec());
+                    lua.set_priv_app_data(cache);
                 }
             }
         }

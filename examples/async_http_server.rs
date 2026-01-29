@@ -11,7 +11,7 @@ use hyper::{Request, Response};
 use hyper_util::rt::TokioIo;
 use tokio::net::TcpListener;
 
-use mlua::{chunk, Error as LuaError, Function, Lua, String as LuaString, Table, UserData, UserDataMethods};
+use mlua::{Error as LuaError, Function, Lua, String as LuaString, Table, UserData, UserDataMethods, chunk};
 
 /// Wrapper around incoming request that implements UserData
 struct LuaRequest(SocketAddr, Request<Incoming>);

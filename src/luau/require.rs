@@ -8,7 +8,7 @@ use std::{fmt, mem, ptr};
 
 use crate::error::{Error, Result};
 use crate::function::Function;
-use crate::state::{callback_error_ext, Lua};
+use crate::state::{Lua, callback_error_ext};
 use crate::table::Table;
 use crate::types::MaybeSend;
 

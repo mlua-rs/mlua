@@ -5,7 +5,7 @@ use std::ptr;
 use crate::chunk::ChunkMode;
 use crate::error::{Error, Result};
 use crate::function::Function;
-use crate::state::{callback_error_ext, ExtraData, Lua};
+use crate::state::{ExtraData, Lua, callback_error_ext};
 use crate::traits::{FromLuaMulti, IntoLua};
 use crate::types::MaybeSend;
 

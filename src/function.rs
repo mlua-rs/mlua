@@ -8,7 +8,7 @@ use crate::table::Table;
 use crate::traits::{FromLuaMulti, IntoLua, IntoLuaMulti, LuaNativeFn, LuaNativeFnMut};
 use crate::types::{Callback, LuaType, MaybeSend, ValueRef};
 use crate::util::{
-    assert_stack, check_stack, linenumber_to_usize, pop_error, ptr_to_lossy_str, ptr_to_str, StackGuard,
+    StackGuard, assert_stack, check_stack, linenumber_to_usize, pop_error, ptr_to_lossy_str, ptr_to_str,
 };
 use crate::value::Value;
 
@@ -18,7 +18,7 @@ use {
     crate::traits::LuaNativeAsyncFn,
     crate::types::AsyncCallback,
     std::future::{self, Future},
-    std::pin::{pin, Pin},
+    std::pin::{Pin, pin},
     std::task::{Context, Poll},
 };
 

@@ -3,7 +3,7 @@ use std::{mem, ptr};
 
 use crate::error::Result;
 use crate::userdata::collect_userdata;
-use crate::util::{check_stack, get_metatable_ptr, push_table, rawset_field, TypeKey};
+use crate::util::{TypeKey, check_stack, get_metatable_ptr, push_table, rawset_field};
 
 // Pushes the userdata and attaches a metatable with __gc method.
 // Internally uses 3 stack spaces, does not call checkstack.

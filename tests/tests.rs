@@ -1,14 +1,14 @@
 use std::collections::HashMap;
 #[cfg(not(target_arch = "wasm32"))]
 use std::iter::FromIterator;
-use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::string::String as StdString;
 use std::sync::Arc;
 use std::{error, f32, f64, fmt};
 
 use mlua::{
-    ffi, ChunkMode, Error, ExternalError, Function, Lua, LuaOptions, Nil, Result, StdLib, String, Table,
-    UserData, Value, Variadic,
+    ChunkMode, Error, ExternalError, Function, Lua, LuaOptions, Nil, Result, StdLib, String, Table, UserData,
+    Value, Variadic, ffi,
 };
 
 #[test]
@@ -684,10 +684,12 @@ fn test_pcall_xpcall() -> Result<()> {
     ))]
     assert_eq!(globals.get::<std::string::String>("xpcall_error")?, "testerror");
     #[cfg(feature = "lua51")]
-    assert!(globals
-        .get::<String>("xpcall_error")?
-        .to_str()?
-        .ends_with(": testerror"));
+    assert!(
+        globals
+            .get::<String>("xpcall_error")?
+            .to_str()?
+            .ends_with(": testerror")
+    );
 
     // Make sure that weird xpcall error recursion at least doesn't cause unsafety or panics.
     lua.load(
@@ -1070,10 +1072,11 @@ fn test_ref_stack_exhaustion() {
         Ok(())
     })) {
         Ok(_) => panic!("no panic was detected"),
-        Err(p) => assert!(p
-            .downcast::<StdString>()
-            .unwrap()
-            .starts_with("cannot create a Lua reference, out of auxiliary stack space")),
+        Err(p) => assert!(
+            p.downcast::<StdString>()
+                .unwrap()
+                .starts_with("cannot create a Lua reference, out of auxiliary stack space")
+        ),
     }
 }
 

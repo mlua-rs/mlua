@@ -6,7 +6,7 @@ use crate::function::Function;
 use crate::state::RawLua;
 use crate::traits::{FromLuaMulti, IntoLuaMulti};
 use crate::types::{LuaType, ValueRef};
-use crate::util::{check_stack, error_traceback_thread, pop_error, StackGuard};
+use crate::util::{StackGuard, check_stack, error_traceback_thread, pop_error};
 
 #[cfg(not(feature = "luau"))]
 use crate::{
@@ -523,6 +523,7 @@ impl<R> AsyncThread<R> {
 #[cfg(feature = "async")]
 impl<R> Drop for AsyncThread<R> {
     fn drop(&mut self) {
+        #[allow(clippy::collapsible_if)]
         if self.recycle {
             if let Some(lua) = self.thread.0.lua.try_lock() {
                 unsafe {

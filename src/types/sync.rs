@@ -69,7 +69,7 @@ mod inner {
 
         #[inline(always)]
         fn deref(&self) -> &Self::Target {
-            &self.0 .0
+            &self.0.0
         }
     }
 }

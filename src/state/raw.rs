@@ -10,7 +10,7 @@ use std::sync::Arc;
 use crate::chunk::ChunkMode;
 use crate::error::{Error, Result};
 use crate::function::Function;
-use crate::memory::{MemoryState, ALLOCATOR};
+use crate::memory::{ALLOCATOR, MemoryState};
 use crate::state::util::callback_error_ext;
 use crate::stdlib::StdLib;
 use crate::string::String;
@@ -22,14 +22,14 @@ use crate::types::{
     LuaType, MaybeSend, ReentrantMutex, RegistryKey, ValueRef, XRc,
 };
 use crate::userdata::{
-    init_userdata_metatable, AnyUserData, MetaMethod, RawUserDataRegistry, UserData, UserDataRegistry,
-    UserDataStorage,
+    AnyUserData, MetaMethod, RawUserDataRegistry, UserData, UserDataRegistry, UserDataStorage,
+    init_userdata_metatable,
 };
 use crate::util::{
-    assert_stack, check_stack, get_destructed_userdata_metatable, get_internal_userdata, get_main_state,
-    get_metatable_ptr, get_userdata, init_error_registry, init_internal_metatable, pop_error,
-    push_internal_userdata, push_string, push_table, push_userdata, rawset_field, safe_pcall, safe_xpcall,
-    short_type_name, StackGuard, WrappedFailure,
+    StackGuard, WrappedFailure, assert_stack, check_stack, get_destructed_userdata_metatable,
+    get_internal_userdata, get_main_state, get_metatable_ptr, get_userdata, init_error_registry,
+    init_internal_metatable, pop_error, push_internal_userdata, push_string, push_table, push_userdata,
+    rawset_field, safe_pcall, safe_xpcall, short_type_name,
 };
 use crate::value::{Nil, Value};
 
@@ -681,10 +681,10 @@ impl RawLua {
     #[cfg(feature = "async")]
     pub(crate) unsafe fn recycle_thread(&self, thread: &mut Thread) {
         let extra = &mut *self.extra.get();
-        if extra.thread_pool.len() < extra.thread_pool.capacity() {
-            if let Some(index) = thread.0.index_count.take() {
-                extra.thread_pool.push(index);
-            }
+        if extra.thread_pool.len() < extra.thread_pool.capacity()
+            && let Some(index) = thread.0.index_count.take()
+        {
+            extra.thread_pool.push(index);
         }
     }
 

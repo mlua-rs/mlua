@@ -1,6 +1,6 @@
 //! Serialize a Rust data structure into Lua value.
 
-use serde::{ser, Serialize};
+use serde::{Serialize, ser};
 
 use super::LuaSerdeExt;
 use crate::error::{Error, Result};
@@ -531,10 +531,10 @@ impl ser::SerializeStruct for SerializeStruct<'_> {
             Some(table @ Value::Table(_)) => Ok(table),
             Some(value @ Value::String(_)) if self.options.detect_serde_json_arbitrary_precision => {
                 let number_s = value.to_string()?;
-                if number_s.contains(['.', 'e', 'E']) {
-                    if let Ok(number) = number_s.parse().map(Value::Number) {
-                        return Ok(number);
-                    }
+                if number_s.contains(['.', 'e', 'E'])
+                    && let Ok(number) = number_s.parse().map(Value::Number)
+                {
+                    return Ok(number);
                 }
                 Ok(number_s
                     .parse()

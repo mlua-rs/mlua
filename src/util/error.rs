@@ -2,15 +2,15 @@ use std::any::Any;
 use std::fmt::Write as _;
 use std::mem::MaybeUninit;
 use std::os::raw::{c_int, c_void};
-use std::panic::{catch_unwind, resume_unwind, AssertUnwindSafe};
+use std::panic::{AssertUnwindSafe, catch_unwind, resume_unwind};
 use std::ptr;
 use std::sync::Arc;
 
 use crate::error::{Error, Result};
 use crate::memory::MemoryState;
 use crate::util::{
-    check_stack, get_internal_userdata, init_internal_metatable, push_internal_userdata, push_string,
-    push_table, rawset_field, to_string, TypeKey, DESTRUCTED_USERDATA_METATABLE,
+    DESTRUCTED_USERDATA_METATABLE, TypeKey, check_stack, get_internal_userdata, init_internal_metatable,
+    push_internal_userdata, push_string, push_table, rawset_field, to_string,
 };
 
 static WRAPPED_FAILURE_TYPE_KEY: u8 = 0;

@@ -250,7 +250,7 @@ impl<'de> serde::Deserializer<'de> for Deserializer {
                         return Err(de::Error::invalid_value(
                             de::Unexpected::Map,
                             &"map with a single key",
-                        ))
+                        ));
                     }
                 };
 

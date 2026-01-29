@@ -8,7 +8,7 @@ use crate::state::{Lua, LuaGuard, RawLua};
 use crate::traits::{FromLuaMulti, IntoLuaMulti};
 use crate::types::{Callback, CallbackUpvalue, ScopedCallback, ValueRef};
 use crate::userdata::{AnyUserData, UserData, UserDataRegistry, UserDataStorage};
-use crate::util::{self, check_stack, get_metatable_ptr, get_userdata, take_userdata, StackGuard};
+use crate::util::{self, StackGuard, check_stack, get_metatable_ptr, get_userdata, take_userdata};
 
 /// Constructed by the [`Lua::scope`] method, allows temporarily creating Lua userdata and
 /// callbacks that are not required to be `Send` or `'static`.

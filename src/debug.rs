@@ -5,7 +5,7 @@ use ffi::{lua_Debug, lua_State};
 
 use crate::function::Function;
 use crate::state::RawLua;
-use crate::util::{assert_stack, linenumber_to_usize, ptr_to_lossy_str, ptr_to_str, StackGuard};
+use crate::util::{StackGuard, assert_stack, linenumber_to_usize, ptr_to_lossy_str, ptr_to_str};
 
 /// Contains information about currently executing Lua code.
 ///

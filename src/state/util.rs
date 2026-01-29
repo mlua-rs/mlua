@@ -1,11 +1,11 @@
 use std::os::raw::c_int;
-use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::ptr;
 use std::sync::Arc;
 
 use crate::error::{Error, Result};
 use crate::state::{ExtraData, RawLua};
-use crate::util::{self, get_internal_metatable, WrappedFailure};
+use crate::util::{self, WrappedFailure, get_internal_metatable};
 
 struct StateGuard<'a>(&'a RawLua, *mut ffi::lua_State);
 

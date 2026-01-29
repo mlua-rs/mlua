@@ -708,9 +708,10 @@ fn test_either_from_lua() -> Result<()> {
                 },
                 err => panic!("expected `Error::BadArgument`, got {err:?}"),
             }
-            assert!(err
-                .to_string()
-                .starts_with("bad argument #1: error converting Lua string to Either<i32, Table>"),);
+            assert!(
+                err.to_string()
+                    .starts_with("bad argument #1: error converting Lua string to Either<i32, Table>"),
+            );
         }
         err => panic!("expected `Error::CallbackError`, got {err:?}"),
     }
@@ -736,15 +737,18 @@ fn test_char_from_lua() -> Result<()> {
     assert_eq!(lua.convert::<char>("A")?, 'A');
     assert_eq!(lua.convert::<char>(65)?, 'A');
     assert_eq!(lua.convert::<char>(128175)?, '💯');
-    assert!(lua
-        .convert::<char>(5456324)
-        .is_err_and(|e| e.to_string().contains("integer out of range")));
-    assert!(lua
-        .convert::<char>("hello")
-        .is_err_and(|e| e.to_string().contains("expected string to have exactly one char")));
-    assert!(lua
-        .convert::<char>(HashMap::<String, String>::new())
-        .is_err_and(|e| e.to_string().contains("expected string or integer")));
+    assert!(
+        lua.convert::<char>(5456324)
+            .is_err_and(|e| e.to_string().contains("integer out of range"))
+    );
+    assert!(
+        lua.convert::<char>("hello")
+            .is_err_and(|e| e.to_string().contains("expected string to have exactly one char"))
+    );
+    assert!(
+        lua.convert::<char>(HashMap::<String, String>::new())
+            .is_err_and(|e| e.to_string().contains("expected string or integer"))
+    );
 
     Ok(())
 }

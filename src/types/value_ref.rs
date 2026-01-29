@@ -55,10 +55,10 @@ impl Drop for ValueRef {
         if let Some(ValueRefIndex(index)) = self.index_count.take() {
             // It's guaranteed that the inner value returns exactly once.
             // This means in particular that the value is not dropped.
-            if XRc::into_inner(index).is_some() {
-                if let Some(lua) = self.lua.try_lock() {
-                    unsafe { lua.drop_ref(self) };
-                }
+            if XRc::into_inner(index).is_some()
+                && let Some(lua) = self.lua.try_lock()
+            {
+                unsafe { lua.drop_ref(self) }
             }
         }
     }

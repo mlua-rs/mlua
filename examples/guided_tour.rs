@@ -1,7 +1,7 @@
 use std::f32;
 use std::iter::FromIterator;
 
-use mlua::{chunk, FromLua, Function, Lua, MetaMethod, Result, UserData, UserDataMethods, Value, Variadic};
+use mlua::{FromLua, Function, Lua, MetaMethod, Result, UserData, UserDataMethods, Value, Variadic, chunk};
 
 fn main() -> Result<()> {
     // You can create a new Lua state with `Lua::new()`. This loads the default Lua std library

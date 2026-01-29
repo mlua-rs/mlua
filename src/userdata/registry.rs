@@ -11,8 +11,8 @@ use crate::state::{Lua, LuaGuard};
 use crate::traits::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti};
 use crate::types::{Callback, MaybeSend};
 use crate::userdata::{
-    borrow_userdata_scoped, borrow_userdata_scoped_mut, AnyUserData, MetaMethod, TypeIdHints, UserData,
-    UserDataFields, UserDataMethods, UserDataStorage,
+    AnyUserData, MetaMethod, TypeIdHints, UserData, UserDataFields, UserDataMethods, UserDataStorage,
+    borrow_userdata_scoped, borrow_userdata_scoped_mut,
 };
 use crate::util::short_type_name;
 use crate::value::Value;
@@ -368,7 +368,7 @@ impl<T> UserDataRegistry<T> {
                         method: name.to_string(),
                         type_name: value.type_name(),
                         message: Some("expected nil, table or function".to_string()),
-                    })
+                    });
                 }
             }
         }

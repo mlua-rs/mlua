@@ -291,8 +291,8 @@ fn test_gc_userdata() -> Result<()> {
     let lua = Lua::new();
     lua.globals().set("userdata", MyUserdata { id: 123 })?;
 
-    assert!(lua
-        .load(
+    assert!(
+        lua.load(
             r#"
             local tbl = setmetatable({
                 userdata = userdata
@@ -308,7 +308,8 @@ fn test_gc_userdata() -> Result<()> {
         "#
         )
         .exec()
-        .is_err());
+        .is_err()
+    );
 
     Ok(())
 }

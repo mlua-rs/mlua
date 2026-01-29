@@ -97,7 +97,7 @@ struct BufferCursor(Buffer, usize);
 
 impl io::Read for BufferCursor {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        let lua = self.0 .0.lua.lock();
+        let lua = self.0.0.lua.lock();
         let data = self.0.as_slice(&lua);
         if self.1 == data.len() {
             return Ok(0);
@@ -111,7 +111,7 @@ impl io::Read for BufferCursor {
 
 impl io::Write for BufferCursor {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        let lua = self.0 .0.lua.lock();
+        let lua = self.0.0.lua.lock();
         let data = self.0.as_slice_mut(&lua);
         if self.1 == data.len() {
             return Ok(0);
@@ -129,7 +129,7 @@ impl io::Write for BufferCursor {
 
 impl io::Seek for BufferCursor {
     fn seek(&mut self, pos: io::SeekFrom) -> io::Result<u64> {
-        let lua = self.0 .0.lua.lock();
+        let lua = self.0.0.lua.lock();
         let data = self.0.as_slice(&lua);
         let new_offset = match pos {
             io::SeekFrom::Start(offset) => offset as i64,

@@ -9,7 +9,7 @@ use crate::function::Function;
 use crate::state::{LuaGuard, RawLua, WeakLua};
 use crate::traits::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, ObjectLike};
 use crate::types::{Integer, ValueRef};
-use crate::util::{assert_stack, check_stack, get_metatable_ptr, StackGuard};
+use crate::util::{StackGuard, assert_stack, check_stack, get_metatable_ptr};
 use crate::value::{Nil, Value};
 
 #[cfg(feature = "async")]
@@ -226,15 +226,15 @@ impl Table {
         // Compare using `__eq` metamethod if exists
         // First, check the self for the metamethod.
         // If self does not define it, then check the other table.
-        if let Some(mt) = self.metatable() {
-            if mt.contains_key("__eq")? {
-                return mt.get::<Function>("__eq")?.call((self, other));
-            }
+        if let Some(mt) = self.metatable()
+            && let Some(eq_func) = mt.get::<Option<Function>>("__eq")?
+        {
+            return eq_func.call((self, other));
         }
-        if let Some(mt) = other.metatable() {
-            if mt.contains_key("__eq")? {
-                return mt.get::<Function>("__eq")?.call((self, other));
-            }
+        if let Some(mt) = other.metatable()
+            && let Some(eq_func) = mt.get::<Option<Function>>("__eq")?
+        {
+            return eq_func.call((self, other));
         }
 
         Ok(false)
@@ -1070,7 +1070,7 @@ impl Serialize for SerializableTable<'_> {
     where
         S: Serializer,
     {
-        use crate::serde::de::{check_value_for_skip, MapPairs, RecursionGuard};
+        use crate::serde::de::{MapPairs, RecursionGuard, check_value_for_skip};
         use crate::value::SerializableValue;
 
         let convert_result = |res: Result<()>, serialize_err: Option<S::Error>| match res {

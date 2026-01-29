@@ -3,8 +3,8 @@
 use std::cell::Cell;
 use std::fmt::Debug;
 use std::os::raw::c_void;
-use std::sync::atomic::{AtomicBool, AtomicPtr, AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicPtr, AtomicU64, Ordering};
 
 use mlua::{
     Compiler, Error, Function, Lua, LuaOptions, Result, StdLib, Table, ThreadStatus, Value, Vector, VmState,

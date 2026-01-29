@@ -1,4 +1,4 @@
-use mlua::{chunk, ExternalResult, Lua, LuaSerdeExt, Result, Value};
+use mlua::{ExternalResult, Lua, LuaSerdeExt, Result, Value, chunk};
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<()> {

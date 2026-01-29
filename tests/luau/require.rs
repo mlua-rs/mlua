@@ -42,8 +42,10 @@ fn test_require_errors() {
     // Pass non-string to require
     let res = run_require(&lua, true);
     assert!(res.is_err());
-    assert!((res.unwrap_err().to_string())
-        .contains("bad argument #1 to 'require' (string expected, got boolean)"));
+    assert!(
+        (res.unwrap_err().to_string())
+            .contains("bad argument #1 to 'require' (string expected, got boolean)")
+    );
 
     // Require from loadstring
     let res = lua
@@ -169,8 +171,10 @@ fn test_require_without_config() {
         "./tests/luau/require/without_config/ambiguous_file_requirer",
     );
     assert!(res.is_err());
-    assert!((res.unwrap_err().to_string())
-        .contains("could not resolve child component \"dependency\" (ambiguous)"));
+    assert!(
+        (res.unwrap_err().to_string())
+            .contains("could not resolve child component \"dependency\" (ambiguous)")
+    );
 
     // RequireWithDirectoryAmbiguity
     let res = run_require(
@@ -178,8 +182,10 @@ fn test_require_without_config() {
         "./tests/luau/require/without_config/ambiguous_directory_requirer",
     );
     assert!(res.is_err());
-    assert!((res.unwrap_err().to_string())
-        .contains("could not resolve child component \"dependency\" (ambiguous)"));
+    assert!(
+        (res.unwrap_err().to_string())
+            .contains("could not resolve child component \"dependency\" (ambiguous)")
+    );
 
     // CheckCachedResult
     let res = run_require(&lua, "./tests/luau/require/without_config/validate_cache").unwrap();

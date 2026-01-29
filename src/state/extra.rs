@@ -14,7 +14,7 @@ use crate::state::RawLua;
 use crate::stdlib::StdLib;
 use crate::types::{AppData, ReentrantMutex, XRc};
 use crate::userdata::RawUserDataRegistry;
-use crate::util::{get_internal_metatable, push_internal_userdata, TypeKey, WrappedFailure};
+use crate::util::{TypeKey, WrappedFailure, get_internal_metatable, push_internal_userdata};
 
 #[cfg(any(feature = "luau", doc))]
 use crate::chunk::Compiler;
