@@ -138,7 +138,7 @@ pub use crate::{
 
 #[cfg(feature = "async")]
 #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
-pub use crate::{thread::AsyncThread, traits::LuaNativeAsyncFn};
+pub use crate::{thread::AsyncThread, traits::LuaNativeAsyncFn, function::AsyncCallFuture};
 
 #[cfg(feature = "serde")]
 #[doc(inline)]
