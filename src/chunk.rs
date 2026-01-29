@@ -366,7 +366,7 @@ impl Compiler {
             self.libraries_with_known_members.push(lib.clone());
         }
         self.library_constants
-            .get_or_insert_with(HashMap::new)
+            .get_or_insert_default()
             .insert((lib, member), r#const.into());
         self
     }
@@ -666,7 +666,7 @@ impl Chunk<'_> {
             && self.detect_mode() == ChunkMode::Text
         {
             #[cfg(feature = "luau")]
-            if let Ok(data) = self.compiler.get_or_insert_with(Default::default).compile(source) {
+            if let Ok(data) = self.compiler.get_or_insert_default().compile(source) {
                 self.source = Ok(Cow::Owned(data));
                 self.mode = Some(ChunkMode::Binary);
             }

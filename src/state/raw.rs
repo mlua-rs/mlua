@@ -1126,7 +1126,7 @@ impl RawLua {
         #[cfg(feature = "luau")]
         if registry.enable_namecall {
             let map: &mut rustc_hash::FxHashMap<_, crate::types::CallbackPtr> =
-                methods_map.get_or_insert_with(Default::default);
+                methods_map.get_or_insert_default();
             for (k, m) in &registry.methods {
                 map.insert(k.as_bytes().to_vec(), &**m);
             }
