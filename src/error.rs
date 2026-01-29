@@ -87,15 +87,6 @@ pub enum Error {
         /// Underlying error returned when converting argument to a Lua value.
         cause: Arc<Error>,
     },
-    /// A Rust value could not be converted to a Lua value.
-    ToLuaConversionError {
-        /// Name of the Rust type that could not be converted.
-        from: String,
-        /// Name of the Lua type that could not be created.
-        to: &'static str,
-        /// A message indicating why the conversion failed in more detail.
-        message: Option<String>,
-    },
     /// A Lua value could not be converted to the expected Rust type.
     FromLuaConversionError {
         /// Name of the Lua type that could not be converted.
@@ -248,13 +239,6 @@ impl fmt::Display for Error {
                     write!(fmt, " to `{to}`")?;
                 }
                 write!(fmt, ": {cause}")
-            }
-            Error::ToLuaConversionError { from, to, message } => {
-                write!(fmt, "error converting {from} to Lua {to}")?;
-                match message {
-                    None => Ok(()),
-                    Some(message) => write!(fmt, " ({message})"),
-                }
             }
             Error::FromLuaConversionError { from, to, message } => {
                 write!(fmt, "error converting Lua {from} to {to}")?;

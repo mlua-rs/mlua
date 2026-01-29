@@ -6,7 +6,7 @@ use std::os::raw::c_int;
 use std::path::{Path, PathBuf};
 use std::{mem, slice, str};
 
-use bstr::{BStr, BString, ByteSlice, ByteVec};
+use bstr::{BStr, BString, ByteVec};
 use num_traits::cast;
 
 use crate::error::{Error, Result};
@@ -730,14 +730,17 @@ impl FromLua for OsString {
 }
 
 impl IntoLua for &OsStr {
+    #[cfg(unix)]
     #[inline]
     fn into_lua(self, lua: &Lua) -> Result<Value> {
-        let s = <[u8]>::from_os_str(self).ok_or_else(|| Error::ToLuaConversionError {
-            from: "OsStr".into(),
-            to: "string",
-            message: Some("invalid utf-8 encoding".into()),
-        })?;
-        Ok(Value::String(lua.create_string(s)?))
+        use std::os::unix::ffi::OsStrExt;
+        Ok(Value::String(lua.create_string(self.as_bytes())?))
+    }
+
+    #[cfg(not(unix))]
+    #[inline]
+    fn into_lua(self, lua: &Lua) -> Result<Value> {
+        self.display().to_string().into_lua(lua)
     }
 }
 
