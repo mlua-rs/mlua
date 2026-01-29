@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::os::raw::c_void;
 use std::ptr;
-use std::string::String as StdString;
 
 use mlua::{Error, LightUserData, Lua, MultiValue, Result, UserData, UserDataMethods, Value};
 
@@ -178,7 +177,7 @@ fn test_value_to_string() -> Result<()> {
     assert!(thread.to_string()?.starts_with("thread:"));
     assert_eq!(thread.type_name(), "thread");
 
-    lua.register_userdata_type::<StdString>(|reg| {
+    lua.register_userdata_type::<String>(|reg| {
         reg.add_meta_method("__tostring", |_, this, ()| Ok(this.clone()));
     })?;
     let ud: Value = Value::UserData(lua.create_any_userdata(String::from("string userdata"))?);
@@ -213,9 +212,9 @@ fn test_value_to_string() -> Result<()> {
 fn test_debug_format() -> Result<()> {
     let lua = Lua::new();
 
-    lua.register_userdata_type::<HashMap<i32, StdString>>(|_| {})?;
+    lua.register_userdata_type::<HashMap<i32, String>>(|_| {})?;
     let ud = lua
-        .create_any_userdata::<HashMap<i32, StdString>>(HashMap::new())
+        .create_any_userdata::<HashMap<i32, String>>(HashMap::new())
         .map(Value::UserData)?;
     assert!(format!("{ud:#?}").starts_with("HashMap<i32, String>:"));
 

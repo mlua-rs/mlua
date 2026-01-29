@@ -13,7 +13,7 @@ use crate::function::Function;
 use crate::memory::{ALLOCATOR, MemoryState};
 use crate::state::util::callback_error_ext;
 use crate::stdlib::StdLib;
-use crate::string::String;
+use crate::string::LuaString;
 use crate::table::Table;
 use crate::thread::Thread;
 use crate::traits::IntoLua;
@@ -516,34 +516,34 @@ impl RawLua {
     }
 
     /// See [`Lua::create_string`]
-    pub(crate) unsafe fn create_string(&self, s: &[u8]) -> Result<String> {
+    pub(crate) unsafe fn create_string(&self, s: &[u8]) -> Result<LuaString> {
         let state = self.state();
         if self.unlikely_memory_error() {
             push_string(state, s, false)?;
-            return Ok(String(self.pop_ref()));
+            return Ok(LuaString(self.pop_ref()));
         }
 
         let _sg = StackGuard::new(state);
         check_stack(state, 3)?;
         push_string(state, s, true)?;
-        Ok(String(self.pop_ref()))
+        Ok(LuaString(self.pop_ref()))
     }
 
     /// Creates an external string, that is, a string that uses memory not managed by Lua.
     ///
     /// Modifies the input data to add `\0` terminator.
     #[cfg(feature = "lua55")]
-    pub(crate) unsafe fn create_external_string(&self, bytes: Vec<u8>) -> Result<String> {
+    pub(crate) unsafe fn create_external_string(&self, bytes: Vec<u8>) -> Result<LuaString> {
         let state = self.state();
         if self.unlikely_memory_error() {
             crate::util::push_external_string(state, bytes, false)?;
-            return Ok(String(self.pop_ref()));
+            return Ok(LuaString(self.pop_ref()));
         }
 
         let _sg = StackGuard::new(state);
         check_stack(state, 3)?;
         crate::util::push_external_string(state, bytes, true)?;
-        Ok(String(self.pop_ref()))
+        Ok(LuaString(self.pop_ref()))
     }
 
     #[cfg(feature = "luau")]
@@ -824,7 +824,7 @@ impl RawLua {
 
             ffi::LUA_TSTRING => {
                 ffi::lua_xpush(state, self.ref_thread(), idx);
-                Value::String(String(self.pop_ref_thread()))
+                Value::String(LuaString(self.pop_ref_thread()))
             }
 
             ffi::LUA_TTABLE => {

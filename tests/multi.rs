@@ -1,4 +1,4 @@
-use mlua::{Error, ExternalError, Integer, IntoLuaMulti, Lua, MultiValue, Result, String, Value, Variadic};
+use mlua::{Error, ExternalError, Integer, IntoLuaMulti, Lua, LuaString, MultiValue, Result, Value, Variadic};
 
 #[test]
 fn test_result_conversions() -> Result<()> {
@@ -81,7 +81,7 @@ fn test_multivalue_by_ref() -> Result<()> {
         Value::Boolean(true),
     ]);
 
-    let f = lua.create_function(|_, (i, s, b): (i32, String, bool)| {
+    let f = lua.create_function(|_, (i, s, b): (i32, LuaString, bool)| {
         assert_eq!(i, 3);
         assert_eq!(s.to_str()?, "hello");
         assert_eq!(b, true);

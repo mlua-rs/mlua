@@ -1,11 +1,11 @@
 use std::borrow::Cow;
 use std::collections::HashSet;
 
-use mlua::{Lua, Result, String};
+use mlua::{Lua, LuaString, Result};
 
 #[test]
 fn test_string_compare() {
-    fn with_str<F: FnOnce(String)>(s: &str, f: F) {
+    fn with_str<F: FnOnce(LuaString)>(s: &str, f: F) {
         f(Lua::new().create_string(s).unwrap());
     }
 
@@ -42,9 +42,9 @@ fn test_string_views() -> Result<()> {
     .exec()?;
 
     let globals = lua.globals();
-    let ok: String = globals.get("ok")?;
-    let err: String = globals.get("err")?;
-    let empty: String = globals.get("empty")?;
+    let ok: LuaString = globals.get("ok")?;
+    let err: LuaString = globals.get("err")?;
+    let empty: LuaString = globals.get("empty")?;
 
     assert_eq!(ok.to_str()?, "null bytes are valid utf-8, wh\0 knew?");
     assert_eq!(ok.to_string_lossy(), "null bytes are valid utf-8, wh\0 knew?");
@@ -74,7 +74,7 @@ fn test_string_from_bytes() -> Result<()> {
 fn test_string_hash() -> Result<()> {
     let lua = Lua::new();
 
-    let set: HashSet<String> = lua.load(r#"{"hello", "world", "abc", 321}"#).eval()?;
+    let set: HashSet<LuaString> = lua.load(r#"{"hello", "world", "abc", 321}"#).eval()?;
     assert_eq!(set.len(), 4);
     assert!(set.contains(&lua.create_string("hello")?));
     assert!(set.contains(&lua.create_string("world")?));
@@ -133,13 +133,13 @@ fn test_string_display() -> Result<()> {
 fn test_string_wrap() -> Result<()> {
     let lua = Lua::new();
 
-    let s = String::wrap("hello, world");
+    let s = LuaString::wrap("hello, world");
     lua.globals().set("s", s)?;
-    assert_eq!(lua.globals().get::<String>("s")?, "hello, world");
+    assert_eq!(lua.globals().get::<LuaString>("s")?, "hello, world");
 
-    let s2 = String::wrap("hello, world (owned)".to_string());
+    let s2 = LuaString::wrap("hello, world (owned)".to_string());
     lua.globals().set("s2", s2)?;
-    assert_eq!(lua.globals().get::<String>("s2")?, "hello, world (owned)");
+    assert_eq!(lua.globals().get::<LuaString>("s2")?, "hello, world (owned)");
 
     Ok(())
 }

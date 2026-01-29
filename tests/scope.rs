@@ -1,10 +1,9 @@
 use std::cell::Cell;
 use std::rc::Rc;
-use std::string::String as StdString;
 use std::sync::Arc;
 
 use mlua::{
-    AnyUserData, Error, Function, Lua, MetaMethod, ObjectLike, Result, String, UserData, UserDataFields,
+    AnyUserData, Error, Function, Lua, LuaString, MetaMethod, ObjectLike, Result, UserData, UserDataFields,
     UserDataMethods, UserDataRegistry,
 };
 
@@ -437,15 +436,15 @@ fn test_scope_userdata_ref_mut() -> Result<()> {
 fn test_scope_any_userdata() -> Result<()> {
     let lua = Lua::new();
 
-    fn register(reg: &mut UserDataRegistry<&mut StdString>) {
-        reg.add_method_mut("push", |_, this, s: String| {
+    fn register(reg: &mut UserDataRegistry<&mut String>) {
+        reg.add_method_mut("push", |_, this, s: LuaString| {
             this.push_str(&s.to_str()?);
             Ok(())
         });
         reg.add_meta_method("__tostring", |_, data, ()| Ok((*data).clone()));
     }
 
-    let mut data = StdString::from("foo");
+    let mut data = String::from("foo");
     lua.scope(|scope| {
         let ud = scope.create_any_userdata(&mut data, register)?;
         lua.globals().set("ud", ud)?;
@@ -527,11 +526,11 @@ fn test_scope_any_userdata_ref_mut() -> Result<()> {
 fn test_scope_destructors() -> Result<()> {
     let lua = Lua::new();
 
-    lua.register_userdata_type::<Arc<StdString>>(|reg| {
+    lua.register_userdata_type::<Arc<String>>(|reg| {
         reg.add_meta_method("__tostring", |_, data, ()| Ok(data.to_string()));
     })?;
 
-    let arc_str = Arc::new(StdString::from("foo"));
+    let arc_str = Arc::new(String::from("foo"));
 
     let ud = lua.create_any_userdata(arc_str.clone())?;
     lua.scope(|scope| {
@@ -544,7 +543,7 @@ fn test_scope_destructors() -> Result<()> {
 
     // Try destructing the userdata while it's borrowed
     let ud = lua.create_any_userdata(arc_str.clone())?;
-    ud.borrow_scoped::<Arc<StdString>, _>(|arc_str| {
+    ud.borrow_scoped::<Arc<String>, _>(|arc_str| {
         assert_eq!(arc_str.as_str(), "foo");
         lua.scope(|scope| {
             scope.add_destructor(|| {

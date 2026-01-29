@@ -1,5 +1,4 @@
 use std::os::raw::c_int;
-use std::string::String as StdString;
 use std::sync::Arc;
 
 use crate::error::{Error, Result};
@@ -236,7 +235,7 @@ pub trait ObjectLike: Sealed {
     /// Converts the object to a string in a human-readable format.
     ///
     /// This might invoke the `__tostring` metamethod.
-    fn to_string(&self) -> Result<StdString>;
+    fn to_string(&self) -> Result<String>;
 
     /// Converts the object to a Lua value.
     fn to_value(&self) -> Value;
@@ -339,7 +338,7 @@ impl_lua_native_fn!(A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P);
 
 pub(crate) trait ShortTypeName {
     #[inline(always)]
-    fn type_name() -> StdString {
+    fn type_name() -> String {
         short_type_name::<Self>()
     }
 }

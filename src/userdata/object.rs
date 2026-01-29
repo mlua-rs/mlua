@@ -1,4 +1,3 @@
-use std::string::String as StdString;
 
 use crate::Function;
 use crate::error::{Error, Result};
@@ -88,7 +87,7 @@ impl ObjectLike for AnyUserData {
     }
 
     #[inline]
-    fn to_string(&self) -> Result<StdString> {
+    fn to_string(&self) -> Result<String> {
         Value::UserData(self.clone()).to_string()
     }
 

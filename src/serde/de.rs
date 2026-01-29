@@ -4,7 +4,6 @@ use std::cell::RefCell;
 use std::os::raw::c_void;
 use std::rc::Rc;
 use std::result::Result as StdResult;
-use std::string::String as StdString;
 
 use rustc_hash::FxHashSet;
 use serde::de::{self, IntoDeserializer};
@@ -243,7 +242,7 @@ impl<'de> serde::Deserializer<'de> for Deserializer {
             Value::Table(table) => {
                 let _guard = RecursionGuard::new(&table, &self.visited);
 
-                let mut iter = table.pairs::<StdString, Value>();
+                let mut iter = table.pairs::<String, Value>();
                 let (variant, value) = match iter.next() {
                     Some(v) => v?,
                     None => {
@@ -621,7 +620,7 @@ impl<'de> de::MapAccess<'de> for MapDeserializer<'_> {
 }
 
 struct EnumDeserializer {
-    variant: StdString,
+    variant: String,
     value: Option<Value>,
     options: Options,
     visited: Rc<RefCell<FxHashSet<*const c_void>>>,

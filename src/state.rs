@@ -15,7 +15,7 @@ use crate::memory::MemoryState;
 use crate::multi::MultiValue;
 use crate::scope::Scope;
 use crate::stdlib::StdLib;
-use crate::string::String;
+use crate::string::LuaString;
 use crate::table::Table;
 use crate::thread::Thread;
 use crate::traits::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti};
@@ -855,7 +855,6 @@ impl Lua {
     {
         use std::ffi::CStr;
         use std::os::raw::{c_char, c_void};
-        use std::string::String as StdString;
 
         unsafe extern "C-unwind" fn warn_proc(ud: *mut c_void, msg: *const c_char, tocont: c_int) {
             let extra = ud as *mut ExtraData;
@@ -865,7 +864,7 @@ impl Lua {
                 if XRc::strong_count(&warn_callback) > 2 {
                     return Ok(());
                 }
-                let msg = StdString::from_utf8_lossy(CStr::from_ptr(msg).to_bytes());
+                let msg = String::from_utf8_lossy(CStr::from_ptr(msg).to_bytes());
                 warn_callback((*extra).lua(), &msg, tocont != 0)
             });
         }
@@ -936,7 +935,7 @@ impl Lua {
     ///
     /// The `msg` parameter, if provided, is added at the beginning of the traceback.
     /// The `level` parameter works the same way as in [`Lua::inspect_stack`].
-    pub fn traceback(&self, msg: Option<&str>, level: usize) -> Result<String> {
+    pub fn traceback(&self, msg: Option<&str>, level: usize) -> Result<LuaString> {
         let lua = self.lock();
         unsafe {
             check_stack(lua.state(), 3)?;
@@ -948,7 +947,7 @@ impl Lua {
                 // `protect_lua` adds it's own call frame, so we need to increase level by 1
                 ffi::luaL_traceback(state, state, msg, (level + 1) as c_int);
             })?;
-            Ok(String(lua.pop_ref()))
+            Ok(LuaString(lua.pop_ref()))
         }
     }
 
@@ -1248,7 +1247,7 @@ impl Lua {
     /// Lua strings can be arbitrary `[u8]` data including embedded nulls, so in addition to `&str`
     /// and `&String`, you can also pass plain `&[u8]` here.
     #[inline]
-    pub fn create_string(&self, s: impl AsRef<[u8]>) -> Result<String> {
+    pub fn create_string(&self, s: impl AsRef<[u8]>) -> Result<LuaString> {
         unsafe { self.lock().create_string(s.as_ref()) }
     }
 
@@ -1259,7 +1258,7 @@ impl Lua {
     #[cfg(feature = "lua55")]
     #[cfg_attr(docsrs, doc(cfg(feature = "lua55")))]
     #[inline]
-    pub fn create_external_string(&self, s: impl Into<Vec<u8>>) -> Result<String> {
+    pub fn create_external_string(&self, s: impl Into<Vec<u8>>) -> Result<LuaString> {
         unsafe { self.lock().create_external_string(s.into()) }
     }
 
@@ -1741,7 +1740,7 @@ impl Lua {
     ///
     /// To succeed, the value must be a string (in which case this is a no-op), an integer, or a
     /// number.
-    pub fn coerce_string(&self, v: Value) -> Result<Option<String>> {
+    pub fn coerce_string(&self, v: Value) -> Result<Option<LuaString>> {
         Ok(match v {
             Value::String(s) => Some(s),
             v => unsafe {
@@ -1759,7 +1758,7 @@ impl Lua {
                     })?
                 };
                 if !res.is_null() {
-                    Some(String(lua.pop_ref()))
+                    Some(LuaString(lua.pop_ref()))
                 } else {
                     None
                 }

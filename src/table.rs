@@ -2,7 +2,6 @@ use std::collections::HashSet;
 use std::fmt;
 use std::marker::PhantomData;
 use std::os::raw::c_void;
-use std::string::String as StdString;
 
 use crate::error::{Error, Result};
 use crate::function::Function;
@@ -1008,7 +1007,7 @@ impl ObjectLike for Table {
     }
 
     #[inline]
-    fn to_string(&self) -> Result<StdString> {
+    fn to_string(&self) -> Result<String> {
         Value::Table(Table(self.0.clone())).to_string()
     }
 
@@ -1098,7 +1097,7 @@ impl Serialize for SerializableTable<'_> {
                 seq.serialize_element(&SerializableValue::new(&value, options, Some(visited)))
                     .map_err(|err| {
                         serialize_err = Some(err);
-                        Error::SerializeError(StdString::new())
+                        Error::SerializeError(String::new())
                     })
             });
             convert_result(res, serialize_err)?;
@@ -1123,7 +1122,7 @@ impl Serialize for SerializableTable<'_> {
             )
             .map_err(|err| {
                 serialize_err = Some(err);
-                Error::SerializeError(StdString::new())
+                Error::SerializeError(String::new())
             })
         };
 

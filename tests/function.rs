@@ -1,4 +1,4 @@
-use mlua::{Error, Function, Lua, Result, String, Table, Variadic};
+use mlua::{Error, Function, Lua, LuaString, Result, Table, Variadic};
 
 #[test]
 fn test_function_call() -> Result<()> {
@@ -343,7 +343,7 @@ fn test_function_deep_clone() -> Result<()> {
 fn test_function_wrap() -> Result<()> {
     let lua = Lua::new();
 
-    let f = Function::wrap(|s: String, n| Ok(s.to_str().unwrap().repeat(n)));
+    let f = Function::wrap(|s: LuaString, n| Ok(s.to_str().unwrap().repeat(n)));
     lua.globals().set("f", f)?;
     lua.load(r#"assert(f("hello", 2) == "hellohello")"#)
         .exec()

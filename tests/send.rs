@@ -2,7 +2,6 @@
 
 use std::cell::UnsafeCell;
 use std::marker::PhantomData;
-use std::string::String as StdString;
 
 use mlua::{AnyUserData, Error, Lua, ObjectLike, Result, UserData, UserDataMethods, UserDataRef};
 use static_assertions::{assert_impl_all, assert_not_impl_all};
@@ -12,7 +11,7 @@ fn test_userdata_multithread_access_send_only() -> Result<()> {
     let lua = Lua::new();
 
     // This type is `Send` but not `Sync`.
-    struct MyUserData(StdString, PhantomData<UnsafeCell<()>>);
+    struct MyUserData(String, PhantomData<UnsafeCell<()>>);
     assert_impl_all!(MyUserData: Send);
     assert_not_impl_all!(MyUserData: Sync);
 
@@ -52,7 +51,7 @@ fn test_userdata_multithread_access_sync() -> Result<()> {
     let lua = Lua::new();
 
     // This type is `Send` and `Sync`.
-    struct MyUserData(StdString);
+    struct MyUserData(String);
     assert_impl_all!(MyUserData: Send, Sync);
 
     impl UserData for MyUserData {

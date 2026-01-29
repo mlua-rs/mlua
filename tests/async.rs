@@ -1,6 +1,5 @@
 #![cfg(feature = "async")]
 
-use std::string::String as StdString;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -40,7 +39,7 @@ async fn test_async_function() -> Result<()> {
 async fn test_async_function_wrap() -> Result<()> {
     let lua = Lua::new();
 
-    let f = Function::wrap_async(|s: StdString| async move {
+    let f = Function::wrap_async(|s: String| async move {
         tokio::task::yield_now().await;
         Ok(s)
     });
@@ -68,7 +67,7 @@ async fn test_async_function_wrap() -> Result<()> {
 async fn test_async_function_wrap_raw() -> Result<()> {
     let lua = Lua::new();
 
-    let f = Function::wrap_raw_async(|s: StdString| async move {
+    let f = Function::wrap_raw_async(|s: String| async move {
         tokio::task::yield_now().await;
         s
     });

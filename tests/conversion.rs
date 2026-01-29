@@ -49,7 +49,7 @@ fn test_string_from_lua() -> Result<()> {
     let lua = Lua::new();
 
     // From stack
-    let f = lua.create_function(|_, s: mlua::String| Ok(s))?;
+    let f = lua.create_function(|_, s: mlua::LuaString| Ok(s))?;
     let s = f.call::<String>("hello, world!")?;
     assert_eq!(s, "hello, world!");
 

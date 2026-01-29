@@ -4,7 +4,6 @@ use std::ffi::{CStr, CString, OsStr, OsString};
 use std::hash::{BuildHasher, Hash};
 use std::os::raw::c_int;
 use std::path::{Path, PathBuf};
-use std::string::String as StdString;
 use std::{mem, slice, str};
 
 use bstr::{BStr, BString, ByteSlice, ByteVec};
@@ -13,7 +12,7 @@ use num_traits::cast;
 use crate::error::{Error, Result};
 use crate::function::Function;
 use crate::state::{Lua, RawLua};
-use crate::string::{BorrowedBytes, BorrowedStr, String};
+use crate::string::{BorrowedBytes, BorrowedStr, LuaString};
 use crate::table::Table;
 use crate::thread::Thread;
 use crate::traits::{FromLua, IntoLua, ShortTypeName as _};
@@ -47,14 +46,14 @@ impl FromLua for Value {
     }
 }
 
-impl IntoLua for String {
+impl IntoLua for LuaString {
     #[inline]
     fn into_lua(self, _: &Lua) -> Result<Value> {
         Ok(Value::String(self))
     }
 }
 
-impl IntoLua for &String {
+impl IntoLua for &LuaString {
     #[inline]
     fn into_lua(self, _: &Lua) -> Result<Value> {
         Ok(Value::String(self.clone()))
@@ -67,9 +66,9 @@ impl IntoLua for &String {
     }
 }
 
-impl FromLua for String {
+impl FromLua for LuaString {
     #[inline]
-    fn from_lua(value: Value, lua: &Lua) -> Result<String> {
+    fn from_lua(value: Value, lua: &Lua) -> Result<LuaString> {
         let ty = value.type_name();
         lua.coerce_string(value)?
             .ok_or_else(|| Error::FromLuaConversionError {
@@ -84,7 +83,7 @@ impl FromLua for String {
         let type_id = ffi::lua_type(state, idx);
         if type_id == ffi::LUA_TSTRING {
             ffi::lua_xpush(state, lua.ref_thread(), idx);
-            return Ok(String(lua.pop_ref_thread()));
+            return Ok(LuaString(lua.pop_ref_thread()));
         }
         // Fallback to default
         Self::from_lua(lua.stack_value(idx, Some(type_id)), lua.lua())
@@ -119,7 +118,7 @@ impl IntoLua for &BorrowedStr<'_> {
 
 impl FromLua for BorrowedStr<'_> {
     fn from_lua(value: Value, lua: &Lua) -> Result<Self> {
-        let s = String::from_lua(value, lua)?;
+        let s = LuaString::from_lua(value, lua)?;
         let BorrowedStr { buf, _lua, .. } = BorrowedStr::try_from(&s)?;
         let buf = unsafe { mem::transmute::<&str, &'static str>(buf) };
         let borrow = Cow::Owned(s);
@@ -127,7 +126,7 @@ impl FromLua for BorrowedStr<'_> {
     }
 
     unsafe fn from_stack(idx: c_int, lua: &RawLua) -> Result<Self> {
-        let s = String::from_stack(idx, lua)?;
+        let s = LuaString::from_stack(idx, lua)?;
         let BorrowedStr { buf, _lua, .. } = BorrowedStr::try_from(&s)?;
         let buf = unsafe { mem::transmute::<&str, &'static str>(buf) };
         let borrow = Cow::Owned(s);
@@ -163,7 +162,7 @@ impl IntoLua for &BorrowedBytes<'_> {
 
 impl FromLua for BorrowedBytes<'_> {
     fn from_lua(value: Value, lua: &Lua) -> Result<Self> {
-        let s = String::from_lua(value, lua)?;
+        let s = LuaString::from_lua(value, lua)?;
         let BorrowedBytes { buf, _lua, .. } = BorrowedBytes::from(&s);
         let buf = unsafe { mem::transmute::<&[u8], &'static [u8]>(buf) };
         let borrow = Cow::Owned(s);
@@ -171,7 +170,7 @@ impl FromLua for BorrowedBytes<'_> {
     }
 
     unsafe fn from_stack(idx: c_int, lua: &RawLua) -> Result<Self> {
-        let s = String::from_stack(idx, lua)?;
+        let s = LuaString::from_stack(idx, lua)?;
         let BorrowedBytes { buf, _lua, .. } = BorrowedBytes::from(&s);
         let buf = unsafe { mem::transmute::<&[u8], &'static [u8]>(buf) };
         let borrow = Cow::Owned(s);
@@ -497,7 +496,7 @@ impl FromLua for crate::Buffer {
     }
 }
 
-impl IntoLua for StdString {
+impl IntoLua for String {
     #[inline]
     fn into_lua(self, lua: &Lua) -> Result<Value> {
         #[cfg(feature = "lua55")]
@@ -519,7 +518,7 @@ impl IntoLua for StdString {
     }
 }
 
-impl FromLua for StdString {
+impl FromLua for String {
     #[inline]
     fn from_lua(value: Value, lua: &Lua) -> Result<Self> {
         let ty = value.type_name();

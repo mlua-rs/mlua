@@ -4,7 +4,6 @@ use std::ffi::CString;
 use std::io::Result as IoResult;
 use std::panic::Location;
 use std::path::{Path, PathBuf};
-use std::string::String as StdString;
 
 use crate::error::{Error, Result};
 use crate::function::Function;
@@ -20,7 +19,7 @@ pub trait AsChunk {
     /// Returns optional chunk name
     ///
     /// See [`Chunk::set_name`] for possible name prefixes.
-    fn name(&self) -> Option<StdString> {
+    fn name(&self) -> Option<String> {
         None
     }
 
@@ -52,13 +51,13 @@ impl AsChunk for &str {
     }
 }
 
-impl AsChunk for StdString {
+impl AsChunk for String {
     fn source<'a>(&self) -> IoResult<Cow<'a, [u8]>> {
         Ok(Cow::Owned(self.clone().into_bytes()))
     }
 }
 
-impl AsChunk for &StdString {
+impl AsChunk for &String {
     fn source<'a>(&self) -> IoResult<Cow<'a, [u8]>>
     where
         Self: 'a,
@@ -92,7 +91,7 @@ impl AsChunk for &Vec<u8> {
 }
 
 impl AsChunk for &Path {
-    fn name(&self) -> Option<StdString> {
+    fn name(&self) -> Option<String> {
         Some(format!("@{}", self.display()))
     }
 
@@ -102,7 +101,7 @@ impl AsChunk for &Path {
 }
 
 impl AsChunk for PathBuf {
-    fn name(&self) -> Option<StdString> {
+    fn name(&self) -> Option<String> {
         Some(format!("@{}", self.display()))
     }
 
@@ -112,7 +111,7 @@ impl AsChunk for PathBuf {
 }
 
 impl<C: AsChunk + ?Sized> AsChunk for Box<C> {
-    fn name(&self) -> Option<StdString> {
+    fn name(&self) -> Option<String> {
         (**self).name()
     }
 
@@ -136,7 +135,7 @@ impl<C: AsChunk + ?Sized> AsChunk for Box<C> {
 #[must_use = "`Chunk`s do nothing unless one of `exec`, `eval`, `call`, or `into_function` are called on them"]
 pub struct Chunk<'a> {
     pub(crate) lua: WeakLua,
-    pub(crate) name: StdString,
+    pub(crate) name: String,
     pub(crate) env: Result<Option<Table>>,
     pub(crate) mode: Option<ChunkMode>,
     pub(crate) source: IoResult<Cow<'a, [u8]>>,
@@ -160,7 +159,7 @@ pub enum CompileConstant {
     Boolean(bool),
     Number(crate::Number),
     Vector(crate::Vector),
-    String(StdString),
+    String(String),
 }
 
 #[cfg(any(feature = "luau", doc))]
@@ -192,7 +191,7 @@ impl From<&str> for CompileConstant {
 }
 
 #[cfg(any(feature = "luau", doc))]
-type LibraryMemberConstantMap = HashMap<(StdString, StdString), CompileConstant>;
+type LibraryMemberConstantMap = HashMap<(String, String), CompileConstant>;
 
 /// Luau compiler
 #[cfg(any(feature = "luau", doc))]
@@ -203,14 +202,14 @@ pub struct Compiler {
     debug_level: u8,
     type_info_level: u8,
     coverage_level: u8,
-    vector_lib: Option<StdString>,
-    vector_ctor: Option<StdString>,
-    vector_type: Option<StdString>,
-    mutable_globals: Vec<StdString>,
-    userdata_types: Vec<StdString>,
-    libraries_with_known_members: Vec<StdString>,
+    vector_lib: Option<String>,
+    vector_ctor: Option<String>,
+    vector_type: Option<String>,
+    mutable_globals: Vec<String>,
+    userdata_types: Vec<String>,
+    libraries_with_known_members: Vec<String>,
     library_constants: Option<LibraryMemberConstantMap>,
-    disabled_builtins: Vec<StdString>,
+    disabled_builtins: Vec<String>,
 }
 
 #[cfg(any(feature = "luau", doc))]
@@ -294,7 +293,7 @@ impl Compiler {
     /// To set the library and method name, use the `lib.ctor` format.
     #[doc(hidden)]
     #[must_use]
-    pub fn set_vector_ctor(mut self, ctor: impl Into<StdString>) -> Self {
+    pub fn set_vector_ctor(mut self, ctor: impl Into<String>) -> Self {
         let ctor = ctor.into();
         let lib_ctor = ctor.split_once('.');
         self.vector_lib = lib_ctor.as_ref().map(|&(lib, _)| lib.to_owned());
@@ -307,7 +306,7 @@ impl Compiler {
     /// Sets alternative vector type name for type tables, in addition to default type `vector`.
     #[doc(hidden)]
     #[must_use]
-    pub fn set_vector_type(mut self, r#type: impl Into<StdString>) -> Self {
+    pub fn set_vector_type(mut self, r#type: impl Into<String>) -> Self {
         self.vector_type = Some(r#type.into());
         self
     }
@@ -316,7 +315,7 @@ impl Compiler {
     ///
     /// It disables the import optimization for fields accessed through it.
     #[must_use]
-    pub fn add_mutable_global(mut self, global: impl Into<StdString>) -> Self {
+    pub fn add_mutable_global(mut self, global: impl Into<String>) -> Self {
         self.mutable_globals.push(global.into());
         self
     }
@@ -325,21 +324,21 @@ impl Compiler {
     ///
     /// It disables the import optimization for fields accessed through these.
     #[must_use]
-    pub fn set_mutable_globals<S: Into<StdString>>(mut self, globals: impl IntoIterator<Item = S>) -> Self {
+    pub fn set_mutable_globals<S: Into<String>>(mut self, globals: impl IntoIterator<Item = S>) -> Self {
         self.mutable_globals = globals.into_iter().map(|s| s.into()).collect();
         self
     }
 
     /// Adds a userdata type to the list that will be included in the type information.
     #[must_use]
-    pub fn add_userdata_type(mut self, r#type: impl Into<StdString>) -> Self {
+    pub fn add_userdata_type(mut self, r#type: impl Into<String>) -> Self {
         self.userdata_types.push(r#type.into());
         self
     }
 
     /// Sets a list of userdata types that will be included in the type information.
     #[must_use]
-    pub fn set_userdata_types<S: Into<StdString>>(mut self, types: impl IntoIterator<Item = S>) -> Self {
+    pub fn set_userdata_types<S: Into<String>>(mut self, types: impl IntoIterator<Item = S>) -> Self {
         self.userdata_types = types.into_iter().map(|s| s.into()).collect();
         self
     }
@@ -373,14 +372,14 @@ impl Compiler {
 
     /// Adds a builtin that should be disabled.
     #[must_use]
-    pub fn add_disabled_builtin(mut self, builtin: impl Into<StdString>) -> Self {
+    pub fn add_disabled_builtin(mut self, builtin: impl Into<String>) -> Self {
         self.disabled_builtins.push(builtin.into());
         self
     }
 
     /// Sets a list of builtins that should be disabled.
     #[must_use]
-    pub fn set_disabled_builtins<S: Into<StdString>>(
+    pub fn set_disabled_builtins<S: Into<String>>(
         mut self,
         builtins: impl IntoIterator<Item = S>,
     ) -> Self {
@@ -490,7 +489,7 @@ impl Compiler {
         if bytecode.first() == Some(&0) {
             // The rest of the bytecode is the error message starting with `:`
             // See https://github.com/luau-lang/luau/blob/0.640/Compiler/src/Compiler.cpp#L4336
-            let message = StdString::from_utf8_lossy(&bytecode[2..]).into_owned();
+            let message = String::from_utf8_lossy(&bytecode[2..]).into_owned();
             return Err(Error::SyntaxError {
                 incomplete_input: message.ends_with("<eof>"),
                 message,
@@ -513,7 +512,7 @@ impl Chunk<'_> {
     /// - `@` - file path (when truncation is needed, the end of the file path is kept, as this is
     ///   more useful for identifying the file)
     /// - `=` - custom chunk name (when truncation is needed, the beginning of the name is kept)
-    pub fn set_name(mut self, name: impl Into<StdString>) -> Self {
+    pub fn set_name(mut self, name: impl Into<String>) -> Self {
         self.name = name.into();
         self
     }
@@ -761,7 +760,7 @@ impl Chunk<'_> {
         ChunkMode::Text
     }
 
-    fn convert_name(name: StdString) -> Result<CString> {
+    fn convert_name(name: String) -> Result<CString> {
         CString::new(name).map_err(|err| Error::runtime(format!("invalid name: {err}")))
     }
 
