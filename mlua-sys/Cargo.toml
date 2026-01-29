@@ -2,7 +2,7 @@
 name = "mlua-sys"
 version = "0.10.0"
 authors = ["Aleksandr Orlenko <zxteam@pm.me>"]
-rust-version = "1.85"
+rust-version = "1.88"
 edition = "2024"
 repository = "https://github.com/mlua-rs/mlua"
 documentation = "https://docs.rs/mlua-sys"
