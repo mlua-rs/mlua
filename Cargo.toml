@@ -1,6 +1,6 @@
 [package]
 name = "mlua"
-version = "0.11.6" # remember to update mlua_derive
+version = "0.12.0-dev.1" # remember to update mlua_derive
 authors = ["Aleksandr Orlenko <zxteam@pm.me>", "kyren <catherine@kyju.org>"]
 rust-version = "1.85.0"
 edition = "2021"
