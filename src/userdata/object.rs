@@ -1,4 +1,3 @@
-
 use crate::Function;
 use crate::error::{Error, Result};
 use crate::state::WeakLua;

@@ -6,8 +6,8 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicI64, Ordering};
 
 use mlua::{
-    AnyUserData, Error, ExternalError, Function, Lua, LuaString, MetaMethod, Nil, ObjectLike, Result, UserData,
-    UserDataFields, UserDataMethods, UserDataRef, UserDataRegistry, Value, Variadic,
+    AnyUserData, Error, ExternalError, Function, Lua, LuaString, MetaMethod, Nil, ObjectLike, Result,
+    UserData, UserDataFields, UserDataMethods, UserDataRef, UserDataRegistry, Value, Variadic,
 };
 
 #[test]
@@ -630,9 +630,11 @@ fn test_fields() -> Result<()> {
         }
 
         fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
-            methods.add_meta_method(MetaMethod::Index, |_, _, name: LuaString| match name.to_str()?.as_ref() {
-                "y" => Ok(Some(-1)),
-                _ => Ok(None),
+            methods.add_meta_method(MetaMethod::Index, |_, _, name: LuaString| {
+                match name.to_str()?.as_ref() {
+                    "y" => Ok(Some(-1)),
+                    _ => Ok(None),
+                }
             });
         }
     }
@@ -723,7 +725,10 @@ fn test_metatable() -> Result<()> {
 
     let ud = lua.create_userdata(MyUserData3)?;
     let metatable = ud.metatable()?;
-    assert_eq!(metatable.get::<LuaString>(MetaMethod::Type)?.to_str()?, "CustomName");
+    assert_eq!(
+        metatable.get::<LuaString>(MetaMethod::Type)?.to_str()?,
+        "CustomName"
+    );
 
     Ok(())
 }

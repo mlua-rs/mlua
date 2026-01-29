@@ -6,8 +6,8 @@ use std::sync::Arc;
 use std::{error, f32, f64, fmt};
 
 use mlua::{
-    ChunkMode, Error, ExternalError, Function, Lua, LuaOptions, Nil, Result, StdLib, Table, UserData,
-    Value, Variadic, ffi,
+    ChunkMode, Error, ExternalError, Function, Lua, LuaOptions, Nil, Result, StdLib, Table, UserData, Value,
+    Variadic, ffi,
 };
 
 #[test]
@@ -1220,7 +1220,11 @@ fn test_context_thread_51() -> Result<()> {
 fn test_jit_version() -> Result<()> {
     let lua = Lua::new();
     let jit: Table = lua.globals().get("jit")?;
-    assert!(jit.get::<mlua::LuaString>("version")?.to_str()?.contains("LuaJIT"));
+    assert!(
+        jit.get::<mlua::LuaString>("version")?
+            .to_str()?
+            .contains("LuaJIT")
+    );
     Ok(())
 }
 
@@ -1424,9 +1428,8 @@ fn test_traceback() -> Result<()> {
     assert!(traceback.contains("stack traceback:"));
 
     // Test traceback inside a function
-    let get_traceback = lua.create_function(|lua, (msg, level): (Option<String>, usize)| {
-        lua.traceback(msg.as_deref(), level)
-    })?;
+    let get_traceback = lua
+        .create_function(|lua, (msg, level): (Option<String>, usize)| lua.traceback(msg.as_deref(), level))?;
     lua.globals().set("get_traceback", get_traceback)?;
 
     lua.load(

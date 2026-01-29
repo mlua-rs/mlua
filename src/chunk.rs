@@ -379,10 +379,7 @@ impl Compiler {
 
     /// Sets a list of builtins that should be disabled.
     #[must_use]
-    pub fn set_disabled_builtins<S: Into<String>>(
-        mut self,
-        builtins: impl IntoIterator<Item = S>,
-    ) -> Self {
+    pub fn set_disabled_builtins<S: Into<String>>(mut self, builtins: impl IntoIterator<Item = S>) -> Self {
         self.disabled_builtins = builtins.into_iter().map(|s| s.into()).collect();
         self
     }

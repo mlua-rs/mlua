@@ -1,4 +1,6 @@
-use mlua::{Error, ExternalError, Integer, IntoLuaMulti, Lua, LuaString, MultiValue, Result, Value, Variadic};
+use mlua::{
+    Error, ExternalError, Integer, IntoLuaMulti, Lua, LuaString, MultiValue, Result, Value, Variadic,
+};
 
 #[test]
 fn test_result_conversions() -> Result<()> {
