@@ -84,7 +84,6 @@ mod scope;
 mod state;
 mod stdlib;
 mod string;
-mod table;
 mod thread;
 mod traits;
 mod types;
@@ -95,6 +94,7 @@ mod vector;
 
 pub mod function;
 pub mod prelude;
+pub mod table;
 
 pub use bstr::BString;
 pub use ffi::{self, lua_CFunction, lua_State};
@@ -108,7 +108,7 @@ pub use crate::scope::Scope;
 pub use crate::state::{GCMode, Lua, LuaOptions, WeakLua};
 pub use crate::stdlib::StdLib;
 pub use crate::string::{BorrowedBytes, BorrowedStr, LuaString, LuaString as String};
-pub use crate::table::{Table, TablePairs, TableSequence};
+pub use crate::table::Table;
 pub use crate::thread::{Thread, ThreadStatus};
 pub use crate::traits::{
     FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, LuaNativeFn, LuaNativeFnMut, ObjectLike,
