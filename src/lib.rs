@@ -76,7 +76,6 @@ mod chunk;
 mod conversion;
 mod debug;
 mod error;
-mod function;
 #[cfg(any(feature = "luau", doc))]
 mod luau;
 mod memory;
@@ -94,6 +93,7 @@ mod util;
 mod value;
 mod vector;
 
+pub mod function;
 pub mod prelude;
 
 pub use bstr::BString;
@@ -102,7 +102,7 @@ pub use ffi::{self, lua_CFunction, lua_State};
 pub use crate::chunk::{AsChunk, Chunk, ChunkMode};
 pub use crate::debug::{Debug, DebugEvent, DebugNames, DebugSource, DebugStack};
 pub use crate::error::{Error, ErrorContext, ExternalError, ExternalResult, Result};
-pub use crate::function::{Function, FunctionInfo};
+pub use crate::function::Function;
 pub use crate::multi::{MultiValue, Variadic};
 pub use crate::scope::Scope;
 pub use crate::state::{GCMode, Lua, LuaOptions, WeakLua};
@@ -130,7 +130,6 @@ pub use crate::debug::HookTriggers;
 pub use crate::{
     buffer::Buffer,
     chunk::{CompileConstant, Compiler},
-    function::CoverageInfo,
     luau::{HeapDump, NavigateError, Require, TextRequirer},
     vector::Vector,
 };

@@ -1,3 +1,84 @@
+//! Lua function handling.
+//!
+//! This module provides types for working with Lua functions from Rust, including
+//! both Lua-defined functions and native Rust callbacks.
+//!
+//! # Main Types
+//!
+//! - [`Function`] - A handle to a Lua function that can be called from Rust.
+//! - [`FunctionInfo`] - Debug information about a function (name, source, line numbers, etc.).
+//! - [`CoverageInfo`] - Code coverage data for Luau functions (requires `luau` feature).
+//!
+//! # Calling Functions
+//!
+//! Use [`Function::call`] to invoke a Lua function synchronously:
+//!
+//! ```
+//! # use mlua::{Function, Lua, Result};
+//! # fn main() -> Result<()> {
+//! let lua = Lua::new();
+//!
+//! // Get a built-in function
+//! let print: Function = lua.globals().get("print")?;
+//! print.call::<()>("Hello from Rust!")?;
+//!
+//! // Call a function that returns values
+//! let tonumber: Function = lua.globals().get("tonumber")?;
+//! let n: i32 = tonumber.call("42")?;
+//! assert_eq!(n, 42);
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! For asynchronous execution, use `Function::call_async` (requires `async` feature):
+//!
+//! ```ignore
+//! let result: String = my_async_func.call_async(args).await?;
+//! ```
+//!
+//! # Creating Functions
+//!
+//! Functions can be created from Rust closures using [`Lua::create_function`]:
+//!
+//! ```
+//! # use mlua::{Lua, Result};
+//! # fn main() -> Result<()> {
+//! let lua = Lua::new();
+//!
+//! let greet = lua.create_function(|_, name: String| {
+//!     Ok(format!("Hello, {}!", name))
+//! })?;
+//!
+//! lua.globals().set("greet", greet)?;
+//! let result: String = lua.load(r#"greet("World")"#).eval()?;
+//! assert_eq!(result, "Hello, World!");
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! For simpler cases, use [`Function::wrap`] or [`Function::wrap_raw`] to convert a Rust function
+//! directly:
+//!
+//! ```
+//! # use mlua::{Function, Lua, Result};
+//! # fn main() -> Result<()> {
+//! let lua = Lua::new();
+//!
+//! fn add(a: i32, b: i32) -> i32 { a + b }
+//!
+//! lua.globals().set("add", Function::wrap_raw(add))?;
+//! let sum: i32 = lua.load("add(2, 3)").eval()?;
+//! assert_eq!(sum, 5);
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! # Function Environments
+//!
+//! Lua functions have an associated environment table that determines how global
+//! variables are resolved. Use [`Function::environment`] and [`Function::set_environment`]
+//! to inspect or modify this environment.
+
 use std::cell::RefCell;
 use std::os::raw::{c_int, c_void};
 use std::{mem, ptr, slice};
@@ -681,7 +762,9 @@ impl LuaType for Function {
     const TYPE_ID: c_int = ffi::LUA_TFUNCTION;
 }
 
+/// Future for asynchronous function calls.
 #[cfg(feature = "async")]
+#[cfg_attr(docsrs, doc(cfg(feature = "async")))]
 #[must_use = "futures do nothing unless you `.await` or poll them"]
 pub struct AsyncCallFuture<R: FromLuaMulti>(Result<AsyncThread<R>>);
 

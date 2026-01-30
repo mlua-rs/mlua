@@ -267,7 +267,7 @@ fn test_function_coverage() -> Result<()> {
 
     assert_eq!(
         report[0],
-        mlua::CoverageInfo {
+        mlua::function::CoverageInfo {
             function: None,
             line_defined: 1,
             depth: 0,
@@ -276,7 +276,7 @@ fn test_function_coverage() -> Result<()> {
     );
     assert_eq!(
         report[1],
-        mlua::CoverageInfo {
+        mlua::function::CoverageInfo {
             function: Some("abc".into()),
             line_defined: 4,
             depth: 1,
@@ -285,7 +285,7 @@ fn test_function_coverage() -> Result<()> {
     );
     assert_eq!(
         report[2],
-        mlua::CoverageInfo {
+        mlua::function::CoverageInfo {
             function: None,
             line_defined: 12,
             depth: 1,
@@ -294,7 +294,7 @@ fn test_function_coverage() -> Result<()> {
     );
     assert_eq!(
         report[3],
-        mlua::CoverageInfo {
+        mlua::function::CoverageInfo {
             function: None,
             line_defined: 13,
             depth: 2,

@@ -5,16 +5,16 @@ pub use crate::{
     AnyUserData as LuaAnyUserData, BorrowedBytes as LuaBorrowedBytes, BorrowedStr as LuaBorrowedStr,
     Chunk as LuaChunk, Either as LuaEither, Error as LuaError, ErrorContext as LuaErrorContext,
     ExternalError as LuaExternalError, ExternalResult as LuaExternalResult, FromLua, FromLuaMulti,
-    Function as LuaFunction, FunctionInfo as LuaFunctionInfo, GCMode as LuaGCMode, Integer as LuaInteger,
-    IntoLua, IntoLuaMulti, LightUserData as LuaLightUserData, Lua, LuaNativeFn, LuaNativeFnMut, LuaOptions,
-    LuaString, MetaMethod as LuaMetaMethod, MultiValue as LuaMultiValue, Nil as LuaNil, Number as LuaNumber,
+    Function as LuaFunction, GCMode as LuaGCMode, Integer as LuaInteger, IntoLua, IntoLuaMulti,
+    LightUserData as LuaLightUserData, Lua, LuaNativeFn, LuaNativeFnMut, LuaOptions, LuaString,
+    MetaMethod as LuaMetaMethod, MultiValue as LuaMultiValue, Nil as LuaNil, Number as LuaNumber,
     ObjectLike as LuaObjectLike, RegistryKey as LuaRegistryKey, Result as LuaResult, StdLib as LuaStdLib,
     Table as LuaTable, TablePairs as LuaTablePairs, TableSequence as LuaTableSequence, Thread as LuaThread,
     ThreadStatus as LuaThreadStatus, UserData as LuaUserData, UserDataFields as LuaUserDataFields,
     UserDataMetatable as LuaUserDataMetatable, UserDataMethods as LuaUserDataMethods,
     UserDataRef as LuaUserDataRef, UserDataRefMut as LuaUserDataRefMut,
     UserDataRegistry as LuaUserDataRegistry, Value as LuaValue, Variadic as LuaVariadic,
-    VmState as LuaVmState, WeakLua,
+    VmState as LuaVmState, WeakLua, function::FunctionInfo as LuaFunctionInfo,
 };
 
 #[cfg(not(feature = "luau"))]
@@ -24,9 +24,8 @@ pub use crate::HookTriggers as LuaHookTriggers;
 #[cfg(feature = "luau")]
 #[doc(no_inline)]
 pub use crate::{
-    CompileConstant as LuaCompileConstant, CoverageInfo as LuaCoverageInfo,
-    NavigateError as LuaNavigateError, Require as LuaRequire, TextRequirer as LuaTextRequirer,
-    Vector as LuaVector,
+    CompileConstant as LuaCompileConstant, NavigateError as LuaNavigateError, Require as LuaRequire,
+    TextRequirer as LuaTextRequirer, Vector as LuaVector,
 };
 
 #[cfg(feature = "async")]
