@@ -74,7 +74,6 @@ mod macros;
 mod buffer;
 mod chunk;
 mod conversion;
-mod debug;
 mod error;
 #[cfg(any(feature = "luau", doc))]
 mod luau;
@@ -92,6 +91,7 @@ mod util;
 mod value;
 mod vector;
 
+pub mod debug;
 pub mod function;
 pub mod prelude;
 pub mod table;
@@ -100,7 +100,6 @@ pub use bstr::BString;
 pub use ffi::{self, lua_CFunction, lua_State};
 
 pub use crate::chunk::{AsChunk, Chunk, ChunkMode};
-pub use crate::debug::{Debug, DebugEvent, DebugNames, DebugSource, DebugStack};
 pub use crate::error::{Error, ErrorContext, ExternalError, ExternalResult, Result};
 pub use crate::function::Function;
 pub use crate::multi::{MultiValue, Variadic};
