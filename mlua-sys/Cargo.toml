@@ -47,3 +47,11 @@ luau0-src = { version = "0.18.0", optional = true }
 
 [lints.rust]
 unexpected_cfgs = { level = "allow", check-cfg = ['cfg(raw_dylib)'] }
+
+[package.metadata.system-deps]
+lua55 = { name = "lua", fallback-names = ["lua5.5", "lua-5.5", "lua55"], version = ">= 5.5, < 5.6", feature = "lua55" }
+lua54 = { name = "lua", fallback-names = ["lua5.4", "lua-5.4", "lua54"], version = ">= 5.4, < 5.5", feature = "lua54" }
+lua53 = { name = "lua", fallback-names = ["lua5.3", "lua-5.3", "lua53"], version = ">= 5.3, < 5.4", feature = "lua53" }
+lua52 = { name = "lua", fallback-names = ["lua5.2", "lua-5.2", "lua52"], version = ">= 5.2, < 5.3", feature = "lua52" }
+lua51 = { name = "lua", fallback-names = ["lua5.1", "lua-5.1", "lua51"], version = ">= 5.1, < 5.2", feature = "lua51" }
+luajit = { name = "luajit", version = ">= 2.0.4, < 2.2", feature = "luajit" }
