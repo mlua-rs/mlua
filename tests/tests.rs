@@ -1374,7 +1374,7 @@ fn test_inspect_stack() -> Result<()> {
         local function baz(a, b, c, ...)
             return stack_info()
         end
-        assert(baz() == 'DebugStack { num_ups: 1, num_params: 3, is_vararg: true }')
+        assert(baz() == 'DebugStack { num_upvalues: 1, num_params: 3, is_vararg: true }')
     "#,
     )
     .exec()?;
@@ -1387,7 +1387,7 @@ fn test_inspect_stack() -> Result<()> {
         local function baz(a, b, c, ...)
             return stack_info()
         end
-        assert(baz() == 'DebugStack { num_ups: 1 }')
+        assert(baz() == 'DebugStack { num_upvalues: 1 }')
     "#,
     )
     .exec()?;

@@ -3,7 +3,8 @@
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::{Arc, Mutex};
 
-use mlua::{DebugEvent, Error, HookTriggers, Lua, Result, ThreadStatus, Value, VmState};
+use mlua::debug::DebugEvent;
+use mlua::{Error, HookTriggers, Lua, Result, ThreadStatus, Value, VmState};
 
 #[test]
 fn test_hook_triggers() {
