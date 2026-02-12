@@ -1,7 +1,6 @@
 #![allow(dead_code)]
 
 use std::env;
-use std::ops::Bound;
 
 pub fn probe_lua() {
     let target_arch = env::var("CARGO_CFG_TARGET_ARCH").unwrap();
@@ -29,36 +28,6 @@ pub fn probe_lua() {
         return;
     }
 
-    // Find using `pkg-config`
-
-    #[cfg(feature = "lua55")]
-    let (incl_bound, excl_bound, alt_probe, ver) = ("5.5", "5.6", ["lua5.5", "lua-5.5", "lua55"], "5.5");
-    #[cfg(feature = "lua54")]
-    let (incl_bound, excl_bound, alt_probe, ver) = ("5.4", "5.5", ["lua5.4", "lua-5.4", "lua54"], "5.4");
-    #[cfg(feature = "lua53")]
-    let (incl_bound, excl_bound, alt_probe, ver) = ("5.3", "5.4", ["lua5.3", "lua-5.3", "lua53"], "5.3");
-    #[cfg(feature = "lua52")]
-    let (incl_bound, excl_bound, alt_probe, ver) = ("5.2", "5.3", ["lua5.2", "lua-5.2", "lua52"], "5.2");
-    #[cfg(feature = "lua51")]
-    let (incl_bound, excl_bound, alt_probe, ver) = ("5.1", "5.2", ["lua5.1", "lua-5.1", "lua51"], "5.1");
-    #[cfg(feature = "luajit")]
-    let (incl_bound, excl_bound, alt_probe, ver) = ("2.0.4", "2.2", [], "JIT");
-
-    #[rustfmt::skip]
-    let mut lua = pkg_config::Config::new()
-        .range_version((Bound::Included(incl_bound), Bound::Excluded(excl_bound)))
-        .cargo_metadata(true)
-        .probe(if cfg!(feature = "luajit") { "luajit" } else { "lua" });
-
-    if lua.is_err() {
-        for pkg in alt_probe {
-            lua = pkg_config::Config::new().cargo_metadata(true).probe(pkg);
-
-            if lua.is_ok() {
-                break;
-            }
-        }
-    }
-
-    lua.unwrap_or_else(|err| panic!("cannot find Lua{ver} using `pkg-config`: {err}"));
+    // This reads [package.metadata.system-deps] from Cargo.toml
+    system_deps::Config::new().probe().unwrap();
 }
