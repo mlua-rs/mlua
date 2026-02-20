@@ -2,7 +2,9 @@ use std::collections::HashMap;
 use std::os::raw::c_void;
 use std::ptr;
 
-use mlua::{Error, LightUserData, Lua, MultiValue, Result, UserData, UserDataMethods, Value};
+use mlua::{
+    Error, LightUserData, Lua, MultiValue, Result, UserData, UserDataMethods, UserDataRegistry, Value,
+};
 
 #[test]
 fn test_value_eq() -> Result<()> {
@@ -217,6 +219,26 @@ fn test_debug_format() -> Result<()> {
         .create_any_userdata::<HashMap<i32, String>>(HashMap::new())
         .map(Value::UserData)?;
     assert!(format!("{ud:#?}").starts_with("HashMap<i32, String>:"));
+
+    struct ToDebugUserData;
+    impl UserData for ToDebugUserData {
+        fn register(registry: &mut UserDataRegistry<Self>) {
+            registry.add_meta_method("__tostring", |_, _, ()| Ok("regular-string"));
+            registry.add_meta_method("__todebugstring", |_, _, ()| Ok("debug-string"));
+        }
+    }
+    let debug_ud = Value::UserData(lua.create_userdata(ToDebugUserData)?);
+    assert_eq!(debug_ud.to_string()?, "regular-string");
+    assert_eq!(format!("{debug_ud:#?}"), "debug-string");
+
+    struct ToStringUserData;
+    impl UserData for ToStringUserData {
+        fn register(registry: &mut UserDataRegistry<Self>) {
+            registry.add_meta_method("__tostring", |_, _, ()| Ok("to-string-only"));
+        }
+    }
+    let tostring_only_ud = Value::UserData(lua.create_userdata(ToStringUserData)?);
+    assert_eq!(format!("{tostring_only_ud:#?}"), "tostring-only");
 
     Ok(())
 }

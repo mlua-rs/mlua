@@ -123,6 +123,11 @@ pub enum MetaMethod {
     ///
     /// This is not an operator, but will be called by methods such as `tostring` and `print`.
     ToString,
+    /// The `__todebugstring` metamethod for debug purposes.
+    ///
+    /// This is an mlua-specific metamethod that can be used to provide debug representation for
+    /// userdata.
+    ToDebugString,
     /// The `__pairs` metamethod.
     ///
     /// This is not an operator, but it will be called by the built-in `pairs` function.
@@ -232,6 +237,7 @@ impl MetaMethod {
             MetaMethod::NewIndex => "__newindex",
             MetaMethod::Call => "__call",
             MetaMethod::ToString => "__tostring",
+            MetaMethod::ToDebugString => "__todebugstring",
 
             #[cfg(any(
                 feature = "lua55",

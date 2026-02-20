@@ -151,7 +151,7 @@ impl Value {
     /// This might invoke the `__tostring` metamethod for non-primitive types (eg. tables,
     /// functions).
     pub fn to_string(&self) -> Result<String> {
-        unsafe fn invoke_to_string(vref: &ValueRef) -> Result<String> {
+        unsafe fn invoke_tostring(vref: &ValueRef) -> Result<String> {
             let lua = vref.lua.lock();
             let state = lua.state();
             let _guard = StackGuard::new(state);
@@ -178,9 +178,9 @@ impl Value {
             | Value::Function(Function(vref))
             | Value::Thread(Thread(vref, ..))
             | Value::UserData(AnyUserData(vref))
-            | Value::Other(vref) => unsafe { invoke_to_string(vref) },
+            | Value::Other(vref) => unsafe { invoke_tostring(vref) },
             #[cfg(feature = "luau")]
-            Value::Buffer(crate::Buffer(vref)) => unsafe { invoke_to_string(vref) },
+            Value::Buffer(crate::Buffer(vref)) => unsafe { invoke_tostring(vref) },
             Value::Error(err) => Ok(err.to_string()),
         }
     }
@@ -545,6 +545,24 @@ impl Value {
         ident: usize,
         visited: &mut HashSet<*const c_void>,
     ) -> fmt::Result {
+        unsafe fn invoke_tostring_dbg(vref: &ValueRef) -> Result<Option<String>> {
+            let lua = vref.lua.lock();
+            let state = lua.state();
+            let _guard = StackGuard::new(state);
+            check_stack(state, 3)?;
+
+            lua.push_ref(vref);
+            protect_lua!(state, 1, 1, fn(state) {
+                // Try `__todebugstring`  metamethod first, then `__tostring`
+                if ffi::luaL_callmeta(state, -1, cstr!("__todebugstring")) == 0 {
+                    if ffi::luaL_callmeta(state, -1, cstr!("__tostring")) == 0 {
+                        ffi::lua_pushnil(state);
+                    }
+                }
+            })?;
+            Ok(lua.pop_value().as_string().map(|s| s.to_string_lossy()))
+        }
+
         match self {
             Value::Nil => write!(fmt, "nil"),
             Value::Boolean(b) => write!(fmt, "{b}"),
@@ -561,15 +579,17 @@ impl Value {
             t @ Value::Table(_) => write!(fmt, "table: {:?}", t.to_pointer()),
             f @ Value::Function(_) => write!(fmt, "function: {:?}", f.to_pointer()),
             t @ Value::Thread(_) => write!(fmt, "thread: {:?}", t.to_pointer()),
-            u @ Value::UserData(ud) => {
-                // Try `__name/__type` first then `__tostring`
-                let name = ud.type_name().ok().flatten();
-                let s = name
-                    .map(|name| format!("{name}: {:?}", u.to_pointer()))
-                    .or_else(|| u.to_string().ok())
-                    .unwrap_or_else(|| format!("userdata: {:?}", u.to_pointer()));
-                write!(fmt, "{s}")
-            }
+            u @ Value::UserData(ud) => unsafe {
+                // Try converting to a (debug) string first, with fallback to `__name/__type`
+                match invoke_tostring_dbg(&ud.0) {
+                    Ok(Some(s)) => write!(fmt, "{s}"),
+                    _ => {
+                        let name = ud.type_name().ok().flatten();
+                        let name = name.as_deref().unwrap_or("userdata");
+                        write!(fmt, "{name}: {:?}", u.to_pointer())
+                    }
+                }
+            },
             #[cfg(feature = "luau")]
             buf @ Value::Buffer(_) => write!(fmt, "buffer: {:?}", buf.to_pointer()),
             Value::Error(e) if recursive => write!(fmt, "{e:?}"),
