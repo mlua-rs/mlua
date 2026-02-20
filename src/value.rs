@@ -545,24 +545,6 @@ impl Value {
         ident: usize,
         visited: &mut HashSet<*const c_void>,
     ) -> fmt::Result {
-        unsafe fn invoke_tostring_dbg(vref: &ValueRef) -> Result<Option<String>> {
-            let lua = vref.lua.lock();
-            let state = lua.state();
-            let _guard = StackGuard::new(state);
-            check_stack(state, 3)?;
-
-            lua.push_ref(vref);
-            protect_lua!(state, 1, 1, fn(state) {
-                // Try `__todebugstring`  metamethod first, then `__tostring`
-                if ffi::luaL_callmeta(state, -1, cstr!("__todebugstring")) == 0 {
-                    if ffi::luaL_callmeta(state, -1, cstr!("__tostring")) == 0 {
-                        ffi::lua_pushnil(state);
-                    }
-                }
-            })?;
-            Ok(lua.pop_value().as_string().map(|s| s.to_string_lossy()))
-        }
-
         match self {
             Value::Nil => write!(fmt, "nil"),
             Value::Boolean(b) => write!(fmt, "{b}"),
@@ -579,17 +561,7 @@ impl Value {
             t @ Value::Table(_) => write!(fmt, "table: {:?}", t.to_pointer()),
             f @ Value::Function(_) => write!(fmt, "function: {:?}", f.to_pointer()),
             t @ Value::Thread(_) => write!(fmt, "thread: {:?}", t.to_pointer()),
-            u @ Value::UserData(ud) => unsafe {
-                // Try converting to a (debug) string first, with fallback to `__name/__type`
-                match invoke_tostring_dbg(&ud.0) {
-                    Ok(Some(s)) => write!(fmt, "{s}"),
-                    _ => {
-                        let name = ud.type_name().ok().flatten();
-                        let name = name.as_deref().unwrap_or("userdata");
-                        write!(fmt, "{name}: {:?}", u.to_pointer())
-                    }
-                }
-            },
+            Value::UserData(ud) => ud.fmt_pretty(fmt),
             #[cfg(feature = "luau")]
             buf @ Value::Buffer(_) => write!(fmt, "buffer: {:?}", buf.to_pointer()),
             Value::Error(e) if recursive => write!(fmt, "{e:?}"),

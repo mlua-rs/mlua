@@ -3,7 +3,8 @@ use std::os::raw::c_void;
 use std::ptr;
 
 use mlua::{
-    Error, LightUserData, Lua, MultiValue, Result, UserData, UserDataMethods, UserDataRegistry, Value,
+    AnyUserData, Error, LightUserData, Lua, MultiValue, Result, UserData, UserDataMethods, UserDataRegistry,
+    Value,
 };
 
 #[test]
@@ -234,11 +235,16 @@ fn test_debug_format() -> Result<()> {
     struct ToStringUserData;
     impl UserData for ToStringUserData {
         fn register(registry: &mut UserDataRegistry<Self>) {
-            registry.add_meta_method("__tostring", |_, _, ()| Ok("to-string-only"));
+            registry.add_meta_method("__tostring", |_, _, ()| Ok("regular-string"));
         }
     }
     let tostring_only_ud = Value::UserData(lua.create_userdata(ToStringUserData)?);
-    assert_eq!(format!("{tostring_only_ud:#?}"), "tostring-only");
+    assert_eq!(format!("{tostring_only_ud:#?}"), "regular-string");
+
+    // Check that `AnyUsedata` pretty debug format is same as for `Value::UserData`
+    let any_ud: AnyUserData = lua.create_userdata(ToDebugUserData)?;
+    let value_ud = Value::UserData(any_ud.clone());
+    assert_eq!(format!("{any_ud:#?}"), format!("{value_ud:#?}"));
 
     Ok(())
 }

@@ -711,7 +711,7 @@ pub trait UserData: Sized {
 ///
 /// [`is`]: crate::AnyUserData::is
 /// [`borrow`]: crate::AnyUserData::borrow
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub struct AnyUserData(pub(crate) ValueRef);
 
 impl AnyUserData {
@@ -1080,6 +1080,45 @@ impl AnyUserData {
             Ok::<_, Error>((*ud).is_serializable())
         };
         is_serializable().unwrap_or(false)
+    }
+
+    unsafe fn invoke_tostring_dbg(&self) -> Result<Option<String>> {
+        let lua = self.0.lua.lock();
+        let state = lua.state();
+        let _guard = StackGuard::new(state);
+        check_stack(state, 3)?;
+
+        lua.push_ref(&self.0);
+        protect_lua!(state, 1, 1, fn(state) {
+            // Try `__todebugstring` metamethod first, then `__tostring`
+            if ffi::luaL_callmeta(state, -1, cstr!("__todebugstring")) == 0 {
+                if ffi::luaL_callmeta(state, -1, cstr!("__tostring")) == 0 {
+                    ffi::lua_pushnil(state);
+                }
+            }
+        })?;
+        Ok(lua.pop_value().as_string().map(|s| s.to_string_lossy()))
+    }
+
+    pub(crate) fn fmt_pretty(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        // Try converting to a (debug) string first, with fallback to `__name/__type`
+        match unsafe { self.invoke_tostring_dbg() } {
+            Ok(Some(s)) => write!(fmt, "{s}"),
+            _ => {
+                let name = self.type_name().ok().flatten();
+                let name = name.as_deref().unwrap_or("userdata");
+                write!(fmt, "{name}: {:?}", self.to_pointer())
+            }
+        }
+    }
+}
+
+impl fmt::Debug for AnyUserData {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        if fmt.alternate() {
+            return self.fmt_pretty(fmt);
+        }
+        fmt.debug_tuple("AnyUserData").field(&self.0).finish()
     }
 }
 
