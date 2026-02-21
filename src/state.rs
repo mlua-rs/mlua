@@ -20,8 +20,8 @@ use crate::table::Table;
 use crate::thread::Thread;
 use crate::traits::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti};
 use crate::types::{
-    AppDataRef, AppDataRefMut, ArcReentrantMutexGuard, Integer, LuaType, MaybeSend, Number, ReentrantMutex,
-    ReentrantMutexGuard, RegistryKey, VmState, XRc, XWeak,
+    AppDataRef, AppDataRefMut, ArcReentrantMutexGuard, Integer, LuaType, MaybeSend, MaybeSync, Number,
+    ReentrantMutex, ReentrantMutexGuard, RegistryKey, VmState, XRc, XWeak,
 };
 use crate::userdata::{AnyUserData, UserData, UserDataProxy, UserDataRegistry, UserDataStorage};
 use crate::util::{StackGuard, assert_stack, check_stack, protect_lua_closure, push_string, rawset_field};
@@ -1492,7 +1492,7 @@ impl Lua {
     #[inline]
     pub fn create_userdata<T>(&self, data: T) -> Result<AnyUserData>
     where
-        T: UserData + MaybeSend + 'static,
+        T: UserData + MaybeSend + MaybeSync + 'static,
     {
         unsafe { self.lock().make_userdata(UserDataStorage::new(data)) }
     }
@@ -1503,7 +1503,7 @@ impl Lua {
     #[inline]
     pub fn create_ser_userdata<T>(&self, data: T) -> Result<AnyUserData>
     where
-        T: UserData + Serialize + MaybeSend + 'static,
+        T: UserData + Serialize + MaybeSend + MaybeSync + 'static,
     {
         unsafe { self.lock().make_userdata(UserDataStorage::new_ser(data)) }
     }
@@ -1518,7 +1518,7 @@ impl Lua {
     #[inline]
     pub fn create_any_userdata<T>(&self, data: T) -> Result<AnyUserData>
     where
-        T: MaybeSend + 'static,
+        T: MaybeSend + MaybeSync + 'static,
     {
         unsafe { self.lock().make_any_userdata(UserDataStorage::new(data)) }
     }
@@ -1531,7 +1531,7 @@ impl Lua {
     #[inline]
     pub fn create_ser_any_userdata<T>(&self, data: T) -> Result<AnyUserData>
     where
-        T: Serialize + MaybeSend + 'static,
+        T: Serialize + MaybeSend + MaybeSync + 'static,
     {
         unsafe { (self.lock()).make_any_userdata(UserDataStorage::new_ser(data)) }
     }

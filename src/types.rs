@@ -128,6 +128,18 @@ pub trait MaybeSend {}
 #[cfg(not(feature = "send"))]
 impl<T> MaybeSend for T {}
 
+/// A trait that adds `Sync` requirement if `send` feature is enabled.
+#[cfg(feature = "send")]
+pub trait MaybeSync: Sync {}
+#[cfg(feature = "send")]
+impl<T: Sync> MaybeSync for T {}
+
+/// A trait that adds `Sync` requirement if `send` feature is enabled.
+#[cfg(not(feature = "send"))]
+pub trait MaybeSync {}
+#[cfg(not(feature = "send"))]
+impl<T> MaybeSync for T {}
+
 pub(crate) struct DestructedUserdata;
 
 pub(crate) trait LuaType {

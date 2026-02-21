@@ -16,7 +16,7 @@ use crate::string::{BorrowedBytes, BorrowedStr, LuaString};
 use crate::table::Table;
 use crate::thread::Thread;
 use crate::traits::{FromLua, IntoLua, ShortTypeName as _};
-use crate::types::{Either, LightUserData, MaybeSend, RegistryKey};
+use crate::types::{Either, LightUserData, MaybeSend, MaybeSync, RegistryKey};
 use crate::userdata::{AnyUserData, UserData};
 use crate::value::{Nil, Value};
 
@@ -294,7 +294,7 @@ impl FromLua for AnyUserData {
     }
 }
 
-impl<T: UserData + MaybeSend + 'static> IntoLua for T {
+impl<T: UserData + MaybeSend + MaybeSync + 'static> IntoLua for T {
     #[inline]
     fn into_lua(self, lua: &Lua) -> Result<Value> {
         Ok(Value::UserData(lua.create_userdata(self)?))

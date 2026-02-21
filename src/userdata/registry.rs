@@ -654,6 +654,12 @@ macro_rules! lua_userdata_impl {
 // A special proxy object for UserData
 pub(crate) struct UserDataProxy<T>(pub(crate) PhantomData<T>);
 
+// `UserDataProxy` holds no real `T` value, only a type marker, so it is always safe to send/share.
+#[cfg(feature = "send")]
+unsafe impl<T> Send for UserDataProxy<T> {}
+#[cfg(feature = "send")]
+unsafe impl<T> Sync for UserDataProxy<T> {}
+
 lua_userdata_impl!(UserDataProxy<T>);
 
 #[cfg(all(feature = "userdata-wrappers", not(feature = "send")))]

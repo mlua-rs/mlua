@@ -10,7 +10,7 @@ use crate::state::Lua;
 use crate::string::LuaString;
 use crate::table::{Table, TablePairs};
 use crate::traits::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti};
-use crate::types::{MaybeSend, ValueRef};
+use crate::types::{MaybeSend, MaybeSync, ValueRef};
 use crate::util::{StackGuard, check_stack, get_userdata, push_string, short_type_name, take_userdata};
 use crate::value::Value;
 
@@ -1216,7 +1216,7 @@ impl AnyUserData {
     /// Wraps any Rust type, returning an opaque type that implements [`IntoLua`] trait.
     ///
     /// This function uses [`Lua::create_any_userdata`] under the hood.
-    pub fn wrap<T: MaybeSend + 'static>(data: T) -> impl IntoLua {
+    pub fn wrap<T: MaybeSend + MaybeSync + 'static>(data: T) -> impl IntoLua {
         WrappedUserdata(move |lua| lua.create_any_userdata(data))
     }
 
@@ -1226,7 +1226,7 @@ impl AnyUserData {
     /// This function uses [`Lua::create_ser_any_userdata`] under the hood.
     #[cfg(feature = "serde")]
     #[cfg_attr(docsrs, doc(cfg(feature = "serde")))]
-    pub fn wrap_ser<T: Serialize + MaybeSend + 'static>(data: T) -> impl IntoLua {
+    pub fn wrap_ser<T: Serialize + MaybeSend + MaybeSync + 'static>(data: T) -> impl IntoLua {
         WrappedUserdata(move |lua| lua.create_ser_any_userdata(data))
     }
 }
