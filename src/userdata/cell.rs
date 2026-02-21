@@ -13,7 +13,7 @@ use super::r#ref::{UserDataRef, UserDataRefMut};
 type DynSerialize = dyn erased_serde::Serialize;
 
 #[cfg(all(feature = "serde", feature = "send"))]
-type DynSerialize = dyn erased_serde::Serialize + Send;
+type DynSerialize = dyn erased_serde::Serialize + Send + Sync;
 
 pub(crate) enum UserDataStorage<T> {
     Owned(UserDataVariant<T>),
