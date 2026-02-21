@@ -1,4 +1,4 @@
-use std::cell::{RefCell, UnsafeCell};
+use std::cell::RefCell;
 
 #[cfg(feature = "serde")]
 use serde::ser::{Serialize, Serializer};
@@ -6,7 +6,7 @@ use serde::ser::{Serialize, Serializer};
 use crate::error::{Error, Result};
 use crate::types::XRc;
 
-use super::lock::{RawLock, UserDataLock};
+use super::lock::{RawLock, RwLock, UserDataLock};
 use super::r#ref::{UserDataRef, UserDataRefMut};
 
 #[cfg(all(feature = "serde", not(feature = "send")))]
@@ -80,10 +80,12 @@ impl<T> UserDataVariant<T> {
             return Err(Error::UserDataBorrowMutError);
         }
         Ok(match self {
-            Self::Default(inner) => XRc::into_inner(inner).unwrap().value.into_inner(),
+            Self::Default(inner) => XRc::into_inner(inner).unwrap().into_value(),
             #[cfg(feature = "serde")]
             Self::Serializable(inner) => unsafe {
-                let raw = Box::into_raw(XRc::into_inner(inner).unwrap().value.into_inner());
+                // The serde variant erases `T` to `Box<DynSerialize>`, so we
+                // must cast the raw pointer back to recover the concrete type.
+                let raw = Box::into_raw(XRc::into_inner(inner).unwrap().into_value());
                 *Box::from_raw(raw as *mut T)
             },
         })
@@ -101,18 +103,18 @@ impl<T> UserDataVariant<T> {
     #[inline(always)]
     pub(super) fn raw_lock(&self) -> &RawLock {
         match self {
-            Self::Default(inner) => &inner.raw_lock,
+            Self::Default(inner) => unsafe { inner.raw_lock() },
             #[cfg(feature = "serde")]
-            Self::Serializable(inner) => &inner.raw_lock,
+            Self::Serializable(inner) => unsafe { inner.raw_lock() },
         }
     }
 
     #[inline(always)]
     pub(super) fn as_ptr(&self) -> *mut T {
         match self {
-            Self::Default(inner) => inner.value.get(),
+            Self::Default(inner) => inner.as_ptr(),
             #[cfg(feature = "serde")]
-            Self::Serializable(inner) => unsafe { &mut **(inner.value.get() as *mut Box<T>) },
+            Self::Serializable(inner) => unsafe { (&mut **inner.as_ptr()) as *mut DynSerialize as *mut T },
         }
     }
 }
@@ -124,7 +126,7 @@ impl Serialize for UserDataStorage<()> {
             Self::Owned(variant @ UserDataVariant::Serializable(inner)) => unsafe {
                 let _guard = (variant.raw_lock().try_lock_shared_guarded())
                     .map_err(|_| serde::ser::Error::custom(Error::UserDataBorrowError))?;
-                (*inner.value.get()).serialize(serializer)
+                (*inner.as_ptr()).serialize(serializer)
             },
             _ => Err(serde::ser::Error::custom("cannot serialize <userdata>")),
         }
@@ -132,23 +134,32 @@ impl Serialize for UserDataStorage<()> {
 }
 
 /// A type that provides interior mutability for a userdata value (thread-safe).
-pub(crate) struct UserDataCell<T> {
-    raw_lock: RawLock,
-    value: UnsafeCell<T>,
-}
-
-#[cfg(feature = "send")]
-unsafe impl<T: Send> Send for UserDataCell<T> {}
-#[cfg(feature = "send")]
-unsafe impl<T: Send> Sync for UserDataCell<T> {}
+pub(crate) struct UserDataCell<T>(RwLock<T>);
 
 impl<T> UserDataCell<T> {
     #[inline(always)]
     fn new(value: T) -> Self {
-        UserDataCell {
-            raw_lock: RawLock::INIT,
-            value: UnsafeCell::new(value),
-        }
+        UserDataCell(RwLock::new(value))
+    }
+
+    /// Returns a reference to the underlying raw lock.
+    #[inline(always)]
+    pub(super) unsafe fn raw_lock(&self) -> &RawLock {
+        self.0.raw()
+    }
+
+    /// Returns a raw pointer to the wrapped value.
+    ///
+    /// The caller is responsible for ensuring the appropriate lock is held.
+    #[inline(always)]
+    pub(super) fn as_ptr(&self) -> *mut T {
+        self.0.data_ptr()
+    }
+
+    /// Consumes the cell and returns the inner value.
+    #[inline(always)]
+    pub(super) fn into_value(self) -> T {
+        self.0.into_inner()
     }
 }
 
