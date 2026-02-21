@@ -1091,6 +1091,7 @@ impl AnyUserData {
         lua.push_ref(&self.0);
         protect_lua!(state, 1, 1, fn(state) {
             // Try `__todebugstring` metamethod first, then `__tostring`
+            #[allow(clippy::collapsible_if)]
             if ffi::luaL_callmeta(state, -1, cstr!("__todebugstring")) == 0 {
                 if ffi::luaL_callmeta(state, -1, cstr!("__tostring")) == 0 {
                     ffi::lua_pushnil(state);
