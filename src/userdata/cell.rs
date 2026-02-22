@@ -23,9 +23,9 @@ pub(crate) enum UserDataStorage<T> {
 // A enum for storing userdata values.
 // It's stored inside a Lua VM and protected by the outer `ReentrantMutex`.
 pub(crate) enum UserDataVariant<T> {
-    Default(XRc<UserDataCell<T>>),
+    Default(XRc<RwLock<T>>),
     #[cfg(feature = "serde")]
-    Serializable(XRc<UserDataCell<Box<DynSerialize>>>),
+    Serializable(XRc<RwLock<Box<DynSerialize>>>),
 }
 
 impl<T> Clone for UserDataVariant<T> {
@@ -80,12 +80,12 @@ impl<T> UserDataVariant<T> {
             return Err(Error::UserDataBorrowMutError);
         }
         Ok(match self {
-            Self::Default(inner) => XRc::into_inner(inner).unwrap().into_value(),
+            Self::Default(inner) => XRc::into_inner(inner).unwrap().into_inner(),
             #[cfg(feature = "serde")]
             Self::Serializable(inner) => unsafe {
                 // The serde variant erases `T` to `Box<DynSerialize>`, so we
                 // must cast the raw pointer back to recover the concrete type.
-                let raw = Box::into_raw(XRc::into_inner(inner).unwrap().into_value());
+                let raw = Box::into_raw(XRc::into_inner(inner).unwrap().into_inner());
                 *Box::from_raw(raw as *mut T)
             },
         })
@@ -103,18 +103,18 @@ impl<T> UserDataVariant<T> {
     #[inline(always)]
     pub(super) fn raw_lock(&self) -> &RawLock {
         match self {
-            Self::Default(inner) => unsafe { inner.raw_lock() },
+            Self::Default(inner) => unsafe { inner.raw() },
             #[cfg(feature = "serde")]
-            Self::Serializable(inner) => unsafe { inner.raw_lock() },
+            Self::Serializable(inner) => unsafe { inner.raw() },
         }
     }
 
     #[inline(always)]
     pub(super) fn as_ptr(&self) -> *mut T {
         match self {
-            Self::Default(inner) => inner.as_ptr(),
+            Self::Default(inner) => inner.data_ptr(),
             #[cfg(feature = "serde")]
-            Self::Serializable(inner) => unsafe { (&mut **inner.as_ptr()) as *mut DynSerialize as *mut T },
+            Self::Serializable(inner) => unsafe { (&mut **inner.data_ptr()) as *mut DynSerialize as *mut T },
         }
     }
 }
@@ -126,40 +126,10 @@ impl Serialize for UserDataStorage<()> {
             Self::Owned(variant @ UserDataVariant::Serializable(inner)) => unsafe {
                 let _guard = (variant.raw_lock().try_lock_shared_guarded())
                     .map_err(|_| serde::ser::Error::custom(Error::UserDataBorrowError))?;
-                (*inner.as_ptr()).serialize(serializer)
+                (*inner.data_ptr()).serialize(serializer)
             },
             _ => Err(serde::ser::Error::custom("cannot serialize <userdata>")),
         }
-    }
-}
-
-/// A type that provides interior mutability for a userdata value (thread-safe).
-pub(crate) struct UserDataCell<T>(RwLock<T>);
-
-impl<T> UserDataCell<T> {
-    #[inline(always)]
-    fn new(value: T) -> Self {
-        UserDataCell(RwLock::new(value))
-    }
-
-    /// Returns a reference to the underlying raw lock.
-    #[inline(always)]
-    pub(super) unsafe fn raw_lock(&self) -> &RawLock {
-        self.0.raw()
-    }
-
-    /// Returns a raw pointer to the wrapped value.
-    ///
-    /// The caller is responsible for ensuring the appropriate lock is held.
-    #[inline(always)]
-    pub(super) fn as_ptr(&self) -> *mut T {
-        self.0.data_ptr()
-    }
-
-    /// Consumes the cell and returns the inner value.
-    #[inline(always)]
-    pub(super) fn into_value(self) -> T {
-        self.0.into_inner()
     }
 }
 
@@ -183,7 +153,7 @@ impl<T> Drop for ScopedUserDataVariant<T> {
 impl<T: 'static> UserDataStorage<T> {
     #[inline(always)]
     pub(crate) fn new(data: T) -> Self {
-        Self::Owned(UserDataVariant::Default(XRc::new(UserDataCell::new(data))))
+        Self::Owned(UserDataVariant::Default(XRc::new(RwLock::new(data))))
     }
 
     #[inline(always)]
@@ -203,7 +173,7 @@ impl<T: 'static> UserDataStorage<T> {
         T: Serialize + crate::types::MaybeSend + crate::types::MaybeSync,
     {
         let data = Box::new(data) as Box<DynSerialize>;
-        let variant = UserDataVariant::Serializable(XRc::new(UserDataCell::new(data)));
+        let variant = UserDataVariant::Serializable(XRc::new(RwLock::new(data)));
         Self::Owned(variant)
     }
 
