@@ -1,3 +1,19 @@
+//! Lua userdata handling.
+//!
+//! This module provides types for creating and working with Lua userdata from Rust.
+//!
+//! # Main Types
+//!
+//! - [`AnyUserData`] - A handle to a Lua userdata value of any Rust type.
+//! - [`UserData`] - Trait to implement for types that should be exposed to Lua as userdata.
+//! - [`UserDataFields`] - Trait for registering fields on userdata types.
+//! - [`UserDataMethods`] - Trait for registering methods on userdata types.
+//! - [`UserDataRegistry`] - Registry for userdata methods and fields.
+//! - [`UserDataMetatable`] - A handle to the metatable of a userdata type.
+//! - [`UserDataRef`] - A borrowed reference to a userdata value.
+//! - [`UserDataRefMut`] - A mutably borrowed reference to a userdata value.
+//! - [`MetaMethod`] - Metamethod names for customizing Lua operators.
+
 use std::any::TypeId;
 use std::ffi::CStr;
 use std::fmt;

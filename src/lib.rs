@@ -85,7 +85,6 @@ mod stdlib;
 mod thread;
 mod traits;
 mod types;
-mod userdata;
 mod util;
 mod value;
 mod vector;
@@ -95,6 +94,7 @@ pub mod function;
 pub mod prelude;
 pub mod string;
 pub mod table;
+pub mod userdata;
 
 pub use bstr::BString;
 pub use ffi::{self, lua_CFunction, lua_State};
@@ -116,14 +116,17 @@ pub use crate::types::{
     AppDataRef, AppDataRefMut, Either, Integer, LightUserData, MaybeSend, MaybeSync, Number, RegistryKey,
     VmState,
 };
-pub use crate::userdata::{
-    AnyUserData, MetaMethod, UserData, UserDataFields, UserDataMetatable, UserDataMethods, UserDataRef,
-    UserDataRefMut, UserDataRegistry,
-};
+pub use crate::userdata::AnyUserData;
 pub use crate::value::{Nil, Value};
 
+// Re-export some types to keep backward compatibility and avoid breaking changes in the public API.
 #[doc(hidden)]
 pub use crate::string::LuaString as String;
+#[doc(hidden)]
+pub use crate::userdata::{
+    MetaMethod, UserData, UserDataFields, UserDataMetatable, UserDataMethods, UserDataRef, UserDataRefMut,
+    UserDataRegistry,
+};
 
 #[cfg(not(feature = "luau"))]
 pub use crate::debug::HookTriggers;

@@ -1376,7 +1376,7 @@ fn test_userdata_namecall() -> Result<()> {
     struct MyUserData;
 
     impl UserData for MyUserData {
-        fn register(registry: &mut mlua::UserDataRegistry<Self>) {
+        fn register(registry: &mut UserDataRegistry<Self>) {
             registry.add_method("method", |_, _, ()| Ok("method called"));
             registry.add_field_method_get("field", |_, _| Ok("field value"));
 
