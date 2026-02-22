@@ -82,7 +82,6 @@ mod multi;
 mod scope;
 mod state;
 mod stdlib;
-mod string;
 mod thread;
 mod traits;
 mod types;
@@ -94,6 +93,7 @@ mod vector;
 pub mod debug;
 pub mod function;
 pub mod prelude;
+pub mod string;
 pub mod table;
 
 pub use bstr::BString;
@@ -106,7 +106,7 @@ pub use crate::multi::{MultiValue, Variadic};
 pub use crate::scope::Scope;
 pub use crate::state::{GCMode, Lua, LuaOptions, WeakLua};
 pub use crate::stdlib::StdLib;
-pub use crate::string::{BorrowedBytes, BorrowedStr, LuaString, LuaString as String};
+pub use crate::string::{BorrowedBytes, BorrowedStr, LuaString};
 pub use crate::table::Table;
 pub use crate::thread::{Thread, ThreadStatus};
 pub use crate::traits::{
@@ -121,6 +121,9 @@ pub use crate::userdata::{
     UserDataRefMut, UserDataRegistry,
 };
 pub use crate::value::{Nil, Value};
+
+#[doc(hidden)]
+pub use crate::string::LuaString as String;
 
 #[cfg(not(feature = "luau"))]
 pub use crate::debug::HookTriggers;

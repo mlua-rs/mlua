@@ -1,3 +1,13 @@
+//! Lua string handling.
+//!
+//! This module provides types for working with Lua strings from Rust.
+//!
+//! # Main Types
+//!
+//! - [`LuaString`] - A handle to an internal Lua string (may not be valid UTF-8).
+//! - [`BorrowedStr`] - A borrowed `&str` view of a Lua string that holds a strong reference to the Lua state.
+//! - [`BorrowedBytes`] - A borrowed `&[u8]` view of a Lua string that holds a strong reference to the Lua state.
+
 use std::borrow::{Borrow, Cow};
 use std::hash::{Hash, Hasher};
 use std::ops::Deref;
