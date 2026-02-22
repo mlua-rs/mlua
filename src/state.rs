@@ -909,8 +909,8 @@ impl Lua {
 
     /// Gets information about the interpreter runtime stack at the given level.
     ///
-    /// This function calls callback `f`, passing the [`Debug`] structure that can be used to get
-    /// information about the function executing at a given level.
+    /// This function calls callback `f`, passing the [`struct@Debug`] structure that can be used to
+    /// get information about the function executing at a given level.
     /// Level `0` is the current running function, whereas level `n+1` is the function that has
     /// called level `n` (except for tail calls, which do not count in the stack).
     pub fn inspect_stack<R>(&self, level: usize, f: impl FnOnce(&Debug) -> R) -> Option<R> {

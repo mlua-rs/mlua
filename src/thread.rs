@@ -449,6 +449,8 @@ impl Thread {
     /// Please note that Luau links environment table with chunk when loading it into Lua state.
     /// Therefore you need to load chunks into a thread to link with the thread environment.
     ///
+    /// [`Lua::sandbox`]: crate::Lua::sandbox
+    ///
     /// # Examples
     ///
     /// ```

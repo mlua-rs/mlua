@@ -1,8 +1,8 @@
 //! Lua debugging interface.
 //!
 //! This module provides access to the Lua debug interface, allowing inspection of the call stack,
-//! and function information. The main types are [`Debug`] for accessing debug information and
-//! [`HookTriggers`] for configuring debug hooks.
+//! and function information. The main types are [`struct@Debug`] for accessing debug information
+//! and [`HookTriggers`] for configuring debug hooks.
 
 use std::borrow::Cow;
 use std::os::raw::c_int;
