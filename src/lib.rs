@@ -101,12 +101,15 @@ pub use ffi::{self, lua_CFunction, lua_State};
 
 pub use crate::chunk::{AsChunk, Chunk, ChunkMode};
 pub use crate::error::{Error, ErrorContext, ExternalError, ExternalResult, Result};
+#[doc(inline)]
 pub use crate::function::Function;
 pub use crate::multi::{MultiValue, Variadic};
 pub use crate::scope::Scope;
 pub use crate::state::{GCMode, Lua, LuaOptions, WeakLua};
 pub use crate::stdlib::StdLib;
+#[doc(inline)]
 pub use crate::string::{BorrowedBytes, BorrowedStr, LuaString};
+#[doc(inline)]
 pub use crate::table::Table;
 pub use crate::thread::{Thread, ThreadStatus};
 pub use crate::traits::{
@@ -116,6 +119,7 @@ pub use crate::types::{
     AppDataRef, AppDataRefMut, Either, Integer, LightUserData, MaybeSend, MaybeSync, Number, RegistryKey,
     VmState,
 };
+#[doc(inline)]
 pub use crate::userdata::AnyUserData;
 pub use crate::value::{Nil, Value};
 
@@ -129,6 +133,7 @@ pub use crate::userdata::{
 };
 
 #[cfg(not(feature = "luau"))]
+#[doc(inline)]
 pub use crate::debug::HookTriggers;
 
 #[cfg(any(feature = "luau", doc))]
