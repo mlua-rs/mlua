@@ -127,6 +127,8 @@ pub use crate::value::{Nil, Value};
 #[doc(hidden)]
 pub use crate::string::LuaString as String;
 #[doc(hidden)]
+pub use crate::table::{TablePairs, TableSequence};
+#[doc(hidden)]
 pub use crate::userdata::{
     MetaMethod, UserData, UserDataFields, UserDataMetatable, UserDataMethods, UserDataRef, UserDataRefMut,
     UserDataRegistry,
