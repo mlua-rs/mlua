@@ -4,7 +4,7 @@ use std::ffi::{CStr, CString, OsStr, OsString};
 use std::hash::{BuildHasher, Hash};
 use std::os::raw::c_int;
 use std::path::{Path, PathBuf};
-use std::{mem, slice, str};
+use std::{slice, str};
 
 use bstr::{BStr, BString, ByteVec};
 use num_traits::cast;
@@ -86,91 +86,79 @@ impl FromLua for LuaString {
     }
 }
 
-impl IntoLua for BorrowedStr<'_> {
+impl IntoLua for BorrowedStr {
     #[inline]
     fn into_lua(self, _: &Lua) -> Result<Value> {
-        Ok(Value::String(self.borrow.into_owned()))
+        Ok(Value::String(LuaString(self.vref)))
     }
 
     #[inline]
     unsafe fn push_into_stack(self, lua: &RawLua) -> Result<()> {
-        lua.push_ref(&self.borrow.0);
+        lua.push_ref(&self.vref);
         Ok(())
     }
 }
 
-impl IntoLua for &BorrowedStr<'_> {
+impl IntoLua for &BorrowedStr {
     #[inline]
     fn into_lua(self, _: &Lua) -> Result<Value> {
-        Ok(Value::String(self.borrow.clone().into_owned()))
+        Ok(Value::String(LuaString(self.vref.clone())))
     }
 
     #[inline]
     unsafe fn push_into_stack(self, lua: &RawLua) -> Result<()> {
-        lua.push_ref(&self.borrow.0);
+        lua.push_ref(&self.vref);
         Ok(())
     }
 }
 
-impl FromLua for BorrowedStr<'_> {
+impl FromLua for BorrowedStr {
     fn from_lua(value: Value, lua: &Lua) -> Result<Self> {
         let s = LuaString::from_lua(value, lua)?;
-        let BorrowedStr { buf, _lua, .. } = BorrowedStr::try_from(&s)?;
-        let buf = unsafe { mem::transmute::<&str, &'static str>(buf) };
-        let borrow = Cow::Owned(s);
-        Ok(Self { buf, borrow, _lua })
+        BorrowedStr::try_from(&s)
     }
 
     unsafe fn from_stack(idx: c_int, lua: &RawLua) -> Result<Self> {
         let s = LuaString::from_stack(idx, lua)?;
-        let BorrowedStr { buf, _lua, .. } = BorrowedStr::try_from(&s)?;
-        let buf = unsafe { mem::transmute::<&str, &'static str>(buf) };
-        let borrow = Cow::Owned(s);
-        Ok(Self { buf, borrow, _lua })
+        BorrowedStr::try_from(&s)
     }
 }
 
-impl IntoLua for BorrowedBytes<'_> {
+impl IntoLua for BorrowedBytes {
     #[inline]
     fn into_lua(self, _: &Lua) -> Result<Value> {
-        Ok(Value::String(self.borrow.into_owned()))
+        Ok(Value::String(LuaString(self.vref)))
     }
 
     #[inline]
     unsafe fn push_into_stack(self, lua: &RawLua) -> Result<()> {
-        lua.push_ref(&self.borrow.0);
+        lua.push_ref(&self.vref);
         Ok(())
     }
 }
 
-impl IntoLua for &BorrowedBytes<'_> {
+impl IntoLua for &BorrowedBytes {
     #[inline]
     fn into_lua(self, _: &Lua) -> Result<Value> {
-        Ok(Value::String(self.borrow.clone().into_owned()))
+        Ok(Value::String(LuaString(self.vref.clone())))
     }
 
     #[inline]
     unsafe fn push_into_stack(self, lua: &RawLua) -> Result<()> {
-        lua.push_ref(&self.borrow.0);
+        lua.push_ref(&self.vref);
         Ok(())
     }
 }
 
-impl FromLua for BorrowedBytes<'_> {
+impl FromLua for BorrowedBytes {
     fn from_lua(value: Value, lua: &Lua) -> Result<Self> {
         let s = LuaString::from_lua(value, lua)?;
-        let BorrowedBytes { buf, _lua, .. } = BorrowedBytes::from(&s);
-        let buf = unsafe { mem::transmute::<&[u8], &'static [u8]>(buf) };
-        let borrow = Cow::Owned(s);
-        Ok(Self { buf, borrow, _lua })
+        Ok(BorrowedBytes::from(&s))
     }
 
     unsafe fn from_stack(idx: c_int, lua: &RawLua) -> Result<Self> {
         let s = LuaString::from_stack(idx, lua)?;
-        let BorrowedBytes { buf, _lua, .. } = BorrowedBytes::from(&s);
-        let buf = unsafe { mem::transmute::<&[u8], &'static [u8]>(buf) };
-        let borrow = Cow::Owned(s);
-        Ok(Self { buf, borrow, _lua })
+        Ok(BorrowedBytes::from(&s))
     }
 }
 

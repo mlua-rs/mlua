@@ -10,11 +10,11 @@
 //! - [`BorrowedBytes`] - A borrowed `&[u8]` view of a Lua string that holds a strong reference to
 //!   the Lua state.
 
-use std::borrow::{Borrow, Cow};
+use std::borrow::Borrow;
 use std::hash::{Hash, Hasher};
 use std::ops::Deref;
 use std::os::raw::{c_int, c_void};
-use std::{cmp, fmt, slice, str};
+use std::{cmp, fmt, mem, slice, str};
 
 use crate::error::{Error, Result};
 use crate::state::Lua;
@@ -37,6 +37,9 @@ pub struct LuaString(pub(crate) ValueRef);
 impl LuaString {
     /// Get a [`BorrowedStr`] if the Lua string is valid UTF-8.
     ///
+    /// The returned `BorrowedStr` holds a strong reference to the Lua state to guarantee the
+    /// validity of the underlying data.
+    ///
     /// # Examples
     ///
     /// ```
@@ -54,7 +57,7 @@ impl LuaString {
     /// # }
     /// ```
     #[inline]
-    pub fn to_str(&self) -> Result<BorrowedStr<'_>> {
+    pub fn to_str(&self) -> Result<BorrowedStr> {
         BorrowedStr::try_from(self)
     }
 
@@ -97,8 +100,9 @@ impl LuaString {
 
     /// Get the bytes that make up this string.
     ///
-    /// The returned slice will not contain the terminating null byte, but will contain any null
-    /// bytes embedded into the Lua string.
+    /// The returned `BorrowedStr` holds a strong reference to the Lua state to guarantee the
+    /// validity of the underlying data. The data will not contain the terminating null byte, but
+    /// will contain any null bytes embedded into the Lua string.
     ///
     /// # Examples
     ///
@@ -113,16 +117,16 @@ impl LuaString {
     /// # }
     /// ```
     #[inline]
-    pub fn as_bytes(&self) -> BorrowedBytes<'_> {
+    pub fn as_bytes(&self) -> BorrowedBytes {
         BorrowedBytes::from(self)
     }
 
     /// Get the bytes that make up this string, including the trailing null byte.
-    pub fn as_bytes_with_nul(&self) -> BorrowedBytes<'_> {
-        let BorrowedBytes { buf, borrow, _lua } = BorrowedBytes::from(self);
+    pub fn as_bytes_with_nul(&self) -> BorrowedBytes {
+        let BorrowedBytes { buf, vref, _lua } = BorrowedBytes::from(self);
         // Include the trailing null byte (it's always present but excluded by default)
         let buf = unsafe { slice::from_raw_parts((*buf).as_ptr(), (*buf).len() + 1) };
-        BorrowedBytes { buf, borrow, _lua }
+        BorrowedBytes { buf, vref, _lua }
     }
 
     // Does not return the terminating null byte
@@ -245,14 +249,14 @@ impl fmt::Display for Display<'_> {
 }
 
 /// A borrowed string (`&str`) that holds a strong reference to the Lua state.
-pub struct BorrowedStr<'a> {
+pub struct BorrowedStr {
     // `buf` points to a readonly memory managed by Lua
-    pub(crate) buf: &'a str,
-    pub(crate) borrow: Cow<'a, LuaString>,
+    pub(crate) buf: &'static str,
+    pub(crate) vref: ValueRef,
     pub(crate) _lua: Lua,
 }
 
-impl Deref for BorrowedStr<'_> {
+impl Deref for BorrowedStr {
     type Target = str;
 
     #[inline(always)]
@@ -261,33 +265,33 @@ impl Deref for BorrowedStr<'_> {
     }
 }
 
-impl Borrow<str> for BorrowedStr<'_> {
+impl Borrow<str> for BorrowedStr {
     #[inline(always)]
     fn borrow(&self) -> &str {
         self.buf
     }
 }
 
-impl AsRef<str> for BorrowedStr<'_> {
+impl AsRef<str> for BorrowedStr {
     #[inline(always)]
     fn as_ref(&self) -> &str {
         self.buf
     }
 }
 
-impl fmt::Display for BorrowedStr<'_> {
+impl fmt::Display for BorrowedStr {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         self.buf.fmt(f)
     }
 }
 
-impl fmt::Debug for BorrowedStr<'_> {
+impl fmt::Debug for BorrowedStr {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         self.buf.fmt(f)
     }
 }
 
-impl<T> PartialEq<T> for BorrowedStr<'_>
+impl<T> PartialEq<T> for BorrowedStr
 where
     T: AsRef<str>,
 {
@@ -296,9 +300,9 @@ where
     }
 }
 
-impl Eq for BorrowedStr<'_> {}
+impl Eq for BorrowedStr {}
 
-impl<T> PartialOrd<T> for BorrowedStr<'_>
+impl<T> PartialOrd<T> for BorrowedStr
 where
     T: AsRef<str>,
 {
@@ -307,33 +311,33 @@ where
     }
 }
 
-impl Ord for BorrowedStr<'_> {
+impl Ord for BorrowedStr {
     fn cmp(&self, other: &Self) -> cmp::Ordering {
         self.buf.cmp(other.buf)
     }
 }
 
-impl<'a> TryFrom<&'a LuaString> for BorrowedStr<'a> {
+impl TryFrom<&LuaString> for BorrowedStr {
     type Error = Error;
 
     #[inline]
-    fn try_from(value: &'a LuaString) -> Result<Self> {
-        let BorrowedBytes { buf, borrow, _lua } = BorrowedBytes::from(value);
+    fn try_from(value: &LuaString) -> Result<Self> {
+        let BorrowedBytes { buf, vref, _lua } = BorrowedBytes::from(value);
         let buf =
             str::from_utf8(buf).map_err(|e| Error::from_lua_conversion("string", "&str", e.to_string()))?;
-        Ok(Self { buf, borrow, _lua })
+        Ok(Self { buf, vref, _lua })
     }
 }
 
 /// A borrowed byte slice (`&[u8]`) that holds a strong reference to the Lua state.
-pub struct BorrowedBytes<'a> {
+pub struct BorrowedBytes {
     // `buf` points to a readonly memory managed by Lua
-    pub(crate) buf: &'a [u8],
-    pub(crate) borrow: Cow<'a, LuaString>,
+    pub(crate) buf: &'static [u8],
+    pub(crate) vref: ValueRef,
     pub(crate) _lua: Lua,
 }
 
-impl Deref for BorrowedBytes<'_> {
+impl Deref for BorrowedBytes {
     type Target = [u8];
 
     #[inline(always)]
@@ -342,27 +346,27 @@ impl Deref for BorrowedBytes<'_> {
     }
 }
 
-impl Borrow<[u8]> for BorrowedBytes<'_> {
+impl Borrow<[u8]> for BorrowedBytes {
     #[inline(always)]
     fn borrow(&self) -> &[u8] {
         self.buf
     }
 }
 
-impl AsRef<[u8]> for BorrowedBytes<'_> {
+impl AsRef<[u8]> for BorrowedBytes {
     #[inline(always)]
     fn as_ref(&self) -> &[u8] {
         self.buf
     }
 }
 
-impl fmt::Debug for BorrowedBytes<'_> {
+impl fmt::Debug for BorrowedBytes {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         self.buf.fmt(f)
     }
 }
 
-impl<T> PartialEq<T> for BorrowedBytes<'_>
+impl<T> PartialEq<T> for BorrowedBytes
 where
     T: AsRef<[u8]>,
 {
@@ -371,9 +375,9 @@ where
     }
 }
 
-impl Eq for BorrowedBytes<'_> {}
+impl Eq for BorrowedBytes {}
 
-impl<T> PartialOrd<T> for BorrowedBytes<'_>
+impl<T> PartialOrd<T> for BorrowedBytes
 where
     T: AsRef<[u8]>,
 {
@@ -382,13 +386,13 @@ where
     }
 }
 
-impl Ord for BorrowedBytes<'_> {
+impl Ord for BorrowedBytes {
     fn cmp(&self, other: &Self) -> cmp::Ordering {
         self.buf.cmp(other.buf)
     }
 }
 
-impl<'a> IntoIterator for &'a BorrowedBytes<'_> {
+impl<'a> IntoIterator for &'a BorrowedBytes {
     type Item = &'a u8;
     type IntoIter = slice::Iter<'a, u8>;
 
@@ -397,12 +401,14 @@ impl<'a> IntoIterator for &'a BorrowedBytes<'_> {
     }
 }
 
-impl<'a> From<&'a LuaString> for BorrowedBytes<'a> {
+impl From<&LuaString> for BorrowedBytes {
     #[inline]
-    fn from(value: &'a LuaString) -> Self {
+    fn from(value: &LuaString) -> Self {
         let (buf, _lua) = unsafe { value.to_slice() };
-        let borrow = Cow::Borrowed(value);
-        Self { buf, borrow, _lua }
+        let vref = value.0.clone();
+        // SAFETY: The `buf` is valid for the lifetime of the Lua state and occupied slot index
+        let buf = unsafe { mem::transmute::<&[u8], &'static [u8]>(buf) };
+        Self { buf, vref, _lua }
     }
 }
 
