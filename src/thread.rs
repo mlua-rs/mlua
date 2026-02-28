@@ -259,6 +259,31 @@ impl Thread {
         }
     }
 
+    /// Returns `true` if this thread is resumable (meaning it can be resumed by calling
+    /// [`Thread::resume`]).
+    #[inline(always)]
+    pub fn is_resumable(&self) -> bool {
+        self.status() == ThreadStatus::Resumable
+    }
+
+    /// Returns `true` if this thread is currently running.
+    #[inline(always)]
+    pub fn is_running(&self) -> bool {
+        self.status() == ThreadStatus::Running
+    }
+
+    /// Returns `true` if this thread has finished executing.
+    #[inline(always)]
+    pub fn is_finished(&self) -> bool {
+        self.status() == ThreadStatus::Finished
+    }
+
+    /// Returns `true` if this thread has raised a Lua error during execution.
+    #[inline(always)]
+    pub fn is_error(&self) -> bool {
+        self.status() == ThreadStatus::Error
+    }
+
     /// Sets a hook function that will periodically be called as Lua code executes.
     ///
     /// This function is similar or [`Lua::set_hook`] except that it sets for the thread.

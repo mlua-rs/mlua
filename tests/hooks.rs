@@ -4,7 +4,7 @@ use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use mlua::debug::DebugEvent;
-use mlua::{Error, HookTriggers, Lua, Result, ThreadStatus, Value, VmState};
+use mlua::{Error, HookTriggers, Lua, Result, Value, VmState};
 
 #[test]
 fn test_hook_triggers() {
@@ -281,14 +281,14 @@ fn test_hook_yield() -> Result<()> {
         assert!(co.resume::<()>(()).is_ok());
         assert!(co.resume::<()>(()).is_ok());
         assert!(co.resume::<()>(()).is_ok());
-        assert!(co.status() == ThreadStatus::Finished);
+        assert!(co.is_finished());
     }
     #[cfg(any(feature = "lua51", feature = "lua52", feature = "luajit"))]
     {
         assert!(
             matches!(co.resume::<()>(()), Err(Error::RuntimeError(err)) if err.contains("attempt to yield from a hook"))
         );
-        assert!(co.status() == ThreadStatus::Error);
+        assert!(co.is_error());
     }
 
     Ok(())
@@ -321,7 +321,7 @@ fn test_global_hook() -> Result<()> {
     thread.resume::<()>(()).unwrap();
     lua.remove_global_hook();
     thread.resume::<()>(()).unwrap();
-    assert_eq!(thread.status(), ThreadStatus::Finished);
+    assert!(thread.is_finished());
     assert_eq!(counter.load(Ordering::Relaxed), 3);
 
     Ok(())

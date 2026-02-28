@@ -6,9 +6,7 @@ use std::os::raw::c_void;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicPtr, AtomicU64, Ordering};
 
-use mlua::{
-    Compiler, Error, Function, Lua, LuaOptions, Result, StdLib, Table, ThreadStatus, Value, Vector, VmState,
-};
+use mlua::{Compiler, Error, Function, Lua, LuaOptions, Result, StdLib, Table, Value, Vector, VmState};
 
 #[test]
 fn test_version() -> Result<()> {
@@ -324,11 +322,11 @@ fn test_interrupts() -> Result<()> {
         .into_function()?,
     )?;
     co.resume::<()>(())?;
-    assert_eq!(co.status(), ThreadStatus::Resumable);
+    assert!(co.is_resumable());
     let result: i32 = co.resume(())?;
     assert_eq!(result, 6);
     assert_eq!(yield_count.load(Ordering::Relaxed), 7);
-    assert_eq!(co.status(), ThreadStatus::Finished);
+    assert!(co.is_finished());
 
     // Test no yielding at non-yieldable points
     yield_count.store(0, Ordering::Relaxed);

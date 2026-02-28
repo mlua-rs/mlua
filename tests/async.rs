@@ -7,7 +7,7 @@ use futures_util::stream::TryStreamExt;
 use tokio::sync::Mutex;
 
 use mlua::{
-    Error, Function, Lua, LuaOptions, MultiValue, ObjectLike, Result, StdLib, Table, ThreadStatus, UserData,
+    Error, Function, Lua, LuaOptions, MultiValue, ObjectLike, Result, StdLib, Table, UserData,
     UserDataMethods, UserDataRef, Value,
 };
 
@@ -714,7 +714,7 @@ fn test_async_yield_with() -> Result<()> {
     assert_eq!(thread.resume::<(i32, i32)>((10, 11))?, (21, 110));
     assert_eq!(thread.resume::<(i32, i32)>((11, 12))?, (23, 132));
     assert_eq!(thread.resume::<(i32, i32)>((12, 13))?, (0, 0));
-    assert_eq!(thread.status(), ThreadStatus::Finished);
+    assert!(thread.is_finished());
 
     Ok(())
 }

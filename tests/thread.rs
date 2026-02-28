@@ -1,6 +1,6 @@
 use std::panic::catch_unwind;
 
-use mlua::{Error, Function, IntoLua, Lua, Result, Thread, ThreadStatus, Value};
+use mlua::{Error, Function, IntoLua, Lua, Result, Thread, Value};
 
 #[test]
 fn test_thread() -> Result<()> {
@@ -21,17 +21,17 @@ fn test_thread() -> Result<()> {
         .eval()?,
     )?;
 
-    assert_eq!(thread.status(), ThreadStatus::Resumable);
+    assert!(thread.is_resumable());
     assert_eq!(thread.resume::<i64>(0)?, 0);
-    assert_eq!(thread.status(), ThreadStatus::Resumable);
+    assert!(thread.is_resumable());
     assert_eq!(thread.resume::<i64>(1)?, 1);
-    assert_eq!(thread.status(), ThreadStatus::Resumable);
+    assert!(thread.is_resumable());
     assert_eq!(thread.resume::<i64>(2)?, 3);
-    assert_eq!(thread.status(), ThreadStatus::Resumable);
+    assert!(thread.is_resumable());
     assert_eq!(thread.resume::<i64>(3)?, 6);
-    assert_eq!(thread.status(), ThreadStatus::Resumable);
+    assert!(thread.is_resumable());
     assert_eq!(thread.resume::<i64>(4)?, 10);
-    assert_eq!(thread.status(), ThreadStatus::Finished);
+    assert!(thread.is_finished());
 
     let accumulate = lua.create_thread(
         lua.load(
@@ -50,9 +50,9 @@ fn test_thread() -> Result<()> {
         accumulate.resume::<()>(i)?;
     }
     assert_eq!(accumulate.resume::<i64>(4)?, 10);
-    assert_eq!(accumulate.status(), ThreadStatus::Resumable);
+    assert!(accumulate.is_resumable());
     assert!(accumulate.resume::<()>("error").is_err());
-    assert_eq!(accumulate.status(), ThreadStatus::Error);
+    assert!(accumulate.is_error());
 
     let thread = lua
         .load(
@@ -65,7 +65,7 @@ fn test_thread() -> Result<()> {
         "#,
         )
         .eval::<Thread>()?;
-    assert_eq!(thread.status(), ThreadStatus::Resumable);
+    assert!(thread.is_resumable());
     assert_eq!(thread.resume::<i64>(())?, 42);
 
     let thread: Thread = lua
@@ -92,7 +92,7 @@ fn test_thread() -> Result<()> {
 
     // Already running thread must be unresumable
     let thread = lua.create_thread(lua.create_function(|lua, ()| {
-        assert_eq!(lua.current_thread().status(), ThreadStatus::Running);
+        assert!(lua.current_thread().is_running());
         let result = lua.current_thread().resume::<()>(());
         assert!(
             matches!(result, Err(Error::CoroutineUnresumable)),
@@ -123,12 +123,12 @@ fn test_thread_reset() -> Result<()> {
     assert!(thread.reset(func.clone()).is_ok());
 
     for _ in 0..2 {
-        assert_eq!(thread.status(), ThreadStatus::Resumable);
+        assert!(thread.is_resumable());
         let _ = thread.resume::<AnyUserData>(MyUserData(arc.clone()))?;
-        assert_eq!(thread.status(), ThreadStatus::Resumable);
+        assert!(thread.is_resumable());
         assert_eq!(Arc::strong_count(&arc), 2);
         thread.resume::<()>(())?;
-        assert_eq!(thread.status(), ThreadStatus::Finished);
+        assert!(thread.is_finished());
         thread.reset(func.clone())?;
         lua.gc_collect()?;
         assert_eq!(Arc::strong_count(&arc), 1);
@@ -138,21 +138,21 @@ fn test_thread_reset() -> Result<()> {
     let func: Function = lua.load(r#"function(ud) error("test error") end"#).eval()?;
     let thread = lua.create_thread(func.clone())?;
     let _ = thread.resume::<AnyUserData>(MyUserData(arc.clone()));
-    assert_eq!(thread.status(), ThreadStatus::Error);
+    assert!(thread.is_error());
     assert_eq!(Arc::strong_count(&arc), 2);
     #[cfg(any(feature = "lua55", feature = "lua54"))]
     {
         assert!(thread.reset(func.clone()).is_err());
         // Reset behavior has changed in Lua v5.4.4
         // It's became possible to force reset thread by popping error object
-        assert!(matches!(thread.status(), ThreadStatus::Finished));
+        assert!(thread.is_finished());
         assert!(thread.reset(func.clone()).is_ok());
-        assert_eq!(thread.status(), ThreadStatus::Resumable);
+        assert!(thread.is_resumable());
     }
     #[cfg(any(feature = "lua55", feature = "lua54", feature = "luau"))]
     {
         assert!(thread.reset(func.clone()).is_ok());
-        assert_eq!(thread.status(), ThreadStatus::Resumable);
+        assert!(thread.is_resumable());
     }
 
     // Try reset running thread
