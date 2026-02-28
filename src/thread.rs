@@ -1,3 +1,40 @@
+//! Lua thread (coroutine) handling.
+//!
+//! This module provides types for creating and working with Lua coroutines from Rust.
+//! Coroutines allow cooperative multitasking within a single Lua state by suspending and
+//! resuming execution at well-defined yield points.
+//!
+//! # Basic Usage
+//!
+//! Threads are created via [`Lua::create_thread`] and driven by calling [`Thread::resume`]:
+//!
+//! ```rust
+//! # use mlua::{Lua, Result, Thread};
+//! # fn main() -> Result<()> {
+//! let lua = Lua::new();
+//! let thread: Thread = lua.load(r#"
+//!     coroutine.create(function(a, b)
+//!         coroutine.yield(a + b)
+//!         return a * b
+//!     end)
+//! "#).eval()?;
+//!
+//! assert_eq!(thread.resume::<i32>((3, 4))?, 7);
+//! assert_eq!(thread.resume::<i32>(())?,    12);
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! # Async Support
+//!
+//! When the `async` feature is enabled, a [`Thread`] can be converted into an [`AsyncThread`]
+//! via [`Thread::into_async`], which implements both [`Future`] and [`Stream`].
+//! This integrates Lua coroutines naturally with Rust async runtimes such as Tokio.
+//!
+//! [`Lua::create_thread`]: crate::Lua::create_thread
+//! [`Future`]: std::future::Future
+//! [`Stream`]: futures_util::stream::Stream
+
 use std::fmt;
 use std::os::raw::{c_int, c_void};
 

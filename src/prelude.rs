@@ -9,12 +9,13 @@ pub use crate::{
     LightUserData as LuaLightUserData, Lua, LuaNativeFn, LuaNativeFnMut, LuaOptions, LuaString,
     MetaMethod as LuaMetaMethod, MultiValue as LuaMultiValue, Nil as LuaNil, Number as LuaNumber,
     ObjectLike as LuaObjectLike, RegistryKey as LuaRegistryKey, Result as LuaResult, StdLib as LuaStdLib,
-    Table as LuaTable, Thread as LuaThread, ThreadStatus as LuaThreadStatus, UserData as LuaUserData,
-    UserDataFields as LuaUserDataFields, UserDataMetatable as LuaUserDataMetatable,
-    UserDataMethods as LuaUserDataMethods, UserDataRef as LuaUserDataRef,
-    UserDataRefMut as LuaUserDataRefMut, UserDataRegistry as LuaUserDataRegistry, Value as LuaValue,
-    Variadic as LuaVariadic, VmState as LuaVmState, WeakLua, function::FunctionInfo as LuaFunctionInfo,
+    Table as LuaTable, Thread as LuaThread, UserData as LuaUserData, UserDataFields as LuaUserDataFields,
+    UserDataMetatable as LuaUserDataMetatable, UserDataMethods as LuaUserDataMethods,
+    UserDataRef as LuaUserDataRef, UserDataRefMut as LuaUserDataRefMut,
+    UserDataRegistry as LuaUserDataRegistry, Value as LuaValue, Variadic as LuaVariadic,
+    VmState as LuaVmState, WeakLua, function::FunctionInfo as LuaFunctionInfo,
     table::TablePairs as LuaTablePairs, table::TableSequence as LuaTableSequence,
+    thread::ThreadStatus as LuaThreadStatus,
 };
 
 #[cfg(not(feature = "luau"))]
@@ -30,7 +31,7 @@ pub use crate::{
 
 #[cfg(feature = "async")]
 #[doc(no_inline)]
-pub use crate::{AsyncThread as LuaAsyncThread, LuaNativeAsyncFn};
+pub use crate::{LuaNativeAsyncFn, thread::AsyncThread as LuaAsyncThread};
 
 #[cfg(feature = "serde")]
 #[doc(no_inline)]

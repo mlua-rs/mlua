@@ -61,6 +61,7 @@
 //! [`Future`]: std::future::Future
 //! [`serde::Serialize`]: https://docs.serde.rs/serde/ser/trait.Serialize.html
 //! [`serde::Deserialize`]: https://docs.serde.rs/serde/de/trait.Deserialize.html
+//! [`AsyncThread`]: crate::thread::AsyncThread
 
 // Deny warnings inside doc tests / examples. When this isn't present, rustdoc doesn't show *any*
 // warnings at all.
@@ -82,7 +83,6 @@ mod multi;
 mod scope;
 mod state;
 mod stdlib;
-mod thread;
 mod traits;
 mod types;
 mod util;
@@ -94,6 +94,7 @@ pub mod function;
 pub mod prelude;
 pub mod string;
 pub mod table;
+pub mod thread;
 pub mod userdata;
 
 pub use bstr::BString;
@@ -111,7 +112,8 @@ pub use crate::stdlib::StdLib;
 pub use crate::string::{BorrowedBytes, BorrowedStr, LuaString};
 #[doc(inline)]
 pub use crate::table::Table;
-pub use crate::thread::{Thread, ThreadStatus};
+#[doc(inline)]
+pub use crate::thread::Thread;
 pub use crate::traits::{
     FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, LuaNativeFn, LuaNativeFnMut, ObjectLike,
 };
@@ -133,6 +135,8 @@ pub use crate::userdata::{
     MetaMethod, UserData, UserDataFields, UserDataMetatable, UserDataMethods, UserDataRef, UserDataRefMut,
     UserDataRegistry,
 };
+#[doc(hidden)]
+pub use thread::ThreadStatus;
 
 #[cfg(not(feature = "luau"))]
 #[doc(inline)]
@@ -149,7 +153,7 @@ pub use crate::{
 
 #[cfg(feature = "async")]
 #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
-pub use crate::{thread::AsyncThread, traits::LuaNativeAsyncFn};
+pub use crate::traits::LuaNativeAsyncFn;
 
 #[cfg(feature = "serde")]
 #[doc(inline)]
