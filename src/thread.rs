@@ -106,7 +106,7 @@ impl ThreadStatusInner {
 }
 
 /// Handle to an internal Lua thread (coroutine).
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub struct Thread(pub(crate) ValueRef, pub(crate) *mut ffi::lua_State);
 
 #[cfg(feature = "send")]
@@ -562,12 +562,6 @@ impl Thread {
 impl fmt::Debug for Thread {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt.debug_tuple("Thread").field(&self.0).finish()
-    }
-}
-
-impl PartialEq for Thread {
-    fn eq(&self, other: &Self) -> bool {
-        self.0 == other.0
     }
 }
 
