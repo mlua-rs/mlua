@@ -501,6 +501,12 @@ pub type lua_Coverage = unsafe extern "C-unwind" fn(
     size: usize,
 );
 
+pub type lua_CounterFunction =
+    unsafe extern "C-unwind" fn(context: *mut c_void, function: *const c_char, linedefined: c_int);
+
+pub type lua_CounterValue =
+    unsafe extern "C-unwind" fn(context: *mut c_void, kind: c_int, line: c_int, hits: u64);
+
 unsafe extern "C-unwind" {
     pub fn lua_stackdepth(L: *mut lua_State) -> c_int;
     pub fn lua_getinfo(L: *mut lua_State, level: c_int, what: *const c_char, ar: *mut lua_Debug) -> c_int;
@@ -514,6 +520,14 @@ unsafe extern "C-unwind" {
     pub fn lua_breakpoint(L: *mut lua_State, funcindex: c_int, line: c_int, enabled: c_int) -> c_int;
 
     pub fn lua_getcoverage(L: *mut lua_State, funcindex: c_int, context: *mut c_void, callback: lua_Coverage);
+
+    pub fn lua_getcounters(
+        L: *mut lua_State,
+        funcindex: c_int,
+        context: *mut c_void,
+        functionvisit: lua_CounterFunction,
+        countervisit: lua_CounterValue,
+    );
 
     pub fn lua_debugtrace(L: *mut lua_State) -> *const c_char;
 }
@@ -552,7 +566,7 @@ pub struct lua_Callbacks {
     /// gets called when L is created (LP == parent) or destroyed (LP == NULL)
     pub userthread: Option<unsafe extern "C-unwind" fn(LP: *mut lua_State, L: *mut lua_State)>,
     /// gets called when a string is created; returned atom can be retrieved via tostringatom
-    pub useratom: Option<unsafe extern "C-unwind" fn(s: *const c_char, l: usize) -> i16>,
+    pub useratom: Option<unsafe extern "C-unwind" fn(L: *mut lua_State, s: *const c_char, l: usize) -> i16>,
 
     /// gets called when BREAK instruction is encountered
     pub debugbreak: Option<unsafe extern "C-unwind" fn(L: *mut lua_State, ar: *mut lua_Debug)>,
