@@ -147,7 +147,7 @@ pub use crate::debug::HookTriggers;
 pub use crate::{
     buffer::Buffer,
     chunk::{CompileConstant, Compiler},
-    luau::{HeapDump, NavigateError, Require, TextRequirer},
+    luau::{FsRequirer, HeapDump, NavigateError, Require},
     vector::Vector,
 };
 

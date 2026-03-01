@@ -12,8 +12,7 @@ use crate::state::{Lua, callback_error_ext};
 use crate::table::Table;
 use crate::types::MaybeSend;
 
-// TODO: Rename to FsRequirer
-pub use fs::TextRequirer;
+pub use fs::FsRequirer;
 
 /// An error that can occur during navigation in the Luau `require-by-string` system.
 #[derive(Debug, Clone)]

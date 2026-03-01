@@ -10,7 +10,7 @@ use crate::traits::{FromLuaMulti, IntoLua};
 use crate::types::MaybeSend;
 
 pub use heap_dump::HeapDump;
-pub use require::{NavigateError, Require, TextRequirer};
+pub use require::{FsRequirer, NavigateError, Require};
 
 // Since Luau has some missing standard functions, we re-implement them here
 
@@ -86,7 +86,7 @@ impl Lua {
         }
 
         // Enable default `require` implementation
-        let require = self.create_require_function(require::TextRequirer::new())?;
+        let require = self.create_require_function(FsRequirer::new())?;
         self.globals().raw_set("require", require)?;
 
         Ok(())

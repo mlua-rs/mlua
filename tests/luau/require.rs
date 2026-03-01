@@ -1,7 +1,7 @@
 use std::io::Result as IoResult;
 use std::result::Result as StdResult;
 
-use mlua::{Error, FromLua, IntoLua, Lua, MultiValue, NavigateError, Require, Result, TextRequirer, Value};
+use mlua::{Error, FromLua, FsRequirer, IntoLua, Lua, MultiValue, NavigateError, Require, Result, Value};
 
 fn run_require(lua: &Lua, path: impl IntoLua) -> Result<Value> {
     lua.load(r#"return require(...)"#).call(path)
@@ -65,7 +65,7 @@ fn test_require_errors() {
     assert!((res.unwrap_err().to_string()).contains("@ is not a valid alias"));
 
     // Test throwing mlua::Error
-    struct MyRequire(TextRequirer);
+    struct MyRequire(FsRequirer);
 
     impl Require for MyRequire {
         fn is_require_allowed(&self, chunk_name: &str) -> bool {
@@ -109,9 +109,7 @@ fn test_require_errors() {
         }
     }
 
-    let require = lua
-        .create_require_function(MyRequire(TextRequirer::new()))
-        .unwrap();
+    let require = lua.create_require_function(MyRequire(FsRequirer::new())).unwrap();
     lua.globals().set("require", require).unwrap();
     let res = lua.load(r#"return require('./a/relative/path')"#).exec();
     assert!((res.unwrap_err().to_string()).contains("test error"));

@@ -12,7 +12,7 @@ use super::{NavigateError, Require};
 
 /// The standard implementation of Luau `require-by-string` navigation.
 #[derive(Default, Debug)]
-pub struct TextRequirer {
+pub struct FsRequirer {
     /// An absolute path to the current Luau module (not mapped to a physical file)
     abs_path: PathBuf,
     /// A relative path to the current Luau module (not mapped to a physical file)
@@ -22,7 +22,7 @@ pub struct TextRequirer {
     resolved_path: Option<PathBuf>,
 }
 
-impl TextRequirer {
+impl FsRequirer {
     /// The prefix used for chunk names in the require system.
     /// Only chunk names starting with this prefix are allowed to be used in `require`.
     const CHUNK_PREFIX: &str = "@";
@@ -36,7 +36,7 @@ impl TextRequirer {
     /// The filename for the Luau configuration file.
     const LUAU_CONFIG_FILENAME: &str = ".config.luau";
 
-    /// Creates a new `TextRequirer` instance.
+    /// Creates a new `FsRequirer` instance.
     pub fn new() -> Self {
         Self::default()
     }
@@ -114,7 +114,7 @@ impl TextRequirer {
     }
 }
 
-impl Require for TextRequirer {
+impl Require for FsRequirer {
     fn is_require_allowed(&self, chunk_name: &str) -> bool {
         chunk_name.starts_with(Self::CHUNK_PREFIX)
     }
@@ -231,7 +231,7 @@ impl Require for TextRequirer {
 mod tests {
     use std::path::Path;
 
-    use super::TextRequirer;
+    use super::FsRequirer;
 
     #[test]
     fn test_path_normalize() {
@@ -267,7 +267,7 @@ mod tests {
             // '..' disappears if path is absolute and component is non-erasable
             ("/../", "/"),
         ] {
-            let path = TextRequirer::normalize_path(input.as_ref());
+            let path = FsRequirer::normalize_path(input.as_ref());
             assert_eq!(
                 &path,
                 expected.as_ref() as &Path,
