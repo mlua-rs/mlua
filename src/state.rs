@@ -1456,7 +1456,7 @@ impl Lua {
     /// }
     /// ```
     ///
-    /// [`AsyncThread`]: crate::AsyncThread
+    /// [`AsyncThread`]: crate::thread::AsyncThread
     #[cfg(feature = "async")]
     #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
     pub fn create_async_function<F, A, FR, R>(&self, func: F) -> Result<Function>

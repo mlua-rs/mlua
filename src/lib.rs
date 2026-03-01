@@ -76,8 +76,6 @@ mod buffer;
 mod chunk;
 mod conversion;
 mod error;
-#[cfg(any(feature = "luau", doc))]
-mod luau;
 mod memory;
 mod multi;
 mod scope;
@@ -91,6 +89,9 @@ mod vector;
 
 pub mod debug;
 pub mod function;
+#[cfg(any(feature = "luau", doc))]
+#[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
+pub mod luau;
 pub mod prelude;
 pub mod string;
 pub mod table;
@@ -147,7 +148,6 @@ pub use crate::debug::HookTriggers;
 pub use crate::{
     buffer::Buffer,
     chunk::{CompileConstant, Compiler},
-    luau::{FsRequirer, HeapDump, NavigateError, Require},
     vector::Vector,
 };
 

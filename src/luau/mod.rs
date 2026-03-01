@@ -1,3 +1,19 @@
+//! Luau-specific extensions and types.
+//!
+//! This module provides Luau-specific functionality including custom `require` implementations,
+//! heap memory analysis, and Luau VM integration utilities.
+//!
+//! # Overview
+//!
+//! - [`Require`] — trait for implementing custom module loaders used with
+//!   [`Lua::create_require_function`]
+//! - [`FsRequirer`] — default filesystem-based [`Require`] implementation
+//! - [`NavigateError`] — error type returned when navigating the module path
+//! - [`HeapDump`] — snapshot of Luau heap memory usage, obtained via [`Lua::heap_dump`]
+//!
+//! [`Lua::create_require_function`]: crate::Lua::create_require_function
+//! [`Lua::heap_dump`]: crate::Lua::heap_dump
+
 use std::ffi::{CStr, CString};
 use std::os::raw::c_int;
 use std::ptr;

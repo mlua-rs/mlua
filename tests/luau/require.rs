@@ -1,7 +1,8 @@
 use std::io::Result as IoResult;
 use std::result::Result as StdResult;
 
-use mlua::{Error, FromLua, FsRequirer, IntoLua, Lua, MultiValue, NavigateError, Require, Result, Value};
+use mlua::luau::{FsRequirer, NavigateError, Require};
+use mlua::{Error, FromLua, IntoLua, Lua, MultiValue, Result, Value};
 
 fn run_require(lua: &Lua, path: impl IntoLua) -> Result<Value> {
     lua.load(r#"return require(...)"#).call(path)

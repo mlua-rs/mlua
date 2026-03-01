@@ -246,7 +246,7 @@ impl Function {
     /// # }
     /// ```
     ///
-    /// [`AsyncThread`]: crate::AsyncThread
+    /// [`AsyncThread`]: crate::thread::AsyncThread
     #[cfg(feature = "async")]
     #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
     pub fn call_async<R>(&self, args: impl IntoLuaMulti) -> AsyncCallFuture<R>
