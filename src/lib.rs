@@ -131,12 +131,12 @@ pub use crate::string::LuaString as String;
 #[doc(hidden)]
 pub use crate::table::{TablePairs, TableSequence};
 #[doc(hidden)]
+pub use crate::thread::ThreadStatus;
+#[doc(hidden)]
 pub use crate::userdata::{
     MetaMethod, UserData, UserDataFields, UserDataMetatable, UserDataMethods, UserDataRef, UserDataRefMut,
     UserDataRegistry,
 };
-#[doc(hidden)]
-pub use thread::ThreadStatus;
 
 #[cfg(not(feature = "luau"))]
 #[doc(inline)]

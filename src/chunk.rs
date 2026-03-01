@@ -1,3 +1,10 @@
+//! Lua chunk loading and execution.
+//!
+//! This module provides types for loading Lua source code or bytecode into a [`Chunk`],
+//! configuring how it is compiled and executed, and converting it into a callable [`Function`].
+//!
+//! Chunks can be loaded from strings, byte slices, or files via the [`AsChunk`] trait.
+
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::ffi::CString;

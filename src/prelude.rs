@@ -3,10 +3,10 @@
 #[doc(no_inline)]
 pub use crate::{
     AnyUserData as LuaAnyUserData, BorrowedBytes as LuaBorrowedBytes, BorrowedStr as LuaBorrowedStr,
-    Chunk as LuaChunk, Either as LuaEither, Error as LuaError, ErrorContext as LuaErrorContext,
-    ExternalError as LuaExternalError, ExternalResult as LuaExternalResult, FromLua, FromLuaMulti,
-    Function as LuaFunction, GCMode as LuaGCMode, Integer as LuaInteger, IntoLua, IntoLuaMulti,
-    LightUserData as LuaLightUserData, Lua, LuaNativeFn, LuaNativeFnMut, LuaOptions, LuaString,
+    Chunk as LuaChunk, ChunkMode as LuaChunkMode, Either as LuaEither, Error as LuaError,
+    ErrorContext as LuaErrorContext, ExternalError as LuaExternalError, ExternalResult as LuaExternalResult,
+    FromLua, FromLuaMulti, Function as LuaFunction, GCMode as LuaGCMode, Integer as LuaInteger, IntoLua,
+    IntoLuaMulti, LightUserData as LuaLightUserData, Lua, LuaNativeFn, LuaNativeFnMut, LuaOptions, LuaString,
     MetaMethod as LuaMetaMethod, MultiValue as LuaMultiValue, Nil as LuaNil, Number as LuaNumber,
     ObjectLike as LuaObjectLike, RegistryKey as LuaRegistryKey, Result as LuaResult, StdLib as LuaStdLib,
     Table as LuaTable, Thread as LuaThread, UserData as LuaUserData, UserDataFields as LuaUserDataFields,
@@ -25,8 +25,8 @@ pub use crate::HookTriggers as LuaHookTriggers;
 #[cfg(feature = "luau")]
 #[doc(no_inline)]
 pub use crate::{
-    CompileConstant as LuaCompileConstant, NavigateError as LuaNavigateError, Require as LuaRequire,
-    TextRequirer as LuaTextRequirer, Vector as LuaVector,
+    CompileConstant as LuaCompileConstant, Compiler as LuaCompiler, NavigateError as LuaNavigateError,
+    Require as LuaRequire, TextRequirer as LuaTextRequirer, Vector as LuaVector,
 };
 
 #[cfg(feature = "async")]
