@@ -786,7 +786,6 @@ impl Chunk<'_> {
     ///
     /// The resulted `IntoLua` implementation will convert the chunk into a Lua function without
     /// executing it.
-    #[doc(hidden)]
     #[track_caller]
     pub fn wrap(chunk: impl AsChunk) -> impl IntoLua {
         WrappedChunk {
