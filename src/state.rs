@@ -62,20 +62,126 @@ pub struct WeakLua(XWeak<ReentrantMutex<RawLua>>);
 
 pub(crate) struct LuaGuard(ArcReentrantMutexGuard<RawLua>);
 
-/// Mode of the Lua garbage collector (GC).
-///
-/// In Lua 5.4 GC can work in two modes: incremental and generational.
-/// Previous Lua versions support only incremental GC.
+/// Tuning parameters for the incremental GC collector.
 ///
 /// More information can be found in the Lua [documentation].
 ///
-/// [documentation]: https://www.lua.org/manual/5.4/manual.html#2.5
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum GCMode {
-    Incremental,
+/// [documentation]: https://www.lua.org/manual/5.5/manual.html#2.5.1
+#[non_exhaustive]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct GcIncParams {
+    /// Pause between successive GC cycles, expressed as a percentage of live memory.
+    #[cfg(not(feature = "luau"))]
+    #[cfg_attr(docsrs, doc(cfg(not(feature = "luau"))))]
+    pub pause: Option<c_int>,
+
+    /// Target heap size as a percentage of live data, controlling how aggressively
+    /// the GC reclaims memory (`LUA_GCSETGOAL`).
+    #[cfg(any(feature = "luau", doc))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
+    pub goal: Option<c_int>,
+
+    /// GC work performed per unit of memory allocated.
+    pub step_multiplier: Option<c_int>,
+
+    /// Granularity of each GC step in kilobytes.
+    #[cfg(any(feature = "lua55", feature = "lua54", feature = "luau"))]
+    #[cfg_attr(docsrs, doc(cfg(any(feature = "lua55", feature = "lua54", feature = "luau"))))]
+    pub step_size: Option<c_int>,
+}
+
+impl GcIncParams {
+    /// Sets the `pause` parameter.
+    #[cfg(not(feature = "luau"))]
+    #[cfg_attr(docsrs, doc(cfg(not(feature = "luau"))))]
+    pub fn pause(mut self, v: c_int) -> Self {
+        self.pause = Some(v);
+        self
+    }
+
+    /// Sets the `goal` parameter.
+    #[cfg(any(feature = "luau", doc))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
+    pub fn goal(mut self, v: c_int) -> Self {
+        self.goal = Some(v);
+        self
+    }
+
+    /// Sets the `step_multiplier` parameter.
+    pub fn step_multiplier(mut self, v: c_int) -> Self {
+        self.step_multiplier = Some(v);
+        self
+    }
+
+    /// Sets the `step_size` parameter.
+    #[cfg(any(feature = "lua55", feature = "lua54", feature = "luau"))]
+    #[cfg_attr(docsrs, doc(cfg(any(feature = "lua55", feature = "lua54", feature = "luau"))))]
+    pub fn step_size(mut self, v: c_int) -> Self {
+        self.step_size = Some(v);
+        self
+    }
+}
+
+/// Tuning parameters for the generational GC collector (Lua 5.4+).
+///
+/// More information can be found in the Lua [documentation].
+///
+/// [documentation]: https://www.lua.org/manual/5.5/manual.html#2.5.2
+#[cfg(any(feature = "lua55", feature = "lua54"))]
+#[cfg_attr(docsrs, doc(cfg(any(feature = "lua55", feature = "lua54"))))]
+#[non_exhaustive]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct GcGenParams {
+    /// Frequency of minor (young-generation) collection steps.
+    pub minor_multiplier: Option<c_int>,
+
+    /// Threshold controlling how large the young generation can grow before triggering
+    /// a shift from minor to major collection.
+    pub minor_to_major: Option<c_int>,
+
+    /// Threshold controlling how much the major collection must shrink the heap before
+    /// switching back to minor (young-generation) collection.
+    #[cfg(feature = "lua55")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "lua55")))]
+    pub major_to_minor: Option<c_int>,
+}
+
+#[cfg(any(feature = "lua55", feature = "lua54"))]
+impl GcGenParams {
+    /// Sets the `minor_multiplier` parameter.
+    pub fn minor_multiplier(mut self, v: c_int) -> Self {
+        self.minor_multiplier = Some(v);
+        self
+    }
+
+    /// Sets the `minor_to_major` threshold.
+    pub fn minor_to_major(mut self, v: c_int) -> Self {
+        self.minor_to_major = Some(v);
+        self
+    }
+
+    /// Sets the `major_to_minor` parameter.
+    #[cfg(feature = "lua55")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "lua55")))]
+    pub fn major_to_minor(mut self, v: c_int) -> Self {
+        self.major_to_minor = Some(v);
+        self
+    }
+}
+
+/// Lua garbage collector (GC) operating mode.
+///
+/// Use [`Lua::gc_set_mode`] to switch the collector mode and/or tune its parameters.
+#[non_exhaustive]
+#[derive(Clone, Debug)]
+pub enum GcMode {
+    /// Incremental mark-and-sweep
+    Incremental(GcIncParams),
+
+    /// Generational
     #[cfg(any(feature = "lua55", feature = "lua54"))]
     #[cfg_attr(docsrs, doc(cfg(any(feature = "lua55", feature = "lua54"))))]
-    Generational,
+    Generational(GcGenParams),
 }
 
 /// Controls Lua interpreter behavior such as Rust panics handling.
@@ -998,19 +1104,19 @@ impl Lua {
         unsafe { ffi::lua_gc(lua.main_state(), ffi::LUA_GCISRUNNING, 0) != 0 }
     }
 
-    /// Stop the Lua GC from running
+    /// Stops the Lua GC from running.
     pub fn gc_stop(&self) {
         let lua = self.lock();
         unsafe { ffi::lua_gc(lua.main_state(), ffi::LUA_GCSTOP, 0) };
     }
 
-    /// Restarts the Lua GC if it is not running
+    /// Restarts the Lua GC if it is not running.
     pub fn gc_restart(&self) {
         let lua = self.lock();
         unsafe { ffi::lua_gc(lua.main_state(), ffi::LUA_GCRESTART, 0) };
     }
 
-    /// Perform a full garbage-collection cycle.
+    /// Performs a full garbage-collection cycle.
     ///
     /// It may be necessary to call this function twice to collect all currently unreachable
     /// objects. Once to finish the current gc cycle, and once to start and finish the next cycle.
@@ -1023,153 +1129,128 @@ impl Lua {
         }
     }
 
-    /// Steps the garbage collector one indivisible step.
+    /// Performs a basic step of garbage collection.
     ///
-    /// Returns `true` if this has finished a collection cycle.
+    /// In incremental mode, a basic step corresponds to the current step size. In generational
+    /// mode, a basic step performs a full minor collection or an incremental step, if the collector
+    /// has scheduled one.
+    ///
+    /// In incremental mode, returns `true` if this step has finished a collection cycle.
+    /// In generational mode, returns `true` if the step finished a major collection.
     pub fn gc_step(&self) -> Result<bool> {
-        self.gc_step_kbytes(0)
-    }
-
-    /// Steps the garbage collector as though memory had been allocated.
-    ///
-    /// if `kbytes` is 0, then this is the same as calling `gc_step`. Returns true if this step has
-    /// finished a collection cycle.
-    pub fn gc_step_kbytes(&self, kbytes: c_int) -> Result<bool> {
         let lua = self.lock();
         let state = lua.main_state();
         unsafe {
             check_stack(state, 3)?;
             protect_lua!(state, 0, 0, |state| {
-                ffi::lua_gc(state, ffi::LUA_GCSTEP, kbytes) != 0
+                ffi::lua_gc(state, ffi::LUA_GCSTEP, 0) != 0
             })
         }
     }
 
-    /// Sets the `pause` value of the collector.
+    /// Switches the GC to the given mode with the provided parameters.
     ///
-    /// Returns the previous value of `pause`. More information can be found in the Lua
-    /// [documentation].
+    /// Returns the previous [`GcMode`]. The returned value's parameter fields are always
+    /// `None` because Lua's C API does not provide a way to read back current parameter values
+    /// without changing them.
     ///
-    /// For Luau this parameter sets GC goal
+    /// # Examples
     ///
-    /// [documentation]: https://www.lua.org/manual/5.4/manual.html#2.5
-    pub fn gc_set_pause(&self, pause: c_int) -> c_int {
+    /// Switch to generational mode (Lua 5.4+):
+    /// ```ignore
+    /// let prev = lua.gc_set_mode(GcMode::Generational(GcGenParams::default()));
+    /// ```
+    ///
+    /// Switch to incremental mode with custom parameters:
+    /// ```ignore
+    /// lua.gc_set_mode(GcMode::Incremental(
+    ///     GcIncParams::default().pause(200).step_multiplier(100)
+    /// ));
+    /// ```
+    pub fn gc_set_mode(&self, mode: GcMode) -> GcMode {
         let lua = self.lock();
         let state = lua.main_state();
-        unsafe {
+
+        match mode {
             #[cfg(feature = "lua55")]
-            return ffi::lua_gc(state, ffi::LUA_GCPARAM, ffi::LUA_GCPPAUSE, pause);
-
-            #[cfg(not(any(feature = "lua55", feature = "luau")))]
-            return ffi::lua_gc(state, ffi::LUA_GCSETPAUSE, pause);
-
+            GcMode::Incremental(params) => unsafe {
+                if let Some(v) = params.pause {
+                    ffi::lua_gc(state, ffi::LUA_GCPARAM, ffi::LUA_GCPPAUSE, v);
+                }
+                if let Some(v) = params.step_multiplier {
+                    ffi::lua_gc(state, ffi::LUA_GCPARAM, ffi::LUA_GCPSTEPMUL, v);
+                }
+                if let Some(v) = params.step_size {
+                    ffi::lua_gc(state, ffi::LUA_GCPARAM, ffi::LUA_GCPSTEPSIZE, v);
+                }
+                match ffi::lua_gc(state, ffi::LUA_GCINC) {
+                    ffi::LUA_GCINC => GcMode::Incremental(GcIncParams::default()),
+                    ffi::LUA_GCGEN => GcMode::Generational(GcGenParams::default()),
+                    _ => unreachable!(),
+                }
+            },
+            #[cfg(feature = "lua54")]
+            GcMode::Incremental(params) => unsafe {
+                let pause = params.pause.unwrap_or(0);
+                let step_mul = params.step_multiplier.unwrap_or(0);
+                let step_size = params.step_size.unwrap_or(0);
+                match ffi::lua_gc(state, ffi::LUA_GCINC, pause, step_mul, step_size) {
+                    ffi::LUA_GCINC => GcMode::Incremental(GcIncParams::default()),
+                    ffi::LUA_GCGEN => GcMode::Generational(GcGenParams::default()),
+                    _ => unreachable!(),
+                }
+            },
+            #[cfg(any(feature = "lua53", feature = "lua52", feature = "lua51", feature = "luajit"))]
+            GcMode::Incremental(params) => unsafe {
+                if let Some(v) = params.pause {
+                    ffi::lua_gc(state, ffi::LUA_GCSETPAUSE, v);
+                }
+                if let Some(v) = params.step_multiplier {
+                    ffi::lua_gc(state, ffi::LUA_GCSETSTEPMUL, v);
+                }
+                GcMode::Incremental(GcIncParams::default())
+            },
             #[cfg(feature = "luau")]
-            return ffi::lua_gc(state, ffi::LUA_GCSETGOAL, pause);
-        }
-    }
+            GcMode::Incremental(params) => unsafe {
+                if let Some(v) = params.goal {
+                    ffi::lua_gc(state, ffi::LUA_GCSETGOAL, v);
+                }
+                if let Some(v) = params.step_multiplier {
+                    ffi::lua_gc(state, ffi::LUA_GCSETSTEPMUL, v);
+                }
+                if let Some(v) = params.step_size {
+                    ffi::lua_gc(state, ffi::LUA_GCSETSTEPSIZE, v);
+                }
+                GcMode::Incremental(GcIncParams::default())
+            },
 
-    /// Sets the `step multiplier` value of the collector.
-    ///
-    /// Returns the previous value of the `step multiplier`. More information can be found in the
-    /// Lua [documentation].
-    ///
-    /// [documentation]: https://www.lua.org/manual/5.4/manual.html#2.5
-    pub fn gc_set_step_multiplier(&self, step_multiplier: c_int) -> c_int {
-        let lua = self.lock();
-        unsafe {
             #[cfg(feature = "lua55")]
-            return ffi::lua_gc(
-                lua.main_state(),
-                ffi::LUA_GCPARAM,
-                ffi::LUA_GCPSTEPMUL,
-                step_multiplier,
-            );
-
-            #[cfg(not(feature = "lua55"))]
-            return ffi::lua_gc(lua.main_state(), ffi::LUA_GCSETSTEPMUL, step_multiplier);
-        }
-    }
-
-    /// Changes the collector to incremental mode with the given parameters.
-    ///
-    /// Returns the previous mode (always `GCMode::Incremental` in Lua < 5.4).
-    /// More information can be found in the Lua [documentation].
-    ///
-    /// [documentation]: https://www.lua.org/manual/5.4/manual.html#2.5.1
-    pub fn gc_inc(&self, pause: c_int, step_multiplier: c_int, step_size: c_int) -> GCMode {
-        let lua = self.lock();
-        let state = lua.main_state();
-
-        #[cfg(any(
-            feature = "lua53",
-            feature = "lua52",
-            feature = "lua51",
-            feature = "luajit",
-            feature = "luau"
-        ))]
-        unsafe {
-            if pause > 0 {
-                #[cfg(not(feature = "luau"))]
-                ffi::lua_gc(state, ffi::LUA_GCSETPAUSE, pause);
-                #[cfg(feature = "luau")]
-                ffi::lua_gc(state, ffi::LUA_GCSETGOAL, pause);
-            }
-
-            if step_multiplier > 0 {
-                ffi::lua_gc(state, ffi::LUA_GCSETSTEPMUL, step_multiplier);
-            }
-
-            #[cfg(feature = "luau")]
-            if step_size > 0 {
-                ffi::lua_gc(state, ffi::LUA_GCSETSTEPSIZE, step_size);
-            }
-            #[cfg(not(feature = "luau"))]
-            let _ = step_size; // Ignored
-
-            GCMode::Incremental
-        }
-
-        #[cfg(feature = "lua55")]
-        let prev_mode = unsafe {
-            ffi::lua_gc(state, ffi::LUA_GCPARAM, ffi::LUA_GCPPAUSE, pause);
-            ffi::lua_gc(state, ffi::LUA_GCPARAM, ffi::LUA_GCPSTEPMUL, step_multiplier);
-            ffi::lua_gc(state, ffi::LUA_GCPARAM, ffi::LUA_GCPSTEPSIZE, step_size);
-            ffi::lua_gc(state, ffi::LUA_GCINC)
-        };
-        #[cfg(feature = "lua54")]
-        let prev_mode = unsafe { ffi::lua_gc(state, ffi::LUA_GCINC, pause, step_multiplier, step_size) };
-        #[cfg(any(feature = "lua55", feature = "lua54"))]
-        match prev_mode {
-            ffi::LUA_GCINC => GCMode::Incremental,
-            ffi::LUA_GCGEN => GCMode::Generational,
-            _ => unreachable!(),
-        }
-    }
-
-    /// Changes the collector to generational mode with the given parameters.
-    ///
-    /// Returns the previous mode. More information about the generational GC
-    /// can be found in the Lua 5.4 [documentation][lua_doc].
-    ///
-    /// [lua_doc]: https://www.lua.org/manual/5.4/manual.html#2.5.2
-    #[cfg(any(feature = "lua55", feature = "lua54"))]
-    #[cfg_attr(docsrs, doc(cfg(any(feature = "lua55", feature = "lua54"))))]
-    pub fn gc_gen(&self, minor_multiplier: c_int, major_multiplier: c_int) -> GCMode {
-        let lua = self.lock();
-        let state = lua.main_state();
-        #[cfg(feature = "lua55")]
-        let prev_mode = unsafe {
-            ffi::lua_gc(state, ffi::LUA_GCPARAM, ffi::LUA_GCPMINORMUL, minor_multiplier);
-            ffi::lua_gc(state, ffi::LUA_GCPARAM, ffi::LUA_GCPMINORMAJOR, major_multiplier);
-            // TODO: LUA_GCPMAJORMINOR
-            ffi::lua_gc(state, ffi::LUA_GCGEN)
-        };
-        #[cfg(not(feature = "lua55"))]
-        let prev_mode = unsafe { ffi::lua_gc(state, ffi::LUA_GCGEN, minor_multiplier, major_multiplier) };
-        match prev_mode {
-            ffi::LUA_GCGEN => GCMode::Generational,
-            ffi::LUA_GCINC => GCMode::Incremental,
-            _ => unreachable!(),
+            GcMode::Generational(params) => unsafe {
+                if let Some(v) = params.minor_multiplier {
+                    ffi::lua_gc(state, ffi::LUA_GCPARAM, ffi::LUA_GCPMINORMUL, v);
+                }
+                if let Some(v) = params.minor_to_major {
+                    ffi::lua_gc(state, ffi::LUA_GCPARAM, ffi::LUA_GCPMINORMAJOR, v);
+                }
+                if let Some(v) = params.major_to_minor {
+                    ffi::lua_gc(state, ffi::LUA_GCPARAM, ffi::LUA_GCPMAJORMINOR, v);
+                }
+                match ffi::lua_gc(state, ffi::LUA_GCGEN) {
+                    ffi::LUA_GCGEN => GcMode::Generational(GcGenParams::default()),
+                    ffi::LUA_GCINC => GcMode::Incremental(GcIncParams::default()),
+                    _ => unreachable!(),
+                }
+            },
+            #[cfg(feature = "lua54")]
+            GcMode::Generational(params) => unsafe {
+                let minor = params.minor_multiplier.unwrap_or(0);
+                let minor_to_major = params.minor_to_major.unwrap_or(0);
+                match ffi::lua_gc(state, ffi::LUA_GCGEN, minor, minor_to_major) {
+                    ffi::LUA_GCGEN => GcMode::Generational(GcGenParams::default()),
+                    ffi::LUA_GCINC => GcMode::Incremental(GcIncParams::default()),
+                    _ => unreachable!(),
+                }
+            },
         }
     }
 

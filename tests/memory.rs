@@ -1,6 +1,8 @@
 use std::sync::Arc;
 
-use mlua::{Error, GCMode, Lua, Result, UserData};
+#[cfg(any(feature = "lua54", feature = "lua55"))]
+use mlua::GcGenParams;
+use mlua::{Error, GcIncParams, GcMode, Lua, Result, UserData};
 
 #[test]
 fn test_memory_limit() -> Result<()> {
@@ -74,8 +76,14 @@ fn test_gc_control() -> Result<()> {
 
     #[cfg(any(feature = "lua55", feature = "lua54"))]
     {
-        assert_eq!(lua.gc_gen(0, 0), GCMode::Incremental);
-        assert_eq!(lua.gc_inc(0, 0, 0), GCMode::Generational);
+        assert!(matches!(
+            lua.gc_set_mode(GcMode::Generational(GcGenParams::default())),
+            GcMode::Incremental(_)
+        ));
+        assert!(matches!(
+            lua.gc_set_mode(GcMode::Incremental(GcIncParams::default())),
+            GcMode::Generational(_)
+        ));
     }
 
     #[cfg(any(
@@ -93,7 +101,17 @@ fn test_gc_control() -> Result<()> {
         assert!(lua.gc_is_running());
     }
 
-    assert_eq!(lua.gc_inc(200, 100, 13), GCMode::Incremental);
+    assert!(matches!(
+        lua.gc_set_mode(GcMode::Incremental({
+            let p = GcIncParams::default().step_multiplier(100);
+            #[cfg(not(feature = "luau"))]
+            let p = p.pause(200);
+            #[cfg(feature = "luau")]
+            let p = p.goal(200);
+            p
+        })),
+        GcMode::Incremental(_)
+    ));
 
     struct MyUserdata(#[allow(unused)] Arc<()>);
     impl UserData for MyUserdata {}

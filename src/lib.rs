@@ -107,7 +107,10 @@ pub use crate::error::{Error, ErrorContext, ExternalError, ExternalResult, Resul
 pub use crate::function::Function;
 pub use crate::multi::{MultiValue, Variadic};
 pub use crate::scope::Scope;
-pub use crate::state::{GCMode, Lua, LuaOptions, WeakLua};
+#[cfg(any(feature = "lua54", feature = "lua55"))]
+#[cfg_attr(docsrs, doc(cfg(any(feature = "lua54", feature = "lua55"))))]
+pub use crate::state::GcGenParams;
+pub use crate::state::{GcIncParams, GcMode, Lua, LuaOptions, WeakLua};
 pub use crate::stdlib::StdLib;
 #[doc(inline)]
 pub use crate::string::{BorrowedBytes, BorrowedStr, LuaString};
