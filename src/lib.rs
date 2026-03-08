@@ -79,7 +79,6 @@ mod error;
 mod memory;
 mod multi;
 mod scope;
-mod state;
 mod stdlib;
 mod traits;
 mod types;
@@ -93,6 +92,7 @@ pub mod function;
 #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
 pub mod luau;
 pub mod prelude;
+pub mod state;
 pub mod string;
 pub mod table;
 pub mod thread;
@@ -107,10 +107,8 @@ pub use crate::error::{Error, ErrorContext, ExternalError, ExternalResult, Resul
 pub use crate::function::Function;
 pub use crate::multi::{MultiValue, Variadic};
 pub use crate::scope::Scope;
-#[cfg(any(feature = "lua54", feature = "lua55"))]
-#[cfg_attr(docsrs, doc(cfg(any(feature = "lua54", feature = "lua55"))))]
-pub use crate::state::GcGenParams;
-pub use crate::state::{GcIncParams, GcMode, Lua, LuaOptions, WeakLua};
+#[doc(inline)]
+pub use crate::state::{Lua, LuaOptions, WeakLua};
 pub use crate::stdlib::StdLib;
 #[doc(inline)]
 pub use crate::string::{BorrowedBytes, BorrowedStr, LuaString};

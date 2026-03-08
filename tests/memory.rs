@@ -1,8 +1,10 @@
 use std::sync::Arc;
 
+use mlua::state::{GcIncParams, GcMode};
+use mlua::{Error, Lua, Result, UserData};
+
 #[cfg(any(feature = "lua54", feature = "lua55"))]
-use mlua::GcGenParams;
-use mlua::{Error, GcIncParams, GcMode, Lua, Result, UserData};
+use mlua::state::GcGenParams;
 
 #[test]
 fn test_memory_limit() -> Result<()> {

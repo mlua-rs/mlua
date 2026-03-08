@@ -1,3 +1,8 @@
+//! Lua state management.
+//!
+//! This module provides the main [`Lua`] state handle together with state-specific
+//! configuration and garbage collector controls.
+
 use std::any::TypeId;
 use std::cell::{BorrowError, BorrowMutError, RefCell};
 use std::marker::PhantomData;
@@ -44,6 +49,7 @@ use {
 use serde::Serialize;
 
 pub(crate) use extra::ExtraData;
+#[doc(hidden)]
 pub use raw::RawLua;
 pub(crate) use util::callback_error_ext;
 
