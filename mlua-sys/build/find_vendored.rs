@@ -29,4 +29,5 @@ pub fn probe_lua() {
         .build();
 
     artifacts.print_cargo_metadata();
+    artifacts.print_cargo_root();
 }
