@@ -262,10 +262,10 @@ pub use mlua_derive::FromLua;
 ///
 /// * skip_memory_check - skip memory allocation checks for some operations.
 ///
-/// In module mode, mlua runs in unknown environment and cannot say are there any memory
-/// limits or not. As result, some operations that require memory allocation runs in
-/// protected mode. Setting this attribute will improve performance of such operations
-/// with risk of having uncaught exceptions and memory leaks.
+/// In module mode, mlua runs in an unknown environment and cannot tell whether there are any memory
+/// limits or not. As a result, some operations that require memory allocation run in protected
+/// mode. Setting this attribute will improve performance of such operations with risk of having
+/// uncaught exceptions and memory leaks.
 ///
 /// ```ignore
 /// #[mlua::lua_module(skip_memory_check)]

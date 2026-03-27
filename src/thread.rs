@@ -356,7 +356,7 @@ impl Thread {
     /// Resets a thread
     ///
     /// In [Lua 5.4]: cleans its call stack and closes all pending to-be-closed variables.
-    /// Returns a error in case of either the original error that stopped the thread or errors
+    /// Returns an error in case of either the original error that stopped the thread or errors
     /// in closing methods.
     ///
     /// In Luau: resets to the initial state of a newly created Lua thread.

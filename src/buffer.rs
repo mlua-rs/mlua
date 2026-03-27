@@ -59,7 +59,7 @@ impl Buffer {
     /// Returns an adaptor implementing [`io::Read`], [`io::Write`] and [`io::Seek`] over the
     /// buffer.
     ///
-    /// Buffer operations are infallible, none of the read/write functions will return a Err.
+    /// Buffer operations are infallible, none of the read/write functions will return an Err.
     pub fn cursor(self) -> impl io::Read + io::Write + io::Seek {
         BufferCursor(self, 0)
     }

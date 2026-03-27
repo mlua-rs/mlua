@@ -37,8 +37,8 @@ pub trait LuaSerdeExt: Sealed {
     fn null(&self) -> Value;
 
     /// A metatable attachable to a Lua table to systematically encode it as Array (instead of Map).
-    /// As result, encoded Array will contain only sequence part of the table, with the same length
-    /// as the `#` operator on that table.
+    /// As a result, encoded Array will contain only sequence part of the table, with the same
+    /// length as the `#` operator on that table.
     ///
     /// # Example
     ///

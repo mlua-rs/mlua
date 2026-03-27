@@ -127,7 +127,7 @@ my_project $ LUA_LIB=$HOME/tmp/lua-5.2.4/src LUA_LIB_NAME=lua LUA_LINK=static ca
 Just enable the `vendored` feature and cargo will automatically build and link the specified Lua/LuaJIT version. This is the easiest way to get started with `mlua`.
 
 ### Standalone mode
-In standalone mode, `mlua` allows adding scripting support to your application with a gently configured Lua runtime to ensure safety and soundness.
+In standalone mode, `mlua` allows adding scripting support to your application with a properly configured Lua runtime to ensure safety and soundness.
 
 Add to `Cargo.toml`:
 
