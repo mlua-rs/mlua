@@ -16,7 +16,7 @@ use crate::stdlib::StdLib;
 use crate::string::LuaString;
 use crate::table::Table;
 use crate::thread::Thread;
-use crate::traits::IntoLua;
+use crate::traits::{FromLua, IntoLua};
 use crate::types::{
     AppDataRef, AppDataRefMut, Callback, CallbackUpvalue, DestructedUserdata, Integer, LightUserData,
     LuaType, MaybeSend, ReentrantMutex, RegistryKey, ValueRef, XRc,
@@ -50,7 +50,7 @@ use {
     std::task::{Context, Poll, Waker},
 };
 
-/// An inner Lua struct which holds a raw Lua state.
+/// An internal Lua struct which holds a raw Lua state.
 #[doc(hidden)]
 pub struct RawLua {
     // The state is dynamic and depends on context
@@ -736,9 +736,19 @@ impl RawLua {
         value.push_into_stack(self)
     }
 
+    /// Pops a value that implements [`FromLua`] from the top of the Lua stack.
+    ///
+    /// Uses up to 1 stack space, does not call `checkstack`.
+    #[inline(always)]
+    pub unsafe fn pop<R: FromLua>(&self) -> Result<R> {
+        let v = R::from_stack(-1, self)?;
+        ffi::lua_pop(self.state(), 1);
+        Ok(v)
+    }
+
     /// Pushes a `Value` (by reference) onto the Lua stack.
     ///
-    /// Uses 2 stack spaces, does not call `checkstack`.
+    /// Uses up to 2 stack spaces, does not call `checkstack`.
     pub unsafe fn push_value(&self, value: &Value) -> Result<()> {
         let state = self.state();
         match value {

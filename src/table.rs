@@ -784,10 +784,8 @@ impl Table {
             ffi::lua_pushnil(state);
             while ffi::lua_next(state, -2) != 0 {
                 let k = K::from_stack(-2, &lua)?;
-                let v = V::from_stack(-1, &lua)?;
+                let v = lua.pop::<V>()?;
                 f(k, v)?;
-                // Keep key for next iteration
-                ffi::lua_pop(state, 1);
             }
         }
         Ok(())
@@ -860,8 +858,7 @@ impl Table {
                 if len.is_none() && t == ffi::LUA_TNIL {
                     break;
                 }
-                f(V::from_stack(-1, &lua)?)?;
-                ffi::lua_pop(state, 1);
+                f(lua.pop::<V>()?)?;
             }
         }
         Ok(())
