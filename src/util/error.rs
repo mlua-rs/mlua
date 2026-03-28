@@ -197,7 +197,7 @@ where
     F: FnOnce(*mut ffi::lua_State) -> R,
     R: Copy,
 {
-    struct Params<F, R: Copy> {
+    struct Params<F, R> {
         function: Option<F>,
         result: MaybeUninit<R>,
         nresults: c_int,

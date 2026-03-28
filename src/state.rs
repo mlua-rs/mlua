@@ -449,30 +449,27 @@ impl Lua {
         R::from_stack_multi(nresults, &lua)
     }
 
-    /// Runs callback with the inner RawLua value. It can be used to manually push and get values on
-    /// the stack.
+    /// Calls provided function passing a reference to the [`RawLua`] handle.
     ///
-    /// This function is safe because all unsafe actions with RawLua can only be done with unsafe
+    /// Provided [`RawLua`] handle can be used to manually pushing/popping values to/from the stack.
     ///
     /// # Example
     /// ```
-    /// # use mlua::{Lua, Result, FromLua, IntoLua};
+    /// # use mlua::{Lua, Result, FromLua, IntoLua, IntoLuaMulti};
     /// # fn main() -> Result<()> {
     /// let lua = Lua::new();
     /// let n: i32 = {
-    ///     let num = 11i32;
-    ///     lua.exec_raw_lua(|lua| {
-    ///         unsafe {
-    ///             <i32 as IntoLua>::push_into_stack(num, lua)?;
+    ///     let nums = (3, 4, 5);
+    ///     lua.exec_raw_lua(|rawlua| unsafe {
+    ///         nums.push_into_stack_multi(rawlua)?;
+    ///         let mut sum = 0;
+    ///         for _ in 0..3 {
+    ///             sum += rawlua.pop::<i32>()?;
     ///         }
-    ///
-    ///         let n = unsafe {
-    ///             <i32 as FromLua>::from_stack(-1, lua)?
-    ///         };
-    ///         Result::Ok(n)
+    ///         Result::Ok(sum)
     ///     })
     /// }?;
-    /// assert_eq!(n, 11);
+    /// assert_eq!(n, 12);
     /// # Ok(())
     /// # }
     /// ```

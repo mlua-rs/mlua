@@ -731,6 +731,7 @@ impl RawLua {
     /// Pushes a value that implements `IntoLua` onto the Lua stack.
     ///
     /// Uses up to 2 stack spaces to push a single value, does not call `checkstack`.
+    #[allow(clippy::missing_safety_doc)]
     #[inline(always)]
     pub unsafe fn push(&self, value: impl IntoLua) -> Result<()> {
         value.push_into_stack(self)
@@ -739,6 +740,7 @@ impl RawLua {
     /// Pops a value that implements [`FromLua`] from the top of the Lua stack.
     ///
     /// Uses up to 1 stack space, does not call `checkstack`.
+    #[allow(clippy::missing_safety_doc)]
     #[inline(always)]
     pub unsafe fn pop<R: FromLua>(&self) -> Result<R> {
         let v = R::from_stack(-1, self)?;
@@ -749,6 +751,7 @@ impl RawLua {
     /// Pushes a `Value` (by reference) onto the Lua stack.
     ///
     /// Uses up to 2 stack spaces, does not call `checkstack`.
+    #[allow(clippy::missing_safety_doc)]
     pub unsafe fn push_value(&self, value: &Value) -> Result<()> {
         let state = self.state();
         match value {
@@ -783,6 +786,7 @@ impl RawLua {
     /// Pops a value from the Lua stack.
     ///
     /// Uses up to 1 stack spaces, does not call `checkstack`.
+    #[allow(clippy::missing_safety_doc)]
     #[inline]
     pub unsafe fn pop_value(&self) -> Value {
         let value = self.stack_value(-1, None);
