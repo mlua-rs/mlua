@@ -549,31 +549,6 @@ impl Lua {
         Ok(())
     }
 
-    #[doc(hidden)]
-    #[deprecated(since = "0.11.0", note = "Use `register_module` instead")]
-    #[cfg(not(feature = "luau"))]
-    #[cfg(not(tarpaulin_include))]
-    pub fn load_from_function<T: FromLua>(&self, modname: &str, func: Function) -> Result<T> {
-        let loaded = unsafe {
-            self.exec_raw::<Table>((), |state| {
-                ffi::luaL_getsubtable(state, ffi::LUA_REGISTRYINDEX, ffi::LUA_LOADED_TABLE);
-            })?
-        };
-
-        let value = match loaded.raw_get(modname)? {
-            Value::Nil => {
-                let result = match func.call(modname)? {
-                    Value::Nil => Value::Boolean(true),
-                    res => res,
-                };
-                loaded.raw_set(modname, &result)?;
-                result
-            }
-            res => res,
-        };
-        T::from_lua(value, self)
-    }
-
     /// Unloads module `modname`.
     ///
     /// This method does not support unloading binary Lua modules since they are internally cached
