@@ -90,7 +90,7 @@ pub struct GcIncParams {
     /// GC work performed per unit of memory allocated.
     pub step_multiplier: Option<c_int>,
 
-    /// Granularity of each GC step in kilobytes.
+    /// Granularity of each GC step (see Lua reference for details).
     #[cfg(any(feature = "lua55", feature = "lua54", feature = "luau"))]
     #[cfg_attr(docsrs, doc(cfg(any(feature = "lua55", feature = "lua54", feature = "luau"))))]
     pub step_size: Option<c_int>,
