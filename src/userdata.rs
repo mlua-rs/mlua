@@ -340,7 +340,6 @@ pub trait UserDataMethods<T> {
     ///
     /// The method can be called only once per userdata instance, subsequent calls will result in a
     /// [`Error::UserDataDestructed`] error.
-    #[doc(hidden)]
     fn add_method_once<M, A, R>(&mut self, name: impl Into<String>, method: M)
     where
         T: 'static,
@@ -395,7 +394,6 @@ pub trait UserDataMethods<T> {
     /// [`Error::UserDataDestructed`] error.
     #[cfg(feature = "async")]
     #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
-    #[doc(hidden)]
     fn add_async_method_once<M, A, MR, R>(&mut self, name: impl Into<String>, method: M)
     where
         T: 'static,
