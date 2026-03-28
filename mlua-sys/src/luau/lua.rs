@@ -565,7 +565,7 @@ pub struct lua_Callbacks {
 
     /// gets called when L is created (LP == parent) or destroyed (LP == NULL)
     pub userthread: Option<unsafe extern "C-unwind" fn(LP: *mut lua_State, L: *mut lua_State)>,
-    /// gets called when a string is created; returned atom can be retrieved via tostringatom
+    /// gets called when a string is created to assign an atom id
     pub useratom: Option<unsafe extern "C-unwind" fn(L: *mut lua_State, s: *const c_char, l: usize) -> i16>,
 
     /// gets called when BREAK instruction is encountered
