@@ -75,7 +75,6 @@ mod macros;
 mod buffer;
 mod chunk;
 mod conversion;
-mod error;
 mod memory;
 mod multi;
 mod scope;
@@ -87,6 +86,7 @@ mod value;
 mod vector;
 
 pub mod debug;
+pub mod error;
 pub mod function;
 #[cfg(any(feature = "luau", doc))]
 #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
@@ -102,7 +102,8 @@ pub use bstr::BString;
 pub use ffi::{self, lua_CFunction, lua_State};
 
 pub use crate::chunk::{AsChunk, Chunk, ChunkMode};
-pub use crate::error::{Error, ErrorContext, ExternalError, ExternalResult, Result};
+#[doc(inline)]
+pub use crate::error::{Error, Result};
 #[doc(inline)]
 pub use crate::function::Function;
 pub use crate::multi::{MultiValue, Variadic};
@@ -128,6 +129,8 @@ pub use crate::userdata::AnyUserData;
 pub use crate::value::{Nil, Value};
 
 // Re-export some types to keep backward compatibility and avoid breaking changes in the public API.
+#[doc(hidden)]
+pub use crate::error::{ErrorContext, ExternalError, ExternalResult};
 #[doc(hidden)]
 pub use crate::string::LuaString as String;
 #[doc(hidden)]

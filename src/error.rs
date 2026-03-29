@@ -1,3 +1,8 @@
+//! Lua error handling.
+//!
+//! This module provides the [`Error`] type returned by all fallible `mlua` operations, together
+//! with extension traits for adapting Rust errors for use within Lua.
+
 use std::error::Error as StdError;
 use std::fmt;
 use std::io::Error as IoError;
