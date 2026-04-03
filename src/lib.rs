@@ -73,7 +73,6 @@
 mod macros;
 
 mod buffer;
-mod chunk;
 mod conversion;
 mod memory;
 mod multi;
@@ -85,6 +84,7 @@ mod util;
 mod value;
 mod vector;
 
+pub mod chunk;
 pub mod debug;
 pub mod error;
 pub mod function;
@@ -101,7 +101,6 @@ pub mod userdata;
 pub use bstr::BString;
 pub use ffi::{self, lua_CFunction, lua_State};
 
-pub use crate::chunk::{AsChunk, Chunk, ChunkMode};
 #[doc(inline)]
 pub use crate::error::{Error, Result};
 #[doc(inline)]
@@ -130,6 +129,11 @@ pub use crate::value::{Nil, Value};
 
 // Re-export some types to keep backward compatibility and avoid breaking changes in the public API.
 #[doc(hidden)]
+pub use crate::chunk::{AsChunk, Chunk, ChunkMode};
+#[cfg(feature = "luau")]
+#[doc(hidden)]
+pub use crate::chunk::{CompileConstant, Compiler};
+#[doc(hidden)]
 pub use crate::error::{ErrorContext, ExternalError, ExternalResult};
 #[doc(hidden)]
 pub use crate::string::LuaString as String;
@@ -149,11 +153,7 @@ pub use crate::debug::HookTriggers;
 
 #[cfg(any(feature = "luau", doc))]
 #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
-pub use crate::{
-    buffer::Buffer,
-    chunk::{CompileConstant, Compiler},
-    vector::Vector,
-};
+pub use crate::{buffer::Buffer, vector::Vector};
 
 #[cfg(feature = "async")]
 #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
