@@ -78,7 +78,6 @@ mod memory;
 mod multi;
 mod scope;
 mod stdlib;
-mod traits;
 mod types;
 mod util;
 mod value;
@@ -96,6 +95,7 @@ pub mod state;
 pub mod string;
 pub mod table;
 pub mod thread;
+pub mod traits;
 pub mod userdata;
 
 pub use bstr::BString;
@@ -116,9 +116,8 @@ pub use crate::string::{BorrowedBytes, BorrowedStr, LuaString};
 pub use crate::table::Table;
 #[doc(inline)]
 pub use crate::thread::Thread;
-pub use crate::traits::{
-    FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, LuaNativeFn, LuaNativeFnMut, ObjectLike,
-};
+#[doc(inline)]
+pub use crate::traits::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, ObjectLike};
 pub use crate::types::{
     AppDataRef, AppDataRefMut, Either, Integer, LightUserData, MaybeSend, MaybeSync, Number, RegistryKey,
     VmState,
@@ -154,10 +153,6 @@ pub use crate::debug::HookTriggers;
 #[cfg(any(feature = "luau", doc))]
 #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
 pub use crate::{buffer::Buffer, vector::Vector};
-
-#[cfg(feature = "async")]
-#[cfg_attr(docsrs, doc(cfg(feature = "async")))]
-pub use crate::traits::LuaNativeAsyncFn;
 
 #[cfg(feature = "serde")]
 #[doc(inline)]

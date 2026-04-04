@@ -1,3 +1,8 @@
+//! Core conversion and extension traits.
+//!
+//! This module provides the fundamental traits for converting values between Rust and Lua,
+//! and for defining native Lua callable functions.
+
 use std::os::raw::c_int;
 use std::sync::Arc;
 

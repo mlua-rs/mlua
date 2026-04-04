@@ -4,19 +4,19 @@
 pub use crate::{
     AnyUserData as LuaAnyUserData, BorrowedBytes as LuaBorrowedBytes, BorrowedStr as LuaBorrowedStr,
     Either as LuaEither, Error as LuaError, FromLua, FromLuaMulti, Function as LuaFunction,
-    Integer as LuaInteger, IntoLua, IntoLuaMulti, LightUserData as LuaLightUserData, Lua, LuaNativeFn,
-    LuaNativeFnMut, LuaOptions, LuaString, MetaMethod as LuaMetaMethod, MultiValue as LuaMultiValue,
-    Nil as LuaNil, Number as LuaNumber, ObjectLike as LuaObjectLike, RegistryKey as LuaRegistryKey,
-    Result as LuaResult, StdLib as LuaStdLib, Table as LuaTable, Thread as LuaThread,
-    UserData as LuaUserData, UserDataFields as LuaUserDataFields, UserDataMetatable as LuaUserDataMetatable,
-    UserDataMethods as LuaUserDataMethods, UserDataRef as LuaUserDataRef,
-    UserDataRefMut as LuaUserDataRefMut, UserDataRegistry as LuaUserDataRegistry, Value as LuaValue,
-    Variadic as LuaVariadic, VmState as LuaVmState, WeakLua, chunk::AsChunk as AsLuaChunk,
-    chunk::Chunk as LuaChunk, chunk::ChunkMode as LuaChunkMode, error::ErrorContext as LuaErrorContext,
+    Integer as LuaInteger, IntoLua, IntoLuaMulti, LightUserData as LuaLightUserData, Lua, LuaOptions,
+    LuaString, MetaMethod as LuaMetaMethod, MultiValue as LuaMultiValue, Nil as LuaNil, Number as LuaNumber,
+    ObjectLike as LuaObjectLike, RegistryKey as LuaRegistryKey, Result as LuaResult, StdLib as LuaStdLib,
+    Table as LuaTable, Thread as LuaThread, UserData as LuaUserData, UserDataFields as LuaUserDataFields,
+    UserDataMetatable as LuaUserDataMetatable, UserDataMethods as LuaUserDataMethods,
+    UserDataRef as LuaUserDataRef, UserDataRefMut as LuaUserDataRefMut,
+    UserDataRegistry as LuaUserDataRegistry, Value as LuaValue, Variadic as LuaVariadic,
+    VmState as LuaVmState, WeakLua, chunk::AsChunk as AsLuaChunk, chunk::Chunk as LuaChunk,
+    chunk::ChunkMode as LuaChunkMode, error::ErrorContext as LuaErrorContext,
     error::ExternalError as LuaExternalError, error::ExternalResult as LuaExternalResult,
     function::FunctionInfo as LuaFunctionInfo, state::GcIncParams as LuaGcIncParams,
     state::GcMode as LuaGcMode, table::TablePairs as LuaTablePairs, table::TableSequence as LuaTableSequence,
-    thread::ThreadStatus as LuaThreadStatus,
+    thread::ThreadStatus as LuaThreadStatus, traits::LuaNativeFn, traits::LuaNativeFnMut,
 };
 
 #[cfg(not(feature = "luau"))]
@@ -40,7 +40,7 @@ pub use crate::{
 
 #[cfg(feature = "async")]
 #[doc(no_inline)]
-pub use crate::{LuaNativeAsyncFn, thread::AsyncThread as LuaAsyncThread};
+pub use crate::{thread::AsyncThread as LuaAsyncThread, traits::LuaNativeAsyncFn};
 
 #[cfg(feature = "serde")]
 #[doc(no_inline)]
