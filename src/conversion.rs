@@ -523,7 +523,10 @@ impl IntoLua for &str {
 impl IntoLua for Cow<'_, str> {
     #[inline]
     fn into_lua(self, lua: &Lua) -> Result<Value> {
-        Ok(Value::String(lua.create_string(self.as_bytes())?))
+        match self {
+            Cow::Borrowed(s) => s.into_lua(lua),
+            Cow::Owned(s) => s.into_lua(lua),
+        }
     }
 }
 
@@ -585,7 +588,10 @@ impl IntoLua for &CStr {
 impl IntoLua for Cow<'_, CStr> {
     #[inline]
     fn into_lua(self, lua: &Lua) -> Result<Value> {
-        Ok(Value::String(lua.create_string(self.to_bytes())?))
+        match self {
+            Cow::Borrowed(s) => s.into_lua(lua),
+            Cow::Owned(s) => s.into_lua(lua),
+        }
     }
 }
 
