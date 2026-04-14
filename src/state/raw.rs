@@ -963,7 +963,7 @@ impl RawLua {
             // Check if userdata/metatable is already registered
             let type_id = TypeId::of::<T>();
             if let Some(&table_id) = (*self.extra.get()).registered_userdata_t.get(&type_id) {
-                return Ok(table_id as Integer);
+                return Ok(table_id);
             }
 
             // Create a new metatable from `UserData` definition
@@ -982,7 +982,7 @@ impl RawLua {
             // Check if userdata/metatable is already registered
             let type_id = TypeId::of::<T>();
             if let Some(&table_id) = (*self.extra.get()).registered_userdata_t.get(&type_id) {
-                return Ok(table_id as Integer);
+                return Ok(table_id);
             }
 
             // Check if metatable creation is pending or create an empty metatable otherwise
@@ -997,7 +997,7 @@ impl RawLua {
     unsafe fn make_userdata_with_metatable<T>(
         &self,
         data: UserDataStorage<T>,
-        get_metatable_id: impl FnOnce() -> Result<Integer>,
+        get_metatable_id: impl FnOnce() -> Result<c_int>,
     ) -> Result<AnyUserData> {
         let state = self.state();
         let _sg = StackGuard::new(state);
@@ -1007,7 +1007,7 @@ impl RawLua {
         let mt_id = get_metatable_id()?;
         let protect = !self.unlikely_memory_error();
         push_userdata(state, data, protect)?;
-        ffi::lua_rawgeti(state, ffi::LUA_REGISTRYINDEX, mt_id);
+        ffi::lua_rawgeti(state, ffi::LUA_REGISTRYINDEX, mt_id as _);
         ffi::lua_setmetatable(state, -2);
 
         // Set empty environment for Lua 5.1
@@ -1025,7 +1025,7 @@ impl RawLua {
         Ok(AnyUserData(self.pop_ref()))
     }
 
-    pub(crate) unsafe fn create_userdata_metatable(&self, registry: RawUserDataRegistry) -> Result<Integer> {
+    pub(crate) unsafe fn create_userdata_metatable(&self, registry: RawUserDataRegistry) -> Result<c_int> {
         let state = self.state();
         let type_id = registry.type_id;
 
@@ -1041,7 +1041,7 @@ impl RawLua {
         }
         self.register_userdata_metatable(mt_ptr, type_id);
 
-        Ok(id as Integer)
+        Ok(id)
     }
 
     pub(crate) unsafe fn push_userdata_metatable(&self, mut registry: RawUserDataRegistry) -> Result<()> {
