@@ -38,9 +38,29 @@ use super::{Lua, LuaOptions, WeakLua};
 
 #[cfg(not(feature = "luau"))]
 use crate::{
-    debug::Debug,
+    debug::{Debug, HookTriggers},
     types::{HookCallback, HookKind, VmState},
 };
+
+/// Combined hook info stored per thread in the `__mlua_hooks` registry table.
+///
+/// Keyed by the thread's `lua_State` pointer cast to a light userdata, so it can be
+/// looked up without touching the (potentially suspended) thread's own stack.
+#[cfg(not(feature = "luau"))]
+#[derive(Clone)]
+pub(crate) struct ThreadHook {
+    pub(crate) triggers: HookTriggers,
+    pub(crate) callback: HookCallback,
+}
+
+#[cfg(not(feature = "luau"))]
+impl crate::util::TypeKey for ThreadHook {
+    #[inline(always)]
+    fn type_key() -> *const std::os::raw::c_void {
+        static THREAD_HOOK_TYPE_KEY: u8 = 0;
+        &THREAD_HOOK_TYPE_KEY as *const u8 as *const std::os::raw::c_void
+    }
+}
 
 #[cfg(feature = "async")]
 use {
@@ -205,6 +225,8 @@ impl RawLua {
                 init_internal_metatable::<CallbackUpvalue>(state, None)?;
                 #[cfg(not(feature = "luau"))]
                 init_internal_metatable::<HookCallback>(state, None)?;
+                #[cfg(not(feature = "luau"))]
+                init_internal_metatable::<ThreadHook>(state, None)?;
                 #[cfg(feature = "async")]
                 {
                     init_internal_metatable::<AsyncCallback>(state, None)?;
@@ -456,11 +478,15 @@ impl RawLua {
         unsafe extern "C-unwind" fn hook_proc(state: *mut ffi::lua_State, ar: *mut ffi::lua_Debug) {
             let top = ffi::lua_gettop(state);
             let mut hook_callback_ptr = ptr::null();
-            ffi::luaL_checkstack(state, 3, ptr::null());
+            ffi::luaL_checkstack(state, 2, ptr::null());
             if ffi::lua_getfield(state, ffi::LUA_REGISTRYINDEX, HOOKS_KEY) == ffi::LUA_TTABLE {
-                ffi::lua_pushthread(state);
+                // Use the thread's state pointer as the key to avoid pushing the thread object.
+                ffi::lua_pushlightuserdata(state, state as *mut c_void);
                 if ffi::lua_rawget(state, -2) == ffi::LUA_TUSERDATA {
-                    hook_callback_ptr = get_internal_userdata::<HookCallback>(state, -1, ptr::null());
+                    let hook_ptr = get_internal_userdata::<ThreadHook>(state, -1, ptr::null());
+                    if !hook_ptr.is_null() {
+                        hook_callback_ptr = &(*hook_ptr).callback as *const HookCallback;
+                    }
                 }
             }
             ffi::lua_settop(state, top);
@@ -491,7 +517,14 @@ impl RawLua {
             HookKind::Thread(triggers, callback) => (triggers, callback),
         };
 
-        // Hooks for threads stored in the registry (in a weak table)
+        // Update fast-path flag so trigger_resume_hook/trigger_yield_hook know to check.
+        if triggers.on_resume || triggers.on_yield {
+            (*self.extra.get()).has_resume_yield_hooks = true;
+        }
+
+        // Hooks for threads stored in the registry (in a weak table).
+        // The key is the thread's lua_State pointer as a light userdata so we never need
+        // to push the thread object (which would touch a potentially-suspended thread's stack).
         let state = self.state();
         let _sg = StackGuard::new(state);
         check_stack(state, 3)?;
@@ -504,14 +537,102 @@ impl RawLua {
                 ffi::lua_setmetatable(state, -2); // metatable(hooktable) = hooktable
             }
 
-            ffi::lua_pushthread(thread_state);
-            ffi::lua_xmove(thread_state, state, 1); // key (thread)
-            let _ = push_internal_userdata(state, callback, false); // value (hook callback)
-            ffi::lua_rawset(state, -3); // hooktable[thread] = hook callback
+            ffi::lua_pushlightuserdata(state, thread_state as *mut c_void); // key
+            let _ = push_internal_userdata(state, ThreadHook { triggers, callback }, false); // value
+            ffi::lua_rawset(state, -3); // hooktable[thread_ptr] = ThreadHook
         })?;
 
         ffi::lua_sethook(thread_state, Some(hook_proc), triggers.mask(), triggers.count());
 
+        Ok(())
+    }
+
+    /// Looks up the `ThreadHook` for `thread_state` from the registry.
+    ///
+    /// Safe to call for suspended threads: uses the state pointer as a light userdata key so
+    /// it never touches the thread's own stack.
+    #[cfg(not(feature = "luau"))]
+    unsafe fn get_thread_hook(&self, thread_state: *mut ffi::lua_State) -> Option<ThreadHook> {
+        const HOOKS_KEY: *const c_char = cstr!("__mlua_hooks");
+        let state = self.state();
+        let top = ffi::lua_gettop(state);
+        if ffi::lua_getfield(state, ffi::LUA_REGISTRYINDEX, HOOKS_KEY) != ffi::LUA_TTABLE {
+            ffi::lua_settop(state, top);
+            return None;
+        }
+        ffi::lua_pushlightuserdata(state, thread_state as *mut c_void);
+        let result = if ffi::lua_rawget(state, -2) == ffi::LUA_TUSERDATA {
+            let ptr = get_internal_userdata::<ThreadHook>(state, -1, ptr::null());
+            if ptr.is_null() { None } else { Some((*ptr).clone()) }
+        } else {
+            None
+        };
+        ffi::lua_settop(state, top);
+        result
+    }
+
+    /// Fires the `on_resume` hook for `thread_state`, if one is registered.
+    ///
+    /// Must be called just before `lua_resume`. Errors from the hook are propagated back to
+    /// the caller, aborting the resume.
+    #[cfg(not(feature = "luau"))]
+    pub(crate) unsafe fn trigger_resume_hook(&self, thread_state: *mut ffi::lua_State) -> Result<()> {
+        // Fast path: skip registry lookup entirely if no resume/yield hooks exist.
+        if !(*self.extra.get()).has_resume_yield_hooks {
+            return Ok(());
+        }
+
+        // Thread-specific hook takes precedence over the global hook.
+        if let Some(hook) = self.get_thread_hook(thread_state) {
+            if hook.triggers.on_resume {
+                let debug = Debug::new_resume(self);
+                (hook.callback)(self.lua(), &debug)?;
+            }
+            // A thread-specific hook was found; don't fall through to the global hook.
+            return Ok(());
+        }
+
+        // Fall back to global hook.
+        let extra = &*self.extra.get();
+        if extra.hook_triggers.on_resume {
+            if let Some(ref cb) = extra.hook_callback {
+                let cb = cb.clone();
+                let debug = Debug::new_resume(self);
+                cb(self.lua(), &debug)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Fires the `on_yield` hook for `thread_state`, if one is registered.
+    ///
+    /// Must be called immediately after `lua_resume` returns `LUA_YIELD`.
+    #[cfg(not(feature = "luau"))]
+    pub(crate) unsafe fn trigger_yield_hook(&self, thread_state: *mut ffi::lua_State) -> Result<()> {
+        // Fast path: skip registry lookup entirely if no resume/yield hooks exist.
+        if !(*self.extra.get()).has_resume_yield_hooks {
+            return Ok(());
+        }
+
+        // Thread-specific hook takes precedence over the global hook.
+        if let Some(hook) = self.get_thread_hook(thread_state) {
+            if hook.triggers.on_yield {
+                let debug = Debug::new_yield(self);
+                (hook.callback)(self.lua(), &debug)?;
+            }
+            // A thread-specific hook was found; don't fall through to the global hook.
+            return Ok(());
+        }
+
+        // Fall back to global hook.
+        let extra = &*self.extra.get();
+        if extra.hook_triggers.on_yield {
+            if let Some(ref cb) = extra.hook_callback {
+                let cb = cb.clone();
+                let debug = Debug::new_yield(self);
+                cb(self.lua(), &debug)?;
+            }
+        }
         Ok(())
     }
 

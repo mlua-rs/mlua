@@ -77,6 +77,11 @@ pub(crate) struct ExtraData {
     pub(super) hook_callback: Option<crate::types::HookCallback>,
     #[cfg(not(feature = "luau"))]
     pub(super) hook_triggers: crate::debug::HookTriggers,
+    /// Fast-path flag: true if any registered hook (global or thread-specific) has
+    /// `on_resume` or `on_yield` set. Checked before doing any registry lookup in
+    /// `trigger_resume_hook` / `trigger_yield_hook`.
+    #[cfg(not(feature = "luau"))]
+    pub(super) has_resume_yield_hooks: bool,
     #[cfg(any(feature = "lua55", feature = "lua54"))]
     pub(super) warn_callback: Option<crate::types::WarnCallback>,
     #[cfg(feature = "luau")]
@@ -182,6 +187,8 @@ impl ExtraData {
             hook_callback: None,
             #[cfg(not(feature = "luau"))]
             hook_triggers: Default::default(),
+            #[cfg(not(feature = "luau"))]
+            has_resume_yield_hooks: false,
             #[cfg(any(feature = "lua55", feature = "lua54"))]
             warn_callback: None,
             #[cfg(feature = "luau")]

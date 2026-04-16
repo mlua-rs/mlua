@@ -248,6 +248,11 @@ impl Thread {
     unsafe fn resume_inner(&self, lua: &RawLua, nargs: c_int) -> Result<(ThreadStatusInner, c_int)> {
         let state = lua.state();
         let thread_state = self.state();
+
+        // Fire on_resume hooks before handing control back to the coroutine.
+        #[cfg(not(feature = "luau"))]
+        lua.trigger_resume_hook(thread_state)?;
+
         let mut nresults = 0;
         #[cfg(not(feature = "luau"))]
         let ret = ffi::lua_resume(thread_state, state, nargs, &mut nresults as *mut c_int);
@@ -255,7 +260,12 @@ impl Thread {
         let ret = ffi::lua_resumex(thread_state, state, nargs, &mut nresults as *mut c_int);
         match ret {
             ffi::LUA_OK => Ok((ThreadStatusInner::Finished, nresults)),
-            ffi::LUA_YIELD => Ok((ThreadStatusInner::Yielded(0), nresults)),
+            ffi::LUA_YIELD => {
+                // Fire on_yield hooks after the coroutine has yielded.
+                #[cfg(not(feature = "luau"))]
+                lua.trigger_yield_hook(thread_state)?;
+                Ok((ThreadStatusInner::Yielded(0), nresults))
+            }
             ffi::LUA_ERRMEM => {
                 // Don't call error handler for memory errors
                 Err(pop_error(thread_state, ret))
