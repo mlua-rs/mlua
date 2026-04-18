@@ -14,7 +14,7 @@ pub const LUA_UTF8LIBNAME: *const c_char = cstr!("utf8");
 pub const LUA_MATHLIBNAME: *const c_char = cstr!("math");
 pub const LUA_DBLIBNAME: *const c_char = cstr!("debug");
 pub const LUA_VECLIBNAME: *const c_char = cstr!("vector");
-pub const LUA_INTLIBNAME : *const c_char = cstr!("integer");
+pub const LUA_INTLIBNAME: *const c_char = cstr!("integer");
 
 unsafe extern "C-unwind" {
     pub fn luaopen_base(L: *mut lua_State) -> c_int;
