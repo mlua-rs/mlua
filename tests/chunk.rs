@@ -1,3 +1,4 @@
+#[cfg(not(target_os = "wasi"))]
 use std::{fs, io};
 
 use mlua::{Chunk, ChunkMode, Lua, Result};
@@ -85,7 +86,7 @@ fn test_chunk_macro() -> Result<()> {
     data.raw_set("num", 1)?;
 
     let ud = mlua::AnyUserData::wrap("hello");
-    let f = mlua::Function::wrap(|| Ok(()));
+    let f = mlua::Function::wrap(|| Ok::<_, mlua::Error>(()));
 
     lua.globals().set("g", 123)?;
 

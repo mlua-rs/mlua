@@ -559,10 +559,8 @@ impl<'a> Iterator for Chain<'a> {
 
 #[cfg(test)]
 mod assertions {
-    use super::*;
-
     #[cfg(not(feature = "error-send"))]
-    static_assertions::assert_not_impl_any!(Error: Send, Sync);
+    static_assertions::assert_not_impl_any!(super::Error: Send, Sync);
     #[cfg(feature = "send")]
-    static_assertions::assert_impl_all!(Error: Send, Sync);
+    static_assertions::assert_impl_all!(super::Error: Send, Sync);
 }
