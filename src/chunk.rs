@@ -160,6 +160,7 @@ pub enum ChunkMode {
 /// Represents a constant value that can be used by Luau compiler.
 #[cfg(any(feature = "luau", doc))]
 #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
+#[non_exhaustive]
 #[derive(Clone, Debug)]
 pub enum CompileConstant {
     Nil,
