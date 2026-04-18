@@ -41,7 +41,7 @@ async fn test_async_function_wrap() -> Result<()> {
 
     let f = Function::wrap_async(|s: String| async move {
         tokio::task::yield_now().await;
-        Ok(s)
+        Ok::<_, Error>(s)
     });
     lua.globals().set("f", f)?;
     let res: String = lua.load(r#"f("hello")"#).eval_async().await?;

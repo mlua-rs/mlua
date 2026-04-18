@@ -1,3 +1,6 @@
+use std::fmt;
+use std::result::Result as StdResult;
+
 use mlua::{Error, Function, Lua, LuaString, Result, Table, Variadic};
 
 #[test]
@@ -343,7 +346,7 @@ fn test_function_deep_clone() -> Result<()> {
 fn test_function_wrap() -> Result<()> {
     let lua = Lua::new();
 
-    let f = Function::wrap(|s: LuaString, n| Ok(s.to_str().unwrap().repeat(n)));
+    let f = Function::wrap(|s: LuaString, n| Ok::<_, Error>(s.to_str().unwrap().repeat(n)));
     lua.globals().set("f", f)?;
     lua.load(r#"assert(f("hello", 2) == "hellohello")"#)
         .exec()
@@ -361,11 +364,40 @@ fn test_function_wrap() -> Result<()> {
     .exec()
     .unwrap();
 
+    // Return external error
+    #[derive(Debug)]
+    struct MyError(String);
+    impl fmt::Display for MyError {
+        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            write!(f, "MyError: {}", self.0)
+        }
+    }
+    impl std::error::Error for MyError {}
+
+    let fext = Function::wrap(|s: String| -> StdResult<String, MyError> {
+        if s == "bad" {
+            return Err(MyError("bad input".into()));
+        }
+        Ok(format!("ok: {s}"))
+    });
+    lua.globals().set("fext", fext)?;
+    lua.load(r#"assert(fext("hello") == "ok: hello")"#)
+        .exec()
+        .unwrap();
+    lua.load(
+        r#"
+        local ok, err = pcall(fext, "bad")
+        assert(not ok and tostring(err):find("MyError: bad input"))
+    "#,
+    )
+    .exec()
+    .unwrap();
+
     // Mutable callback
     let mut i = 0;
     let fmut = Function::wrap_mut(move || {
         i += 1;
-        Ok(i)
+        Ok::<_, Error>(i)
     });
     lua.globals().set("fmut", fmut)?;
     lua.load(r#"fmut(); fmut(); assert(fmut() == 3)"#).exec().unwrap();
@@ -385,7 +417,7 @@ fn test_function_wrap() -> Result<()> {
     // Check recursive mut callback error
     let fmut = Function::wrap_mut(|f: Function| match f.call::<()>(&f) {
         Err(Error::CallbackError { cause, .. }) => match cause.as_ref() {
-            Error::RecursiveMutCallback { .. } => Ok(()),
+            Error::RecursiveMutCallback { .. } => Ok::<_, Error>(()),
             other => panic!("incorrect result: {other:?}"),
         },
         other => panic!("incorrect result: {other:?}"),

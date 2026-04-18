@@ -345,7 +345,11 @@ impl Error {
     /// Wraps an external error object.
     #[inline]
     pub fn external<T: Into<Box<DynStdError>>>(err: T) -> Self {
-        Error::ExternalError(err.into().into())
+        let boxed = err.into();
+        match boxed.downcast::<Self>() {
+            Ok(err) => *err,
+            Err(boxed) => Error::ExternalError(boxed.into()),
+        }
     }
 
     /// Attempts to downcast the external error object to a concrete type by reference.

@@ -77,6 +77,19 @@ fn test_error_chain() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn test_external_error() {
+    // `Error::external` should preserve `mlua::Error`
+    let runtime_err = Error::runtime("test error");
+    let converted = Error::external(runtime_err);
+    assert!(matches!(converted, Error::RuntimeError(ref msg) if msg == "test error"));
+
+    // Other errors should become `ExternalError`
+    let converted = Error::external(io::Error::other("other error"));
+    assert!(matches!(converted, Error::ExternalError(_)));
+    assert!(converted.downcast_ref::<io::Error>().is_some());
+}
+
 #[cfg(feature = "anyhow")]
 #[test]
 fn test_error_anyhow() -> Result<()> {
