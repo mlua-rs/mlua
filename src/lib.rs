@@ -78,6 +78,7 @@ mod memory;
 mod multi;
 mod scope;
 mod stdlib;
+mod traits;
 mod types;
 mod util;
 mod value;
@@ -95,7 +96,6 @@ pub mod state;
 pub mod string;
 pub mod table;
 pub mod thread;
-pub mod traits;
 pub mod userdata;
 
 pub use bstr::BString;
