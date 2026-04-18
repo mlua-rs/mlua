@@ -80,6 +80,7 @@ unsafe extern "C" {
     pub fn luau_set_compile_constant_nil(cons: *mut lua_CompileConstant);
     pub fn luau_set_compile_constant_boolean(cons: *mut lua_CompileConstant, b: c_int);
     pub fn luau_set_compile_constant_number(cons: *mut lua_CompileConstant, n: f64);
+    pub fn luau_set_compile_constant_integer64(cons: *mut lua_CompileConstant, l: i64);
     pub fn luau_set_compile_constant_vector(cons: *mut lua_CompileConstant, x: f32, y: f32, z: f32, w: f32);
     pub fn luau_set_compile_constant_string(cons: *mut lua_CompileConstant, s: *const c_char, l: usize);
 }

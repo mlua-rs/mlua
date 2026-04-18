@@ -73,10 +73,15 @@ impl StdLib {
     #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
     pub const VECTOR: StdLib = StdLib(1 << 10);
 
+    /// [`integer`](https://luau.org/library#integer-library) library
+    #[cfg(any(feature = "luau", doc))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
+    pub const INTEGER: StdLib = StdLib(1 << 11);
+
     /// [`jit`](http://luajit.org/ext_jit.html) library
     #[cfg(any(feature = "luajit", doc))]
     #[cfg_attr(docsrs, doc(cfg(feature = "luajit")))]
-    pub const JIT: StdLib = StdLib(1 << 11);
+    pub const JIT: StdLib = StdLib(1 << 12);
 
     /// (**unsafe**) [`ffi`](http://luajit.org/ext_ffi.html) library
     #[cfg(any(feature = "luajit", doc))]

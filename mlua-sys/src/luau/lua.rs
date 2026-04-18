@@ -65,14 +65,15 @@ pub const LUA_TBOOLEAN: c_int = 1;
 
 pub const LUA_TLIGHTUSERDATA: c_int = 2;
 pub const LUA_TNUMBER: c_int = 3;
-pub const LUA_TVECTOR: c_int = 4;
+pub const LUA_TINTEGER: c_int = 4;
+pub const LUA_TVECTOR: c_int = 5;
 
-pub const LUA_TSTRING: c_int = 5;
-pub const LUA_TTABLE: c_int = 6;
-pub const LUA_TFUNCTION: c_int = 7;
-pub const LUA_TUSERDATA: c_int = 8;
-pub const LUA_TTHREAD: c_int = 9;
-pub const LUA_TBUFFER: c_int = 10;
+pub const LUA_TSTRING: c_int = 6;
+pub const LUA_TTABLE: c_int = 7;
+pub const LUA_TFUNCTION: c_int = 8;
+pub const LUA_TUSERDATA: c_int = 9;
+pub const LUA_TTHREAD: c_int = 10;
+pub const LUA_TBUFFER: c_int = 11;
 
 /// Guaranteed number of Lua stack slots available to a C function.
 pub const LUA_MINSTACK: c_int = 20;
@@ -153,6 +154,7 @@ unsafe extern "C-unwind" {
     pub fn lua_tounsignedx(L: *mut lua_State, idx: c_int, isnum: *mut c_int) -> lua_Unsigned;
     pub fn lua_tovector(L: *mut lua_State, idx: c_int) -> *const c_float;
     pub fn lua_toboolean(L: *mut lua_State, idx: c_int) -> c_int;
+    pub fn lua_tointeger64(L: *mut lua_State, idx: c_int, isinteger: *mut c_int) -> i64;
     pub fn lua_tolstring(L: *mut lua_State, idx: c_int, len: *mut usize) -> *const c_char;
     pub fn lua_tostringatom(L: *mut lua_State, idx: c_int, atom: *mut c_int) -> *const c_char;
     pub fn lua_tolstringatom(
@@ -182,6 +184,7 @@ unsafe extern "C-unwind" {
     pub fn lua_pushnumber(L: *mut lua_State, n: lua_Number);
     #[link_name = "lua_pushinteger"]
     pub fn lua_pushinteger_(L: *mut lua_State, n: c_int);
+    pub fn lua_pushinteger64(L: *mut lua_State, n: i64);
     pub fn lua_pushunsigned(L: *mut lua_State, n: lua_Unsigned);
     #[cfg(not(feature = "luau-vector4"))]
     pub fn lua_pushvector(L: *mut lua_State, x: c_float, y: c_float, z: c_float);
@@ -410,6 +413,11 @@ pub unsafe fn lua_isnil(L: *mut lua_State, n: c_int) -> c_int {
 #[inline(always)]
 pub unsafe fn lua_isboolean(L: *mut lua_State, n: c_int) -> c_int {
     (lua_type(L, n) == LUA_TBOOLEAN) as c_int
+}
+
+#[inline(always)]
+pub unsafe fn lua_isinteger64(L: *mut lua_State, n: c_int) -> c_int {
+    (lua_type(L, n) == LUA_TINTEGER) as c_int
 }
 
 #[inline(always)]

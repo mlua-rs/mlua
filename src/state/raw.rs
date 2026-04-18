@@ -817,12 +817,19 @@ impl RawLua {
 
             #[cfg(any(feature = "lua52", feature = "lua51", feature = "luajit", feature = "luau"))]
             ffi::LUA_TNUMBER => {
-                use crate::types::Number;
-
                 let n = ffi::lua_tonumber(state, idx);
                 match num_traits::cast(n) {
-                    Some(i) if n.to_bits() == (i as Number).to_bits() => Value::Integer(i),
+                    Some(i) if n.to_bits() == (i as crate::types::Number).to_bits() => Value::Integer(i),
                     _ => Value::Number(n),
+                }
+            }
+
+            #[cfg(feature = "luau")]
+            ffi::LUA_TINTEGER => {
+                let i = ffi::lua_tointeger64(state, idx, ptr::null_mut());
+                match num_traits::cast(i) {
+                    Some(i) => Value::Integer(i),
+                    _ => Value::Number(i as crate::types::Number),
                 }
             }
 
@@ -1596,6 +1603,11 @@ unsafe fn load_std_libs(state: *mut ffi::lua_State, libs: StdLib) -> Result<()> 
     #[cfg(feature = "luau")]
     if libs.contains(StdLib::VECTOR) {
         requiref(state, ffi::LUA_VECLIBNAME, ffi::luaopen_vector, 1)?;
+    }
+
+    #[cfg(feature = "luau")]
+    if libs.contains(StdLib::INTEGER) {
+        requiref(state, ffi::LUA_INTLIBNAME, ffi::luaopen_integer, 1)?;
     }
 
     if libs.contains(StdLib::MATH) {

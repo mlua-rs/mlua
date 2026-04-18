@@ -812,6 +812,13 @@ macro_rules! lua_convert_int {
                         });
                     }
                 }
+                #[cfg(feature = "luau")]
+                if type_id == ffi::LUA_TINTEGER {
+                    let i = ffi::lua_tointeger64(state, idx, std::ptr::null_mut());
+                    return cast(i).ok_or_else(|| {
+                        Error::from_lua_conversion("integer", stringify!($x), "out of range".to_string())
+                    });
+                }
                 // Fallback to default
                 Self::from_lua(lua.stack_value(idx, Some(type_id)), lua.lua())
             }

@@ -6,7 +6,9 @@ use std::os::raw::c_void;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicPtr, AtomicU64, Ordering};
 
-use mlua::{Compiler, Error, Function, Lua, LuaOptions, Result, StdLib, Table, Value, Vector, VmState};
+use mlua::{
+    Compiler, Error, Function, Lua, LuaOptions, ObjectLike, Result, StdLib, Table, Value, Vector, VmState,
+};
 
 #[test]
 fn test_version() -> Result<()> {
@@ -529,6 +531,24 @@ fn test_heap_dump() -> Result<()> {
     // Remove category filter
     let size_by_udtype_all = dump.size_by_userdata(None);
     assert!(size_by_udtype.len() < size_by_udtype_all.len());
+
+    Ok(())
+}
+
+#[test]
+fn test_integer64_type() -> Result<()> {
+    let lua = Lua::new();
+
+    _ = Lua::set_fflag("LuauIntegerType", true);
+
+    let integer_lib = lua.globals().get::<Table>("integer")?;
+    let n = integer_lib.call_function::<i64>("create", 42)?;
+    assert_eq!(n, 42);
+
+    let n: i64 = lua.load("return 42i").eval()?;
+    assert_eq!(n, 42);
+    let n: i64 = lua.load("return -42i").eval()?;
+    assert_eq!(n, -42);
 
     Ok(())
 }

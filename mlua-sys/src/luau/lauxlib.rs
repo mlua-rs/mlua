@@ -38,8 +38,10 @@ unsafe extern "C-unwind" {
 
     #[link_name = "luaL_checkinteger"]
     pub fn luaL_checkinteger_(L: *mut lua_State, narg: c_int) -> c_int;
+    pub fn luaL_checkinteger64(L: *mut lua_State, narg: c_int) -> i64;
     #[link_name = "luaL_optinteger"]
     pub fn luaL_optinteger_(L: *mut lua_State, narg: c_int, def: c_int) -> c_int;
+    pub fn luaL_optinteger64(L: *mut lua_State, narg: c_int, def: i64) -> i64;
     pub fn luaL_checkunsigned(L: *mut lua_State, narg: c_int) -> lua_Unsigned;
     pub fn luaL_optunsigned(L: *mut lua_State, narg: c_int, def: lua_Unsigned) -> lua_Unsigned;
 
