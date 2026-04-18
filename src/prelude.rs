@@ -14,9 +14,9 @@ pub use crate::{
     VmState as LuaVmState, WeakLua, chunk::AsChunk as AsLuaChunk, chunk::Chunk as LuaChunk,
     chunk::ChunkMode as LuaChunkMode, error::ErrorContext as LuaErrorContext,
     error::ExternalError as LuaExternalError, error::ExternalResult as LuaExternalResult,
-    function::FunctionInfo as LuaFunctionInfo, state::GcIncParams as LuaGcIncParams,
-    state::GcMode as LuaGcMode, table::TablePairs as LuaTablePairs, table::TableSequence as LuaTableSequence,
-    thread::ThreadStatus as LuaThreadStatus, traits::LuaNativeFn, traits::LuaNativeFnMut,
+    function::FunctionInfo as LuaFunctionInfo, function::LuaNativeFn, function::LuaNativeFnMut,
+    state::GcIncParams as LuaGcIncParams, state::GcMode as LuaGcMode, table::TablePairs as LuaTablePairs,
+    table::TableSequence as LuaTableSequence, thread::ThreadStatus as LuaThreadStatus,
 };
 
 #[cfg(not(feature = "luau"))]
@@ -40,7 +40,7 @@ pub use crate::{
 
 #[cfg(feature = "async")]
 #[doc(no_inline)]
-pub use crate::{thread::AsyncThread as LuaAsyncThread, traits::LuaNativeAsyncFn};
+pub use crate::{function::LuaNativeAsyncFn, thread::AsyncThread as LuaAsyncThread};
 
 #[cfg(feature = "serde")]
 #[doc(no_inline)]
