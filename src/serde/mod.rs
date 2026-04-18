@@ -243,6 +243,6 @@ pub mod de;
 pub mod ser;
 
 #[doc(inline)]
-pub use de::Deserializer;
+pub use de::{Deserializer, Options as DeserializeOptions};
 #[doc(inline)]
-pub use ser::Serializer;
+pub use ser::{Options as SerializeOptions, Serializer};

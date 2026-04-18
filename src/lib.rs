@@ -156,8 +156,11 @@ pub use crate::{buffer::Buffer, vector::Vector};
 
 #[cfg(feature = "serde")]
 #[doc(inline)]
+pub use crate::serde::LuaSerdeExt;
+#[cfg(feature = "serde")]
+#[doc(hidden)]
 pub use crate::{
-    serde::{LuaSerdeExt, de::Options as DeserializeOptions, ser::Options as SerializeOptions},
+    serde::{DeserializeOptions, SerializeOptions},
     value::SerializableValue,
 };
 
