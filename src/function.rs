@@ -3,12 +3,6 @@
 //! This module provides types for working with Lua functions from Rust, including
 //! both Lua-defined functions and native Rust callbacks.
 //!
-//! # Main Types
-//!
-//! - [`Function`] - A handle to a Lua function that can be called from Rust.
-//! - [`FunctionInfo`] - Debug information about a function (name, source, line numbers, etc.).
-//! - [`CoverageInfo`] - Code coverage data for Luau functions (requires `luau` feature).
-//!
 //! # Calling Functions
 //!
 //! Use [`Function::call`] to invoke a Lua function synchronously:

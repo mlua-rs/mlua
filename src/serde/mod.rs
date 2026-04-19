@@ -242,7 +242,5 @@ static ARRAY_METATABLE_REGISTRY_KEY: u8 = 0;
 pub mod de;
 pub mod ser;
 
-#[doc(inline)]
 pub use de::{Deserializer, Options as DeserializeOptions};
-#[doc(inline)]
 pub use ser::{Options as SerializeOptions, Serializer};

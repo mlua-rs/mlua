@@ -3,12 +3,6 @@
 //! Tables are Lua's primary data structure, used for arrays, dictionaries, objects, modules,
 //! and more. This module provides types for creating and manipulating Lua tables from Rust.
 //!
-//! # Main Types
-//!
-//! - [`Table`] - A handle to a Lua table.
-//! - [`TablePairs`] - An iterator over key-value pairs in a table.
-//! - [`TableSequence`] - An iterator over the array (sequence) portion of a table.
-//!
 //! # Basic Operations
 //!
 //! Tables support key-value access similar to Rust's `HashMap`:

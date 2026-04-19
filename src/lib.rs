@@ -155,14 +155,11 @@ pub use crate::debug::HookTriggers;
 pub use crate::{buffer::Buffer, vector::Vector};
 
 #[cfg(feature = "serde")]
-#[doc(inline)]
-pub use crate::serde::LuaSerdeExt;
-#[cfg(feature = "serde")]
 #[doc(hidden)]
-pub use crate::{
-    serde::{DeserializeOptions, SerializeOptions},
-    value::SerializableValue,
-};
+pub use crate::serde::{DeserializeOptions, SerializeOptions};
+#[cfg(feature = "serde")]
+#[doc(inline)]
+pub use crate::{serde::LuaSerdeExt, value::SerializableValue};
 
 #[cfg(feature = "serde")]
 #[cfg_attr(docsrs, doc(cfg(feature = "serde")))]
