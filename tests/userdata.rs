@@ -734,6 +734,43 @@ fn test_metatable() -> Result<()> {
 }
 
 #[test]
+fn test_userdata_type_name() -> Result<()> {
+    struct MyUserData;
+    impl UserData for MyUserData {}
+
+    struct MyUserdataCustom;
+    impl UserData for MyUserdataCustom {
+        fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
+            fields.add_meta_field_with(MetaMethod::Type, |_| Ok("MyCustomName"));
+        }
+    }
+
+    // mlua always sets __name/__type; override with a non-string to test the "userdata" fallback
+    struct MyUserdataInvalid;
+    impl UserData for MyUserdataInvalid {
+        fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
+            fields.add_meta_field_with(MetaMethod::Type, |_| Ok(42_i64));
+        }
+    }
+
+    let lua = Lua::new();
+
+    // Default is the Rust type name
+    let ud = lua.create_userdata(MyUserData)?;
+    assert_eq!(ud.type_name()?, "MyUserData");
+
+    // Custom name from metatable
+    let ud = lua.create_userdata(MyUserdataCustom)?;
+    assert_eq!(ud.type_name()?, "MyCustomName");
+
+    // Invalid type name should fallback to "userdata"
+    let ud = lua.create_userdata(MyUserdataInvalid)?;
+    assert_eq!(ud.type_name()?.to_str()?, "userdata");
+
+    Ok(())
+}
+
+#[test]
 fn test_userdata_proxy() -> Result<()> {
     struct MyUserData(i64);
 

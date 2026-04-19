@@ -8,6 +8,7 @@ use std::fmt;
 use std::hash::Hash;
 use std::os::raw::{c_char, c_void};
 
+use crate::Either;
 use crate::error::{Error, Result};
 use crate::function::Function;
 use crate::state::Lua;
@@ -1028,8 +1029,8 @@ impl AnyUserData {
 
     /// Returns a type name of this userdata (from a metatable field).
     ///
-    /// If no type name is set, returns `None`.
-    pub fn type_name(&self) -> Result<Option<String>> {
+    /// If no type name is set, returns `userdata`.
+    pub fn type_name(&self) -> Result<LuaString> {
         let lua = self.0.lua.lock();
         let state = lua.state();
         unsafe {
@@ -1046,8 +1047,8 @@ impl AnyUserData {
                 ffi::luaL_getmetafield(state, -1, MetaMethod::Type.as_cstr().as_ptr())
             };
             match name_type {
-                ffi::LUA_TSTRING => Ok(Some(LuaString(lua.pop_ref()).to_str()?.to_owned())),
-                _ => Ok(None),
+                ffi::LUA_TSTRING => Ok(LuaString(lua.pop_ref())),
+                _ => lua.create_string(b"userdata"),
             }
         }
     }
@@ -1108,8 +1109,10 @@ impl AnyUserData {
         match unsafe { self.invoke_tostring_dbg() } {
             Ok(Some(s)) => write!(fmt, "{s}"),
             _ => {
-                let name = self.type_name().ok().flatten();
-                let name = name.as_deref().unwrap_or("userdata");
+                let name = self.type_name().ok();
+                let name = (name.as_ref())
+                    .map(|s| Either::Left(s.display()))
+                    .unwrap_or(Either::Right("userdata"));
                 write!(fmt, "{name}: {:?}", self.to_pointer())
             }
         }
