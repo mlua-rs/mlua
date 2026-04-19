@@ -9,7 +9,7 @@ pub use crate::{
     ObjectLike as LuaObjectLike, RegistryKey as LuaRegistryKey, Result as LuaResult, StdLib as LuaStdLib,
     Table as LuaTable, Thread as LuaThread, UserData as LuaUserData, UserDataFields as LuaUserDataFields,
     UserDataMetatable as LuaUserDataMetatable, UserDataMethods as LuaUserDataMethods,
-    UserDataRef as LuaUserDataRef, UserDataRefMut as LuaUserDataRefMut,
+    UserDataOwned as LuaUserDataOwned, UserDataRef as LuaUserDataRef, UserDataRefMut as LuaUserDataRefMut,
     UserDataRegistry as LuaUserDataRegistry, Value as LuaValue, Variadic as LuaVariadic,
     VmState as LuaVmState, WeakLua, chunk::AsChunk as AsLuaChunk, chunk::Chunk as LuaChunk,
     chunk::ChunkMode as LuaChunkMode, error::ErrorContext as LuaErrorContext,

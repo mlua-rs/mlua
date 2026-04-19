@@ -142,8 +142,8 @@ pub use crate::table::{TablePairs, TableSequence};
 pub use crate::thread::ThreadStatus;
 #[doc(hidden)]
 pub use crate::userdata::{
-    MetaMethod, UserData, UserDataFields, UserDataMetatable, UserDataMethods, UserDataRef, UserDataRefMut,
-    UserDataRegistry,
+    MetaMethod, UserData, UserDataFields, UserDataMetatable, UserDataMethods, UserDataOwned, UserDataRef,
+    UserDataRefMut, UserDataRegistry,
 };
 
 #[cfg(not(feature = "luau"))]

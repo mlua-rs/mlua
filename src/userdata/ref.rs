@@ -7,7 +7,7 @@ use crate::error::{Error, Result};
 use crate::state::{Lua, RawLua};
 use crate::traits::FromLua;
 use crate::userdata::AnyUserData;
-use crate::util::get_userdata;
+use crate::util::{check_stack, get_userdata, take_userdata};
 use crate::value::Value;
 
 use super::cell::{UserDataStorage, UserDataVariant};
@@ -440,6 +440,66 @@ impl<T> DerefMut for UserDataRefMutInner<T> {
     }
 }
 
+/// A wrapper type that takes ownership of a userdata value.
+///
+/// It implements [`FromLua`] and can be used to receive a typed userdata from Lua by taking
+/// ownership of it.
+/// The original Lua userdata is marked as destructed and cannot be used further.
+pub struct UserDataOwned<T>(pub T);
+
+impl<T> Deref for UserDataOwned<T> {
+    type Target = T;
+
+    #[inline]
+    fn deref(&self) -> &T {
+        &self.0
+    }
+}
+
+impl<T> DerefMut for UserDataOwned<T> {
+    #[inline]
+    fn deref_mut(&mut self) -> &mut T {
+        &mut self.0
+    }
+}
+
+impl<T: fmt::Debug> fmt::Debug for UserDataOwned<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        (**self).fmt(f)
+    }
+}
+
+impl<T: fmt::Display> fmt::Display for UserDataOwned<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        (**self).fmt(f)
+    }
+}
+
+impl<T: 'static> FromLua for UserDataOwned<T> {
+    fn from_lua(value: Value, _: &Lua) -> Result<Self> {
+        try_value_to_userdata::<T>(value)?.take().map(UserDataOwned)
+    }
+
+    unsafe fn from_stack(idx: c_int, lua: &RawLua) -> Result<Self> {
+        let state = lua.state();
+        let type_id = lua.get_userdata_type_id::<T>(state, idx)?;
+        match type_id {
+            Some(type_id) if type_id == TypeId::of::<T>() => {
+                let ud = get_userdata::<UserDataStorage<T>>(state, idx);
+                if (*ud).has_exclusive_access() {
+                    check_stack(state, 1)?;
+                    take_userdata::<UserDataStorage<T>>(state, idx)
+                        .into_inner()
+                        .map(UserDataOwned)
+                } else {
+                    Err(Error::UserDataBorrowMutError)
+                }
+            }
+            _ => Err(Error::UserDataTypeMismatch),
+        }
+    }
+}
+
 #[inline]
 fn try_value_to_userdata<T>(value: Value) -> Result<AnyUserData> {
     match value {
@@ -464,6 +524,10 @@ mod assertions {
     static_assertions::assert_impl_all!(UserDataRefMut<()>: Sync, Send);
     #[cfg(feature = "send")]
     static_assertions::assert_not_impl_all!(UserDataRefMut<std::rc::Rc<()>>: Send, Sync);
+    #[cfg(feature = "send")]
+    static_assertions::assert_impl_all!(UserDataOwned<()>: Send, Sync);
+    #[cfg(feature = "send")]
+    static_assertions::assert_not_impl_all!(UserDataOwned<std::rc::Rc<()>>: Send, Sync);
 
     #[cfg(not(feature = "send"))]
     static_assertions::assert_not_impl_all!(UserDataRef<()>: Send, Sync);

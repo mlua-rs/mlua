@@ -30,7 +30,7 @@ use {
 
 // Re-export for convenience
 pub(crate) use cell::UserDataStorage;
-pub use r#ref::{UserDataRef, UserDataRefMut};
+pub use r#ref::{UserDataOwned, UserDataRef, UserDataRefMut};
 pub use registry::UserDataRegistry;
 pub(crate) use registry::{RawUserDataRegistry, UserDataProxy};
 pub(crate) use util::{

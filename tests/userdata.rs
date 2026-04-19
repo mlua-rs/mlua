@@ -7,7 +7,7 @@ use std::sync::atomic::{AtomicI64, Ordering};
 
 use mlua::{
     AnyUserData, Error, ExternalError, Function, Lua, LuaString, MetaMethod, Nil, ObjectLike, Result,
-    UserData, UserDataFields, UserDataMethods, UserDataRef, UserDataRegistry, Value, Variadic,
+    UserData, UserDataFields, UserDataMethods, UserDataOwned, UserDataRef, UserDataRegistry, Value, Variadic,
 };
 
 #[test]
@@ -1456,6 +1456,52 @@ fn test_userdata_get_path() -> Result<()> {
 
     let ud = lua.create_userdata(MyUd)?;
     assert_eq!(ud.get_path::<LuaString>(".value")?, "userdata_value");
+
+    Ok(())
+}
+
+#[test]
+fn test_userdata_owned() -> Result<()> {
+    #[derive(Debug)]
+    struct MyUserdata(Arc<i64>);
+
+    impl UserData for MyUserdata {
+        fn register(registry: &mut UserDataRegistry<Self>) {
+            registry.add_method("num", |_, this, ()| Ok(*this.0));
+        }
+    }
+
+    let lua = Lua::new();
+    let rc = Arc::new(42);
+
+    // It takes ownership and destructs the Lua userdata
+    let ud = lua.create_userdata(MyUserdata(rc.clone()))?;
+    assert_eq!(Arc::strong_count(&rc), 2);
+    let owned: UserDataOwned<MyUserdata> = lua.convert(&ud)?;
+    assert_eq!(*owned.0.0, 42);
+    drop(owned);
+    assert_eq!(Arc::strong_count(&rc), 1);
+    match ud.borrow::<MyUserdata>() {
+        Err(Error::UserDataDestructed) => {}
+        r => panic!("expected UserDataDestructed, got {:?}", r),
+    }
+
+    // Cannot take while borrowed
+    let rc = Arc::new(7);
+    let ud = lua.create_userdata(MyUserdata(rc.clone()))?;
+    let borrowed = ud.borrow::<MyUserdata>()?;
+    match lua.convert::<UserDataOwned<MyUserdata>>(&ud) {
+        Err(Error::UserDataBorrowMutError) => {}
+        r => panic!("expected UserDataBorrowMutError, got {:?}", r),
+    }
+    drop(borrowed);
+
+    // Works as a function parameter
+    let f = lua.create_function(|_, owned: UserDataOwned<MyUserdata>| Ok(*owned.0.0))?;
+    let rc = Arc::new(55);
+    let ud = lua.create_userdata(MyUserdata(rc.clone()))?;
+    assert_eq!(f.call::<i64>(ud)?, 55);
+    assert_eq!(Arc::strong_count(&rc), 1); // dropped after call
 
     Ok(())
 }
