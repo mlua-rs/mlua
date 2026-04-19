@@ -80,7 +80,7 @@ http-body-util = "0.1.1"
 reqwest = { version = "0.13", features = ["json"] }
 tempfile = "3"
 criterion = { version = "0.8", features = ["async_tokio"] }
-rustyline = "17.0"
+rustyline = "18.0"
 tokio = { version = "1.0", features = ["full"] }
 
 [lints.rust]
