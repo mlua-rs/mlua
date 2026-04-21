@@ -1,3 +1,22 @@
+## v0.12.0-rc.1 (Apr 21, 2026)
+
+- Rust 2024 edition
+- Removed `Error::ToLuaConversionError` variant as it was unused (and not practically useful)
+- New modules to group data types: `chunk`, `debug`, `error`, `function`, `table`, `string`, `state`, `thread`, `userdata`, `luau`
+- Support `__todebugstring` metamethod for pretty formatting userdata value (for debugging)
+- New `MaybeSync` trait that is required for userdata types
+- Removed lifetime from `BorrowedStr` and `BorrowedBytes`
+- New `Thread` methods: `is_resumable`, `is_running`, `is_finished`, `is_error`
+- Added `Thread::state` to get raw Lua state pointer
+- Luau `TextRequirer` is renamed to `FsRequirer`
+- GC interface refactor: `Lua::gc_inc/Lua::gc_gen` is replaced with `gc_set_mode`
+- Added `GcIncParams` and `GcGenParams` for GC tuning
+- New `UserDataMethods::add_method_once` and `UserDataMethods::add_async_method_once`
+- Initial Luau integer64 type support
+- Changed interface of `Function::wrap/wrap_mut/wrap_async` to support any Error type
+- Changed `AnyUserData::type_name` to return `LuaString` instead
+- Added `UserDataOwned<T>` wrapper to take ownership of userdata `T` and implements `FromLua`
+
 ## v0.11.6 (Jan 27, 2026)
 
 - Added Lua 5.5 support (`lua55` feature flag)
