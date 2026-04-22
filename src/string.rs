@@ -23,7 +23,7 @@ use {
 /// Handle to an internal Lua string.
 ///
 /// Unlike Rust strings, Lua strings may not be valid UTF-8.
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub struct LuaString(pub(crate) ValueRef);
 
 impl LuaString {
@@ -183,12 +183,6 @@ where
 {
     fn eq(&self, other: &T) -> bool {
         self.as_bytes() == other.as_ref()
-    }
-}
-
-impl PartialEq for LuaString {
-    fn eq(&self, other: &LuaString) -> bool {
-        self.as_bytes() == other.as_bytes()
     }
 }
 

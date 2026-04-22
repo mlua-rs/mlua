@@ -5,27 +5,37 @@ use mlua::{Lua, LuaString, Result};
 
 #[test]
 fn test_string_compare() {
-    fn with_str<F: FnOnce(LuaString)>(s: &str, f: F) {
-        f(Lua::new().create_string(s).unwrap());
+    let lua = Lua::new();
+
+    fn with_str<F: FnOnce(LuaString)>(lua: &Lua, s: &str, f: F) {
+        f(lua.create_string(s).unwrap());
     }
 
     // Tests that all comparisons we want to have are usable
-    with_str("teststring", |t| assert_eq!(t, "teststring")); // &str
-    with_str("teststring", |t| assert_eq!(t, b"teststring")); // &[u8]
-    with_str("teststring", |t| assert_eq!(t, b"teststring".to_vec())); // Vec<u8>
-    with_str("teststring", |t| assert_eq!(t, "teststring".to_string())); // String
-    with_str("teststring", |t| assert_eq!(t, t)); // mlua::String
-    with_str("teststring", |t| assert_eq!(t, Cow::from(b"teststring".as_ref()))); // Cow (borrowed)
-    with_str("bla", |t| assert_eq!(t, Cow::from(b"bla".to_vec()))); // Cow (owned)
+    with_str(&lua, "teststring", |t| assert_eq!(t, "teststring")); // &str
+    with_str(&lua, "teststring", |t| assert_eq!(t, b"teststring")); // &[u8]
+    with_str(&lua, "teststring", |t| assert_eq!(t, b"teststring".to_vec())); // Vec<u8>
+    with_str(&lua, "teststring", |t| assert_eq!(t, "teststring".to_string())); // String
+    with_str(&lua, "teststring", |t| assert_eq!(t, t)); // mlua::String
+    with_str(&lua, "teststring", |t| {
+        assert_eq!(t, Cow::from(b"teststring".as_ref())) // Cow (borrowed)
+    });
+    with_str(&lua, "bla", |t| assert_eq!(t, Cow::from(b"bla".to_vec()))); // Cow (owned)
 
     // Test ordering
-    with_str("a", |a| {
+    with_str(&lua, "a", |a| {
         assert!(!(a < a));
         assert!(!(a > a));
     });
-    with_str("a", |a| assert!(a < "b"));
-    with_str("a", |a| assert!(a < b"b"));
-    with_str("a", |a| with_str("b", |b| assert!(a < b)));
+    with_str(&lua, "a", |a| assert!(a < "b"));
+    with_str(&lua, "a", |a| assert!(a < b"b"));
+    with_str(&lua, "a", |a| with_str(&lua, "b", |b| assert!(a < b)));
+
+    // Long strings (not interned by Lua)
+    let long_str = "abc".repeat(100);
+    with_str(&lua, &long_str, |s1| {
+        with_str(&lua, &long_str, |s2| assert_eq!(s1, s2))
+    });
 }
 
 #[test]
