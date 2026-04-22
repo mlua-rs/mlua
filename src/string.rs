@@ -149,7 +149,10 @@ impl LuaString {
     /// Typically this function is used only for hashing and debug information.
     #[inline]
     pub fn to_pointer(&self) -> *const c_void {
-        self.0.to_pointer()
+        // In Lua < 5.4 (excluding Luau), string pointers are NULL
+        // Use alternative approach
+        let lua = self.0.lua.lock();
+        unsafe { ffi::lua_tostring(lua.ref_thread(), self.0.index) as *const c_void }
     }
 }
 

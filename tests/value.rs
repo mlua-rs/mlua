@@ -65,7 +65,7 @@ fn test_value_eq() -> Result<()> {
 
     assert!(!table1.to_pointer().is_null());
     assert!(!ptr::eq(table1.to_pointer(), table2.to_pointer()));
-    assert!(ptr::eq(string1.to_pointer(), string2.to_pointer()));
+    assert!(ptr::eq(string1.to_pointer(), string2.to_pointer()) && !string1.to_pointer().is_null());
     assert!(ptr::eq(func1.to_pointer(), func2.to_pointer()));
     assert!(num1.to_pointer().is_null());
 

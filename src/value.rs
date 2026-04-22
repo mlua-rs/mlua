@@ -128,18 +128,13 @@ impl Value {
     #[inline]
     pub fn to_pointer(&self) -> *const c_void {
         match self {
-            Value::String(LuaString(vref)) => {
-                // In Lua < 5.4 (excluding Luau), string pointers are NULL
-                // Use alternative approach
-                let lua = vref.lua.lock();
-                unsafe { ffi::lua_tostring(lua.ref_thread(), vref.index) as *const c_void }
-            }
             Value::LightUserData(ud) => ud.0,
             Value::Table(Table(vref))
             | Value::Function(Function(vref))
             | Value::Thread(Thread(vref, ..))
             | Value::UserData(AnyUserData(vref))
             | Value::Other(vref) => vref.to_pointer(),
+            Value::String(s) => s.to_pointer(),
             #[cfg(feature = "luau")]
             Value::Buffer(crate::Buffer(vref)) => vref.to_pointer(),
             _ => ptr::null(),
