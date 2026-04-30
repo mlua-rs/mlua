@@ -26,14 +26,22 @@ fn main() {
     // Check if compilation and linking is handled by external crate
     if cfg!(not(feature = "external")) {
         let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap();
-        if target_os == "windows" && cfg!(feature = "module") {
-            if !std::env::var("LUA_LIB_NAME").unwrap_or_default().is_empty() {
-                // Don't use raw-dylib linking
-                find::probe_lua();
-                return;
-            }
+        if cfg!(feature = "module") {
+            if target_os == "windows" {
+                if !std::env::var("LUA_LIB_NAME").unwrap_or_default().is_empty() {
+                    // Don't use raw-dylib linking
+                    find::probe_lua();
+                    return;
+                }
 
-            println!("cargo:rustc-cfg=raw_dylib");
+                println!("cargo:rustc-cfg=raw_dylib");
+            } else if target_os == "macos" {
+                // macOS linker requires explicit opt-in to allow undefined
+                // symbols in dylibs. Lua C modules resolve these symbols at
+                // load time from the host interpreter.
+                println!("cargo:rustc-cdylib-link-arg=-undefined");
+                println!("cargo:rustc-cdylib-link-arg=dynamic_lookup");
+            }
         }
 
         #[cfg(not(feature = "module"))]
