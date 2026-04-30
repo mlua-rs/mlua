@@ -1,4 +1,4 @@
-use std::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, BitXorAssign};
+use std::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, BitXorAssign, Not};
 
 /// Flags describing the set of lua standard libraries to load.
 #[derive(Copy, Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -142,5 +142,12 @@ impl BitXor for StdLib {
 impl BitXorAssign for StdLib {
     fn bitxor_assign(&mut self, rhs: Self) {
         *self = StdLib(self.0 ^ rhs.0)
+    }
+}
+
+impl Not for StdLib {
+    type Output = Self;
+    fn not(self) -> Self::Output {
+        StdLib(!self.0)
     }
 }
