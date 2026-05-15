@@ -170,12 +170,16 @@ impl Tokens {
                 .flat_map(Tokens::from)
                 .peekable()
                 .batching(|iter| {
-                    // Find variable tokens
+                    // Find variable tokens: `$` + `ident` => `$ident`
                     let t = iter.next()?;
                     if t.is("$") {
-                        // `$` + `ident` => `$ident`
-                        let t = iter.next().expect("$ must trail an identifier");
-                        Some(t.attr(TokenAttr::Cap))
+                        if let Some(next) = iter.next()
+                            && matches!(next.tree, TokenTree::Ident(_))
+                        {
+                            Some(next.attr(TokenAttr::Cap))
+                        } else {
+                            proc_macro_error2::abort!(t.tree.span(), "`$` must be followed by an identifier");
+                        }
                     } else {
                         Some(t)
                     }
