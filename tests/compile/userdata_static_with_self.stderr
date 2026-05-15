@@ -1,0 +1,5 @@
+error: field function must not take `self`
+  --> tests/compile/userdata_static_with_self.rs:10:5
+   |
+10 |     fn get_x(&self) -> mlua::Result<u32> {
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

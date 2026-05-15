@@ -1,0 +1,5 @@
+error: field setter must take `&[mut] self`
+  --> tests/compile/userdata_setter_ref_self.rs:10:5
+   |
+10 |     fn set_x(self, val: u32) -> mlua::Result<()> {
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

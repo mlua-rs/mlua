@@ -1,0 +1,5 @@
+error: field getter must take `&self`
+  --> tests/compile/userdata_getter_mut_self.rs:10:5
+   |
+10 |     fn x(&mut self) -> mlua::Result<u32> {
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

@@ -1,0 +1,5 @@
+error: const items do not support `getter` or `setter`
+ --> tests/compile/userdata_const_getter.rs:8:11
+  |
+8 |     const X: u32 = 42;
+  |           ^

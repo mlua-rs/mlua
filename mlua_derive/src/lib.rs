@@ -2,13 +2,23 @@ use proc_macro::TokenStream;
 use proc_macro2::{Ident, Span};
 use quote::quote;
 use syn::meta::ParseNestedMeta;
-use syn::{parse_macro_input, ItemFn, LitStr, Result};
+use syn::{ItemFn, LitStr, Result, parse_macro_input};
 
 #[cfg(feature = "macros")]
 use {
-    crate::chunk::Chunk, proc_macro::TokenTree, proc_macro2::TokenStream as TokenStream2,
-    proc_macro_error2::proc_macro_error,
+    crate::chunk::Chunk, proc_macro::TokenTree, proc_macro_error2::proc_macro_error,
+    proc_macro2::TokenStream as TokenStream2,
 };
+
+#[cfg(feature = "macros")]
+macro_rules! try_compile {
+    ($expr:expr) => {
+        match $expr {
+            Ok(val) => val,
+            Err(err) => return err.to_compile_error().into(),
+        }
+    };
+}
 
 #[derive(Default)]
 struct ModuleAttributes {
@@ -151,9 +161,29 @@ pub fn from_lua(input: TokenStream) -> TokenStream {
     from_lua::from_lua(input)
 }
 
+/// Attribute macro for exposing a Rust type as a Lua userdata.
+#[cfg(feature = "macros")]
+#[proc_macro_attribute]
+pub fn userdata(attr: TokenStream, item: TokenStream) -> TokenStream {
+    userdata::userdata_type(attr, item)
+}
+
+/// Attribute macro for exposing impl block methods to Lua userdata.
+#[cfg(feature = "macros")]
+#[proc_macro_attribute]
+pub fn userdata_impl(attr: TokenStream, item: TokenStream) -> TokenStream {
+    userdata_impl::userdata_impl(attr, item)
+}
+
+#[cfg(feature = "macros")]
+mod attr;
 #[cfg(feature = "macros")]
 mod chunk;
 #[cfg(feature = "macros")]
 mod from_lua;
 #[cfg(feature = "macros")]
 mod token;
+#[cfg(feature = "macros")]
+mod userdata;
+#[cfg(feature = "macros")]
+mod userdata_impl;

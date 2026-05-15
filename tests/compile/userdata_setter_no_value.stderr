@@ -1,0 +1,5 @@
+error: field setter must take exactly one value argument
+  --> tests/compile/userdata_setter_no_value.rs:10:5
+   |
+10 |     fn set_x(&mut self) -> mlua::Result<()> {
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

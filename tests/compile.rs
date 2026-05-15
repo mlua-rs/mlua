@@ -21,4 +21,18 @@ fn test_compilation() {
     t.compile_fail("tests/compile/non_send.rs");
     #[cfg(not(feature = "send"))]
     t.pass("tests/compile/non_send.rs");
+
+    #[cfg(feature = "macros")]
+    {
+        t.compile_fail("tests/compile/userdata_getter_and_meta.rs");
+        t.compile_fail("tests/compile/userdata_getter_and_setter.rs");
+        t.compile_fail("tests/compile/userdata_getter_mut_self.rs");
+        t.compile_fail("tests/compile/userdata_getter_extra_arg.rs");
+        t.compile_fail("tests/compile/userdata_setter_ref_self.rs");
+        t.compile_fail("tests/compile/userdata_mut_slice_arg.rs");
+        t.compile_fail("tests/compile/userdata_setter_no_value.rs");
+        t.compile_fail("tests/compile/userdata_static_with_self.rs");
+        t.compile_fail("tests/compile/userdata_meta_owned_self.rs");
+        t.compile_fail("tests/compile/userdata_const_getter.rs");
+    }
 }

@@ -42,7 +42,7 @@ async = ["dep:futures-util"]
 send = ["error-send"]
 error-send = []
 serde = ["dep:serde", "dep:erased-serde", "dep:serde-value", "bstr/serde"]
-macros = ["mlua_derive/macros"]
+macros = ["mlua_derive/macros", "dep:inventory"]
 anyhow = ["dep:anyhow", "error-send"]
 userdata-wrappers = ["parking_lot/send_guard"]
 
@@ -61,6 +61,7 @@ erased-serde = { version = "0.4", optional = true }
 serde-value = { version = "0.7", optional = true }
 parking_lot = { version = "0.12", features = ["arc_lock"] }
 anyhow = { version = "1.0", optional = true }
+inventory = { version = "0.3", optional = true }
 libc = "0.2"
 
 ffi = { package = "mlua-sys", version = "0.11.0-rc.1", path = "mlua-sys" }

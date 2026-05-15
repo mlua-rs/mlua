@@ -100,6 +100,9 @@ pub mod userdata;
 
 pub use bstr::BString;
 pub use ffi::{self, lua_CFunction, lua_State};
+#[cfg(feature = "macros")]
+#[doc(hidden)]
+pub use inventory as __inventory;
 
 #[doc(inline)]
 pub use crate::error::{Error, Result};
@@ -229,6 +232,26 @@ pub use mlua_derive::chunk;
 #[cfg(feature = "macros")]
 #[cfg_attr(docsrs, doc(cfg(feature = "macros")))]
 pub use mlua_derive::FromLua;
+
+/// Attribute macro for exposing a struct as Lua userdata.
+///
+/// All fields are auto-exposed as get/set.
+///
+/// Use `#[lua(...)]` to customize.
+///
+/// This generates a [`UserData`] trait implementation.
+#[cfg(feature = "macros")]
+#[cfg_attr(docsrs, doc(cfg(feature = "macros")))]
+pub use mlua_derive::userdata;
+
+/// Attribute macro for exposing impl block methods to Lua userdata.
+///
+/// All methods and constants are auto-exposed.
+///
+/// Use `#[lua(...)]` to customize.
+#[cfg(feature = "macros")]
+#[cfg_attr(docsrs, doc(cfg(feature = "macros")))]
+pub use mlua_derive::userdata_impl;
 
 /// Registers Lua module entrypoint.
 ///
