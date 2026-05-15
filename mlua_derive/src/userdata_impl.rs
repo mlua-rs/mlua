@@ -71,11 +71,8 @@ fn classify_ref_type(ty: &Type) -> Option<Type> {
     if ref_ty.mutability.is_none() {
         let lookup_name: Option<String> = match &*ref_ty.elem {
             Type::Path(path) => path.path.segments.last().map(|seg| seg.ident.to_string()),
-            Type::Slice(slice)
-                if let Type::Path(path) = &*slice.elem
-                    && let Some(seg) = path.path.segments.last() =>
-            {
-                Some(format!("[{}]", seg.ident))
+            Type::Slice(slice) if let Type::Path(path) = &*slice.elem => {
+                path.path.segments.last().map(|seg| format!("[{}]", seg.ident))
             }
             _ => None,
         };
