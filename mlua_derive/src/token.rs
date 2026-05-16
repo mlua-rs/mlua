@@ -3,10 +3,8 @@ use std::fmt::{self, Display, Formatter};
 use std::vec::IntoIter;
 
 use itertools::Itertools;
-use once_cell::sync::Lazy;
 use proc_macro::{Delimiter, Span, TokenStream, TokenTree};
 use proc_macro2::Span as Span2;
-use regex::Regex;
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Pos {
@@ -39,44 +37,14 @@ fn span_pos(span: &Span) -> (Pos, Pos) {
     let start = span2.start();
     let end = span2.end();
 
-    // In stable, line/column information is not provided
-    // and set to 0 (line is 1-indexed)
+    // Rust 1.88 stabilized Span APIs, so this branch must be unreachable
     if start.line == 0 || end.line == 0 {
-        return fallback_span_pos(span);
+        proc_macro_error2::abort_call_site!(
+            "cannot retrieve span location information; mlua requires nightly Rust or stable >= 1.88"
+        );
     }
 
     (Pos::new(start.line, start.column), Pos::new(end.line, end.column))
-}
-
-fn parse_pos(span: &Span) -> Option<(usize, usize)> {
-    // Workaround to somehow retrieve location information in span in stable rust :(
-
-    static RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"bytes\(([0-9]+)\.\.([0-9]+)\)").unwrap());
-
-    match RE.captures(&format!("{span:?}")) {
-        Some(caps) => match (caps.get(1), caps.get(2)) {
-            (Some(start), Some(end)) => Some((
-                match start.as_str().parse() {
-                    Ok(v) => v,
-                    _ => return None,
-                },
-                match end.as_str().parse() {
-                    Ok(v) => v,
-                    _ => return None,
-                },
-            )),
-            _ => None,
-        },
-        None => None,
-    }
-}
-
-fn fallback_span_pos(span: &Span) -> (Pos, Pos) {
-    let (start, end) = match parse_pos(span) {
-        Some(v) => v,
-        None => proc_macro_error2::abort_call_site!("Cannot retrieve span information; please use nightly"),
-    };
-    (Pos::new(1, start), Pos::new(1, end))
 }
 
 /// Attribute of token.

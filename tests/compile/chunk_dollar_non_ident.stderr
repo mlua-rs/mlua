@@ -1,0 +1,5 @@
+error: `$` must be followed by an identifier
+ --> tests/compile/chunk_dollar_non_ident.rs:3:22
+  |
+3 |     let _ = chunk! { $42 };
+  |                      ^

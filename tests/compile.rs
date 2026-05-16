@@ -24,6 +24,7 @@ fn test_compilation() {
 
     #[cfg(feature = "macros")]
     {
+        t.compile_fail("tests/compile/chunk_dollar_non_ident.rs");
         t.compile_fail("tests/compile/userdata_getter_and_meta.rs");
         t.compile_fail("tests/compile/userdata_getter_and_setter.rs");
         t.compile_fail("tests/compile/userdata_getter_mut_self.rs");
