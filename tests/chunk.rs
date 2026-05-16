@@ -110,6 +110,21 @@ fn test_chunk_macro() -> Result<()> {
 
     assert_eq!(lua.globals().get::<i32>("s")?, 321);
 
+    // Check line numbers in error reporting
+    match lua
+        .load(mlua::chunk! {
+            local x = 1
+            -- comment
+            error("boom")
+        })
+        .exec()
+    {
+        Err(mlua::Error::RuntimeError(ref msg)) => {
+            assert!(msg.contains(":3:"), "expected line 3, got: {msg}");
+        }
+        other => panic!("expected RuntimeError, got {other:?}"),
+    }
+
     Ok(())
 }
 

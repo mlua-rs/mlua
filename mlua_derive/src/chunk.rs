@@ -1,26 +1,36 @@
-use proc_macro::{TokenStream, TokenTree};
+use std::ops::Deref;
+
+use proc_macro::TokenStream;
+use proc_macro2::TokenStream as TokenStream2;
+use quote::ToTokens;
 
 use crate::token::{Pos, Token, Tokens};
 
 #[derive(Debug, Clone)]
-pub(crate) struct Capture {
-    key: Token,
-    rust: TokenTree,
+pub(crate) struct Capture(Token);
+
+impl Deref for Capture {
+    type Target = Token;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
 }
 
 impl Capture {
-    fn new(key: Token, rust: TokenTree) -> Self {
-        Self { key, rust }
+    fn new(token: &Token) -> Self {
+        Self(token.clone())
     }
 
-    /// Token string inside `chunk!`
-    pub(crate) fn key(&self) -> &Token {
-        &self.key
+    pub(crate) fn name(&self) -> String {
+        self.0.to_string()
     }
+}
 
-    /// As rust variable, e.g. `x`
-    pub(crate) fn as_rust(&self) -> &TokenTree {
-        &self.rust
+impl ToTokens for Capture {
+    fn to_tokens(&self, tokens: &mut TokenStream2) {
+        let ts: TokenStream = self.0.tree().clone().into();
+        tokens.extend(TokenStream2::from(ts));
     }
 }
 
@@ -33,11 +43,10 @@ impl Captures {
     }
 
     pub(crate) fn add(&mut self, token: &Token) {
-        if self.0.iter().any(|arg| arg.key() == token) {
+        if self.0.iter().any(|arg| &**arg == token) {
             return;
         }
-        let arg = Capture::new(token.clone(), token.tree().clone());
-        self.0.push(arg);
+        self.0.push(Capture::new(token));
     }
 
     pub(crate) fn captures(&self) -> &[Capture] {
@@ -58,29 +67,26 @@ impl Chunk {
         let mut source = String::new();
         let mut caps = Captures::new();
 
-        let mut pos: Option<Pos> = None;
+        let mut prev_end: Option<Pos> = None;
         for t in tokens {
             if t.is_cap() {
                 caps.add(&t);
             }
 
             let (line, col) = (t.start().line, t.start().column);
-            let (prev_line, prev_col) = pos
-                .take()
-                .map(|lc| (lc.line, lc.column))
-                .unwrap_or_else(|| (line, col));
-
-            #[allow(clippy::comparison_chain)]
-            if line > prev_line {
-                source.push('\n');
-            } else if line == prev_line {
-                for _ in 0..col.saturating_sub(prev_col) {
-                    source.push(' ');
+            if let Some(prev) = prev_end {
+                if line > prev.line {
+                    source.push('\n');
+                    source.push_str(&" ".repeat(col.saturating_sub(1)));
+                } else if line == prev.line {
+                    source.push_str(&" ".repeat(col.saturating_sub(prev.column)));
                 }
+            } else {
+                source.push_str(&" ".repeat(col.saturating_sub(1)));
             }
             source.push_str(&t.to_string());
 
-            pos = Some(t.end());
+            prev_end = Some(t.end());
         }
 
         Self {

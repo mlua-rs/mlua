@@ -76,8 +76,9 @@ impl Eq for Token {}
 impl Token {
     fn new(tree: TokenTree) -> Self {
         let (start, end) = span_pos(&tree.span());
+        let source = tree.span().source_text().unwrap_or_else(|| tree.to_string());
         Self {
-            source: tree.to_string(),
+            source,
             start,
             end,
             tree,
@@ -136,7 +137,6 @@ impl Tokens {
         Tokens(
             tt.into_iter()
                 .flat_map(Tokens::from)
-                .peekable()
                 .batching(|iter| {
                     // Find variable tokens: `$` + `ident` => `$ident`
                     let t = iter.next()?;

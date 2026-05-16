@@ -5,10 +5,7 @@ use syn::meta::ParseNestedMeta;
 use syn::{ItemFn, LitStr, Result, parse_macro_input};
 
 #[cfg(feature = "macros")]
-use {
-    crate::chunk::Chunk, proc_macro::TokenTree, proc_macro_error2::proc_macro_error,
-    proc_macro2::TokenStream as TokenStream2,
-};
+use {crate::chunk::Chunk, proc_macro_error2::proc_macro_error};
 
 #[cfg(feature = "macros")]
 macro_rules! try_compile {
@@ -85,12 +82,6 @@ pub fn lua_module(attr: TokenStream, item: TokenStream) -> TokenStream {
 }
 
 #[cfg(feature = "macros")]
-fn to_ident(tt: &TokenTree) -> TokenStream2 {
-    let s: TokenStream = tt.clone().into();
-    s.into()
-}
-
-#[cfg(feature = "macros")]
 #[proc_macro]
 #[proc_macro_error]
 pub fn chunk(input: TokenStream) -> TokenStream {
@@ -100,8 +91,7 @@ pub fn chunk(input: TokenStream) -> TokenStream {
 
     let caps_len = chunk.captures().len();
     let caps = chunk.captures().iter().map(|cap| {
-        let cap_name = cap.as_rust().to_string();
-        let cap = to_ident(cap.as_rust());
+        let cap_name = cap.name();
         quote! { env.raw_set(#cap_name, #cap)?; }
     });
 
