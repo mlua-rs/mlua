@@ -32,18 +32,12 @@ impl Captures {
         Self(Vec::new())
     }
 
-    pub(crate) fn add(&mut self, token: &Token) -> Capture {
-        let tt = token.tree();
-        let key = token.clone();
-
-        match self.0.iter().find(|arg| arg.key() == &key) {
-            Some(arg) => arg.clone(),
-            None => {
-                let arg = Capture::new(key, tt.clone());
-                self.0.push(arg.clone());
-                arg
-            }
+    pub(crate) fn add(&mut self, token: &Token) {
+        if self.0.iter().any(|arg| arg.key() == token) {
+            return;
         }
+        let arg = Capture::new(token.clone(), token.tree().clone());
+        self.0.push(arg);
     }
 
     pub(crate) fn captures(&self) -> &[Capture] {
