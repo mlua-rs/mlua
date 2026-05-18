@@ -7,7 +7,7 @@ use syn::{
     Attribute, FnArg, Ident, ImplItem, ItemImpl, Meta, Signature, Type, parse_macro_input, parse_quote,
 };
 
-use crate::attr::LuaAttr;
+use super::attr::LuaAttr;
 
 /// `&T` reference types that mlua provides as wrapper types via `FromLua`.
 static BORROW_WRAPPERS: &[(&str, &str)] = &[

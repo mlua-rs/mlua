@@ -1,8 +1,11 @@
+mod attr;
+pub(crate) mod userdata_impl;
+
 use proc_macro::TokenStream;
 use quote::{format_ident, quote};
 use syn::{Attribute, Data, DeriveInput, Error, Fields, FieldsNamed, Meta, parse_macro_input};
 
-use crate::attr::LuaAttr;
+use self::attr::LuaAttr;
 
 /// Parse all `#[lua(...)]` attributes on a field, merging them into one `LuaAttr`.
 fn parse_field_lua_attr(attrs: &[Attribute]) -> syn::Result<LuaAttr> {

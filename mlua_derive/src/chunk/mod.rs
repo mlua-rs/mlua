@@ -2,9 +2,11 @@ use std::ops::Deref;
 
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
-use quote::ToTokens;
+use quote::{ToTokens, quote};
 
-use crate::token::{Pos, Token, Tokens};
+use self::token::{Pos, Token, Tokens};
+
+mod token;
 
 #[derive(Debug, Clone)]
 pub(crate) struct Capture(Token);
@@ -95,11 +97,64 @@ impl Chunk {
         }
     }
 
-    pub(crate) fn source(&self) -> &str {
-        &self.source
-    }
-
     pub(crate) fn captures(&self) -> &[Capture] {
         self.caps.captures()
+    }
+
+    pub(crate) fn expand(&self) -> TokenStream2 {
+        let source = &self.source;
+
+        let caps_len = self.captures().len();
+        let caps = self.captures().iter().map(|cap| {
+            let cap_name = cap.name();
+            quote! { env.raw_set(#cap_name, #cap)?; }
+        });
+
+        quote! {{
+            use mlua::{AsChunk, ChunkMode, Lua, Result, Table};
+            use ::std::borrow::Cow;
+            use ::std::cell::Cell;
+            use ::std::io::Result as IoResult;
+
+            struct InnerChunk<F: FnOnce(&Lua) -> Result<Table>>(Cell<Option<F>>);
+
+            impl<F> AsChunk for InnerChunk<F>
+            where
+                F: FnOnce(&Lua) -> Result<Table>,
+            {
+                fn environment(&self, lua: &Lua) -> Result<Option<Table>> {
+                    if #caps_len > 0 {
+                        if let Some(make_env) = self.0.take() {
+                            return make_env(lua).map(Some);
+                        }
+                    }
+                    Ok(None)
+                }
+
+                fn mode(&self) -> Option<ChunkMode> {
+                    Some(ChunkMode::Text)
+                }
+
+                fn source<'a>(&self) -> IoResult<Cow<'a, [u8]>> {
+                    Ok(Cow::Borrowed((#source).as_bytes()))
+                }
+            }
+
+            let make_env = move |lua: &Lua| -> Result<Table> {
+                let globals = lua.globals();
+                let env = lua.create_table()?;
+                let meta = lua.create_table()?;
+                meta.raw_set("__index", &globals)?;
+                meta.raw_set("__newindex", &globals)?;
+
+                // Add captured variables
+                #(#caps)*
+
+                env.set_metatable(Some(meta))?;
+                Ok(env)
+            };
+
+            InnerChunk(Cell::new(Some(make_env)))
+        }}
     }
 }
