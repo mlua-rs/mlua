@@ -1,7 +1,7 @@
 use std::any::TypeId;
 use std::cell::{Cell, UnsafeCell};
 use std::ffi::CStr;
-use std::mem;
+use std::mem::{self, ManuallyDrop};
 use std::os::raw::{c_char, c_int, c_void};
 use std::panic::resume_unwind;
 use std::ptr::{self, NonNull};
@@ -56,7 +56,7 @@ pub struct RawLua {
     // The state is dynamic and depends on context
     pub(super) state: Cell<*mut ffi::lua_State>,
     pub(super) main_state: Option<NonNull<ffi::lua_State>>,
-    pub(super) extra: XRc<UnsafeCell<ExtraData>>,
+    pub(super) extra: ManuallyDrop<XRc<UnsafeCell<ExtraData>>>,
     owned: bool,
 }
 
@@ -82,6 +82,9 @@ impl Drop for RawLua {
             if !mem_state.is_null() {
                 drop(Box::from_raw(mem_state));
             }
+
+            // Drop the `ExtraData` reference after `lua_close` has collected the registry entry
+            ManuallyDrop::drop(&mut self.extra);
         }
     }
 }
@@ -245,7 +248,7 @@ impl RawLua {
             state: Cell::new(state),
             // Make sure that we don't store current state as main state (if it's not available)
             main_state: get_main_state(state).and_then(NonNull::new),
-            extra: XRc::clone(&extra),
+            extra: ManuallyDrop::new(XRc::clone(&extra)),
             owned,
         }));
         (*extra.get()).set_lua(&rawlua);
