@@ -7,6 +7,20 @@ use syn::{Attribute, Data, DeriveInput, Error, Fields, FieldsNamed, Meta, parse_
 
 use self::attr::LuaAttr;
 
+/// Wrap registration tokens with any `#[cfg]`/`#[cfg_attr]` attributes from the original item.
+pub(crate) fn with_cfg(tokens: proc_macro2::TokenStream, attrs: &[Attribute]) -> proc_macro2::TokenStream {
+    let cfgs: Vec<_> = (attrs.iter())
+        .filter(|attr| attr.path().is_ident("cfg") || attr.path().is_ident("cfg_attr"))
+        .collect();
+    if cfgs.is_empty() {
+        return tokens;
+    }
+    quote! {
+        #(#cfgs)*
+        #tokens
+    }
+}
+
 /// Parse all `#[lua(...)]` attributes on a field, merging them into one `LuaAttr`.
 fn parse_field_lua_attr(attrs: &[Attribute]) -> syn::Result<LuaAttr> {
     let mut lua_attr = LuaAttr::default();
@@ -85,17 +99,19 @@ pub fn userdata_type(attr: TokenStream, item: TokenStream) -> TokenStream {
             };
 
             if has_get {
-                field_registrations.push(quote! {
+                let tokens = quote! {
                     registry.add_field_method_get(#lua_name, |_lua, this| Ok(this.#field_name.clone()));
-                });
+                };
+                field_registrations.push(with_cfg(tokens, &field.attrs));
             }
             if has_set {
-                field_registrations.push(quote! {
+                let tokens = quote! {
                     registry.add_field_method_set(#lua_name, |_lua, this, val| {
                         this.#field_name = val;
                         Ok(())
                     });
-                });
+                };
+                field_registrations.push(with_cfg(tokens, &field.attrs));
             }
         }
 

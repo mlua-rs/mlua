@@ -372,3 +372,118 @@ fn test_known_borrow_wrappers() -> Result<()> {
     .unwrap();
     Ok(())
 }
+
+#[cfg(feature = "async")]
+mod async_tests {
+    use mlua::{Lua, Result};
+
+    #[derive(Clone, Debug)]
+    #[mlua::userdata]
+    struct AsyncCounter(u64);
+
+    #[mlua::userdata_impl]
+    impl AsyncCounter {
+        #[lua(infallible)]
+        fn new() -> Self {
+            AsyncCounter(0)
+        }
+
+        async fn get_value(&self) -> Result<u64> {
+            Ok(self.0)
+        }
+
+        async fn set_value(&mut self, value: u64) -> Result<()> {
+            self.0 = value;
+            Ok(())
+        }
+
+        async fn take_value(self) -> Result<u64> {
+            Ok(self.0)
+        }
+
+        #[lua(infallible)]
+        async fn get_value_infallible(&self) -> u64 {
+            self.0
+        }
+
+        async fn multiply(&self, factor: u64) -> Result<u64> {
+            Ok(self.0 * factor)
+        }
+
+        async fn default_value() -> Result<u64> {
+            Ok(42)
+        }
+
+        #[cfg(not(any(feature = "lua51", feature = "luau")))]
+        #[lua(meta)]
+        async fn __tostring(&self) -> Result<String> {
+            Ok(format!("Counter({})", self.0))
+        }
+    }
+
+    #[tokio::test]
+    async fn test_async_methods() {
+        let lua = Lua::new();
+        lua.globals()
+            .set("AsyncCounter", lua.create_proxy::<AsyncCounter>().unwrap())
+            .unwrap();
+
+        lua.load(
+            r#"
+            local c = AsyncCounter.new()
+            c:set_value(10)
+            local val = c:get_value()
+            assert(val == 10, "expected 10, got " .. tostring(val))
+            local doubled = c:multiply(3)
+            assert(doubled == 30, "expected 30, got " .. tostring(doubled))
+            local inf = c:get_value_infallible()
+            assert(inf == 10, "expected infallible 10, got " .. tostring(inf))
+        "#,
+        )
+        .exec_async()
+        .await
+        .unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_async_consume() {
+        let lua = Lua::new();
+        lua.globals()
+            .set("AsyncCounter", lua.create_proxy::<AsyncCounter>().unwrap())
+            .unwrap();
+
+        lua.load(
+            r#"
+            local c = AsyncCounter.new()
+            c:set_value(42)
+            local val = c:take_value()
+            assert(val == 42)
+            local ok, err = pcall(function() c:get_value() end)
+            assert(not ok and tostring(err):match("userdata has been destructed"))
+        "#,
+        )
+        .exec_async()
+        .await
+        .unwrap();
+    }
+
+    #[cfg(not(any(feature = "lua51", feature = "luau")))]
+    #[tokio::test]
+    async fn test_async_meta() {
+        let lua = Lua::new();
+        lua.globals()
+            .set("AsyncCounter", lua.create_proxy::<AsyncCounter>().unwrap())
+            .unwrap();
+
+        lua.load(
+            r#"
+            local c = AsyncCounter.new()
+            c:set_value(7)
+            assert(tostring(c) == "Counter(7)")
+        "#,
+        )
+        .exec_async()
+        .await
+        .unwrap();
+    }
+}

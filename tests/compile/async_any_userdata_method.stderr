@@ -1,14 +1,18 @@
 error[E0596]: cannot borrow `s` as mutable, as it is a captured variable in a `Fn` closure
   --> tests/compile/async_any_userdata_method.rs:9:49
    |
- 8 |         let mut s = &s;
-   |             ----- `s` declared here, outside the closure
- 9 |         reg.add_async_method("t", |_, this, ()| async {
-   |                                   ------------- ^^^^^ cannot borrow as mutable
-   |                                   |
-   |                                   in this closure
-10 |             s = &*this;
-   |             - mutable borrow occurs due to use of `s` in closure
+ 8 |           let mut s = &s;
+   |               ----- `s` declared here, outside the closure
+ 9 |           reg.add_async_method("t", |_, this, ()| async {
+   |               -                     ------------- ^^^^^ cannot borrow as mutable
+   |               |                     |
+   |  _____________|                     in this closure
+   | |
+10 | |             s = &*this;
+   | |             - mutable borrow occurs due to use of `s` in closure
+11 | |             Ok(())
+12 | |         });
+   | |__________- expects `Fn` instead of `FnMut`
 
 error[E0373]: async block may outlive the current function, but it borrows `this`, which is owned by the current function
   --> tests/compile/async_any_userdata_method.rs:9:49

@@ -120,6 +120,16 @@ error[E0277]: the type `UnsafeCell<state::extra::ExtraData>` may contain interio
   |
   = help: the trait `RefUnwindSafe` is not implemented for `UnsafeCell<state::extra::ExtraData>`
   = note: required for `Rc<UnsafeCell<state::extra::ExtraData>>` to implement `RefUnwindSafe`
+note: required because it appears within the type `MaybeDangling<Rc<UnsafeCell<state::extra::ExtraData>>>`
+ --> $RUST/core/src/mem/maybe_dangling.rs
+  |
+  | pub struct MaybeDangling<P: ?Sized>(P);
+  |            ^^^^^^^^^^^^^
+note: required because it appears within the type `ManuallyDrop<Rc<UnsafeCell<state::extra::ExtraData>>>`
+ --> $RUST/core/src/mem/manually_drop.rs
+  |
+  | pub struct ManuallyDrop<T: ?Sized> {
+  |            ^^^^^^^^^^^^
 note: required because it appears within the type `mlua::state::RawLua`
  --> src/state/raw.rs
   |

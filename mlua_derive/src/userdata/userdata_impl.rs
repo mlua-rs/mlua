@@ -8,6 +8,7 @@ use syn::{
 };
 
 use super::attr::LuaAttr;
+use super::with_cfg;
 
 /// `&T` reference types that mlua provides as wrapper types via `FromLua`.
 static BORROW_WRAPPERS: &[(&str, &str)] = &[
@@ -235,13 +236,15 @@ pub fn userdata_impl(attr: TokenStream, item: TokenStream) -> TokenStream {
                 let const_name = &const_item.ident;
                 let lua_name = lua_attr.name(const_name);
                 if lua_attr.meta {
-                    registration_calls.push(quote! {
+                    let tokens = quote! {
                         registry.add_meta_field(#lua_name, #type_path::#const_name);
-                    });
+                    };
+                    registration_calls.push(with_cfg(tokens, &const_item.attrs));
                 } else {
-                    registration_calls.push(quote! {
+                    let tokens = quote! {
                         registry.add_field(#lua_name, #type_path::#const_name);
-                    });
+                    };
+                    registration_calls.push(with_cfg(tokens, &const_item.attrs));
                 }
             }
             ImplItem::Fn(method) => {
@@ -273,8 +276,14 @@ pub fn userdata_impl(attr: TokenStream, item: TokenStream) -> TokenStream {
 
                 let fn_name = &method.sig.ident;
                 let info = try_compile!(analyze_self_and_args(&method.sig));
+                let is_async = method.sig.asyncness.is_some();
 
                 if lua_attr.getter {
+                    if is_async {
+                        return syn::Error::new_spanned(&method.sig, "async field getter is not supported")
+                            .to_compile_error()
+                            .into();
+                    }
                     if !matches!(info.self_kind, SelfKind::Ref(RefKind::Ref)) {
                         return syn::Error::new_spanned(&method.sig, "field getter must take `&self`")
                             .to_compile_error()
@@ -288,10 +297,16 @@ pub fn userdata_impl(attr: TokenStream, item: TokenStream) -> TokenStream {
                         .to_compile_error()
                         .into();
                     }
-                    registration_calls.push(gen_field_getter(type_path, fn_name, &lua_attr, &info));
+                    let tokens = gen_field_getter(type_path, fn_name, &lua_attr, &info);
+                    registration_calls.push(with_cfg(tokens, &method.attrs));
                     continue;
                 }
                 if lua_attr.setter {
+                    if is_async {
+                        return syn::Error::new_spanned(&method.sig, "async field setter is not supported")
+                            .to_compile_error()
+                            .into();
+                    }
                     if !matches!(info.self_kind, SelfKind::Ref(_)) {
                         return syn::Error::new_spanned(&method.sig, "field setter must take `&[mut] self`")
                             .to_compile_error()
@@ -305,10 +320,16 @@ pub fn userdata_impl(attr: TokenStream, item: TokenStream) -> TokenStream {
                         .to_compile_error()
                         .into();
                     }
-                    registration_calls.push(gen_field_setter(type_path, fn_name, &lua_attr, &info));
+                    let tokens = gen_field_setter(type_path, fn_name, &lua_attr, &info);
+                    registration_calls.push(with_cfg(tokens, &method.attrs));
                     continue;
                 }
                 if lua_attr.field {
+                    if is_async {
+                        return syn::Error::new_spanned(&method.sig, "async field function is not supported")
+                            .to_compile_error()
+                            .into();
+                    }
                     if !matches!(info.self_kind, SelfKind::None) {
                         return syn::Error::new_spanned(&method.sig, "field function must not take `self`")
                             .to_compile_error()
@@ -316,13 +337,15 @@ pub fn userdata_impl(attr: TokenStream, item: TokenStream) -> TokenStream {
                     }
                     let lua_name = lua_attr.name(fn_name);
                     if lua_attr.meta {
-                        registration_calls.push(quote! {
-                            registry.add_meta_field(#lua_name, #type_path::#fn_name());
-                        });
+                        let tokens = quote! {
+                            registry.add_meta_field(#lua_name, #type_path::#fn_name);
+                        };
+                        registration_calls.push(with_cfg(tokens, &method.attrs));
                     } else {
-                        registration_calls.push(quote! {
+                        let tokens = quote! {
                             registry.add_field(#lua_name, #type_path::#fn_name());
-                        });
+                        };
+                        registration_calls.push(with_cfg(tokens, &method.attrs));
                     }
                     continue;
                 }
@@ -336,11 +359,23 @@ pub fn userdata_impl(attr: TokenStream, item: TokenStream) -> TokenStream {
                         .to_compile_error()
                         .into();
                     }
-                    registration_calls.push(gen_meta(type_path, fn_name, &lua_attr, &info));
+                    if is_async {
+                        let tokens = gen_async_meta(type_path, fn_name, &lua_attr, &info);
+                        registration_calls.push(with_cfg(tokens, &method.attrs));
+                    } else {
+                        let tokens = gen_meta(type_path, fn_name, &lua_attr, &info);
+                        registration_calls.push(with_cfg(tokens, &method.attrs));
+                    }
                     continue;
                 }
 
-                registration_calls.push(gen_regular_method(type_path, fn_name, &lua_attr, &info));
+                if is_async {
+                    let tokens = gen_async_regular_method(type_path, fn_name, &lua_attr, &info);
+                    registration_calls.push(with_cfg(tokens, &method.attrs));
+                } else {
+                    let tokens = gen_regular_method(type_path, fn_name, &lua_attr, &info);
+                    registration_calls.push(with_cfg(tokens, &method.attrs));
+                }
             }
             _ => {}
         }
@@ -417,11 +452,48 @@ fn gen_call_args(info: &MethodInfo) -> TokenStream2 {
     quote! { #(#call_args),* }
 }
 
+/// Generate call arguments for invoking the original async method.
+fn gen_async_call_args(info: &MethodInfo) -> TokenStream2 {
+    let mut call_args: Vec<TokenStream2> = Vec::new();
+
+    match info.self_kind {
+        SelfKind::None => {}
+        SelfKind::Ref(RefKind::Ref) => call_args.push(quote! { &this }),
+        SelfKind::Ref(RefKind::Mut) => call_args.push(quote! { &mut this }),
+        SelfKind::Owned => call_args.push(quote! { this }),
+    }
+
+    if info.has_lua {
+        call_args.push(quote! { lua });
+    }
+
+    for arg in &info.args {
+        let ident = &arg.ident;
+        match arg.userdata_ref {
+            Some(RefKind::Ref) => call_args.push(quote! { &*#ident }),
+            Some(RefKind::Mut) => call_args.push(quote! { &mut *#ident }),
+            None => call_args.push(quote! { #ident }),
+        }
+    }
+
+    quote! { #(#call_args),* }
+}
+
 /// Generate the closure params for the registration callback.
 fn gen_closure_params(info: &MethodInfo) -> TokenStream2 {
     let destructure = gen_closure_destructure(info);
     match info.self_kind {
         SelfKind::None => quote! { |lua, #destructure| },
+        _ => quote! { |lua, this, #destructure| },
+    }
+}
+
+/// Generate the closure params for an async registration callback.
+fn gen_async_closure_params(info: &MethodInfo) -> TokenStream2 {
+    let destructure = gen_closure_destructure(info);
+    match info.self_kind {
+        SelfKind::None => quote! { |lua, #destructure| },
+        SelfKind::Ref(RefKind::Mut) => quote! { |lua, mut this, #destructure| },
         _ => quote! { |lua, this, #destructure| },
     }
 }
@@ -546,6 +618,80 @@ fn gen_regular_method(
         },
         SelfKind::None => quote! {
             registry.add_function(#lua_name, #closure_params { #body });
+        },
+    }
+}
+
+fn gen_async_regular_method(
+    type_path: &syn::Path,
+    fn_name: &Ident,
+    lua_attr: &LuaAttr,
+    info: &MethodInfo,
+) -> TokenStream2 {
+    let fn_path = quote! { #type_path::#fn_name };
+    let closure_params = gen_async_closure_params(info);
+    let call_args = gen_async_call_args(info);
+    let lua_name = lua_attr.name(fn_name);
+
+    let body = if lua_attr.infallible {
+        quote! { async move { Ok(#fn_path(#call_args).await) } }
+    } else {
+        quote! { async move { #fn_path(#call_args).await } }
+    };
+    match info.self_kind {
+        SelfKind::Ref(RefKind::Ref) => quote! {
+            registry.add_async_method(#lua_name, #closure_params #body);
+        },
+        SelfKind::Ref(RefKind::Mut) => quote! {
+            registry.add_async_method_mut(#lua_name, #closure_params #body);
+        },
+        SelfKind::Owned => quote! {
+            registry.add_async_method_once(#lua_name, #closure_params #body);
+        },
+        SelfKind::None => quote! {
+            registry.add_async_function(#lua_name, #closure_params #body);
+        },
+    }
+}
+
+fn gen_async_meta(
+    type_path: &syn::Path,
+    fn_name: &Ident,
+    lua_attr: &LuaAttr,
+    info: &MethodInfo,
+) -> TokenStream2 {
+    let meta_name = match lua_attr.effective_meta_name(fn_name) {
+        Ok(name) => name,
+        Err(err) => return err.to_compile_error(),
+    };
+    let closure_params = if matches!(info.self_kind, SelfKind::None) {
+        if info.args.is_empty() {
+            quote! { |lua, _this: ::mlua::AnyUserData| }
+        } else {
+            let idents: Vec<_> = info.args.iter().map(|a| &a.ident).collect();
+            let types: Vec<_> = info.args.iter().map(|a| &a.callback_type).collect();
+            quote! { |lua, (_this, #(#idents),*): (::mlua::AnyUserData, #(#types),*) | }
+        }
+    } else {
+        gen_async_closure_params(info)
+    };
+    let call_args = gen_async_call_args(info);
+    let fn_path = quote! { #type_path::#fn_name };
+
+    let body = if lua_attr.infallible {
+        quote! { async move { Ok(#fn_path(#call_args).await) } }
+    } else {
+        quote! { async move { #fn_path(#call_args).await } }
+    };
+    match info.self_kind {
+        SelfKind::None => quote! {
+            registry.add_async_meta_function(#meta_name, #closure_params #body);
+        },
+        SelfKind::Ref(RefKind::Mut) => quote! {
+            registry.add_async_meta_method_mut(#meta_name, #closure_params #body);
+        },
+        _ => quote! {
+            registry.add_async_meta_method(#meta_name, #closure_params #body);
         },
     }
 }

@@ -1,0 +1,13 @@
+error: async field getter is not supported
+  --> tests/compile/userdata_getter_async.rs:10:5
+   |
+10 |     async fn value(&self) -> Result<u64> {
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `mlua::Result`
+ --> tests/compile/userdata_getter_async.rs:1:5
+  |
+1 | use mlua::Result;
+  |     ^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
