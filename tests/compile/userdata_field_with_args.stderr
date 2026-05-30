@@ -1,0 +1,5 @@
+error: field function must not take arguments
+  --> tests/compile/userdata_field_with_args.rs:10:5
+   |
+10 |     fn as_name(name: &str) -> String {
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

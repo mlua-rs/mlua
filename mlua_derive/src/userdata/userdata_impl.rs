@@ -335,6 +335,14 @@ pub fn userdata_impl(attr: TokenStream, item: TokenStream) -> TokenStream {
                             .to_compile_error()
                             .into();
                     }
+                    if !info.args.is_empty() {
+                        return syn::Error::new_spanned(
+                            &method.sig,
+                            "field function must not take arguments",
+                        )
+                        .to_compile_error()
+                        .into();
+                    }
                     let lua_name = lua_attr.name(fn_name);
                     if lua_attr.meta {
                         let tokens = quote! {
