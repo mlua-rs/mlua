@@ -1,5 +1,5 @@
 error: meta methods cannot take `self`, use `&[mut] self` instead
- --> tests/compile/userdata_meta_owned_self.rs:8:5
+ --> tests/compile/userdata_meta_owned_self.rs:7:5
   |
-8 |     fn __gc(self) -> mlua::Result<()> {
+7 |     fn __gc(self) -> mlua::Result<()> {
   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

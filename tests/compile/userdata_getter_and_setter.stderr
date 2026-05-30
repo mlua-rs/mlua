@@ -1,5 +1,5 @@
 error: at most one of `getter`, `setter`, `field` can be specified
-  --> tests/compile/userdata_getter_and_setter.rs:10:5
-   |
-10 |     fn x(&self) -> mlua::Result<u32> {
-   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ --> tests/compile/userdata_getter_and_setter.rs:9:5
+  |
+9 |     fn x(&self) -> mlua::Result<u32> {
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

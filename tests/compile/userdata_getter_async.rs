@@ -1,7 +1,6 @@
 use mlua::Result;
 
-#[derive(Clone, Debug)]
-#[mlua::userdata]
+#[derive(Clone, Debug, mlua::UserData)]
 struct Foo(u64);
 
 #[mlua::userdata_impl]

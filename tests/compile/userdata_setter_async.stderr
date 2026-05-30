@@ -1,8 +1,8 @@
 error: async field setter is not supported
-  --> tests/compile/userdata_setter_async.rs:10:5
-   |
-10 |     async fn set_value(&mut self, val: u64) -> Result<()> {
-   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ --> tests/compile/userdata_setter_async.rs:9:5
+  |
+9 |     async fn set_value(&mut self, val: u64) -> Result<()> {
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 warning: unused import: `mlua::Result`
  --> tests/compile/userdata_setter_async.rs:1:5

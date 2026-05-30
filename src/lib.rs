@@ -233,16 +233,14 @@ pub use mlua_derive::chunk;
 #[cfg_attr(docsrs, doc(cfg(feature = "macros")))]
 pub use mlua_derive::FromLua;
 
-/// Attribute macro for exposing a struct as Lua userdata.
+/// Derive macro for implementing [`UserData`] for a Rust type.
 ///
-/// All fields are auto-exposed as get/set.
+/// Named fields are auto-exposed as get/set.
 ///
 /// Use `#[lua(...)]` to customize.
-///
-/// This generates a [`UserData`] trait implementation.
 #[cfg(feature = "macros")]
 #[cfg_attr(docsrs, doc(cfg(feature = "macros")))]
-pub use mlua_derive::userdata;
+pub use mlua_derive::UserData;
 
 /// Attribute macro for exposing impl block methods to Lua userdata.
 ///

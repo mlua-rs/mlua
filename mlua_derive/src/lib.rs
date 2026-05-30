@@ -33,11 +33,11 @@ pub fn from_lua(input: TokenStream) -> TokenStream {
     from_lua::from_lua(input)
 }
 
-/// Attribute macro for exposing a Rust type as a Lua userdata.
+/// Derive macro for implementing `UserData` for a Rust type.
 #[cfg(feature = "macros")]
-#[proc_macro_attribute]
-pub fn userdata(attr: TokenStream, item: TokenStream) -> TokenStream {
-    userdata::userdata_type(attr, item)
+#[proc_macro_derive(UserData, attributes(lua))]
+pub fn userdata(item: TokenStream) -> TokenStream {
+    userdata::userdata_type(item)
 }
 
 /// Attribute macro for exposing impl block methods to Lua userdata.

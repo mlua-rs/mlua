@@ -1,7 +1,6 @@
-use mlua::{Lua, Result, chunk};
+use mlua::{Lua, Result, UserData, chunk};
 
-#[derive(Default)]
-#[mlua::userdata]
+#[derive(Default, UserData)]
 struct Rectangle {
     length: u32,
     width: u32,

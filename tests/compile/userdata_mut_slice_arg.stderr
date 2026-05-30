@@ -1,5 +1,5 @@
 error: this reference type is not supported as a callback parameter
- --> tests/compile/userdata_mut_slice_arg.rs:7:27
+ --> tests/compile/userdata_mut_slice_arg.rs:6:27
   |
-7 |     fn first(&self, data: &mut [u8]) -> mlua::Result<u8> {
+6 |     fn first(&self, data: &mut [u8]) -> mlua::Result<u8> {
   |                           ^^^^^^^^^

@@ -1,5 +1,5 @@
 error: field getter must not take additional arguments
-  --> tests/compile/userdata_getter_extra_arg.rs:10:5
-   |
-10 |     fn x(&self, extra: u32) -> mlua::Result<u32> {
-   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ --> tests/compile/userdata_getter_extra_arg.rs:9:5
+  |
+9 |     fn x(&self, extra: u32) -> mlua::Result<u32> {
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

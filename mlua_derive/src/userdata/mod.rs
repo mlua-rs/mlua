@@ -34,35 +34,18 @@ fn parse_field_lua_attr(attrs: &[Attribute]) -> syn::Result<LuaAttr> {
     Ok(lua_attr)
 }
 
-/// Strip `#[lua(...)]` attributes from a field, keeping all others.
-fn strip_lua_attrs(attrs: &[Attribute]) -> Vec<Attribute> {
-    (attrs.iter())
-        .filter(|attr| !attr.path().is_ident("lua"))
-        .cloned()
-        .collect()
-}
-
-pub fn userdata_type(attr: TokenStream, item: TokenStream) -> TokenStream {
-    if !attr.is_empty() {
-        return Error::new_spanned(
-            proc_macro2::TokenStream::from(attr),
-            "`#[userdata]` does not accept arguments",
-        )
-        .to_compile_error()
-        .into();
-    }
-
-    let mut input = parse_macro_input!(item as DeriveInput);
+pub fn userdata_type(item: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(item as DeriveInput);
     let type_name = &input.ident;
 
-    let mut named_fields: Option<&mut FieldsNamed> = match &mut input.data {
-        Data::Struct(data) => match &mut data.fields {
+    let named_fields: Option<&FieldsNamed> = match &input.data {
+        Data::Struct(data) => match &data.fields {
             Fields::Named(fields) => Some(fields),
             Fields::Unnamed(_) | Fields::Unit => None,
         },
         Data::Enum(_) => None,
         Data::Union(_) => {
-            return Error::new_spanned(&input, "`#[userdata]` cannot be applied to unions")
+            return Error::new_spanned(&input, "`#[derive(UserData)]` cannot be applied to unions")
                 .to_compile_error()
                 .into();
         }
@@ -73,14 +56,14 @@ pub fn userdata_type(attr: TokenStream, item: TokenStream) -> TokenStream {
     if has_type_params {
         return Error::new_spanned(
             &input.generics,
-            "`#[userdata]` does not support generic type parameters. Wrap the generic type in a concrete newtype instead."
+            "`#[derive(UserData)]` does not support generic type parameters. Wrap the generic type in a concrete newtype instead."
         )
         .to_compile_error()
         .into();
     }
 
     let mut field_registrations = Vec::new();
-    if let Some(fields) = &mut named_fields {
+    if let Some(fields) = &named_fields {
         for field in &fields.named {
             let field_name = field.ident.as_ref().unwrap();
 
@@ -114,19 +97,12 @@ pub fn userdata_type(attr: TokenStream, item: TokenStream) -> TokenStream {
                 field_registrations.push(with_cfg(tokens, &field.attrs));
             }
         }
-
-        // Strip mlua-specific attributes from fields before re-emitting
-        for field in &mut fields.named {
-            field.attrs = strip_lua_attrs(&field.attrs);
-        }
     }
 
     let registration_type_name = format_ident!("__MluaUserDataRegistration_{type_name}");
     let register_fields_fn_name = format_ident!("__mlua_register_{type_name}_fields");
 
     let output = quote! {
-        #input
-
         #[doc(hidden)]
         #[allow(non_camel_case_types)]
         struct #registration_type_name {

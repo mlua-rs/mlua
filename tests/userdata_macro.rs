@@ -1,9 +1,8 @@
 #![cfg(feature = "macros")]
 
-use mlua::{Lua, Result};
+use mlua::{Lua, Result, UserData};
 
-#[derive(Default, Clone, Debug)]
-#[mlua::userdata]
+#[derive(Default, Clone, Debug, UserData)]
 struct Rectangle {
     length: u32,
     #[lua]
@@ -208,8 +207,7 @@ fn test_rectangle() {
     .unwrap();
 }
 
-#[derive(Clone, Debug)]
-#[mlua::userdata]
+#[derive(Clone, Debug, UserData)]
 enum Color {
     Red,
     Green,
@@ -274,8 +272,7 @@ fn test_color() {
     .unwrap();
 }
 
-#[derive(Clone, Debug)]
-#[mlua::userdata]
+#[derive(Clone, Debug, UserData)]
 struct Point(i32, i32);
 
 fn make_lua_point() -> Lua {
@@ -328,8 +325,7 @@ fn test_point() {
     .unwrap();
 }
 
-#[derive(Clone, Debug)]
-#[mlua::userdata]
+#[derive(Clone, Debug, UserData)]
 struct Bytes(Vec<u8>);
 
 #[mlua::userdata_impl]
@@ -375,10 +371,9 @@ fn test_known_borrow_wrappers() -> Result<()> {
 
 #[cfg(feature = "async")]
 mod async_tests {
-    use mlua::{Lua, Result};
+    use mlua::{Lua, Result, UserData};
 
-    #[derive(Clone, Debug)]
-    #[mlua::userdata]
+    #[derive(Clone, Debug, UserData)]
     struct AsyncCounter(u64);
 
     #[mlua::userdata_impl]

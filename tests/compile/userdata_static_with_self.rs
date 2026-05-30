@@ -1,5 +1,4 @@
-#[derive(Default)]
-#[mlua::userdata]
+#[derive(Default, mlua::UserData)]
 struct Foo {
     x: u32,
 }

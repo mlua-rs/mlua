@@ -1,8 +1,8 @@
 error: async field function is not supported
-  --> tests/compile/userdata_field_async.rs:10:5
-   |
-10 |     async fn description() -> Result<String> {
-   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ --> tests/compile/userdata_field_async.rs:9:5
+  |
+9 |     async fn description() -> Result<String> {
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 warning: unused import: `mlua::Result`
  --> tests/compile/userdata_field_async.rs:1:5

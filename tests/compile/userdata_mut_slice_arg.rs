@@ -1,5 +1,4 @@
-#[derive(Default)]
-#[mlua::userdata]
+#[derive(Default, mlua::UserData)]
 struct Foo(Vec<u8>);
 
 #[mlua::userdata_impl]
