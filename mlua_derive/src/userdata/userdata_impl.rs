@@ -177,10 +177,20 @@ fn strip_item_attrs(attrs: &[Attribute]) -> Vec<Attribute> {
 fn parse_lua_attr(attrs: &[Attribute]) -> syn::Result<LuaAttr> {
     let mut lua_attr = LuaAttr::default();
     for attr in attrs {
-        if attr.path().is_ident("lua")
-            && let Meta::List(_) = &attr.meta
-        {
-            attr.parse_nested_meta(|meta| lua_attr.parse_inner(meta))?;
+        if !attr.path().is_ident("lua") {
+            continue;
+        }
+        match &attr.meta {
+            Meta::List(_) => {
+                attr.parse_nested_meta(|meta| lua_attr.parse_inner(meta))?;
+            }
+            Meta::Path(_) => {}
+            Meta::NameValue(_) => {
+                return Err(syn::Error::new_spanned(
+                    attr,
+                    "`#[lua = \"...\"]` is not supported: use `#[lua(attr = \"...\")]`",
+                ));
+            }
         }
     }
     Ok(lua_attr)
