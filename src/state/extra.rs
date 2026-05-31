@@ -12,7 +12,8 @@ use rustc_hash::FxHashMap;
 use crate::error::Result;
 use crate::state::RawLua;
 use crate::stdlib::StdLib;
-use crate::types::{AppData, ReentrantMutex, XRc};
+use crate::thread::ThreadTriggers;
+use crate::types::{AppData, ReentrantMutex, ThreadEventCallback, XRc};
 use crate::userdata::RawUserDataRegistry;
 use crate::util::{TypeKey, WrappedFailure, get_internal_metatable, push_internal_userdata};
 
@@ -81,10 +82,8 @@ pub(crate) struct ExtraData {
     pub(super) warn_callback: Option<crate::types::WarnCallback>,
     #[cfg(feature = "luau")]
     pub(super) interrupt_callback: Option<crate::types::InterruptCallback>,
-    #[cfg(feature = "luau")]
-    pub(super) thread_creation_callback: Option<crate::types::ThreadCreationCallback>,
-    #[cfg(feature = "luau")]
-    pub(super) thread_collection_callback: Option<crate::types::ThreadCollectionCallback>,
+    pub(super) thread_triggers: ThreadTriggers,
+    pub(super) thread_event_callback: Option<ThreadEventCallback>,
 
     #[cfg(feature = "luau")]
     pub(crate) running_gc: bool,
@@ -186,10 +185,8 @@ impl ExtraData {
             warn_callback: None,
             #[cfg(feature = "luau")]
             interrupt_callback: None,
-            #[cfg(feature = "luau")]
-            thread_creation_callback: None,
-            #[cfg(feature = "luau")]
-            thread_collection_callback: None,
+            thread_triggers: ThreadTriggers::default(),
+            thread_event_callback: None,
             #[cfg(feature = "luau")]
             sandboxed: false,
             #[cfg(feature = "luau")]

@@ -22,7 +22,7 @@ use crate::scope::Scope;
 use crate::stdlib::StdLib;
 use crate::string::LuaString;
 use crate::table::Table;
-use crate::thread::Thread;
+use crate::thread::{Thread, ThreadEvent, ThreadTriggers};
 use crate::traits::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti};
 use crate::types::{
     AppDataRef, AppDataRefMut, ArcReentrantMutexGuard, Integer, LuaType, MaybeSend, MaybeSync, Number,
@@ -842,92 +842,87 @@ impl Lua {
         }
     }
 
-    /// Sets a thread creation callback that will be called when a thread is created.
-    #[cfg(any(feature = "luau", doc))]
-    #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
-    pub fn set_thread_creation_callback<F>(&self, callback: F)
+    /// Sets a callback invoked when thread lifecycle events occur.
+    ///
+    /// `triggers` controls which events trigger the callback, see [`ThreadTriggers`] for more
+    /// details.
+    ///
+    /// Only one callback can be registered at a time. Calling this again replaces the previous
+    /// callback and its triggers.
+    ///
+    /// # Example
+    ///
+    /// Subscribe only to yield events:
+    ///
+    /// ```
+    /// # use mlua::{Lua, Result, ThreadTriggers, ThreadEvent};
+    /// # fn main() -> Result<()> {
+    /// let lua = Lua::new();
+    /// lua.set_thread_event_callback(
+    ///     ThreadTriggers::ON_YIELD,
+    ///     |_lua, event| {
+    ///         if let ThreadEvent::Yield(thread) = event {
+    ///             println!("thread yielded");
+    ///         }
+    ///         Ok(())
+    ///     },
+    /// );
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn set_thread_event_callback<F>(&self, triggers: ThreadTriggers, callback: F)
     where
-        F: Fn(&Lua, Thread) -> Result<()> + MaybeSend + 'static,
+        F: Fn(&Lua, ThreadEvent) -> Result<()> + MaybeSend + 'static,
     {
         let lua = self.lock();
         unsafe {
-            (*lua.extra.get()).thread_creation_callback = Some(XRc::new(callback));
-            (*ffi::lua_callbacks(lua.main_state())).userthread = Some(Self::userthread_proc);
+            (*lua.extra.get()).thread_triggers = triggers;
+            (*lua.extra.get()).thread_event_callback = Some(XRc::new(callback));
+            #[cfg(feature = "luau")]
+            {
+                let proc = Self::userthread_proc as _;
+                (*ffi::lua_callbacks(lua.main_state())).userthread = triggers.on_create.then(|| proc);
+            }
         }
     }
 
-    /// Sets a thread collection callback that will be called when a thread is destroyed.
+    /// Removes the thread event callback previously set by [`Lua::set_thread_event_callback`].
     ///
-    /// Luau GC does not support exceptions during collection, so the callback must be
-    /// non-panicking. If the callback panics, the program will be aborted.
-    #[cfg(any(feature = "luau", doc))]
-    #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
-    pub fn set_thread_collection_callback<F>(&self, callback: F)
-    where
-        F: Fn(crate::LightUserData) + MaybeSend + 'static,
-    {
+    /// This function has no effect if a callback was not previously set.
+    pub fn remove_thread_event_callback(&self) {
         let lua = self.lock();
+        let extra = lua.extra.get();
         unsafe {
-            (*lua.extra.get()).thread_collection_callback = Some(XRc::new(callback));
-            (*ffi::lua_callbacks(lua.main_state())).userthread = Some(Self::userthread_proc);
+            (*extra).thread_triggers = ThreadTriggers::new();
+            (*extra).thread_event_callback = None;
+            #[cfg(feature = "luau")]
+            {
+                (*ffi::lua_callbacks(lua.main_state())).userthread = None;
+            }
         }
     }
 
     #[cfg(feature = "luau")]
     unsafe extern "C-unwind" fn userthread_proc(parent: *mut ffi::lua_State, child: *mut ffi::lua_State) {
+        // Only handle thread creation
+        if parent.is_null() {
+            return;
+        }
+
         let extra = ExtraData::get(child);
-        if !parent.is_null() {
-            // Thread is created
-            let callback = match (*extra).thread_creation_callback {
-                Some(ref cb) => cb.clone(),
-                None => return,
-            };
-            if XRc::strong_count(&callback) > 2 {
-                return; // Don't allow recursion
-            }
-            ffi::lua_pushthread(child);
-            ffi::lua_xmove(child, (*extra).ref_thread, 1);
-            let value = Thread((*extra).raw_lua().pop_ref_thread(), child);
-            callback_error_ext(parent, extra, false, move |extra, _| {
-                callback((*extra).lua(), value)
-            })
-        } else {
-            // Thread is about to be collected
-            let callback = match (*extra).thread_collection_callback {
-                Some(ref cb) => cb.clone(),
-                None => return,
-            };
-
-            // We need to wrap the callback call in non-unwind function as it's not safe to unwind when
-            // Luau GC is running.
-            // This will trigger `abort()` if the callback panics.
-            unsafe extern "C" fn run_callback(
-                callback: *const crate::types::ThreadCollectionCallback,
-                value: *mut ffi::lua_State,
-            ) {
-                (*callback)(crate::LightUserData(value as _));
-            }
-
-            (*extra).running_gc = true;
-            run_callback(&callback, child);
-            (*extra).running_gc = false;
+        if !(*extra).thread_triggers.on_create {
+            return;
         }
-    }
-
-    /// Removes any thread creation or collection callbacks previously set by
-    /// [`Lua::set_thread_creation_callback`] or [`Lua::set_thread_collection_callback`].
-    ///
-    /// This function has no effect if a thread callbacks were not previously set.
-    #[cfg(any(feature = "luau", doc))]
-    #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
-    pub fn remove_thread_callbacks(&self) {
-        let lua = self.lock();
-        unsafe {
-            let extra = lua.extra.get();
-            (*extra).thread_creation_callback = None;
-            (*extra).thread_collection_callback = None;
-            (*ffi::lua_callbacks(lua.main_state())).userthread = None;
-        }
+        let callback = match &(*extra).thread_event_callback {
+            Some(cb) if XRc::strong_count(cb) == 1 => cb.clone(),
+            _ => return,
+        };
+        ffi::lua_pushthread(child);
+        ffi::lua_xmove(child, (*extra).ref_thread, 1);
+        let thread = Thread((*extra).raw_lua().pop_ref_thread(), child);
+        callback_error_ext(parent, extra, false, move |extra, _| {
+            callback((*extra).lua(), ThreadEvent::Create(thread))
+        })
     }
 
     /// Sets the warning function to be used by Lua to emit warnings.

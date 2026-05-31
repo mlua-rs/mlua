@@ -15,11 +15,11 @@ use crate::state::util::callback_error_ext;
 use crate::stdlib::StdLib;
 use crate::string::LuaString;
 use crate::table::Table;
-use crate::thread::Thread;
+use crate::thread::{Thread, ThreadTriggers};
 use crate::traits::{FromLua, IntoLua};
 use crate::types::{
     AppDataRef, AppDataRefMut, Callback, CallbackUpvalue, DestructedUserdata, Integer, LightUserData,
-    LuaType, MaybeSend, ReentrantMutex, RegistryKey, ValueRef, XRc,
+    LuaType, MaybeSend, ReentrantMutex, RegistryKey, ThreadEventCallback, ValueRef, XRc,
 };
 use crate::userdata::{
     AnyUserData, MetaMethod, RawUserDataRegistry, UserData, UserDataRegistry, UserDataStorage,
@@ -643,7 +643,7 @@ impl RawLua {
 
         let protect = !self.unlikely_memory_error();
         #[cfg(feature = "luau")]
-        let protect = protect || (*self.extra.get()).thread_creation_callback.is_some();
+        let protect = protect || self.thread_event_triggers().on_create;
 
         let thread_state = if !protect {
             ffi::lua_newthread(state)
@@ -656,6 +656,19 @@ impl RawLua {
         self.set_thread_hook(thread_state, HookKind::Global)?;
 
         let thread = Thread(self.pop_ref(), thread_state);
+
+        // Exec creation callback for non-Luau (Luau handles this via `userthread_proc`)
+        #[cfg(not(feature = "luau"))]
+        if self.thread_event_triggers().on_create {
+            let extra = self.extra.get();
+            if let Some(ref cb) = (*extra).thread_event_callback
+                && XRc::strong_count(cb) == 1
+            {
+                let cb = cb.clone();
+                cb((*extra).lua(), crate::thread::ThreadEvent::Create(thread.clone()))?;
+            }
+        }
+
         ffi::lua_xpush(self.ref_thread(), thread_state, func.0.index);
         Ok(thread)
     }
@@ -689,6 +702,16 @@ impl RawLua {
         {
             extra.thread_pool.push(index);
         }
+    }
+
+    #[inline(always)]
+    pub(crate) unsafe fn thread_event_triggers(&self) -> ThreadTriggers {
+        (*self.extra.get()).thread_triggers
+    }
+
+    #[inline(always)]
+    pub(crate) unsafe fn thread_event_callback(&self) -> Option<ThreadEventCallback> {
+        (*self.extra.get()).thread_event_callback.clone()
     }
 
     /// Pushes a primitive type value onto the Lua stack.

@@ -96,17 +96,11 @@ pub(crate) type InterruptCallback = XRc<dyn Fn(&Lua) -> Result<VmState> + Send>;
 #[cfg(all(not(feature = "send"), feature = "luau"))]
 pub(crate) type InterruptCallback = XRc<dyn Fn(&Lua) -> Result<VmState>>;
 
-#[cfg(all(feature = "send", feature = "luau"))]
-pub(crate) type ThreadCreationCallback = XRc<dyn Fn(&Lua, crate::Thread) -> Result<()> + Send>;
+#[cfg(feature = "send")]
+pub(crate) type ThreadEventCallback = XRc<dyn Fn(&Lua, crate::thread::ThreadEvent) -> Result<()> + Send>;
 
-#[cfg(all(not(feature = "send"), feature = "luau"))]
-pub(crate) type ThreadCreationCallback = XRc<dyn Fn(&Lua, crate::Thread) -> Result<()>>;
-
-#[cfg(all(feature = "send", feature = "luau"))]
-pub(crate) type ThreadCollectionCallback = XRc<dyn Fn(crate::LightUserData) + Send>;
-
-#[cfg(all(not(feature = "send"), feature = "luau"))]
-pub(crate) type ThreadCollectionCallback = XRc<dyn Fn(crate::LightUserData)>;
+#[cfg(not(feature = "send"))]
+pub(crate) type ThreadEventCallback = XRc<dyn Fn(&Lua, crate::thread::ThreadEvent) -> Result<()>>;
 
 #[cfg(feature = "send")]
 #[cfg(any(feature = "lua55", feature = "lua54"))]

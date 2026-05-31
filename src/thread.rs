@@ -42,7 +42,7 @@ use crate::error::{Error, Result};
 use crate::function::Function;
 use crate::state::RawLua;
 use crate::traits::{FromLuaMulti, IntoLuaMulti};
-use crate::types::{LuaType, ValueRef};
+use crate::types::{LuaType, ValueRef, XRc};
 use crate::util::{StackGuard, check_stack, error_traceback_thread, pop_error};
 
 #[cfg(not(feature = "luau"))]
@@ -62,6 +62,85 @@ use {
         task::{Context, Poll, Waker},
     },
 };
+
+/// Controls which thread lifecycle events trigger the callback.
+#[derive(Clone, Copy, Debug, Default)]
+#[non_exhaustive]
+pub struct ThreadTriggers {
+    /// Trigger the callback when a new thread is created.
+    pub on_create: bool,
+    /// Trigger the callback before a thread is resumed (via [`Thread::resume`]).
+    pub on_resume: bool,
+    /// Trigger the callback after a thread yields.
+    pub on_yield: bool,
+}
+
+impl ThreadTriggers {
+    /// An instance of [`ThreadTriggers`] with `on_create` trigger set.
+    pub const ON_CREATE: Self = Self::new().on_create();
+
+    /// An instance of [`ThreadTriggers`] with `on_resume` trigger set.
+    pub const ON_RESUME: Self = Self::new().on_resume();
+
+    /// An instance of [`ThreadTriggers`] with `on_yield` trigger set.
+    pub const ON_YIELD: Self = Self::new().on_yield();
+
+    /// Returns a new instance of `ThreadTriggers` with all triggers disabled.
+    pub const fn new() -> Self {
+        Self {
+            on_create: false,
+            on_resume: false,
+            on_yield: false,
+        }
+    }
+
+    /// Returns an instance of `ThreadTriggers` with `on_create` trigger set.
+    pub const fn on_create(mut self) -> Self {
+        self.on_create = true;
+        self
+    }
+
+    /// Returns an instance of `ThreadTriggers` with `on_resume` trigger set.
+    pub const fn on_resume(mut self) -> Self {
+        self.on_resume = true;
+        self
+    }
+
+    /// Returns an instance of `ThreadTriggers` with `on_yield` trigger set.
+    pub const fn on_yield(mut self) -> Self {
+        self.on_yield = true;
+        self
+    }
+}
+
+impl std::ops::BitOr for ThreadTriggers {
+    type Output = Self;
+
+    fn bitor(mut self, rhs: Self) -> Self::Output {
+        self.on_create |= rhs.on_create;
+        self.on_resume |= rhs.on_resume;
+        self.on_yield |= rhs.on_yield;
+        self
+    }
+}
+
+impl std::ops::BitOrAssign for ThreadTriggers {
+    fn bitor_assign(&mut self, rhs: Self) {
+        *self = *self | rhs;
+    }
+}
+
+/// Represents a thread (coroutine) event.
+#[derive(Debug, Clone)]
+#[non_exhaustive]
+pub enum ThreadEvent {
+    /// A new thread was created.
+    Create(Thread),
+    /// A thread is about to be resumed via [`Thread::resume`].
+    Resume(Thread),
+    /// A thread has just yielded.
+    Yield(Thread),
+}
 
 /// Status of a Lua thread (coroutine).
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
@@ -98,7 +177,6 @@ impl ThreadStatusInner {
         matches!(self, ThreadStatusInner::New(_) | ThreadStatusInner::Yielded(_))
     }
 
-    #[cfg(feature = "async")]
     #[inline(always)]
     fn is_yielded(self) -> bool {
         matches!(self, ThreadStatusInner::Yielded(_))
@@ -193,6 +271,14 @@ impl Thread {
         unsafe {
             let _sg = StackGuard::new(state);
 
+            // Exec thread resume callback
+            if lua.thread_event_triggers().on_resume
+                && let Some(cb) = lua.thread_event_callback()
+                && XRc::strong_count(&cb) <= 2
+            {
+                cb(lua.lua(), ThreadEvent::Resume(self.clone()))?;
+            }
+
             let nargs = args.push_into_stack_multi(&lua)?;
             if nargs > 0 {
                 check_stack(thread_state, nargs)?;
@@ -201,7 +287,17 @@ impl Thread {
             }
 
             let _thread_sg = StackGuard::with_top(thread_state, 0);
-            let (_, nresults) = self.resume_inner(&lua, pushed_nargs)?;
+            let (status, nresults) = self.resume_inner(&lua, pushed_nargs)?;
+
+            // Exec thread yield callback
+            if lua.thread_event_triggers().on_yield
+                && status.is_yielded()
+                && let Some(cb) = lua.thread_event_callback()
+                && XRc::strong_count(&cb) <= 2
+            {
+                cb(lua.lua(), ThreadEvent::Yield(self.clone()))?;
+            }
+
             check_stack(state, nresults + 1)?;
             ffi::lua_xmove(thread_state, state, nresults);
 
@@ -229,12 +325,30 @@ impl Thread {
         unsafe {
             let _sg = StackGuard::new(state);
 
+            // Exec thread resume callback
+            if lua.thread_event_triggers().on_resume
+                && let Some(cb) = lua.thread_event_callback()
+                && XRc::strong_count(&cb) <= 2
+            {
+                cb(lua.lua(), ThreadEvent::Resume(self.clone()))?;
+            }
+
             check_stack(state, 1)?;
             error.push_into_stack(&lua)?;
             ffi::lua_xmove(state, thread_state, 1);
 
             let _thread_sg = StackGuard::with_top(thread_state, 0);
-            let (_, nresults) = self.resume_inner(&lua, ffi::LUA_RESUMEERROR)?;
+            let (status, nresults) = self.resume_inner(&lua, ffi::LUA_RESUMEERROR)?;
+
+            // Exec thread yield callback
+            if lua.thread_event_triggers().on_yield
+                && status.is_yielded()
+                && let Some(cb) = lua.thread_event_callback()
+                && XRc::strong_count(&cb) <= 2
+            {
+                cb(lua.lua(), ThreadEvent::Yield(self.clone()))?;
+            }
+
             check_stack(state, nresults + 1)?;
             ffi::lua_xmove(thread_state, state, nresults);
 
@@ -622,9 +736,25 @@ impl<R: FromLuaMulti> Stream for AsyncThread<R> {
             let _thread_sg = StackGuard::with_top(thread_state, 0);
             let _wg = WakerGuard::new(&lua, cx.waker());
 
+            // Exec thread resume callback
+            if lua.thread_event_triggers().on_resume
+                && let Some(cb) = lua.thread_event_callback()
+                && XRc::strong_count(&cb) <= 2
+            {
+                cb(lua.lua(), ThreadEvent::Resume(self.thread.clone()))?;
+            }
+
             let (status, nresults) = (self.thread).resume_inner(&lua, nargs)?;
 
             if status.is_yielded() {
+                // Exec thread yield callback
+                if lua.thread_event_triggers().on_yield
+                    && let Some(cb) = lua.thread_event_callback()
+                    && XRc::strong_count(&cb) <= 2
+                {
+                    cb(lua.lua(), ThreadEvent::Yield(self.thread.clone()))?;
+                }
+
                 if nresults == 1 && is_poll_pending(thread_state) {
                     return Poll::Pending;
                 }
@@ -658,9 +788,25 @@ impl<R: FromLuaMulti> Future for AsyncThread<R> {
             let _thread_sg = StackGuard::with_top(thread_state, 0);
             let _wg = WakerGuard::new(&lua, cx.waker());
 
+            // Exec thread resume callback
+            if lua.thread_event_triggers().on_resume
+                && let Some(cb) = lua.thread_event_callback()
+                && XRc::strong_count(&cb) <= 2
+            {
+                cb(lua.lua(), ThreadEvent::Resume(self.thread.clone()))?;
+            }
+
             let (status, nresults) = self.thread.resume_inner(&lua, nargs)?;
 
             if status.is_yielded() {
+                // Exec thread yield callback
+                if lua.thread_event_triggers().on_yield
+                    && let Some(cb) = lua.thread_event_callback()
+                    && XRc::strong_count(&cb) <= 2
+                {
+                    cb(lua.lua(), ThreadEvent::Yield(self.thread.clone()))?;
+                }
+
                 if !(nresults == 1 && is_poll_pending(thread_state)) {
                     // Ignore values returned via yield()
                     cx.waker().wake_by_ref();
