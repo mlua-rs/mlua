@@ -1,8 +1,9 @@
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use proc_macro::TokenStream;
-use proc_macro2::TokenStream as TokenStream2;
+use proc_macro2::{Span, TokenStream as TokenStream2};
 use quote::{format_ident, quote};
+use syn::spanned::Spanned;
 use syn::{
     Attribute, FnArg, Ident, ImplItem, ItemImpl, Meta, Signature, Type, parse_macro_input, parse_quote,
 };
@@ -183,6 +184,7 @@ fn parse_lua_attr(attrs: &[Attribute]) -> syn::Result<LuaAttr> {
         match &attr.meta {
             Meta::List(_) => {
                 attr.parse_nested_meta(|meta| lua_attr.parse_inner(meta))?;
+                validate_lua_attr(&lua_attr, attr.span())?;
             }
             Meta::Path(_) => {}
             Meta::NameValue(_) => {
@@ -194,6 +196,18 @@ fn parse_lua_attr(attrs: &[Attribute]) -> syn::Result<LuaAttr> {
         }
     }
     Ok(lua_attr)
+}
+
+fn validate_lua_attr(attr: &LuaAttr, span: Span) -> syn::Result<()> {
+    for (set, name) in [(attr.get, "get"), (attr.set, "set")] {
+        if set {
+            return Err(syn::Error::new(
+                span,
+                format!("`{name}` is not valid for methods"),
+            ));
+        }
+    }
+    Ok(())
 }
 
 pub fn userdata_impl(attr: TokenStream, item: TokenStream) -> TokenStream {
