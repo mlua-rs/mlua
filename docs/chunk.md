@@ -7,7 +7,7 @@ User's Rust types needs to implement [`UserData`] or [`IntoLua`] traits.
 
 Captured variables are **moved** into the chunk.
 
-```
+```rust
 use mlua::{Lua, Result, chunk};
 
 fn main() -> Result<()> {

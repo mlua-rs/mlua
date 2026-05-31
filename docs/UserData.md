@@ -8,7 +8,7 @@ Named fields are exposed as readable and writable fields in Lua by default.
 Use `#[lua(...)]` on individual fields or methods to control how they are
 registered.
 
-```rust
+```rust,ignore
 use mlua::{Lua, Result, UserData};
 
 #[derive(UserData)]
@@ -92,7 +92,7 @@ At most one of `getter`, `setter`, `field` may be specified on a method.
 Constants in an `#[mlua::userdata_impl]` block are registered as static
 fields:
 
-```rust
+```rust,ignore
 #[mlua::userdata_impl]
 impl MyType {
     const VERSION: &str = "1.0";
@@ -108,7 +108,7 @@ Annotate a method with `#[lua(meta)]` to register it as a Lua metamethod.
 The metamethod name is inferred from the function name when it starts with
 `__`. Use `name = "..."` to specify the name explicitly.
 
-```rust
+```rust,ignore
 #[mlua::userdata_impl]
 impl MyType {
     #[lua(meta, infallible)]
