@@ -539,7 +539,7 @@ fn test_heap_dump() -> Result<()> {
 fn test_integer64_type() -> Result<()> {
     let lua = Lua::new();
 
-    _ = Lua::set_fflag("LuauIntegerType", true);
+    _ = Lua::set_fflag("LuauIntegerType2", true);
 
     let integer_lib = lua.globals().get::<Table>("integer")?;
     let n = integer_lib.call_function::<i64>("create", 42)?;
