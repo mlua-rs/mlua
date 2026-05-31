@@ -61,9 +61,9 @@ pub fn userdata_type(item: TokenStream) -> TokenStream {
         }
     };
 
-    // Check for generic type parameters (not supported)
-    let has_type_params = input.generics.type_params().next().is_some();
-    if has_type_params {
+    // Check for generic parameters (not supported)
+    let has_generics = !input.generics.params.is_empty();
+    if has_generics {
         return Error::new_spanned(
             &input.generics,
             "`#[derive(UserData)]` does not support generic type parameters. Wrap the generic type in a concrete newtype instead."
