@@ -2,7 +2,6 @@ mod attr;
 pub(crate) mod userdata_impl;
 
 use proc_macro::TokenStream;
-use proc_macro2::Span;
 use quote::{format_ident, quote};
 use syn::spanned::Spanned;
 use syn::{Attribute, Data, DeriveInput, Error, Fields, FieldsNamed, Meta, parse_macro_input};
@@ -32,8 +31,9 @@ fn parse_field_lua_attr(attrs: &[Attribute]) -> syn::Result<LuaAttr> {
         }
         match &attr.meta {
             Meta::List(_) => {
+                lua_attr.span = Some(attr.span());
                 attr.parse_nested_meta(|meta| lua_attr.parse_inner(meta))?;
-                validate_field_lua_attr(&lua_attr, attr.span())?;
+                validate_field_lua_attr(&lua_attr)?;
             }
             Meta::Path(_) => {}
             Meta::NameValue(_) => {
@@ -47,7 +47,7 @@ fn parse_field_lua_attr(attrs: &[Attribute]) -> syn::Result<LuaAttr> {
     Ok(lua_attr)
 }
 
-fn validate_field_lua_attr(attr: &LuaAttr, span: Span) -> syn::Result<()> {
+fn validate_field_lua_attr(attr: &LuaAttr) -> syn::Result<()> {
     for (set, name) in [
         (attr.getter, "getter"),
         (attr.setter, "setter"),
@@ -57,7 +57,7 @@ fn validate_field_lua_attr(attr: &LuaAttr, span: Span) -> syn::Result<()> {
     ] {
         if set {
             return Err(syn::Error::new(
-                span,
+                attr.span(),
                 format!("`{name}` is not valid for struct fields"),
             ));
         }

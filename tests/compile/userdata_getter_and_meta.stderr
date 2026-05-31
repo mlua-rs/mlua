@@ -1,5 +1,5 @@
 error: `meta` can only be combined with `field`
- --> tests/compile/userdata_getter_and_meta.rs:7:5
+ --> tests/compile/userdata_getter_and_meta.rs:6:5
   |
-7 |     fn bar(&self) -> mlua::Result<u32> {
-  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+6 |     #[lua(getter, meta)]
+  |     ^^^^^^^^^^^^^^^^^^^^

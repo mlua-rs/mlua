@@ -1,3 +1,4 @@
+use proc_macro2::Span;
 use syn::meta::ParseNestedMeta;
 use syn::{Ident, LitStr, Result};
 
@@ -8,6 +9,7 @@ use syn::{Ident, LitStr, Result};
 /// - Impl methods: `getter`, `setter`, `field`, `meta`, `infallible`, `name`, `skip`
 #[derive(Default)]
 pub(crate) struct LuaAttr {
+    pub(crate) span: Option<Span>,
     pub(crate) name: Option<String>,
     pub(crate) infallible: bool,
     pub(crate) skip: bool,
@@ -62,6 +64,11 @@ impl LuaAttr {
     /// Returns the effective Lua name.
     pub(crate) fn name(&self, ident: &Ident) -> String {
         self.name.clone().unwrap_or_else(|| ident.to_string())
+    }
+
+    /// Returns the span to use for error reporting.
+    pub(crate) fn span(&self) -> Span {
+        self.span.unwrap_or_else(Span::call_site)
     }
 
     /// Returns the effective Lua metamethod name.

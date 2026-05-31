@@ -1,7 +1,7 @@
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use proc_macro::TokenStream;
-use proc_macro2::{Span, TokenStream as TokenStream2};
+use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote};
 use syn::spanned::Spanned;
 use syn::{
@@ -183,8 +183,9 @@ fn parse_lua_attr(attrs: &[Attribute]) -> syn::Result<LuaAttr> {
         }
         match &attr.meta {
             Meta::List(_) => {
+                lua_attr.span = Some(attr.span());
                 attr.parse_nested_meta(|meta| lua_attr.parse_inner(meta))?;
-                validate_lua_attr(&lua_attr, attr.span())?;
+                validate_lua_attr(&lua_attr)?;
             }
             Meta::Path(_) => {}
             Meta::NameValue(_) => {
@@ -198,11 +199,11 @@ fn parse_lua_attr(attrs: &[Attribute]) -> syn::Result<LuaAttr> {
     Ok(lua_attr)
 }
 
-fn validate_lua_attr(attr: &LuaAttr, span: Span) -> syn::Result<()> {
+fn validate_lua_attr(attr: &LuaAttr) -> syn::Result<()> {
     for (set, name) in [(attr.get, "get"), (attr.set, "set")] {
         if set {
             return Err(syn::Error::new(
-                span,
+                attr.span(),
                 format!("`{name}` is not valid for methods"),
             ));
         }
@@ -250,8 +251,8 @@ pub fn userdata_impl(attr: TokenStream, item: TokenStream) -> TokenStream {
                     continue;
                 }
                 if lua_attr.getter || lua_attr.setter {
-                    return syn::Error::new_spanned(
-                        &const_item.ident,
+                    return syn::Error::new(
+                        lua_attr.span(),
                         "const items do not support `getter` or `setter`",
                     )
                     .to_compile_error()
@@ -285,15 +286,15 @@ pub fn userdata_impl(attr: TokenStream, item: TokenStream) -> TokenStream {
                 let primary = [lua_attr.getter, lua_attr.setter, lua_attr.field];
                 let primary_count = primary.iter().filter(|&&x| x).count();
                 if primary_count > 1 {
-                    return syn::Error::new_spanned(
-                        &method.sig,
+                    return syn::Error::new(
+                        lua_attr.span(),
                         "at most one of `getter`, `setter`, `field` can be specified",
                     )
                     .to_compile_error()
                     .into();
                 }
                 if lua_attr.meta && primary_count == 1 && !lua_attr.field {
-                    return syn::Error::new_spanned(&method.sig, "`meta` can only be combined with `field`")
+                    return syn::Error::new(lua_attr.span(), "`meta` can only be combined with `field`")
                         .to_compile_error()
                         .into();
                 }
