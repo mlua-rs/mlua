@@ -1,4 +1,3 @@
-use proc_macro2::Span;
 use syn::meta::ParseNestedMeta;
 use syn::{Ident, LitStr, Result};
 
@@ -69,16 +68,16 @@ impl LuaAttr {
     ///
     /// If `name` is set via attribute, use it. Otherwise, if the function name
     /// starts with `__`, use that. Returns an error if neither is available.
-    pub(crate) fn effective_meta_name(&self, fn_name: &Ident) -> Result<String> {
+    pub(crate) fn effective_meta_name(&self, fn_ident: &Ident) -> Result<String> {
         if let Some(ref name) = self.name {
             return Ok(name.clone());
         }
-        let fn_name = fn_name.to_string();
+        let fn_name = fn_ident.to_string();
         if fn_name.starts_with("__") {
             return Ok(fn_name);
         }
         Err(syn::Error::new(
-            Span::call_site(),
+            fn_ident.span(),
             format!(
                 "could not infer metamethod name from `{fn_name}`, either add `name = \"...\"` to `#[lua(meta, ...)]` or prefix the function with `__`"
             ),
