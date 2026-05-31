@@ -79,6 +79,11 @@ impl Rectangle {
         }
     }
 
+    #[lua(meta, field, name = "__answer")]
+    fn answer() -> u32 {
+        42
+    }
+
     #[lua(skip)]
     #[allow(unused)]
     fn helper() -> u32 {
@@ -124,7 +129,7 @@ impl Rectangle {
 }
 
 fn make_lua() -> Lua {
-    let lua = Lua::new();
+    let lua = unsafe { Lua::unsafe_new() };
     lua.globals()
         .set("Rectangle", lua.create_proxy::<Rectangle>().unwrap())
         .unwrap();
@@ -192,6 +197,12 @@ fn test_rectangle() {
         assert(rect.length == 0, "length should be 0 after transfer")
         assert(other.length == 7, "other length should be 7 after transfer")
         assert(other:double_length() == 14, "double_length should be 14")
+
+        -- meta field
+        if _VERSION:match("Lua ") then
+            local mt = debug.getmetatable(rect)
+            assert(mt.__answer == 42, "__answer meta field should be 42")
+        end
 
         assert(rect.lua_version == _VERSION, "lua_version should match Lua's _VERSION")
 

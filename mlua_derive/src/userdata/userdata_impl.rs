@@ -356,7 +356,7 @@ pub fn userdata_impl(attr: TokenStream, item: TokenStream) -> TokenStream {
                     let lua_name = lua_attr.name(fn_name);
                     if lua_attr.meta {
                         let tokens = quote! {
-                            registry.add_meta_field(#lua_name, #type_path::#fn_name);
+                            registry.add_meta_field(#lua_name, #type_path::#fn_name());
                         };
                         registration_calls.push(with_cfg(tokens, &method.attrs));
                     } else {
