@@ -351,6 +351,192 @@ fn test_interrupts() -> Result<()> {
     Ok(())
 }
 
+// A debugger compiles without optimizations so lines and locals survive intact.
+#[cfg(feature = "luau")]
+fn debug_lua() -> Lua {
+    let lua = Lua::new();
+    lua.set_compiler(Compiler::new().set_optimization_level(0).set_debug_level(2));
+    lua
+}
+
+// Lines are 1-based; line 1 is the empty line after `r#"`.
+const DEBUG_CHUNK: &str = r#"
+    local a = 1
+    local b = 2
+    local c = a + b
+    return c
+"#;
+
+#[test]
+fn test_debug_breakpoint() -> Result<()> {
+    let lua = debug_lua();
+
+    let break_line = Arc::new(AtomicU64::new(0));
+    let break_line2 = break_line.clone();
+    let hits = Arc::new(AtomicU64::new(0));
+    let hits2 = hits.clone();
+    lua.set_debug_break(move |_, debug| {
+        // Yield on the first hit; on resume the same breakpoint re-fires, so continue past it.
+        if hits2.fetch_add(1, Ordering::Relaxed) == 0 {
+            break_line2.store(debug.current_line().unwrap_or(0) as u64, Ordering::Relaxed);
+            return Ok(VmState::Yield);
+        }
+        Ok(VmState::Continue)
+    });
+
+    let f = lua.load(DEBUG_CHUNK).into_function()?;
+    let actual = f.set_breakpoint(4, true).expect("breakpoint was not placed");
+    assert_eq!(actual, 4); // `local c = a + b`
+
+    let co = lua.create_thread(f.clone())?;
+    co.resume::<()>(())?;
+    assert!(co.is_resumable());
+    assert_eq!(break_line.load(Ordering::Relaxed), 4);
+
+    let result: i32 = co.resume(())?;
+    assert_eq!(result, 3);
+    assert!(co.is_finished());
+
+    // Clearing the breakpoint stops pausing.
+    hits.store(0, Ordering::Relaxed);
+    f.set_breakpoint(4, false);
+    let result: i32 = lua.create_thread(f)?.resume(())?;
+    assert_eq!(result, 3);
+    assert_eq!(hits.load(Ordering::Relaxed), 0);
+
+    Ok(())
+}
+
+#[test]
+fn test_debug_breakpoint_multiline() -> Result<()> {
+    let lua = debug_lua();
+
+    let break_line = Arc::new(AtomicU64::new(0));
+    let break_line2 = break_line.clone();
+    lua.set_debug_break(move |_, debug| {
+        break_line2.store(debug.current_line().unwrap_or(0) as u64, Ordering::Relaxed);
+        Ok(VmState::Continue)
+    });
+
+    // A call whose arguments span several lines: a native breakpoint binds to the executable line
+    // Luau snaps to, which instrumentation can't reproduce.
+    let f = lua
+        .load(
+            r#"
+            local function add(x, y) return x + y end
+            local r = add(
+                1,
+                2
+            )
+            return r
+        "#,
+        )
+        .into_function()?;
+    let actual = f.set_breakpoint(3, true).expect("breakpoint was not placed");
+    assert!(actual >= 3);
+
+    let result: i32 = f.call(())?;
+    assert_eq!(result, 3);
+    assert_eq!(break_line.load(Ordering::Relaxed), actual as u64);
+
+    Ok(())
+}
+
+#[test]
+fn test_debug_single_step() -> Result<()> {
+    let lua = debug_lua();
+
+    // Pause once per source line: Luau re-fires the step on resume, so continue while still on the
+    // line we paused at and yield only when execution reaches a new line.
+    let lines = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let lines2 = lines.clone();
+    lua.set_debug_step(move |_, debug| {
+        let line = debug.current_line().unwrap_or(0);
+        let mut lines = lines2.lock().unwrap();
+        if lines.last() != Some(&line) {
+            lines.push(line);
+            return Ok(VmState::Yield);
+        }
+        Ok(VmState::Continue)
+    });
+
+    let f = lua.load(DEBUG_CHUNK).into_function()?;
+
+    lua.set_single_step(true);
+    let co = lua.create_thread(f.clone())?;
+    let mut steps = 0;
+    while co.is_resumable() {
+        co.resume::<()>(())?;
+        steps += 1;
+        assert!(steps < 100, "single-step did not converge");
+    }
+    assert_eq!(*lines.lock().unwrap(), vec![2, 3, 4, 5]);
+
+    // Disabling single-step runs straight through without firing the callback.
+    lua.set_single_step(false);
+    let before = lines.lock().unwrap().len();
+    let result: i32 = lua.create_thread(f)?.resume(())?;
+    assert_eq!(result, 3);
+    assert_eq!(lines.lock().unwrap().len(), before);
+
+    Ok(())
+}
+
+#[test]
+fn test_debug_locals() -> Result<()> {
+    let lua = debug_lua();
+
+    let captured = Arc::new(std::sync::Mutex::new(Vec::<(String, i64)>::new()));
+    let captured2 = captured.clone();
+    let done = Arc::new(AtomicU64::new(0));
+    let done2 = done.clone();
+    lua.set_debug_break(move |_, debug| {
+        if done2.fetch_add(1, Ordering::Relaxed) == 0 {
+            for (name, value) in debug.locals() {
+                captured2
+                    .lock()
+                    .unwrap()
+                    .push((name, value.as_i64().unwrap_or(0)));
+            }
+            // Reassign `a` (local 1) so `c = a + b` evaluates to 12.
+            assert!(debug.set_local(1, Value::Integer(10))?);
+        }
+        Ok(VmState::Continue)
+    });
+
+    let f = lua.load(DEBUG_CHUNK).into_function()?;
+    f.set_breakpoint(4, true).expect("breakpoint was not placed");
+
+    let result: i32 = f.call(())?;
+    assert_eq!(
+        captured.lock().unwrap().as_slice(),
+        &[("a".into(), 1), ("b".into(), 2)]
+    );
+    assert_eq!(result, 12);
+
+    Ok(())
+}
+
+#[test]
+fn test_debug_break_error() -> Result<()> {
+    let lua = debug_lua();
+
+    lua.set_debug_break(|_, _| Err(Error::runtime("error from breakpoint")));
+
+    let f = lua.load(DEBUG_CHUNK).into_function()?;
+    f.set_breakpoint(4, true).expect("breakpoint was not placed");
+
+    match f.call::<()>(()) {
+        Err(Error::CallbackError { cause, .. }) => match &*cause {
+            Error::RuntimeError(msg) => assert_eq!(msg, "error from breakpoint"),
+            err => panic!("expected `RuntimeError`, got {err:?}"),
+        },
+        res => panic!("expected `CallbackError`, got {res:?}"),
+    }
+
+    Ok(())
+}
+
 #[test]
 fn test_fflags() {
     // We cannot really on any particular feature flag to be present

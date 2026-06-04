@@ -1,8 +1,9 @@
 use std::cell::UnsafeCell;
 use std::os::raw::{c_int, c_void};
 
+use crate::debug::Debug;
 #[cfg(not(feature = "luau"))]
-use crate::debug::{Debug, HookTriggers};
+use crate::debug::HookTriggers;
 use crate::error::Result;
 use crate::state::{ExtraData, Lua, RawLua};
 
@@ -70,6 +71,7 @@ pub(crate) type AsyncCallbackUpvalue = Upvalue<AsyncCallback>;
 pub(crate) type AsyncPollUpvalue = Upvalue<Option<BoxFuture<'static, Result<c_int>>>>;
 
 /// Type to set next Lua VM action after executing interrupt or hook function.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum VmState {
     Continue,
     /// Yield the current thread.
@@ -95,6 +97,12 @@ pub(crate) type InterruptCallback = XRc<dyn Fn(&Lua) -> Result<VmState> + Send>;
 
 #[cfg(all(not(feature = "send"), feature = "luau"))]
 pub(crate) type InterruptCallback = XRc<dyn Fn(&Lua) -> Result<VmState>>;
+
+#[cfg(all(feature = "send", feature = "luau"))]
+pub(crate) type DebugCallback = XRc<dyn Fn(&Lua, &Debug) -> Result<VmState> + Send>;
+
+#[cfg(all(not(feature = "send"), feature = "luau"))]
+pub(crate) type DebugCallback = XRc<dyn Fn(&Lua, &Debug) -> Result<VmState>>;
 
 #[cfg(feature = "send")]
 pub(crate) type ThreadEventCallback = XRc<dyn Fn(&Lua, crate::thread::ThreadEvent) -> Result<()> + Send>;

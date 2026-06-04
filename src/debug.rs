@@ -12,6 +12,8 @@ use ffi::{lua_Debug, lua_State};
 use crate::function::Function;
 use crate::state::RawLua;
 use crate::util::{StackGuard, assert_stack, linenumber_to_usize, ptr_to_lossy_str, ptr_to_str};
+#[cfg(feature = "luau")]
+use crate::{error::Result, value::Value};
 
 /// Contains information about currently executing Lua code.
 ///
@@ -204,6 +206,59 @@ impl<'a> Debug<'a> {
             };
             stack
         }
+    }
+
+    /// Reads local variable `index` (1-based) in this activation record, returning its name and
+    /// current value, or `None` once `index` is past the last visible local (wraps `lua_getlocal`).
+    ///
+    /// Luau keeps locals reachable here even though its sandbox removes `debug.getlocal`, so this is
+    /// the way to inspect locals from a [`Lua::set_debug_break`]/[`Lua::set_debug_step`] callback.
+    ///
+    /// [`Lua::set_debug_break`]: crate::Lua::set_debug_break
+    /// [`Lua::set_debug_step`]: crate::Lua::set_debug_step
+    #[cfg(any(feature = "luau", doc))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
+    pub fn get_local(&self, index: usize) -> Option<(String, Value)> {
+        unsafe {
+            let _sg = StackGuard::new(self.state);
+            assert_stack(self.state, 1);
+
+            // `lua_getlocal` pushes the value only when a local exists; otherwise it returns null.
+            let name = ptr_to_lossy_str(ffi::lua_getlocal(self.state, self.level, index as c_int))?;
+            Some((name.into_owned(), self.lua.pop_value()))
+        }
+    }
+
+    /// Assigns `value` to local variable `index` (1-based) in this record, returning `true` if a
+    /// local with that index exists (wraps `lua_setlocal`).
+    #[cfg(any(feature = "luau", doc))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
+    pub fn set_local(&self, index: usize, value: Value) -> Result<bool> {
+        unsafe {
+            // `lua_setlocal` may leave the value on the stack when `index` is out of range; the
+            // `StackGuard` restores the top in every case.
+            let _sg = StackGuard::new(self.state);
+            assert_stack(self.state, 1);
+
+            self.lua.push_value(&value)?;
+            let name = ffi::lua_setlocal(self.state, self.level, index as c_int);
+            Ok(!name.is_null())
+        }
+    }
+
+    /// Collects every readable local in this record as `(name, value)` pairs, in index order.
+    ///
+    /// Convenience wrapper over [`Debug::get_local`].
+    #[cfg(any(feature = "luau", doc))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
+    pub fn locals(&self) -> Vec<(String, Value)> {
+        let mut locals = Vec::new();
+        let mut index = 1;
+        while let Some(local) = self.get_local(index) {
+            locals.push(local);
+            index += 1;
+        }
+        locals
     }
 }
 
