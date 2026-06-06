@@ -1,3 +1,12 @@
+## v0.12.0-rc.2 (Jun 06, 2026)
+
+- Add `#[derive(UserData)]` and `#[mlua::userdata_impl]` macros
+- Support thread create/resume/yield callbacks for all Lua versions (including Luau)
+- Support `to_alias_override`/`to_alias_fallback` in `Require` trait (Luau)
+- Prevent `XRc` overflow when dropping `RawLua` with foreign Lua state
+- implement `Not` for `StdLib` (#699)
+- Fix `String::to_pointer` return NULL in Lua <5.4
+
 ## v0.12.0-rc.1 (Apr 21, 2026)
 
 - Rust 2024 edition
