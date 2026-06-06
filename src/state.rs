@@ -881,7 +881,7 @@ impl Lua {
             #[cfg(feature = "luau")]
             {
                 let proc = Self::userthread_proc as _;
-                (*ffi::lua_callbacks(lua.main_state())).userthread = triggers.on_create.then(|| proc);
+                (*ffi::lua_callbacks(lua.main_state())).userthread = triggers.on_create.then_some(proc);
             }
         }
     }

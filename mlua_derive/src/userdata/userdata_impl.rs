@@ -537,7 +537,7 @@ fn gen_field_getter(
     lua_attr: &LuaAttr,
     info: &MethodInfo,
 ) -> TokenStream2 {
-    let lua_name = lua_attr.name(&fn_name);
+    let lua_name = lua_attr.name(fn_name);
     let call_args = gen_call_args(info);
 
     if lua_attr.infallible {

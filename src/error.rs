@@ -290,7 +290,7 @@ impl fmt::Display for Error {
                     // Try to find local traceback within the full traceback
                     if let Some(pos) = full_traceback.find(traceback) {
                         write!(fmt, "{}", &full_traceback[..pos])?;
-                        writeln!(fmt, ">{}", &full_traceback[pos..].trim_end())?;
+                        writeln!(fmt, ">{}", full_traceback[pos..].trim_end())?;
                     } else {
                         writeln!(fmt, "{}", full_traceback.trim_end())?;
                     }
