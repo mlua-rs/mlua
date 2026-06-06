@@ -251,6 +251,152 @@ fn test_require_with_config_luau() {
     test_require_with_config_inner("with_config_luau");
 }
 
+#[test]
+fn test_alias_override() {
+    let lua = Lua::new();
+
+    struct OverrideRequire(FsRequirer);
+
+    impl Require for OverrideRequire {
+        fn is_require_allowed(&self, chunk_name: &str) -> bool {
+            self.0.is_require_allowed(chunk_name)
+        }
+
+        fn reset(&mut self, chunk_name: &str) -> StdResult<(), NavigateError> {
+            self.0.reset(chunk_name)
+        }
+
+        fn jump_to_alias(&mut self, path: &str) -> StdResult<(), NavigateError> {
+            self.0.jump_to_alias(path)
+        }
+
+        fn to_alias_override(&mut self, alias: &str) -> StdResult<(), NavigateError> {
+            if alias == "testoverride" {
+                self.0.jump_to_alias("./tests/luau/require/without_config")
+            } else {
+                Err(NavigateError::NotFound)
+            }
+        }
+
+        fn to_parent(&mut self) -> StdResult<(), NavigateError> {
+            self.0.to_parent()
+        }
+
+        fn to_child(&mut self, name: &str) -> StdResult<(), NavigateError> {
+            self.0.to_child(name)
+        }
+
+        fn has_module(&self) -> bool {
+            self.0.has_module()
+        }
+
+        fn cache_key(&self) -> String {
+            self.0.cache_key()
+        }
+
+        fn has_config(&self) -> bool {
+            self.0.has_config()
+        }
+
+        fn config(&self) -> IoResult<Vec<u8>> {
+            self.0.config()
+        }
+
+        fn loader(&self, lua: &Lua) -> Result<mlua::Function> {
+            self.0.loader(lua)
+        }
+    }
+
+    let require_fn = lua
+        .create_require_function(OverrideRequire(FsRequirer::new()))
+        .unwrap();
+    lua.globals().set("require", require_fn).unwrap();
+
+    // to_alias_override intercepts before config-file search
+    let res = run_require(&lua, "@testoverride/dependency").unwrap();
+    assert_eq!("result from dependency", get_str(&res, 1));
+
+    // Different sub-path through the same alias
+    let res = run_require(&lua, "@testoverride/module").unwrap();
+    assert_eq!("required into module", get_str(&res, 2));
+
+    // Aliases not handled by the override still fail normally
+    let res = run_require(&lua, "@unknown_alias_xyz/anything");
+    assert!(res.is_err());
+    assert!((res.unwrap_err().to_string()).contains("@unknown_alias_xyz is not a valid alias"));
+}
+
+#[test]
+fn test_alias_fallback() {
+    let lua = Lua::new();
+
+    struct FallbackRequire(FsRequirer);
+
+    impl Require for FallbackRequire {
+        fn is_require_allowed(&self, chunk_name: &str) -> bool {
+            self.0.is_require_allowed(chunk_name)
+        }
+
+        fn reset(&mut self, chunk_name: &str) -> StdResult<(), NavigateError> {
+            self.0.reset(chunk_name)
+        }
+
+        fn jump_to_alias(&mut self, path: &str) -> StdResult<(), NavigateError> {
+            self.0.jump_to_alias(path)
+        }
+
+        fn to_alias_fallback(&mut self, alias: &str) -> StdResult<(), NavigateError> {
+            if alias == "testfallback" {
+                self.0.jump_to_alias("./tests/luau/require/without_config")
+            } else {
+                Err(NavigateError::NotFound)
+            }
+        }
+
+        fn to_parent(&mut self) -> StdResult<(), NavigateError> {
+            self.0.to_parent()
+        }
+
+        fn to_child(&mut self, name: &str) -> StdResult<(), NavigateError> {
+            self.0.to_child(name)
+        }
+
+        fn has_module(&self) -> bool {
+            self.0.has_module()
+        }
+
+        fn cache_key(&self) -> String {
+            self.0.cache_key()
+        }
+
+        fn has_config(&self) -> bool {
+            self.0.has_config()
+        }
+
+        fn config(&self) -> IoResult<Vec<u8>> {
+            self.0.config()
+        }
+
+        fn loader(&self, lua: &Lua) -> Result<mlua::Function> {
+            self.0.loader(lua)
+        }
+    }
+
+    let require_fn = lua
+        .create_require_function(FallbackRequire(FsRequirer::new()))
+        .unwrap();
+    lua.globals().set("require", require_fn).unwrap();
+
+    // to_alias_fallback catches after config-file search misses
+    let res = run_require(&lua, "@testfallback/dependency").unwrap();
+    assert_eq!("result from dependency", get_str(&res, 1));
+
+    // Aliases not handled by the fallback still fail
+    let res = run_require(&lua, "@unknown_alias_xyz/anything");
+    assert!(res.is_err());
+    assert!((res.unwrap_err().to_string()).contains("@unknown_alias_xyz is not a valid alias"));
+}
+
 #[cfg(all(feature = "async", not(windows)))]
 #[tokio::test]
 async fn test_async_require() -> Result<()> {

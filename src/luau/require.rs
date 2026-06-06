@@ -66,6 +66,24 @@ pub trait Require {
     /// configuration file.
     fn jump_to_alias(&mut self, path: &str) -> StdResult<(), NavigateError>;
 
+    /// Provides an initial alias override opportunity prior to searching for
+    /// configuration files.
+    ///
+    /// If `Ok(())` is returned, alias resolution stops here and the internal state
+    /// must point at the aliased location.
+    fn to_alias_override(&mut self, _alias: &str) -> StdResult<(), NavigateError> {
+        Err(NavigateError::NotFound)
+    }
+
+    /// Provides a final opportunity to resolve an alias if it cannot be found in
+    /// configuration files.
+    ///
+    /// If `Ok(())` is returned, alias resolution stops here and the internal state
+    /// must point at the aliased location.
+    fn to_alias_fallback(&mut self, _alias: &str) -> StdResult<(), NavigateError> {
+        Err(NavigateError::NotFound)
+    }
+
     // Navigate to parent directory
     fn to_parent(&mut self) -> StdResult<(), NavigateError>;
 
@@ -192,6 +210,30 @@ pub(super) unsafe extern "C-unwind" fn init_config(config: *mut ffi::luarequire_
         })
     }
 
+    unsafe extern "C-unwind" fn to_alias_override(
+        state: *mut ffi::lua_State,
+        ctx: *mut c_void,
+        alias_unprefixed: *const c_char,
+    ) -> ffi::luarequire_NavigateResult {
+        let mut this = try_borrow_mut!(state, ctx);
+        let alias = CStr::from_ptr(alias_unprefixed).to_string_lossy();
+        callback_error_ext(state, ptr::null_mut(), true, move |_, _| {
+            this.to_alias_override(&alias).into_nav_result()
+        })
+    }
+
+    unsafe extern "C-unwind" fn to_alias_fallback(
+        state: *mut ffi::lua_State,
+        ctx: *mut c_void,
+        alias_unprefixed: *const c_char,
+    ) -> ffi::luarequire_NavigateResult {
+        let mut this = try_borrow_mut!(state, ctx);
+        let alias = CStr::from_ptr(alias_unprefixed).to_string_lossy();
+        callback_error_ext(state, ptr::null_mut(), true, move |_, _| {
+            this.to_alias_fallback(&alias).into_nav_result()
+        })
+    }
+
     unsafe extern "C-unwind" fn to_parent(
         state: *mut ffi::lua_State,
         ctx: *mut c_void,
@@ -298,8 +340,8 @@ pub(super) unsafe extern "C-unwind" fn init_config(config: *mut ffi::luarequire_
     (*config).is_require_allowed = is_require_allowed;
     (*config).reset = reset;
     (*config).jump_to_alias = jump_to_alias;
-    (*config).to_alias_override = None;
-    (*config).to_alias_fallback = None;
+    (*config).to_alias_override = Some(to_alias_override);
+    (*config).to_alias_fallback = Some(to_alias_fallback);
     (*config).to_parent = to_parent;
     (*config).to_child = to_child;
     (*config).is_module_present = is_module_present;
