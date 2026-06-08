@@ -499,7 +499,7 @@ fn test_debug_locals() -> Result<()> {
                     .push((name, value.as_i64().unwrap_or(0)));
             }
             // Reassign `a` (local 1) so `c = a + b` evaluates to 12.
-            assert!(debug.set_local(1, Value::Integer(10))?);
+            assert_eq!(debug.set_local(1, Value::Integer(10))?, Some("a".to_string()));
         }
         Ok(VmState::Continue)
     });
@@ -532,6 +532,47 @@ fn test_debug_break_error() -> Result<()> {
             err => panic!("expected `RuntimeError`, got {err:?}"),
         },
         res => panic!("expected `CallbackError`, got {res:?}"),
+    }
+
+    Ok(())
+}
+
+#[test]
+fn test_set_local_out_of_range() -> Result<()> {
+    let lua = debug_lua();
+
+    lua.set_debug_break(|_, debug| {
+        // Index 99 is well past the end of any local list.
+        assert_eq!(debug.set_local(99, Value::Integer(0))?, None);
+        Ok(VmState::Continue)
+    });
+
+    let f = lua.load(DEBUG_CHUNK).into_function()?;
+    f.set_breakpoint(4, true).expect("breakpoint was not placed");
+    let _: i32 = f.call(())?;
+
+    Ok(())
+}
+
+#[test]
+fn test_set_local_type_mismatch_causes_lua_error() -> Result<()> {
+    // Replace the integer local `a` with a string value.  The write itself
+    // succeeds (returns the local's name), but the VM raises a RuntimeError
+    // when it tries to add a string to `b` on the next line.  No Rust UB.
+    let lua = debug_lua();
+
+    lua.set_debug_break(|lua, debug| {
+        let name = debug.set_local(1, Value::String(lua.create_string("not_a_number")?))?;
+        assert_eq!(name, Some("a".to_string()));
+        Ok(VmState::Continue)
+    });
+
+    let f = lua.load(DEBUG_CHUNK).into_function()?;
+    f.set_breakpoint(4, true).expect("breakpoint was not placed");
+
+    match f.call::<i32>(()) {
+        Err(_) => {} // RuntimeError from `a + b` where `a` is now a string.
+        Ok(v) => panic!("expected a Lua error, got {v}"),
     }
 
     Ok(())
