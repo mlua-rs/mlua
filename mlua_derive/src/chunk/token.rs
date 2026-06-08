@@ -2,9 +2,10 @@ use std::cmp::{Eq, PartialEq};
 use std::fmt::{self, Display, Formatter};
 use std::vec::IntoIter;
 
-use itertools::Itertools;
 use proc_macro::{Delimiter, Span, TokenStream, TokenTree};
 use proc_macro2::Span as Span2;
+use proc_macro2::TokenStream as TokenStream2;
+use syn;
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Pos {
@@ -39,9 +40,7 @@ fn span_pos(span: &Span) -> (Pos, Pos) {
 
     // Rust 1.88 stabilized Span APIs, so this branch must be unreachable
     if start.line == 0 || end.line == 0 {
-        proc_macro_error2::abort_call_site!(
-            "cannot retrieve span location information; mlua requires nightly Rust or stable >= 1.88"
-        );
+        unreachable!("cannot retrieve span location information; mlua requires nightly Rust or stable >= 1.88");
     }
 
     (Pos::new(start.line, start.column), Pos::new(end.line, end.column))
@@ -133,27 +132,26 @@ impl Token {
 pub(crate) struct Tokens(pub(crate) Vec<Token>);
 
 impl Tokens {
-    pub(crate) fn retokenize(tt: TokenStream) -> Tokens {
-        Tokens(
-            tt.into_iter()
-                .flat_map(Tokens::from)
-                .batching(|iter| {
-                    // Find variable tokens: `$` + `ident` => `$ident`
-                    let t = iter.next()?;
-                    if t.is("$") {
-                        if let Some(next) = iter.next()
-                            && matches!(next.tree, TokenTree::Ident(_))
-                        {
-                            Some(next.attr(TokenAttr::Cap))
-                        } else {
-                            proc_macro_error2::abort!(t.tree.span(), "`$` must be followed by an identifier");
-                        }
-                    } else {
-                        Some(t)
-                    }
-                })
-                .collect(),
-        )
+    pub(crate) fn retokenize(tt: TokenStream) -> Result<Tokens, TokenStream2> {
+        let flat: Vec<Token> = tt.into_iter().flat_map(Tokens::from).collect();
+        let mut tokens = Vec::new();
+        let mut iter = flat.into_iter();
+        while let Some(t) = iter.next() {
+            // Find variable tokens: `$` + `ident` => `$ident`
+            if t.is("$") {
+                if let Some(next) = iter.next()
+                    && matches!(next.tree, TokenTree::Ident(_))
+                {
+                    tokens.push(next.attr(TokenAttr::Cap));
+                } else {
+                    return Err(syn::Error::new(t.tree.span().into(), "`$` must be followed by an identifier")
+                        .to_compile_error());
+                }
+            } else {
+                tokens.push(t);
+            }
+        }
+        Ok(Tokens(tokens))
     }
 }
 
