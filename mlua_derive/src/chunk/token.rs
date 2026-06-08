@@ -1,10 +1,10 @@
 use std::cmp::{Eq, PartialEq};
+use std::convert::TryFrom;
 use std::fmt::{self, Display, Formatter};
 use std::vec::IntoIter;
 
 use proc_macro::{Delimiter, Span, TokenStream, TokenTree};
-use proc_macro2::Span as Span2;
-use proc_macro2::TokenStream as TokenStream2;
+use proc_macro2::{Span as Span2, TokenStream as TokenStream2};
 use syn;
 
 #[derive(Clone, Copy, Debug)]
@@ -33,17 +33,21 @@ impl Pos {
     }
 }
 
-fn span_pos(span: &Span) -> (Pos, Pos) {
+fn span_pos(span: &Span) -> Result<(Pos, Pos), TokenStream2> {
     let span2: Span2 = (*span).into();
     let start = span2.start();
     let end = span2.end();
 
     // Rust 1.88 stabilized Span APIs, so this branch must be unreachable
     if start.line == 0 || end.line == 0 {
-        unreachable!("cannot retrieve span location information; mlua requires nightly Rust or stable >= 1.88");
+        return Err(syn::Error::new(
+            Span2::call_site(),
+            "cannot retrieve span location information; mlua requires nightly Rust or stable >= 1.88",
+        )
+        .to_compile_error());
     }
 
-    (Pos::new(start.line, start.column), Pos::new(end.line, end.column))
+    Ok((Pos::new(start.line, start.column), Pos::new(end.line, end.column)))
 }
 
 /// Attribute of token.
@@ -73,33 +77,32 @@ impl PartialEq for Token {
 impl Eq for Token {}
 
 impl Token {
-    fn new(tree: TokenTree) -> Self {
-        let (start, end) = span_pos(&tree.span());
+    fn new(tree: TokenTree) -> Result<Self, TokenStream2> {
+        let (start, end) = span_pos(&tree.span())?;
         let source = tree.span().source_text().unwrap_or_else(|| tree.to_string());
-        Self {
+        Ok(Self {
             source,
             start,
             end,
             tree,
             attr: TokenAttr::None,
-        }
+        })
     }
 
-    fn new_delim(source: String, tree: TokenTree, open: bool) -> Self {
-        let (start, end) = span_pos(&tree.span());
+    fn new_delim(source: String, tree: TokenTree, open: bool) -> Result<Self, TokenStream2> {
+        let (start, end) = span_pos(&tree.span())?;
         let (start, end) = if open {
             (start, start.right())
         } else {
             (end.left(), end)
         };
-
-        Self {
+        Ok(Self {
             source,
             tree,
             start,
             end,
             attr: TokenAttr::None,
-        }
+        })
     }
 
     pub(crate) fn tree(&self) -> &TokenTree {
@@ -133,7 +136,11 @@ pub(crate) struct Tokens(pub(crate) Vec<Token>);
 
 impl Tokens {
     pub(crate) fn retokenize(tt: TokenStream) -> Result<Tokens, TokenStream2> {
-        let flat: Vec<Token> = tt.into_iter().flat_map(Tokens::from).collect();
+        let mut flat = Vec::new();
+        for tree in tt.into_iter() {
+            flat.extend(Tokens::try_from(tree)?.0);
+        }
+
         let mut tokens = Vec::new();
         let mut iter = flat.into_iter();
         while let Some(t) = iter.next() {
@@ -144,8 +151,11 @@ impl Tokens {
                 {
                     tokens.push(next.attr(TokenAttr::Cap));
                 } else {
-                    return Err(syn::Error::new(t.tree.span().into(), "`$` must be followed by an identifier")
-                        .to_compile_error());
+                    return Err(syn::Error::new(
+                        t.tree.span().into(),
+                        "`$` must be followed by an identifier",
+                    )
+                    .to_compile_error());
                 }
             } else {
                 tokens.push(t);
@@ -164,8 +174,10 @@ impl IntoIterator for Tokens {
     }
 }
 
-impl From<TokenTree> for Tokens {
-    fn from(tt: TokenTree) -> Self {
+impl TryFrom<TokenTree> for Tokens {
+    type Error = TokenStream2;
+
+    fn try_from(tt: TokenTree) -> Result<Self, TokenStream2> {
         let tts = match tt.clone() {
             TokenTree::Group(g) => {
                 let (b, e) = match g.delimiter() {
@@ -176,15 +188,16 @@ impl From<TokenTree> for Tokens {
                 };
                 let (b, e) = (b.into(), e.into());
 
-                vec![Token::new_delim(b, tt.clone(), true)]
-                    .into_iter()
-                    .chain(g.stream().into_iter().flat_map(Tokens::from))
-                    .chain(vec![Token::new_delim(e, tt, false)])
-                    .collect()
+                let mut result = vec![Token::new_delim(b, tt.clone(), true)?];
+                for inner in g.stream().into_iter() {
+                    result.extend(Tokens::try_from(inner)?.0);
+                }
+                result.push(Token::new_delim(e, tt, false)?);
+                result
             }
-            _ => vec![Token::new(tt)],
+            _ => vec![Token::new(tt)?],
         };
-        Tokens(tts)
+        Ok(Tokens(tts))
     }
 }
 
