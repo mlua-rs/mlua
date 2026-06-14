@@ -203,7 +203,7 @@ jobs:
     needs: build
     strategy:
       matrix:
-        lua: [lua54, luajit]
+        lua: [lua55, lua54, luajit]
     defaults:
       run:
         shell: msys2 {0}
@@ -212,7 +212,7 @@ jobs:
       - uses: actions/checkout@main
       - name: Install Rust & Lua
         run: |
-          pacman -S --noconfirm mingw-w64-x86_64-rust mingw-w64-x86_64-lua mingw-w64-x86_64-luajit mingw-w64-x86_64-pkg-config
+          pacman -S --noconfirm mingw-w64-x86_64-rust mingw-w64-x86_64-lua54 mingw-w64-x86_64-lua mingw-w64-x86_64-luajit mingw-w64-x86_64-pkg-config
       - name: Run ${{ matrix.lua }} module tests
         run: |
           (cd tests/module && cargo build --release --features "${{ matrix.lua }}")
