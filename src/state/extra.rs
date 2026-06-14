@@ -66,6 +66,9 @@ pub(crate) struct ExtraData {
     // Pool of `Thread`s (coroutines) for async execution
     #[cfg(feature = "async")]
     pub(super) thread_pool: Vec<crate::types::ValueRefIndex>,
+    // Map for implicit threads to root user-owned Thread
+    #[cfg(feature = "async")]
+    pub(super) thread_ownership_map: FxHashMap<*mut ffi::lua_State, *mut ffi::lua_State>,
 
     // Address of `WrappedFailure` metatable
     pub(super) wrapped_failure_mt_ptr: *const c_void,
@@ -174,6 +177,8 @@ impl ExtraData {
             wrapped_failure_top: 0,
             #[cfg(feature = "async")]
             thread_pool: Vec::new(),
+            #[cfg(feature = "async")]
+            thread_ownership_map: FxHashMap::default(),
             wrapped_failure_mt_ptr,
             #[cfg(feature = "async")]
             waker: NonNull::from(noop_waker_ref()),

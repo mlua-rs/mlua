@@ -693,6 +693,24 @@ impl RawLua {
         self.create_thread(func)
     }
 
+    /// Updates the ownership of the given implicit thread to the root user-owned thread.
+    ///
+    /// If `owner` is `None`, the thread is removed from the ownership map.
+    #[cfg(feature = "async")]
+    pub(crate) unsafe fn update_thread_ownership(&self, th: &Thread, owner: Option<*mut ffi::lua_State>) {
+        let extra = &mut *self.extra.get();
+        let th_state = th.state();
+        match owner {
+            Some(owner) => {
+                let new_owner = (extra.thread_ownership_map).get(&owner).copied().unwrap_or(owner);
+                extra.thread_ownership_map.insert(th_state, new_owner);
+            }
+            None => {
+                extra.thread_ownership_map.remove(&th_state);
+            }
+        }
+    }
+
     /// Returns the thread to the pool for later use.
     #[cfg(feature = "async")]
     pub(crate) unsafe fn recycle_thread(&self, thread: &mut Thread) {

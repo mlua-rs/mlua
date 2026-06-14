@@ -7,7 +7,7 @@ use futures_util::stream::TryStreamExt;
 use tokio::sync::Mutex;
 
 use mlua::{
-    Error, Function, Lua, LuaOptions, MultiValue, ObjectLike, Result, StdLib, Table, UserData,
+    Error, Function, Lua, LuaOptions, MultiValue, ObjectLike, Result, StdLib, Table, Thread, UserData,
     UserDataMethods, UserDataRef, Value,
 };
 
@@ -715,6 +715,20 @@ fn test_async_yield_with() -> Result<()> {
     assert_eq!(thread.resume::<(i32, i32)>((11, 12))?, (23, 132));
     assert_eq!(thread.resume::<(i32, i32)>((12, 13))?, (0, 0));
     assert!(thread.is_finished());
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_async_current_thread() -> Result<()> {
+    let lua = Lua::new();
+
+    let get_inner_thread = lua.create_async_function(move |lua, ()| async move {
+        let f = lua.create_async_function(move |lua, ()| async move { Ok(lua.current_thread()) })?;
+        f.call_async::<Thread>(()).await
+    })?;
+    let inner_thread = get_inner_thread.call_async::<Thread>(()).await?;
+    assert_eq!(inner_thread, lua.current_thread());
 
     Ok(())
 }

@@ -252,6 +252,7 @@ impl Function {
             lua.create_recycled_thread(self).and_then(|th| {
                 let mut th = th.into_async(args)?;
                 th.set_recyclable(true);
+                lua.update_thread_ownership(th.thread(), Some(lua.state()));
                 Ok(th)
             })
         })

@@ -1764,7 +1764,18 @@ impl Lua {
     pub fn current_thread(&self) -> Thread {
         let lua = self.lock();
         let state = lua.state();
+        let extra = lua.extra.get();
         unsafe {
+            // If this thread is implicit (created by `call_async`), return the root user-owned thread
+            // instead.
+            #[cfg(feature = "async")]
+            if let Some(&owner) = (*extra).thread_ownership_map.get(&state) {
+                assert_stack(owner, 1);
+                ffi::lua_pushthread(owner);
+                ffi::lua_xmove(owner, lua.ref_thread(), 1);
+                return Thread(lua.pop_ref_thread(), owner);
+            }
+
             let _sg = StackGuard::new(state);
             assert_stack(state, 1);
             ffi::lua_pushthread(state);

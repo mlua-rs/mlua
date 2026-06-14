@@ -689,6 +689,11 @@ impl<R> AsyncThread<R> {
     pub(crate) fn set_recyclable(&mut self, recyclable: bool) {
         self.recycle = recyclable;
     }
+
+    #[inline(always)]
+    pub(crate) fn thread(&self) -> &Thread {
+        &self.thread
+    }
 }
 
 #[cfg(feature = "async")]
@@ -712,6 +717,7 @@ impl<R> Drop for AsyncThread<R> {
                     if self.thread.reset_inner(status).is_ok() {
                         lua.recycle_thread(&mut self.thread);
                     }
+                    lua.update_thread_ownership(&self.thread, None);
                 }
             }
         }
