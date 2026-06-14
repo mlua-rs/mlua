@@ -79,6 +79,18 @@ impl Rectangle {
         }
     }
 
+    #[lua(infallible)]
+    fn maybe_add(&self, other: Option<&Rectangle>) -> Rectangle {
+        match other {
+            Some(other) => Rectangle {
+                length: self.length + other.length,
+                width: self.width + other.width,
+                ..Default::default()
+            },
+            None => self.clone(),
+        }
+    }
+
     #[lua(meta, field, name = "__answer")]
     fn answer() -> u32 {
         42
@@ -111,6 +123,13 @@ impl Rectangle {
 
     fn greet(&self, name: &str) -> Result<String> {
         Ok(format!("Hello, {name}!"))
+    }
+
+    fn maybe_greet(&self, name: Option<&str>) -> Result<String> {
+        match name {
+            Some(name) => Ok(format!("Hello, {name}!")),
+            None => Ok("Hello!".to_string()),
+        }
     }
 
     fn transfer_length(&mut self, other: &mut Rectangle) -> Result<()> {
@@ -190,6 +209,14 @@ fn test_rectangle() {
         assert(r4.length == 8, "__add length should be 5 + 3 = 8")
         assert(r4.width == 14, "__add width should be 10 + 4 = 14")
 
+        -- Option<&T> wrapped parameter
+        local r5 = r1:maybe_add(r3)
+        assert(r5.length == 8, "maybe_add with arg length should be 5 + 3 = 8")
+        assert(r5.width == 14, "maybe_add with arg width should be 10 + 4 = 14")
+        local r6 = r1:maybe_add()
+        assert(r6.length == 5, "maybe_add with nil is no-op")
+        assert(r6.width == 10, "maybe_add with nil is no-op")
+
         -- method with &mut self and &mut Rectangle param
         rect = Rectangle.new(5, 10, 3)
         other = Rectangle.new(2, 3, 0)
@@ -212,6 +239,11 @@ fn test_rectangle() {
         assert(h == 10, "into_tuple height should be 7")
         local ok, err = pcall(function() rect:area() end)
         assert(not ok and tostring(err):match("userdata has been destructed"), "rect should be consumed and unusable after into_tuple")
+
+        -- Custom methods
+        assert(other:greet("User") == "Hello, User!", "greet should return 'Hello, User!'")
+        assert(other:maybe_greet("User") == "Hello, User!", "maybe_greet with arg should return 'Hello, User!'")
+        assert(other:maybe_greet() == "Hello!", "maybe_greet with nil should return 'Hello!'")
     "#,
     )
     .exec()

@@ -26,6 +26,8 @@ enum SelfKind {
 enum RefKind {
     Ref,
     Mut,
+    OptionRef,
+    OptionMut,
 }
 
 struct ArgInfo {
@@ -104,6 +106,25 @@ fn classify_ref_type(ty: &Type) -> Option<Type> {
     }
 }
 
+/// If `ty` is `Option<InnerType>`, return the inner type.
+fn try_unwrap_option(ty: &Type) -> Option<&Type> {
+    let Type::Path(type_path) = ty else { return None };
+    let segment = type_path.path.segments.last()?;
+    if segment.ident != "Option" {
+        return None;
+    }
+    let syn::PathArguments::AngleBracketed(args) = &segment.arguments else {
+        return None;
+    };
+    if args.args.len() != 1 {
+        return None;
+    }
+    let syn::GenericArgument::Type(inner) = &args.args[0] else {
+        return None;
+    };
+    Some(inner)
+}
+
 /// Analyze method signature.
 ///
 /// Determine `self` kind and collect the callback arguments.
@@ -134,12 +155,32 @@ fn analyze_self_and_args(sig: &Signature) -> syn::Result<MethodInfo> {
                 check_first_typed = false;
                 if let syn::Pat::Ident(pat_ident) = &*typed.pat {
                     let arg_type = &*typed.ty;
+                    let mut option_inner = None;
                     let ref_kind = match arg_type {
                         Type::Reference(r) if r.mutability.is_some() => Some(RefKind::Mut),
                         Type::Reference(_) => Some(RefKind::Ref),
-                        _ => None,
+                        _ => {
+                            // Check if it's `Option<&T>` or `Option<&mut T>`
+                            option_inner = try_unwrap_option(arg_type);
+                            option_inner.and_then(|inner| match inner {
+                                Type::Reference(r) if r.mutability.is_some() => Some(RefKind::OptionMut),
+                                Type::Reference(_) => Some(RefKind::OptionRef),
+                                _ => None,
+                            })
+                        }
                     };
                     let callback_type = match &ref_kind {
+                        Some(RefKind::OptionRef | RefKind::OptionMut) => {
+                            match classify_ref_type(option_inner.unwrap()) {
+                                Some(ty) => parse_quote! { Option<#ty> },
+                                None => {
+                                    return Err(syn::Error::new_spanned(
+                                        arg_type,
+                                        "this reference type is not supported as a callback parameter",
+                                    ));
+                                }
+                            }
+                        }
                         Some(_) => match classify_ref_type(arg_type) {
                             Some(ty) => ty,
                             None => {
@@ -449,7 +490,7 @@ fn gen_closure_destructure(info: &MethodInfo) -> TokenStream2 {
         .iter()
         .map(|a| {
             let ident = &a.ident;
-            if matches!(a.userdata_ref, Some(RefKind::Mut)) {
+            if matches!(a.userdata_ref, Some(RefKind::Mut | RefKind::OptionMut)) {
                 quote! { mut #ident }
             } else {
                 quote! { #ident }
@@ -458,6 +499,18 @@ fn gen_closure_destructure(info: &MethodInfo) -> TokenStream2 {
         .collect();
     let types: Vec<_> = info.args.iter().map(|a| &a.callback_type).collect();
     quote! { (#(#idents),*): (#(#types),*) }
+}
+
+/// Generate the call-site expression for a single argument.
+fn gen_arg_token(arg: &ArgInfo) -> TokenStream2 {
+    let ident = &arg.ident;
+    match arg.userdata_ref {
+        Some(RefKind::Ref) => quote! { &*#ident },
+        Some(RefKind::Mut) => quote! { &mut *#ident },
+        Some(RefKind::OptionRef) => quote! { #ident.as_ref().map(|r| &**r) },
+        Some(RefKind::OptionMut) => quote! { #ident.as_mut().map(|r| &mut **r) },
+        None => quote! { #ident },
+    }
 }
 
 /// Generate call arguments for invoking the original method.
@@ -474,12 +527,7 @@ fn gen_call_args(info: &MethodInfo) -> TokenStream2 {
     }
 
     for arg in &info.args {
-        let ident = &arg.ident;
-        match arg.userdata_ref {
-            Some(RefKind::Ref) => call_args.push(quote! { &*#ident }),
-            Some(RefKind::Mut) => call_args.push(quote! { &mut *#ident }),
-            None => call_args.push(quote! { #ident }),
-        }
+        call_args.push(gen_arg_token(arg));
     }
 
     quote! { #(#call_args),* }
@@ -491,8 +539,8 @@ fn gen_async_call_args(info: &MethodInfo) -> TokenStream2 {
 
     match info.self_kind {
         SelfKind::None => {}
-        SelfKind::Ref(RefKind::Ref) => call_args.push(quote! { &this }),
-        SelfKind::Ref(RefKind::Mut) => call_args.push(quote! { &mut this }),
+        SelfKind::Ref(RefKind::Mut | RefKind::OptionMut) => call_args.push(quote! { &mut this }),
+        SelfKind::Ref(_) => call_args.push(quote! { &this }),
         SelfKind::Owned => call_args.push(quote! { this }),
     }
 
@@ -501,12 +549,7 @@ fn gen_async_call_args(info: &MethodInfo) -> TokenStream2 {
     }
 
     for arg in &info.args {
-        let ident = &arg.ident;
-        match arg.userdata_ref {
-            Some(RefKind::Ref) => call_args.push(quote! { &*#ident }),
-            Some(RefKind::Mut) => call_args.push(quote! { &mut *#ident }),
-            None => call_args.push(quote! { #ident }),
-        }
+        call_args.push(gen_arg_token(arg));
     }
 
     quote! { #(#call_args),* }
@@ -640,11 +683,11 @@ fn gen_regular_method(
         quote! { #fn_path(#call_args) }
     };
     match info.self_kind {
-        SelfKind::Ref(RefKind::Ref) => quote! {
-            registry.add_method(#lua_name, #closure_params { #body });
-        },
-        SelfKind::Ref(RefKind::Mut) => quote! {
+        SelfKind::Ref(RefKind::Mut | RefKind::OptionMut) => quote! {
             registry.add_method_mut(#lua_name, #closure_params { #body });
+        },
+        SelfKind::Ref(_) => quote! {
+            registry.add_method(#lua_name, #closure_params { #body });
         },
         SelfKind::Owned => quote! {
             registry.add_method_once(#lua_name, #closure_params { #body });
@@ -672,11 +715,11 @@ fn gen_async_regular_method(
         quote! { async move { #fn_path(#call_args).await } }
     };
     match info.self_kind {
-        SelfKind::Ref(RefKind::Ref) => quote! {
-            registry.add_async_method(#lua_name, #closure_params #body);
-        },
-        SelfKind::Ref(RefKind::Mut) => quote! {
+        SelfKind::Ref(RefKind::Mut | RefKind::OptionMut) => quote! {
             registry.add_async_method_mut(#lua_name, #closure_params #body);
+        },
+        SelfKind::Ref(_) => quote! {
+            registry.add_async_method(#lua_name, #closure_params #body);
         },
         SelfKind::Owned => quote! {
             registry.add_async_method_once(#lua_name, #closure_params #body);

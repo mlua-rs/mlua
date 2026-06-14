@@ -5,7 +5,6 @@ use std::vec::IntoIter;
 
 use proc_macro::{Delimiter, Span, TokenStream, TokenTree};
 use proc_macro2::{Span as Span2, TokenStream as TokenStream2};
-use syn;
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Pos {
