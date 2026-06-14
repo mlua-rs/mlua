@@ -137,8 +137,8 @@ pub(crate) struct Tokens(pub(crate) Vec<Token>);
 impl Tokens {
     pub(crate) fn retokenize(tt: TokenStream) -> Result<Tokens, TokenStream2> {
         let mut flat = Vec::new();
-        for tree in tt.into_iter() {
-            flat.extend(Tokens::try_from(tree)?.0);
+        for tree in tt {
+            flat.extend(Tokens::try_from(tree)?);
         }
 
         let mut tokens = Vec::new();
@@ -189,8 +189,8 @@ impl TryFrom<TokenTree> for Tokens {
                 let (b, e) = (b.into(), e.into());
 
                 let mut result = vec![Token::new_delim(b, tt.clone(), true)?];
-                for inner in g.stream().into_iter() {
-                    result.extend(Tokens::try_from(inner)?.0);
+                for inner in g.stream() {
+                    result.extend(Tokens::try_from(inner)?);
                 }
                 result.push(Token::new_delim(e, tt, false)?);
                 result

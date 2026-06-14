@@ -91,10 +91,8 @@ impl Chunk {
             prev_end = Some(t.end());
         }
 
-        Ok(Self {
-            source: source.trim_end().to_string(),
-            caps,
-        })
+        let source = source.trim_end().to_string();
+        Ok(Self { source, caps })
     }
 
     pub(crate) fn captures(&self) -> &[Capture] {
