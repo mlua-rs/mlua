@@ -190,10 +190,11 @@ pub unsafe fn luaL_loadbufferenv(
     status
 }
 
+#[allow(unused_variables, unreachable_code)]
 pub unsafe fn luaL_makeseed(L: *mut lua_State) -> c_uint {
-    #[cfg(macos)]
+    #[cfg(target_os = "macos")]
     return libc::arc4random();
-    #[cfg(linux)]
+    #[cfg(target_os = "linux")]
     {
         let mut seed = 0u32;
         let buf = &mut seed as *mut _ as *mut c_void;
