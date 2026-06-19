@@ -902,17 +902,21 @@ where
     fn from_lua(value: Value, _lua: &Lua) -> Result<Self> {
         match value {
             #[cfg(feature = "luau")]
-            #[rustfmt::skip]
-            Value::Vector(v) if N == crate::Vector::SIZE => unsafe {
-                use std::{mem, ptr};
-                let mut arr: [mem::MaybeUninit<T>; N] = mem::MaybeUninit::uninit().assume_init();
-                ptr::write(arr[0].as_mut_ptr() , T::from_lua(Value::Number(v.x() as _), _lua)?);
-                ptr::write(arr[1].as_mut_ptr(), T::from_lua(Value::Number(v.y() as _), _lua)?);
-                ptr::write(arr[2].as_mut_ptr(), T::from_lua(Value::Number(v.z() as _), _lua)?);
+            Value::Vector(v) if N == crate::Vector::SIZE => {
+                use std::mem::MaybeUninit;
+                let x = T::from_lua(Value::Number(v.x() as _), _lua)?;
+                let y = T::from_lua(Value::Number(v.y() as _), _lua)?;
+                let z = T::from_lua(Value::Number(v.z() as _), _lua)?;
                 #[cfg(feature = "luau-vector4")]
-                ptr::write(arr[3].as_mut_ptr(), T::from_lua(Value::Number(v.w() as _), _lua)?);
-                Ok(mem::transmute_copy(&arr))
-            },
+                let w = T::from_lua(Value::Number(v.w() as _), _lua)?;
+                let mut arr: [MaybeUninit<T>; N] = [const { MaybeUninit::uninit() }; N];
+                arr[0].write(x);
+                arr[1].write(y);
+                arr[2].write(z);
+                #[cfg(feature = "luau-vector4")]
+                arr[3].write(w);
+                Ok(arr.map(|e| unsafe { e.assume_init() }))
+            }
             Value::Table(table) => {
                 let vec = table.sequence_values().collect::<Result<Vec<_>>>()?;
                 vec.try_into().map_err(|vec: Vec<T>| {
