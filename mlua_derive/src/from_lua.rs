@@ -1,16 +1,18 @@
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{DeriveInput, parse_macro_input};
+use syn::{DeriveInput, parse_macro_input, parse_quote};
 
 pub fn from_lua(input: TokenStream) -> TokenStream {
-    let DeriveInput { ident, generics, .. } = parse_macro_input!(input as DeriveInput);
+    let DeriveInput {
+        ident, mut generics, ..
+    } = parse_macro_input!(input as DeriveInput);
 
     let ident_str = ident.to_string();
-    let (impl_generics, ty_generics, _) = generics.split_for_impl();
-    let where_clause = match &generics.where_clause {
-        Some(where_clause) => quote! { #where_clause, Self: 'static + Clone },
-        None => quote! { where Self: 'static + Clone },
-    };
+    generics
+        .make_where_clause()
+        .predicates
+        .push(parse_quote!(Self: 'static + Clone));
+    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
 
     quote! {
         impl #impl_generics ::mlua::FromLua for #ident #ty_generics #where_clause {

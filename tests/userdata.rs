@@ -986,10 +986,11 @@ fn test_userdata_derive() -> Result<()> {
 
     // More complex struct where generics and where clause
 
+    #[rustfmt::skip]
     #[derive(Clone, Copy, mlua::FromLua)]
     struct MyUserData2<'a, T: ?Sized>(&'a T)
     where
-        T: Copy;
+        T: Copy,; // trailing comma is needed for testing
 
     lua.register_userdata_type::<MyUserData2<'static, i32>>(|reg| {
         reg.add_function("val", |_, this: MyUserData2<'static, i32>| Ok(*this.0));
