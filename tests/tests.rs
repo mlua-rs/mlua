@@ -132,9 +132,9 @@ fn test_exec() -> Result<()> {
 fn test_eval() -> Result<()> {
     let lua = Lua::new();
 
-    assert_eq!(lua.load("1 + 1").eval::<i32>()?, 2);
+    assert_eq!(lua.load("\t1 + 1").eval::<i32>()?, 2);
     assert_eq!(lua.load("false == false").eval::<bool>()?, true);
-    assert_eq!(lua.load("return 1 + 2").eval::<i32>()?, 3);
+    assert_eq!(lua.load("\nreturn 1 + 2").eval::<i32>()?, 3);
     match lua.load("if true then").eval::<()>() {
         Err(Error::SyntaxError {
             incomplete_input: true,
