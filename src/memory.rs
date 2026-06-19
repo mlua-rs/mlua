@@ -50,7 +50,7 @@ impl MemoryState {
     #[inline]
     pub(crate) fn set_memory_limit(&mut self, limit: usize) -> usize {
         let prev_limit = self.memory_limit;
-        self.memory_limit = limit as isize;
+        self.memory_limit = limit.min(isize::MAX as usize) as isize;
         prev_limit as usize
     }
 
