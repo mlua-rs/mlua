@@ -121,8 +121,7 @@ pub(crate) unsafe fn push_external_string(
             ffi::lua_pushexternalstring(state, s_ptr, s_len, Some(dealloc), bytes_ud as *mut _);
         });
         if res.is_err() {
-            // Deallocate on error
-            drop(Box::from_raw(bytes_ud));
+            // Lua free external string on error
             return res;
         }
     } else {
