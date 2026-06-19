@@ -564,6 +564,7 @@ impl Table {
             #[cfg(not(feature = "luau"))]
             {
                 let state = lua.state();
+                let _sg = StackGuard::new(state);
                 check_stack(state, 4)?;
 
                 lua.push_ref(&self.0);
