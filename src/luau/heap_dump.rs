@@ -34,12 +34,13 @@ impl HeapDump {
             }
             ffi::lua_gcdump(state, file as *mut _, Some(category_name));
             libc::fseek(file, 0, libc::SEEK_END);
-            let len = libc::ftell(file) as usize;
+            let len = libc::ftell(file);
             libc::rewind(file);
             if len > 0 {
+                let len = len as usize;
                 buf.reserve(len);
-                libc::fread(buf.as_mut_ptr() as *mut _, 1, len, file);
-                buf.set_len(len);
+                let n = libc::fread(buf.as_mut_ptr() as *mut _, 1, len, file);
+                buf.set_len(n);
             }
             libc::fclose(file);
         }
