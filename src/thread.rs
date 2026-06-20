@@ -151,6 +151,11 @@ pub enum ThreadStatus {
     Resumable,
     /// The thread is currently running.
     Running,
+    /// The thread is active but not running.
+    ///
+    /// This is the case when the thread has resumed another thread (which has not yet
+    /// returned or yielded).
+    Normal,
     /// The thread has finished executing.
     Finished,
     /// The thread has raised a Lua error during execution.
@@ -165,6 +170,7 @@ pub enum ThreadStatus {
 enum ThreadStatusInner {
     New(c_int),
     Running,
+    Normal,
     Yielded(c_int),
     Finished,
     Error,
@@ -387,6 +393,7 @@ impl Thread {
         match self.status_inner(&self.0.lua.lock()) {
             ThreadStatusInner::New(_) | ThreadStatusInner::Yielded(_) => ThreadStatus::Resumable,
             ThreadStatusInner::Running => ThreadStatus::Running,
+            ThreadStatusInner::Normal => ThreadStatus::Normal,
             ThreadStatusInner::Finished => ThreadStatus::Finished,
             ThreadStatusInner::Error => ThreadStatus::Error,
         }
@@ -403,8 +410,22 @@ impl Thread {
         let top = unsafe { ffi::lua_gettop(thread_state) };
         match status {
             ffi::LUA_YIELD => ThreadStatusInner::Yielded(top),
-            ffi::LUA_OK if top > 0 => ThreadStatusInner::New(top - 1),
-            ffi::LUA_OK => ThreadStatusInner::Finished,
+            ffi::LUA_OK => {
+                // Active call frames mean this thread has resumed another (still-running) thread.
+                // Without frames it's new or finished.
+                let mut ar = const { unsafe { std::mem::zeroed::<ffi::lua_Debug>() } };
+                #[cfg(not(feature = "luau"))]
+                let has_frames = unsafe { ffi::lua_getstack(thread_state, 0, &mut ar) != 0 };
+                #[cfg(feature = "luau")]
+                let has_frames = unsafe { ffi::lua_getinfo(thread_state, 0, cstr!(""), &mut ar) != 0 };
+                if has_frames {
+                    ThreadStatusInner::Normal
+                } else if top > 0 {
+                    ThreadStatusInner::New(top - 1)
+                } else {
+                    ThreadStatusInner::Finished
+                }
+            }
             _ => ThreadStatusInner::Error,
         }
     }
@@ -420,6 +441,15 @@ impl Thread {
     #[inline(always)]
     pub fn is_running(&self) -> bool {
         self.status() == ThreadStatus::Running
+    }
+
+    /// Returns `true` if this thread is active but not running.
+    ///
+    /// This is the case when the thread has resumed another thread that has not yet returned
+    /// or yielded.
+    #[inline(always)]
+    pub fn is_normal(&self) -> bool {
+        self.status() == ThreadStatus::Normal
     }
 
     /// Returns `true` if this thread has finished executing.
@@ -510,6 +540,7 @@ impl Thread {
                 Ok(())
             }
             ThreadStatusInner::Running => Err(Error::runtime("cannot reset a running thread")),
+            ThreadStatusInner::Normal => Err(Error::runtime("cannot reset a normal thread")),
             ThreadStatusInner::Finished => Ok(()),
             #[cfg(not(any(feature = "lua55", feature = "lua54", feature = "luau")))]
             ThreadStatusInner::Yielded(_) | ThreadStatusInner::Error => {

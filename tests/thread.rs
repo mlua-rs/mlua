@@ -105,6 +105,32 @@ fn test_thread() -> Result<()> {
     let result = thread.resume::<()>(());
     assert!(result.is_ok(), "unexpected result: {result:?}");
 
+    // A thread that has resumed another thread (still running) is "normal".
+    let check_outer = lua.create_function(|lua, ()| {
+        let outer: Thread = lua.globals().get("outer")?;
+        assert!(outer.is_normal());
+        assert!(
+            matches!(outer.resume::<()>(()), Err(Error::CoroutineUnresumable)),
+            "resuming a `normal` thread must be unresumable",
+        );
+        Ok(())
+    })?;
+    lua.globals().set("check_outer", check_outer)?;
+    let outer = lua.create_thread(
+        lua.load(
+            r#"
+            function()
+                local inner = coroutine.create(function() check_outer() end)
+                assert(coroutine.resume(inner))
+            end
+            "#,
+        )
+        .eval()?,
+    )?;
+    lua.globals().set("outer", &outer)?;
+    outer.resume::<()>(())?;
+    assert!(outer.is_finished());
+
     Ok(())
 }
 
