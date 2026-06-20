@@ -305,6 +305,12 @@ fn test_serialize_mixed_table() -> LuaResult<()> {
     let json = serde_json::to_string(&table.to_serializable().detect_mixed_tables(true)).unwrap();
     assert_eq!(json, r#"{"1":1,"2":2,"3":3,"1":"value"}"#);
 
+    // Array metatable takes precedence
+    let table = lua.load(r#"{1,2,3, key="value"}"#).eval::<Value>()?;
+    (table.as_table().unwrap()).set_metatable(Some(lua.array_metatable()))?;
+    let json = serde_json::to_string(&table.to_serializable().detect_mixed_tables(true)).unwrap();
+    assert_eq!(json, r#"[1,2,3]"#);
+
     Ok(())
 }
 

@@ -936,17 +936,22 @@ impl Table {
     /// Determines if the table should be encoded as an array or a map.
     ///
     /// The algorithm is the following:
-    /// 1. If `detect_mixed_tables` is enabled, iterate over all keys in the table checking is they
+    /// 1. If the table has the array metatable attached, always encode it as an array.
+    ///
+    /// 2. If `detect_mixed_tables` is enabled, iterate over all keys in the table checking is they
     ///    all are positive integers. If non-array key is found, return `None` (encode as map).
     ///    Otherwise check the sparsity of the array. Too sparse arrays are encoded as maps.
     ///
-    /// 2. If `detect_mixed_tables` is disabled, check if the table has a positive length or has the
-    ///    array metatable. If so, encode as array. If the table is empty and
-    ///    `encode_empty_tables_as_array` is enabled, encode as array.
+    /// 3. If `detect_mixed_tables` is disabled, check if the table has a positive length. If so,
+    ///    encode as array. If the table is empty and `encode_empty_tables_as_array` is enabled,
+    ///    encode as array.
     ///
     /// Returns the length of the array if it should be encoded as an array.
     #[cfg(feature = "serde")]
     pub(crate) fn encode_as_array(&self, options: crate::serde::de::Options) -> Option<usize> {
+        if self.has_array_metatable() {
+            return Some(self.raw_len());
+        }
         if options.detect_mixed_tables {
             if let Some((len, max_idx)) = self.find_array_len() {
                 // If the array is too sparse, serialize it as a map instead
@@ -956,7 +961,7 @@ impl Table {
             }
         } else {
             let len = self.raw_len();
-            if len > 0 || self.has_array_metatable() {
+            if len > 0 {
                 return Some(len);
             }
             if options.encode_empty_tables_as_array && self.is_empty() {
