@@ -359,7 +359,7 @@ pub(super) unsafe extern "C-unwind" fn init_config(config: *mut ffi::luarequire_
 fn detect_config_format(data: &[u8]) -> ConfigStatus {
     let data = data.trim_ascii();
     if data.starts_with(b"{") {
-        let data = &data[1..].trim_ascii_start();
+        let data = data[1..].trim_ascii_start();
         if data.starts_with(b"\"") || data == b"}" {
             return ConfigStatus::PresentJson;
         }

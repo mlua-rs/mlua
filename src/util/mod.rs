@@ -281,7 +281,7 @@ pub(crate) unsafe fn to_string(state: *mut ffi::lua_State, index: c_int) -> Stri
         }
         ffi::LUA_TNUMBER => {
             let mut isint = 0;
-            let i = ffi::lua_tointegerx(state, -1, &mut isint);
+            let i = ffi::lua_tointegerx(state, index, &mut isint);
             if isint == 0 {
                 ffi::lua_tonumber(state, index).to_string()
             } else {
@@ -348,10 +348,7 @@ pub(crate) unsafe fn ptr_to_lossy_str<'a>(input: *const c_char) -> Option<Cow<'a
 }
 
 pub(crate) fn linenumber_to_usize(n: c_int) -> Option<usize> {
-    match n {
-        n if n < 0 => None,
-        n => Some(n as usize),
-    }
+    usize::try_from(n).ok()
 }
 
 mod error;

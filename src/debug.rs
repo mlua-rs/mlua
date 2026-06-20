@@ -99,10 +99,7 @@ impl<'a> Debug<'a> {
             DebugNames {
                 name: ptr_to_lossy_str((*self.ar).name),
                 #[cfg(not(feature = "luau"))]
-                name_what: match ptr_to_str((*self.ar).namewhat) {
-                    Some("") => None,
-                    val => val,
-                },
+                name_what: ptr_to_str((*self.ar).namewhat).filter(|s| !s.is_empty()),
                 #[cfg(feature = "luau")]
                 name_what: None,
             }
@@ -379,9 +376,7 @@ impl std::ops::BitOr for HookTriggers {
         self.on_calls |= rhs.on_calls;
         self.on_returns |= rhs.on_returns;
         self.every_line |= rhs.every_line;
-        if self.every_nth_instruction.is_none() && rhs.every_nth_instruction.is_some() {
-            self.every_nth_instruction = rhs.every_nth_instruction;
-        }
+        self.every_nth_instruction = self.every_nth_instruction.or(rhs.every_nth_instruction);
         self
     }
 }

@@ -975,11 +975,11 @@ impl Lua {
     #[cfg(any(feature = "lua55", feature = "lua54"))]
     #[cfg_attr(docsrs, doc(cfg(any(feature = "lua55", feature = "lua54"))))]
     pub fn warning(&self, msg: impl AsRef<str>, incomplete: bool) {
-        let msg = msg.as_ref();
-        let mut bytes = vec![0; msg.len() + 1];
-        bytes[..msg.len()].copy_from_slice(msg.as_bytes());
-        let real_len = bytes.iter().position(|&c| c == 0).unwrap();
-        bytes.truncate(real_len);
+        let msg = msg.as_ref().as_bytes();
+        let end = msg.iter().position(|&c| c == 0).unwrap_or(msg.len());
+        let mut bytes = Vec::with_capacity(end + 1);
+        bytes.extend_from_slice(&msg[..end]);
+        bytes.push(0);
         let lua = self.lock();
         unsafe {
             ffi::lua_warning(lua.state(), bytes.as_ptr() as *const _, incomplete as c_int);
@@ -1848,7 +1848,7 @@ impl Lua {
                 lua.push_value(&v)?;
                 let mut isint = 0;
                 let i = ffi::lua_tointegerx(state, -1, &mut isint);
-                if isint == 0 { None } else { Some(i) }
+                (isint != 0).then_some(i)
             },
         })
     }
@@ -1870,7 +1870,7 @@ impl Lua {
                 lua.push_value(&v)?;
                 let mut isnum = 0;
                 let n = ffi::lua_tonumberx(state, -1, &mut isnum);
-                if isnum == 0 { None } else { Some(n) }
+                (isnum != 0).then_some(n)
             },
         })
     }

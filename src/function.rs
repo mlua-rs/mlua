@@ -457,10 +457,7 @@ impl Function {
             FunctionInfo {
                 name: ptr_to_lossy_str(ar.name).map(|s| s.into_owned()),
                 #[cfg(not(feature = "luau"))]
-                name_what: match ptr_to_str(ar.namewhat) {
-                    Some("") => None,
-                    val => val,
-                },
+                name_what: ptr_to_str(ar.namewhat).filter(|s| !s.is_empty()),
                 #[cfg(feature = "luau")]
                 name_what: None,
                 what: ptr_to_str(ar.what).unwrap_or("main"),
@@ -542,22 +539,15 @@ impl Function {
     where
         F: FnMut(CoverageInfo),
     {
-        use std::ffi::CStr;
-        use std::os::raw::c_char;
-
         unsafe extern "C-unwind" fn callback<F: FnMut(CoverageInfo)>(
             data: *mut c_void,
-            function: *const c_char,
+            function: *const std::os::raw::c_char,
             line_defined: c_int,
             depth: c_int,
             hits: *const c_int,
             size: usize,
         ) {
-            let function = if !function.is_null() {
-                Some(CStr::from_ptr(function).to_string_lossy().to_string())
-            } else {
-                None
-            };
+            let function = ptr_to_lossy_str(function).map(|s| s.into_owned());
             let rust_callback = &*(data as *const RefCell<F>);
             if let Ok(mut rust_callback) = rust_callback.try_borrow_mut() {
                 // Call the Rust callback with CoverageInfo

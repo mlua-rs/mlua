@@ -1117,36 +1117,23 @@ impl<L: FromLua, R: FromLua> FromLua for Either<L, R> {
     #[inline]
     fn from_lua(value: Value, lua: &Lua) -> Result<Self> {
         let value_type_name = value.type_name();
-        // Try the left type first
-        match L::from_lua(value.clone(), lua) {
-            Ok(l) => Ok(Either::Left(l)),
-            // Try the right type
-            Err(_) => match R::from_lua(value, lua).map(Either::Right) {
-                Ok(r) => Ok(r),
-                Err(_) => Err(Error::from_lua_conversion(
-                    value_type_name,
-                    Self::type_name(),
-                    None,
-                )),
-            },
-        }
+        L::from_lua(value.clone(), lua)
+            .map(Either::Left)
+            .or_else(|_| R::from_lua(value, lua).map(Either::Right))
+            .map_err(|_| Error::from_lua_conversion(value_type_name, Self::type_name(), None))
     }
 
     #[inline]
     unsafe fn from_stack(idx: c_int, lua: &RawLua) -> Result<Self> {
-        match L::from_stack(idx, lua) {
-            Ok(l) => Ok(Either::Left(l)),
-            Err(_) => match R::from_stack(idx, lua).map(Either::Right) {
-                Ok(r) => Ok(r),
-                Err(_) => {
-                    let state = lua.state();
-                    let from_type_name = CStr::from_ptr(ffi::lua_typename(state, ffi::lua_type(state, idx)))
-                        .to_str()
-                        .unwrap_or("unknown");
-                    let err = Error::from_lua_conversion(from_type_name, Self::type_name(), None);
-                    Err(err)
-                }
-            },
-        }
+        L::from_stack(idx, lua)
+            .map(Either::Left)
+            .or_else(|_| R::from_stack(idx, lua).map(Either::Right))
+            .map_err(|_| {
+                let state = lua.state();
+                let from_type_name = CStr::from_ptr(ffi::lua_typename(state, ffi::lua_type(state, idx)))
+                    .to_str()
+                    .unwrap_or("unknown");
+                Error::from_lua_conversion(from_type_name, Self::type_name(), None)
+            })
     }
 }

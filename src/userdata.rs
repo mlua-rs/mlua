@@ -275,8 +275,7 @@ impl MetaMethod {
 
     pub(crate) fn validate(name: &str) -> Result<&str> {
         match name {
-            "__gc" => Err(Error::MetaMethodRestricted(name.to_string())),
-            "__metatable" => Err(Error::MetaMethodRestricted(name.to_string())),
+            "__gc" | "__metatable" => Err(Error::MetaMethodRestricted(name.to_string())),
             _ if name.starts_with("__mlua") => Err(Error::MetaMethodRestricted(name.to_string())),
             name => Ok(name),
         }
@@ -923,7 +922,7 @@ impl AnyUserData {
             }
             ffi::lua_rawgeti(state, -1, n as ffi::lua_Integer);
 
-            V::from_lua(lua.pop_value(), lua.lua())
+            V::from_stack(-1, &lua)
         }
     }
 
@@ -1064,8 +1063,8 @@ impl AnyUserData {
             return Ok(false);
         }
 
-        if mt.contains_key("__eq")? {
-            return mt.get::<Function>("__eq")?.call((self, other));
+        if let Some(eq) = mt.get::<Option<Function>>("__eq")? {
+            return eq.call((self, other));
         }
 
         Ok(false)
@@ -1080,7 +1079,7 @@ impl AnyUserData {
             // Userdata must be registered and not destructed
             let _ = lua.get_userdata_ref_type_id(&self.0)?;
             let ud = &*get_userdata::<UserDataStorage<()>>(lua.ref_thread(), self.0.index);
-            Ok::<_, Error>((*ud).is_serializable())
+            Ok::<_, Error>(ud.is_serializable())
         };
         is_serializable().unwrap_or(false)
     }

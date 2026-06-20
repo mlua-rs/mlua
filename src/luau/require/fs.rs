@@ -208,13 +208,15 @@ impl Require for FsRequirer {
     }
 
     fn has_config(&self) -> bool {
-        self.abs_path.is_dir() && self.abs_path.join(Self::LUAURC_CONFIG_FILENAME).is_file()
-            || self.abs_path.is_dir() && self.abs_path.join(Self::LUAU_CONFIG_FILENAME).is_file()
+        self.abs_path.is_dir()
+            && (self.abs_path.join(Self::LUAURC_CONFIG_FILENAME).is_file()
+                || self.abs_path.join(Self::LUAU_CONFIG_FILENAME).is_file())
     }
 
     fn config(&self) -> IoResult<Vec<u8>> {
-        if self.abs_path.join(Self::LUAURC_CONFIG_FILENAME).is_file() {
-            return fs::read(self.abs_path.join(Self::LUAURC_CONFIG_FILENAME));
+        let path = self.abs_path.join(Self::LUAURC_CONFIG_FILENAME);
+        if path.is_file() {
+            return fs::read(path);
         }
         fs::read(self.abs_path.join(Self::LUAU_CONFIG_FILENAME))
     }

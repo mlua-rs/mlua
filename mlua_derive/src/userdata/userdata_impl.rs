@@ -301,17 +301,16 @@ pub fn userdata_impl(attr: TokenStream, item: TokenStream) -> TokenStream {
                 }
                 let const_name = &const_item.ident;
                 let lua_name = lua_attr.name(const_name);
-                if lua_attr.meta {
-                    let tokens = quote! {
+                let tokens = if lua_attr.meta {
+                    quote! {
                         registry.add_meta_field(#lua_name, #type_path::#const_name);
-                    };
-                    registration_calls.push(with_cfg(tokens, &const_item.attrs));
+                    }
                 } else {
-                    let tokens = quote! {
+                    quote! {
                         registry.add_field(#lua_name, #type_path::#const_name);
-                    };
-                    registration_calls.push(with_cfg(tokens, &const_item.attrs));
-                }
+                    }
+                };
+                registration_calls.push(with_cfg(tokens, &const_item.attrs));
             }
             ImplItem::Fn(method) => {
                 let lua_attr = try_compile!(parse_lua_attr(&method.attrs));
@@ -410,17 +409,16 @@ pub fn userdata_impl(attr: TokenStream, item: TokenStream) -> TokenStream {
                         .into();
                     }
                     let lua_name = lua_attr.name(fn_name);
-                    if lua_attr.meta {
-                        let tokens = quote! {
+                    let tokens = if lua_attr.meta {
+                        quote! {
                             registry.add_meta_field(#lua_name, #type_path::#fn_name());
-                        };
-                        registration_calls.push(with_cfg(tokens, &method.attrs));
+                        }
                     } else {
-                        let tokens = quote! {
+                        quote! {
                             registry.add_field(#lua_name, #type_path::#fn_name());
-                        };
-                        registration_calls.push(with_cfg(tokens, &method.attrs));
-                    }
+                        }
+                    };
+                    registration_calls.push(with_cfg(tokens, &method.attrs));
                     continue;
                 }
 

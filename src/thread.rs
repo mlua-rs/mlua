@@ -699,26 +699,25 @@ impl<R> AsyncThread<R> {
 #[cfg(feature = "async")]
 impl<R> Drop for AsyncThread<R> {
     fn drop(&mut self) {
-        #[allow(clippy::collapsible_if)]
-        if self.recycle {
-            if let Some(lua) = self.thread.0.lua.try_lock() {
-                unsafe {
-                    let mut status = self.thread.status_inner(&lua);
-                    if matches!(status, ThreadStatusInner::Yielded(0)) {
-                        // The thread is dropped while yielded, resume it with the "terminate" signal
-                        ffi::lua_pushlightuserdata(self.thread.1, crate::Lua::poll_terminate().0);
-                        if let Ok((new_status, _)) = self.thread.resume_inner(&lua, 1) {
-                            // `new_status` should always be `ThreadStatusInner::Yielded(0)`
-                            status = new_status;
-                        }
+        if self.recycle
+            && let Some(lua) = self.thread.0.lua.try_lock()
+        {
+            unsafe {
+                let mut status = self.thread.status_inner(&lua);
+                if matches!(status, ThreadStatusInner::Yielded(0)) {
+                    // The thread is dropped while yielded, resume it with the "terminate" signal
+                    ffi::lua_pushlightuserdata(self.thread.1, crate::Lua::poll_terminate().0);
+                    if let Ok((new_status, _)) = self.thread.resume_inner(&lua, 1) {
+                        // `new_status` should always be `ThreadStatusInner::Yielded(0)`
+                        status = new_status;
                     }
-
-                    // For Lua 5.4 this also closes all pending to-be-closed variables
-                    if self.thread.reset_inner(status).is_ok() {
-                        lua.recycle_thread(&mut self.thread);
-                    }
-                    lua.update_thread_ownership(&self.thread, None);
                 }
+
+                // For Lua 5.4 this also closes all pending to-be-closed variables
+                if self.thread.reset_inner(status).is_ok() {
+                    lua.recycle_thread(&mut self.thread);
+                }
+                lua.update_thread_ownership(&self.thread, None);
             }
         }
     }

@@ -401,14 +401,11 @@ impl Compiler {
         use std::os::raw::{c_char, c_int};
         use std::ptr;
 
-        let vector_lib = self.vector_lib.clone();
-        let vector_lib = vector_lib.and_then(|lib| CString::new(lib).ok());
+        let vector_lib = (self.vector_lib.as_deref()).and_then(|lib| CString::new(lib).ok());
         let vector_lib = vector_lib.as_ref();
-        let vector_ctor = self.vector_ctor.clone();
-        let vector_ctor = vector_ctor.and_then(|ctor| CString::new(ctor).ok());
+        let vector_ctor = (self.vector_ctor.as_deref()).and_then(|ctor| CString::new(ctor).ok());
         let vector_ctor = vector_ctor.as_ref();
-        let vector_type = self.vector_type.clone();
-        let vector_type = vector_type.and_then(|t| CString::new(t).ok());
+        let vector_type = (self.vector_type.as_deref()).and_then(|t| CString::new(t).ok());
         let vector_type = vector_type.as_ref();
 
         macro_rules! vec2cstring_ptr {
@@ -740,11 +737,7 @@ impl Chunk<'_> {
             .unwrap_or(source);
 
         let name = Self::convert_name(self.name.clone())?;
-        let env = match &self.env {
-            Ok(Some(env)) => Some(env),
-            Ok(None) => None,
-            Err(err) => return Err(err.clone()),
-        };
+        let env = self.env.as_ref().map_err(Error::clone)?.as_ref();
         self.lua.lock().load_chunk(Some(&name), env, None, &source)
     }
 
