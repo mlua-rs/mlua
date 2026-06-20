@@ -1,10 +1,160 @@
 #![cfg(not(feature = "luau"))]
 
-use std::sync::atomic::{AtomicI64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use mlua::debug::DebugEvent;
 use mlua::{Error, HookTriggers, Lua, Result, Value, VmState};
+
+// Ensure the new trigger fields participate in the BitOr impl.
+#[test]
+fn test_resume_yield_trigger_bitor() {
+    let t = HookTriggers::ON_RESUME | HookTriggers::ON_YIELD | HookTriggers::ON_CALLS;
+    assert!(t.on_resume);
+    assert!(t.on_yield);
+    assert!(t.on_calls);
+    assert!(!t.on_returns);
+}
+
+#[test]
+fn test_on_resume_hook() -> Result<()> {
+    let lua = Lua::new();
+
+    let counter = Arc::new(AtomicI64::new(0));
+    let hook_counter = counter.clone();
+
+    let co = lua.create_thread(
+        lua.load("coroutine.yield() coroutine.yield()").into_function()?,
+    )?;
+
+    co.set_hook(HookTriggers::ON_RESUME, move |_lua, debug| {
+        assert_eq!(debug.event(), DebugEvent::Resume);
+        // Confirm other Debug methods return graceful defaults.
+        assert_eq!(debug.current_line(), None);
+        assert_eq!(debug.names().name, None);
+        hook_counter.fetch_add(1, Ordering::Relaxed);
+        Ok(VmState::Continue)
+    })?;
+
+    co.resume::<()>(())?; // first resume  → hook fires once, then yields
+    co.resume::<()>(())?; // second resume → hook fires once, then yields
+    co.resume::<()>(())?; // third resume  → hook fires once, then finishes
+
+    assert_eq!(counter.load(Ordering::Relaxed), 3);
+    assert!(co.is_finished());
+    Ok(())
+}
+
+#[test]
+fn test_on_yield_hook() -> Result<()> {
+    let lua = Lua::new();
+
+    let counter = Arc::new(AtomicI64::new(0));
+    let hook_counter = counter.clone();
+
+    let co = lua.create_thread(
+        lua.load("coroutine.yield() coroutine.yield()").into_function()?,
+    )?;
+
+    co.set_hook(HookTriggers::ON_YIELD, move |_lua, debug| {
+        assert_eq!(debug.event(), DebugEvent::Yield);
+        hook_counter.fetch_add(1, Ordering::Relaxed);
+        Ok(VmState::Continue)
+    })?;
+
+    co.resume::<()>(())?; // yields → hook fires
+    co.resume::<()>(())?; // yields → hook fires
+    co.resume::<()>(())?; // finishes → no hook
+
+    assert_eq!(counter.load(Ordering::Relaxed), 2);
+    assert!(co.is_finished());
+    Ok(())
+}
+
+#[test]
+fn test_resume_yield_combined() -> Result<()> {
+    let lua = Lua::new();
+
+    // Track events in order.
+    let events = Arc::new(Mutex::new(Vec::new()));
+    let hook_events = events.clone();
+
+    let co = lua.create_thread(
+        lua.load("coroutine.yield()").into_function()?,
+    )?;
+
+    co.set_hook(
+        HookTriggers::ON_RESUME | HookTriggers::ON_YIELD,
+        move |_lua, debug| {
+            hook_events.lock().unwrap().push(debug.event());
+            Ok(VmState::Continue)
+        },
+    )?;
+
+    co.resume::<()>(())?; // resume hook → coroutine runs → yield hook
+    co.resume::<()>(())?; // resume hook → coroutine finishes (no yield hook)
+
+    let events = events.lock().unwrap();
+    assert_eq!(
+        *events,
+        vec![DebugEvent::Resume, DebugEvent::Yield, DebugEvent::Resume]
+    );
+    Ok(())
+}
+
+#[test]
+fn test_global_resume_yield_hook() -> Result<()> {
+    let lua = Lua::new();
+
+    let resume_count = Arc::new(AtomicI64::new(0));
+    let yield_count = Arc::new(AtomicI64::new(0));
+    let rc = resume_count.clone();
+    let yc = yield_count.clone();
+
+    lua.set_global_hook(
+        HookTriggers::ON_RESUME | HookTriggers::ON_YIELD,
+        move |_lua, debug| {
+            match debug.event() {
+                DebugEvent::Resume => rc.fetch_add(1, Ordering::Relaxed),
+                DebugEvent::Yield => yc.fetch_add(1, Ordering::Relaxed),
+                _ => 0,
+            };
+            Ok(VmState::Continue)
+        },
+    )?;
+
+    let co = lua.create_thread(
+        lua.load("coroutine.yield() coroutine.yield()").into_function()?,
+    )?;
+
+    co.resume::<()>(())?;
+    co.resume::<()>(())?;
+    co.resume::<()>(())?;
+
+    assert_eq!(resume_count.load(Ordering::Relaxed), 3);
+    assert_eq!(yield_count.load(Ordering::Relaxed), 2);
+    Ok(())
+}
+
+#[test]
+fn test_resume_hook_error_propagates() -> Result<()> {
+    let lua = Lua::new();
+
+    let co = lua.create_thread(lua.load("coroutine.yield()").into_function()?)?;
+
+    let fired = Arc::new(AtomicBool::new(false));
+    let fired2 = fired.clone();
+    co.set_hook(HookTriggers::ON_RESUME, move |_lua, _debug| {
+        fired2.store(true, Ordering::Relaxed);
+        Err(Error::runtime("hook error"))
+    })?;
+
+    let err = co.resume::<()>(()).expect_err("expected hook error to propagate");
+    assert!(fired.load(Ordering::Relaxed), "hook should have fired");
+    assert!(err.to_string().contains("hook error"), "got: {err}");
+
+    Ok(())
+}
 
 #[test]
 fn test_hook_triggers() {

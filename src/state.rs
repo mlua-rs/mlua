@@ -668,6 +668,9 @@ impl Lua {
     {
         let lua = self.lock();
         unsafe {
+            if triggers.on_resume || triggers.on_yield {
+                (*lua.extra.get()).has_resume_yield_hooks = true;
+            }
             (*lua.extra.get()).hook_triggers = triggers;
             (*lua.extra.get()).hook_callback = Some(XRc::new(callback));
             lua.set_thread_hook(lua.state(), HookKind::Global)
