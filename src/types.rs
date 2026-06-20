@@ -20,9 +20,6 @@ pub use either::Either;
 pub use registry_key::RegistryKey;
 pub(crate) use value_ref::ValueRef;
 
-#[cfg(feature = "async")]
-pub(crate) use value_ref::ValueRefIndex;
-
 /// Type of Lua integer numbers.
 pub type Integer = ffi::lua_Integer;
 /// Type of Lua floating point numbers.

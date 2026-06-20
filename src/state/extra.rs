@@ -65,7 +65,7 @@ pub(crate) struct ExtraData {
     pub(super) wrapped_failure_top: usize,
     // Pool of `Thread`s (coroutines) for async execution
     #[cfg(feature = "async")]
-    pub(super) thread_pool: Vec<crate::types::ValueRefIndex>,
+    pub(super) thread_pool: Vec<c_int>,
     // Map for implicit threads to root user-owned Thread
     #[cfg(feature = "async")]
     pub(super) thread_ownership_map: FxHashMap<*mut ffi::lua_State, *mut ffi::lua_State>,

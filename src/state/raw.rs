@@ -677,7 +677,7 @@ impl RawLua {
     #[cfg(feature = "async")]
     pub(crate) unsafe fn create_recycled_thread(&self, func: &Function) -> Result<Thread> {
         if let Some(index) = (*self.extra.get()).thread_pool.pop() {
-            let thread_state = ffi::lua_tothread(self.ref_thread(), *index.0);
+            let thread_state = ffi::lua_tothread(self.ref_thread(), index);
             ffi::lua_xpush(self.ref_thread(), thread_state, func.0.index);
 
             #[cfg(feature = "luau")]
@@ -716,7 +716,7 @@ impl RawLua {
     pub(crate) unsafe fn recycle_thread(&self, thread: &mut Thread) {
         let extra = &mut *self.extra.get();
         if extra.thread_pool.len() < extra.thread_pool.capacity()
-            && let Some(index) = thread.0.index_count.take()
+            && let Some(index) = thread.0.take_index()
         {
             extra.thread_pool.push(index);
         }
