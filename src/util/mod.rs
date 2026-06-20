@@ -117,13 +117,10 @@ pub(crate) unsafe fn push_external_string(
     }
 
     if protect {
-        let res = protect_lua!(state, 0, 1, move |state| {
+        // Lua free external string on error
+        protect_lua!(state, 0, 1, move |state| {
             ffi::lua_pushexternalstring(state, s_ptr, s_len, Some(dealloc), bytes_ud as *mut _);
-        });
-        if res.is_err() {
-            // Lua free external string on error
-            return res;
-        }
+        })?;
     } else {
         ffi::lua_pushexternalstring(state, s_ptr, s_len, Some(dealloc), bytes_ud as *mut _);
     }
