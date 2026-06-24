@@ -440,6 +440,31 @@ impl Value {
         }
     }
 
+    /// Cast the value to a [`Vector`].
+    ///
+    /// If the value is a [`Vector`], returns it or `None` otherwise.
+    ///
+    /// [`Vector`]: crate::Vector
+    #[cfg(any(feature = "luau", doc))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
+    #[inline]
+    pub fn as_vector(&self) -> Option<crate::Vector> {
+        match self {
+            Value::Vector(v) => Some(*v),
+            _ => None,
+        }
+    }
+
+    /// Returns `true` if the value is a [`Vector`].
+    ///
+    /// [`Vector`]: crate::Vector
+    #[cfg(any(feature = "luau", doc))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
+    #[inline]
+    pub fn is_vector(&self) -> bool {
+        self.as_vector().is_some()
+    }
+
     /// Cast the value to a [`Buffer`].
     ///
     /// If the value is [`Buffer`], returns it or `None` otherwise.

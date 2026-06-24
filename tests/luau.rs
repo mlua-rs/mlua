@@ -60,10 +60,11 @@ fn test_vectors() -> Result<()> {
 fn test_vectors() -> Result<()> {
     let lua = Lua::new();
 
-    let v: Vector = lua
+    let v: Value = lua
         .load("vector.create(1, 2, 3, 4) + vector.create(4, 3, 2, 1)")
         .eval()?;
-    assert_eq!(v, [5.0, 5.0, 5.0, 5.0]);
+    assert!(v.is_vector());
+    assert_eq!(v.as_vector(), Some([5.0, 5.0, 5.0, 5.0]));
 
     // Test conversion into Rust array
     let v: [f64; 4] = lua.load("vector.create(1, 2, 3, 4)").eval()?;
