@@ -30,7 +30,7 @@ pub use crate::state::GcGenParams as LuaGcGenParams;
 #[cfg(feature = "luau")]
 #[doc(no_inline)]
 pub use crate::{
-    Vector as LuaVector,
+    Buffer as LuaBuffer, Vector as LuaVector,
     chunk::{CompileConstant as LuaCompileConstant, Compiler as LuaCompiler},
     luau::{
         FsRequirer as LuaFsRequirer, HeapDump as LuaHeapDump, NavigateError as LuaNavigateError,
