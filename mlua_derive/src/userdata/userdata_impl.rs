@@ -38,7 +38,7 @@ struct ArgInfo {
 
 struct MethodInfo {
     self_kind: SelfKind,
-    has_lua: bool,
+    lua: Option<LuaArg>,
     args: Vec<ArgInfo>,
 }
 
@@ -50,15 +50,28 @@ fn ref_inner_type(ty: &Type) -> Type {
     }
 }
 
-/// Check if the type is `&Lua` or `&mlua::Lua`.
-fn is_lua_ref(ty: &Type) -> bool {
-    let Type::Reference(ref_ty) = ty else { return false };
-    match &*ref_ty.elem {
-        Type::Path(p) if p.path.segments.len() == 1 => p.path.segments[0].ident == "Lua",
-        Type::Path(p) if p.path.segments.len() == 2 => {
-            p.path.segments[0].ident == "mlua" && p.path.segments[1].ident == "Lua"
-        }
+/// How the `Lua` context parameter is passed to the method.
+enum LuaArg {
+    Ref,
+    Owned,
+}
+
+/// Check if the type is `Lua` or `mlua::Lua`.
+fn is_lua_type(ty: &Type) -> bool {
+    let Type::Path(p) = ty else { return false };
+    match p.path.segments.len() {
+        1 => p.path.segments[0].ident == "Lua",
+        2 => p.path.segments[0].ident == "mlua" && p.path.segments[1].ident == "Lua",
         _ => false,
+    }
+}
+
+/// Classify the method's `Lua` context parameter, if present.
+fn lua_arg_kind(ty: &Type) -> Option<LuaArg> {
+    match ty {
+        Type::Reference(r) if r.mutability.is_none() && is_lua_type(&r.elem) => Some(LuaArg::Ref),
+        ty if is_lua_type(ty) => Some(LuaArg::Owned),
+        _ => None,
     }
 }
 
@@ -128,10 +141,10 @@ fn try_unwrap_option(ty: &Type) -> Option<&Type> {
 /// Analyze method signature.
 ///
 /// Determine `self` kind and collect the callback arguments.
-/// Auto-detects `&Lua` as the first non-self parameter.
+/// Auto-detects `Lua` (owned or reference) as the first non-self parameter.
 fn analyze_self_and_args(sig: &Signature) -> syn::Result<MethodInfo> {
     let mut self_kind = SelfKind::None;
-    let mut has_lua = false;
+    let mut lua = None;
     let mut args = Vec::new();
     let mut check_first_typed = true;
 
@@ -147,12 +160,14 @@ fn analyze_self_and_args(sig: &Signature) -> syn::Result<MethodInfo> {
                 self_kind = SelfKind::Owned;
             }
             FnArg::Typed(typed) => {
-                if check_first_typed && is_lua_ref(&typed.ty) {
-                    has_lua = true;
+                if check_first_typed {
                     check_first_typed = false;
-                    continue;
+                    if let Some(kind) = lua_arg_kind(&typed.ty) {
+                        lua = Some(kind);
+                        continue;
+                    }
                 }
-                check_first_typed = false;
+
                 if let syn::Pat::Ident(pat_ident) = &*typed.pat {
                     let arg_type = &*typed.ty;
                     let mut option_inner = None;
@@ -202,11 +217,7 @@ fn analyze_self_and_args(sig: &Signature) -> syn::Result<MethodInfo> {
         }
     }
 
-    Ok(MethodInfo {
-        self_kind,
-        has_lua,
-        args,
-    })
+    Ok(MethodInfo { self_kind, lua, args })
 }
 
 fn strip_item_attrs(attrs: &[Attribute]) -> Vec<Attribute> {
@@ -342,6 +353,16 @@ pub fn userdata_impl(attr: TokenStream, item: TokenStream) -> TokenStream {
                 let fn_name = &method.sig.ident;
                 let info = try_compile!(analyze_self_and_args(&method.sig));
                 let is_async = method.sig.asyncness.is_some();
+
+                // Owned `Lua` is only available to async callbacks.
+                if !is_async && matches!(info.lua, Some(LuaArg::Owned)) {
+                    return syn::Error::new_spanned(
+                        &method.sig,
+                        "owned `Lua` parameter is only supported for `async` methods (use `&Lua` instead)",
+                    )
+                    .to_compile_error()
+                    .into();
+                }
 
                 if lua_attr.getter {
                     if is_async {
@@ -520,7 +541,7 @@ fn gen_call_args(info: &MethodInfo) -> TokenStream2 {
         _ => call_args.push(quote! { this }),
     }
 
-    if info.has_lua {
+    if info.lua.is_some() {
         call_args.push(quote! { lua });
     }
 
@@ -542,8 +563,10 @@ fn gen_async_call_args(info: &MethodInfo) -> TokenStream2 {
         SelfKind::Owned => call_args.push(quote! { this }),
     }
 
-    if info.has_lua {
-        call_args.push(quote! { lua });
+    match info.lua {
+        Some(LuaArg::Ref) => call_args.push(quote! { &lua }),
+        Some(LuaArg::Owned) => call_args.push(quote! { lua }),
+        None => {}
     }
 
     for arg in &info.args {

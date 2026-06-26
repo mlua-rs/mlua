@@ -452,6 +452,14 @@ mod async_tests {
             Ok(42)
         }
 
+        async fn lua_version(lua: &Lua, extra: Option<&str>) -> Result<String> {
+            (lua.globals().get("_VERSION")).map(|s: String| s + extra.unwrap_or(""))
+        }
+
+        async fn lua_version_owned(lua: Lua) -> Result<String> {
+            lua.globals().get("_VERSION")
+        }
+
         #[cfg(not(any(feature = "lua51", feature = "luau")))]
         #[lua(meta)]
         async fn __tostring(&self) -> Result<String> {
@@ -476,6 +484,26 @@ mod async_tests {
             assert(doubled == 30, "expected 30, got " .. tostring(doubled))
             local inf = c:get_value_infallible()
             assert(inf == 10, "expected infallible 10, got " .. tostring(inf))
+        "#,
+        )
+        .exec_async()
+        .await
+        .unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_async_lua_param() {
+        let lua = Lua::new();
+        lua.globals()
+            .set("AsyncCounter", lua.create_proxy::<AsyncCounter>().unwrap())
+            .unwrap();
+
+        lua.load(
+            r#"
+            local c = AsyncCounter.new()
+            assert(type(AsyncCounter.lua_version()) == "string")
+            assert(string.sub(AsyncCounter.lua_version(" extra"), -5) == "extra", "expected 'extra' at the end")
+            assert(type(AsyncCounter.lua_version_owned()) == "string")
         "#,
         )
         .exec_async()
