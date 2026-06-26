@@ -20,10 +20,11 @@ fn test_version() -> Result<()> {
 fn test_vectors() -> Result<()> {
     let lua = Lua::new();
 
-    let v: Vector = lua
+    let v: Value = lua
         .load("vector.create(1, 2, 3) + vector.create(3, 2, 1)")
         .eval()?;
-    assert_eq!(v, [4.0, 4.0, 4.0]);
+    assert!(v.is_vector());
+    assert_eq!(v.as_vector().unwrap(), [4.0, 4.0, 4.0]);
 
     // Test conversion into Rust array
     let v: [f64; 3] = lua.load("vector.create(1, 2, 3)").eval()?;
@@ -64,7 +65,7 @@ fn test_vectors() -> Result<()> {
         .load("vector.create(1, 2, 3, 4) + vector.create(4, 3, 2, 1)")
         .eval()?;
     assert!(v.is_vector());
-    assert_eq!(v.as_vector(), Some([5.0, 5.0, 5.0, 5.0]));
+    assert_eq!(v.as_vector().unwrap(), [5.0, 5.0, 5.0, 5.0]);
 
     // Test conversion into Rust array
     let v: [f64; 4] = lua.load("vector.create(1, 2, 3, 4)").eval()?;
@@ -98,7 +99,6 @@ fn test_vectors() -> Result<()> {
     Ok(())
 }
 
-#[cfg(not(feature = "luau-vector4"))]
 #[test]
 fn test_vector_metatable() -> Result<()> {
     let lua = Lua::new();
