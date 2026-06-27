@@ -52,6 +52,8 @@ pub(crate) use extra::ExtraData;
 #[doc(hidden)]
 pub use raw::RawLua;
 pub(crate) use util::callback_error_ext;
+#[cfg(feature = "luau")]
+pub(crate) use util::debug_callback;
 
 /// Top level Lua struct which represents an instance of Lua VM.
 pub struct Lua {
@@ -878,6 +880,92 @@ impl Lua {
         unsafe {
             (*lua.extra.get()).interrupt_callback = None;
             (*ffi::lua_callbacks(lua.main_state())).interrupt = None;
+        }
+    }
+
+    /// Sets the callback Luau invokes when a breakpoint (set via [`Function::set_breakpoint`]) is
+    /// hit.
+    ///
+    /// The callback receives a [`Debug`] for the paused frame, so it can read the current line and
+    /// inspect locals. Returning [`VmState::Yield`] suspends the running coroutine at the
+    /// breakpoint (the yield happens only at yieldable points, exactly as [`Lua::set_interrupt`]),
+    /// which is what makes a non-blocking, single-threaded debugger possible.
+    ///
+    /// Note: Luau re-evaluates the breakpoint when the coroutine is resumed, so the callback fires
+    /// again on the same line. Return [`VmState::Continue`] on resume to step past it (a debugger
+    /// typically yields on the first hit and continues once the user resumes).
+    ///
+    /// [`Function::set_breakpoint`]: crate::Function::set_breakpoint
+    #[cfg(any(feature = "luau", doc))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
+    pub fn set_debug_break<F>(&self, callback: F)
+    where
+        F: Fn(&Lua, &Debug) -> Result<VmState> + MaybeSend + 'static,
+    {
+        unsafe extern "C-unwind" fn debug_break_proc(state: *mut ffi::lua_State, ar: *mut ffi::lua_Debug) {
+            debug_callback(state, ar, |extra| (*extra).debug_break_callback.clone());
+        }
+
+        let lua = self.lock();
+        unsafe {
+            (*lua.extra.get()).debug_break_callback = Some(XRc::new(callback));
+            (*ffi::lua_callbacks(lua.main_state())).debugbreak = Some(debug_break_proc);
+        }
+    }
+
+    /// Sets the per-line single-step callback, invoked for each line while single-stepping is
+    /// enabled via [`Lua::set_single_step`].
+    ///
+    /// Like [`Lua::set_debug_break`], the callback may return [`VmState::Yield`] to suspend the
+    /// running coroutine.
+    #[cfg(any(feature = "luau", doc))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
+    pub fn set_debug_step<F>(&self, callback: F)
+    where
+        F: Fn(&Lua, &Debug) -> Result<VmState> + MaybeSend + 'static,
+    {
+        unsafe extern "C-unwind" fn debug_step_proc(state: *mut ffi::lua_State, ar: *mut ffi::lua_Debug) {
+            debug_callback(state, ar, |extra| (*extra).debug_step_callback.clone());
+        }
+
+        let lua = self.lock();
+        unsafe {
+            (*lua.extra.get()).debug_step_callback = Some(XRc::new(callback));
+            (*ffi::lua_callbacks(lua.main_state())).debugstep = Some(debug_step_proc);
+        }
+    }
+
+    /// Enables or disables single-stepping (wraps `lua_singlestep`).
+    ///
+    /// While enabled, the callback registered with [`Lua::set_debug_step`] fires for every line.
+    /// The flag is per-thread; threads created afterwards inherit it, so enable it before creating
+    /// the thread you want to step.
+    #[cfg(any(feature = "luau", doc))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
+    pub fn set_single_step(&self, enabled: bool) {
+        let lua = self.lock();
+        unsafe { ffi::lua_singlestep(lua.main_state(), enabled as c_int) };
+    }
+
+    /// Removes the breakpoint callback previously set by [`Lua::set_debug_break`].
+    #[cfg(any(feature = "luau", doc))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
+    pub fn remove_debug_break(&self) {
+        let lua = self.lock();
+        unsafe {
+            (*lua.extra.get()).debug_break_callback = None;
+            (*ffi::lua_callbacks(lua.main_state())).debugbreak = None;
+        }
+    }
+
+    /// Removes the single-step callback previously set by [`Lua::set_debug_step`].
+    #[cfg(any(feature = "luau", doc))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
+    pub fn remove_debug_step(&self) {
+        let lua = self.lock();
+        unsafe {
+            (*lua.extra.get()).debug_step_callback = None;
+            (*ffi::lua_callbacks(lua.main_state())).debugstep = None;
         }
     }
 

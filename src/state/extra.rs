@@ -85,6 +85,10 @@ pub(crate) struct ExtraData {
     pub(super) warn_callback: Option<crate::types::WarnCallback>,
     #[cfg(feature = "luau")]
     pub(super) interrupt_callback: Option<crate::types::InterruptCallback>,
+    #[cfg(feature = "luau")]
+    pub(super) debug_break_callback: Option<crate::types::DebugCallback>,
+    #[cfg(feature = "luau")]
+    pub(super) debug_step_callback: Option<crate::types::DebugCallback>,
     pub(super) thread_triggers: ThreadTriggers,
     pub(super) thread_event_callback: Option<ThreadEventCallback>,
 
@@ -190,6 +194,10 @@ impl ExtraData {
             warn_callback: None,
             #[cfg(feature = "luau")]
             interrupt_callback: None,
+            #[cfg(feature = "luau")]
+            debug_break_callback: None,
+            #[cfg(feature = "luau")]
+            debug_step_callback: None,
             thread_triggers: ThreadTriggers::default(),
             thread_event_callback: None,
             #[cfg(feature = "luau")]
