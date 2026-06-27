@@ -255,6 +255,38 @@ impl LuaOptions {
     }
 }
 
+/// Luau JIT options
+#[cfg(any(feature = "luau-jit", doc))]
+#[cfg_attr(docsrs, doc(cfg(feature = "luau-jit")))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct JitOptions {
+    inliner: bool,
+}
+
+#[cfg(any(feature = "luau-jit", doc))]
+impl Default for JitOptions {
+    fn default() -> Self {
+        const { Self::new() }
+    }
+}
+
+#[cfg(any(feature = "luau-jit", doc))]
+impl JitOptions {
+    /// Creates default JIT options.
+    pub const fn new() -> Self {
+        JitOptions { inliner: false }
+    }
+
+    /// Toggles the runtime bytecode inliner.
+    ///
+    /// Disabled by default. Changing this option does not affect already loaded functions.
+    #[must_use]
+    pub const fn set_inliner(mut self, enabled: bool) -> Self {
+        self.inliner = enabled;
+        self
+    }
+}
+
 impl Drop for Lua {
     fn drop(&mut self) {
         if self.collect_garbage {
@@ -1249,6 +1281,23 @@ impl Lua {
     pub fn enable_jit(&self, enable: bool) {
         let lua = self.lock();
         unsafe { (*lua.extra.get()).enable_jit = enable };
+    }
+
+    /// Configures JIT options for this Lua VM.
+    #[cfg(any(feature = "luau-jit", doc))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "luau-jit")))]
+    pub fn set_jit_options(&self, options: JitOptions) {
+        let lua = self.lock();
+        unsafe {
+            let state = lua.main_state();
+            if options.inliner {
+                let _ = Self::set_fflag("LuauCallFeedback", true);
+                let _ = Self::set_fflag("LuauEmitCallFeedback", true);
+                ffi::luau_enable_jit_inliner(state);
+            } else {
+                ffi::luau_disable_jit_inliner(state);
+            }
+        }
     }
 
     /// Sets Luau feature flag (global setting).

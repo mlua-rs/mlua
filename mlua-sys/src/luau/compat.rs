@@ -12,6 +12,11 @@ use super::luacode::*;
 
 pub const LUA_RESUMEERROR: c_int = -1;
 
+// Keep in sync with Bytecode.h
+const LBC_VERSION_MAX: u8 = 11;
+const LBC_TYPE_VERSION_MIN: u8 = 1;
+const LBC_TYPE_VERSION_MAX: u8 = 3;
+
 unsafe fn compat53_reverse(L: *mut lua_State, mut a: c_int, mut b: c_int) {
     while a < b {
         lua_pushvalue(L, a);
@@ -368,6 +373,24 @@ pub unsafe fn luaL_newmetatable(L: *mut lua_State, tname: *const c_char) -> c_in
     }
 }
 
+// Detects whether a chunk is Luau bytecode or text source.
+pub unsafe fn luaL_isbytecode(data: *const c_char, size: usize) -> bool {
+    if size == 0 {
+        return false;
+    }
+    match *data as u8 {
+        b if b < b'\t' => true, // bytecode
+        b if b <= LBC_VERSION_MAX => {
+            let types_version = (size >= 2).then(|| *data.add(1) as u8);
+            match types_version {
+                Some(LBC_TYPE_VERSION_MIN..=LBC_TYPE_VERSION_MAX) => true, // bytecode
+                _ => false,                                                // text
+            }
+        }
+        _ => false, // text
+    }
+}
+
 pub unsafe fn luaL_loadbufferenv(
     L: *mut lua_State,
     data: *const c_char,
@@ -384,19 +407,21 @@ pub unsafe fn luaL_loadbufferenv(
         free(*(data as *mut *mut c_char) as *mut c_void);
     }
 
-    let chunk_is_text = size == 0 || (*data as u8) >= b'\t';
+    let is_bytecode = luaL_isbytecode(data, size);
     if !mode.is_null() {
         let modeb = CStr::from_ptr(mode).to_bytes();
-        if !chunk_is_text && !modeb.contains(&b'b') {
+        let allow_binary = modeb.contains(&b'b');
+        let allow_text = modeb.contains(&b't');
+        if is_bytecode && !allow_binary {
             lua_pushfstring(L, cstr!("attempt to load a binary chunk (mode is '%s')"), mode);
             return LUA_ERRSYNTAX;
-        } else if chunk_is_text && !modeb.contains(&b't') {
+        } else if !is_bytecode && !allow_text {
             lua_pushfstring(L, cstr!("attempt to load a text chunk (mode is '%s')"), mode);
             return LUA_ERRSYNTAX;
         }
     }
 
-    let status = if chunk_is_text {
+    let status = if !is_bytecode {
         if env < 0 {
             env -= 1;
         }

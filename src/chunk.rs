@@ -751,7 +751,7 @@ impl Chunk<'_> {
                 return ChunkMode::Binary;
             }
             #[cfg(feature = "luau")]
-            if *source.first().unwrap_or(&u8::MAX) < b'\t' {
+            if unsafe { ffi::luaL_isbytecode(source.as_ptr().cast(), source.len()) } {
                 return ChunkMode::Binary;
             }
         }

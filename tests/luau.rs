@@ -358,6 +358,32 @@ fn test_fflags() {
     assert!(Lua::set_fflag("UnknownFlag", true).is_err());
 }
 
+#[cfg(feature = "luau-jit")]
+#[test]
+fn test_jit_inliner() -> Result<()> {
+    let lua = Lua::new();
+    lua.set_jit_options(mlua::JitOptions::new().set_inliner(true));
+
+    // An inlinable helper called in a hot loop.
+    let sum = lua
+        .load(
+            r#"
+            local function add(a, b)
+                return a + b
+            end
+            local sum = 0
+            for i = 1, 1000 do
+                sum = add(sum, i)
+            end
+            return sum
+        "#,
+        )
+        .eval::<i64>()?;
+    assert_eq!(sum, 500500);
+
+    Ok(())
+}
+
 #[test]
 fn test_loadstring() -> Result<()> {
     let lua = Lua::new();

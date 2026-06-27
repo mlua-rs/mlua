@@ -153,6 +153,9 @@ pub use crate::userdata::{
 #[doc(inline)]
 pub use crate::debug::HookTriggers;
 
+#[cfg(any(feature = "luau-jit", doc))]
+#[doc(inline)]
+pub use crate::state::JitOptions;
 #[cfg(any(feature = "luau", doc))]
 #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
 pub use crate::{buffer::Buffer, vector::Vector};

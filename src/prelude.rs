@@ -27,7 +27,7 @@ pub use crate::HookTriggers as LuaHookTriggers;
 #[doc(no_inline)]
 pub use crate::state::GcGenParams as LuaGcGenParams;
 
-#[cfg(feature = "luau")]
+#[cfg(any(feature = "luau", doc))]
 #[doc(no_inline)]
 pub use crate::{
     Buffer as LuaBuffer, Vector as LuaVector,
@@ -37,6 +37,10 @@ pub use crate::{
         Require as LuaRequire,
     },
 };
+
+#[cfg(any(feature = "luau-jit", doc))]
+#[doc(no_inline)]
+pub use crate::state::JitOptions as LuaJitOptions;
 
 #[cfg(feature = "async")]
 #[doc(no_inline)]
