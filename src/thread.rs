@@ -314,7 +314,7 @@ impl Thread {
     /// Resumes execution of this thread, immediately raising an error.
     ///
     /// This is a Luau specific extension.
-    #[cfg(feature = "luau")]
+    #[cfg(any(feature = "luau", doc))]
     #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
     pub fn resume_error<R>(&self, error: impl crate::IntoLua) -> Result<R>
     where
