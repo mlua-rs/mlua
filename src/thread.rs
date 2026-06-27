@@ -95,18 +95,21 @@ impl ThreadTriggers {
     }
 
     /// Returns an instance of `ThreadTriggers` with `on_create` trigger set.
+    #[must_use]
     pub const fn on_create(mut self) -> Self {
         self.on_create = true;
         self
     }
 
     /// Returns an instance of `ThreadTriggers` with `on_resume` trigger set.
+    #[must_use]
     pub const fn on_resume(mut self) -> Self {
         self.on_resume = true;
         self
     }
 
     /// Returns an instance of `ThreadTriggers` with `on_yield` trigger set.
+    #[must_use]
     pub const fn on_yield(mut self) -> Self {
         self.on_yield = true;
         self

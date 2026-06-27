@@ -100,6 +100,7 @@ impl GcIncParams {
     /// Sets the `pause` parameter.
     #[cfg(not(feature = "luau"))]
     #[cfg_attr(docsrs, doc(cfg(not(feature = "luau"))))]
+    #[must_use]
     pub fn pause(mut self, v: c_int) -> Self {
         self.pause = Some(v);
         self
@@ -108,12 +109,14 @@ impl GcIncParams {
     /// Sets the `goal` parameter.
     #[cfg(any(feature = "luau", doc))]
     #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
+    #[must_use]
     pub fn goal(mut self, v: c_int) -> Self {
         self.goal = Some(v);
         self
     }
 
     /// Sets the `step_multiplier` parameter.
+    #[must_use]
     pub fn step_multiplier(mut self, v: c_int) -> Self {
         self.step_multiplier = Some(v);
         self
@@ -122,6 +125,7 @@ impl GcIncParams {
     /// Sets the `step_size` parameter.
     #[cfg(any(feature = "lua55", feature = "lua54", feature = "luau"))]
     #[cfg_attr(docsrs, doc(cfg(any(feature = "lua55", feature = "lua54", feature = "luau"))))]
+    #[must_use]
     pub fn step_size(mut self, v: c_int) -> Self {
         self.step_size = Some(v);
         self
@@ -155,12 +159,14 @@ pub struct GcGenParams {
 #[cfg(any(feature = "lua55", feature = "lua54"))]
 impl GcGenParams {
     /// Sets the `minor_multiplier` parameter.
+    #[must_use]
     pub fn minor_multiplier(mut self, v: c_int) -> Self {
         self.minor_multiplier = Some(v);
         self
     }
 
     /// Sets the `minor_to_major` threshold.
+    #[must_use]
     pub fn minor_to_major(mut self, v: c_int) -> Self {
         self.minor_to_major = Some(v);
         self
@@ -169,6 +175,7 @@ impl GcGenParams {
     /// Sets the `major_to_minor` parameter.
     #[cfg(feature = "lua55")]
     #[cfg_attr(docsrs, doc(cfg(feature = "lua55")))]
+    #[must_use]
     pub fn major_to_minor(mut self, v: c_int) -> Self {
         self.major_to_minor = Some(v);
         self

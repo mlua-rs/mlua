@@ -309,6 +309,7 @@ impl HookTriggers {
     /// Returns an instance of `HookTriggers` with [`on_calls`] trigger set.
     ///
     /// [`on_calls`]: #structfield.on_calls
+    #[must_use]
     pub const fn on_calls(mut self) -> Self {
         self.on_calls = true;
         self
@@ -317,6 +318,7 @@ impl HookTriggers {
     /// Returns an instance of `HookTriggers` with [`on_returns`] trigger set.
     ///
     /// [`on_returns`]: #structfield.on_returns
+    #[must_use]
     pub const fn on_returns(mut self) -> Self {
         self.on_returns = true;
         self
@@ -325,6 +327,7 @@ impl HookTriggers {
     /// Returns an instance of `HookTriggers` with [`every_line`] trigger set.
     ///
     /// [`every_line`]: #structfield.every_line
+    #[must_use]
     pub const fn every_line(mut self) -> Self {
         self.every_line = true;
         self
@@ -333,6 +336,7 @@ impl HookTriggers {
     /// Returns an instance of `HookTriggers` with [`every_nth_instruction`] trigger set.
     ///
     /// [`every_nth_instruction`]: #structfield.every_nth_instruction
+    #[must_use]
     pub const fn every_nth_instruction(mut self, n: u32) -> Self {
         self.every_nth_instruction = Some(n);
         self
