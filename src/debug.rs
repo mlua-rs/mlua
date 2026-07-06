@@ -325,6 +325,41 @@ impl<'a> Debug<'a> {
         }
         upvalues
     }
+
+    /// Sets the `index`-th upvalue (1-based) of the function running at this stack level.
+    /// Returns the upvalue's name on success, `None` when `index` is out of range.
+    ///
+    /// Because upvalues are shared with every closure capturing them, the write is visible
+    /// to the running function as soon as it resumes.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if `value` cannot be pushed onto the Lua stack.
+    pub fn set_upvalue(&self, index: usize, value: Value) -> Result<Option<String>> {
+        unsafe {
+            let _sg = StackGuard::new(self.state);
+            assert_stack(self.state, 3); // function + value + slack
+
+            // Push the function running at this level.
+            #[cfg(not(feature = "luau"))]
+            mlua_assert!(
+                ffi::lua_getinfo(self.state, cstr!("f"), self.ar) != 0,
+                "lua_getinfo failed with `f`"
+            );
+            #[cfg(feature = "luau")]
+            mlua_assert!(
+                ffi::lua_getinfo(self.state, self.level, cstr!("f"), self.ar) != 0,
+                "lua_getinfo failed with `f`"
+            );
+
+            let func_idx = ffi::lua_gettop(self.state);
+            self.lua.push_value(&value)?;
+            // `lua_setupvalue` pops the value on success and leaves it on failure
+            // (out-of-range); the `StackGuard` restores the top in every case.
+            let name = ffi::lua_setupvalue(self.state, func_idx, index as c_int);
+            Ok(ptr_to_lossy_str(name).map(|s| s.into_owned()))
+        }
+    }
 }
 
 /// Represents a specific event that triggered the hook.
