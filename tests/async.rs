@@ -687,6 +687,49 @@ async fn test_async_hook() -> Result<()> {
     Ok(())
 }
 
+#[tokio::test]
+#[cfg(any(feature = "lua55", feature = "lua54", feature = "lua53"))]
+async fn test_async_hook_yield_preserves_stack() -> Result<()> {
+    use std::future::{Future, poll_fn};
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::task::Poll;
+
+    let lua = Lua::new();
+
+    let thread = lua.create_thread(
+        lua.load(
+            r#"
+            local x = 40
+            local y = 2
+            return x + y
+        "#,
+        )
+        .into_function()?,
+    )?;
+
+    let yielded = Arc::new(AtomicBool::new(false));
+    let yielded2 = yielded.clone();
+    thread.set_hook(mlua::HookTriggers::EVERY_LINE, move |lua, debug| {
+        if debug.current_line() == Some(4) && !yielded2.swap(true, Ordering::Relaxed) {
+            lua.remove_hook();
+            return Ok(mlua::VmState::Yield);
+        }
+        Ok(mlua::VmState::Continue)
+    })?;
+
+    let mut thread = Box::pin(thread.into_async::<i32>(())?);
+    poll_fn(|cx| {
+        assert!(thread.as_mut().poll(cx).is_pending());
+        Poll::Ready(())
+    })
+    .await;
+    assert!(yielded.load(Ordering::Relaxed));
+    lua.gc_collect()?;
+    assert_eq!(thread.await?, 42);
+
+    Ok(())
+}
+
 #[test]
 fn test_async_yield_with() -> Result<()> {
     let lua = Lua::new();

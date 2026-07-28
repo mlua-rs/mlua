@@ -295,6 +295,40 @@ fn test_hook_yield() -> Result<()> {
 }
 
 #[test]
+#[cfg(any(feature = "lua55", feature = "lua54", feature = "lua53"))]
+fn test_hook_yield_preserves_stack() -> Result<()> {
+    let lua = Lua::new();
+
+    let func = lua
+        .load(
+            r#"
+            local x = { value = 40 }
+            local y = 2
+            return x.value + y
+        "#,
+        )
+        .into_function()?;
+    let co = lua.create_thread(func)?;
+
+    let yielded = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let yielded2 = yielded.clone();
+    co.set_hook(HookTriggers::EVERY_LINE, move |_lua, debug| {
+        if debug.current_line() == Some(4) && !yielded2.swap(true, Ordering::Relaxed) {
+            return Ok(VmState::Yield);
+        }
+        Ok(VmState::Continue)
+    })?;
+
+    co.resume::<()>(())?;
+    assert!(yielded.load(Ordering::Relaxed));
+    co.remove_hook();
+    lua.gc_collect()?;
+    assert_eq!(co.resume::<i32>(())?, 42);
+
+    Ok(())
+}
+
+#[test]
 fn test_global_hook() -> Result<()> {
     let lua = Lua::new();
 

@@ -782,7 +782,7 @@ impl Lua {
     pub fn remove_hook(&self) {
         let lua = self.lock();
         unsafe {
-            ffi::lua_sethook(lua.state(), None, 0, 0);
+            lua.remove_thread_hook(lua.state());
         }
     }
 

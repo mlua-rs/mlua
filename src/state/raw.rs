@@ -427,6 +427,10 @@ impl RawLua {
                     if event == ffi::LUA_HOOKCOUNT || event == ffi::LUA_HOOKLINE {
                         #[cfg(any(feature = "lua55", feature = "lua54", feature = "lua53"))]
                         if ffi::lua_isyieldable(state) != 0 {
+                            if ffi::lua_gethook(state).is_none() {
+                                let extra = ExtraData::get(state);
+                                (*extra).hook_removed_while_yielded = true;
+                            }
                             ffi::lua_yield(state, 0);
                         }
                         #[cfg(any(feature = "lua52", feature = "lua51", feature = "luajit"))]
@@ -516,6 +520,41 @@ impl RawLua {
         ffi::lua_sethook(thread_state, Some(hook_proc), triggers.mask(), triggers.count());
 
         Ok(())
+    }
+
+    #[cfg(not(feature = "luau"))]
+    #[inline]
+    pub(crate) unsafe fn remove_thread_hook(&self, thread_state: *mut ffi::lua_State) {
+        #[cfg(any(feature = "lua55", feature = "lua54", feature = "lua53"))]
+        if ffi::lua_status(thread_state) == ffi::LUA_YIELD && Self::has_hook_yielded_frame(thread_state) {
+            (*self.extra.get()).hook_removed_while_yielded = true;
+        }
+        ffi::lua_sethook(thread_state, None, 0, 0);
+    }
+
+    #[cfg(any(feature = "lua55", feature = "lua54", feature = "lua53"))]
+    unsafe fn has_hook_yielded_frame(thread_state: *mut ffi::lua_State) -> bool {
+        let mut ar = mem::zeroed::<ffi::lua_Debug>();
+        ffi::lua_getstack(thread_state, 0, &mut ar) != 0
+            && ffi::lua_getinfo(thread_state, cstr!("S"), &mut ar) != 0
+            && !ar.what.is_null()
+            && CStr::from_ptr(ar.what).to_bytes() != b"C"
+    }
+
+    pub(crate) unsafe fn is_hook_yielded(&self, thread_state: *mut ffi::lua_State) -> bool {
+        #[cfg(any(feature = "lua55", feature = "lua54", feature = "lua53"))]
+        {
+            if ffi::lua_gethook(thread_state).is_none() && !(*self.extra.get()).hook_removed_while_yielded {
+                return false;
+            }
+            Self::has_hook_yielded_frame(thread_state)
+        }
+
+        #[cfg(not(any(feature = "lua55", feature = "lua54", feature = "lua53")))]
+        {
+            let _ = thread_state;
+            false
+        }
     }
 
     /// See [`Lua::create_string`]

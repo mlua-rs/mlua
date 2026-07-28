@@ -185,12 +185,6 @@ enum ThreadStatusInner {
 }
 
 impl ThreadStatusInner {
-    #[cfg(feature = "async")]
-    #[inline(always)]
-    fn is_resumable(self) -> bool {
-        matches!(self, ThreadStatusInner::New(_) | ThreadStatusInner::Yielded(_))
-    }
-
     #[inline(always)]
     fn is_yielded(self) -> bool {
         matches!(self, ThreadStatusInner::Yielded(_))
@@ -329,7 +323,7 @@ impl Thread {
     {
         let lua = self.0.lua.lock();
         check_thread_reentrancy(self.state(), &lua)?;
-        let mut pushed_nargs = self.resumable_nargs(&lua)?;
+        let (mut pushed_nargs, mut hook_yielded) = self.resumable_state(&lua)?;
 
         let state = lua.state();
         let thread_state = self.state();
@@ -341,18 +335,24 @@ impl Thread {
             if exec_thread_event(&lua, on_resume, thread_state, || {
                 ThreadEvent::Resume(self.clone())
             })? {
-                pushed_nargs = self.resumable_nargs(&lua)?;
+                (pushed_nargs, hook_yielded) = self.resumable_state(&lua)?;
             }
 
-            let nargs = args.push_into_stack_multi(&lua)?;
-            if nargs > 0 {
-                check_stack(thread_state, nargs)?;
-                ffi::lua_xmove(state, thread_state, nargs);
-                pushed_nargs += nargs;
+            if !hook_yielded {
+                let nargs = args.push_into_stack_multi(&lua)?;
+                if nargs > 0 {
+                    check_stack(thread_state, nargs)?;
+                    ffi::lua_xmove(state, thread_state, nargs);
+                    pushed_nargs += nargs;
+                }
             }
 
-            let _thread_sg = StackGuard::with_top(thread_state, 0);
+            let mut thread_sg = StackGuard::with_top(thread_state, 0);
             let (status, nresults) = self.resume_inner(&lua, pushed_nargs)?;
+            if status.is_yielded() && self.is_hook_yielded(&lua) {
+                debug_assert_eq!(nresults, 0);
+                thread_sg.keep(ffi::lua_gettop(thread_state));
+            }
 
             check_stack(state, nresults + 1)?;
             ffi::lua_xmove(thread_state, state, nresults);
@@ -478,13 +478,22 @@ impl Thread {
         }
     }
 
-    /// Returns the number of pending arguments on the thread stack if the thread is resumable.
+    /// Returns the pending argument count and whether the thread was interrupted by a hook.
     #[inline]
-    fn resumable_nargs(&self, lua: &RawLua) -> Result<c_int> {
+    fn resumable_state(&self, lua: &RawLua) -> Result<(c_int, bool)> {
         match self.status_inner(lua) {
-            ThreadStatusInner::New(nargs) | ThreadStatusInner::Yielded(nargs) => Ok(nargs),
+            ThreadStatusInner::New(nargs) => Ok((nargs, false)),
+            ThreadStatusInner::Yielded(nargs) => {
+                let hook_yielded = self.is_hook_yielded(lua);
+                Ok((if hook_yielded { 0 } else { nargs }, hook_yielded))
+            }
             _ => Err(Error::CoroutineUnresumable),
         }
+    }
+
+    /// Distinguishes a hook interruption from a normal yield.
+    fn is_hook_yielded(&self, lua: &RawLua) -> bool {
+        unsafe { lua.is_hook_yielded(self.state()) }
     }
 
     /// Returns `true` if this thread is resumable (meaning it can be resumed by calling
@@ -548,9 +557,9 @@ impl Thread {
     #[cfg(not(feature = "luau"))]
     #[cfg_attr(docsrs, doc(cfg(not(feature = "luau"))))]
     pub fn remove_hook(&self) {
-        let _lua = self.0.lua.lock();
+        let lua = self.0.lua.lock();
         unsafe {
-            ffi::lua_sethook(self.state(), None, 0, 0);
+            lua.remove_thread_hook(self.state());
         }
     }
 
@@ -681,19 +690,19 @@ impl Thread {
     {
         let lua = self.0.lua.lock();
         check_thread_reentrancy(self.state(), &lua)?;
-        if !self.status_inner(&lua).is_resumable() {
-            return Err(Error::CoroutineUnresumable);
-        }
+        let (_, hook_yielded) = self.resumable_state(&lua)?;
 
         let state = lua.state();
         let thread_state = self.state();
         unsafe {
             let _sg = StackGuard::new(state);
 
-            let nargs = args.push_into_stack_multi(&lua)?;
-            if nargs > 0 {
-                check_stack(thread_state, nargs)?;
-                ffi::lua_xmove(state, thread_state, nargs);
+            if !hook_yielded {
+                let nargs = args.push_into_stack_multi(&lua)?;
+                if nargs > 0 {
+                    check_stack(thread_state, nargs)?;
+                    ffi::lua_xmove(state, thread_state, nargs);
+                }
             }
 
             Ok(AsyncThread {
@@ -794,7 +803,7 @@ impl<R> Drop for AsyncThread<R> {
         {
             unsafe {
                 let mut status = self.thread.status_inner(&lua);
-                if matches!(status, ThreadStatusInner::Yielded(0)) {
+                if matches!(status, ThreadStatusInner::Yielded(0)) && !self.thread.is_hook_yielded(&lua) {
                     // The thread is dropped while yielded, resume it with the "terminate" signal
                     ffi::lua_pushlightuserdata(self.thread.1, crate::Lua::poll_terminate().0);
                     if let Ok((new_status, _)) = self.thread.resume_inner(&lua, 1) {
@@ -820,8 +829,8 @@ impl<R: FromLuaMulti> Stream for AsyncThread<R> {
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let lua = self.thread.0.lua.lock();
         check_thread_reentrancy(self.thread.state(), &lua)?;
-        let mut nargs = match self.thread.resumable_nargs(&lua) {
-            Ok(nargs) => nargs,
+        let mut nargs = match self.thread.resumable_state(&lua) {
+            Ok((nargs, _)) => nargs,
             Err(_) => return Poll::Ready(None),
         };
 
@@ -829,7 +838,7 @@ impl<R: FromLuaMulti> Stream for AsyncThread<R> {
         let thread_state = self.thread.state();
         unsafe {
             let _sg = StackGuard::new(state);
-            let _thread_sg = StackGuard::with_top(thread_state, 0);
+            let mut thread_sg = StackGuard::with_top(thread_state, 0);
             let _wg = WakerGuard::new(&lua, cx.waker());
 
             // If the resume callback runs, it may touch this thread, so re-read the argument count
@@ -837,15 +846,20 @@ impl<R: FromLuaMulti> Stream for AsyncThread<R> {
             if exec_thread_event(&lua, on_resume, thread_state, || {
                 ThreadEvent::Resume(self.thread.clone())
             })? {
-                nargs = match self.thread.resumable_nargs(&lua) {
-                    Ok(nargs) => nargs,
+                nargs = match self.thread.resumable_state(&lua) {
+                    Ok((nargs, _)) => nargs,
                     Err(_) => return Poll::Ready(None),
                 };
             }
 
             let (status, nresults) = (self.thread).resume_inner(&lua, nargs)?;
+            let hook_yielded = status.is_yielded() && self.thread.is_hook_yielded(&lua);
+            if hook_yielded {
+                debug_assert_eq!(nresults, 0);
+                thread_sg.keep(ffi::lua_gettop(thread_state));
+            }
 
-            if status.is_yielded() && nresults == 1 && is_poll_pending(thread_state) {
+            if status.is_yielded() && !hook_yielded && nresults == 1 && is_poll_pending(thread_state) {
                 // Exec thread yield callback
                 let on_yield = lua.thread_event_triggers().on_yield;
                 exec_thread_event(&lua, on_yield, thread_state, || {
@@ -878,13 +892,13 @@ impl<R: FromLuaMulti> Future for AsyncThread<R> {
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let lua = self.thread.0.lua.lock();
         check_thread_reentrancy(self.thread.state(), &lua)?;
-        let mut nargs = self.thread.resumable_nargs(&lua)?;
+        let (mut nargs, _) = self.thread.resumable_state(&lua)?;
 
         let state = lua.state();
         let thread_state = self.thread.state();
         unsafe {
             let _sg = StackGuard::new(state);
-            let _thread_sg = StackGuard::with_top(thread_state, 0);
+            let mut thread_sg = StackGuard::with_top(thread_state, 0);
             let _wg = WakerGuard::new(&lua, cx.waker());
 
             // If the resume callback runs, it may touch this thread, so re-read the argument count
@@ -892,13 +906,18 @@ impl<R: FromLuaMulti> Future for AsyncThread<R> {
             if exec_thread_event(&lua, on_resume, thread_state, || {
                 ThreadEvent::Resume(self.thread.clone())
             })? {
-                nargs = self.thread.resumable_nargs(&lua)?;
+                (nargs, _) = self.thread.resumable_state(&lua)?;
             }
 
             let (status, nresults) = self.thread.resume_inner(&lua, nargs)?;
+            let hook_yielded = status.is_yielded() && self.thread.is_hook_yielded(&lua);
+            if hook_yielded {
+                debug_assert_eq!(nresults, 0);
+                thread_sg.keep(ffi::lua_gettop(thread_state));
+            }
 
             if status.is_yielded() {
-                let pending = nresults == 1 && is_poll_pending(thread_state);
+                let pending = !hook_yielded && nresults == 1 && is_poll_pending(thread_state);
 
                 // Exec thread yield callback
                 let on_yield = lua.thread_event_triggers().on_yield;
