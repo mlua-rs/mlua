@@ -33,6 +33,9 @@ pub(crate) use cell::UserDataStorage;
 pub use r#ref::{UserDataOwned, UserDataRef, UserDataRefMut};
 pub use registry::UserDataRegistry;
 pub(crate) use registry::{RawUserDataRegistry, UserDataProxy};
+#[cfg(feature = "macros")]
+#[doc(hidden)]
+pub use registry::{UserDataRegistrar, UserDataRegistration};
 pub(crate) use util::{
     TypeIdHints, borrow_userdata_scoped, borrow_userdata_scoped_mut, collect_userdata,
     init_userdata_metatable,

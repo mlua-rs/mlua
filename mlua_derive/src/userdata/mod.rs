@@ -131,17 +131,17 @@ pub fn userdata_type(item: TokenStream) -> TokenStream {
         }
     }
 
-    let registration_type_name = format_ident!("__MluaUserDataRegistration_{type_name}");
     let register_fields_fn_name = format_ident!("__mlua_register_{type_name}_fields");
 
     let output = quote! {
-        #[doc(hidden)]
-        #[allow(non_camel_case_types)]
-        struct #registration_type_name {
-            register: fn(&mut ::mlua::userdata::UserDataRegistry<#type_name>),
+        // Registrations are collected through the type itself, so that `#[mlua::userdata_impl]`
+        // can submit them from any module.
+        impl ::mlua::userdata::UserDataRegistrar for #type_name {
+            fn inventory_registry() -> &'static ::mlua::__inventory::Registry {
+                static REGISTRY: ::mlua::__inventory::Registry = ::mlua::__inventory::Registry::new();
+                &REGISTRY
+            }
         }
-
-        ::mlua::__inventory::collect!(#registration_type_name);
 
         #[allow(non_snake_case)]
         fn #register_fields_fn_name(registry: &mut ::mlua::userdata::UserDataRegistry<#type_name>) {
@@ -150,12 +150,12 @@ pub fn userdata_type(item: TokenStream) -> TokenStream {
         }
 
         ::mlua::__inventory::submit! {
-            #registration_type_name { register: #register_fields_fn_name }
+            ::mlua::userdata::UserDataRegistration::<#type_name> { register: #register_fields_fn_name }
         }
 
         impl ::mlua::userdata::UserData for #type_name {
             fn register(registry: &mut ::mlua::userdata::UserDataRegistry<Self>) {
-                for item in ::mlua::__inventory::iter::<#registration_type_name> {
+                for item in ::mlua::__inventory::iter::<::mlua::userdata::UserDataRegistration<#type_name>> {
                     (item.register)(registry);
                 }
             }

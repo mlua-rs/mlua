@@ -569,6 +569,53 @@ fn test_wildcard_params() {
     .unwrap();
 }
 
+// The type definition and its Lua bindings can live in different modules.
+mod counter_type {
+    use mlua::UserData;
+
+    #[derive(Clone, Debug, UserData)]
+    pub struct Counter {
+        pub count: u32,
+    }
+}
+
+mod counter_bindings {
+    use mlua::Result;
+
+    use super::counter_type::Counter;
+
+    #[mlua::userdata_impl]
+    impl Counter {
+        #[lua(infallible)]
+        fn new() -> Counter {
+            Counter { count: 0 }
+        }
+
+        fn increment(&mut self) -> Result<u32> {
+            self.count += 1;
+            Ok(self.count)
+        }
+    }
+}
+
+#[test]
+fn test_impl_in_other_module() {
+    let lua = Lua::new();
+    lua.globals()
+        .set("Counter", lua.create_proxy::<counter_type::Counter>().unwrap())
+        .unwrap();
+    lua.load(
+        r#"
+        local c = Counter.new()
+        assert(c:increment() == 1, "increment should return 1")
+        assert(c:increment() == 2, "increment should return 2")
+        assert(c.count == 2, "field registered by the derive should be visible too")
+    "#,
+    )
+    .exec()
+    .unwrap();
+}
+
 #[cfg(feature = "async")]
 mod async_tests {
     use mlua::{Lua, Result, UserData};

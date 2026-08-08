@@ -57,6 +57,9 @@ Use `#[mlua::userdata_impl]` on an `impl` block to register methods,
 metamethods, and constants. All items in the block are registered automatically,
 regardless of visibility.
 
+Multiple `impl` blocks are supported and they do not need to live in the same
+module as the type definition.
+
 ## Method detection
 
 The receiver type determines how a method is registered:

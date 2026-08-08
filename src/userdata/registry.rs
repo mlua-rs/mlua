@@ -677,6 +677,40 @@ lua_userdata_impl!(std::sync::Arc<parking_lot::Mutex<T>>);
 #[cfg(feature = "userdata-wrappers")]
 lua_userdata_impl!(std::sync::Arc<parking_lot::RwLock<T>>);
 
+/// A single registration function collected by the `mlua` derive macros.
+///
+/// This is not part of the public API.
+#[cfg(feature = "macros")]
+#[doc(hidden)]
+pub struct UserDataRegistration<T> {
+    pub register: fn(&mut UserDataRegistry<T>),
+}
+
+/// Links a userdata type to the inventory registry holding its registrations.
+///
+/// Implemented by `#[derive(UserData)]`, which is what allows `#[mlua::userdata_impl]` to submit
+/// registrations through the type itself rather than through a name that is only reachable from the
+/// module where the type is defined.
+///
+/// This is not part of the public API.
+#[cfg(feature = "macros")]
+#[doc(hidden)]
+#[diagnostic::on_unimplemented(
+    message = "`{Self}` is missing `#[derive(UserData)]`",
+    note = "`#[mlua::userdata_impl]` requires the type to derive `UserData`"
+)]
+pub trait UserDataRegistrar: Sized + 'static {
+    fn inventory_registry() -> &'static inventory::Registry;
+}
+
+#[cfg(feature = "macros")]
+impl<T: UserDataRegistrar> inventory::Collect for UserDataRegistration<T> {
+    #[inline]
+    fn registry() -> &'static inventory::Registry {
+        T::inventory_registry()
+    }
+}
+
 #[cfg(test)]
 mod assertions {
     #[cfg(feature = "send")]
