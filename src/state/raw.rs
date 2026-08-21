@@ -401,11 +401,10 @@ impl RawLua {
             },
         );
         #[cfg(feature = "luau-jit")]
-        if status == ffi::LUA_OK {
-            if (*self.extra.get()).enable_jit && ffi::luau_codegen_supported() != 0 {
+        if status == ffi::LUA_OK
+            && (*self.extra.get()).enable_jit && ffi::luau_codegen_supported() != 0 {
                 ffi::luau_codegen_compile(state, -1);
             }
-        }
         status
     }
 

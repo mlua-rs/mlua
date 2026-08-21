@@ -213,7 +213,7 @@ fn test_function_info() -> Result<()> {
         let func_with_upvalues_info = func_with_upvalues.info();
         assert_eq!(func_with_upvalues_info.num_upvalues, 2);
         assert_eq!(func_with_upvalues_info.num_params, 1);
-        assert_eq!(func_with_upvalues_info.is_vararg, true);
+        assert!(func_with_upvalues_info.is_vararg);
     }
 
     Ok(())
@@ -227,7 +227,7 @@ fn test_function_dump() -> Result<()> {
     let concat_lua = lua
         .load(r#"function(arg1, arg2) return arg1 .. arg2 end"#)
         .eval::<Function>()?;
-    let concat = lua.load(&concat_lua.dump(false)).into_function()?;
+    let concat = lua.load(concat_lua.dump(false)).into_function()?;
 
     assert_eq!(concat.call::<String>(("foo", "bar"))?, "foobar");
 
@@ -417,7 +417,7 @@ fn test_function_wrap() -> Result<()> {
     // Check recursive mut callback error
     let fmut = Function::wrap_mut(|f: Function| match f.call::<()>(&f) {
         Err(Error::CallbackError { cause, .. }) => match cause.as_ref() {
-            Error::RecursiveMutCallback { .. } => Ok::<_, Error>(()),
+            Error::RecursiveMutCallback => Ok::<_, Error>(()),
             other => panic!("incorrect result: {other:?}"),
         },
         other => panic!("incorrect result: {other:?}"),

@@ -33,7 +33,7 @@ fn test_error_context() -> Result<()> {
 
     // Rewrite context message and test `downcast_ref`
     let func3 = lua.create_function(|_, ()| {
-        Err::<(), _>(Error::external(io::Error::new(io::ErrorKind::Other, "other")))
+        Err::<(), _>(Error::external(io::Error::other("other")))
             .context("some context")
             .context("some new context")
     })?;
@@ -52,11 +52,11 @@ fn test_error_chain() -> Result<()> {
     let lua = Lua::new();
 
     // Check that `Error::ExternalError` creates a chain with a single element
-    let io_err = io::Error::new(io::ErrorKind::Other, "other");
+    let io_err = io::Error::other("other");
     assert_eq!(Error::external(io_err).chain().count(), 1);
 
     let func = lua.create_function(|_, ()| {
-        let err = Error::external(io::Error::new(io::ErrorKind::Other, "other")).context("io error");
+        let err = Error::external(io::Error::other("other")).context("io error");
         Err::<(), _>(err)
     })?;
     let err = func.call::<()>(()).unwrap_err();

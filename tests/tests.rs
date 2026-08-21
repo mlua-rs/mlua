@@ -134,7 +134,7 @@ fn test_eval() -> Result<()> {
     let lua = Lua::new();
 
     assert_eq!(lua.load("\t1 + 1").eval::<i32>()?, 2);
-    assert_eq!(lua.load("false == false").eval::<bool>()?, true);
+    assert!(lua.load("false == false").eval::<bool>()?);
     assert_eq!(lua.load("\nreturn 1 + 2").eval::<i32>()?, 3);
     match lua.load("if true then").eval::<()>() {
         Err(Error::SyntaxError {
@@ -437,7 +437,7 @@ fn test_panic() -> Result<()> {
     // Test returning Rust panic (must be resumed)
     {
         let lua = make_lua(LuaOptions::default())?;
-        match catch_unwind(AssertUnwindSafe(|| -> Result<()> {
+        if let Ok(_) = catch_unwind(AssertUnwindSafe(|| -> Result<()> {
             let _caught_panic = lua
                 .load(
                     r#"
@@ -448,10 +448,7 @@ fn test_panic() -> Result<()> {
                 )
                 .eval::<Value>()?;
             Ok(())
-        })) {
-            Ok(_) => panic!("no panic was detected"),
-            Err(_) => {}
-        };
+        })) { panic!("no panic was detected") };
 
         assert!(lua.globals().get::<Value>("err")? == Value::Nil);
         match lua.load("tostring(err)").exec() {
@@ -671,10 +668,10 @@ fn test_pcall_xpcall() -> Result<()> {
     )
     .exec()?;
 
-    assert_eq!(globals.get::<bool>("pcall_status")?, false);
+    assert!(!globals.get::<bool>("pcall_status")?);
     assert_eq!(globals.get::<String>("pcall_error")?, "testerror");
 
-    assert_eq!(globals.get::<bool>("xpcall_statusr")?, false);
+    assert!(!globals.get::<bool>("xpcall_statusr")?);
     #[cfg(any(
         feature = "lua55",
         feature = "lua54",
@@ -728,7 +725,7 @@ fn test_recursive_mut_callback_error() -> Result<()> {
     match lua.globals().get::<Function>("f")?.call::<()>(false) {
         Err(Error::CallbackError { ref cause, .. }) => match *cause.as_ref() {
             Error::CallbackError { ref cause, .. } => match *cause.as_ref() {
-                Error::RecursiveMutCallback { .. } => {}
+                Error::RecursiveMutCallback => {}
                 ref other => panic!("incorrect result: {:?}", other),
             },
             ref other => panic!("incorrect result: {:?}", other),
@@ -920,14 +917,8 @@ fn test_application_data() -> Result<()> {
 
     // Insert of new data or removal should fail now
     assert!(lua.try_set_app_data::<i32>(123).is_err());
-    match catch_unwind(AssertUnwindSafe(|| lua.set_app_data::<i32>(123))) {
-        Ok(_) => panic!("expected panic"),
-        Err(_) => {}
-    }
-    match catch_unwind(AssertUnwindSafe(|| lua.remove_app_data::<i32>())) {
-        Ok(_) => panic!("expected panic"),
-        Err(_) => {}
-    }
+    if catch_unwind(AssertUnwindSafe(|| lua.set_app_data::<i32>(123))).is_ok() { panic!("expected panic") }
+    if catch_unwind(AssertUnwindSafe(|| lua.remove_app_data::<i32>())).is_ok() { panic!("expected panic") }
 
     // Check display and debug impls
     assert_eq!(format!("{s}"), "test1");
@@ -935,10 +926,7 @@ fn test_application_data() -> Result<()> {
 
     // Borrowing immutably and mutably of the same type is not allowed
     assert!(lua.try_app_data_mut::<&str>().is_err());
-    match catch_unwind(AssertUnwindSafe(|| lua.app_data_mut::<&str>().unwrap())) {
-        Ok(_) => panic!("expected panic"),
-        Err(_) => {}
-    }
+    if let Ok(_) = catch_unwind(AssertUnwindSafe(|| lua.app_data_mut::<&str>().unwrap())) { panic!("expected panic") }
     assert!(lua.try_app_data_ref::<Vec<&str>>().is_err());
     drop((s, v));
 
@@ -959,7 +947,7 @@ fn test_application_data() -> Result<()> {
     assert_eq!(*lua.app_data_ref::<Vec<&str>>().unwrap(), vec!["test2", "test3"]);
 
     lua.remove_app_data::<Vec<&str>>();
-    assert!(matches!(lua.app_data_ref::<Vec<&str>>(), None));
+    assert!(lua.app_data_ref::<Vec<&str>>().is_none());
 
     Ok(())
 }
@@ -1004,7 +992,7 @@ fn test_c_function() -> Result<()> {
 
     let func = unsafe { lua.create_c_function(c_function)? };
     func.call::<()>(())?;
-    assert_eq!(lua.globals().get::<bool>("c_function")?, true);
+    assert!(lua.globals().get::<bool>("c_function")?);
 
     Ok(())
 }

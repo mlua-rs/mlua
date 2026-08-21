@@ -86,7 +86,7 @@ fn test_multivalue_by_ref() -> Result<()> {
     let f = lua.create_function(|_, (i, s, b): (i32, LuaString, bool)| {
         assert_eq!(i, 3);
         assert_eq!(s.to_str()?, "hello");
-        assert_eq!(b, true);
+        assert!(b);
         Ok(())
     })?;
     f.call::<()>(&multi)?;

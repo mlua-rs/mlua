@@ -76,11 +76,11 @@ fn test_value_eq() -> Result<()> {
 fn test_multi_value() {
     let mut multi_value = MultiValue::new();
     assert_eq!(multi_value.len(), 0);
-    assert_eq!(multi_value.get(0), None);
+    assert_eq!(multi_value.front(), None);
 
     multi_value.push_front(Value::Number(2.));
     multi_value.push_front(Value::Number(1.));
-    assert_eq!(multi_value.get(0), Some(&Value::Number(1.)));
+    assert_eq!(multi_value.front(), Some(&Value::Number(1.)));
     assert_eq!(multi_value.get(1), Some(&Value::Number(2.)));
 
     assert_eq!(multi_value.pop_front(), Some(Value::Number(1.)));
@@ -137,7 +137,7 @@ fn test_value_to_string() -> Result<()> {
     assert_eq!(Value::NULL.to_string()?, "null");
     assert_eq!(Value::NULL.type_name(), "lightuserdata");
     assert_eq!(
-        Value::LightUserData(LightUserData(0x1 as *const c_void as *mut _)).to_string()?,
+        Value::LightUserData(LightUserData(std::ptr::dangling::<c_void>() as *mut _)).to_string()?,
         "lightuserdata: 0x1"
     );
     assert_eq!(Value::Integer(1).to_string()?, "1");

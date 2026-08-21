@@ -313,7 +313,7 @@ fn test_bool_into_lua() -> Result<()> {
     // Push into stack
     let table = lua.create_table()?;
     table.set("b", true)?;
-    assert_eq!(true, table.get::<bool>("b")?);
+    assert!(table.get::<bool>("b")?);
 
     Ok(())
 }

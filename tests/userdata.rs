@@ -151,9 +151,9 @@ fn test_metamethods() -> Result<()> {
                     if i <= data.0 {
                         return Ok(mlua::Variadic::from_iter(vec![i, i]));
                     }
-                    return Ok(mlua::Variadic::new());
+                    Ok(mlua::Variadic::new())
                 })?;
-                Ok((stateless_iter, data.clone(), 0))
+                Ok((stateless_iter, *data, 0))
             });
         }
     }
