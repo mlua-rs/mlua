@@ -109,13 +109,19 @@ fn test_serialize_failure() -> Result<(), Box<dyn StdError>> {
     let lua = Lua::new();
 
     let ud = Value::UserData(lua.create_userdata(MyUserData(123))?);
-    if let Ok(v) = serde_json::to_value(&ud) { panic!("expected serialization error, got {}", v) }
+    if let Ok(v) = serde_json::to_value(&ud) {
+        panic!("expected serialization error, got {}", v)
+    }
 
     let func = lua.create_function(|_, _: ()| Ok(()))?;
-    if let Ok(v) = serde_json::to_value(Value::Function(func.clone())) { panic!("expected serialization error, got {}", v) }
+    if let Ok(v) = serde_json::to_value(Value::Function(func.clone())) {
+        panic!("expected serialization error, got {}", v)
+    }
 
     let thr = lua.create_thread(func)?;
-    if let Ok(v) = serde_json::to_value(Value::Thread(thr)) { panic!("expected serialization error, got {}", v) }
+    if let Ok(v) = serde_json::to_value(Value::Thread(thr)) {
+        panic!("expected serialization error, got {}", v)
+    }
 
     Ok(())
 }

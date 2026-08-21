@@ -448,7 +448,9 @@ fn test_panic() -> Result<()> {
                 )
                 .eval::<Value>()?;
             Ok(())
-        })) { panic!("no panic was detected") };
+        })) {
+            panic!("no panic was detected")
+        };
 
         assert!(lua.globals().get::<Value>("err")? == Value::Nil);
         match lua.load("tostring(err)").exec() {
@@ -917,8 +919,12 @@ fn test_application_data() -> Result<()> {
 
     // Insert of new data or removal should fail now
     assert!(lua.try_set_app_data::<i32>(123).is_err());
-    if catch_unwind(AssertUnwindSafe(|| lua.set_app_data::<i32>(123))).is_ok() { panic!("expected panic") }
-    if catch_unwind(AssertUnwindSafe(|| lua.remove_app_data::<i32>())).is_ok() { panic!("expected panic") }
+    if catch_unwind(AssertUnwindSafe(|| lua.set_app_data::<i32>(123))).is_ok() {
+        panic!("expected panic")
+    }
+    if catch_unwind(AssertUnwindSafe(|| lua.remove_app_data::<i32>())).is_ok() {
+        panic!("expected panic")
+    }
 
     // Check display and debug impls
     assert_eq!(format!("{s}"), "test1");
@@ -926,7 +932,9 @@ fn test_application_data() -> Result<()> {
 
     // Borrowing immutably and mutably of the same type is not allowed
     assert!(lua.try_app_data_mut::<&str>().is_err());
-    if let Ok(_) = catch_unwind(AssertUnwindSafe(|| lua.app_data_mut::<&str>().unwrap())) { panic!("expected panic") }
+    if let Ok(_) = catch_unwind(AssertUnwindSafe(|| lua.app_data_mut::<&str>().unwrap())) {
+        panic!("expected panic")
+    }
     assert!(lua.try_app_data_ref::<Vec<&str>>().is_err());
     drop((s, v));
 
