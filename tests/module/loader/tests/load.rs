@@ -41,6 +41,30 @@ fn test_module_error() -> Result<()> {
     .exec()
 }
 
+#[cfg(any(feature = "lua51", feature = "luajit"))]
+#[test]
+fn test_module_protected_call_setup() -> Result<()> {
+    let lua = make_lua()?;
+    lua.load("test_protected_call_setup = require('test_module').test_protected_call_setup")
+        .exec()?;
+
+    lua.set_memory_limit(1)?;
+
+    let state = lua.state();
+    let check_passed = unsafe {
+        mlua::ffi::lua_getglobal(state, c"test_protected_call_setup".as_ptr());
+        mlua::ffi::lua_call(state, 0, 1);
+        let ok = mlua::ffi::lua_toboolean(state, -1) != 0;
+        mlua::ffi::lua_pop(state, 1);
+        ok
+    };
+    lua.set_memory_limit(0)?;
+
+    assert!(check_passed);
+
+    Ok(())
+}
+
 #[cfg(any(
     feature = "lua55",
     feature = "lua54",

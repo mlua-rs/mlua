@@ -149,6 +149,67 @@ pub(crate) unsafe fn pop_error(state: *mut ffi::lua_State, err_code: c_int) -> E
     }
 }
 
+// Create C closures under `lua_cpcall` so an allocation failure doesn't escape
+#[cfg(any(feature = "lua51", feature = "luajit"))]
+unsafe fn push_protected_cfunctions(state: *mut ffi::lua_State, f: ffi::lua_CFunction) -> Result<()> {
+    if !MemoryState::get(state).is_null() {
+        MemoryState::relax_limit_with(state, || {
+            ffi::lua_pushcfunction(state, error_traceback);
+            ffi::lua_pushcfunction(state, f);
+        });
+        return Ok(());
+    }
+
+    static ERROR_TRACEBACK_KEY: u8 = 0;
+    static FUNCTION_KEY: u8 = 0;
+
+    unsafe extern "C-unwind" fn do_push(state: *mut ffi::lua_State) -> c_int {
+        let f = ffi::lua_tolightuserdata(state, -1) as *const ffi::lua_CFunction;
+        ffi::lua_pop(state, 1);
+
+        ffi::lua_pushcfunction(state, error_traceback);
+        ffi::lua_rawsetp(
+            state,
+            ffi::LUA_REGISTRYINDEX,
+            &ERROR_TRACEBACK_KEY as *const u8 as *const c_void,
+        );
+        ffi::lua_pushcfunction(state, *f);
+        ffi::lua_rawsetp(
+            state,
+            ffi::LUA_REGISTRYINDEX,
+            &FUNCTION_KEY as *const u8 as *const c_void,
+        );
+        0
+    }
+
+    let ret = ffi::lua_cpcall(state, do_push, &f as *const ffi::lua_CFunction as *mut c_void);
+    if ret != ffi::LUA_OK {
+        return Err(pop_error(state, ret));
+    }
+
+    ffi::lua_rawgetp(
+        state,
+        ffi::LUA_REGISTRYINDEX,
+        &ERROR_TRACEBACK_KEY as *const u8 as *const c_void,
+    );
+    ffi::lua_rawgetp(
+        state,
+        ffi::LUA_REGISTRYINDEX,
+        &FUNCTION_KEY as *const u8 as *const c_void,
+    );
+    Ok(())
+}
+
+#[cfg(not(any(feature = "lua51", feature = "luajit")))]
+#[inline]
+unsafe fn push_protected_cfunctions(state: *mut ffi::lua_State, f: ffi::lua_CFunction) -> Result<()> {
+    MemoryState::relax_limit_with(state, || {
+        ffi::lua_pushcfunction(state, error_traceback);
+        ffi::lua_pushcfunction(state, f);
+    });
+    Ok(())
+}
+
 // Call a function that calls into the Lua API and may trigger a Lua error (longjmp) in a safe way.
 // Wraps the inner function in a call to `lua_pcall`, so the inner function only has access to a
 // limited lua stack. `nargs` is the same as the the parameter to `lua_pcall`, and `nresults` is
@@ -162,10 +223,7 @@ pub(crate) unsafe fn protect_lua_call(
 ) -> Result<()> {
     let stack_start = ffi::lua_gettop(state) - nargs;
 
-    MemoryState::relax_limit_with(state, || {
-        ffi::lua_pushcfunction(state, error_traceback);
-        ffi::lua_pushcfunction(state, f);
-    });
+    push_protected_cfunctions(state, f)?;
     if nargs > 0 {
         ffi::lua_rotate(state, stack_start + 1, 2);
     }
@@ -223,10 +281,7 @@ where
 
     let stack_start = ffi::lua_gettop(state) - nargs;
 
-    MemoryState::relax_limit_with(state, || {
-        ffi::lua_pushcfunction(state, error_traceback);
-        ffi::lua_pushcfunction(state, do_call::<F, R>);
-    });
+    push_protected_cfunctions(state, do_call::<F, R>)?;
     if nargs > 0 {
         ffi::lua_rotate(state, stack_start + 1, 2);
     }

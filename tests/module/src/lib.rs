@@ -12,12 +12,23 @@ fn check_userdata(_: &Lua, ud: LuaAnyUserData) -> LuaResult<i32> {
     Ok(ud.borrow::<MyUserData>()?.0)
 }
 
+#[cfg(any(feature = "lua51", feature = "luajit"))]
+fn test_protected_call_setup(lua: &Lua, _: ()) -> LuaResult<bool> {
+    let res = lua.create_function(|_, ()| Ok(()));
+    Ok(matches!(res, Err(LuaError::MemoryError(_))))
+}
+
 #[mlua::lua_module]
 fn test_module(lua: &Lua) -> LuaResult<LuaTable> {
     let exports = lua.create_table()?;
     exports.set("sum", lua.create_function(sum)?)?;
     exports.set("used_memory", lua.create_function(used_memory)?)?;
     exports.set("check_userdata", lua.create_function(check_userdata)?)?;
+    #[cfg(any(feature = "lua51", feature = "luajit"))]
+    exports.set(
+        "test_protected_call_setup",
+        lua.create_function(test_protected_call_setup)?,
+    )?;
     Ok(exports)
 }
 

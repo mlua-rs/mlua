@@ -316,7 +316,7 @@ impl Clone for Lua {
 
 impl fmt::Debug for Lua {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Lua({:p})", self.lock().state())
+        write!(f, "Lua({:p})", self.state())
     }
 }
 
@@ -2398,6 +2398,12 @@ impl Lua {
             },
         })
         .await
+    }
+
+    /// Returns a pointer to the underlying Lua state.
+    #[doc(hidden)]
+    pub fn state(&self) -> *mut ffi::lua_State {
+        self.lock().state()
     }
 
     /// Returns a weak reference to the Lua instance.
