@@ -569,6 +569,36 @@ fn test_wildcard_params() {
     .unwrap();
 }
 
+mod separate_definition {
+    use mlua::UserData;
+
+    #[derive(UserData)]
+    pub(super) struct SeparateModuleUserData;
+}
+
+mod separate_implementation {
+    use super::separate_definition::SeparateModuleUserData;
+
+    #[mlua::userdata_impl]
+    impl SeparateModuleUserData {
+        #[lua(infallible)]
+        fn answer(&self) -> i32 {
+            42
+        }
+    }
+}
+
+#[test]
+fn test_userdata_impl_in_separate_module() {
+    let lua = Lua::new();
+    let userdata = lua
+        .create_userdata(separate_definition::SeparateModuleUserData)
+        .unwrap();
+    lua.globals().set("userdata", userdata).unwrap();
+
+    assert_eq!(lua.load("return userdata:answer()").eval::<i32>().unwrap(), 42);
+}
+
 #[cfg(feature = "async")]
 mod async_tests {
     use mlua::{Lua, Result, UserData};

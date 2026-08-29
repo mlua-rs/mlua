@@ -323,7 +323,7 @@ pub fn userdata_impl(attr: TokenStream, item: TokenStream) -> TokenStream {
     static COUNTER: AtomicUsize = AtomicUsize::new(0);
     let unique_suffix = COUNTER.fetch_add(1, Ordering::Relaxed);
     let register_fn_name = format_ident!("__mlua_register_{type_name}_{unique_suffix}");
-    let registration_type_name = format_ident!("__MluaUserDataRegistration_{type_name}");
+    let registration_fn_name = format_ident!("__mlua_userdata_registration");
 
     let mut registration_calls = Vec::new();
     for item in &input.items {
@@ -522,7 +522,7 @@ pub fn userdata_impl(attr: TokenStream, item: TokenStream) -> TokenStream {
         }
 
         ::mlua::__inventory::submit! {
-            #registration_type_name { register: #register_fn_name }
+            #type_path::#registration_fn_name(#register_fn_name)
         }
 
         #input
