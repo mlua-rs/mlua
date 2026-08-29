@@ -259,6 +259,8 @@ unsafe extern "C-unwind" {
     pub fn lua_call(L: *mut lua_State, nargs: c_int, nresults: c_int);
     pub fn lua_pcall(L: *mut lua_State, nargs: c_int, nresults: c_int, errfunc: c_int) -> c_int;
     pub fn lua_cpcall(L: *mut lua_State, f: lua_CFunction, ud: *mut c_void) -> c_int;
+    pub fn lua_callyieldable(L: *mut lua_State, nargs: c_int, nresults: c_int) -> c_int;
+    pub fn lua_pcallyieldable(L: *mut lua_State, nargs: c_int, nresults: c_int, errfunc: c_int) -> c_int;
 
     //
     // Coroutine functions
@@ -293,9 +295,13 @@ pub const LUA_GCSTEP: c_int = 6;
 pub const LUA_GCSETGOAL: c_int = 7;
 pub const LUA_GCSETSTEPMUL: c_int = 8;
 pub const LUA_GCSETSTEPSIZE: c_int = 9;
+pub const LUA_GCISPAUSED: c_int = 10;
+
+pub type lua_CategoryName = unsafe extern "C" fn(L: *mut lua_State, memcat: u8) -> *const c_char;
 
 unsafe extern "C-unwind" {
     pub fn lua_gc(L: *mut lua_State, what: c_int, data: c_int) -> c_int;
+    pub fn lua_memorydump(L: *mut lua_State, file: *mut c_void, category_name: Option<lua_CategoryName>);
 }
 
 //
@@ -304,6 +310,7 @@ unsafe extern "C-unwind" {
 unsafe extern "C-unwind" {
     pub fn lua_setmemcat(L: *mut lua_State, category: c_int);
     pub fn lua_totalbytes(L: *mut lua_State, category: c_int) -> usize;
+    pub fn lua_allocationrate(L: *mut lua_State) -> i64;
 }
 
 //
@@ -314,20 +321,32 @@ unsafe extern "C-unwind" {
     pub fn lua_next(L: *mut lua_State, idx: c_int) -> c_int;
     pub fn lua_rawiter(L: *mut lua_State, idx: c_int, iter: c_int) -> c_int;
     pub fn lua_concat(L: *mut lua_State, n: c_int);
+    pub fn lua_setpointerencodekey(L: *mut lua_State, a: u64, b: u64, c: u64, d: u64);
     pub fn lua_encodepointer(L: *mut lua_State, p: usize) -> usize;
     pub fn lua_clock() -> c_double;
     pub fn lua_setuserdatatag(L: *mut lua_State, idx: c_int, tag: c_int);
     pub fn lua_setuserdatadtor(L: *mut lua_State, tag: c_int, dtor: Option<lua_Destructor>);
     pub fn lua_getuserdatadtor(L: *mut lua_State, tag: c_int) -> Option<lua_Destructor>;
+    pub fn lua_setuserdatamark(L: *mut lua_State, tag: c_int, markfn: Option<lua_UserdataMark>);
+    pub fn lua_setembeddergc(L: *mut lua_State, gcfn: Option<lua_EmbedderGc>);
+    pub fn lua_weakref(L: *mut lua_State, idx: c_int) -> c_int;
+    pub fn lua_weakunref(L: *mut lua_State, r#ref: c_int) -> c_int;
+    pub fn lua_getweakref(L: *mut lua_State, r#ref: c_int) -> c_int;
     pub fn lua_setuserdatametatable(L: *mut lua_State, tag: c_int);
     pub fn lua_getuserdatametatable(L: *mut lua_State, tag: c_int);
+    pub fn lua_getuserdataname(L: *mut lua_State, tag: c_int) -> *const c_char;
     pub fn lua_setlightuserdataname(L: *mut lua_State, tag: c_int, name: *const c_char);
     pub fn lua_getlightuserdataname(L: *mut lua_State, tag: c_int) -> *const c_char;
     pub fn lua_clonefunction(L: *mut lua_State, idx: c_int);
+    pub fn lua_usesexport(L: *mut lua_State, idx: c_int) -> c_int;
     pub fn lua_cleartable(L: *mut lua_State, idx: c_int);
     pub fn lua_clonetable(L: *mut lua_State, idx: c_int);
     pub fn lua_getallocf(L: *mut lua_State, ud: *mut *mut c_void) -> lua_Alloc;
 }
+
+pub type lua_UserdataMark = unsafe extern "C-unwind" fn(L: *mut lua_State, ud: *mut c_void);
+pub type lua_EmbedderMark = unsafe extern "C-unwind" fn(L: *mut lua_State, r#ref: c_int);
+pub type lua_EmbedderGc = unsafe extern "C-unwind" fn(L: *mut lua_State, markref: Option<lua_EmbedderMark>);
 
 //
 // Reference system, can be used to pin objects
@@ -337,7 +356,7 @@ pub const LUA_REFNIL: c_int = 0;
 
 unsafe extern "C-unwind" {
     pub fn lua_ref(L: *mut lua_State, idx: c_int) -> c_int;
-    pub fn lua_unref(L: *mut lua_State, r#ref: c_int);
+    pub fn lua_unref(L: *mut lua_State, r#ref: c_int) -> c_int;
 }
 
 //
@@ -516,6 +535,7 @@ pub type lua_CounterValue =
     unsafe extern "C-unwind" fn(context: *mut c_void, kind: c_int, line: c_int, hits: u64);
 
 unsafe extern "C-unwind" {
+    pub fn lua_callhook(L: *mut lua_State, hook: lua_Hook, userdata: *mut c_void);
     pub fn lua_stackdepth(L: *mut lua_State) -> c_int;
     pub fn lua_getinfo(L: *mut lua_State, level: c_int, what: *const c_char, ar: *mut lua_Debug) -> c_int;
     pub fn lua_getargument(L: *mut lua_State, level: c_int, n: c_int) -> c_int;
@@ -524,8 +544,12 @@ unsafe extern "C-unwind" {
     pub fn lua_getupvalue(L: *mut lua_State, funcindex: c_int, n: c_int) -> *const c_char;
     pub fn lua_setupvalue(L: *mut lua_State, funcindex: c_int, n: c_int) -> *const c_char;
 
+    pub fn lua_hascustomexecution(L: *mut lua_State, level: c_int) -> c_int;
+    pub fn lua_incustomexecution(L: *mut lua_State, level: c_int) -> c_int;
+
     pub fn lua_singlestep(L: *mut lua_State, enabled: c_int);
     pub fn lua_breakpoint(L: *mut lua_State, funcindex: c_int, line: c_int, enabled: c_int) -> c_int;
+    pub fn lua_atbreakpoint(L: *mut lua_State) -> c_int;
 
     pub fn lua_getcoverage(L: *mut lua_State, funcindex: c_int, context: *mut c_void, callback: lua_Coverage);
 
@@ -548,6 +572,8 @@ pub struct lua_Debug {
     pub short_src: *const c_char,
     pub linedefined: c_int,
     pub currentline: c_int,
+    pub protoid: c_int,
+    pub bytecodeid: c_int,
     pub nupvals: u8,
     pub nparams: u8,
     pub isvararg: c_char,
@@ -585,8 +611,26 @@ pub struct lua_Callbacks {
     /// gets called when protected call results in an error
     pub debugprotectederror: Option<unsafe extern "C-unwind" fn(L: *mut lua_State)>,
 
-    /// gets called when memory is allocated
-    pub onallocate: Option<unsafe extern "C-unwind" fn(L: *mut lua_State, osize: usize, nsize: usize)>,
+    /// gets called after a heap object (or array) is allocated
+    pub onallocate: Option<
+        unsafe extern "C-unwind" fn(
+            L: *mut lua_State,
+            block: *mut c_void,
+            osize: usize,
+            nsize: usize,
+            memcat: u8,
+            tt: c_int,
+            tag: c_int,
+        ),
+    >,
+
+    /// gets called before `lua_resume` runs a coroutine
+    pub preresume: Option<unsafe extern "C-unwind" fn(L: *mut lua_State)>,
+    /// gets called after `lua_resume` returns
+    pub postresume: Option<unsafe extern "C-unwind" fn(L: *mut lua_State)>,
+
+    /// gets called before a heap object (or array) is freed
+    pub onfree: Option<unsafe extern "C-unwind" fn(L: *mut lua_State, block: *mut c_void)>,
 }
 
 unsafe extern "C" {
@@ -597,9 +641,4 @@ unsafe extern "C" {
 unsafe extern "C" {
     pub fn luau_setfflag(name: *const c_char, value: c_int) -> c_int;
     pub fn lua_getmetatablepointer(L: *mut lua_State, idx: c_int) -> *const c_void;
-    pub fn lua_gcdump(
-        L: *mut lua_State,
-        file: *mut c_void,
-        category_name: Option<unsafe extern "C" fn(L: *mut lua_State, memcat: u8) -> *const c_char>,
-    );
 }

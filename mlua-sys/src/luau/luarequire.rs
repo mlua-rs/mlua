@@ -216,4 +216,13 @@ unsafe extern "C-unwind" {
 
     // Clears all entries from the require cache.
     pub fn luarequire_clearcache(L: *mut lua_State) -> c_int;
+
+    // Locks a placeholder table to prevent access during cyclic module loading.
+    pub fn luarequire_lockplaceholder(L: *mut lua_State, idx: c_int);
+
+    // Populates a placeholder table from a module result table.
+    pub fn luarequire_populateplaceholder(L: *mut lua_State, placeholder_idx: c_int, result_idx: c_int);
+
+    // Creates and caches a locked placeholder for the current module.
+    pub fn luarequire_createplaceholder(L: *mut lua_State);
 }

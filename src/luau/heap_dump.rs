@@ -32,7 +32,7 @@ impl HeapDump {
             if file.is_null() {
                 return None;
             }
-            ffi::lua_gcdump(state, file as *mut _, Some(category_name));
+            ffi::lua_memorydump(state, file as *mut _, Some(category_name));
             libc::fseek(file, 0, libc::SEEK_END);
             let len = libc::ftell(file);
             libc::rewind(file);
