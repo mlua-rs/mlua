@@ -1,3 +1,10 @@
+## v0.12.1 (Aug 29, 2026)
+
+- Lua 5.5 updated to 5.5.1
+- Luau updated to 0.736
+- Allow `#[mlua::userdata_impl]` to be used in a different module from `#[derive(UserData)]` (#726)
+- Fix coroutine stack handling after yielding from hooks (#723)
+
 ## v0.12.0 (Jul 05, 2026)
 
 Changes since v0.12.0-rc.2
