@@ -35,7 +35,7 @@ fn main() -> Result<()> {
     assert_eq!(globals.get::<String>("global")?, "foobar");
 
     assert_eq!(lua.load("1 + 1").eval::<i32>()?, 2);
-    assert_eq!(lua.load("false == false").eval::<bool>()?, true);
+    assert!(lua.load("false == false").eval::<bool>()?);
     assert_eq!(lua.load("return 1 + 2").eval::<i32>()?, 3);
 
     // Use can use special `chunk!` macro to use Rust tokenizer and automatically capture variables
@@ -119,15 +119,13 @@ fn main() -> Result<()> {
     })?;
     globals.set("join", join)?;
 
-    assert_eq!(
+    assert!(
         lua.load(r#"check_equal({"a", "b", "c"}, {"a", "b", "c"})"#)
-            .eval::<bool>()?,
-        true
+            .eval::<bool>()?
     );
-    assert_eq!(
-        lua.load(r#"check_equal({"a", "b", "c"}, {"d", "e", "f"})"#)
-            .eval::<bool>()?,
-        false
+    assert!(
+        !lua.load(r#"check_equal({"a", "b", "c"}, {"d", "e", "f"})"#)
+            .eval::<bool>()?
     );
     assert_eq!(lua.load(r#"join("a", "b", "c")"#).eval::<String>()?, "abc");
 

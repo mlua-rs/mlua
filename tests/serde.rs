@@ -109,21 +109,18 @@ fn test_serialize_failure() -> Result<(), Box<dyn StdError>> {
     let lua = Lua::new();
 
     let ud = Value::UserData(lua.create_userdata(MyUserData(123))?);
-    match serde_json::to_value(&ud) {
-        Ok(v) => panic!("expected serialization error, got {}", v),
-        Err(serde_json::Error { .. }) => {}
+    if let Ok(v) = serde_json::to_value(&ud) {
+        panic!("expected serialization error, got {}", v)
     }
 
     let func = lua.create_function(|_, _: ()| Ok(()))?;
-    match serde_json::to_value(&Value::Function(func.clone())) {
-        Ok(v) => panic!("expected serialization error, got {}", v),
-        Err(serde_json::Error { .. }) => {}
+    if let Ok(v) = serde_json::to_value(Value::Function(func.clone())) {
+        panic!("expected serialization error, got {}", v)
     }
 
     let thr = lua.create_thread(func)?;
-    match serde_json::to_value(&Value::Thread(thr)) {
-        Ok(v) => panic!("expected serialization error, got {}", v),
-        Err(serde_json::Error { .. }) => {}
+    if let Ok(v) = serde_json::to_value(Value::Thread(thr)) {
+        panic!("expected serialization error, got {}", v)
     }
 
     Ok(())
@@ -822,12 +819,12 @@ fn test_arbitrary_precision() {
 fn test_buffer_serialize() -> LuaResult<()> {
     let lua = Lua::new();
 
-    let buf = lua.create_buffer(&[1, 2, 3, 4])?;
+    let buf = lua.create_buffer([1, 2, 3, 4])?;
     let val = serde_value::to_value(&buf).unwrap();
     assert_eq!(val, serde_value::Value::Bytes(vec![1, 2, 3, 4]));
 
     // Try empty buffer
-    let buf = lua.create_buffer(&[])?;
+    let buf = lua.create_buffer([])?;
     let val = serde_value::to_value(&buf).unwrap();
     assert_eq!(val, serde_value::Value::Bytes(vec![]));
 
@@ -839,7 +836,7 @@ fn test_buffer_serialize() -> LuaResult<()> {
 fn test_buffer_from_value() -> LuaResult<()> {
     let lua = Lua::new();
 
-    let buf = lua.create_buffer(&[1, 2, 3, 4])?;
+    let buf = lua.create_buffer([1, 2, 3, 4])?;
     let val = lua.from_value::<serde_value::Value>(Value::Buffer(buf)).unwrap();
     assert_eq!(val, serde_value::Value::Bytes(vec![1, 2, 3, 4]));
 

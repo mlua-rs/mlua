@@ -120,7 +120,7 @@ async fn test_async_call() -> Result<()> {
     assert_eq!(hello.call_async::<String>("alex").await?, "hello, alex!");
 
     // Executing non-async functions using async call is allowed
-    let sum = lua.create_function(|_lua, (a, b): (i64, i64)| return Ok(a + b))?;
+    let sum = lua.create_function(|_lua, (a, b): (i64, i64)| Ok(a + b))?;
     assert_eq!(sum.call_async::<i64>((5, 1)).await?, 6);
 
     Ok(())
@@ -230,7 +230,7 @@ async fn test_async_return_async_closure() -> Result<()> {
 
         let g = lua.create_async_function(move |_, b: i64| async move {
             sleep_ms(10).await;
-            return Ok(a + b);
+            Ok(a + b)
         })?;
 
         Ok(g)

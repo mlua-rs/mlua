@@ -74,7 +74,7 @@ fn test_string_views() -> Result<()> {
 fn test_string_from_bytes() -> Result<()> {
     let lua = Lua::new();
 
-    let rs = lua.create_string(&[0, 1, 2, 3, 0, 1, 2, 3])?;
+    let rs = lua.create_string([0, 1, 2, 3, 0, 1, 2, 3])?;
     assert_eq!(rs.as_bytes(), &[0, 1, 2, 3, 0, 1, 2, 3]);
 
     Ok(())
