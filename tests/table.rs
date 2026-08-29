@@ -297,7 +297,8 @@ fn test_table_for_each() -> Result<()> {
             table.set(k, Value::Nil)?;
             lua.gc_collect()?;
         }
-        Ok(i += 1)
+        i += 1;
+        Ok(())
     })?;
     assert_eq!(i, 5);
 

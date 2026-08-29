@@ -263,8 +263,8 @@ mod tests {
     fn test_numbers() {
         assert_eq!(parse("0").unwrap(), Json::Integer(0));
         assert_eq!(parse("-42").unwrap(), Json::Integer(-42));
-        assert_eq!(parse("3.14").unwrap(), Json::Number(3.14));
-        assert_eq!(parse("-3.14").unwrap(), Json::Number(-3.14));
+        assert_eq!(parse("3.25").unwrap(), Json::Number(3.25));
+        assert_eq!(parse("-3.25").unwrap(), Json::Number(-3.25));
         assert_eq!(parse("1e10").unwrap(), Json::Number(1e10));
         assert_eq!(parse("1E10").unwrap(), Json::Number(1E10));
         assert_eq!(parse("1e-10").unwrap(), Json::Number(1e-10));

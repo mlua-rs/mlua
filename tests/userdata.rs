@@ -151,9 +151,9 @@ fn test_metamethods() -> Result<()> {
                     if i <= data.0 {
                         return Ok(mlua::Variadic::from_iter(vec![i, i]));
                     }
-                    return Ok(mlua::Variadic::new());
+                    Ok(mlua::Variadic::new())
                 })?;
-                Ok((stateless_iter, data.clone(), 0))
+                Ok((stateless_iter, *data, 0))
             });
         }
     }
@@ -969,6 +969,7 @@ fn test_userdata_pointer() -> Result<()> {
 
 #[cfg(feature = "macros")]
 #[test]
+#[allow(clippy::needless_maybe_sized)] // Exercise derive parsing with a `?Sized` generic bound.
 fn test_userdata_derive() -> Result<()> {
     let lua = Lua::new();
 

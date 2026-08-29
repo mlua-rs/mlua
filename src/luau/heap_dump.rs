@@ -168,7 +168,7 @@ fn update_size<K: Eq + Hash>(size_type: &mut HashMap<K, (usize, u64)>, key: K, s
 /// Retrieves the value associated with a given `key` from a Lua table `tbl`.
 fn get_key<'a>(objects: &'a HashMap<&'a str, Json>, tbl: &Json, key: &str) -> Option<&'a str> {
     let pairs = tbl["pairs"].as_array()?;
-    for kv in pairs.chunks_exact(2) {
+    for kv in pairs.as_chunks::<2>().0 {
         #[rustfmt::skip]
         let (Some(key_addr), Some(val_addr)) = (kv[0].as_str(), kv[1].as_str()) else { continue; };
         if objects[key_addr]["type"] == "string" && objects[key_addr]["data"].as_str() == Some(key) {
