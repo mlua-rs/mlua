@@ -936,17 +936,15 @@ impl Table {
     #[cfg(feature = "serde")]
     fn has_array_metatable(&self) -> bool {
         let lua = self.0.lua.lock();
-        let state = lua.state();
+        let ref_thread = lua.ref_thread();
         unsafe {
-            let _sg = StackGuard::new(state);
-            assert_stack(state, 3);
+            let _sg = StackGuard::new(ref_thread);
 
-            lua.push_ref(&self.0);
-            if ffi::lua_getmetatable(state, -1) == 0 {
+            if ffi::lua_getmetatable(ref_thread, self.0.index) == 0 {
                 return false;
             }
-            crate::serde::push_array_metatable(state);
-            ffi::lua_rawequal(state, -1, -2) != 0
+            crate::serde::push_array_metatable(ref_thread);
+            ffi::lua_rawequal(ref_thread, -1, -2) != 0
         }
     }
 
