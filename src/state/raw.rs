@@ -1429,10 +1429,9 @@ impl RawLua {
             let _sg = StackGuard::new(state);
             check_stack(state, 4)?;
 
-            let func = Some(func);
             let extra = XRc::clone(&self.extra);
             let protect = !self.unlikely_memory_error();
-            let upvalue = push_internal_userdata(state, CallbackUpvalue { data: func, extra }, protect)?;
+            let upvalue = push_internal_userdata(state, CallbackUpvalue { data: None, extra }, protect)?;
             if protect {
                 protect_lua!(state, 1, 1, fn(state) {
                     ffi::lua_pushcclosure(state, call_callback, 1);
@@ -1441,10 +1440,10 @@ impl RawLua {
                 ffi::lua_pushcclosure(state, call_callback, 1);
             }
 
-            self.try_pop_ref().map(Function).inspect_err(|_| {
-                // Scoped callbacks must release their captures before the scope ends.
-                (*upvalue).data.take();
-            })
+            let function = Function(self.try_pop_ref()?);
+            // Keep scoped captures owned locally until all fallible operations succeed.
+            (*upvalue).data = Some(func);
+            Ok(function)
         }
     }
 

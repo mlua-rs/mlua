@@ -13,25 +13,25 @@ pub(crate) unsafe fn push_internal_userdata<T: TypeKey>(
     protect: bool,
 ) -> Result<*mut T> {
     #[cfg(not(feature = "luau"))]
-    let ud_ptr = if protect {
-        protect_lua!(state, 0, 1, move |state| {
-            let ud_ptr = ffi::lua_newuserdata(state, const { mem::size_of::<T>() }) as *mut T;
-            ptr::write(ud_ptr, t);
-            ud_ptr
-        })?
-    } else {
-        let ud_ptr = ffi::lua_newuserdata(state, const { mem::size_of::<T>() }) as *mut T;
-        ptr::write(ud_ptr, t);
-        ud_ptr
-    };
+    let ud_ptr = push_uninit_userdata::<T>(state, protect)?;
 
     #[cfg(feature = "luau")]
-    let ud_ptr = if protect {
-        protect_lua!(state, 0, 1, move |state| ffi::lua_newuserdata_t::<T>(state, t))?
-    } else {
-        ffi::lua_newuserdata_t::<T>(state, t)
+    let ud_ptr = {
+        unsafe extern "C" fn destructor<T>(_: *mut ffi::lua_State, ud: *mut c_void) {
+            ptr::drop_in_place(ud as *mut T);
+        }
+
+        let size = const { mem::size_of::<T>() };
+        if protect {
+            protect_lua!(state, 0, 1, |state| {
+                ffi::lua_newuserdatadtor(state, size, destructor::<T>) as *mut T
+            })?
+        } else {
+            ffi::lua_newuserdatadtor(state, size, destructor::<T>) as *mut T
+        }
     };
 
+    ptr::write(ud_ptr, t);
     get_internal_metatable::<T>(state);
     ffi::lua_setmetatable(state, -2);
     Ok(ud_ptr)
@@ -97,7 +97,6 @@ pub(crate) unsafe fn get_internal_userdata<T: TypeKey>(
 
 // Internally uses 3 stack spaces, does not call checkstack.
 #[inline]
-#[cfg(not(feature = "luau"))]
 pub(crate) unsafe fn push_uninit_userdata<T>(state: *mut ffi::lua_State, protect: bool) -> Result<*mut T> {
     if protect {
         protect_lua!(state, 0, 1, |state| {

@@ -569,3 +569,45 @@ fn modify_userdata(lua: &Lua, ud: &AnyUserData) -> Result<()> {
     )
     .call(ud)
 }
+
+#[test]
+fn test_scope_callback_memory_error() -> Result<()> {
+    // Sweep allocation boundaries to cover failure after the callback upvalue is allocated.
+    for headroom in (0..256).step_by(8) {
+        let lua = Lua::new();
+        if cfg!(feature = "luajit") && lua.set_memory_limit(0).is_err() {
+            return Ok(());
+        }
+
+        lua.gc_collect()?;
+        lua.gc_stop();
+        lua.set_memory_limit(lua.used_memory() + headroom)?;
+
+        let arc = Arc::new(());
+        let _ = lua.scope(|scope| {
+            let data = arc.clone();
+            scope.create_function(move |_, ()| Ok(Arc::strong_count(&data)))
+        });
+        lua.set_memory_limit(0)?;
+        assert_eq!(Arc::strong_count(&arc), 1, "headroom={headroom}");
+    }
+
+    Ok(())
+}
+
+#[test]
+#[cfg(not(target_arch = "wasm32"))]
+fn test_scope_userdata_registration_panic() -> Result<()> {
+    use std::panic::{AssertUnwindSafe, catch_unwind};
+
+    let lua = Lua::new();
+
+    let arc = Arc::new(());
+    let result = catch_unwind(AssertUnwindSafe(|| {
+        lua.scope(|scope| scope.create_any_userdata(arc.clone(), |_| panic!("registration failed")))
+    }));
+    assert!(result.is_err());
+    assert_eq!(Arc::strong_count(&arc), 1);
+
+    Ok(())
+}

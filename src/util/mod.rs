@@ -14,12 +14,9 @@ pub(crate) use short_names::short_type_name;
 pub(crate) use types::TypeKey;
 pub(crate) use userdata::{
     DESTRUCTED_USERDATA_METATABLE, get_destructed_userdata_metatable, get_internal_metatable,
-    get_internal_userdata, get_userdata, init_internal_metatable, push_internal_userdata, push_userdata,
-    take_userdata,
+    get_internal_userdata, get_userdata, init_internal_metatable, push_internal_userdata,
+    push_uninit_userdata, push_userdata, take_userdata,
 };
-
-#[cfg(not(feature = "luau"))]
-pub(crate) use userdata::push_uninit_userdata;
 
 // Checks that Lua has enough free stack space for future stack operations. On failure, this will
 // panic with an internal error message.

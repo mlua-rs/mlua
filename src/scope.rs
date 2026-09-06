@@ -178,14 +178,8 @@ impl<'scope, 'env: 'scope> Scope<'scope, 'env> {
             let _sg = StackGuard::new(state);
             check_stack(state, 3)?;
 
-            // We don't write the data to the userdata until pushing the metatable
+            // Delay initialization until the metatable is ready
             let protect = !self.lua.unlikely_memory_error();
-            #[cfg(feature = "luau")]
-            let ud_ptr = {
-                let data = UserDataStorage::new_scoped(data);
-                util::push_userdata(state, data, protect)?
-            };
-            #[cfg(not(feature = "luau"))]
             let ud_ptr = util::push_uninit_userdata::<UserDataStorage<T>>(state, protect)?;
 
             // Push the metatable and register it with no TypeId
@@ -196,7 +190,6 @@ impl<'scope, 'env: 'scope> Scope<'scope, 'env> {
             self.lua.register_userdata_metatable(mt_ptr, None);
 
             // Write data to the pointer and attach metatable
-            #[cfg(not(feature = "luau"))]
             std::ptr::write(ud_ptr, UserDataStorage::new_scoped(data));
             ffi::lua_setmetatable(state, -2);
 
