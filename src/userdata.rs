@@ -1040,14 +1040,9 @@ impl AnyUserData {
             check_stack(state, 3)?;
 
             lua.push_userdata_ref(&self.0)?;
-            let protect = !lua.unlikely_memory_error();
-            let name_type = if protect {
-                protect_lua!(state, 1, 1, |state| {
-                    ffi::luaL_getmetafield(state, -1, MetaMethod::Type.as_cstr().as_ptr())
-                })?
-            } else {
+            let name_type = protect_lua_mem!(lua, 1, 1, |state| {
                 ffi::luaL_getmetafield(state, -1, MetaMethod::Type.as_cstr().as_ptr())
-            };
+            })?;
             match name_type {
                 ffi::LUA_TSTRING => Ok(LuaString(lua.try_pop_ref()?)),
                 _ => lua.create_string(b"userdata"),

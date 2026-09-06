@@ -636,7 +636,12 @@ impl Lua {
     #[cfg(feature = "module")]
     pub fn skip_memory_check(&self, skip: bool) {
         let lua = self.lock();
-        unsafe { (*lua.extra.get()).skip_memory_check = skip };
+        unsafe {
+            (*lua.extra.get()).skip_memory_check = skip;
+            if MemoryState::get(lua.state()).is_null() {
+                (*lua.extra.get()).unlikely_memory_error = skip;
+            }
+        }
     }
 
     /// Enables (or disables) sandbox mode on this Lua instance.
@@ -1106,7 +1111,11 @@ impl Lua {
         let lua = self.lock();
         unsafe {
             match MemoryState::get(lua.state()) {
-                mem_state if !mem_state.is_null() => Ok((*mem_state).set_memory_limit(limit)),
+                mem_state if !mem_state.is_null() => {
+                    let prev_limit = (*mem_state).set_memory_limit(limit);
+                    (*lua.extra.get()).unlikely_memory_error = (*mem_state).memory_limit() == 0;
+                    Ok(prev_limit)
+                }
                 _ => Err(Error::MemoryControlNotAvailable),
             }
         }
@@ -1539,11 +1548,7 @@ impl Lua {
             let _sg = StackGuard::new(state);
             check_stack(state, 3)?;
 
-            if lua.unlikely_memory_error() {
-                ffi::lua_pushcfunction(state, func);
-            } else {
-                protect_lua!(state, 0, 1, |state| ffi::lua_pushcfunction(state, func))?;
-            }
+            protect_lua_mem!(lua, 0, 1, |state| ffi::lua_pushcfunction(state, func))?;
             Ok(Function(lua.try_pop_ref()?))
         }
     }
@@ -1897,13 +1902,9 @@ impl Lua {
                 check_stack(state, 4)?;
 
                 lua.push_value(&v)?;
-                let res = if lua.unlikely_memory_error() {
+                let res = protect_lua_mem!(lua, 1, 1, |state| {
                     ffi::lua_tolstring(state, -1, ptr::null_mut())
-                } else {
-                    protect_lua!(state, 1, 1, |state| {
-                        ffi::lua_tolstring(state, -1, ptr::null_mut())
-                    })?
-                };
+                })?;
                 if !res.is_null() {
                     Some(LuaString(lua.try_pop_ref()?))
                 } else {
@@ -2067,13 +2068,9 @@ impl Lua {
             }
 
             // Allocate a new RegistryKey slot
-            let registry_id = if lua.unlikely_memory_error() {
+            let registry_id = protect_lua_mem!(lua, 1, 0, |state| {
                 ffi::luaL_ref(state, ffi::LUA_REGISTRYINDEX)
-            } else {
-                protect_lua!(state, 1, 0, |state| {
-                    ffi::luaL_ref(state, ffi::LUA_REGISTRYINDEX)
-                })?
-            };
+            })?;
             Ok(RegistryKey::new(registry_id, unref_list))
         }
     }

@@ -79,13 +79,9 @@ pub(crate) unsafe fn get_internal_userdata<T: TypeKey>(
 // Internally uses 3 stack spaces, does not call checkstack.
 #[inline]
 pub(crate) unsafe fn push_uninit_userdata<T>(state: *mut ffi::lua_State, protect: bool) -> Result<*mut T> {
-    if protect {
-        protect_lua!(state, 0, 1, |state| {
-            ffi::lua_newuserdata(state, const { mem::size_of::<T>() }) as *mut T
-        })
-    } else {
-        Ok(ffi::lua_newuserdata(state, const { mem::size_of::<T>() }) as *mut T)
-    }
+    protect_lua_mem!(state, if protect, 0, 1, |state| {
+        ffi::lua_newuserdata(state, const { mem::size_of::<T>() }) as *mut T
+    })
 }
 
 // Internally uses 3 stack spaces, does not call checkstack.
@@ -94,20 +90,13 @@ pub(crate) unsafe fn push_userdata<T>(state: *mut ffi::lua_State, t: T, protect:
     let size = const { mem::size_of::<T>() };
 
     #[cfg(not(feature = "luau"))]
-    let ud_ptr = if protect {
-        protect_lua!(state, 0, 1, move |state| ffi::lua_newuserdata(state, size))?
-    } else {
-        ffi::lua_newuserdata(state, size)
-    } as *mut T;
+    let ud_ptr =
+        protect_lua_mem!(state, if protect, 0, 1, |state| ffi::lua_newuserdata(state, size))? as *mut T;
 
     #[cfg(feature = "luau")]
-    let ud_ptr = if protect {
-        protect_lua!(state, 0, 1, |state| {
-            ffi::lua_newuserdatadtor(state, size, collect_userdata::<T>)
-        })?
-    } else {
+    let ud_ptr = protect_lua_mem!(state, if protect, 0, 1, |state| {
         ffi::lua_newuserdatadtor(state, size, collect_userdata::<T>)
-    } as *mut T;
+    })? as *mut T;
 
     ptr::write(ud_ptr, t);
     Ok(ud_ptr)

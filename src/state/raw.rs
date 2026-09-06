@@ -363,14 +363,10 @@ impl RawLua {
                 Some(ChunkMode::Text) => cstr!("t"),
                 None => cstr!("bt"),
             };
-            let status = if self.unlikely_memory_error() {
+            // Luau and Lua 5.2 can trigger an exception during chunk loading.
+            let status = protect_lua_mem!(self, 0, 1, |state| {
                 self.load_chunk_inner(state, name, env, mode, source)
-            } else {
-                // Luau and Lua 5.2 can trigger an exception during chunk loading
-                protect_lua!(state, 0, 1, |state| {
-                    self.load_chunk_inner(state, name, env, mode, source)
-                })?
-            };
+            })?;
             match status {
                 ffi::LUA_OK => Ok(Function(self.try_pop_ref()?)),
                 err => Err(pop_error(state, err)),
@@ -632,11 +628,7 @@ impl RawLua {
         for (k, v) in iter {
             self.push(k)?;
             self.push(v)?;
-            if protect {
-                protect_lua!(state, 3, 1, fn(state) ffi::lua_rawset(state, -3))?;
-            } else {
-                ffi::lua_rawset(state, -3);
-            }
+            protect_lua_mem!(self, 3, 1, fn(state) ffi::lua_rawset(state, -3))?;
         }
 
         Ok(Table(self.try_pop_ref()?))
@@ -658,13 +650,9 @@ impl RawLua {
         push_table(state, lower_bound, 0, protect)?;
         for (i, v) in iter.enumerate() {
             self.push(v)?;
-            if protect {
-                protect_lua!(state, 2, 1, |state| {
-                    ffi::lua_rawseti(state, -2, (i + 1) as Integer);
-                })?;
-            } else {
+            protect_lua_mem!(self, 2, 1, |state| {
                 ffi::lua_rawseti(state, -2, (i + 1) as Integer);
-            }
+            })?;
         }
 
         Ok(Table(self.try_pop_ref()?))
@@ -682,15 +670,10 @@ impl RawLua {
         let _sg = StackGuard::new(state);
         check_stack(state, 3)?;
 
-        let protect = !self.unlikely_memory_error();
-        #[cfg(feature = "luau")]
-        let protect = protect || self.thread_event_triggers().on_create;
-
-        let thread_state = if !protect {
-            ffi::lua_newthread(state)
-        } else {
-            protect_lua!(state, 0, 1, |state| ffi::lua_newthread(state))?
-        };
+        let thread_state = protect_lua_mem!(
+            self, or cfg!(feature = "luau") && self.thread_event_triggers().on_create,
+            0, 1, |state| ffi::lua_newthread(state)
+        )?;
 
         // Inherit global hook if set
         #[cfg(not(feature = "luau"))]
@@ -1081,7 +1064,11 @@ impl RawLua {
             return false;
         }
 
-        // MemoryInfo is empty in module mode so we cannot predict memory limits
+        if self.owned {
+            return (*self.extra.get()).unlikely_memory_error;
+        }
+
+        // Externally managed states may change their allocator.
         match MemoryState::get(self.state()) {
             mem_state if !mem_state.is_null() => (*mem_state).memory_limit() == 0,
             _ => (*self.extra.get()).skip_memory_check, // Check the special flag (only for module mode)
@@ -1145,15 +1132,10 @@ impl RawLua {
 
         // Set empty environment for Lua 5.1
         #[cfg(any(feature = "lua51", feature = "luajit"))]
-        if protect {
-            protect_lua!(state, 1, 1, fn(state) {
-                ffi::lua_newtable(state);
-                ffi::lua_setuservalue(state, -2);
-            })?;
-        } else {
+        protect_lua_mem!(self, 1, 1, fn(state) {
             ffi::lua_newtable(state);
             ffi::lua_setuservalue(state, -2);
-        }
+        })?;
 
         Ok(AnyUserData(self.try_pop_ref()?))
     }
@@ -1436,13 +1418,9 @@ impl RawLua {
             let extra = XRc::clone(&self.extra);
             let protect = !self.unlikely_memory_error();
             let upvalue = push_internal_userdata(state, CallbackUpvalue { data: None, extra }, protect)?;
-            if protect {
-                protect_lua!(state, 1, 1, fn(state) {
-                    ffi::lua_pushcclosure(state, call_callback, 1);
-                })?;
-            } else {
+            protect_lua_mem!(self, 1, 1, fn(state) {
                 ffi::lua_pushcclosure(state, call_callback, 1);
-            }
+            })?;
 
             let function = Function(self.try_pop_ref()?);
             // Keep scoped captures owned locally until all fallible operations succeed.
@@ -1550,13 +1528,9 @@ impl RawLua {
             let protect = !self.unlikely_memory_error();
             let upvalue = AsyncCallbackUpvalue { data: func, extra };
             push_internal_userdata(state, upvalue, protect)?;
-            if protect {
-                protect_lua!(state, 1, 1, fn(state) {
-                    ffi::lua_pushcclosure(state, get_future_callback, 1);
-                })?;
-            } else {
+            protect_lua_mem!(self, 1, 1, fn(state) {
                 ffi::lua_pushcclosure(state, get_future_callback, 1);
-            }
+            })?;
 
             Function(self.try_pop_ref()?)
         };

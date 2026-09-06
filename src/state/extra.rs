@@ -10,6 +10,7 @@ use parking_lot::Mutex;
 use rustc_hash::FxHashMap;
 
 use crate::error::{Error, Result};
+use crate::memory::MemoryState;
 use crate::state::RawLua;
 use crate::stdlib::StdLib;
 use crate::thread::ThreadTriggers;
@@ -51,6 +52,8 @@ pub(crate) struct ExtraData {
 
     pub(super) safe: bool,
     pub(super) libs: StdLib,
+    // Cached allocation protection decision for owned states
+    pub(super) unlikely_memory_error: bool,
     // Used in module mode
     pub(super) skip_memory_check: bool,
 
@@ -174,6 +177,10 @@ impl ExtraData {
             app_data_priv: AppData::default(),
             safe: false,
             libs: StdLib::NONE,
+            unlikely_memory_error: owned && {
+                let mem_state = MemoryState::get(state);
+                !mem_state.is_null() && (*mem_state).memory_limit() == 0
+            },
             skip_memory_check: false,
             ref_thread,
             // We need some reserved stack space to move values in and out of the ref stack.

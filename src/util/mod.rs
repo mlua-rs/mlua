@@ -86,14 +86,10 @@ impl Drop for StackGuard {
 #[inline(always)]
 pub(crate) unsafe fn push_string(state: *mut ffi::lua_State, s: &[u8], protect: bool) -> Result<()> {
     // Always use protected mode if the string is too long
-    if protect || s.len() >= const { 1 << 30 } {
-        protect_lua!(state, 0, 1, |state| {
-            ffi::lua_pushlstring(state, s.as_ptr() as *const c_char, s.len());
-        })
-    } else {
+    let protect = protect || s.len() >= const { 1 << 30 };
+    protect_lua_mem!(state, if protect, 0, 1, |state| {
         ffi::lua_pushlstring(state, s.as_ptr() as *const c_char, s.len());
-        Ok(())
-    }
+    })
 }
 
 // Uses 3 (or 1 if unprotected) stack spaces, does not call checkstack.
@@ -113,27 +109,20 @@ pub(crate) unsafe fn push_external_string(
         ptr::null_mut()
     }
 
-    if protect {
-        // Lua free external string on error
-        protect_lua!(state, 0, 1, move |state| {
-            ffi::lua_pushexternalstring(state, s_ptr, s_len, Some(dealloc), bytes_ud as *mut _);
-        })?;
-    } else {
+    // Lua frees the external string on error.
+    protect_lua_mem!(state, if protect, 0, 1, move |state| {
         ffi::lua_pushexternalstring(state, s_ptr, s_len, Some(dealloc), bytes_ud as *mut _);
-    }
-    Ok(())
+    })
 }
 
 // Uses 3 stack spaces (when protect), does not call checkstack.
 #[cfg(feature = "luau")]
 #[inline(always)]
 pub(crate) unsafe fn push_buffer(state: *mut ffi::lua_State, size: usize, protect: bool) -> Result<*mut u8> {
-    let data = if protect || size > const { 1024 * 1024 * 1024 } {
-        protect_lua!(state, 0, 1, |state| ffi::lua_newbuffer(state, size))?
-    } else {
-        ffi::lua_newbuffer(state, size)
-    };
-    Ok(data as *mut u8)
+    let protect = protect || size > const { 1024 * 1024 * 1024 };
+    protect_lua_mem!(state, if protect, 0, 1, |state| {
+        ffi::lua_newbuffer(state, size) as *mut u8
+    })
 }
 
 // Uses 3 stack spaces, does not call checkstack.
@@ -146,12 +135,8 @@ pub(crate) unsafe fn push_table(
 ) -> Result<()> {
     let narr: c_int = narr.try_into().unwrap_or(c_int::MAX);
     let nrec: c_int = nrec.try_into().unwrap_or(c_int::MAX);
-    if protect || narr >= const { 1 << 26 } || nrec >= const { 1 << 26 } {
-        protect_lua!(state, 0, 1, |state| ffi::lua_createtable(state, narr, nrec))
-    } else {
-        ffi::lua_createtable(state, narr, nrec);
-        Ok(())
-    }
+    let protect = protect || narr >= const { 1 << 26 } || nrec >= const { 1 << 26 };
+    protect_lua_mem!(state, if protect, 0, 1, |state| ffi::lua_createtable(state, narr, nrec))
 }
 
 // Uses 4 stack spaces, does not call checkstack.

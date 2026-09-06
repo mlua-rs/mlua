@@ -529,13 +529,9 @@ impl Function {
                 return Ok(data);
             }
             let data_ptr = &mut data as *mut Vec<u8> as *mut c_void;
-            let status = if protect {
-                protect_lua!(state, 1, 0, |state| {
-                    ffi::lua_dump(state, writer, data_ptr, strip as i32)
-                })?
-            } else {
+            let status = protect_lua_mem!(state, if protect, 1, 0, |state| {
                 ffi::lua_dump(state, writer, data_ptr, strip as i32)
-            };
+            })?;
             if status != 0 {
                 return Err(pop_error(state, status));
             }
@@ -621,11 +617,7 @@ impl Function {
                 return Ok(self.clone());
             }
 
-            if lua.unlikely_memory_error() {
-                ffi::lua_clonefunction(state, -1);
-            } else {
-                protect_lua!(state, 1, 1, fn(state) ffi::lua_clonefunction(state, -1))?;
-            }
+            protect_lua_mem!(lua, 1, 1, fn(state) ffi::lua_clonefunction(state, -1))?;
             Ok(Function(lua.try_pop_ref()?))
         }
     }

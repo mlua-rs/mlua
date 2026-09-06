@@ -114,3 +114,37 @@ macro_rules! protect_lua {
         crate::util::protect_lua_call($state, $nargs, do_call)
     }};
 }
+
+// Like `protect_lua!`, but skips protection when memory errors are unlikely.
+// The direct path neither creates a call frame nor adjusts the stack to `nresults`.
+macro_rules! protect_lua_mem {
+    ($state:expr, if $protect:expr, $nargs:expr, $nresults:expr, $f:expr) => {{
+        let state = $state;
+        let f = $f;
+        if $protect {
+            protect_lua!(state, $nargs, $nresults, f)
+        } else {
+            crate::Result::Ok(f(state))
+        }
+    }};
+
+    ($state:expr, if $protect:expr, $nargs:expr, $nresults:expr, fn($state_inner:ident) $code:expr) => {{
+        let state = $state;
+        if $protect {
+            protect_lua!(state, $nargs, $nresults, fn($state_inner) $code)
+        } else {
+            let $state_inner = state;
+            $code;
+            crate::Result::Ok(())
+        }
+    }};
+
+    ($lua:expr, or $force:expr, $($args:tt)*) => {{
+        let lua = &$lua;
+        protect_lua_mem!(lua.state(), if !lua.unlikely_memory_error() || $force, $($args)*)
+    }};
+
+    ($lua:expr, $($args:tt)*) => {{
+        protect_lua_mem!($lua, or false, $($args)*)
+    }};
+}
