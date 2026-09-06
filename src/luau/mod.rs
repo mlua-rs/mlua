@@ -94,7 +94,7 @@ impl Lua {
 
         // Enable default `require` implementation
         let require = self.create_require_function(FsRequirer::new())?;
-        self.try_globals()?.raw_set("require", require)?;
+        globals.raw_set("require", require)?;
 
         Ok(())
     }
