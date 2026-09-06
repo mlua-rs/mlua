@@ -580,6 +580,10 @@ impl Thread {
     /// [Lua 5.4]: https://www.lua.org/manual/5.4/manual.html#lua_closethread
     pub fn reset(&self, func: Function) -> Result<()> {
         let lua = self.0.lua.lock();
+        assert!(
+            lua.weak() == &func.0.lua,
+            "Lua instance passed Value created from a different main Lua state"
+        );
         check_thread_reentrancy(self.state(), &lua)?;
         let thread_state = self.state();
         unsafe {

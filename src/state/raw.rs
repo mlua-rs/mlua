@@ -674,6 +674,10 @@ impl RawLua {
     ///
     /// Takes function by reference.
     pub(crate) unsafe fn create_thread(&self, func: &Function) -> Result<Thread> {
+        assert!(
+            self.weak() == &func.0.lua,
+            "Lua instance passed Value created from a different main Lua state"
+        );
         let state = self.state();
         let _sg = StackGuard::new(state);
         check_stack(state, 3)?;

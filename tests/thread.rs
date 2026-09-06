@@ -1,4 +1,4 @@
-use std::panic::catch_unwind;
+use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
@@ -131,6 +131,18 @@ fn test_thread() -> Result<()> {
     lua.globals().set("outer", &outer)?;
     outer.resume::<()>(())?;
     assert!(outer.is_finished());
+
+    Ok(())
+}
+
+#[test]
+#[cfg(not(panic = "abort"))]
+fn test_thread_foreign_function() -> Result<()> {
+    let lua = Lua::new();
+
+    let other = Lua::new();
+    let func = other.load("return 123").into_function()?;
+    assert!(catch_unwind(AssertUnwindSafe(|| lua.create_thread(func))).is_err());
 
     Ok(())
 }
