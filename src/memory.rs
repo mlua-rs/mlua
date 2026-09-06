@@ -119,7 +119,7 @@ unsafe extern "C" fn allocator(
     }
     let mem_limit = mem_state.memory_limit;
     let new_used_memory = mem_state.used_memory + mem_diff;
-    if mem_limit > 0 && new_used_memory > mem_limit && !mem_state.ignore_limit {
+    if mem_diff > 0 && mem_limit > 0 && new_used_memory > mem_limit && !mem_state.ignore_limit {
         #[cfg(feature = "luau")]
         {
             mem_state.limit_reached = true;
