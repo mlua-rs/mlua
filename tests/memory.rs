@@ -54,6 +54,7 @@ fn test_memory_limit() -> Result<()> {
         })?;
         let _refs: Vec<_> = (0..nrefs).map(|_| lua.globals()).collect();
         assert_eq!(f.call::<i32>(42)?, 42);
+        lua.set_memory_limit(0)?;
     }
 
     Ok(())
@@ -69,6 +70,7 @@ fn test_result_reference_exhaustion() -> Result<()> {
         .load("local t = {}; return function() return t, t end")
         .eval()?;
     f.call::<MultiValue>(())?; // Warm the call stack before limiting allocations.
+    lua.gc_stop();
     lua.set_memory_limit(1)?;
 
     let mut refs = Vec::new();

@@ -1,6 +1,5 @@
 #![cfg(not(feature = "luau"))]
 
-use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::{Arc, Mutex};
 
@@ -114,7 +113,10 @@ fn test_error_within_hook() -> Result<()> {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn test_panic_during_callback_traceback() -> Result<()> {
+    use std::panic::{AssertUnwindSafe, catch_unwind};
+
     let lua = Lua::new();
     if cfg!(feature = "luajit") && lua.set_memory_limit(0).is_err() {
         return Ok(());
