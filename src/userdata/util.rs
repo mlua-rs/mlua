@@ -455,8 +455,8 @@ pub(crate) unsafe extern "C" fn collect_userdata<T>(
     // so we need to set a flag to prevent calling any Lua functions
     let extra = (*ffi::lua_callbacks(state)).userdata as *mut crate::state::ExtraData;
     (*extra).running_gc = true;
-    // Luau does not support _any_ panics in destructors (they are declared as "C", NOT as "C-unwind"),
-    // so any panics will trigger `abort()`.
+    // Luau does not support _any_ panics in destructors (they are declared as "C", NOT as
+    // "C-unwind"), so any panics will trigger `abort()`.
     ptr::drop_in_place(ud as *mut T);
     (*extra).running_gc = false;
 }

@@ -1837,8 +1837,8 @@ impl Lua {
         let lua = self.lock();
         let state = lua.state();
         unsafe {
-            // If this thread is implicit (created by `call_async`), return the root user-owned thread
-            // instead.
+            // If this thread is implicit (created by `call_async`), return the root user-owned
+            // thread instead.
             #[cfg(feature = "async")]
             if let Some(&owner) = (*lua.extra.get()).thread_ownership_map.get(&state) {
                 assert_stack(owner, 1);

@@ -169,9 +169,10 @@ impl Require for FsRequirer {
     fn to_parent(&mut self) -> StdResult<(), NavigateError> {
         let mut abs_path = self.abs_path.clone();
         if !abs_path.pop() {
-            // It's important to return `NotFound` if we reached the root, as it's a "recoverable" error if we
-            // cannot go beyond the root directory.
-            // Luau "require-by-string` has a special logic to search for config file to resolve aliases.
+            // It's important to return `NotFound` if we reached the root, as it's a "recoverable"
+            // error if we cannot go beyond the root directory.
+            // Luau "require-by-string` has a special logic to search for config file to resolve
+            // aliases.
             return Err(NavigateError::NotFound);
         }
         let mut rel_parent = self.rel_path.clone();

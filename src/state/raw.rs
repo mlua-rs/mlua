@@ -1380,8 +1380,9 @@ impl RawLua {
         unsafe extern "C-unwind" fn call_callback(state: *mut ffi::lua_State) -> c_int {
             let upvalue = get_userdata::<CallbackUpvalue>(state, ffi::lua_upvalueindex(1));
             callback_error_ext(state, (*upvalue).extra.get(), true, |extra, nargs| {
-                // Lua ensures that `LUA_MINSTACK` stack spaces are available (after pushing arguments)
-                // The lock must be already held as the callback is executed
+                // Lua ensures that `LUA_MINSTACK` stack spaces are available (after pushing
+                // arguments) The lock must be already held as the callback is
+                // executed
                 let rawlua = (*extra).raw_lua();
                 match (*upvalue).data {
                     Some(ref func) => func(rawlua, nargs),
@@ -1433,8 +1434,9 @@ impl RawLua {
             // so the first upvalue is always valid
             let upvalue = get_userdata::<AsyncCallbackUpvalue>(state, ffi::lua_upvalueindex(1));
             callback_error_ext(state, (*upvalue).extra.get(), true, |extra, nargs| {
-                // Lua ensures that `LUA_MINSTACK` stack spaces are available (after pushing arguments)
-                // The lock must be already held as the callback is executed
+                // Lua ensures that `LUA_MINSTACK` stack spaces are available (after pushing
+                // arguments) The lock must be already held as the callback is
+                // executed
                 let rawlua = (*extra).raw_lua();
 
                 let func = &*(*upvalue).data;
@@ -1451,8 +1453,8 @@ impl RawLua {
             // Future is always passed in the first argument
             let future = get_userdata::<AsyncPollUpvalue>(state, 1);
             callback_error_ext(state, (*future).extra.get(), true, |extra, nargs| {
-                // Lua ensures that `LUA_MINSTACK` stack spaces are available (after pushing arguments)
-                // The lock must be already held as the future is polled
+                // Lua ensures that `LUA_MINSTACK` stack spaces are available (after pushing
+                // arguments) The lock must be already held as the future is polled
                 let rawlua = (*extra).raw_lua();
 
                 if nargs == 2 && ffi::lua_tolightuserdata(state, -1) == Lua::poll_terminate().0 {

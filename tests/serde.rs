@@ -277,7 +277,8 @@ fn test_serialize_mixed_table() -> LuaResult<()> {
     let json2 = lua.from_value::<serde_json::Value>(table)?;
     assert_eq!(json1, json2.to_string());
 
-    // A table with several borders should be correctly encoded when `detect_mixed_tables` is enabled
+    // A table with several borders should be correctly encoded when `detect_mixed_tables` is
+    // enabled
     let table = lua
         .load(
             r#"

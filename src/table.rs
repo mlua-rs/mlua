@@ -1379,7 +1379,8 @@ where
 
                 // It must be safe to call `lua_next` unprotected as deleting a key from a table is
                 // a permitted operation.
-                // It fails only if the key is not found (never existed) which seems impossible scenario.
+                // It fails only if the key is not found (never existed) which seems impossible
+                // scenario.
                 if ffi::lua_next(state, -2) != 0 {
                     let key = lua.stack_value(-2, None);
                     Ok(Some((

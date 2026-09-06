@@ -364,9 +364,10 @@ pub(crate) unsafe fn init_error_registry(state: *mut ffi::lua_State) -> Result<(
                     ffi::lua_pop(state, 2);
 
                     (*err_buf).clear();
-                    // Depending on how the API is used and what error types scripts are given, it may
-                    // be possible to make this consume arbitrary amounts of memory (for example, some
-                    // kind of recursive error structure?)
+                    // Depending on how the API is used and what error types scripts are given, it
+                    // may be possible to make this consume arbitrary amounts of
+                    // memory (for example, some kind of recursive error
+                    // structure?)
                     let _ = write!(&mut (*err_buf), "{error}");
                     Ok(err_buf)
                 }

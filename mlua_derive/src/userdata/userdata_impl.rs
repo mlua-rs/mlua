@@ -171,8 +171,8 @@ fn analyze_self_and_args(sig: &Signature) -> syn::Result<MethodInfo> {
                 let ident = match &*typed.pat {
                     syn::Pat::Ident(pat_ident) => pat_ident.ident.clone(),
                     syn::Pat::Wild(_) => {
-                        // For wildcards we generate a unique identifier to avoid collisions with other
-                        // parameters.
+                        // For wildcards we generate a unique identifier to avoid collisions with
+                        // other parameters.
                         Ident::new(&format!("__mlua_arg_{}", args.len()), Span2::mixed_site())
                     }
                     _ => {

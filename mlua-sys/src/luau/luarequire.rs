@@ -205,8 +205,8 @@ unsafe extern "C-unwind" {
 
     // Registers an aliased require path to a result.
     //
-    // After registration, the given result will always be immediately returned when the given path is
-    // required.
+    // After registration, the given result will always be immediately returned when the given path
+    // is required.
     // Expects the path and table to be passed as arguments on the stack.
     pub fn luarequire_registermodule(L: *mut lua_State) -> c_int;
 
