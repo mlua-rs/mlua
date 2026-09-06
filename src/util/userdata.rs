@@ -12,26 +12,7 @@ pub(crate) unsafe fn push_internal_userdata<T: TypeKey>(
     t: T,
     protect: bool,
 ) -> Result<*mut T> {
-    #[cfg(not(feature = "luau"))]
-    let ud_ptr = push_uninit_userdata::<T>(state, protect)?;
-
-    #[cfg(feature = "luau")]
-    let ud_ptr = {
-        unsafe extern "C" fn destructor<T>(_: *mut ffi::lua_State, ud: *mut c_void) {
-            ptr::drop_in_place(ud as *mut T);
-        }
-
-        let size = const { mem::size_of::<T>() };
-        if protect {
-            protect_lua!(state, 0, 1, |state| {
-                ffi::lua_newuserdatadtor(state, size, destructor::<T>) as *mut T
-            })?
-        } else {
-            ffi::lua_newuserdatadtor(state, size, destructor::<T>) as *mut T
-        }
-    };
-
-    ptr::write(ud_ptr, t);
+    let ud_ptr = push_userdata(state, t, protect)?;
     get_internal_metatable::<T>(state);
     ffi::lua_setmetatable(state, -2);
     Ok(ud_ptr)
