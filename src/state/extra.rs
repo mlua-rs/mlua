@@ -142,6 +142,10 @@ impl ExtraData {
             "Error while creating ref thread",
         );
 
+        // Do not run inherited hooks during protected ref stack growth (matters in module mode)
+        #[cfg(feature = "lua51")]
+        ffi::lua_sethook(ref_thread, None, 0, 0);
+
         let wrapped_failure_mt_ptr = {
             get_internal_metatable::<WrappedFailure>(state);
             let ptr = ffi::lua_topointer(state, -1);
@@ -292,7 +296,7 @@ impl ExtraData {
         // Try to grow max stack size
         if self.ref_stack_top >= self.ref_stack_size {
             let mut inc = self.ref_stack_size; // Try to double stack size
-            while inc > 0 && ffi::lua_checkstack(self.ref_thread, inc + REF_STACK_RESERVE) == 0 {
+            while inc > 0 && !self.check_ref_stack(inc + REF_STACK_RESERVE) {
                 inc /= 2;
             }
             if inc == 0 {
@@ -304,5 +308,32 @@ impl ExtraData {
         }
         self.ref_stack_top += 1;
         Ok(self.ref_stack_top)
+    }
+
+    #[cfg(not(feature = "lua51"))]
+    #[inline(always)]
+    unsafe fn check_ref_stack(&self, amount: c_int) -> bool {
+        ffi::lua_checkstack(self.ref_thread, amount) != 0
+    }
+
+    #[cfg(feature = "lua51")]
+    unsafe fn check_ref_stack(&self, amount: c_int) -> bool {
+        if self.raw_lua().unlikely_memory_error() {
+            return ffi::lua_checkstack(self.ref_thread, amount) != 0;
+        }
+
+        unsafe extern "C-unwind" fn grow_stack(state: *mut ffi::lua_State) -> c_int {
+            let args = ffi::lua_tolightuserdata(state, 1) as *mut (c_int, bool);
+            (*args).1 = ffi::lua_checkstack(state, (*args).0) != 0;
+            // we always return an error to skip GC
+            ffi::lua_error(state)
+        }
+
+        // Lua 5.1 can throw on allocation failure, protect growth on the ref thread
+        let state = self.ref_thread;
+        let mut args = (amount, false);
+        ffi::lua_cpcall(state, grow_stack, &mut args as *mut _ as *mut c_void);
+        ffi::lua_pop(state, 1);
+        args.1 && ffi::lua_checkstack(state, amount) != 0
     }
 }
