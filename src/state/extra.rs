@@ -143,7 +143,7 @@ impl ExtraData {
         );
 
         // Do not run inherited hooks during protected ref stack growth (matters in module mode)
-        #[cfg(feature = "lua51")]
+        #[cfg(all(feature = "lua51", not(feature = "vendored")))]
         ffi::lua_sethook(ref_thread, None, 0, 0);
 
         let wrapped_failure_mt_ptr = {
@@ -310,13 +310,13 @@ impl ExtraData {
         Ok(self.ref_stack_top)
     }
 
-    #[cfg(not(feature = "lua51"))]
+    #[cfg(any(not(feature = "lua51"), feature = "vendored"))]
     #[inline(always)]
     unsafe fn check_ref_stack(&self, amount: c_int) -> bool {
         ffi::lua_checkstack(self.ref_thread, amount) != 0
     }
 
-    #[cfg(feature = "lua51")]
+    #[cfg(all(feature = "lua51", not(feature = "vendored")))]
     unsafe fn check_ref_stack(&self, amount: c_int) -> bool {
         if self.raw_lua().unlikely_memory_error() {
             return ffi::lua_checkstack(self.ref_thread, amount) != 0;
