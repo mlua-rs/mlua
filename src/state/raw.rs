@@ -1002,14 +1002,31 @@ impl RawLua {
     // to store reference values. This is much faster than storing these in the registry, and also
     // much more flexible and requires less bookkeeping than storing them directly in the currently
     // used stack.
+    //
+    // Returns an error if the auxiliary stack cannot grow. The value is popped even on failure.
+    #[inline]
+    pub(crate) unsafe fn try_pop_ref(&self) -> Result<ValueRef> {
+        ffi::lua_xmove(self.state(), self.ref_thread(), 1);
+        self.try_pop_ref_thread()
+    }
+
+    // Like `try_pop_ref`, but panics if the auxiliary stack cannot grow.
     #[inline]
     pub(crate) unsafe fn pop_ref(&self) -> ValueRef {
         ffi::lua_xmove(self.state(), self.ref_thread(), 1);
-        let index = (*self.extra.get()).ref_stack_pop();
-        ValueRef::new(self, index)
+        self.pop_ref_thread()
     }
 
-    // Same as `pop_ref` but assumes the value is already on the reference thread
+    // Like `try_pop_ref`, but assumes the value is already on the auxiliary thread.
+    //
+    // Returns an error if the auxiliary stack cannot grow. The value is popped even on failure.
+    #[inline]
+    pub(crate) unsafe fn try_pop_ref_thread(&self) -> Result<ValueRef> {
+        let index = (*self.extra.get()).try_ref_stack_pop()?;
+        Ok(ValueRef::new(self, index))
+    }
+
+    // Like `try_pop_ref_thread`, but panics if the auxiliary stack cannot grow.
     #[inline]
     pub(crate) unsafe fn pop_ref_thread(&self) -> ValueRef {
         let index = (*self.extra.get()).ref_stack_pop();

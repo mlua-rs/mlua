@@ -280,9 +280,9 @@ impl ExtraData {
         })
     }
 
-    /// Pops a reference from top of the auxiliary stack and move it to a first free slot.
+    /// Pops a reference from the top of the auxiliary stack and moves it to the first free slot.
     ///
-    /// Returns an error if the auxiliary stack cannot grow.
+    /// Returns an error if the auxiliary stack cannot grow. The value is popped even on failure.
     pub(super) unsafe fn try_ref_stack_pop(&mut self) -> Result<c_int> {
         if let Some(free) = self.ref_free.pop() {
             ffi::lua_replace(self.ref_thread, free);

@@ -959,13 +959,14 @@ impl Lua {
         if !(*extra).thread_triggers.on_create || !(*extra).thread_event_state.is_null() {
             return;
         }
-        let callback = match &(*extra).thread_event_callback {
-            Some(cb) => cb.clone(),
-            _ => return,
+        let Some(callback) = (*extra).thread_event_callback.clone() else {
+            return;
         };
         ffi::lua_pushthread(child);
         ffi::lua_xmove(child, (*extra).ref_thread, 1);
-        let thread = Thread((*extra).raw_lua().pop_ref_thread(), child);
+        let Ok(thread) = ((*extra).raw_lua().try_pop_ref_thread()).map(|vref| Thread(vref, child)) else {
+            return;
+        };
         callback_error_ext(parent, extra, false, move |extra, _| {
             let _guard = crate::thread::ThreadEventGuard::new((*extra).raw_lua(), child);
             callback((*extra).lua(), ThreadEvent::Create(thread))
