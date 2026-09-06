@@ -394,6 +394,7 @@ impl Thread {
 
             check_stack(state, 1)?;
             error.push_into_stack(&lua)?;
+            check_stack(thread_state, 1)?;
             ffi::lua_xmove(state, thread_state, 1);
 
             let _thread_sg = StackGuard::with_top(thread_state, 0);
