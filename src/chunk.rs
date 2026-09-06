@@ -672,8 +672,9 @@ impl Chunk<'_> {
                 self.mode = Some(ChunkMode::Binary);
             }
             #[cfg(not(feature = "luau"))]
-            if let Ok(func) = self.lua.lock().load_chunk(None, None, None, source.as_ref()) {
-                let data = func.dump(false);
+            if let Ok(func) = self.lua.lock().load_chunk(None, None, None, source.as_ref())
+                && let Ok(data) = func.try_dump(false)
+            {
                 self.source = Ok(Cow::Owned(data));
                 self.mode = Some(ChunkMode::Binary);
             }

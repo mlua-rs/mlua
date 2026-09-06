@@ -494,6 +494,12 @@ impl Function {
     #[cfg(not(feature = "luau"))]
     #[cfg_attr(docsrs, doc(cfg(not(feature = "luau"))))]
     pub fn dump(&self, strip: bool) -> Vec<u8> {
+        self.try_dump(strip).expect("cannot dump function")
+    }
+
+    // Like `dump`, but returns an error if stack growth or dumping fails.
+    #[cfg(not(feature = "luau"))]
+    pub(crate) fn try_dump(&self, strip: bool) -> Result<Vec<u8>> {
         unsafe extern "C-unwind" fn writer(
             _state: *mut ffi::lua_State,
             buf: *const c_void,
@@ -514,15 +520,28 @@ impl Function {
         let mut data: Vec<u8> = Vec::new();
         unsafe {
             let _sg = StackGuard::new(state);
-            assert_stack(state, 1);
+            // Lua 5.5 allocates an auxiliary table while dumping
+            let protect = cfg!(feature = "lua55") && !lua.unlikely_memory_error();
+            check_stack(state, if protect { 4 } else { 1 })?;
 
             lua.push_ref(&self.0);
+            if ffi::lua_iscfunction(state, -1) != 0 {
+                return Ok(data);
+            }
             let data_ptr = &mut data as *mut Vec<u8> as *mut c_void;
-            ffi::lua_dump(state, writer, data_ptr, strip as i32);
-            ffi::lua_pop(state, 1);
+            let status = if protect {
+                protect_lua!(state, 1, 0, |state| {
+                    ffi::lua_dump(state, writer, data_ptr, strip as i32)
+                })?
+            } else {
+                ffi::lua_dump(state, writer, data_ptr, strip as i32)
+            };
+            if status != 0 {
+                return Err(pop_error(state, status));
+            }
         }
 
-        data
+        Ok(data)
     }
 
     /// Retrieves recorded coverage information about this Lua function including inner calls.
