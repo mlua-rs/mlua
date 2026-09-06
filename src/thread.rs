@@ -843,7 +843,6 @@ impl<R: FromLuaMulti> Stream for AsyncThread<R> {
         let thread_state = self.thread.state();
         unsafe {
             let _sg = StackGuard::new(state);
-            let mut thread_sg = StackGuard::with_top(thread_state, 0);
             let _wg = WakerGuard::new(&lua, cx.waker());
 
             // If the resume callback runs, it may touch this thread, so re-read the argument count
@@ -857,6 +856,7 @@ impl<R: FromLuaMulti> Stream for AsyncThread<R> {
                 };
             }
 
+            let mut thread_sg = StackGuard::with_top(thread_state, 0);
             let (status, nresults) = (self.thread).resume_inner(&lua, nargs)?;
             let hook_yielded = status.is_yielded() && self.thread.is_hook_yielded(&lua);
             if hook_yielded {
@@ -903,7 +903,6 @@ impl<R: FromLuaMulti> Future for AsyncThread<R> {
         let thread_state = self.thread.state();
         unsafe {
             let _sg = StackGuard::new(state);
-            let mut thread_sg = StackGuard::with_top(thread_state, 0);
             let _wg = WakerGuard::new(&lua, cx.waker());
 
             // If the resume callback runs, it may touch this thread, so re-read the argument count
@@ -914,6 +913,7 @@ impl<R: FromLuaMulti> Future for AsyncThread<R> {
                 (nargs, _) = self.thread.resumable_state(&lua)?;
             }
 
+            let mut thread_sg = StackGuard::with_top(thread_state, 0);
             let (status, nresults) = self.thread.resume_inner(&lua, nargs)?;
             let hook_yielded = status.is_yielded() && self.thread.is_hook_yielded(&lua);
             if hook_yielded {

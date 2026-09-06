@@ -775,3 +775,22 @@ async fn test_async_current_thread() -> Result<()> {
 
     Ok(())
 }
+
+#[tokio::test]
+async fn test_async_thread_resume_event_error() -> Result<()> {
+    let lua = Lua::new();
+
+    let thread = lua.create_thread(lua.load("return ...").into_function()?)?;
+    let mut thread = thread.into_async::<i32>(42)?;
+    lua.set_thread_event_callback(mlua::thread::ThreadTriggers::ON_RESUME, |_, _| {
+        Err(Error::runtime("stop"))
+    });
+
+    let result = (&mut thread).await.map(|_| ());
+    assert!(matches!(result, Err(Error::RuntimeError(msg)) if msg == "stop"));
+
+    lua.remove_thread_event_callback();
+    assert_eq!(thread.await?, 42);
+
+    Ok(())
+}
