@@ -256,7 +256,11 @@ impl<'a> ser::Serializer for Serializer<'a> {
     fn serialize_seq(self, len: Option<usize>) -> Result<Self::SerializeSeq> {
         let table = self.lua.create_table_with_capacity(len.unwrap_or(0), 0)?;
         if self.options.set_array_metatable {
-            table.set_metatable(Some(self.lua.array_metatable()))?;
+            let lua = self.lua.lock();
+            unsafe {
+                super::push_array_metatable(lua.ref_thread());
+                ffi::lua_setmetatable(lua.ref_thread(), table.0.index);
+            }
         }
         Ok(SerializeSeq::new(self.lua, table, self.options))
     }
