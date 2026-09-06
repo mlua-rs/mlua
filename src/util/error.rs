@@ -358,52 +358,36 @@ pub(crate) unsafe fn init_error_registry(state: *mut ffi::lua_State) -> Result<(
 
     // Create error and panic metatables
 
-    static ERROR_PRINT_BUFFER_KEY: u8 = 0;
-
     unsafe extern "C-unwind" fn error_tostring(state: *mut ffi::lua_State) -> c_int {
         callback_error(state, |_| {
             check_stack(state, 3)?;
 
-            let err_buf = match get_internal_userdata::<WrappedFailure>(state, -1, ptr::null()).as_ref() {
+            let mut err_buf = String::new();
+            match get_internal_userdata::<WrappedFailure>(state, -1, ptr::null()).as_ref() {
                 Some(WrappedFailure::Error(error)) => {
-                    let err_buf_key = &ERROR_PRINT_BUFFER_KEY as *const u8 as *const c_void;
-                    ffi::lua_rawgetp(state, ffi::LUA_REGISTRYINDEX, err_buf_key);
-                    let err_buf = ffi::lua_touserdata(state, -1) as *mut String;
-                    ffi::lua_pop(state, 2);
-
-                    (*err_buf).clear();
                     // Depending on how the API is used and what error types scripts are given, it
                     // may be possible to make this consume arbitrary amounts of
                     // memory (for example, some kind of recursive error
                     // structure?)
-                    let _ = write!(&mut (*err_buf), "{error}");
-                    Ok(err_buf)
+                    let _ = write!(&mut err_buf, "{error}");
                 }
                 Some(WrappedFailure::Panic(Some(panic))) => {
-                    let err_buf_key = &ERROR_PRINT_BUFFER_KEY as *const u8 as *const c_void;
-                    ffi::lua_rawgetp(state, ffi::LUA_REGISTRYINDEX, err_buf_key);
-                    let err_buf = ffi::lua_touserdata(state, -1) as *mut String;
-                    (*err_buf).clear();
-                    ffi::lua_pop(state, 2);
-
                     if let Some(msg) = panic.downcast_ref::<&str>() {
-                        let _ = write!(&mut (*err_buf), "{msg}");
+                        let _ = write!(&mut err_buf, "{msg}");
                     } else if let Some(msg) = panic.downcast_ref::<String>() {
-                        let _ = write!(&mut (*err_buf), "{msg}");
+                        let _ = write!(&mut err_buf, "{msg}");
                     } else {
-                        let _ = write!(&mut (*err_buf), "<panic>");
+                        let _ = write!(&mut err_buf, "<panic>");
                     };
-                    Ok(err_buf)
                 }
-                Some(WrappedFailure::Panic(None)) => Err(Error::PreviouslyResumedPanic),
+                Some(WrappedFailure::Panic(None)) => return Err(Error::PreviouslyResumedPanic),
                 _ => {
                     // I'm not sure whether this is possible to trigger without bugs in mlua?
-                    Err(Error::UserDataTypeMismatch)
+                    return Err(Error::UserDataTypeMismatch);
                 }
-            }?;
+            }
 
-            push_string(state, (*err_buf).as_bytes(), true)?;
-            (*err_buf).clear();
+            push_string(state, err_buf.as_bytes(), true)?;
 
             Ok(1)
         })
@@ -485,14 +469,6 @@ pub(crate) unsafe fn init_error_registry(state: *mut ffi::lua_State) -> Result<(
     protect_lua!(state, 1, 0, fn(state) {
         let destructed_mt_key = &DESTRUCTED_USERDATA_METATABLE as *const u8 as *const c_void;
         ffi::lua_rawsetp(state, ffi::LUA_REGISTRYINDEX, destructed_mt_key);
-    })?;
-
-    // Create error print buffer
-    init_internal_metatable::<String>(state, None)?;
-    push_internal_userdata(state, String::new(), true)?;
-    protect_lua!(state, 1, 0, fn(state) {
-        let err_buf_key = &ERROR_PRINT_BUFFER_KEY as *const u8 as *const c_void;
-        ffi::lua_rawsetp(state, ffi::LUA_REGISTRYINDEX, err_buf_key);
     })?;
 
     Ok(())

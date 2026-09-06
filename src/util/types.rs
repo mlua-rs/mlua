@@ -10,14 +10,6 @@ pub(crate) trait TypeKey: Any {
     fn type_key() -> *const c_void;
 }
 
-impl TypeKey for String {
-    #[inline(always)]
-    fn type_key() -> *const c_void {
-        static STRING_TYPE_KEY: u8 = 0;
-        &STRING_TYPE_KEY as *const u8 as *const c_void
-    }
-}
-
 impl TypeKey for Callback {
     #[inline(always)]
     fn type_key() -> *const c_void {
