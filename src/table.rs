@@ -426,12 +426,12 @@ impl Table {
         // Compare using `__eq` metamethod if exists
         // First, check the self for the metamethod.
         // If self does not define it, then check the other table.
-        if let Some(mt) = self.metatable()
+        if let Some(mt) = self.try_metatable()?
             && let Some(eq_func) = mt.get::<Option<Function>>("__eq")?
         {
             return eq_func.call((self, other));
         }
-        if let Some(mt) = other.metatable()
+        if let Some(mt) = other.try_metatable()?
             && let Some(eq_func) = mt.get::<Option<Function>>("__eq")?
         {
             return eq_func.call((self, other));
@@ -672,6 +672,19 @@ impl Table {
             ffi::lua_pop(ref_thread, 2);
         }
         false
+    }
+
+    // Like `metatable`, but returns an error if the auxiliary stack cannot grow.
+    fn try_metatable(&self) -> Result<Option<Table>> {
+        let lua = self.0.lua.lock();
+        let ref_thread = lua.ref_thread();
+        unsafe {
+            Ok(if ffi::lua_getmetatable(ref_thread, self.0.index) == 0 {
+                None
+            } else {
+                Some(Table(lua.try_pop_ref_thread()?))
+            })
+        }
     }
 
     /// Returns a reference to the metatable of this table, or `None` if no metatable is set.
