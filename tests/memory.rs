@@ -45,6 +45,17 @@ fn test_memory_limit() -> Result<()> {
         _ => panic!("did not trigger memory error"),
     };
 
+    // Callback cleanup must not panic if the reference stack cannot grow under a memory limit.
+    for nrefs in 0..64 {
+        let lua = Lua::new();
+        let f = lua.create_function(|lua, value: i32| {
+            lua.set_memory_limit(1)?;
+            Ok(value)
+        })?;
+        let _refs: Vec<_> = (0..nrefs).map(|_| lua.globals()).collect();
+        assert_eq!(f.call::<i32>(42)?, 42);
+    }
+
     Ok(())
 }
 

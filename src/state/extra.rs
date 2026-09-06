@@ -9,7 +9,7 @@ use std::sync::Arc;
 use parking_lot::Mutex;
 use rustc_hash::FxHashMap;
 
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::state::RawLua;
 use crate::stdlib::StdLib;
 use crate::thread::ThreadTriggers;
@@ -272,11 +272,21 @@ impl ExtraData {
         self.weak.assume_init_ref()
     }
 
-    /// Pops a reference from top of the auxiliary stack and move it to a first free slot.
+    /// Like `try_ref_stack_pop`, but panics if the auxiliary stack cannot grow.
     pub(super) unsafe fn ref_stack_pop(&mut self) -> c_int {
+        self.try_ref_stack_pop().unwrap_or_else(|_| {
+            let top = self.ref_stack_top;
+            panic!("cannot create a Lua reference, out of auxiliary stack space (used {top} slots)");
+        })
+    }
+
+    /// Pops a reference from top of the auxiliary stack and move it to a first free slot.
+    ///
+    /// Returns an error if the auxiliary stack cannot grow.
+    pub(super) unsafe fn try_ref_stack_pop(&mut self) -> Result<c_int> {
         if let Some(free) = self.ref_free.pop() {
             ffi::lua_replace(self.ref_thread, free);
-            return free;
+            return Ok(free);
         }
 
         // Try to grow max stack size
@@ -286,17 +296,13 @@ impl ExtraData {
                 inc /= 2;
             }
             if inc == 0 {
-                // Pop item on top of the stack to avoid stack leaking and successfully run destructors
-                // during unwinding.
+                // Pop the pending value to keep the stack balanced on failure.
                 ffi::lua_pop(self.ref_thread, 1);
-                let top = self.ref_stack_top;
-                // It is a user error to create too many references to exhaust the Lua max stack size
-                // for the ref thread.
-                panic!("cannot create a Lua reference, out of auxiliary stack space (used {top} slots)");
+                return Err(Error::StackError);
             }
             self.ref_stack_size += inc;
         }
         self.ref_stack_top += 1;
-        self.ref_stack_top
+        Ok(self.ref_stack_top)
     }
 }

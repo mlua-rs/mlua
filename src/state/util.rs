@@ -89,9 +89,10 @@ where
                 PreallocatedFailure::New(_) => {
                     ffi::lua_rotate(state, 1, -1);
                     ffi::lua_xmove(state, ref_thread, 1);
-                    let index = (*extra).ref_stack_pop();
-                    (*extra).wrapped_failure_pool.push(index);
-                    (*extra).wrapped_failure_top += 1;
+                    if let Ok(index) = (*extra).try_ref_stack_pop() {
+                        (*extra).wrapped_failure_pool.push(index);
+                        (*extra).wrapped_failure_top += 1;
+                    }
                 }
                 PreallocatedFailure::Reserved => (*extra).wrapped_failure_top += 1,
             }
