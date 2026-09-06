@@ -113,33 +113,42 @@ where
             prealloc_failure.release(state, extra);
             r
         }
-        Ok(Err(err)) => {
+        Ok(Err(mut err)) => {
             let wrapped_error = prealloc_failure.r#use(state, extra);
-
-            if !wrap_error {
-                ptr::write(wrapped_error, WrappedFailure::Error(err));
-                get_internal_metatable::<WrappedFailure>(state);
-                ffi::lua_setmetatable(state, -2);
-                ffi::lua_error(state)
+            if wrap_error {
+                err = Error::CallbackError {
+                    traceback: String::new(),
+                    cause: Arc::new(err),
+                };
             }
 
-            // Build `CallbackError` with traceback
-            let traceback = if ffi::lua_checkstack(state, ffi::LUA_TRACEBACK_STACK) != 0 {
-                ffi::luaL_traceback(state, state, ptr::null(), 0);
-                let traceback = util::to_string(state, -1);
-                ffi::lua_pop(state, 1);
-                traceback
-            } else {
-                "<not enough stack space for traceback>".to_string()
-            };
-            let cause = Arc::new(err);
-            ptr::write(
-                wrapped_error,
-                WrappedFailure::Error(Error::CallbackError { traceback, cause }),
-            );
+            // Store the error before traceback generation can fail or run GC.
+            ptr::write(wrapped_error, WrappedFailure::Error(err));
             get_internal_metatable::<WrappedFailure>(state);
             ffi::lua_setmetatable(state, -2);
 
+            if wrap_error {
+                if (*extra).raw_lua().unlikely_memory_error() {
+                    if ffi::lua_checkstack(state, ffi::LUA_TRACEBACK_STACK) != 0 {
+                        ffi::luaL_traceback(state, state, ptr::null(), 0);
+                    }
+                } else if let Err(p) = catch_unwind(AssertUnwindSafe(
+                    || protect_lua!(state, 0, 1, fn(state) ffi::luaL_traceback(state, state, ptr::null(), 1)),
+                )) {
+                    // Let Lua restore its frames before resuming a hook panic.
+                    *wrapped_error = WrappedFailure::Panic(Some(p));
+                }
+                if let WrappedFailure::Error(Error::CallbackError { traceback, .. }) = &mut *wrapped_error {
+                    // A successful call leaves the traceback above the stored error.
+                    *traceback = if ffi::lua_type(state, -1) == ffi::LUA_TSTRING {
+                        util::to_string(state, -1)
+                    } else {
+                        "<traceback unavailable>".to_string()
+                    };
+                }
+            }
+
+            ffi::lua_settop(state, 1);
             ffi::lua_error(state)
         }
         Err(p) => {

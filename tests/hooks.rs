@@ -1,5 +1,6 @@
 #![cfg(not(feature = "luau"))]
 
+use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::{Arc, Mutex};
 
@@ -109,6 +110,33 @@ fn test_error_within_hook() -> Result<()> {
         err => panic!("expected `RuntimeError` with a specific message, got {err:?}"),
     }
 
+    Ok(())
+}
+
+#[test]
+fn test_panic_during_callback_traceback() -> Result<()> {
+    let lua = Lua::new();
+    if cfg!(feature = "luajit") && lua.set_memory_limit(0).is_err() {
+        return Ok(());
+    }
+    let callback = lua.create_function(|lua, ()| -> Result<()> {
+        lua.set_hook(HookTriggers::ON_CALLS, |lua, _| {
+            lua.remove_hook();
+            panic!("traceback hook panic");
+        })?;
+        // use protected traceback generation
+        lua.set_memory_limit(usize::MAX)?;
+        Err(Error::runtime("callback error"))
+    })?;
+    lua.globals().set("callback", callback)?;
+
+    let panic = catch_unwind(AssertUnwindSafe(|| lua.load("callback()").exec()))
+        .expect_err("hook panic did not propagate");
+    assert_eq!(panic.downcast_ref::<&str>(), Some(&"traceback hook panic"));
+    assert!(
+        lua.inspect_stack(0, |_| ()).is_none(),
+        "Lua frames were not restored"
+    );
     Ok(())
 }
 

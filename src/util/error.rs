@@ -310,7 +310,7 @@ pub(crate) unsafe extern "C-unwind" fn error_traceback(state: *mut ffi::lua_Stat
     // See https://github.com/luau-lang/luau/issues/880
     #[cfg(feature = "luau")]
     if MemoryState::limit_reached(state) {
-        return 0;
+        return 1;
     }
 
     if ffi::lua_checkstack(state, 2) == 0 {
