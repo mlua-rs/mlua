@@ -56,7 +56,7 @@ pub trait FromLua: Sized {
     #[doc(hidden)]
     #[inline]
     unsafe fn from_stack(idx: c_int, lua: &RawLua) -> Result<Self> {
-        Self::from_lua(lua.stack_value(idx, None), lua.lua())
+        Self::from_lua(lua.try_stack_value(idx, None)?, lua.lua())
     }
 
     /// Same as `from_lua_arg` but for a value in the Lua stack at index `idx`.
@@ -129,7 +129,7 @@ pub trait FromLuaMulti: Sized {
     unsafe fn from_stack_multi(nvals: c_int, lua: &RawLua) -> Result<Self> {
         let mut values = MultiValue::with_capacity(nvals as usize);
         for idx in 0..nvals {
-            values.push_back(lua.stack_value(-nvals + idx, None));
+            values.push_back(lua.try_stack_value(-nvals + idx, None)?);
         }
         Self::from_lua_multi(values, lua.lua())
     }

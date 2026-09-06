@@ -1382,7 +1382,7 @@ where
                 // It fails only if the key is not found (never existed) which seems impossible
                 // scenario.
                 if ffi::lua_next(state, -2) != 0 {
-                    let key = lua.stack_value(-2, None);
+                    let key = lua.try_stack_value(-2, None)?;
                     Ok(Some((
                         key.clone(),
                         K::from_lua(key, lua.lua())?,

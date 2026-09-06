@@ -1006,7 +1006,7 @@ impl AnyUserData {
             let _type_id = lua.get_userdata_ref_type_id(&self.0)?;
 
             ffi::lua_getmetatable(ref_thread, self.0.index);
-            Ok(Table(lua.pop_ref_thread()))
+            Ok(Table(lua.try_pop_ref_thread()?))
         }
     }
 
@@ -1049,7 +1049,7 @@ impl AnyUserData {
                 ffi::luaL_getmetafield(state, -1, MetaMethod::Type.as_cstr().as_ptr())
             };
             match name_type {
-                ffi::LUA_TSTRING => Ok(LuaString(lua.pop_ref())),
+                ffi::LUA_TSTRING => Ok(LuaString(lua.try_pop_ref()?)),
                 _ => lua.create_string(b"userdata"),
             }
         }
@@ -1103,7 +1103,7 @@ impl AnyUserData {
                 }
             }
         })?;
-        Ok(lua.pop_value().as_string().map(|s| s.to_string_lossy()))
+        Ok(lua.try_pop_value()?.as_string().map(|s| s.to_string_lossy()))
     }
 
     pub(crate) fn fmt_pretty(&self, fmt: &mut fmt::Formatter) -> fmt::Result {

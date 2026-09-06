@@ -372,7 +372,7 @@ impl RawLua {
                 })?
             };
             match status {
-                ffi::LUA_OK => Ok(Function(self.pop_ref())),
+                ffi::LUA_OK => Ok(Function(self.try_pop_ref()?)),
                 err => Err(pop_error(state, err)),
             }
         }
@@ -560,13 +560,13 @@ impl RawLua {
         let state = self.state();
         if self.unlikely_memory_error() {
             push_string(state, s, false)?;
-            return Ok(LuaString(self.pop_ref()));
+            return Ok(LuaString(self.try_pop_ref()?));
         }
 
         let _sg = StackGuard::new(state);
         check_stack(state, 3)?;
         push_string(state, s, true)?;
-        Ok(LuaString(self.pop_ref()))
+        Ok(LuaString(self.try_pop_ref()?))
     }
 
     /// Creates an external string, that is, a string that uses memory not managed by Lua.
@@ -577,13 +577,13 @@ impl RawLua {
         let state = self.state();
         if self.unlikely_memory_error() {
             crate::util::push_external_string(state, bytes, false)?;
-            return Ok(LuaString(self.pop_ref()));
+            return Ok(LuaString(self.try_pop_ref()?));
         }
 
         let _sg = StackGuard::new(state);
         check_stack(state, 3)?;
         crate::util::push_external_string(state, bytes, true)?;
-        Ok(LuaString(self.pop_ref()))
+        Ok(LuaString(self.try_pop_ref()?))
     }
 
     #[cfg(feature = "luau")]
@@ -591,13 +591,13 @@ impl RawLua {
         let state = self.state();
         if self.unlikely_memory_error() {
             let ptr = crate::util::push_buffer(state, size, false)?;
-            return Ok((ptr, crate::Buffer(self.pop_ref())));
+            return Ok((ptr, crate::Buffer(self.try_pop_ref()?)));
         }
 
         let _sg = StackGuard::new(state);
         check_stack(state, 3)?;
         let ptr = crate::util::push_buffer(state, size, true)?;
-        Ok((ptr, crate::Buffer(self.pop_ref())))
+        Ok((ptr, crate::Buffer(self.try_pop_ref()?)))
     }
 
     /// See [`Lua::create_table_with_capacity`]
@@ -605,13 +605,13 @@ impl RawLua {
         let state = self.state();
         if self.unlikely_memory_error() {
             push_table(state, narr, nrec, false)?;
-            return Ok(Table(self.pop_ref()));
+            return Ok(Table(self.try_pop_ref()?));
         }
 
         let _sg = StackGuard::new(state);
         check_stack(state, 3)?;
         push_table(state, narr, nrec, true)?;
-        Ok(Table(self.pop_ref()))
+        Ok(Table(self.try_pop_ref()?))
     }
 
     /// See [`Lua::create_table_from`]
@@ -639,7 +639,7 @@ impl RawLua {
             }
         }
 
-        Ok(Table(self.pop_ref()))
+        Ok(Table(self.try_pop_ref()?))
     }
 
     /// See [`Lua::create_sequence_from`]
@@ -667,7 +667,7 @@ impl RawLua {
             }
         }
 
-        Ok(Table(self.pop_ref()))
+        Ok(Table(self.try_pop_ref()?))
     }
 
     /// Wraps a Lua function into a new thread (or coroutine).
@@ -692,7 +692,7 @@ impl RawLua {
         #[cfg(not(feature = "luau"))]
         self.set_thread_hook(thread_state, HookKind::Global)?;
 
-        let thread = Thread(self.pop_ref(), thread_state);
+        let thread = Thread(self.try_pop_ref()?, thread_state);
 
         // Exec creation callback for non-Luau (Luau handles this via `userthread_proc`)
         #[cfg(not(feature = "luau"))]
@@ -878,17 +878,28 @@ impl RawLua {
     #[allow(clippy::missing_safety_doc)]
     #[inline]
     pub unsafe fn pop_value(&self) -> Value {
-        let value = self.stack_value(-1, None);
+        self.try_pop_value().unwrap_or_else(|_| {
+            let top = (*self.extra.get()).ref_stack_top;
+            panic!("cannot create a Lua reference, out of auxiliary stack space (used {top} slots)");
+        })
+    }
+
+    // Pops a value, returning an error if its reference cannot be retained.
+    // The value is popped even on failure. Does not call `checkstack`.
+    #[inline]
+    pub(crate) unsafe fn try_pop_value(&self) -> Result<Value> {
+        let value = self.try_stack_value(-1, None);
         ffi::lua_pop(self.state(), 1);
         value
     }
 
     /// Returns value at given stack index without popping it.
     ///
+    /// Returns an error if the auxiliary stack cannot grow.
     /// Uses up to 1 stack spaces, does not call `checkstack`.
-    pub(crate) unsafe fn stack_value(&self, idx: c_int, type_hint: Option<c_int>) -> Value {
+    pub(crate) unsafe fn try_stack_value(&self, idx: c_int, type_hint: Option<c_int>) -> Result<Value> {
         let state = self.state();
-        match type_hint.unwrap_or_else(|| ffi::lua_type(state, idx)) {
+        Ok(match type_hint.unwrap_or_else(|| ffi::lua_type(state, idx)) {
             ffi::LUA_TNIL => Nil,
 
             ffi::LUA_TBOOLEAN => Value::Boolean(ffi::lua_toboolean(state, idx) != 0),
@@ -927,24 +938,29 @@ impl RawLua {
                 let v = ffi::lua_tovector(state, idx);
                 mlua_debug_assert!(!v.is_null(), "vector is null");
                 #[cfg(not(feature = "luau-vector4"))]
-                return Value::Vector(crate::Vector([*v, *v.add(1), *v.add(2)]));
+                return Ok(Value::Vector(crate::Vector([*v, *v.add(1), *v.add(2)])));
                 #[cfg(feature = "luau-vector4")]
-                return Value::Vector(crate::Vector([*v, *v.add(1), *v.add(2), *v.add(3)]));
+                return Ok(Value::Vector(crate::Vector([
+                    *v,
+                    *v.add(1),
+                    *v.add(2),
+                    *v.add(3),
+                ])));
             }
 
             ffi::LUA_TSTRING => {
                 ffi::lua_xpush(state, self.ref_thread(), idx);
-                Value::String(LuaString(self.pop_ref_thread()))
+                Value::String(LuaString(self.try_pop_ref_thread()?))
             }
 
             ffi::LUA_TTABLE => {
                 ffi::lua_xpush(state, self.ref_thread(), idx);
-                Value::Table(Table(self.pop_ref_thread()))
+                Value::Table(Table(self.try_pop_ref_thread()?))
             }
 
             ffi::LUA_TFUNCTION => {
                 ffi::lua_xpush(state, self.ref_thread(), idx);
-                Value::Function(Function(self.pop_ref_thread()))
+                Value::Function(Function(self.try_pop_ref_thread()?))
             }
 
             ffi::LUA_TUSERDATA => {
@@ -961,7 +977,7 @@ impl RawLua {
                     }
                     _ => {
                         ffi::lua_xpush(state, self.ref_thread(), idx);
-                        Value::UserData(AnyUserData(self.pop_ref_thread()))
+                        Value::UserData(AnyUserData(self.try_pop_ref_thread()?))
                     }
                 }
             }
@@ -969,20 +985,20 @@ impl RawLua {
             ffi::LUA_TTHREAD => {
                 ffi::lua_xpush(state, self.ref_thread(), idx);
                 let thread_state = ffi::lua_tothread(self.ref_thread(), -1);
-                Value::Thread(Thread(self.pop_ref_thread(), thread_state))
+                Value::Thread(Thread(self.try_pop_ref_thread()?, thread_state))
             }
 
             #[cfg(feature = "luau")]
             ffi::LUA_TBUFFER => {
                 ffi::lua_xpush(state, self.ref_thread(), idx);
-                Value::Buffer(crate::Buffer(self.pop_ref_thread()))
+                Value::Buffer(crate::Buffer(self.try_pop_ref_thread()?))
             }
 
             _ => {
                 ffi::lua_xpush(state, self.ref_thread(), idx);
-                Value::Other(self.pop_ref_thread())
+                Value::Other(self.try_pop_ref_thread()?)
             }
-        }
+        })
     }
 
     // Pushes a ValueRef value onto the stack, uses 1 stack space, does not call checkstack
@@ -1135,7 +1151,7 @@ impl RawLua {
             ffi::lua_setuservalue(state, -2);
         }
 
-        Ok(AnyUserData(self.pop_ref()))
+        Ok(AnyUserData(self.try_pop_ref()?))
     }
 
     pub(crate) unsafe fn create_userdata_metatable(&self, registry: RawUserDataRegistry) -> Result<c_int> {
@@ -1416,7 +1432,7 @@ impl RawLua {
             let func = Some(func);
             let extra = XRc::clone(&self.extra);
             let protect = !self.unlikely_memory_error();
-            push_internal_userdata(state, CallbackUpvalue { data: func, extra }, protect)?;
+            let upvalue = push_internal_userdata(state, CallbackUpvalue { data: func, extra }, protect)?;
             if protect {
                 protect_lua!(state, 1, 1, fn(state) {
                     ffi::lua_pushcclosure(state, call_callback, 1);
@@ -1425,7 +1441,10 @@ impl RawLua {
                 ffi::lua_pushcclosure(state, call_callback, 1);
             }
 
-            Ok(Function(self.pop_ref()))
+            self.try_pop_ref().map(Function).inspect_err(|_| {
+                // Scoped callbacks must release their captures before the scope ends.
+                (*upvalue).data.take();
+            })
         }
     }
 
@@ -1536,7 +1555,7 @@ impl RawLua {
                 ffi::lua_pushcclosure(state, get_future_callback, 1);
             }
 
-            Function(self.pop_ref())
+            Function(self.try_pop_ref()?)
         };
 
         unsafe extern "C-unwind" fn unpack(state: *mut ffi::lua_State) -> c_int {
@@ -1549,7 +1568,7 @@ impl RawLua {
         }
 
         let lua = self.lua();
-        let coroutine = lua.globals().get::<Table>("coroutine")?;
+        let coroutine = lua.try_globals()?.get::<Table>("coroutine")?;
 
         // Prepare environment for the async poller
         let env = lua.create_table_with_capacity(0, 4)?;

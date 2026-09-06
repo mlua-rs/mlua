@@ -327,7 +327,7 @@ impl Function {
                 ffi::lua_pushcclosure(state, args_wrapper_impl, ffi::lua_gettop(state));
             })?;
 
-            Function(lua.pop_ref())
+            Function(lua.try_pop_ref()?)
         };
 
         let lua = lua.lua();
@@ -607,7 +607,7 @@ impl Function {
             } else {
                 protect_lua!(state, 1, 1, fn(state) ffi::lua_clonefunction(state, -1))?;
             }
-            Ok(Function(lua.pop_ref()))
+            Ok(Function(lua.try_pop_ref()?))
         }
     }
 }

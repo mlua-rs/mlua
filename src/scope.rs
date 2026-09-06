@@ -200,7 +200,16 @@ impl<'scope, 'env: 'scope> Scope<'scope, 'env> {
             std::ptr::write(ud_ptr, UserDataStorage::new_scoped(data));
             ffi::lua_setmetatable(state, -2);
 
-            AnyUserData(self.lua.pop_ref())
+            // Keep the userdata on the stack so it can be invalidated on failure.
+            ffi::lua_xpush(state, self.lua.ref_thread(), -1);
+            match self.lua.try_pop_ref_thread() {
+                Ok(vref) => AnyUserData(vref),
+                Err(err) => {
+                    self.lua.deregister_userdata_metatable(mt_ptr);
+                    drop(take_userdata::<UserDataStorage<T>>(state, -1));
+                    return Err(err);
+                }
+            }
         };
         self.seal_userdata::<T>(&ud);
         Ok(ud)

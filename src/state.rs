@@ -1074,7 +1074,7 @@ impl Lua {
                 // `protect_lua` adds it's own call frame, so we need to increase level by 1
                 ffi::luaL_traceback(state, state, msg, (level + 1) as c_int);
             })?;
-            Ok(LuaString(lua.pop_ref()))
+            Ok(LuaString(lua.try_pop_ref()?))
         }
     }
 
@@ -1530,7 +1530,7 @@ impl Lua {
             feature = "lua52"
         )) {
             ffi::lua_pushcfunction(lua.ref_thread(), func);
-            return Ok(Function(lua.pop_ref_thread()));
+            return Ok(Function(lua.try_pop_ref_thread()?));
         }
 
         // Lua <5.2 requires memory allocation to push a C function
@@ -1544,7 +1544,7 @@ impl Lua {
             } else {
                 protect_lua!(state, 0, 1, |state| ffi::lua_pushcfunction(state, func))?;
             }
-            Ok(Function(lua.pop_ref()))
+            Ok(Function(lua.try_pop_ref()?))
         }
     }
 
@@ -1782,6 +1782,16 @@ impl Lua {
         }
     }
 
+    // Like `globals`, but returns an error if the stack cannot grow.
+    pub(crate) fn try_globals(&self) -> Result<Table> {
+        let lua = self.lock();
+        unsafe {
+            check_stack(lua.state(), 1)?;
+            ffi::lua_pushglobaltable(lua.state());
+            Ok(Table(lua.try_pop_ref()?))
+        }
+    }
+
     /// Returns a handle to the global environment.
     pub fn globals(&self) -> Table {
         let lua = self.lock();
@@ -1895,7 +1905,7 @@ impl Lua {
                     })?
                 };
                 if !res.is_null() {
-                    Some(LuaString(lua.pop_ref()))
+                    Some(LuaString(lua.try_pop_ref()?))
                 } else {
                     None
                 }
@@ -2418,7 +2428,7 @@ impl Lua {
 
     #[cfg(not(feature = "luau"))]
     fn disable_c_modules(&self) -> Result<()> {
-        let package: Table = self.globals().get("package")?;
+        let package: Table = self.try_globals()?.get("package")?;
 
         package.set(
             "loadlib",

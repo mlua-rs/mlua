@@ -156,7 +156,7 @@ impl Value {
             protect_lua!(state, 1, 1, fn(state) {
                 ffi::luaL_tolstring(state, -1, ptr::null_mut());
             })?;
-            Ok(LuaString(lua.pop_ref()).to_str()?.to_string())
+            Ok(LuaString(lua.try_pop_ref()?).to_str()?.to_string())
         }
 
         match self {

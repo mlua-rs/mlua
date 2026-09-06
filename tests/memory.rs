@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use mlua::state::{GcIncParams, GcMode};
-use mlua::{Error, Lua, Result, UserData};
+use mlua::{Error, Function, Lua, MultiValue, Result, Table, UserData};
 
 #[cfg(any(feature = "lua54", feature = "lua55"))]
 use mlua::state::GcGenParams;
@@ -56,6 +56,36 @@ fn test_memory_limit() -> Result<()> {
         assert_eq!(f.call::<i32>(42)?, 42);
     }
 
+    Ok(())
+}
+
+#[test]
+fn test_result_reference_exhaustion() -> Result<()> {
+    let lua = Lua::new();
+    if cfg!(feature = "luajit") && lua.set_memory_limit(0).is_err() {
+        return Ok(());
+    }
+    let f: Function = lua
+        .load("local t = {}; return function() return t, t end")
+        .eval()?;
+    f.call::<MultiValue>(())?; // Warm the call stack before limiting allocations.
+    lua.set_memory_limit(1)?;
+
+    let mut refs = Vec::new();
+    loop {
+        match f.call::<Table>(()) {
+            Ok(table) => refs.push(table),
+            Err(Error::StackError) => break,
+            Err(err) => return Err(err),
+        }
+    }
+
+    // The first result can be retained, but the second must fail and release the first.
+    drop(refs.pop().unwrap());
+    assert!(matches!(f.call::<MultiValue>(()), Err(Error::StackError)));
+    f.call::<Table>(())?;
+    lua.set_memory_limit(0)?;
+    assert_eq!(f.call::<MultiValue>(())?.len(), 2);
     Ok(())
 }
 

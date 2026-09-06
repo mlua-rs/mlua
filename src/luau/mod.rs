@@ -81,7 +81,7 @@ impl Lua {
     }
 
     pub(crate) unsafe fn configure_luau(&self) -> Result<()> {
-        let globals = self.globals();
+        let globals = self.try_globals()?;
 
         globals.raw_set("collectgarbage", self.create_c_function(lua_collectgarbage)?)?;
         globals.raw_set("loadstring", self.create_c_function(lua_loadstring)?)?;
@@ -94,7 +94,7 @@ impl Lua {
 
         // Enable default `require` implementation
         let require = self.create_require_function(FsRequirer::new())?;
-        self.globals().raw_set("require", require)?;
+        self.try_globals()?.raw_set("require", require)?;
 
         Ok(())
     }
