@@ -116,6 +116,23 @@ fn test_table_push_pop() -> Result<()> {
 }
 
 #[test]
+fn test_table_pop_empty() -> Result<()> {
+    let lua = Lua::new();
+
+    let empty = lua.create_table()?;
+    let table = lua.create_table_from([(0, 42)])?;
+    assert_eq!(empty.raw_pop::<Value>()?, Value::Nil);
+    assert_eq!(table.raw_pop::<Value>()?, Value::Nil);
+    assert_eq!(table.raw_get::<i64>(0)?, 42);
+
+    table.set_metatable(Some(lua.create_table()?))?;
+    assert_eq!(table.pop::<Value>()?, Value::Nil);
+    assert_eq!(table.raw_get::<i64>(0)?, 42);
+
+    Ok(())
+}
+
+#[test]
 fn test_table_insert_remove() -> Result<()> {
     let lua = Lua::new();
 

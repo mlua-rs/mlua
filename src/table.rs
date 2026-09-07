@@ -333,9 +333,13 @@ impl Table {
             lua.push_ref(&self.0);
             protect_lua!(state, 1, 1, fn(state) {
                 let len = ffi::luaL_len(state, -1) as Integer;
-                ffi::lua_geti(state, -1, len);
-                ffi::lua_pushnil(state);
-                ffi::lua_seti(state, -3, len);
+                if len == 0 {
+                    ffi::lua_pushnil(state);
+                } else {
+                    ffi::lua_geti(state, -1, len);
+                    ffi::lua_pushnil(state);
+                    ffi::lua_seti(state, -3, len);
+                }
             })?;
             V::from_stack(-1, &lua)
         }
@@ -542,10 +546,14 @@ impl Table {
 
             lua.push_ref(&self.0);
             let len = ffi::lua_rawlen(state, -1) as Integer;
-            ffi::lua_rawgeti(state, -1, len);
-            // Set slot to nil (it must be safe to do)
-            ffi::lua_pushnil(state);
-            ffi::lua_rawseti(state, -3, len);
+            if len == 0 {
+                ffi::lua_pushnil(state);
+            } else {
+                ffi::lua_rawgeti(state, -1, len);
+                // Clear an existing slot without allocating.
+                ffi::lua_pushnil(state);
+                ffi::lua_rawseti(state, -3, len);
+            }
 
             V::from_stack(-1, &lua)
         }
