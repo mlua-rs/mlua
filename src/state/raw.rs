@@ -495,8 +495,9 @@ impl RawLua {
         // Hooks for threads stored in the registry (in a weak table)
         let state = self.state();
         let _sg = StackGuard::new(state);
-        check_stack(state, 3)?;
-        protect_lua!(state, 0, 0, |state| {
+        check_stack(state, 4)?;
+        push_internal_userdata(state, callback, !self.unlikely_memory_error())?;
+        protect_lua!(state, 1, 0, |state| {
             if ffi::luaL_getsubtable(state, ffi::LUA_REGISTRYINDEX, HOOKS_KEY) == 0 {
                 // Table just created, initialize it
                 ffi::lua_pushliteral(state, c"k");
@@ -507,7 +508,7 @@ impl RawLua {
 
             ffi::lua_pushthread(thread_state);
             ffi::lua_xmove(thread_state, state, 1); // key (thread)
-            let _ = push_internal_userdata(state, callback, false); // value (hook callback)
+            ffi::lua_pushvalue(state, 1); // value (hook callback)
             ffi::lua_rawset(state, -3); // hooktable[thread] = hook callback
         })?;
 

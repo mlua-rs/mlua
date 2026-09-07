@@ -263,6 +263,7 @@ where
     F: FnOnce(*mut ffi::lua_State) -> R,
     R: Copy,
 {
+    // TODO: Prevent leaking owning captures on longjmp while keeping `Lua::exec_raw` compatibility.
     struct Params<F, R> {
         function: Option<F>,
         result: MaybeUninit<R>,

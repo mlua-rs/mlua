@@ -390,3 +390,26 @@ fn test_global_hook() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn test_hook_memory_error() -> Result<()> {
+    let lua = Lua::new();
+    if cfg!(feature = "luajit") && lua.set_memory_limit(0).is_err() {
+        return Ok(());
+    }
+
+    let arc = Arc::new(());
+    let captured = arc.clone();
+    lua.set_memory_limit(1)?;
+    assert!(matches!(
+        lua.set_hook(HookTriggers::EVERY_LINE, move |_, _| {
+            let _ = &captured;
+            Ok(VmState::Continue)
+        }),
+        Err(Error::MemoryError(_))
+    ));
+    drop(lua);
+    assert_eq!(Arc::strong_count(&arc), 1);
+
+    Ok(())
+}

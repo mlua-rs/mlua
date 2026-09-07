@@ -10,7 +10,9 @@ use crate::error::{Error, Result};
 use crate::function::Function;
 use crate::state::{Lua, callback_error_ext};
 use crate::table::Table;
+use crate::traits::FromLuaMulti;
 use crate::types::MaybeSend;
+use crate::util::{StackGuard, check_stack, push_userdata};
 
 pub use fs::FsRequirer;
 
@@ -420,15 +422,20 @@ pub(super) fn create_require_function<R: Require + MaybeSend + 'static>(
     }
 
     let (get_cache_key, find_current_file, proxyrequire, registered_modules, loader_cache) = unsafe {
-        lua.exec_raw::<(Function, Function, Function, Table, Table)>((), move |state| {
-            let context = Context::new(require);
-            let context_ptr = ffi::lua_newuserdata_t(state, RefCell::new(context));
+        let rawlua = lua.lock();
+        let state = rawlua.state();
+        let _sg = StackGuard::new(state);
+        check_stack(state, 6)?;
+        let protect = !rawlua.unlikely_memory_error();
+        let context_ptr = push_userdata(state, RefCell::new(Context::new(require)), protect)?;
+        protect_lua!(state, 1, 5, |state| {
             ffi::lua_pushcclosured(state, get_cache_key, cstr!("get_cache_key"), 1);
             ffi::lua_pushcfunctiond(state, find_current_file, cstr!("find_current_file"));
             ffi::luarequire_pushproxyrequire(state, init_config, context_ptr as *mut _);
             ffi::luaL_getsubtable(state, ffi::LUA_REGISTRYINDEX, ffi::LUA_REGISTERED_MODULES_TABLE);
             ffi::luaL_getsubtable(state, ffi::LUA_REGISTRYINDEX, cstr!("__MLUA_LOADER_CACHE"));
-        })
+        })?;
+        <(Function, Function, Function, Table, Table)>::from_stack_multi(5, &rawlua)
     }?;
 
     unsafe extern "C-unwind" fn error(state: *mut ffi::lua_State) -> c_int {

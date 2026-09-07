@@ -95,9 +95,20 @@ macro_rules! require_module_feature {
 }
 
 macro_rules! protect_lua {
-    ($state:expr, $nargs:expr, $nresults:expr, $f:expr) => {
-        crate::util::protect_lua_closure($state, $nargs, $nresults, $f)
-    };
+    ($state:expr, $nargs:expr, $nresults:expr, $f:expr) => {{
+        // Check captures here to preserve Lua::exec_raw's existing closure contract.
+        #[inline(always)]
+        fn check<F>(f: F) -> F {
+            const {
+                assert!(
+                    !std::mem::needs_drop::<F>(),
+                    "protected closure must not own values requiring drop"
+                );
+            }
+            f
+        }
+        crate::util::protect_lua_closure($state, $nargs, $nresults, check($f))
+    }};
 
     ($state:expr, $nargs:expr, $nresults:expr, fn($state_inner:ident) $code:expr) => {{
         use ::std::os::raw::c_int;
