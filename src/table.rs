@@ -809,6 +809,8 @@ impl Table {
             guard: self.0.lua.lock(),
             table: self,
             key: Some(Nil),
+            #[cfg(feature = "luau")]
+            index: 0,
             _phantom: PhantomData,
         }
     }
@@ -829,10 +831,24 @@ impl Table {
             check_stack(state, 5)?;
 
             lua.push_ref(&self.0);
+            #[cfg(feature = "luau")]
+            let mut index = 0;
+            #[cfg(not(feature = "luau"))]
             ffi::lua_pushnil(state);
-            while ffi::lua_next(state, -2) != 0 {
+            while {
+                #[cfg(feature = "luau")]
+                {
+                    index = ffi::lua_rawiter(state, -1, index);
+                    index >= 0
+                }
+                #[cfg(not(feature = "luau"))]
+                {
+                    ffi::lua_next(state, -2) != 0
+                }
+            } {
                 let k = K::from_stack(-2, &lua)?;
-                let v = lua.pop::<V>()?;
+                let v = V::from_stack(-1, &lua)?;
+                ffi::lua_pop(state, if cfg!(feature = "luau") { 2 } else { 1 });
                 f(k, v)?;
             }
         }
@@ -1356,6 +1372,8 @@ pub struct TablePairs<'a, K, V> {
     guard: LuaGuard,
     table: &'a Table,
     key: Option<Value>,
+    #[cfg(feature = "luau")]
+    index: std::os::raw::c_int,
     _phantom: PhantomData<(K, V)>,
 }
 
@@ -1367,7 +1385,7 @@ where
     type Item = Result<(K, V)>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if let Some(prev_key) = self.key.take() {
+        if let Some(_prev_key) = self.key.take() {
             let lua: &RawLua = &self.guard;
             let state = lua.state();
 
@@ -1376,13 +1394,18 @@ where
                 check_stack(state, 5)?;
 
                 lua.push_ref(&self.table.0);
-                lua.push_value(&prev_key)?;
+                #[cfg(feature = "luau")]
+                let more = {
+                    self.index = ffi::lua_rawiter(state, -1, self.index);
+                    self.index >= 0
+                };
+                #[cfg(not(feature = "luau"))]
+                let more = {
+                    lua.push_value(&_prev_key)?;
+                    ffi::lua_next(state, -2) != 0
+                };
 
-                // It must be safe to call `lua_next` unprotected as deleting a key from a table is
-                // a permitted operation.
-                // It fails only if the key is not found (never existed) which seems impossible
-                // scenario.
-                if ffi::lua_next(state, -2) != 0 {
+                if more {
                     let key = lua.try_stack_value(-2, None)?;
                     Ok(Some((
                         key.clone(),

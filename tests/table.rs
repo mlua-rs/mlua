@@ -273,6 +273,25 @@ fn test_table_pairs() -> Result<()> {
 }
 
 #[test]
+#[cfg(feature = "luau")]
+fn test_table_iteration_after_clear() -> Result<()> {
+    let lua = Lua::new();
+
+    let table = lua.create_table_from([("key", 1)])?;
+    let mut pairs = table.pairs::<String, i32>();
+    pairs.next().unwrap()?;
+    table.clear()?;
+    assert!(pairs.next().is_none());
+
+    table.raw_set("key", 1)?;
+    table.for_each::<String, i32>(|_, _| table.clear())?;
+    table.raw_set("key", 2)?;
+    assert_eq!(table.pairs::<String, i32>().next().unwrap()?.1, 2);
+
+    Ok(())
+}
+
+#[test]
 fn test_table_for_each() -> Result<()> {
     let lua = Lua::new();
 
