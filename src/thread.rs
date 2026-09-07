@@ -807,6 +807,12 @@ impl<R> Drop for AsyncThread<R> {
             && let Some(lua) = self.thread.0.lua.try_lock()
         {
             unsafe {
+                #[cfg(feature = "luau")]
+                if lua.is_running_gc() {
+                    lua.update_thread_ownership(&self.thread, None);
+                    return;
+                }
+
                 let mut status = self.thread.status_inner(&lua);
                 if matches!(status, ThreadStatusInner::Yielded(0)) && !self.thread.is_hook_yielded(&lua) {
                     // The thread is dropped while yielded, resume it with the "terminate" signal

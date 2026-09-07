@@ -103,6 +103,12 @@ impl RawLua {
         unsafe { (*self.extra.get()).weak() }
     }
 
+    #[cfg(feature = "luau")]
+    #[inline(always)]
+    pub(crate) fn is_running_gc(&self) -> bool {
+        unsafe { (*self.extra.get()).running_gc }
+    }
+
     /// Returns a pointer to the current Lua state.
     ///
     /// The pointer refers to the active Lua coroutine and depends on the context.

@@ -2456,7 +2456,7 @@ impl Lua {
     pub(crate) fn lock(&self) -> ReentrantMutexGuard<'_, RawLua> {
         let rawlua = self.raw.lock();
         #[cfg(feature = "luau")]
-        if unsafe { (*rawlua.extra.get()).running_gc } {
+        if rawlua.is_running_gc() {
             panic!("Luau VM is suspended while GC is running");
         }
         rawlua
@@ -2464,7 +2464,12 @@ impl Lua {
 
     #[inline(always)]
     pub(crate) fn lock_arc(&self) -> LuaGuard {
-        LuaGuard(self.raw.lock_arc())
+        let guard = LuaGuard(self.raw.lock_arc());
+        #[cfg(feature = "luau")]
+        if guard.is_running_gc() {
+            panic!("Luau VM is suspended while GC is running");
+        }
+        guard
     }
 
     /// Returns a handle to the unprotected Lua state without any synchronization.
@@ -2483,7 +2488,7 @@ impl WeakLua {
     pub(crate) fn lock(&self) -> LuaGuard {
         let guard = LuaGuard::new(self.0.upgrade().expect("Lua instance is destroyed"));
         #[cfg(feature = "luau")]
-        if unsafe { (*guard.extra.get()).running_gc } {
+        if guard.is_running_gc() {
             panic!("Luau VM is suspended while GC is running");
         }
         guard
@@ -2491,6 +2496,7 @@ impl WeakLua {
 
     #[inline(always)]
     pub(crate) fn try_lock(&self) -> Option<LuaGuard> {
+        // Reference cleanup must remain possible during Luau GC.
         Some(LuaGuard::new(self.0.upgrade()?))
     }
 
