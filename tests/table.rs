@@ -652,3 +652,27 @@ fn test_table_get_path() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn test_table_invalid_keys() -> Result<()> {
+    let lua = Lua::new();
+
+    let table = lua.create_table()?;
+    for key in [
+        Value::Nil,
+        Value::Number(f64::NAN),
+        #[cfg(all(feature = "luau", not(feature = "luau-vector4")))]
+        Value::Vector(mlua::Vector::new(f32::NAN, 0., 0.)),
+    ] {
+        assert!(matches!(
+            table.raw_set(key.clone(), 1),
+            Err(Error::RuntimeError(_))
+        ));
+        assert!(matches!(
+            lua.create_table_from([(key, 1)]),
+            Err(Error::RuntimeError(_))
+        ));
+    }
+
+    Ok(())
+}

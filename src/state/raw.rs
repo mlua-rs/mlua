@@ -628,7 +628,9 @@ impl RawLua {
         for (k, v) in iter {
             self.push(k)?;
             self.push(v)?;
-            protect_lua_mem!(self, 3, 1, fn(state) ffi::lua_rawset(state, -3))?;
+            protect_lua_mem!(self, or !Table::is_valid_key(state, -2), 3, 1, fn(state) {
+                ffi::lua_rawset(state, -3)
+            })?;
         }
 
         Ok(Table(self.try_pop_ref()?))

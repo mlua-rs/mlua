@@ -154,7 +154,7 @@
 use std::collections::HashSet;
 use std::fmt;
 use std::marker::PhantomData;
-use std::os::raw::c_void;
+use std::os::raw::{c_int, c_void};
 
 use crate::error::{Error, Result};
 use crate::function::Function;
@@ -455,7 +455,9 @@ impl Table {
             #[cfg(feature = "luau")]
             self.check_readonly_write(&lua)?;
 
-            protect_lua_mem!(lua, 3, 1, fn(state) ffi::lua_rawset(state, -3))?;
+            protect_lua_mem!(lua, or !Self::is_valid_key(state, -2), 3, 1, fn(state) {
+                ffi::lua_rawset(state, -3)
+            })?;
             ffi::lua_pop(state, 1);
             Ok(())
         }
@@ -1032,6 +1034,18 @@ impl Table {
         None
     }
 
+    #[inline]
+    pub(crate) unsafe fn is_valid_key(state: *mut ffi::lua_State, idx: c_int) -> bool {
+        match ffi::lua_type(state, idx) {
+            ffi::LUA_TNIL => false,
+            ffi::LUA_TNUMBER => !ffi::lua_tonumber(state, idx).is_nan(),
+            // Luau vectors containing NaN are not equal to themselves.
+            #[cfg(feature = "luau")]
+            ffi::LUA_TVECTOR => ffi::lua_rawequal(state, idx, idx) != 0,
+            _ => true,
+        }
+    }
+
     #[cfg(feature = "luau")]
     #[inline(always)]
     fn check_readonly_write(&self, lua: &RawLua) -> Result<()> {
@@ -1369,7 +1383,7 @@ pub struct TablePairs<'a, K, V> {
     table: &'a Table,
     key: Option<Value>,
     #[cfg(feature = "luau")]
-    index: std::os::raw::c_int,
+    index: c_int,
     _phantom: PhantomData<(K, V)>,
 }
 
