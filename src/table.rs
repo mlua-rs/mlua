@@ -1140,8 +1140,8 @@ where
                     _ => return false,
                 }
             }
+            len == other.len()
         }
-        true
     }
 }
 

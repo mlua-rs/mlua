@@ -43,12 +43,15 @@ fn test_table() -> Result<()> {
     );
     assert_eq!(table1, [1, 2, 3, 4, 5]);
     assert_eq!(table1, [1, 2, 3, 4, 5].as_slice());
+    assert_ne!(table1, [1, 2, 3, 4, 5, 6]);
+    assert_ne!(table1, [1, 2, 3, 4]);
 
     let table2 = globals.get::<Table>("table2")?;
     assert_eq!(table2.len()?, 0);
     assert!(table2.is_empty());
     assert_eq!(table2.pairs().collect::<Result<Vec<(i64, i64)>>>()?, vec![]);
     assert_eq!(table2, [0; 0]);
+    assert_ne!(table2, [1]);
 
     let table3 = globals.get::<Table>("table3")?;
     // sequence_values should only iterate until the first border
