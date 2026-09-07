@@ -445,15 +445,15 @@ impl Table {
         let lua = self.0.lua.lock();
         let state = lua.state();
         unsafe {
-            #[cfg(feature = "luau")]
-            self.check_readonly_write(&lua)?;
-
             let _sg = StackGuard::new(state);
             check_stack(state, 5)?;
 
             lua.push_ref(&self.0);
             key.push_into_stack(&lua)?;
             value.push_into_stack(&lua)?;
+
+            #[cfg(feature = "luau")]
+            self.check_readonly_write(&lua)?;
 
             protect_lua_mem!(lua, 3, 1, fn(state) ffi::lua_rawset(state, -3))?;
             ffi::lua_pop(state, 1);
@@ -511,23 +511,20 @@ impl Table {
         let lua = self.0.lua.lock();
         let state = lua.state();
         unsafe {
-            #[cfg(feature = "luau")]
-            self.check_readonly_write(&lua)?;
-
             let _sg = StackGuard::new(state);
             check_stack(state, 4)?;
 
             lua.push_ref(&self.0);
             value.push_into_stack(&lua)?;
 
-            unsafe fn callback(state: *mut ffi::lua_State) {
+            #[cfg(feature = "luau")]
+            self.check_readonly_write(&lua)?;
+
+            protect_lua_mem!(lua, 2, 0, fn(state) {
                 let len = ffi::lua_rawlen(state, -2) as Integer;
                 ffi::lua_rawseti(state, -2, len + 1);
-            }
-
-            protect_lua_mem!(lua, 2, 0, fn(state) callback(state))?;
+            })
         }
-        Ok(())
     }
 
     /// Removes the last element from the table and returns it, without invoking metamethods.
@@ -934,21 +931,20 @@ impl Table {
         let lua = self.0.lua.lock();
         let state = lua.state();
         unsafe {
-            #[cfg(feature = "luau")]
-            self.check_readonly_write(&lua)?;
-
             let _sg = StackGuard::new(state);
             check_stack(state, 5)?;
 
             lua.push_ref(&self.0);
             value.push_into_stack(&lua)?;
 
+            #[cfg(feature = "luau")]
+            self.check_readonly_write(&lua)?;
+
             let idx = idx.try_into().unwrap();
             protect_lua_mem!(lua, 2, 0, |state| {
                 ffi::lua_rawseti(state, -2, idx);
-            })?;
+            })
         }
-        Ok(())
     }
 
     /// Checks if the table has the array metatable attached.

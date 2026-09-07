@@ -175,6 +175,27 @@ fn test_table_remove_metatable() -> Result<()> {
 }
 
 #[test]
+#[cfg(feature = "luau")]
+fn test_table_readonly_during_conversion() -> Result<()> {
+    struct Freeze<'a>(&'a Table);
+
+    impl mlua::IntoLua for Freeze<'_> {
+        fn into_lua(self, _: &Lua) -> Result<Value> {
+            self.0.set_readonly(true);
+            Ok(Value::Integer(1))
+        }
+    }
+
+    let lua = Lua::new();
+    let table = lua.create_table()?;
+    let result = table.raw_set(1, Freeze(&table));
+    assert!(matches!(result, Err(Error::RuntimeError(err)) if err.contains("readonly")));
+    assert!(table.is_empty());
+
+    Ok(())
+}
+
+#[test]
 fn test_table_clear() -> Result<()> {
     let lua = Lua::new();
 
