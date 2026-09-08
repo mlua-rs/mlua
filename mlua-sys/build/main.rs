@@ -19,7 +19,25 @@ cfg_if::cfg_if! {
         }
     } else {
         fn main() {
-            compile_error!("You can enable only one of the features: lua55, lua54, lua53, lua52, lua51, luajit, luajit52, luau");
+            let features = [
+                (cfg!(feature = "lua55"), "lua55"),
+                (cfg!(feature = "lua54"), "lua54"),
+                (cfg!(feature = "lua53"), "lua53"),
+                (cfg!(feature = "lua52"), "lua52"),
+                (cfg!(feature = "lua51"), "lua51"),
+                (cfg!(feature = "luajit52"), "luajit52"),
+                (
+                    cfg!(all(feature = "luajit", not(feature = "luajit52"))),
+                    "luajit",
+                ),
+                (cfg!(feature = "luau"), "luau"),
+            ]
+            .into_iter()
+            .filter_map(|(enabled, feature)| enabled.then_some(feature))
+            .collect::<Vec<_>>()
+            .join(", ");
+
+            println!("cargo::error=You enabled {features}; only one Lua feature can be enabled");
         }
     }
 }
