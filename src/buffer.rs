@@ -4,6 +4,7 @@ use std::io;
 use serde::ser::{Serialize, Serializer};
 
 use crate::state::RawLua;
+use crate::traits::HasValueRef;
 use crate::types::ValueRef;
 
 /// A Luau buffer type.
@@ -158,6 +159,12 @@ impl io::Seek for BufferCursor {
         }
         self.1 = new_offset as usize;
         Ok(self.1 as u64)
+    }
+}
+
+impl HasValueRef for Buffer {
+    fn to_vref(&self) -> &ValueRef {
+        &self.0
     }
 }
 

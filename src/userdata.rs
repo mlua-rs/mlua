@@ -14,7 +14,7 @@ use crate::function::Function;
 use crate::state::Lua;
 use crate::string::LuaString;
 use crate::table::{Table, TablePairs};
-use crate::traits::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti};
+use crate::traits::{FromLua, FromLuaMulti, HasValueRef, IntoLua, IntoLuaMulti};
 use crate::types::{MaybeSend, MaybeSync, ValueRef};
 use crate::util::{StackGuard, check_stack, get_userdata, push_string, short_type_name, take_userdata};
 use crate::value::Value;
@@ -1113,6 +1113,12 @@ impl AnyUserData {
                 write!(fmt, "{name}: {:?}", self.to_pointer())
             }
         }
+    }
+}
+
+impl HasValueRef for AnyUserData {
+    fn to_vref(&self) -> &ValueRef {
+        &self.0
     }
 }
 

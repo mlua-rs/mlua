@@ -10,7 +10,7 @@ use std::{cmp, fmt, mem, slice, str};
 
 use crate::error::{Error, Result};
 use crate::state::Lua;
-use crate::traits::IntoLua;
+use crate::traits::{HasValueRef, IntoLua};
 use crate::types::{LuaType, ValueRef};
 use crate::value::Value;
 
@@ -212,6 +212,12 @@ impl Ord for LuaString {
 impl Hash for LuaString {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.as_bytes().hash(state);
+    }
+}
+
+impl HasValueRef for LuaString {
+    fn to_vref(&self) -> &ValueRef {
+        &self.0
     }
 }
 

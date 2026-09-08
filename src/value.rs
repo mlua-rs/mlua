@@ -10,6 +10,7 @@ use crate::function::Function;
 use crate::string::LuaString;
 use crate::table::Table;
 use crate::thread::Thread;
+use crate::traits::MaybeHasValueRef;
 use crate::types::{Integer, LightUserData, Number, ValueRef};
 use crate::userdata::AnyUserData;
 use crate::util::{StackGuard, check_stack};
@@ -556,6 +557,33 @@ impl Value {
             Value::Error(e) if recursive => write!(fmt, "{e:?}"),
             Value::Error(_) => write!(fmt, "error"),
             Value::Other(v) => write!(fmt, "other: {:?}", v.to_pointer()),
+        }
+    }
+}
+
+impl MaybeHasValueRef for Value {
+    fn maybe_to_vref(&self) -> Option<&ValueRef> {
+        #[cfg(feature = "luau")]
+        use crate::buffer::Buffer;
+        // Don't use the `_` pattern, as it may be over looked in the future potentially causing compatiable types to
+        // return `None`!
+        match self {
+            Self::Nil => None,
+            Self::Boolean(_) => None,
+            Self::LightUserData(_) => None,
+            Self::Error(_) => None,
+            Self::Function(Function(vref)) => Some(vref),
+            Self::Integer(_) => None,
+            Self::Number(_) => None,
+            Self::String(LuaString(vref)) => Some(vref),
+            Self::Table(Table(vref)) => Some(vref),
+            Self::Thread(Thread(vref, _)) => Some(vref),
+            #[cfg(feature = "luau")]
+            Self::Buffer(Buffer(vref)) => Some(vref),
+            #[cfg(feature = "luau")]
+            Self::Vector(_) => None,
+            Self::UserData(AnyUserData(vref)) => Some(vref),
+            Self::Other(vref) => Some(vref),
         }
     }
 }

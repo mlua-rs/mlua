@@ -10,6 +10,7 @@ use crate::error::{Error, Result};
 use crate::multi::MultiValue;
 use crate::private::Sealed;
 use crate::state::{Lua, RawLua, WeakLua};
+use crate::types::ValueRef;
 use crate::util::{check_stack, parse_lookup_path, short_type_name};
 use crate::value::Value;
 
@@ -247,6 +248,17 @@ pub trait ObjectLike: Sealed {
     /// Gets a reference to the associated Lua state.
     #[doc(hidden)]
     fn weak_lua(&self) -> &WeakLua;
+}
+
+/// A trait for types that have a [`ValueRef`].
+pub trait HasValueRef: Sized {
+    /// Convert to a [`ValueRef`].
+    fn to_vref(&self) -> &ValueRef;
+}
+
+pub trait MaybeHasValueRef: Sized {
+    /// Convert compatible types to a [`ValueRef`].
+    fn maybe_to_vref(&self) -> Option<&ValueRef>;
 }
 
 pub(crate) trait ShortTypeName {

@@ -159,7 +159,7 @@ use std::os::raw::{c_int, c_void};
 use crate::error::{Error, Result};
 use crate::function::Function;
 use crate::state::{LuaGuard, RawLua, WeakLua};
-use crate::traits::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, ObjectLike};
+use crate::traits::{FromLua, FromLuaMulti, HasValueRef, IntoLua, IntoLuaMulti, ObjectLike};
 use crate::types::{Integer, ValueRef};
 use crate::util::{StackGuard, assert_stack, check_stack, get_metatable_ptr};
 use crate::value::{Nil, Value};
@@ -1250,6 +1250,12 @@ impl ObjectLike for Table {
     #[inline]
     fn weak_lua(&self) -> &WeakLua {
         &self.0.lua
+    }
+}
+
+impl HasValueRef for Table {
+    fn to_vref(&self) -> &ValueRef {
+        &self.0
     }
 }
 
