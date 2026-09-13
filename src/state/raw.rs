@@ -1329,6 +1329,9 @@ impl RawLua {
     #[inline(always)]
     pub(crate) unsafe fn register_userdata_metatable(&self, mt_ptr: *const c_void, type_id: Option<TypeId>) {
         (*self.extra.get()).registered_userdata_mt.insert(mt_ptr, type_id);
+        if (*self.extra.get()).last_checked_userdata_mt.0 == mt_ptr {
+            (*self.extra.get()).last_checked_userdata_mt = (ptr::null(), None);
+        }
     }
 
     #[inline(always)]

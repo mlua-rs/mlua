@@ -844,6 +844,18 @@ fn test_any_userdata() -> Result<()> {
 }
 
 #[test]
+fn test_userdata_reregister_type() -> Result<()> {
+    let lua = Lua::new();
+    assert!(lua.create_any_userdata(0u32)?.is::<u32>());
+    lua.register_userdata_type::<u32>(|_| {})?;
+    lua.gc_collect()?;
+    lua.gc_collect()?;
+    // Metatable address of `u32` can be reused for `i32`
+    assert!(lua.create_any_userdata(0i32)?.is::<i32>());
+    Ok(())
+}
+
+#[test]
 fn test_any_userdata_wrap() -> Result<()> {
     let lua = Lua::new();
 
