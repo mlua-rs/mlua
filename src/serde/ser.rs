@@ -168,7 +168,7 @@ impl<'a> ser::Serializer for Serializer<'a> {
 
     #[inline]
     fn serialize_char(self, value: char) -> Result<Value> {
-        self.serialize_str(&value.to_string())
+        self.serialize_str(value.encode_utf8(&mut [0; 4]))
     }
 
     #[inline]
@@ -245,9 +245,9 @@ impl<'a> ser::Serializer for Serializer<'a> {
     where
         T: Serialize + ?Sized,
     {
-        let table = self.lua.create_table()?;
         let variant = self.lua.create_string(variant)?;
         let value = self.lua.to_value_with(value, self.options)?;
+        let table = (self.lua).create_table_with_capacity(0, usize::from(!value.is_nil()))?;
         table.raw_set(variant, value)?;
         Ok(Value::Table(table))
     }
@@ -286,12 +286,17 @@ impl<'a> ser::Serializer for Serializer<'a> {
         _name: &'static str,
         _variant_index: u32,
         variant: &'static str,
-        _len: usize,
+        len: usize,
     ) -> Result<Self::SerializeTupleVariant> {
+        let capacity = if self.options.serialize_none_to_null && self.options.serialize_unit_to_null {
+            len
+        } else {
+            0
+        };
         Ok(SerializeTupleVariant {
             lua: self.lua,
             variant,
-            table: self.lua.create_table()?,
+            table: self.lua.create_table_with_capacity(capacity, 0)?,
             options: self.options,
         })
     }
@@ -461,7 +466,7 @@ impl ser::SerializeTupleVariant for SerializeTupleVariant<'_> {
     }
 
     fn end(self) -> Result<Value> {
-        let table = self.lua.create_table()?;
+        let table = self.lua.create_table_with_capacity(0, 1)?;
         table.raw_set(self.variant, self.table)?;
         Ok(Value::Table(table))
     }

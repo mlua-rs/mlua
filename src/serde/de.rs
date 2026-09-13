@@ -153,7 +153,7 @@ impl Deserializer {
             value,
             options,
             visited,
-            ..Default::default()
+            len: None,
         }
     }
 
