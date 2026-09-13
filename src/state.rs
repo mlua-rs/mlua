@@ -1876,10 +1876,9 @@ impl Lua {
     /// The lifetime of any function or userdata created through [`Scope`] lasts only until the
     /// completion of this method call, on completion all such created values are automatically
     /// dropped and Lua references to them are invalidated. If a script accesses a value created
-    /// through [`Scope`] outside of this method, a Lua error will result. Since we can ensure the
-    /// lifetime of values created through [`Scope`], and we know that [`Lua`] cannot be sent to
-    /// another thread while [`Scope`] is live, it is safe to allow `!Send` data types and whose
-    /// lifetimes only outlive the scope lifetime.
+    /// through [`Scope`] outside of this method, a Lua error will result. The Lua lock is held
+    /// until all scoped values are invalidated, preventing other threads from accessing them.
+    /// This allows `!Send` data types whose lifetimes only outlive the scope lifetime.
     pub fn scope<'env, R>(
         &self,
         f: impl for<'scope> FnOnce(&'scope Scope<'scope, 'env>) -> Result<R>,

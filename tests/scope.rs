@@ -611,3 +611,31 @@ fn test_scope_userdata_registration_panic() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+#[cfg(feature = "send")]
+fn test_scope_func_send() -> Result<()> {
+    use std::sync::mpsc;
+    use std::thread;
+    use std::time::Duration;
+
+    let lua = Lua::new();
+    let value = Cell::new(42);
+    let worker = lua.scope(|scope| {
+        let f = scope.create_function(|_, ()| Ok(value.get()))?;
+        let (tx, rx) = mpsc::channel();
+        let worker = thread::spawn(move || {
+            tx.send(()).unwrap();
+            f.call::<i32>(())
+        });
+        rx.recv().unwrap();
+        // Let the worker block on the Lua lock before scope teardown.
+        thread::sleep(Duration::from_millis(10));
+        Ok(worker)
+    })?;
+    assert!(matches!(
+        worker.join().unwrap(),
+        Err(Error::CallbackError { cause, .. }) if matches!(*cause, Error::CallbackDestructed)
+    ));
+    Ok(())
+}

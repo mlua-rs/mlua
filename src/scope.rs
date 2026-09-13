@@ -15,9 +15,9 @@ use crate::util::{self, StackGuard, check_stack, get_metatable_ptr, get_userdata
 ///
 /// See [`Lua::scope`] for more details.
 pub struct Scope<'scope, 'env: 'scope> {
-    lua: LuaGuard,
-    // Internal destructors run first, then user destructors (based on the declaration order)
+    // Invalidate scoped values before releasing the Lua lock, then run user destructors.
     destructors: Destructors<'env>,
+    lua: LuaGuard,
     user_destructors: UserDestructors<'env>,
     _scope_invariant: PhantomData<&'scope mut &'scope ()>,
     _env_invariant: PhantomData<&'env mut &'env ()>,
@@ -33,8 +33,8 @@ struct UserDestructors<'a>(RefCell<Vec<Box<dyn FnOnce() + 'a>>>);
 impl<'scope, 'env: 'scope> Scope<'scope, 'env> {
     pub(crate) fn new(lua: LuaGuard) -> Self {
         Scope {
-            lua,
             destructors: Destructors(RefCell::new(Vec::new())),
+            lua,
             user_destructors: UserDestructors(RefCell::new(Vec::new())),
             _scope_invariant: PhantomData,
             _env_invariant: PhantomData,
