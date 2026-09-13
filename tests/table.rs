@@ -1,4 +1,4 @@
-use mlua::{Error, Lua, ObjectLike, Result, Table, Value};
+use mlua::{Error, IntoLua, Lua, ObjectLike, Result, Table, Value};
 
 #[test]
 fn test_globals_set_get() -> Result<()> {
@@ -190,6 +190,44 @@ fn test_table_remove_metatable() -> Result<()> {
     assert_eq!(inner.get::<String>("abc")?, "abcdef");
     t.remove("abc")?;
     assert_eq!(inner.get::<Value>("abc")?, Value::Nil);
+
+    Ok(())
+}
+
+#[test]
+fn test_table_metatable_during_conversion() -> Result<()> {
+    struct SetMetatable<'a>(&'a Table, &'a Table);
+
+    impl IntoLua for SetMetatable<'_> {
+        fn into_lua(self, _: &Lua) -> Result<Value> {
+            self.0.set_metatable(Some(self.1.clone()))?;
+            Ok(Value::Integer(1))
+        }
+    }
+
+    let lua = Lua::new();
+    let inner = lua.create_sequence_from([42, 43])?;
+    let mt = lua.create_table_from([("__index", &inner), ("__newindex", &inner)])?;
+    mt.set(
+        "__len",
+        lua.create_function({
+            let inner = inner.clone();
+            move |_, ()| Ok(inner.raw_len())
+        })?,
+    )?;
+    let table = lua.create_table()?;
+
+    assert_eq!(table.get::<i64>(SetMetatable(&table, &mt))?, 42);
+    table.set_metatable(None)?;
+    table.set(1, SetMetatable(&table, &mt))?;
+    assert_eq!(inner.raw_get::<i64>(1)?, 1);
+    table.set_metatable(None)?;
+    table.push(SetMetatable(&table, &mt))?;
+    assert_eq!(inner.raw_get::<i64>(3)?, 1);
+    table.set_metatable(None)?;
+    table.remove(SetMetatable(&table, &mt))?;
+    assert_eq!(inner, [43, 1]);
+    assert!(table.is_empty());
 
     Ok(())
 }

@@ -14,14 +14,14 @@ impl ObjectLike for AnyUserData {
     fn get<V: FromLua>(&self, key: impl IntoLua) -> Result<V> {
         // `lua_gettable` method used under the hood can work with any Lua value
         // that has `__index` metamethod
-        Table(self.0.clone()).get_protected(key)
+        Table(self.0.clone()).get_impl(key, true)
     }
 
     #[inline]
     fn set(&self, key: impl IntoLua, value: impl IntoLua) -> Result<()> {
         // `lua_settable` method used under the hood can work with any Lua value
         // that has `__newindex` metamethod
-        Table(self.0.clone()).set_protected(key, value)
+        Table(self.0.clone()).set_impl(key, value, true)
     }
 
     #[inline]

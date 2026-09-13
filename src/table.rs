@@ -213,15 +213,10 @@ impl Table {
     ///
     /// [`raw_set`]: Table::raw_set
     pub fn set(&self, key: impl IntoLua, value: impl IntoLua) -> Result<()> {
-        // Fast track (skip protected call)
-        if !self.has_metatable() {
-            return self.raw_set(key, value);
-        }
-
-        self.set_protected(key, value)
+        self.set_impl(key, value, false)
     }
 
-    pub(crate) fn set_protected(&self, key: impl IntoLua, value: impl IntoLua) -> Result<()> {
+    pub(crate) fn set_impl(&self, key: impl IntoLua, value: impl IntoLua, protect: bool) -> Result<()> {
         let lua = self.0.lua.lock();
         let state = lua.state();
         unsafe {
@@ -231,7 +226,16 @@ impl Table {
             lua.push_ref(&self.0);
             key.push_into_stack(&lua)?;
             value.push_into_stack(&lua)?;
-            protect_lua!(state, 3, 0, fn(state) ffi::lua_settable(state, -3))
+            if protect || self.has_metatable() {
+                protect_lua!(state, 3, 0, fn(state) ffi::lua_settable(state, -3))
+            } else {
+                #[cfg(feature = "luau")]
+                self.check_readonly_write(&lua)?;
+
+                protect_lua_mem!(lua, or !Self::is_valid_key(state, -2), 3, 0, fn(state) {
+                    ffi::lua_rawset(state, -3)
+                })
+            }
         }
     }
 
@@ -260,15 +264,10 @@ impl Table {
     ///
     /// [`raw_get`]: Table::raw_get
     pub fn get<V: FromLua>(&self, key: impl IntoLua) -> Result<V> {
-        // Fast track (skip protected call)
-        if !self.has_metatable() {
-            return self.raw_get(key);
-        }
-
-        self.get_protected(key)
+        self.get_impl(key, false)
     }
 
-    pub(crate) fn get_protected<V: FromLua>(&self, key: impl IntoLua) -> Result<V> {
+    pub(crate) fn get_impl<V: FromLua>(&self, key: impl IntoLua, protect: bool) -> Result<V> {
         let lua = self.0.lua.lock();
         let state = lua.state();
         unsafe {
@@ -277,7 +276,11 @@ impl Table {
 
             lua.push_ref(&self.0);
             key.push_into_stack(&lua)?;
-            protect_lua!(state, 2, 1, fn(state) ffi::lua_gettable(state, -2))?;
+            if protect || self.has_metatable() {
+                protect_lua!(state, 2, 1, fn(state) ffi::lua_gettable(state, -2))?;
+            } else {
+                ffi::lua_rawget(state, -2);
+            }
 
             V::from_stack(-1, &lua)
         }
@@ -294,11 +297,6 @@ impl Table {
     ///
     /// This might invoke the `__len` and `__newindex` metamethods.
     pub fn push(&self, value: impl IntoLua) -> Result<()> {
-        // Fast track (skip protected call)
-        if !self.has_metatable() {
-            return self.raw_push(value);
-        }
-
         let lua = self.0.lua.lock();
         let state = lua.state();
         unsafe {
@@ -307,6 +305,15 @@ impl Table {
 
             lua.push_ref(&self.0);
             value.push_into_stack(&lua)?;
+            if !self.has_metatable() {
+                #[cfg(feature = "luau")]
+                self.check_readonly_write(&lua)?;
+
+                return protect_lua_mem!(lua, 2, 0, fn(state) {
+                    let len = ffi::lua_rawlen(state, -2) as Integer;
+                    ffi::lua_rawseti(state, -2, len + 1);
+                });
+            }
             protect_lua!(state, 2, 0, fn(state) {
                 let len = ffi::luaL_len(state, -2) as Integer;
                 ffi::lua_seti(state, -2, len + 1);
@@ -358,13 +365,14 @@ impl Table {
     ///
     /// [`raw_remove`]: Table::raw_remove
     pub fn remove(&self, key: impl IntoLua) -> Result<()> {
+        let lua = self.0.lua.lock();
+        let key = key.into_lua(lua.lua())?;
+
         // Fast track (skip protected call)
         if !self.has_metatable() {
             return self.raw_remove(key);
         }
 
-        let lua = self.0.lua.lock();
-        let key = key.into_lua(lua.lua())?;
         match key {
             Value::Integer(idx) => {
                 let size = self.len()?;
