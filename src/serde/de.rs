@@ -296,7 +296,15 @@ impl<'de> serde::Deserializer<'de> for Deserializer {
                     options: self.options,
                     visited: self.visited,
                 };
-                visitor.visit_seq(&mut deserializer)
+                let seq = visitor.visit_seq(&mut deserializer)?;
+                if deserializer.next == crate::Vector::SIZE {
+                    Ok(seq)
+                } else {
+                    Err(de::Error::invalid_length(
+                        crate::Vector::SIZE,
+                        &"fewer elements in the vector",
+                    ))
+                }
             }
             Value::Table(t) => {
                 let _guard = RecursionGuard::new(&t, &self.visited);

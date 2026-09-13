@@ -163,6 +163,18 @@ fn test_serialize_vector() -> Result<(), Box<dyn StdError>> {
 }
 
 #[test]
+#[cfg(feature = "luau")]
+fn test_deserialize_vector_length() -> LuaResult<()> {
+    let lua = Lua::new();
+    let value = lua.load("vector.create(1, 2, 3)").eval()?;
+    assert!(matches!(
+        lua.from_value::<[f32; 2]>(value),
+        Err(Error::DeserializeError(_))
+    ));
+    Ok(())
+}
+
+#[test]
 fn test_serialize_sorted() -> LuaResult<()> {
     let lua = Lua::new();
 
