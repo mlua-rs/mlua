@@ -352,6 +352,36 @@ fn test_interrupts() -> Result<()> {
 }
 
 #[test]
+fn test_interrupt_callback_drop() {
+    struct ReenterOnDrop(Lua);
+
+    impl Drop for ReenterOnDrop {
+        fn drop(&mut self) {
+            self.0
+                .load("local n = 0; for i = 1, 10 do n = n + i end")
+                .exec()
+                .unwrap();
+            self.0.set_app_data(());
+        }
+    }
+
+    for replace in [false, true] {
+        let lua = Lua::new();
+        let guard = ReenterOnDrop(lua.clone());
+        lua.set_interrupt(move |_| {
+            let _ = &guard;
+            panic!("called a callback during drop");
+        });
+        if replace {
+            lua.set_interrupt(|_| Ok(VmState::Continue));
+        } else {
+            lua.remove_interrupt();
+        }
+        assert_eq!(lua.remove_app_data::<()>(), Some(()));
+    }
+}
+
+#[test]
 fn test_fflags() {
     // We cannot really on any particular feature flag to be present
     assert!(Lua::set_fflag("UnknownFlag", true).is_err());

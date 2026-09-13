@@ -714,8 +714,8 @@ impl Lua {
     {
         let lua = self.lock();
         unsafe {
+            let _old_callback = (*lua.extra.get()).hook_callback.replace(XRc::new(callback));
             (*lua.extra.get()).hook_triggers = triggers;
-            (*lua.extra.get()).hook_callback = Some(XRc::new(callback));
             lua.set_thread_hook(lua.state(), HookKind::Global)
         }
     }
@@ -774,7 +774,7 @@ impl Lua {
     pub fn remove_global_hook(&self) {
         let lua = self.lock();
         unsafe {
-            (*lua.extra.get()).hook_callback = None;
+            let _old_callback = (*lua.extra.get()).hook_callback.take();
             (*lua.extra.get()).hook_triggers = HookTriggers::default();
         }
     }
@@ -871,7 +871,7 @@ impl Lua {
         // Set interrupt callback
         let lua = self.lock();
         unsafe {
-            (*lua.extra.get()).interrupt_callback = Some(XRc::new(callback));
+            let _old_callback = (*lua.extra.get()).interrupt_callback.replace(XRc::new(callback));
             (*ffi::lua_callbacks(lua.main_state())).interrupt = Some(interrupt_proc);
         }
     }
@@ -884,7 +884,7 @@ impl Lua {
     pub fn remove_interrupt(&self) {
         let lua = self.lock();
         unsafe {
-            (*lua.extra.get()).interrupt_callback = None;
+            let _old_callback = (*lua.extra.get()).interrupt_callback.take();
             (*ffi::lua_callbacks(lua.main_state())).interrupt = None;
         }
     }
@@ -927,8 +927,8 @@ impl Lua {
     {
         let lua = self.lock();
         unsafe {
+            let _old_callback = ((*lua.extra.get()).thread_event_callback).replace(XRc::new(callback));
             (*lua.extra.get()).thread_triggers = triggers;
-            (*lua.extra.get()).thread_event_callback = Some(XRc::new(callback));
             #[cfg(feature = "luau")]
             {
                 let proc = Self::userthread_proc as _;
@@ -944,8 +944,8 @@ impl Lua {
         let lua = self.lock();
         let extra = lua.extra.get();
         unsafe {
+            let _old_callback = (*extra).thread_event_callback.take();
             (*extra).thread_triggers = ThreadTriggers::new();
-            (*extra).thread_event_callback = None;
             #[cfg(feature = "luau")]
             {
                 (*ffi::lua_callbacks(lua.main_state())).userthread = None;
@@ -1003,7 +1003,7 @@ impl Lua {
 
         let lua = self.lock();
         unsafe {
-            (*lua.extra.get()).warn_callback = Some(XRc::new(callback));
+            let _old_callback = (*lua.extra.get()).warn_callback.replace(XRc::new(callback));
             ffi::lua_setwarnf(lua.state(), Some(warn_proc), lua.extra.get() as *mut c_void);
         }
     }
@@ -1016,7 +1016,7 @@ impl Lua {
     pub fn remove_warning_function(&self) {
         let lua = self.lock();
         unsafe {
-            (*lua.extra.get()).warn_callback = None;
+            let _old_callback = (*lua.extra.get()).warn_callback.take();
             ffi::lua_setwarnf(lua.state(), None, ptr::null_mut());
         }
     }

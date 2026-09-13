@@ -392,6 +392,34 @@ fn test_global_hook() -> Result<()> {
 }
 
 #[test]
+fn test_global_hook_callback_drop() -> Result<()> {
+    struct ReenterOnDrop(Lua);
+
+    impl Drop for ReenterOnDrop {
+        fn drop(&mut self) {
+            self.0.load("local n = 1").exec().unwrap();
+            self.0.set_app_data(());
+        }
+    }
+
+    for replace in [false, true] {
+        let lua = Lua::new();
+        let guard = ReenterOnDrop(lua.clone());
+        lua.set_global_hook(HookTriggers::EVERY_LINE, move |_, _| {
+            let _ = &guard;
+            panic!("called a callback during drop");
+        })?;
+        if replace {
+            lua.set_global_hook(HookTriggers::EVERY_LINE, |_, _| Ok(VmState::Continue))?;
+        } else {
+            lua.remove_global_hook();
+        }
+        assert_eq!(lua.remove_app_data::<()>(), Some(()));
+    }
+    Ok(())
+}
+
+#[test]
 fn test_hook_memory_error() -> Result<()> {
     let lua = Lua::new();
     if cfg!(feature = "luajit") && lua.set_memory_limit(0).is_err() {

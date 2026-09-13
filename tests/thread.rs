@@ -519,6 +519,34 @@ fn test_thread_event_swap() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn test_thread_event_callback_drop() {
+    struct ReenterOnDrop(Lua);
+
+    impl Drop for ReenterOnDrop {
+        fn drop(&mut self) {
+            let function = self.0.create_function(|_, ()| Ok(())).unwrap();
+            self.0.create_thread(function).unwrap();
+            self.0.set_app_data(());
+        }
+    }
+
+    for replace in [false, true] {
+        let lua = Lua::new();
+        let guard = ReenterOnDrop(lua.clone());
+        lua.set_thread_event_callback(ThreadTriggers::ON_CREATE, move |_, _| {
+            let _ = &guard;
+            panic!("called a callback during drop");
+        });
+        if replace {
+            lua.set_thread_event_callback(ThreadTriggers::ON_CREATE, |_, _| Ok(()));
+        } else {
+            lua.remove_thread_event_callback();
+        }
+        assert_eq!(lua.remove_app_data::<()>(), Some(()));
+    }
+}
+
 #[cfg(feature = "luau")]
 #[test]
 fn test_thread_event_luau_resume_error() -> Result<()> {
