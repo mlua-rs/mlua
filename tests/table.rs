@@ -371,6 +371,22 @@ fn test_table_iteration_after_clear() -> Result<()> {
 }
 
 #[test]
+#[cfg(not(feature = "luau"))]
+fn test_table_pairs_invalid_key() -> Result<()> {
+    let lua = Lua::new();
+    let table = lua.create_table_from([("key", true)])?;
+    let mut pairs = table.pairs::<Value, Value>();
+    pairs.next().unwrap()?;
+    table.clear()?;
+    for key in ["a", "b", "c"] {
+        table.raw_set(key, true)?;
+    }
+    assert!(matches!(pairs.next().unwrap(), Err(Error::RuntimeError(e)) if e.contains("invalid key")));
+    assert!(pairs.next().is_none());
+    Ok(())
+}
+
+#[test]
 fn test_table_for_each() -> Result<()> {
     let lua = Lua::new();
 
@@ -417,6 +433,57 @@ fn test_table_for_each_value() -> Result<()> {
     assert_eq!(sum, 1 + 2 + 3 + 4 + 5);
 
     Ok(())
+}
+
+#[test]
+#[cfg(not(feature = "luau"))]
+fn test_table_for_each_invalid_key() -> Result<()> {
+    let lua = Lua::new();
+    let table = lua.create_table_from([("key", true)])?;
+    let result = table.for_each::<Value, Value>(|_, _| {
+        table.clear()?;
+        for key in ["a", "b", "c"] {
+            table.raw_set(key, true)?;
+        }
+        Ok(())
+    });
+    assert!(matches!(result, Err(Error::RuntimeError(e)) if e.contains("invalid key")));
+    Ok(())
+}
+
+#[test]
+fn test_table_for_each_error() -> Result<()> {
+    use std::panic::{AssertUnwindSafe, catch_unwind};
+
+    let lua = Lua::new();
+    let table = lua.create_sequence_from([1, 2])?;
+    #[cfg(not(feature = "luau"))]
+    lua.set_hook(mlua::HookTriggers::ON_RETURNS, |_, _| {
+        Err(Error::runtime("return hook error"))
+    })?;
+    let mut calls = 0;
+    let result = table.for_each::<i64, i64>(|_, _| {
+        calls += 1;
+        Err(Error::runtime("callback error"))
+    });
+    assert!(matches!(result, Err(Error::RuntimeError(e)) if e == "callback error"));
+    assert_eq!(calls, 1);
+    assert!(matches!(
+        table.for_each::<i64, Table>(|_, _| unreachable!()),
+        Err(Error::FromLuaConversionError { .. })
+    ));
+
+    let panic = catch_unwind(AssertUnwindSafe(|| {
+        table.for_each::<i64, i64>(|_, _| panic!("callback panic"))
+    }));
+    assert_eq!(panic.unwrap_err().downcast_ref::<&str>(), Some(&"callback panic"));
+
+    #[cfg(not(feature = "luau"))]
+    lua.remove_hook();
+    table.for_each::<i64, i64>(|k, v| {
+        assert_eq!(lua.load("return ...").call::<i64>(v)?, k);
+        Ok(())
+    })
 }
 
 #[test]

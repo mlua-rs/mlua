@@ -850,25 +850,39 @@ impl Table {
             check_stack(state, 5)?;
 
             lua.push_ref(&self.0);
-            #[cfg(feature = "luau")]
-            let mut index = 0;
-            #[cfg(not(feature = "luau"))]
-            ffi::lua_pushnil(state);
-            while {
-                #[cfg(feature = "luau")]
-                {
-                    index = ffi::lua_rawiter(state, -1, index);
-                    index >= 0
-                }
-                #[cfg(not(feature = "luau"))]
-                {
-                    ffi::lua_next(state, -2) != 0
-                }
-            } {
+            let mut callback = || {
                 let k = K::from_stack(-2, &lua)?;
                 let v = V::from_stack(-1, &lua)?;
                 ffi::lua_pop(state, if cfg!(feature = "luau") { 2 } else { 1 });
-                f(k, v)?;
+                f(k, v)
+            };
+
+            #[cfg(feature = "luau")]
+            {
+                let mut index = ffi::lua_rawiter(state, -1, 0);
+                while index >= 0 {
+                    callback()?;
+                    index = ffi::lua_rawiter(state, -1, index);
+                }
+            }
+
+            #[cfg(not(feature = "luau"))]
+            {
+                use std::panic::{AssertUnwindSafe, catch_unwind, resume_unwind};
+
+                let mut result = Ok(Ok(()));
+                let lua_result = protect_lua!(state, 1, 0, |state| {
+                    ffi::lua_pushnil(state);
+                    while matches!(result, Ok(Ok(()))) && ffi::lua_next(state, -2) != 0 {
+                        // Keep Rust errors/panics outside the longjmp boundary
+                        match catch_unwind(AssertUnwindSafe(&mut callback)) {
+                            Ok(Ok(())) => {}
+                            err => result = err,
+                        }
+                    }
+                });
+                result.unwrap_or_else(|panic| resume_unwind(panic))?;
+                lua_result?;
             }
         }
         Ok(())
@@ -1052,6 +1066,19 @@ impl Table {
             }
         }
         None
+    }
+
+    #[cfg(not(feature = "luau"))]
+    #[inline]
+    unsafe fn next(state: *mut ffi::lua_State) -> Result<bool> {
+        let protect = ffi::lua_isnil(state, -1) == 0 && {
+            ffi::lua_pushvalue(state, -1);
+            let missing = ffi::lua_rawget(state, -3) == ffi::LUA_TNIL;
+            ffi::lua_pop(state, 1);
+            missing
+        };
+        // A deleted key may still be valid for next, but a rehash can invalidate it.
+        protect_lua_mem!(state, if protect, 2, ffi::LUA_MULTRET, |state| ffi::lua_next(state, -2) != 0)
     }
 
     #[inline]
@@ -1432,7 +1459,7 @@ where
                 #[cfg(not(feature = "luau"))]
                 let more = {
                     lua.push_value(&_prev_key)?;
-                    ffi::lua_next(state, -2) != 0
+                    Table::next(state)?
                 };
 
                 if more {
