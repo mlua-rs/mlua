@@ -1068,6 +1068,43 @@ impl Table {
         None
     }
 
+    #[cfg(feature = "serde")]
+    pub(crate) fn collect_pairs(&self) -> Result<Vec<(Value, Value)>> {
+        let mut pairs = Vec::new();
+
+        #[cfg(not(feature = "luau"))]
+        unsafe {
+            const LIMIT: c_int = 8;
+            let lua = self.0.lua.lock();
+            let state = lua.state();
+            let _sg = StackGuard::new(state);
+            check_stack(state, 2 * LIMIT + 2)?;
+
+            lua.push_ref(&self.0);
+            let table_index = ffi::lua_gettop(state);
+            ffi::lua_pushnil(state);
+            // Finish small traversals before conversions or allocations can reenter Lua
+            for count in 0..LIMIT {
+                if ffi::lua_next(state, table_index) == 0 {
+                    pairs.reserve_exact(count as usize);
+                    for i in 0..count {
+                        let index = table_index + 1 + 2 * i;
+                        let key = lua.try_stack_value(index, None)?;
+                        pairs.push((key, lua.try_stack_value(index + 1, None)?));
+                    }
+                    return Ok(pairs);
+                }
+                ffi::lua_pushvalue(state, -2);
+            }
+        }
+
+        self.for_each(|key, value| {
+            pairs.push((key, value));
+            Ok(())
+        })?;
+        Ok(pairs)
+    }
+
     #[cfg(not(feature = "luau"))]
     #[inline]
     unsafe fn next(state: *mut ffi::lua_State) -> Result<bool> {

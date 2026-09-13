@@ -518,7 +518,7 @@ pub(crate) enum MapPairs<'a> {
 impl<'a> MapPairs<'a> {
     pub(crate) fn new(t: &'a Table, sort_keys: bool) -> Result<Self> {
         if sort_keys {
-            let mut pairs = t.pairs::<Value, Value>().collect::<Result<Vec<_>>>()?;
+            let mut pairs = t.collect_pairs()?;
             pairs.sort_by(|(a, _), (b, _)| b.sort_cmp(a)); // reverse order as we pop values from the end
             Ok(MapPairs::Vec(pairs))
         } else {
