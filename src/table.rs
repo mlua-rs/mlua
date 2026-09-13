@@ -725,6 +725,10 @@ impl Table {
         let ref_thread = lua.ref_thread();
         unsafe {
             if let Some(metatable) = &metatable {
+                assert!(
+                    lua.weak() == &metatable.0.lua,
+                    "Lua instance passed Value created from a different main Lua state"
+                );
                 ffi::lua_pushvalue(ref_thread, metatable.0.index);
             } else {
                 ffi::lua_pushnil(ref_thread);
