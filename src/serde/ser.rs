@@ -20,6 +20,13 @@ pub struct Serializer<'a> {
 #[derive(Debug, Clone, Copy)]
 #[non_exhaustive]
 pub struct Options {
+    /// Maximum nesting depth for containers and newtype wrappers.
+    ///
+    /// Increasing this limit may require a larger thread stack. Zero rejects all nesting.
+    ///
+    /// Default: **128**
+    pub recursion_limit: usize,
+
     /// If true, sequence serialization to a Lua table will create table
     /// with the [`array_metatable`] attached.
     ///
@@ -63,11 +70,21 @@ impl Options {
     /// Returns a new instance of [`Options`] with default parameters.
     pub const fn new() -> Self {
         Options {
+            recursion_limit: super::DEFAULT_RECURSION_LIMIT,
             set_array_metatable: true,
             serialize_none_to_null: true,
             serialize_unit_to_null: true,
             detect_serde_json_arbitrary_precision: false,
         }
+    }
+
+    /// Sets [`recursion_limit`] option.
+    ///
+    /// [`recursion_limit`]: #structfield.recursion_limit
+    #[must_use]
+    pub const fn recursion_limit(mut self, limit: usize) -> Self {
+        self.recursion_limit = limit;
+        self
     }
 
     /// Sets [`set_array_metatable`] option.
@@ -121,6 +138,15 @@ impl<'a> Serializer<'a> {
     /// Creates a new Lua Serializer with custom options.
     pub fn new_with_options(lua: &'a Lua, options: Options) -> Self {
         Serializer { lua, options }
+    }
+
+    #[inline]
+    fn descend(mut self) -> Result<Self> {
+        self.options.recursion_limit = (self.options)
+            .recursion_limit
+            .checked_sub(1)
+            .ok_or_else(|| Error::SerializeError("recursion limit exceeded".into()))?;
+        Ok(self)
     }
 }
 
@@ -195,7 +221,7 @@ impl<'a> ser::Serializer for Serializer<'a> {
     where
         T: Serialize + ?Sized,
     {
-        value.serialize(self)
+        value.serialize(self.descend()?)
     }
 
     #[inline]
@@ -231,12 +257,12 @@ impl<'a> ser::Serializer for Serializer<'a> {
     where
         T: Serialize + ?Sized,
     {
-        value.serialize(self)
+        value.serialize(self.descend()?)
     }
 
     #[inline]
     fn serialize_newtype_variant<T>(
-        self,
+        mut self,
         _name: &'static str,
         _variant_index: u32,
         variant: &'static str,
@@ -245,6 +271,7 @@ impl<'a> ser::Serializer for Serializer<'a> {
     where
         T: Serialize + ?Sized,
     {
+        self = self.descend()?;
         let variant = self.lua.create_string(variant)?;
         let value = self.lua.to_value_with(value, self.options)?;
         let table = (self.lua).create_table_with_capacity(0, usize::from(!value.is_nil()))?;
@@ -253,7 +280,8 @@ impl<'a> ser::Serializer for Serializer<'a> {
     }
 
     #[inline]
-    fn serialize_seq(self, len: Option<usize>) -> Result<Self::SerializeSeq> {
+    fn serialize_seq(mut self, len: Option<usize>) -> Result<Self::SerializeSeq> {
+        self = self.descend()?;
         let table = self.lua.create_table_with_capacity(len.unwrap_or(0), 0)?;
         if self.options.set_array_metatable {
             let lua = self.lua.lock();
@@ -274,7 +302,8 @@ impl<'a> ser::Serializer for Serializer<'a> {
     fn serialize_tuple_struct(self, name: &'static str, len: usize) -> Result<Self::SerializeTupleStruct> {
         #[cfg(feature = "luau")]
         if name == "Vector" && len == crate::Vector::SIZE {
-            return Ok(SerializeSeq::new_vector(self.lua, self.options));
+            let this = self.descend()?;
+            return Ok(SerializeSeq::new_vector(this.lua, this.options));
         }
         _ = name;
         self.serialize_seq(Some(len))
@@ -282,12 +311,13 @@ impl<'a> ser::Serializer for Serializer<'a> {
 
     #[inline]
     fn serialize_tuple_variant(
-        self,
+        mut self,
         _name: &'static str,
         _variant_index: u32,
         variant: &'static str,
         len: usize,
     ) -> Result<Self::SerializeTupleVariant> {
+        self = self.descend()?;
         let capacity = if self.options.serialize_none_to_null && self.options.serialize_unit_to_null {
             len
         } else {
@@ -302,7 +332,8 @@ impl<'a> ser::Serializer for Serializer<'a> {
     }
 
     #[inline]
-    fn serialize_map(self, len: Option<usize>) -> Result<Self::SerializeMap> {
+    fn serialize_map(mut self, len: Option<usize>) -> Result<Self::SerializeMap> {
+        self = self.descend()?;
         Ok(SerializeMap {
             lua: self.lua,
             key: None,
@@ -312,7 +343,8 @@ impl<'a> ser::Serializer for Serializer<'a> {
     }
 
     #[inline]
-    fn serialize_struct(self, name: &'static str, len: usize) -> Result<Self::SerializeStruct> {
+    fn serialize_struct(mut self, name: &'static str, len: usize) -> Result<Self::SerializeStruct> {
+        self = self.descend()?;
         if self.options.detect_serde_json_arbitrary_precision
             && name == "$serde_json::private::Number"
             && len == 1
@@ -333,12 +365,13 @@ impl<'a> ser::Serializer for Serializer<'a> {
 
     #[inline]
     fn serialize_struct_variant(
-        self,
+        mut self,
         _name: &'static str,
         _variant_index: u32,
         variant: &'static str,
         len: usize,
     ) -> Result<Self::SerializeStructVariant> {
+        self = self.descend()?;
         Ok(SerializeStructVariant {
             lua: self.lua,
             variant,

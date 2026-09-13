@@ -1396,7 +1396,8 @@ impl Serialize for SerializableTable<'_> {
 
         let options = self.options;
         let visited = &self.visited;
-        let _guard = RecursionGuard::new(self.table, visited);
+        let _guard = RecursionGuard::new(self.table, visited, options.recursion_limit)
+            .map_err(serde::ser::Error::custom)?;
 
         // Array
         if let Some(len) = self.table.encode_as_array(self.options) {

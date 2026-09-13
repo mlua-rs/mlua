@@ -652,6 +652,15 @@ impl<'a> SerializableValue<'a> {
         }
     }
 
+    /// Sets the maximum table nesting depth. Default: **128**.
+    ///
+    /// Increasing this limit may require a larger thread stack. Zero rejects all tables.
+    #[must_use]
+    pub fn recursion_limit(mut self, limit: usize) -> Self {
+        self.options.recursion_limit = limit;
+        self
+    }
+
     /// If true, an attempt to serialize types such as [`Function`], [`Thread`], [`LightUserData`]
     /// and [`Error`] will cause an error.
     /// Otherwise these types skipped when iterating or serialized as unit type.

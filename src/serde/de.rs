@@ -26,6 +26,13 @@ pub struct Deserializer {
 #[derive(Debug, Clone, Copy)]
 #[non_exhaustive]
 pub struct Options {
+    /// Maximum nesting depth for tables.
+    ///
+    /// Increasing this limit may require a larger thread stack. Zero rejects all tables.
+    ///
+    /// Default: **128**
+    pub recursion_limit: usize,
+
     /// If true, an attempt to serialize types such as [`Function`], [`Thread`], [`LightUserData`]
     /// and [`Error`] will cause an error.
     /// Otherwise these types skipped when iterating or serialized as unit type.
@@ -79,12 +86,20 @@ impl Options {
     /// Returns a new instance of `Options` with default parameters.
     pub const fn new() -> Self {
         Options {
+            recursion_limit: super::DEFAULT_RECURSION_LIMIT,
             deny_unsupported_types: true,
             deny_recursive_tables: true,
             sort_keys: false,
             encode_empty_tables_as_array: false,
             detect_mixed_tables: false,
         }
+    }
+
+    /// Sets [`recursion_limit`](Self::recursion_limit).
+    #[must_use]
+    pub const fn recursion_limit(mut self, limit: usize) -> Self {
+        self.recursion_limit = limit;
+        self
     }
 
     /// Sets [`deny_unsupported_types`] option.
@@ -240,7 +255,8 @@ impl<'de> serde::Deserializer<'de> for Deserializer {
     {
         let (variant, value, _guard) = match self.value {
             Value::Table(table) => {
-                let _guard = RecursionGuard::new(&table, &self.visited);
+                let _guard = RecursionGuard::new(&table, &self.visited, self.options.recursion_limit)
+                    .map_err(|err| Error::DeserializeError(err.to_string()))?;
 
                 let mut iter = table.pairs::<String, Value>();
                 let (variant, value) = match iter.next() {
@@ -307,7 +323,8 @@ impl<'de> serde::Deserializer<'de> for Deserializer {
                 }
             }
             Value::Table(t) => {
-                let _guard = RecursionGuard::new(&t, &self.visited);
+                let _guard = RecursionGuard::new(&t, &self.visited, self.options.recursion_limit)
+                    .map_err(|err| Error::DeserializeError(err.to_string()))?;
 
                 let len = self.len.unwrap_or_else(|| t.raw_len());
                 let mut deserializer = SeqDeserializer {
@@ -355,7 +372,8 @@ impl<'de> serde::Deserializer<'de> for Deserializer {
     {
         match self.value {
             Value::Table(t) => {
-                let _guard = RecursionGuard::new(&t, &self.visited);
+                let _guard = RecursionGuard::new(&t, &self.visited, self.options.recursion_limit)
+                    .map_err(|err| Error::DeserializeError(err.to_string()))?;
 
                 let mut deserializer = MapDeserializer {
                     pairs: MapPairs::new(&t, self.options.sort_keys)?,
@@ -726,11 +744,18 @@ pub(crate) struct RecursionGuard {
 
 impl RecursionGuard {
     #[inline]
-    pub(crate) fn new(table: &Table, visited: &Rc<RefCell<FxHashSet<*const c_void>>>) -> Self {
+    pub(crate) fn new(
+        table: &Table,
+        visited: &Rc<RefCell<FxHashSet<*const c_void>>>,
+        limit: usize,
+    ) -> StdResult<Self, &'static str> {
+        if visited.borrow().len() >= limit {
+            return Err("recursion limit exceeded");
+        }
         let visited = Rc::clone(visited);
         let ptr = table.to_pointer();
         visited.borrow_mut().insert(ptr);
-        RecursionGuard { ptr, visited }
+        Ok(RecursionGuard { ptr, visited })
     }
 }
 

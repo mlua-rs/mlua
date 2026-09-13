@@ -12,6 +12,8 @@ use crate::table::Table;
 use crate::util::check_stack;
 use crate::value::Value;
 
+const DEFAULT_RECURSION_LIMIT: usize = 128;
+
 /// Trait for serializing/deserializing Lua values using Serde.
 #[cfg_attr(docsrs, doc(cfg(feature = "serde")))]
 pub trait LuaSerdeExt: Sealed {
@@ -67,7 +69,8 @@ pub trait LuaSerdeExt: Sealed {
 
     /// Converts `T` into a [`Value`] instance.
     ///
-    /// [`Value`]: crate::Value
+    /// Nesting is limited to 128 levels by default. Use [`SerializeOptions::recursion_limit`]
+    /// with [`LuaSerdeExt::to_value_with`] to change it.
     ///
     /// # Example
     ///
@@ -121,6 +124,10 @@ pub trait LuaSerdeExt: Sealed {
         T: Serialize + ?Sized;
 
     /// Deserializes a [`Value`] into any serde deserializable object.
+    ///
+    /// Table nesting is limited to 128 levels by default. Use
+    /// [`DeserializeOptions::recursion_limit`] with [`LuaSerdeExt::from_value_with`] to change
+    /// it.
     ///
     /// # Example
     ///

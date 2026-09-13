@@ -486,6 +486,103 @@ fn test_from_value_nested_tables() -> Result<(), Box<dyn StdError>> {
 }
 
 #[test]
+fn test_serde_recursion_limit() -> LuaResult<()> {
+    let lua = Lua::new();
+    let nested = lua
+        .load("local key, depth = ...; local t; for i = 1, depth do t = {[key] = t} end; return t")
+        .into_function()?;
+    for key in [Value::Integer(1), "next".into_lua(&lua)?] {
+        for (limit, depth) in [
+            (0, 0),
+            (0, 1),
+            (2, 2),
+            (2, 3),
+            (128, 128),
+            (128, 129),
+            (128, 15_000),
+        ] {
+            let value: Value = nested.call((&key, depth))?;
+            let options = DeserializeOptions::new()
+                .deny_recursive_tables(false)
+                .recursion_limit(limit);
+            let result = lua.from_value_with::<serde_json::Value>(value.clone(), options);
+            let serialized = serde_json::to_string(
+                &value
+                    .to_serializable()
+                    .deny_recursive_tables(false)
+                    .recursion_limit(limit),
+            );
+            if depth == limit {
+                result?;
+                assert!(serialized.is_ok());
+            } else {
+                assert!(
+                    matches!(result, Err(Error::DeserializeError(err)) if err == "recursion limit exceeded")
+                );
+                assert_eq!(serialized.unwrap_err().to_string(), "recursion limit exceeded");
+            }
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn test_to_value_recursion_limit() -> LuaResult<()> {
+    struct Nested(usize, u8);
+
+    #[derive(Serialize)]
+    enum Variant<'a> {
+        Newtype(&'a Nested),
+        Tuple(&'a Nested, ()),
+        Struct { next: &'a Nested },
+    }
+
+    impl Serialize for Nested {
+        fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+            if self.0 == 0 {
+                return serializer.serialize_unit();
+            }
+            let next = Nested(self.0 - 1, self.1);
+            match self.1 {
+                0 => [next].serialize(serializer),
+                1 => serializer.collect_map(std::iter::once(("next", next))),
+                2 => Some(next).serialize(serializer),
+                3 => serializer.serialize_newtype_struct("Nested", &next),
+                4 => Variant::Newtype(&next).serialize(serializer),
+                5 => Variant::Tuple(&next, ()).serialize(serializer),
+                6 => Variant::Struct { next: &next }.serialize(serializer),
+                _ => {
+                    #[derive(Serialize)]
+                    struct Node<'a> {
+                        next: &'a Nested,
+                    }
+                    Node { next: &next }.serialize(serializer)
+                }
+            }
+        }
+    }
+
+    let lua = Lua::new();
+    assert_eq!(SerializeOptions::new().recursion_limit, 128);
+    assert_eq!(DeserializeOptions::new().recursion_limit, 128);
+    for kind in 0..8 {
+        assert!(matches!(
+            lua.to_value(&Nested(15_000, kind)),
+            Err(Error::SerializeError(err)) if err == "recursion limit exceeded"
+        ));
+        for limit in [0, 2, 128, 130] {
+            let options = SerializeOptions::new().recursion_limit(limit);
+            lua.to_value_with(&Nested(limit, kind), options)?;
+            assert!(matches!(
+                lua.to_value_with(&Nested(limit + 1, kind), options),
+                Err(Error::SerializeError(err)) if err == "recursion limit exceeded"
+            ));
+        }
+    }
+    Ok(())
+}
+
+#[test]
 fn test_from_value_struct() -> Result<(), Box<dyn StdError>> {
     let lua = Lua::new();
 
@@ -582,6 +679,19 @@ fn test_from_value_enum() -> Result<(), Box<dyn StdError>> {
     let value = lua.load(r#"{Wrap = null}"#).eval()?;
     let got = lua.from_value(value)?;
     assert_eq!(E::Wrap(()), got);
+
+    #[derive(Deserialize, PartialEq, Debug)]
+    enum Recursive {
+        End,
+        Next(Box<Recursive>),
+    }
+    let value = lua
+        .load(r#"local t = "End"; for i = 1, 15000 do t = {Next = t} end; return t"#)
+        .eval()?;
+    assert!(matches!(
+        lua.from_value::<Recursive>(value),
+        Err(Error::DeserializeError(err)) if err == "recursion limit exceeded"
+    ));
 
     Ok(())
 }
