@@ -594,8 +594,9 @@ impl PartialEq for Value {
             (Value::Boolean(a), Value::Boolean(b)) => a == b,
             (Value::LightUserData(a), Value::LightUserData(b)) => a == b,
             (Value::Integer(a), Value::Integer(b)) => *a == *b,
-            (Value::Integer(a), Value::Number(b)) => *a as Number == *b,
-            (Value::Number(a), Value::Integer(b)) => *a == *b as Number,
+            (Value::Integer(a), Value::Number(b)) | (Value::Number(b), Value::Integer(a)) => {
+                *a as Number == *b && Integer::from_f64(*b) == Some(*a)
+            }
             (Value::Number(a), Value::Number(b)) => *a == *b,
             #[cfg(feature = "luau")]
             (Value::Vector(v1), Value::Vector(v2)) => v1 == v2,

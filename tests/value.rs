@@ -63,6 +63,29 @@ fn test_value_eq() -> Result<()> {
     assert!(thread1.equals(&thread2)?);
     assert!(null == Value::NULL);
 
+    for (integer, number, equal) in [
+        (0, -0.0, true),
+        (1, 1.0, true),
+        (1, 1.5, false),
+        (0, f64::NAN, false),
+        (i64::MAX, f64::INFINITY, false),
+        (i64::MIN, f64::NEG_INFINITY, false),
+        (i64::MAX, i64::MAX as f64, false),
+        (i64::MIN, i64::MIN as f64, true),
+        (1 << 53, (1u64 << 53) as f64, true),
+        ((1 << 53) + 1, (1u64 << 53) as f64, false),
+        (-(1 << 53) - 1, -((1u64 << 53) as f64), false),
+    ] {
+        let integer = match mlua::Integer::try_from(integer) {
+            Ok(integer) => integer,
+            Err(_) => continue,
+        };
+        let (a, b) = (Value::Integer(integer), Value::Number(number));
+        assert_eq!(a == b, equal, "{a:?} == {b:?}");
+        assert_eq!(b == a, equal, "{b:?} == {a:?}");
+        assert_eq!(a.equals(&b)?, equal);
+    }
+
     assert!(!table1.to_pointer().is_null());
     assert!(!ptr::eq(table1.to_pointer(), table2.to_pointer()));
     assert!(ptr::eq(string1.to_pointer(), string2.to_pointer()) && !string1.to_pointer().is_null());
