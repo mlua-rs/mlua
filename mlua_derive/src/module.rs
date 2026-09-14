@@ -1,6 +1,6 @@
 use proc_macro::TokenStream;
-use proc_macro2::{Ident, Span};
-use quote::quote;
+use proc_macro2::Ident;
+use quote::{format_ident, quote};
 use syn::meta::ParseNestedMeta;
 use syn::{ItemFn, LitStr, Result, parse_macro_input};
 
@@ -43,7 +43,7 @@ pub fn lua_module(attr: TokenStream, item: TokenStream) -> TokenStream {
     let func = parse_macro_input!(item as ItemFn);
     let func_name = &func.sig.ident;
     let module_name = args.name.unwrap_or_else(|| func_name.clone());
-    let ext_entrypoint_name = Ident::new(&format!("luaopen_{module_name}"), Span::call_site());
+    let ext_entrypoint_name = format_ident!("luaopen_{}", module_name);
     let skip_memory_check = if args.skip_memory_check {
         quote! { lua.skip_memory_check(true); }
     } else {

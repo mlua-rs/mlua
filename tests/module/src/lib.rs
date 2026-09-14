@@ -19,7 +19,7 @@ fn test_protected_call_setup(lua: &Lua, _: ()) -> LuaResult<bool> {
 }
 
 #[mlua::lua_module]
-fn test_module(lua: &Lua) -> LuaResult<LuaTable> {
+fn r#test_module(lua: &Lua) -> LuaResult<LuaTable> {
     let exports = lua.create_table()?;
     exports.set("sum", lua.create_function(sum)?)?;
     exports.set("used_memory", lua.create_function(used_memory)?)?;

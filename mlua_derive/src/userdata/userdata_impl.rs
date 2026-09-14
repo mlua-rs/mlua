@@ -143,6 +143,12 @@ fn try_unwrap_option(ty: &Type) -> Option<&Type> {
 /// Determine `self` kind and collect the callback arguments.
 /// Auto-detects `Lua` (owned or reference) as the first non-self parameter.
 fn analyze_self_and_args(sig: &Signature) -> syn::Result<MethodInfo> {
+    if !sig.generics.params.is_empty() {
+        return Err(syn::Error::new_spanned(
+            &sig.generics,
+            "`#[mlua::userdata_impl]` does not support generic methods.",
+        ));
+    }
     let mut self_kind = SelfKind::None;
     let mut lua = None;
     let mut args = Vec::new();
@@ -322,7 +328,7 @@ pub fn userdata_impl(attr: TokenStream, item: TokenStream) -> TokenStream {
 
     static COUNTER: AtomicUsize = AtomicUsize::new(0);
     let unique_suffix = COUNTER.fetch_add(1, Ordering::Relaxed);
-    let register_fn_name = format_ident!("__mlua_register_{type_name}_{unique_suffix}");
+    let register_fn_name = format_ident!("__mlua_register_{}_{unique_suffix}", type_name);
     let registration_fn_name = format_ident!("__mlua_userdata_registration");
 
     let mut registration_calls = Vec::new();
@@ -515,14 +521,16 @@ pub fn userdata_impl(attr: TokenStream, item: TokenStream) -> TokenStream {
     input.attrs = strip_item_attrs(&input.attrs);
 
     let output = quote! {
-        #[allow(non_snake_case)]
-        fn #register_fn_name(registry: &mut ::mlua::userdata::UserDataRegistry<#type_path>) {
-            use ::mlua::userdata::{UserDataFields as _, UserDataMethods as _};
-            #(#registration_calls)*
+        impl #type_path {
+            #[allow(non_snake_case)]
+            fn #register_fn_name(registry: &mut ::mlua::userdata::UserDataRegistry<Self>) {
+                use ::mlua::userdata::{UserDataFields as _, UserDataMethods as _};
+                #(#registration_calls)*
+            }
         }
 
         ::mlua::__inventory::submit! {
-            #type_path::#registration_fn_name(#register_fn_name)
+            #type_path::#registration_fn_name(#type_path::#register_fn_name)
         }
 
         #input
@@ -672,25 +680,16 @@ fn gen_field_setter(
 ) -> TokenStream2 {
     let lua_name = lua_attr.name(fn_name);
     let call_args = gen_call_args(info);
-    let this = Ident::new("this", Span2::mixed_site());
-    let lua = Ident::new("lua", Span2::mixed_site());
+    let closure_params = gen_closure_params(info);
 
-    if lua_attr.infallible {
-        let val_ident = info.args.first().map(|a| &a.ident);
-        return quote! {
-            registry.add_field_method_set(#lua_name, |#lua, #this, #val_ident| {
-                let _ = #lua; // silence unused variable warning
-                Ok(#type_path::#fn_name(#call_args))
-            });
-        };
-    }
+    let body = if lua_attr.infallible {
+        quote! { Ok(#type_path::#fn_name(#call_args)) }
+    } else {
+        quote! { #type_path::#fn_name(#call_args) }
+    };
 
-    let val_ident = info.args.first().map(|a| &a.ident);
     quote! {
-        registry.add_field_method_set(#lua_name, |#lua, #this, #val_ident| {
-            let _ = #lua; // silence unused variable warning
-            #type_path::#fn_name(#call_args)
-        });
+        registry.add_field_method_set(#lua_name, #closure_params { #body });
     }
 }
 

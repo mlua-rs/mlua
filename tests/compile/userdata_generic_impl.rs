@@ -11,4 +11,11 @@ impl<T> Foo<T> {
     }
 }
 
+#[mlua::userdata_impl]
+impl Foo {
+    fn generic<T>(&self, value: T) -> mlua::Result<T> {
+        Ok(value)
+    }
+}
+
 fn main() {}

@@ -71,7 +71,7 @@ impl Rectangle {
     }
 
     #[lua(meta, infallible, name = "__add")]
-    fn add(&self, other: &Rectangle) -> Rectangle {
+    fn add(&self, other: &Self) -> Self {
         Rectangle {
             length: self.length + other.length,
             width: self.width + other.width,
@@ -80,7 +80,7 @@ impl Rectangle {
     }
 
     #[lua(infallible)]
-    fn maybe_add(&self, other: Option<&Rectangle>) -> Rectangle {
+    fn maybe_add(&self, other: Option<&Self>) -> Self {
         match other {
             Some(other) => Rectangle {
                 length: self.length + other.length,
@@ -132,7 +132,7 @@ impl Rectangle {
         }
     }
 
-    fn transfer_length(&mut self, other: &mut Rectangle) -> Result<()> {
+    fn transfer_length(&mut self, other: &mut Self) -> Result<()> {
         other.length += self.length;
         self.length = 0;
         Ok(())
@@ -381,6 +381,22 @@ impl Bytes {
         Bytes(data.to_vec())
     }
 
+    #[lua(setter, infallible)]
+    fn text(&mut self, value: &str) {
+        self.0 = value.as_bytes().to_vec();
+    }
+
+    #[lua(setter)]
+    fn bytes(&mut self, value: Option<&[u8]>) -> Result<()> {
+        self.0 = value.unwrap_or_default().to_vec();
+        Ok(())
+    }
+
+    #[lua(setter, infallible)]
+    fn take(&mut self, value: &mut Self) {
+        self.0 = std::mem::take(&mut value.0);
+    }
+
     fn first(&self) -> Result<Option<u8>> {
         Ok(self.0.first().copied())
     }
@@ -401,6 +417,16 @@ fn test_known_borrow_wrappers() -> Result<()> {
         local b = Bytes.new('abc')
         assert(b:first() == 97, "first should return 97 ('a')")
         assert(b:len() == 3, "len should return 3")
+
+        b.text = 'def'
+        assert(b:first() == 100)
+        b.bytes = 'ghi'
+        assert(b:first() == 103)
+        local other = Bytes.new('jkl')
+        b.take = other
+        assert(b:first() == 106 and other:len() == 0)
+        b.bytes = nil
+        assert(b:len() == 0)
 
         if _VERSION:match("Luau") then
             assert(typeof(b) == 'MyBytes', "type should be MyBytes in Luau")
@@ -472,13 +498,13 @@ fn test_static_metamethods() {
 }
 
 #[derive(Clone, Debug, UserData)]
-struct Hygiene {
+struct r#Hygiene {
     value: i32,
     r#type: i32,
 }
 
 #[mlua::userdata_impl]
-impl Hygiene {
+impl r#Hygiene {
     #[lua(infallible)]
     fn new(value: i32) -> Self {
         Hygiene { value, r#type: 7 }

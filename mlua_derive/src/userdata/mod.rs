@@ -131,9 +131,9 @@ pub fn userdata_type(item: TokenStream) -> TokenStream {
         }
     }
 
-    let registration_type_name = format_ident!("__MluaUserDataRegistration_{type_name}");
+    let registration_type_name = format_ident!("__MluaUserDataRegistration_{}", type_name);
     let registration_fn_name = format_ident!("__mlua_userdata_registration");
-    let register_fields_fn_name = format_ident!("__mlua_register_{type_name}_fields");
+    let register_fields_fn_name = format_ident!("__mlua_register_{}_fields", type_name);
 
     let output = quote! {
         #[doc(hidden)]
