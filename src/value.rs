@@ -493,6 +493,14 @@ impl Value {
     // Compares two values.
     // Used to sort values for Debug printing.
     pub(crate) fn sort_cmp(&self, other: &Self) -> Ordering {
+        fn cmp_integer_number(a: Integer, b: Number) -> Ordering {
+            match (a as Number).partial_cmp(&b) {
+                // Integer::MAX can round up to a float outside the integer ranges
+                Some(Ordering::Equal) => Integer::from_f64(b).map_or(Ordering::Less, |b| a.cmp(&b)),
+                ordering => ordering.unwrap_or(Ordering::Equal),
+            }
+        }
+
         match (self, other) {
             // Nil
             (Value::Nil, Value::Nil) => Ordering::Equal,
@@ -508,10 +516,8 @@ impl Value {
             (_, Value::Boolean(_)) => Ordering::Greater,
             // Integer && Number
             (Value::Integer(a), Value::Integer(b)) => a.cmp(b),
-            (Value::Integer(a), Value::Number(b)) => (*a as Number).partial_cmp(b).unwrap_or(Ordering::Equal),
-            (Value::Number(a), Value::Integer(b)) => {
-                a.partial_cmp(&(*b as Number)).unwrap_or(Ordering::Equal)
-            }
+            (Value::Integer(a), Value::Number(b)) => cmp_integer_number(*a, *b),
+            (Value::Number(a), Value::Integer(b)) => cmp_integer_number(*b, *a).reverse(),
             (Value::Number(a), Value::Number(b)) => a.partial_cmp(b).unwrap_or(Ordering::Equal),
             (Value::Integer(_) | Value::Number(_), _) => Ordering::Less,
             (_, Value::Integer(_) | Value::Number(_)) => Ordering::Greater,

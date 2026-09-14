@@ -947,10 +947,15 @@ fn test_arbitrary_precision() {
     let num = lua.to_value_with(&num, opts).unwrap();
     assert_eq!(num, Value::Integer(123));
 
-    // Max u64
+    // Max i64
     let num = serde_json::Value::Number(serde_json::Number::from(i64::MAX));
     let num = lua.to_value_with(&num, opts).unwrap();
-    assert_eq!(num, Value::Number(i64::MAX as f64));
+    assert_eq!(num, i64::MAX.into_lua(&lua).unwrap());
+
+    // Max u64
+    let num = serde_json::Value::Number(serde_json::Number::from(u64::MAX));
+    let num = lua.to_value_with(&num, opts).unwrap();
+    assert_eq!(num, Value::Number(u64::MAX as f64));
 
     // Check that the option is disabled by default
     let num = serde_json::Value::Number(serde_json::Number::from_f64(1.244e2).unwrap());

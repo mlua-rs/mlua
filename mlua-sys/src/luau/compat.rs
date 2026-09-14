@@ -160,7 +160,11 @@ pub unsafe fn lua_tointegerx(L: *mut lua_State, i: c_int, isnum: *mut c_int) -> 
     let mut ok = 0;
     let n = lua_tonumberx(L, i, &mut ok);
     let n_int = n as lua_Integer;
-    if ok != 0 && (n - n_int as lua_Number).abs() < lua_Number::EPSILON {
+    if ok != 0
+        && n >= lua_Integer::MIN as lua_Number
+        && n < -(lua_Integer::MIN as lua_Number)
+        && n == n_int as lua_Number
+    {
         if !isnum.is_null() {
             *isnum = 1;
         }

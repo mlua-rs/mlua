@@ -7,8 +7,8 @@ use std::{error, fmt};
 
 use mlua::chunk::ChunkMode;
 use mlua::{
-    Error, ExternalError, Function, Lua, LuaOptions, Nil, Result, StdLib, Table, UserData, Value, Variadic,
-    ffi,
+    Error, ExternalError, Function, Integer, Lua, LuaOptions, Nil, Result, StdLib, Table, UserData, Value,
+    Variadic, ffi,
 };
 
 #[test]
@@ -553,6 +553,29 @@ fn test_safe_integers() -> Result<()> {
 #[test]
 fn test_num_conversion() -> Result<()> {
     let lua = Lua::new();
+
+    let min = Integer::MIN as f64;
+    for (number, expected) in [
+        (0.0, Some(0)),
+        (-0.0, Some(0)),
+        (1.0, Some(1)),
+        (min, Some(Integer::MIN)),
+        (-min, None),
+        (min.next_down(), None),
+        (1e-20, None),
+        (-1e-20, None),
+        (1.5, None),
+        (f64::NAN, None),
+        (f64::INFINITY, None),
+        (f64::NEG_INFINITY, None),
+    ] {
+        assert_eq!(lua.coerce_integer(Value::Number(number))?, expected, "{number:?}");
+    }
+    unsafe {
+        lua.exec_raw::<()>(Value::Number(-min), |state| {
+            assert_eq!(ffi::lua_isinteger(state, -1), 0);
+        })?;
+    }
 
     assert_eq!(
         lua.coerce_integer(Value::String(lua.create_string("1")?))?,
