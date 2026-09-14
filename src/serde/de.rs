@@ -584,7 +584,7 @@ impl MapDeserializer<'_> {
             match self.pairs.next() {
                 Some(item) => {
                     let (key, value) = item?;
-                    let skip_key = check_value_for_skip(&key, self.options, &self.visited)
+                    let skip_key = check_key_for_skip(&key, self.options, &self.visited)
                         .map_err(|err| Error::DeserializeError(err.to_string()))?;
                     let skip_value = check_value_for_skip(&value, self.options, &self.visited)
                         .map_err(|err| Error::DeserializeError(err.to_string()))?;
@@ -765,6 +765,17 @@ impl Drop for RecursionGuard {
     }
 }
 
+pub(crate) fn check_key_for_skip(
+    key: &Value,
+    options: Options,
+    visited: &RefCell<FxHashSet<*const c_void>>,
+) -> StdResult<bool, &'static str> {
+    if key.is_null() && !options.deny_unsupported_types {
+        return Ok(true);
+    }
+    check_value_for_skip(key, options, visited)
+}
+
 // Checks `options` and decides should we emit an error or skip next element
 pub(crate) fn check_value_for_skip(
     value: &Value,
@@ -781,6 +792,7 @@ pub(crate) fn check_value_for_skip(
                 return Ok(true); // skip
             }
         }
+        Value::LightUserData(ud) if ud.0.is_null() => {}
         Value::UserData(ud) if ud.is_serializable() => {}
         Value::Function(_)
         | Value::Thread(_)

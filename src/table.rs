@@ -1384,7 +1384,7 @@ impl Serialize for SerializableTable<'_> {
     where
         S: Serializer,
     {
-        use crate::serde::de::{MapPairs, RecursionGuard, check_value_for_skip};
+        use crate::serde::de::{MapPairs, RecursionGuard, check_key_for_skip, check_value_for_skip};
         use crate::value::SerializableValue;
 
         let convert_result = |res: Result<()>, serialize_err: Option<S::Error>| match res {
@@ -1424,7 +1424,7 @@ impl Serialize for SerializableTable<'_> {
         let mut map = serializer.serialize_map(None)?;
         let mut serialize_err = None;
         let mut process_pair = |key, value| {
-            let skip_key = check_value_for_skip(&key, self.options, visited)
+            let skip_key = check_key_for_skip(&key, self.options, visited)
                 .map_err(|err| Error::SerializeError(err.to_string()))?;
             let skip_value = check_value_for_skip(&value, self.options, visited)
                 .map_err(|err| Error::SerializeError(err.to_string()))?;

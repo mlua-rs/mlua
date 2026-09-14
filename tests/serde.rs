@@ -776,6 +776,18 @@ fn test_from_value_with_options() -> Result<(), Box<dyn StdError>> {
         vec!["a".to_string(), "b".to_string(), "c".to_string()]
     );
 
+    lua.globals().set("null", Value::NULL)?;
+    for (source, expected) in [
+        ("{null, 7, function() end}", "[null,7]"),
+        ("{[null] = 42, a = null, b = function() end}", r#"{"a":null}"#),
+    ] {
+        let value: Value = lua.load(source).eval()?;
+        let serializable = value.to_serializable().deny_unsupported_types(false);
+        assert_eq!(serde_json::to_string(&serializable)?, expected);
+        let result = lua.from_value_with::<serde_json::Value>(value, options)?;
+        assert_eq!(result.to_string(), expected);
+    }
+
     // Deny recursive tables by default
     let value = lua.load(r#"local t = {}; t.t = t; return t"#).eval()?;
     match lua.from_value::<HashMap<String, Option<String>>>(value) {
