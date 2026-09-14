@@ -785,14 +785,23 @@ macro_rules! lua_convert_int {
             #[inline]
             fn from_lua(value: Value, lua: &Lua) -> Result<Self> {
                 let ty = value.type_name();
+                let cast_number = |n: ffi::lua_Number| {
+                    cast(n).filter(|_| {
+                        cfg!(any(
+                            feature = "lua51",
+                            feature = "lua52",
+                            feature = "luajit"
+                        )) || n == n.trunc()
+                    })
+                };
                 (match value {
                     Value::Integer(i) => cast(i),
-                    Value::Number(n) => cast(n),
+                    Value::Number(n) => cast_number(n),
                     _ => {
                         if let Some(i) = lua.coerce_integer(value.clone())? {
                             cast(i)
                         } else {
-                            cast(lua.coerce_number(value)?.ok_or_else(|| {
+                            cast_number(lua.coerce_number(value)?.ok_or_else(|| {
                                 let msg = "expected number or string coercible to number";
                                 Error::from_lua_conversion(ty, stringify!($x), msg.to_string())
                             })?)

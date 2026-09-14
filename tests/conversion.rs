@@ -354,6 +354,34 @@ fn test_integer_from_lua() -> Result<()> {
     // Should fallback to default conversion
     assert_eq!(f.call::<i32>("42")?, 42);
 
+    for (number, expected) in [
+        (0.0, Some(0)),
+        (-0.0, Some(0)),
+        (3.0, Some(3)),
+        (3.7, None),
+        (-3.7, None),
+        (1e-20, None),
+        (-1e-20, None),
+        (f64::NAN, None),
+        (f64::INFINITY, None),
+    ] {
+        let expected =
+            if cfg!(any(feature = "lua51", feature = "lua52", feature = "luajit")) && number.is_finite() {
+                Some(number as i32)
+            } else {
+                expected
+            };
+        for value in [Value::Number(number), lua.pack(number.to_string())?] {
+            assert_eq!(lua.unpack::<i32>(value.clone()).ok(), expected, "{value:?}");
+            assert_eq!(
+                lua.unpack::<u64>(value.clone()).ok(),
+                expected.and_then(|i| u64::try_from(i).ok()),
+                "{value:?}"
+            );
+            assert_eq!(f.call::<i32>(value.clone()).ok(), expected, "{value:?}");
+        }
+    }
+
     Ok(())
 }
 

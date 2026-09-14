@@ -610,7 +610,13 @@ fn test_num_conversion() -> Result<()> {
     #[cfg(any(feature = "lua52", feature = "lua51", feature = "luajit", feature = "luau"))]
     assert_eq!(lua.load("1.0").eval::<String>()?, "1");
 
+    #[cfg(any(feature = "lua51", feature = "lua52", feature = "luajit"))]
     assert_eq!(lua.load("1.5").eval::<i64>()?, 1);
+    #[cfg(not(any(feature = "lua51", feature = "lua52", feature = "luajit")))]
+    assert!(matches!(
+        lua.load("1.5").eval::<i64>(),
+        Err(Error::FromLuaConversionError { .. })
+    ));
     assert_eq!(lua.load("1.5").eval::<f64>()?, 1.5);
     assert_eq!(lua.load("1.5").eval::<String>()?, "1.5");
 
@@ -626,6 +632,7 @@ fn test_num_conversion() -> Result<()> {
     assert_eq!(lua.unpack::<f32>(lua.pack(f64::MIN)?)?, f32::NEG_INFINITY);
 
     assert_eq!(lua.unpack::<i128>(lua.pack(1i128 << 64)?)?, 1i128 << 64);
+    assert_eq!(lua.convert::<u128>("18446744073709551616")?, 1u128 << 64);
 
     // Negative zero
     let negative_zero = lua.load("-0.0").eval::<f64>()?;
