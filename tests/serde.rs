@@ -303,6 +303,19 @@ fn test_serialize_mixed_table() -> LuaResult<()> {
     let json = serde_json::to_string(&table.to_serializable().detect_mixed_tables(true)).unwrap();
     assert_eq!(json, r#"[1,2,3,null,5,6,null,null,null,10]"#);
 
+    for (key, expected) in [
+        (9, "[null,null,null,null,null,null,null,null,42]"),
+        (10, r#"{"10":42}"#),
+        (1000, r#"{"1000":42}"#),
+    ] {
+        let table = lua.create_table_from([(key, 42)])?.into_lua(&lua)?;
+        let json = serde_json::to_string(&table.to_serializable().detect_mixed_tables(true)).unwrap();
+        assert_eq!(json, expected);
+        let options = DeserializeOptions::new().detect_mixed_tables(true);
+        let value = lua.from_value_with::<serde_value::Value>(table, options)?;
+        assert_eq!(serde_json::to_string(&value).unwrap(), expected);
+    }
+
     // A mixed table with both array-like and map-like entries
     let table = lua.load(r#"{1,2,3, key="value"}"#).eval::<Value>()?;
     let json = serde_json::to_string(&table).unwrap();

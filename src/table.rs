@@ -1052,7 +1052,7 @@ impl Table {
         if options.detect_mixed_tables {
             if let Some((len, max_idx)) = self.find_array_len() {
                 // If the array is too sparse, serialize it as a map instead
-                if len < 10 || len * 2 >= max_idx {
+                if max_idx < 10 || len * 2 >= max_idx {
                     return Some(max_idx);
                 }
             }
