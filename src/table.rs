@@ -316,6 +316,9 @@ impl Table {
             }
             protect_lua!(state, 2, 0, fn(state) {
                 let len = ffi::luaL_len(state, -2) as Integer;
+                if len == Integer::MAX {
+                    ffi::luaL_error(state, cstr!("table length overflow"));
+                }
                 ffi::lua_seti(state, -2, len + 1);
             })?
         }

@@ -112,6 +112,16 @@ fn test_table_push_pop() -> Result<()> {
     assert_eq!(table2.pop::<Value>()?, Value::Nil);
     assert_eq!(table2.len()?, 0);
 
+    #[cfg(any(feature = "lua53", feature = "lua54", feature = "lua55"))]
+    {
+        let table = (lua.load("setmetatable({}, {__len = function() return math.maxinteger end})"))
+            .eval::<Table>()?;
+        assert!(
+            matches!(table.push(1), Err(Error::RuntimeError(msg)) if msg.contains("table length overflow"))
+        );
+        assert!(table.is_empty());
+    }
+
     Ok(())
 }
 
