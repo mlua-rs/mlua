@@ -463,8 +463,6 @@ fn test_table_for_each_invalid_key() -> Result<()> {
 
 #[test]
 fn test_table_for_each_error() -> Result<()> {
-    use std::panic::{AssertUnwindSafe, catch_unwind};
-
     let lua = Lua::new();
     let table = lua.create_sequence_from([1, 2])?;
     #[cfg(not(feature = "luau"))]
@@ -483,10 +481,15 @@ fn test_table_for_each_error() -> Result<()> {
         Err(Error::FromLuaConversionError { .. })
     ));
 
-    let panic = catch_unwind(AssertUnwindSafe(|| {
-        table.for_each::<i64, i64>(|_, _| panic!("callback panic"))
-    }));
-    assert_eq!(panic.unwrap_err().downcast_ref::<&str>(), Some(&"callback panic"));
+    #[cfg(panic = "unwind")]
+    {
+        use std::panic::{AssertUnwindSafe, catch_unwind};
+
+        let panic = catch_unwind(AssertUnwindSafe(|| {
+            table.for_each::<i64, i64>(|_, _| panic!("callback panic"))
+        }));
+        assert_eq!(panic.unwrap_err().downcast_ref::<&str>(), Some(&"callback panic"));
+    }
 
     #[cfg(not(feature = "luau"))]
     lua.remove_hook();
