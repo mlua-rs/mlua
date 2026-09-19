@@ -305,6 +305,23 @@ fn test_function_coverage() -> Result<()> {
         }
     );
 
+    #[cfg(panic = "unwind")]
+    {
+        use std::panic::{AssertUnwindSafe, catch_unwind};
+
+        let memory = lua.used_memory();
+        let mut calls = 0;
+        let panic = catch_unwind(AssertUnwindSafe(|| {
+            f.coverage(|_| {
+                calls += 1;
+                panic!("coverage panic");
+            });
+        }));
+        assert_eq!(panic.unwrap_err().downcast_ref::<&str>(), Some(&"coverage panic"));
+        assert_eq!(calls, 1);
+        assert_eq!(lua.used_memory(), memory);
+    }
+
     Ok(())
 }
 

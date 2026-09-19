@@ -554,6 +554,8 @@ impl Function {
     where
         F: FnMut(CoverageInfo),
     {
+        use std::panic::{AssertUnwindSafe, catch_unwind, resume_unwind};
+
         unsafe extern "C-unwind" fn callback<F: FnMut(CoverageInfo)>(
             data: *mut c_void,
             function: *const std::os::raw::c_char,
@@ -562,16 +564,19 @@ impl Function {
             hits: *const c_int,
             size: usize,
         ) {
-            let function = ptr_to_lossy_str(function).map(|s| s.into_owned());
-            let rust_callback = &*(data as *const RefCell<F>);
+            let rust_callback = &*(data as *const RefCell<(F, std::thread::Result<()>)>);
             if let Ok(mut rust_callback) = rust_callback.try_borrow_mut() {
-                // Call the Rust callback with CoverageInfo
-                rust_callback(CoverageInfo {
-                    function,
-                    line_defined,
-                    depth,
-                    hits: slice::from_raw_parts(hits, size).to_vec(),
-                });
+                let (func, result) = &mut *rust_callback;
+                if result.is_ok() {
+                    *result = catch_unwind(AssertUnwindSafe(|| {
+                        func(CoverageInfo {
+                            function: ptr_to_lossy_str(function).map(|s| s.into_owned()),
+                            line_defined,
+                            depth,
+                            hits: slice::from_raw_parts(hits, size).to_vec(),
+                        });
+                    }));
+                }
             }
         }
 
@@ -582,9 +587,11 @@ impl Function {
             assert_stack(state, 1);
 
             lua.push_ref(&self.0);
-            let func = RefCell::new(func);
-            let func_ptr = &func as *const RefCell<F> as *mut c_void;
+            let func: RefCell<(F, std::thread::Result<()>)> = RefCell::new((func, Ok(())));
+            let func_ptr = &func as *const _ as *mut c_void;
             ffi::lua_getcoverage(state, -1, func_ptr, callback::<F>);
+            // Resume only after Luau has freed its coverage buffer.
+            func.into_inner().1.unwrap_or_else(|panic| resume_unwind(panic));
         }
     }
 
