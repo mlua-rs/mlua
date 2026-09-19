@@ -1457,6 +1457,41 @@ fn test_userdata_namecall() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "luau")]
+#[test]
+fn test_userdata_namecall_lifetime() -> Result<()> {
+    let lua = Lua::new();
+
+    let value = Arc::new(42);
+    let weak = Arc::downgrade(&value);
+    lua.register_userdata_type::<()>(|registry| {
+        registry.add_function("method", move |_, ()| Ok(*value));
+        registry.add_field_method_get("field", |_, _| Ok(Nil));
+        registry.enable_namecall();
+    })?;
+    let namecall = lua
+        .create_any_userdata(())?
+        .metatable()?
+        .get::<Function>("__namecall")?;
+    // Retaining only `__namecall` must keep its callbacks alive after re-registration.
+    lua.register_userdata_type::<()>(|_| {})?;
+    lua.gc_collect()?;
+    lua.gc_collect()?;
+    assert!(weak.upgrade().is_some());
+
+    let ud = lua.create_any_userdata(())?;
+    ud.metatable()?.set("__namecall", namecall)?;
+    lua.globals().set("ud", &ud)?;
+    assert_eq!(lua.load("return ud:method()").eval::<i32>()?, 42);
+
+    ud.metatable()?.set("__namecall", Nil)?;
+    lua.gc_collect()?;
+    lua.gc_collect()?;
+    assert!(weak.upgrade().is_none());
+
+    Ok(())
+}
+
 #[test]
 fn test_userdata_get_path() -> Result<()> {
     let lua = Lua::new();

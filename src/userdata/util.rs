@@ -216,7 +216,7 @@ pub(crate) unsafe fn init_userdata_metatable(
     field_getters: Option<c_int>,
     field_setters: Option<c_int>,
     methods: Option<c_int>,
-    _methods_map: Option<FxHashMap<Vec<u8>, CallbackPtr>>, // Used only in Luau for `__namecall`
+    _methods_map: Option<(FxHashMap<Vec<u8>, CallbackPtr>, c_int)>, // Used only in Luau for `__namecall`
 ) -> Result<()> {
     if field_getters.is_some() || methods.is_some() {
         // Push `__index` generator function
@@ -242,9 +242,9 @@ pub(crate) unsafe fn init_userdata_metatable(
         rawset_field(state, metatable, "__index")?;
 
         #[cfg(feature = "luau")]
-        if let Some(methods_map) = _methods_map {
+        if let Some((methods_map, owners)) = _methods_map {
             // In Luau we can speedup method calls by providing a dedicated `__namecall` metamethod
-            push_userdata_metatable_namecall(state, methods_map)?;
+            push_userdata_metatable_namecall(state, methods_map, owners)?;
             rawset_field(state, metatable, "__namecall")?;
         }
     }
@@ -409,6 +409,7 @@ unsafe fn init_userdata_metatable_newindex(state: *mut ffi::lua_State) -> Result
 unsafe fn push_userdata_metatable_namecall(
     state: *mut ffi::lua_State,
     methods_map: FxHashMap<Vec<u8>, CallbackPtr>,
+    owners: c_int,
 ) -> Result<()> {
     unsafe extern "C-unwind" fn namecall(state: *mut ffi::lua_State) -> c_int {
         let name = ffi::lua_namecallatom(state, ptr::null_mut());
@@ -430,8 +431,9 @@ unsafe fn push_userdata_metatable_namecall(
 
     // Automatic destructor is provided for any Luau userdata
     crate::util::push_userdata(state, methods_map, true)?;
-    protect_lua!(state, 1, 1, |state| {
-        ffi::lua_pushcclosured(state, namecall, cstr!("__namecall"), 1);
+    ffi::lua_pushvalue(state, owners);
+    protect_lua!(state, 2, 1, |state| {
+        ffi::lua_pushcclosured(state, namecall, cstr!("__namecall"), 2);
     })
 }
 

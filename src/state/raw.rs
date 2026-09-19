@@ -1171,7 +1171,7 @@ impl RawLua {
     pub(crate) unsafe fn push_userdata_metatable(&self, mut registry: RawUserDataRegistry) -> Result<()> {
         let state = self.state();
         let mut stack_guard = StackGuard::new(state);
-        check_stack(state, 13)?;
+        check_stack(state, 14)?;
 
         // Prepare metatable, add meta methods first and then meta fields
         let metatable_nrec = registry.meta_methods.len() + registry.meta_fields.len();
@@ -1263,11 +1263,8 @@ impl RawLua {
         let mut methods_map = None;
         #[cfg(feature = "luau")]
         if registry.enable_namecall {
-            let map: &mut rustc_hash::FxHashMap<_, crate::types::CallbackPtr> =
-                methods_map.get_or_insert_default();
-            for (k, m) in &registry.methods {
-                map.insert(k.as_bytes().to_vec(), &**m);
-            }
+            push_table(state, registry.methods.len(), 0, true)?;
+            methods_map = Some((rustc_hash::FxHashMap::default(), ffi::lua_absindex(state, -1)));
         }
 
         let mut methods_index = None;
@@ -1285,8 +1282,22 @@ impl RawLua {
                     push_table(state, 0, methods_nrec, true)?;
                 }
             }
-            for (k, m) in registry.methods {
+            for (_i, (k, m)) in registry.methods.into_iter().enumerate() {
                 self.push(self.create_callback(m)?)?;
+                #[cfg(feature = "luau")]
+                if let Some((map, owners)) = &mut methods_map {
+                    // Derive the pointer after moving the callback into its final storage.
+                    ffi::lua_getupvalue(state, -1, 1);
+                    let upvalue = get_userdata::<CallbackUpvalue>(state, -1);
+                    let callback_ptr = (*upvalue).data.as_deref().unwrap() as crate::types::CallbackPtr;
+                    map.insert(k.as_bytes().to_vec(), callback_ptr);
+                    ffi::lua_pop(state, 1);
+                    // Keep callback owners private so replacing `__index` cannot invalidate
+                    // pointers.
+                    ffi::lua_pushvalue(state, -1);
+                    // The array is preallocated, so this cannot allocate.
+                    ffi::lua_rawseti(state, *owners, (_i + 1) as Integer);
+                }
                 rawset_field(state, -2, &k)?;
             }
             #[cfg(feature = "async")]
