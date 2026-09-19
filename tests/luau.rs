@@ -201,7 +201,7 @@ fn test_sandbox() -> Result<()> {
         let err = collectgarbage.call::<()>(arg).err().unwrap().to_string();
         assert!(err.contains("collectgarbage called with invalid option"));
     }
-    assert!(collectgarbage.call::<u64>("count").unwrap() > 0);
+    assert!(collectgarbage.call::<f64>("count").unwrap() > 0.0);
 
     lua.sandbox(false)?;
 
