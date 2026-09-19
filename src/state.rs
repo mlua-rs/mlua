@@ -1046,10 +1046,10 @@ impl Lua {
     /// Level `0` is the current running function, whereas level `n+1` is the function that has
     /// called level `n` (except for tail calls, which do not count in the stack).
     pub fn inspect_stack<R>(&self, level: usize, f: impl FnOnce(&Debug) -> R) -> Option<R> {
+        let level = c_int::try_from(level).ok()?;
         let lua = self.lock();
         unsafe {
             let mut ar = mem::zeroed::<ffi::lua_Debug>();
-            let level = level as c_int;
             #[cfg(not(feature = "luau"))]
             if ffi::lua_getstack(lua.state(), level, &mut ar) == 0 {
                 return None;
@@ -1076,8 +1076,9 @@ impl Lua {
                     Some(s) => ffi::lua_pushlstring(state, s.as_ptr() as *const c_char, s.len()),
                     None => ptr::null(),
                 };
-                // `protect_lua` adds it's own call frame, so we need to increase level by 1
-                ffi::luaL_traceback(state, state, msg, (level + 1) as c_int);
+                // `protect_lua` adds its own call frame, leave room for Lua's internal increment.
+                let level = level.saturating_add(1).min((c_int::MAX - 1) as usize) as c_int;
+                ffi::luaL_traceback(state, state, msg, level);
             })?;
             Ok(LuaString(lua.try_pop_ref()?))
         }
