@@ -1472,67 +1472,92 @@ impl RawLua {
                 let fut = Some(func(rawlua, nargs));
                 let extra = XRc::clone(&(*upvalue).extra);
                 let protect = !rawlua.unlikely_memory_error();
-                push_internal_userdata(state, AsyncPollUpvalue { data: fut, extra }, protect)?;
-
-                Ok(1)
+                // Remove arguments but preserve any preallocated failure below them.
+                ffi::lua_pop(state, nargs);
+                let future = push_internal_userdata(state, AsyncPollUpvalue { data: fut, extra }, protect)?;
+                let future_index = ffi::lua_gettop(state);
+                let nresults = poll_future(state, rawlua, future, 1)?;
+                ffi::lua_pushvalue(state, future_index);
+                ffi::lua_insert(state, -nresults - 1);
+                Ok(nresults + 1)
             })
         }
 
-        unsafe extern "C-unwind" fn poll_future(state: *mut ffi::lua_State) -> c_int {
-            // Future is always passed in the first argument
+        unsafe extern "C-unwind" fn poll_future_callback(state: *mut ffi::lua_State) -> c_int {
+            // The helper can be called directly, so validate before accessing the future.
+            #[cfg(feature = "luau")]
+            let valid =
+                ffi::lua_getmetatablepointer(state, 1) == ffi::lua_topointer(state, ffi::lua_upvalueindex(1));
+            #[cfg(not(feature = "luau"))]
+            let valid = ffi::lua_getmetatable(state, 1) != 0 && {
+                let valid = ffi::lua_rawequal(state, -1, ffi::lua_upvalueindex(1)) != 0;
+                ffi::lua_pop(state, 1);
+                valid
+            };
+            if !valid {
+                return callback_error_ext(state, ptr::null_mut(), false, |_, _| {
+                    Err(Error::UserDataTypeMismatch)
+                });
+            }
             let future = get_userdata::<AsyncPollUpvalue>(state, 1);
             callback_error_ext(state, (*future).extra.get(), true, |extra, nargs| {
-                // Lua ensures that `LUA_MINSTACK` stack spaces are available (after pushing
-                // arguments) The lock must be already held as the future is polled
-                let rawlua = (*extra).raw_lua();
-
-                if nargs == 2 && ffi::lua_tolightuserdata(state, -1) == Lua::poll_terminate().0 {
-                    // Destroy the future and terminate the Lua thread
-                    (*future).data.take();
-                    ffi::lua_pushinteger(state, -1);
-                    return Ok(1);
-                }
-
-                let fut = &mut (*future).data;
-                let mut ctx = Context::from_waker(rawlua.waker());
-                match fut.as_mut().map(|fut| fut.as_mut().poll(&mut ctx)) {
-                    Some(Poll::Pending) => {
-                        let fut_nvals = ffi::lua_gettop(state) - 1; // Exclude the future itself
-                        if fut_nvals >= 3 && ffi::lua_tolightuserdata(state, -3) == Lua::poll_yield().0 {
-                            // We have some values to yield
-                            ffi::lua_pushnil(state);
-                            ffi::lua_replace(state, -4);
-                            return Ok(3);
-                        }
-                        ffi::lua_pushnil(state);
-                        ffi::lua_pushlightuserdata(state, Lua::poll_pending().0);
-                        Ok(2)
-                    }
-                    Some(Poll::Ready(nresults)) => {
-                        match nresults? {
-                            nresults if nresults < 3 => {
-                                // Fast path for up to 2 results without creating a table
-                                ffi::lua_pushinteger(state, nresults as _);
-                                if nresults > 0 {
-                                    ffi::lua_insert(state, -nresults - 1);
-                                }
-                                Ok(nresults + 1)
-                            }
-                            nresults => {
-                                let results = MultiValue::from_stack_multi(nresults, rawlua)?;
-                                ffi::lua_pushinteger(state, nresults as _);
-                                rawlua.push(rawlua.create_sequence_from(results)?)?;
-                                Ok(2)
-                            }
-                        }
-                    }
-                    None => Err(Error::CallbackDestructed),
-                }
+                poll_future(state, (*extra).raw_lua(), future, nargs)
             })
+        }
+
+        #[inline(always)]
+        unsafe fn poll_future(
+            state: *mut ffi::lua_State,
+            rawlua: &RawLua,
+            future: *mut AsyncPollUpvalue,
+            nargs: c_int,
+        ) -> Result<c_int> {
+            if nargs == 2 && ffi::lua_tolightuserdata(state, -1) == Lua::poll_terminate().0 {
+                // Destroy the future and terminate the Lua thread
+                (*future).data.take();
+                ffi::lua_pushinteger(state, -1);
+                return Ok(1);
+            }
+
+            let fut = &mut (*future).data;
+            let mut ctx = Context::from_waker(rawlua.waker());
+            match fut.as_mut().map(|fut| fut.as_mut().poll(&mut ctx)) {
+                Some(Poll::Pending) => {
+                    let fut_nvals = ffi::lua_gettop(state) - 1; // Exclude the future itself
+                    if fut_nvals >= 3 && ffi::lua_tolightuserdata(state, -3) == Lua::poll_yield().0 {
+                        // We have some values to yield
+                        ffi::lua_pushnil(state);
+                        ffi::lua_replace(state, -4);
+                        return Ok(3);
+                    }
+                    ffi::lua_pushnil(state);
+                    ffi::lua_pushlightuserdata(state, Lua::poll_pending().0);
+                    Ok(2)
+                }
+                Some(Poll::Ready(nresults)) => {
+                    match nresults? {
+                        nresults if nresults < 3 => {
+                            // Fast path for up to 2 results without creating a table
+                            ffi::lua_pushinteger(state, nresults as _);
+                            if nresults > 0 {
+                                ffi::lua_insert(state, -nresults - 1);
+                            }
+                            Ok(nresults + 1)
+                        }
+                        nresults => {
+                            let results = MultiValue::from_stack_multi(nresults, rawlua)?;
+                            ffi::lua_pushinteger(state, nresults as _);
+                            rawlua.push(rawlua.create_sequence_from(results)?)?;
+                            Ok(2)
+                        }
+                    }
+                }
+                None => Err(Error::CallbackDestructed),
+            }
         }
 
         let state = self.state();
-        let get_future = unsafe {
+        let (get_future, poll) = unsafe {
             let _sg = StackGuard::new(state);
             check_stack(state, 4)?;
 
@@ -1543,8 +1568,16 @@ impl RawLua {
             protect_lua_mem!(self, 1, 1, fn(state) {
                 ffi::lua_pushcclosure(state, get_future_callback, 1);
             })?;
+            let get_future = Function(self.try_pop_ref()?);
 
-            Function(self.try_pop_ref()?)
+            // Cache the expected metatable in an upvalue to avoid a registry lookup per poll.
+            crate::util::get_internal_metatable::<AsyncPollUpvalue>(state);
+            protect_lua_mem!(self, 1, 1, fn(state) {
+                ffi::lua_pushcclosure(state, poll_future_callback, 1);
+            })?;
+            let poll = Function(self.try_pop_ref()?);
+
+            (get_future, poll)
         };
 
         unsafe extern "C-unwind" fn unpack(state: *mut ffi::lua_State) -> c_int {
@@ -1558,57 +1591,54 @@ impl RawLua {
 
         let lua = self.lua();
         let coroutine = lua.try_globals()?.get::<Table>("coroutine")?;
+        let r#yield = coroutine.get::<Function>("yield")?;
+        let unpack = unsafe { lua.create_c_function(unpack)? };
 
-        // Prepare environment for the async poller
-        let env = lua.create_table_with_capacity(0, 4)?;
-        env.set("get_future", get_future)?;
-        env.set("poll", unsafe { lua.create_c_function(poll_future)? })?;
-        env.set("yield", coroutine.get::<Function>("yield")?)?;
-        env.set("unpack", unsafe { lua.create_c_function(unpack)? })?;
-
+        // Capture helpers once when creating the wrapper.
         lua.load(
             r#"
-            local poll, yield = poll, yield
-            local future = get_future(...)
-            local nres, res, res2 = poll(future)
-            while true do
-                -- Poll::Ready branch, `nres` is the number of results
-                if nres ~= nil then
-                    if nres == 0 then
-                        return
-                    elseif nres == 1 then
-                        return res
-                    elseif nres == 2 then
-                        return res, res2
-                    elseif nres < 0 then
-                        -- Negative `nres` means that the future is terminated
-                        -- It must stay yielded and never be resumed again
-                        yield()
-                    else
-                        return unpack(res, nres)
+            local get_future, poll, yield, unpack = ...
+            return function(...)
+                local poll, yield = poll, yield
+                local future, nres, res, res2 = get_future(...)
+                while true do
+                    -- Poll::Ready branch, `nres` is the number of results
+                    if nres ~= nil then
+                        if nres == 0 then
+                            return
+                        elseif nres == 1 then
+                            return res
+                        elseif nres == 2 then
+                            return res, res2
+                        elseif nres < 0 then
+                            -- Negative `nres` means that the future is terminated
+                            -- It must stay yielded and never be resumed again
+                            yield()
+                        else
+                            return unpack(res, nres)
+                        end
                     end
-                end
 
-                -- Poll::Pending branch
-                if res2 == nil then
-                    -- `res` is a "pending" value
-                    -- `yield` can return a signal to drop the future that we should propagate
-                    -- to the poller
-                    nres, res, res2 = poll(future, yield(res))
-                elseif res2 == 0 then
-                    nres, res, res2 = poll(future, yield())
-                elseif res2 == 1 then
-                    nres, res, res2 = poll(future, yield(res))
-                else
-                    nres, res, res2 = poll(future, yield(unpack(res, res2)))
+                    -- Poll::Pending branch
+                    if res2 == nil then
+                        -- `res` is a "pending" value
+                        -- `yield` can return a signal to drop the future that we should propagate
+                        -- to the poller
+                        nres, res, res2 = poll(future, yield(res))
+                    elseif res2 == 0 then
+                        nres, res, res2 = poll(future, yield())
+                    elseif res2 == 1 then
+                        nres, res, res2 = poll(future, yield(res))
+                    else
+                        nres, res, res2 = poll(future, yield(unpack(res, res2)))
+                    end
                 end
             end
             "#,
         )
         .try_cache()
         .set_name("=__mlua_async_poll")
-        .set_environment(env)
-        .into_function()
+        .call((get_future, poll, r#yield, unpack))
     }
 
     #[cfg(feature = "async")]

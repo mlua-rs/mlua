@@ -36,6 +36,24 @@ async fn test_async_function() -> Result<()> {
 }
 
 #[tokio::test]
+async fn test_async_poll_invalid_future() -> Result<()> {
+    let lua = Lua::new();
+
+    // Internal helpers can escape through stack inspection, including after the initial poll.
+    let f = lua.create_async_function(|lua, ()| async move {
+        tokio::task::yield_now().await;
+        Ok(lua.inspect_stack(0, |debug| debug.function()).unwrap())
+    })?;
+    let poll = f.call_async::<Function>(()).await?;
+    for value in [Value::Nil, Value::UserData(lua.create_any_userdata(0u8)?)] {
+        assert!(matches!(poll.call::<()>(value), Err(Error::UserDataTypeMismatch)));
+    }
+    f.call_async::<Function>(()).await?;
+
+    Ok(())
+}
+
+#[tokio::test]
 async fn test_async_function_wrap() -> Result<()> {
     let lua = Lua::new();
 
@@ -130,17 +148,21 @@ async fn test_async_call() -> Result<()> {
 async fn test_async_call_many_returns() -> Result<()> {
     let lua = Lua::new();
 
-    let hello = lua.create_async_function(|_lua, ()| async move {
-        sleep_ms(10).await;
+    let hello = lua.create_async_function(|_lua, yield_first: bool| async move {
+        if yield_first {
+            tokio::task::yield_now().await;
+        }
         Ok(("a", "b", "c", 1))
     })?;
 
-    let vals = hello.call_async::<MultiValue>(()).await?;
-    assert_eq!(vals.len(), 4);
-    assert_eq!(vals[0].to_string()?, "a");
-    assert_eq!(vals[1].to_string()?, "b");
-    assert_eq!(vals[2].to_string()?, "c");
-    assert_eq!(vals[3], Value::Integer(1));
+    for yield_first in [false, true] {
+        let vals = hello.call_async::<MultiValue>(yield_first).await?;
+        assert_eq!(vals.len(), 4);
+        assert_eq!(vals[0].to_string()?, "a");
+        assert_eq!(vals[1].to_string()?, "b");
+        assert_eq!(vals[2].to_string()?, "c");
+        assert_eq!(vals[3], Value::Integer(1));
+    }
 
     Ok(())
 }
