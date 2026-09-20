@@ -396,6 +396,9 @@ impl Compiler {
     ///
     /// Returns [`Error::SyntaxError`] if the source code is invalid.
     pub fn compile(&self, source: impl AsRef<[u8]>) -> Result<Vec<u8>> {
+        #[cfg(feature = "luau-jit")]
+        crate::luau::init_jit_flags();
+
         use std::cell::RefCell;
         use std::ffi::CStr;
         use std::os::raw::{c_char, c_int};

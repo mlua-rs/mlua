@@ -288,7 +288,7 @@ impl JitOptions {
 
     /// Toggles the runtime bytecode inliner.
     ///
-    /// Disabled by default. Changing this option does not affect already loaded functions.
+    /// Disabled by default. Enable before compiling and executing code.
     #[must_use]
     pub const fn inliner(mut self, enabled: bool) -> Self {
         self.inliner = enabled;
@@ -1325,8 +1325,6 @@ impl Lua {
         unsafe {
             let state = lua.main_state();
             if options.inliner {
-                let _ = Self::set_fflag("LuauCallFeedback", true);
-                let _ = Self::set_fflag("LuauEmitCallFeedback", true);
                 ffi::luau_enable_jit_inliner(state);
             } else {
                 ffi::luau_disable_jit_inliner(state);
@@ -1336,11 +1334,16 @@ impl Lua {
 
     /// Sets Luau feature flag (global setting).
     ///
+    /// Flags must be configured before creating any Lua VMs or compiling any Luau code.
+    /// This function must not run concurrently with any other Luau operation, including itself.
+    /// Changing flags later can cause data races or invalidate compiled bytecode.
+    ///
     /// See https://github.com/luau-lang/luau/blob/master/CONTRIBUTING.md#feature-flags for details.
     #[cfg(feature = "luau")]
     #[doc(hidden)]
     #[allow(clippy::result_unit_err)]
     pub fn set_fflag(name: &str, enabled: bool) -> StdResult<(), ()> {
+        // TODO: Make this function unsafe in the next breaking release.
         if let Ok(name) = std::ffi::CString::new(name)
             && unsafe { ffi::luau_setfflag(name.as_ptr(), enabled as c_int) != 0 }
         {

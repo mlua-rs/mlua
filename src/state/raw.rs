@@ -130,6 +130,9 @@ impl RawLua {
     }
 
     pub(super) unsafe fn new(libs: StdLib, options: &LuaOptions) -> XRc<ReentrantMutex<Self>> {
+        #[cfg(feature = "luau-jit")]
+        crate::luau::init_jit_flags();
+
         let mem_state: *mut MemoryState = Box::into_raw(Box::default());
         #[cfg(feature = "lua55")]
         let mut state = {

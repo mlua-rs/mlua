@@ -390,19 +390,31 @@ fn test_fflags() {
 #[cfg(feature = "luau-jit")]
 #[test]
 fn test_jit_inliner() -> Result<()> {
+    let compiler = Compiler::new();
+    let bytecode = compiler.compile("return 42")?;
+
     let lua = Lua::new();
+    lua.enable_jit(false);
+    lua.sandbox(true)?;
     lua.set_jit_options(mlua::state::JitOptions::new().inliner(true));
+
+    // Enabling the inliner must not change global compiler flags.
+    assert_eq!(compiler.compile("return 42")?, bytecode);
 
     // An inlinable helper called in a hot loop.
     let sum = lua
         .load(
             r#"
             local function add(a, b)
-                return a + b
+                return a + b + 0.5
+            end
+            local function caller(a, b)
+                local sum = add(a, b)
+                return sum - 0.5
             end
             local sum = 0
             for i = 1, 1000 do
-                sum = add(sum, i)
+                sum = caller(sum, i)
             end
             return sum
         "#,
@@ -508,11 +520,23 @@ fn test_heap_dump() -> Result<()> {
     Ok(())
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 #[test]
 fn test_integer64_type() -> Result<()> {
-    let lua = Lua::new();
+    // Isolate process-global flag changes from other tests' VMs and compilers.
+    if std::env::var_os("MLUA_TEST_INTEGER64_TYPE").is_none() {
+        assert!(
+            std::process::Command::new(std::env::current_exe()?)
+                .args(["--exact", "test_integer64_type"])
+                .env("MLUA_TEST_INTEGER64_TYPE", "1")
+                .status()?
+                .success()
+        );
+        return Ok(());
+    }
 
     _ = Lua::set_fflag("LuauIntegerType2", true);
+    let lua = Lua::new();
 
     let integer_lib = lua.globals().get::<Table>("integer")?;
     let n = integer_lib.call_function::<i64>("create", 42)?;
