@@ -1,4 +1,6 @@
+use std::fs;
 use std::io::Result as IoResult;
+use std::path::Path;
 use std::result::Result as StdResult;
 use std::sync::Arc;
 
@@ -142,6 +144,27 @@ fn test_require_errors() {
     lua.gc_collect().unwrap();
     lua.gc_collect().unwrap();
     assert_eq!(Arc::strong_count(&alive), 1);
+}
+
+#[test]
+fn test_require_from_path() -> Result<()> {
+    let dir = tempfile::tempdir_in(".").unwrap();
+    // Resetting a required module must not pick an unrelated extensionless file.
+    fs::write(dir.path().join("dependency"), "return 99").unwrap();
+    fs::write(
+        dir.path().join("dependency.luau"),
+        "if not loaded then loaded = true; return require('@self') end; return 42",
+    )
+    .unwrap();
+    for name in ["main.luau", "main.lua", "init.luau"] {
+        let path = Path::new(dir.path().file_name().unwrap()).join(name);
+        fs::write(&path, "return require('./dependency')").unwrap();
+        for path in [path.clone(), path.canonicalize().unwrap()] {
+            let lua = Lua::new();
+            assert_eq!(lua.load(path.as_path()).eval::<i32>()?, 42);
+        }
+    }
+    Ok(())
 }
 
 #[test]

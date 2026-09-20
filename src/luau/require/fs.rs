@@ -137,20 +137,20 @@ impl Require for FsRequirer {
             return Ok(());
         }
 
-        if chunk_path.is_absolute() {
-            let resolved_path = Self::resolve_module(&chunk_path)?;
-            self.abs_path = chunk_path.clone();
-            self.rel_path = chunk_path;
-            self.resolved_path = resolved_path;
+        let abs_path = if chunk_path.is_absolute() {
+            chunk_path.clone()
         } else {
-            // Relative path
             let cwd = env::current_dir().map_err(|_| NavigateError::NotFound)?;
-            let abs_path = Self::normalize_path(&cwd.join(&chunk_path));
-            let resolved_path = Self::resolve_module(&abs_path)?;
-            self.abs_path = abs_path;
-            self.rel_path = chunk_path;
-            self.resolved_path = resolved_path;
-        }
+            Self::normalize_path(&cwd.join(&chunk_path))
+        };
+        // Chunks loaded by path include the file extension, unlike module names.
+        let resolved_path = match Self::resolve_module(&abs_path) {
+            Err(NavigateError::NotFound) if abs_path.is_file() => Some(abs_path.clone()),
+            result => result?,
+        };
+        self.abs_path = abs_path;
+        self.rel_path = chunk_path;
+        self.resolved_path = resolved_path;
 
         Ok(())
     }
