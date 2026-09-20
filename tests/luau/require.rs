@@ -1,5 +1,6 @@
 use std::io::Result as IoResult;
 use std::result::Result as StdResult;
+use std::sync::Arc;
 
 use mlua::luau::{FsRequirer, NavigateError, Require};
 use mlua::{Error, FromLua, IntoLua, Lua, MultiValue, Result, Value};
@@ -66,11 +67,14 @@ fn test_require_errors() {
     assert!((res.unwrap_err().to_string()).contains("@ is not a valid alias"));
 
     // Test throwing mlua::Error
-    struct MyRequire(FsRequirer);
+    struct MyRequire {
+        inner: FsRequirer,
+        _alive: Arc<()>,
+    }
 
     impl Require for MyRequire {
         fn is_require_allowed(&self, chunk_name: &str) -> bool {
-            self.0.is_require_allowed(chunk_name)
+            self.inner.is_require_allowed(chunk_name)
         }
 
         fn reset(&mut self, _chunk_name: &str) -> StdResult<(), NavigateError> {
@@ -78,42 +82,66 @@ fn test_require_errors() {
         }
 
         fn jump_to_alias(&mut self, path: &str) -> StdResult<(), NavigateError> {
-            self.0.jump_to_alias(path)
+            self.inner.jump_to_alias(path)
         }
 
         fn to_parent(&mut self) -> StdResult<(), NavigateError> {
-            self.0.to_parent()
+            self.inner.to_parent()
         }
 
         fn to_child(&mut self, name: &str) -> StdResult<(), NavigateError> {
-            self.0.to_child(name)
+            self.inner.to_child(name)
         }
 
         fn has_module(&self) -> bool {
-            self.0.has_module()
+            self.inner.has_module()
         }
 
         fn cache_key(&self) -> String {
-            self.0.cache_key()
+            self.inner.cache_key()
         }
 
         fn has_config(&self) -> bool {
-            self.0.has_config()
+            self.inner.has_config()
         }
 
         fn config(&self) -> IoResult<Vec<u8>> {
-            self.0.config()
+            self.inner.config()
         }
 
         fn loader(&self, lua: &Lua) -> Result<mlua::Function> {
-            self.0.loader(lua)
+            self.inner.loader(lua)
         }
     }
 
-    let require = lua.create_require_function(MyRequire(FsRequirer::new())).unwrap();
+    let alive = Arc::new(());
+    let require = lua
+        .create_require_function(MyRequire {
+            inner: FsRequirer::new(),
+            _alive: alive.clone(),
+        })
+        .unwrap();
+    let proxy = require
+        .environment()
+        .unwrap()
+        .get::<mlua::Function>("proxyrequire")
+        .unwrap();
     lua.globals().set("require", require).unwrap();
     let res = lua.load(r#"return require('./a/relative/path')"#).exec();
     assert!((res.unwrap_err().to_string()).contains("test error"));
+
+    // An escaped proxy must retain its context independently of the require environment.
+    lua.globals().set("require", Value::Nil).unwrap();
+    lua.gc_collect().unwrap();
+    lua.gc_collect().unwrap();
+    assert_eq!(Arc::strong_count(&alive), 2);
+    let res = proxy.call::<Value>(("./a/relative/path", "@main.lua"));
+    assert!(res.unwrap_err().to_string().contains("test error"));
+
+    drop(proxy);
+    lua.gc_collect().unwrap();
+    lua.gc_collect().unwrap();
+    assert_eq!(Arc::strong_count(&alive), 1);
 }
 
 #[test]
