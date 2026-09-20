@@ -5,7 +5,7 @@ use std::result::Result as StdResult;
 use std::sync::Arc;
 
 use mlua::luau::{FsRequirer, NavigateError, Require};
-use mlua::{Error, FromLua, IntoLua, Lua, MultiValue, Result, Value};
+use mlua::{Error, FromLua, Function, IntoLua, Lua, MultiValue, Result, Value};
 
 fn run_require(lua: &Lua, path: impl IntoLua) -> Result<Value> {
     lua.load(r#"return require(...)"#).call(path)
@@ -79,8 +79,11 @@ fn test_require_errors() {
             self.inner.is_require_allowed(chunk_name)
         }
 
-        fn reset(&mut self, _chunk_name: &str) -> StdResult<(), NavigateError> {
-            Err(Error::runtime("test error"))?
+        fn reset(&mut self, chunk_name: &str) -> StdResult<(), NavigateError> {
+            if chunk_name.ends_with(".rs") {
+                Err(Error::runtime("test error"))?;
+            }
+            self.inner.reset(chunk_name)
         }
 
         fn jump_to_alias(&mut self, path: &str) -> StdResult<(), NavigateError> {
@@ -111,8 +114,8 @@ fn test_require_errors() {
             self.inner.config()
         }
 
-        fn loader(&self, lua: &Lua) -> Result<mlua::Function> {
-            self.inner.loader(lua)
+        fn loader(&self, lua: &Lua) -> Result<Function> {
+            lua.create_function(|_, ()| Ok(42))
         }
     }
 
@@ -123,13 +126,14 @@ fn test_require_errors() {
             _alive: alive.clone(),
         })
         .unwrap();
-    let proxy = require
-        .environment()
-        .unwrap()
-        .get::<mlua::Function>("proxyrequire")
+    let proxy = (require.environment().unwrap())
+        .get::<Function>("proxyrequire")
         .unwrap();
     lua.globals().set("require", require).unwrap();
-    let res = lua.load(r#"return require('./a/relative/path')"#).exec();
+    let res = lua
+        .load(r#"return require('./a/relative/path')"#)
+        .set_name("@main.rs")
+        .exec();
     assert!((res.unwrap_err().to_string()).contains("test error"));
 
     // An escaped proxy must retain its context independently of the require environment.
@@ -137,9 +141,16 @@ fn test_require_errors() {
     lua.gc_collect().unwrap();
     lua.gc_collect().unwrap();
     assert_eq!(Arc::strong_count(&alive), 2);
-    let res = proxy.call::<Value>(("./a/relative/path", "@main.lua"));
+    let res = proxy.call::<Value>(("./a/relative/path", "@main.rs"));
     assert!(res.unwrap_err().to_string().contains("test error"));
-
+    assert_eq!(
+        proxy
+            .call::<Function>(("./dependency", "@tests/luau/require/without_config/module.luau"))
+            .unwrap()
+            .call::<i32>(())
+            .unwrap(),
+        42
+    );
     drop(proxy);
     lua.gc_collect().unwrap();
     lua.gc_collect().unwrap();
@@ -353,7 +364,7 @@ fn test_alias_override() {
             self.0.config()
         }
 
-        fn loader(&self, lua: &Lua) -> Result<mlua::Function> {
+        fn loader(&self, lua: &Lua) -> Result<Function> {
             self.0.loader(lua)
         }
     }
@@ -428,7 +439,7 @@ fn test_alias_fallback() {
             self.0.config()
         }
 
-        fn loader(&self, lua: &Lua) -> Result<mlua::Function> {
+        fn loader(&self, lua: &Lua) -> Result<Function> {
             self.0.loader(lua)
         }
     }

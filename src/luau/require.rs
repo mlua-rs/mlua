@@ -432,11 +432,13 @@ pub(super) fn create_require_function<R: Require + MaybeSend + 'static>(
             ffi::lua_pushcclosured(state, get_cache_key, cstr!("get_cache_key"), 1);
             ffi::lua_pushcfunctiond(state, find_current_file, cstr!("find_current_file"));
             ffi::luarequire_pushproxyrequire(state, init_config, context_ptr as *mut _);
-            // Keep the context alive in the proxy's environment
+            // Anchor to the config userdata to keep the context alive
+            ffi::lua_getupvalue(state, -1, 1);
             ffi::lua_createtable(state, 1, 0);
             ffi::lua_getupvalue(state, 1, 1);
             ffi::lua_rawseti(state, -2, 1);
-            ffi::lua_setfenv(state, -2);
+            ffi::lua_setmetatable(state, -2);
+            ffi::lua_pop(state, 1);
             ffi::luaL_getsubtable(state, ffi::LUA_REGISTRYINDEX, ffi::LUA_REGISTERED_MODULES_TABLE);
             ffi::luaL_getsubtable(state, ffi::LUA_REGISTRYINDEX, cstr!("__MLUA_LOADER_CACHE"));
         })?;
