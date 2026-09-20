@@ -447,6 +447,90 @@ fn test_userdata_destroy() -> Result<()> {
 }
 
 #[test]
+#[cfg(panic = "unwind")]
+fn test_userdata_destroy_panic() -> Result<()> {
+    use std::panic::{AssertUnwindSafe, catch_unwind};
+
+    struct Panicking;
+    impl Drop for Panicking {
+        fn drop(&mut self) {
+            panic!("userdata drop");
+        }
+    }
+
+    let lua = Lua::new();
+    // Repeat beyond Lua's C-call limit
+    for _ in 0..256 {
+        let ud = lua.create_any_userdata(Panicking)?;
+        let panic = catch_unwind(AssertUnwindSafe(|| ud.destroy())).unwrap_err();
+        assert_eq!(panic.downcast_ref::<&str>(), Some(&"userdata drop"));
+        assert!(matches!(ud.destroy(), Err(Error::UserDataDestructed)));
+        assert!(lua.inspect_stack(0, |_| ()).is_none());
+        assert_eq!(lua.load("return 42").eval::<i32>()?, 42);
+    }
+    lua.gc_collect()?;
+
+    Ok(())
+}
+
+#[cfg(not(target_family = "wasm"))]
+#[test]
+fn test_userdata_gc_panic() -> Result<()> {
+    use std::panic::{AssertUnwindSafe, catch_unwind};
+
+    struct Panicking;
+    impl Drop for Panicking {
+        fn drop(&mut self) {
+            panic!("userdata drop");
+        }
+    }
+
+    if let Ok(mode) = std::env::var("MLUA_TEST_GC_PANIC") {
+        let _ = catch_unwind(AssertUnwindSafe(|| -> Result<()> {
+            let lua = Lua::new();
+            lua.gc_stop();
+            if mode.starts_with("callback") {
+                let value = Panicking;
+                lua.create_function(move |_, ()| {
+                    let _ = &value;
+                    Ok(())
+                })?;
+            } else {
+                lua.create_any_userdata(Panicking)?;
+            }
+            if mode.ends_with("collect") {
+                lua.gc_collect()?;
+                lua.gc_collect()?;
+                // Collection must abort before reaching here
+                std::process::exit(0);
+            }
+            drop(lua);
+            Ok(())
+        }));
+        return Ok(());
+    }
+
+    for mode in [
+        "userdata_collect",
+        "userdata_close",
+        "callback_collect",
+        "callback_close",
+    ] {
+        let output = std::process::Command::new(std::env::current_exe()?)
+            .args(["--exact", "test_userdata_gc_panic"])
+            .env("MLUA_TEST_GC_PANIC", mode)
+            .output()?;
+        assert!(!output.status.success(), "{mode}");
+        #[cfg(unix)]
+        {
+            use std::os::unix::process::ExitStatusExt;
+            assert_eq!(output.status.signal(), Some(libc::SIGABRT), "{mode}");
+        }
+    }
+    Ok(())
+}
+
+#[test]
 fn test_userdata_method_once() -> Result<()> {
     struct MyUserdata(Arc<i64>);
 

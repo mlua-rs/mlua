@@ -816,6 +816,9 @@ impl AnyUserData {
     /// This is similar to [`AnyUserData::take`], but it doesn't require a type.
     ///
     /// This method works for non-scoped userdata only.
+    ///
+    /// Panics from the value's destructor propagate to the caller. During garbage collection,
+    /// destructor panics abort the process instead.
     pub fn destroy(&self) -> Result<()> {
         let lua = self.0.lua.lock();
         let state = lua.state();
@@ -825,7 +828,12 @@ impl AnyUserData {
 
             lua.push_userdata_ref(&self.0)?;
             protect_lua!(state, 1, 1, fn(state) {
-                if ffi::luaL_callmeta(state, -1, cstr!("__gc")) == 0 {
+                if ffi::luaL_getmetafield(state, 1, cstr!("__gc")) != ffi::LUA_TNIL {
+                    ffi::lua_pushvalue(state, 1);
+                    // Only explicit destruction may propagate panics
+                    ffi::lua_pushboolean(state, 1);
+                    ffi::lua_call(state, 2, 1);
+                } else {
                     ffi::lua_pushboolean(state, 0);
                 }
             })?;

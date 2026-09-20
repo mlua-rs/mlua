@@ -1,5 +1,6 @@
 use std::any::TypeId;
 use std::os::raw::c_int;
+use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::ptr;
 
 use rustc_hash::FxHashMap;
@@ -443,7 +444,8 @@ unsafe fn push_userdata_metatable_namecall(
 #[cfg(not(feature = "luau"))]
 pub(crate) unsafe extern "C-unwind" fn collect_userdata<T>(state: *mut ffi::lua_State) -> c_int {
     let ud = get_userdata::<T>(state, -1);
-    ptr::drop_in_place(ud);
+    // A GC finalizer must neither unwind through Lua nor raise a Lua error
+    catch_unwind(AssertUnwindSafe(|| ptr::drop_in_place(ud))).unwrap_or_else(|_| std::process::abort());
     0
 }
 
@@ -473,14 +475,20 @@ pub(crate) unsafe extern "C" fn collect_userdata<T>(
 // It checks if the userdata is safe to destroy and sets the "destroyed" metatable
 // to prevent further GC collection.
 pub(super) unsafe extern "C-unwind" fn destroy_userdata_storage<T>(state: *mut ffi::lua_State) -> c_int {
-    let ud = get_userdata::<UserDataStorage<T>>(state, 1);
-    if (*ud).is_safe_to_destroy() {
-        take_userdata::<UserDataStorage<T>>(state, 1);
-        ffi::lua_pushboolean(state, 1);
+    let destroy = |index| {
+        let ud = get_userdata::<UserDataStorage<T>>(state, index);
+        let safe_to_destroy = (*ud).is_safe_to_destroy();
+        if safe_to_destroy {
+            drop(take_userdata::<UserDataStorage<T>>(state, index));
+        }
+        ffi::lua_pushboolean(state, safe_to_destroy as c_int);
+        1
+    };
+    if ffi::lua_toboolean(state, 2) != 0 {
+        crate::state::callback_error_ext(state, ptr::null_mut(), false, |_, nargs| Ok(destroy(-nargs)))
     } else {
-        ffi::lua_pushboolean(state, 0);
+        catch_unwind(AssertUnwindSafe(|| destroy(1))).unwrap_or_else(|_| std::process::abort())
     }
-    1
 }
 
 static USERDATA_METATABLE_INDEX: u8 = 0;
