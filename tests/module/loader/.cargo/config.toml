@@ -6,3 +6,6 @@ rustflags = ["-C", "link-args=-rdynamic"]
 
 [target.x86_64-unknown-linux-gnu]
 rustflags = ["-C", "link-args=-rdynamic"]
+
+[target.x86_64-unknown-illumos]
+rustflags = ["-C", "link-args=-rdynamic"]
