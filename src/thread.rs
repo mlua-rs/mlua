@@ -41,7 +41,7 @@ use std::os::raw::{c_int, c_void};
 use crate::error::{Error, Result};
 use crate::function::Function;
 use crate::state::RawLua;
-use crate::traits::{FromLuaMulti, IntoLuaMulti};
+use crate::traits::{FromLuaMulti, HasValueRef, IntoLuaMulti};
 use crate::types::{LuaType, ValueRef};
 use crate::util::{StackGuard, check_stack, error_traceback_thread, pop_error};
 
@@ -780,6 +780,12 @@ impl Thread {
 impl fmt::Debug for Thread {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt.debug_tuple("Thread").field(&self.0).finish()
+    }
+}
+
+impl HasValueRef for Thread {
+    fn to_vref(&self) -> &ValueRef {
+        &self.0
     }
 }
 
