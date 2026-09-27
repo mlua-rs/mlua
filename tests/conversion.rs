@@ -412,6 +412,12 @@ fn test_conv_vec() -> Result<()> {
     let v2: Vec<i32> = lua.globals().get("v")?;
     assert_eq!(v, v2);
 
+    assert!(lua.load("{10, false, 30}").eval::<Vec<i32>>().is_err());
+    assert_eq!(
+        lua.load("{{1, 2}, {3}}").eval::<Vec<Vec<i32>>>()?,
+        vec![vec![1, 2], vec![3]]
+    );
+
     Ok(())
 }
 

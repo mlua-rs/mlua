@@ -910,16 +910,16 @@ where
     T: FromLua,
 {
     #[inline]
-    fn from_lua(value: Value, _lua: &Lua) -> Result<Self> {
+    fn from_lua(value: Value, lua: &Lua) -> Result<Self> {
         match value {
             #[cfg(feature = "luau")]
             Value::Vector(v) if N == crate::Vector::SIZE => {
                 use std::mem::MaybeUninit;
-                let x = T::from_lua(Value::Number(v.x() as _), _lua)?;
-                let y = T::from_lua(Value::Number(v.y() as _), _lua)?;
-                let z = T::from_lua(Value::Number(v.z() as _), _lua)?;
+                let x = T::from_lua(Value::Number(v.x() as _), lua)?;
+                let y = T::from_lua(Value::Number(v.y() as _), lua)?;
+                let z = T::from_lua(Value::Number(v.z() as _), lua)?;
                 #[cfg(feature = "luau-vector4")]
-                let w = T::from_lua(Value::Number(v.w() as _), _lua)?;
+                let w = T::from_lua(Value::Number(v.w() as _), lua)?;
                 let mut arr: [MaybeUninit<T>; N] = [const { MaybeUninit::uninit() }; N];
                 arr[0].write(x);
                 arr[1].write(y);
@@ -929,7 +929,7 @@ where
                 Ok(arr.map(|e| unsafe { e.assume_init() }))
             }
             Value::Table(table) => {
-                let vec = table.sequence_values().collect::<Result<Vec<_>>>()?;
+                let vec = Vec::<T>::from_lua(Value::Table(table), lua)?;
                 vec.try_into().map_err(|vec: Vec<T>| {
                     let msg = format!("expected table of length {N}, got {}", vec.len());
                     Error::from_lua_conversion("table", Self::type_name(), msg)
@@ -969,7 +969,14 @@ impl<T: FromLua> FromLua for Vec<T> {
     #[inline]
     fn from_lua(value: Value, _lua: &Lua) -> Result<Self> {
         match value {
-            Value::Table(table) => table.sequence_values().collect(),
+            Value::Table(table) => {
+                let mut values = Vec::new();
+                table.for_each_value(|value| {
+                    values.push(value);
+                    Ok(())
+                })?;
+                Ok(values)
+            }
             _ => Err(Error::from_lua_conversion(
                 value.type_name(),
                 Self::type_name(),
