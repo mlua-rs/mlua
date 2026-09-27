@@ -1389,6 +1389,7 @@ impl RawLua {
         }
     }
 
+    #[inline]
     unsafe fn get_userdata_type_id_inner(
         &self,
         state: *mut ffi::lua_State,
@@ -1405,6 +1406,11 @@ impl RawLua {
             return Ok(last_type_id);
         }
 
+        self.get_userdata_type_id_uncached(mt_ptr)
+    }
+
+    #[inline(never)]
+    unsafe fn get_userdata_type_id_uncached(&self, mt_ptr: *const c_void) -> Result<Option<TypeId>> {
         match (*self.extra.get()).registered_userdata_mt.get(&mt_ptr) {
             Some(&type_id) if type_id == Some(TypeId::of::<DestructedUserdata>()) => {
                 Err(Error::UserDataDestructed)
