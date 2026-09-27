@@ -382,6 +382,11 @@ fn test_integer_from_lua() -> Result<()> {
         }
     }
 
+    let f = lua.create_function(|_, n: u128| Ok(n.to_string()))?;
+    assert_eq!(f.call::<String>(2_f64.powi(100))?, (1_u128 << 100).to_string());
+    assert!(f.call::<String>(2_f64.powi(128)).is_err());
+    assert!(f.call::<String>(-1).is_err());
+
     Ok(())
 }
 

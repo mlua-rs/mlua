@@ -814,6 +814,18 @@ macro_rules! lua_convert_int {
             unsafe fn from_stack(idx: c_int, lua: &RawLua) -> Result<Self> {
                 let state = lua.state();
                 let type_id = ffi::lua_type(state, idx);
+                #[cfg(feature = "luau")]
+                if matches!(type_id, ffi::LUA_TNUMBER | ffi::LUA_TSTRING) {
+                    let mut ok = 0;
+                    let n = ffi::lua_tonumberx(state, idx, &mut ok);
+                    if ok != 0
+                        && n == n.trunc()
+                        && let Some(i) = cast(n)
+                    {
+                        return Ok(i);
+                    }
+                }
+                #[cfg(not(feature = "luau"))]
                 if type_id == ffi::LUA_TNUMBER {
                     let mut ok = 0;
                     let i = ffi::lua_tointegerx(state, idx, &mut ok);
