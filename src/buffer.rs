@@ -140,9 +140,9 @@ impl io::Seek for BufferCursor {
         let lua = self.0.0.lua.lock();
         let data = self.0.as_slice(&lua);
         let new_offset = match pos {
-            io::SeekFrom::Start(offset) => offset as i64,
-            io::SeekFrom::End(offset) => data.len() as i64 + offset,
-            io::SeekFrom::Current(offset) => self.1 as i64 + offset,
+            io::SeekFrom::Start(offset) => offset as i128,
+            io::SeekFrom::End(offset) => data.len() as i128 + offset as i128,
+            io::SeekFrom::Current(offset) => self.1 as i128 + offset as i128,
         };
         if new_offset < 0 {
             return Err(io::Error::new(
@@ -150,7 +150,7 @@ impl io::Seek for BufferCursor {
                 "invalid seek to a negative position",
             ));
         }
-        if new_offset as usize > data.len() {
+        if new_offset > data.len() as i128 {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
                 "invalid seek to a position beyond the end of the buffer",
