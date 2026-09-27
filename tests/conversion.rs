@@ -439,6 +439,10 @@ fn test_conv_hashset() -> Result<()> {
     let set3 = lua.load(r#"{"a", "b", "c"}"#).eval::<HashSet<String>>()?;
     assert_eq!(set3, hashset! { "a".into(), "b".into(), "c".into() });
 
+    let set = hashset! {1, 2, 3};
+    assert_eq!(lua.unpack::<HashSet<i32>>(set.clone().into_lua(&lua)?)?, set);
+    assert_eq!(lua.load("{1, 2, 3}").eval::<HashSet<i32>>()?, set);
+
     Ok(())
 }
 
@@ -465,6 +469,10 @@ fn test_conv_btreeset() -> Result<()> {
 
     let set3 = lua.load(r#"{"a", "b", "c"}"#).eval::<BTreeSet<String>>()?;
     assert_eq!(set3, btreeset! { "a".into(), "b".into(), "c".into() });
+
+    let set = btreeset! {1, 2, 3};
+    assert_eq!(lua.unpack::<BTreeSet<i32>>(set.clone().into_lua(&lua)?)?, set);
+    assert_eq!(lua.load("{1, 2, 3}").eval::<BTreeSet<i32>>()?, set);
 
     Ok(())
 }

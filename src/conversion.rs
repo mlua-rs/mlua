@@ -1034,7 +1034,11 @@ impl<T: Eq + Hash + FromLua, S: BuildHasher + Default> FromLua for HashSet<T, S>
     #[inline]
     fn from_lua(value: Value, _: &Lua) -> Result<Self> {
         match value {
-            Value::Table(table) if table.raw_len() > 0 => table.sequence_values().collect(),
+            Value::Table(table)
+                if table.raw_len() > 0 && !matches!(table.raw_get(1)?, Value::Boolean(true)) =>
+            {
+                table.sequence_values().collect()
+            }
             Value::Table(table) => table.pairs::<T, Value>().map(|res| res.map(|(k, _)| k)).collect(),
             _ => Err(Error::from_lua_conversion(
                 value.type_name(),
@@ -1058,7 +1062,11 @@ impl<T: Ord + FromLua> FromLua for BTreeSet<T> {
     #[inline]
     fn from_lua(value: Value, _: &Lua) -> Result<Self> {
         match value {
-            Value::Table(table) if table.raw_len() > 0 => table.sequence_values().collect(),
+            Value::Table(table)
+                if table.raw_len() > 0 && !matches!(table.raw_get(1)?, Value::Boolean(true)) =>
+            {
+                table.sequence_values().collect()
+            }
             Value::Table(table) => table.pairs::<T, Value>().map(|res| res.map(|(k, _)| k)).collect(),
             _ => Err(Error::from_lua_conversion(
                 value.type_name(),
