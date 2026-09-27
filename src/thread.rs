@@ -606,14 +606,13 @@ impl Thread {
 
     unsafe fn reset_inner(&self, status: ThreadStatusInner) -> Result<()> {
         match status {
-            ThreadStatusInner::New(_) => {
-                // The thread is new, so we can just set the top to 0
+            ThreadStatusInner::New(_) | ThreadStatusInner::Finished => {
+                // Clear everything
                 ffi::lua_settop(self.state(), 0);
                 Ok(())
             }
             ThreadStatusInner::Running => Err(Error::runtime("cannot reset a running thread")),
             ThreadStatusInner::Normal => Err(Error::runtime("cannot reset a normal thread")),
-            ThreadStatusInner::Finished => Ok(()),
             #[cfg(not(any(feature = "lua55", feature = "lua54", feature = "luau")))]
             ThreadStatusInner::Yielded(_) | ThreadStatusInner::Error => {
                 Err(Error::runtime("cannot reset non-finished thread"))
@@ -818,7 +817,7 @@ impl<R> Drop for AsyncThread<R> {
                     // The thread is dropped while yielded, resume it with the "terminate" signal
                     ffi::lua_pushlightuserdata(self.thread.1, crate::Lua::poll_terminate().0);
                     if let Ok((new_status, _)) = self.thread.resume_inner(&lua, 1) {
-                        // `new_status` should always be `ThreadStatusInner::Yielded(0)`
+                        // The coroutine can finish or yield again.
                         status = new_status;
                     }
                 }
