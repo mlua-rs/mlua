@@ -226,7 +226,7 @@ impl Table {
             lua.push_ref(&self.0);
             key.push_into_stack(&lua)?;
             value.push_into_stack(&lua)?;
-            if protect || self.has_metatable() {
+            if protect || !get_metatable_ptr(lua.ref_thread(), self.0.index).is_null() {
                 protect_lua!(state, 3, 0, fn(state) ffi::lua_settable(state, -3))
             } else {
                 #[cfg(feature = "luau")]
@@ -276,7 +276,7 @@ impl Table {
 
             lua.push_ref(&self.0);
             key.push_into_stack(&lua)?;
-            if protect || self.has_metatable() {
+            if protect || !get_metatable_ptr(lua.ref_thread(), self.0.index).is_null() {
                 protect_lua!(state, 2, 1, fn(state) ffi::lua_gettable(state, -2))?;
             } else {
                 ffi::lua_rawget(state, -2);
@@ -305,7 +305,7 @@ impl Table {
 
             lua.push_ref(&self.0);
             value.push_into_stack(&lua)?;
-            if !self.has_metatable() {
+            if get_metatable_ptr(lua.ref_thread(), self.0.index).is_null() {
                 #[cfg(feature = "luau")]
                 self.check_readonly_write(&lua)?;
 
