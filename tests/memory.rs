@@ -37,10 +37,7 @@ fn test_memory_limit() -> Result<()> {
 
     // Test memory limit during chunk loading
     lua.set_memory_limit(1024)?;
-    match lua
-        .load("local t = {}; for i = 1,10000 do t[i] = i end")
-        .into_function()
-    {
+    match lua.load(format!("return '{}'", "x".repeat(4096))).into_function() {
         Err(Error::MemoryError(_)) => {}
         _ => panic!("did not trigger memory error"),
     };
