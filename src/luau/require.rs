@@ -295,7 +295,7 @@ pub(super) unsafe extern "C-unwind" fn init_config(config: *mut ffi::luarequire_
         size_out: *mut usize,
     ) -> WriteResult {
         let this = try_borrow!(state, ctx);
-        let cache_key = this.cache_key();
+        let cache_key = callback_error_ext(state, ptr::null_mut(), true, move |_, _| Ok(this.cache_key()));
         write_to_buffer(buffer, buffer_size, size_out, cache_key.as_bytes())
     }
 
@@ -416,9 +416,10 @@ pub(super) fn create_require_function<R: Require + MaybeSend + 'static>(
     unsafe extern "C-unwind" fn get_cache_key(state: *mut ffi::lua_State) -> c_int {
         let ctx = ffi::lua_touserdata(state, ffi::lua_upvalueindex(1));
         let ctx = try_borrow!(state, ctx);
-        let cache_key = ctx.cache_key();
-        ffi::lua_pushlstring(state, cache_key.as_ptr() as *const _, cache_key.len());
-        1
+        callback_error_ext(state, ptr::null_mut(), true, move |extra, _| {
+            (*extra).raw_lua().push(ctx.cache_key())?;
+            Ok(1)
+        })
     }
 
     let (get_cache_key, find_current_file, proxyrequire, registered_modules, loader_cache) = unsafe {
