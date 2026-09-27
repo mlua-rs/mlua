@@ -16,6 +16,16 @@ fn test_function_call() -> Result<()> {
 }
 
 #[test]
+fn test_function_call_many_returns() -> Result<()> {
+    let lua = Lua::new();
+    let values = lua
+        .load("local t = {}; for i = 1, 64 do t[i] = {} end; return (table.unpack or unpack)(t)")
+        .eval::<Variadic<Table>>()?;
+    assert_eq!(values.len(), 64);
+    Ok(())
+}
+
+#[test]
 fn test_function_call_error() -> Result<()> {
     let lua = Lua::new();
 

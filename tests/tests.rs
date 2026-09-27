@@ -1682,6 +1682,16 @@ fn test_exec_raw() -> Result<()> {
     }?;
     assert_eq!(n, 8);
 
+    let values: Variadic<Table> = unsafe {
+        lua.exec_raw((), |state| {
+            assert_ne!(ffi::lua_checkstack(state, 64), 0);
+            for _ in 0..64 {
+                ffi::lua_newtable(state);
+            }
+        })
+    }?;
+    assert_eq!(values.len(), 64);
+
     // Test error handling
     let res: Result<()> = unsafe {
         lua.exec_raw("test error", |state| {

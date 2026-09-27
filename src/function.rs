@@ -210,6 +210,8 @@ impl Function {
             }
             // Get the results
             let nresults = ffi::lua_gettop(state) - stack_start;
+            #[cfg(not(feature = "luau"))]
+            check_stack(state, 1)?;
             R::from_stack_multi(nresults, &lua)
         }
     }

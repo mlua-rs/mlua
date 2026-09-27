@@ -1559,6 +1559,7 @@ impl RawLua {
                             Ok(nresults + 1)
                         }
                         nresults => {
+                            check_stack(state, 1)?;
                             let results = MultiValue::from_stack_multi(nresults, rawlua)?;
                             ffi::lua_pushinteger(state, nresults as _);
                             rawlua.push(rawlua.create_sequence_from(results)?)?;
