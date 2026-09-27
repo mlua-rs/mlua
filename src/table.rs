@@ -1549,7 +1549,7 @@ impl<V: FromLua> Iterator for TableSequence<'_, V> {
         let state = lua.state();
         unsafe {
             let _sg = StackGuard::new(state);
-            if let Err(err) = check_stack(state, 1) {
+            if let Err(err) = check_stack(state, 2) {
                 return Some(Err(err));
             }
 
