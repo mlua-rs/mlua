@@ -1,6 +1,6 @@
 use std::os::raw::c_int;
 use std::panic::{AssertUnwindSafe, catch_unwind};
-use std::ptr;
+use std::ptr::{self, NonNull};
 use std::sync::Arc;
 
 use crate::error::{Error, Result};
@@ -40,17 +40,24 @@ where
     let nargs = ffi::lua_gettop(state);
 
     enum PreallocatedFailure {
-        New(*mut WrappedFailure),
+        New(NonNull<WrappedFailure>),
         Reserved,
     }
 
     impl PreallocatedFailure {
+        #[inline(always)]
         unsafe fn reserve(state: *mut ffi::lua_State, extra: *mut ExtraData) -> Self {
             if (*extra).wrapped_failure_top > 0 {
                 (*extra).wrapped_failure_top -= 1;
                 return PreallocatedFailure::Reserved;
             }
 
+            Self::reserve_new(state)
+        }
+
+        #[cold]
+        #[inline(never)]
+        unsafe fn reserve_new(state: *mut ffi::lua_State) -> Self {
             // We need to check stack for Luau in case when callback is called from interrupt
             // See https://github.com/luau-lang/luau/issues/446 and mlua #142 and #153
             #[cfg(feature = "luau")]
@@ -58,7 +65,8 @@ where
             // Place it to the beginning of the stack
             let ud = WrappedFailure::new_userdata(state);
             ffi::lua_insert(state, 1);
-            PreallocatedFailure::New(ud)
+            // Lua raises an error on allocation failure instead of returning null
+            PreallocatedFailure::New(NonNull::new_unchecked(ud))
         }
 
         #[cold]
@@ -67,7 +75,7 @@ where
             match *self {
                 PreallocatedFailure::New(ud) => {
                     ffi::lua_settop(state, 1);
-                    ud
+                    ud.as_ptr()
                 }
                 PreallocatedFailure::Reserved => {
                     let index = (*extra).wrapped_failure_pool.pop().unwrap();
@@ -83,18 +91,23 @@ where
             }
         }
 
+        #[inline(always)]
         unsafe fn release(self, state: *mut ffi::lua_State, extra: *mut ExtraData) {
-            let ref_thread = (*extra).ref_thread;
             match self {
-                PreallocatedFailure::New(_) => {
-                    ffi::lua_rotate(state, 1, -1);
-                    ffi::lua_xmove(state, ref_thread, 1);
-                    if let Ok(index) = (*extra).try_ref_stack_pop() {
-                        (*extra).wrapped_failure_pool.push(index);
-                        (*extra).wrapped_failure_top += 1;
-                    }
-                }
+                PreallocatedFailure::New(_) => Self::release_new(state, extra),
                 PreallocatedFailure::Reserved => (*extra).wrapped_failure_top += 1,
+            }
+        }
+
+        #[cold]
+        #[inline(never)]
+        unsafe fn release_new(state: *mut ffi::lua_State, extra: *mut ExtraData) {
+            let ref_thread = (*extra).ref_thread;
+            ffi::lua_rotate(state, 1, -1);
+            ffi::lua_xmove(state, ref_thread, 1);
+            if let Ok(index) = (*extra).try_ref_stack_pop() {
+                (*extra).wrapped_failure_pool.push(index);
+                (*extra).wrapped_failure_top += 1;
             }
         }
     }
@@ -103,17 +116,26 @@ where
     // to store a wrapped failure (error or panic) *before* we proceed.
     let prealloc_failure = PreallocatedFailure::reserve(state, extra);
 
+    // Keep the Error payload out of catch_unwind return value
+    let mut callback_error = None;
     match catch_unwind(AssertUnwindSafe(|| {
         let rawlua = (*extra).raw_lua();
         let _guard = StateGuard::new(rawlua, state);
-        f(extra, nargs)
+        match f(extra, nargs) {
+            Ok(result) => Some(result),
+            Err(err) => {
+                callback_error = Some(err);
+                None
+            }
+        }
     })) {
-        Ok(Ok(r)) => {
+        Ok(Some(r)) => {
             // Return unused `WrappedFailure` to the pool
             prealloc_failure.release(state, extra);
             r
         }
-        Ok(Err(mut err)) => {
+        Ok(None) => {
+            let mut err = callback_error.take().unwrap();
             let wrapped_error = prealloc_failure.r#use(state, extra);
             if wrap_error {
                 err = Error::CallbackError {

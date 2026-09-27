@@ -41,6 +41,46 @@ fn test_function_call_error() -> Result<()> {
 }
 
 #[test]
+#[cfg(all(not(panic = "abort"), not(target_arch = "wasm32")))]
+fn test_function_failure_recovery() -> Result<()> {
+    use std::panic::{AssertUnwindSafe, catch_unwind};
+
+    let lua = Lua::new();
+
+    let inner = lua.create_function(|_, outcome: String| match outcome.as_str() {
+        "success" => Ok(42),
+        "error" => Err(Error::runtime("callback failure")),
+        "panic" => panic!("callback panic"),
+        _ => unreachable!(),
+    })?;
+    let outer = lua.create_function(move |_, outcome: String| inner.call::<i32>(outcome))?;
+
+    // Check that nested coroutine callbacks recover after both errors and panics.
+    for outcome in ["success", "error", "success", "panic", "success"] {
+        let thread = lua.create_thread(outer.clone())?;
+        let result = catch_unwind(AssertUnwindSafe(|| thread.resume::<i32>(outcome)));
+        match outcome {
+            "success" => assert_eq!(result.unwrap()?, 42),
+            "error" => {
+                let err = result.unwrap().unwrap_err();
+                assert!(matches!(err, Error::CallbackError { .. }));
+                assert!(matches!(
+                    err.chain().last().unwrap().downcast_ref::<Error>(),
+                    Some(Error::RuntimeError(msg)) if msg == "callback failure"
+                ));
+            }
+            "panic" => assert_eq!(
+                result.unwrap_err().downcast_ref::<&str>(),
+                Some(&"callback panic")
+            ),
+            _ => unreachable!(),
+        }
+    }
+
+    Ok(())
+}
+
+#[test]
 fn test_function_bind() -> Result<()> {
     let lua = Lua::new();
 
