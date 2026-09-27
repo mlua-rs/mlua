@@ -602,6 +602,9 @@ pub struct lua_Callbacks {
     /// gets called when a string is created to assign an atom id
     pub useratom: Option<unsafe extern "C-unwind" fn(L: *mut lua_State, s: *const c_char, l: usize) -> i16>,
 
+    /// gets called before a finalizer is attached to `co` by the current thread
+    pub userfinalizer: Option<unsafe extern "C-unwind" fn(L: *mut lua_State, co: *mut lua_State)>,
+
     /// gets called when BREAK instruction is encountered
     pub debugbreak: Option<unsafe extern "C-unwind" fn(L: *mut lua_State, ar: *mut lua_Debug)>,
     /// gets called after each instruction in single step mode
