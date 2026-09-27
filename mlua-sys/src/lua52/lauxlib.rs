@@ -94,7 +94,7 @@ unsafe extern "C-unwind" {
 
     pub fn luaL_newstate() -> *mut lua_State;
 
-    pub fn luaL_len(L: *mut lua_State, idx: c_int) -> lua_Integer;
+    pub fn luaL_len(L: *mut lua_State, idx: c_int) -> c_int;
 
     pub fn luaL_gsub(
         L: *mut lua_State,
