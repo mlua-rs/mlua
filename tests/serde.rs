@@ -976,6 +976,10 @@ fn test_buffer_serialize() -> LuaResult<()> {
     let val = serde_value::to_value(&buf).unwrap();
     assert_eq!(val, serde_value::Value::Bytes(vec![1, 2, 3, 4]));
 
+    let value = Value::Buffer(buf);
+    let borrowed = unsafe { value.to_serializable().borrow_buffers(true) };
+    assert_eq!(serde_value::to_value(&borrowed).unwrap(), val);
+
     // Try empty buffer
     let buf = lua.create_buffer([])?;
     let val = serde_value::to_value(&buf).unwrap();
@@ -990,8 +994,55 @@ fn test_buffer_from_value() -> LuaResult<()> {
     let lua = Lua::new();
 
     let buf = lua.create_buffer([1, 2, 3, 4])?;
-    let val = lua.from_value::<serde_value::Value>(Value::Buffer(buf)).unwrap();
+    let value = Value::Buffer(buf);
+    let val = lua.from_value::<serde_value::Value>(value.clone()).unwrap();
     assert_eq!(val, serde_value::Value::Bytes(vec![1, 2, 3, 4]));
+    let options = unsafe { DeserializeOptions::new().borrow_buffers(true) };
+    assert_eq!(lua.from_value_with::<serde_value::Value>(value, options)?, val);
+
+    Ok(())
+}
+
+#[cfg(feature = "luau")]
+#[test]
+fn test_buffer_serde_reentrant() -> LuaResult<()> {
+    struct MutateBuffer(mlua::Buffer, Vec<u8>);
+
+    impl std::io::Write for MutateBuffer {
+        fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+            self.0.write_bytes(0, &[2]);
+            self.1.extend_from_slice(bytes);
+            Ok(bytes.len())
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    impl serde::de::Visitor<'_> for MutateBuffer {
+        type Value = u8;
+
+        fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+            f.write_str("bytes")
+        }
+
+        fn visit_bytes<E: serde::de::Error>(self, bytes: &[u8]) -> Result<u8, E> {
+            self.0.write_bytes(0, &[2]);
+            Ok(bytes[0])
+        }
+    }
+
+    let lua = Lua::new();
+
+    let buf = lua.create_buffer([1])?;
+    let mut callback = MutateBuffer(buf.clone(), Vec::new());
+    serde_json::to_writer(&mut callback, &buf).unwrap();
+    assert_eq!(callback.1, b"[1]");
+
+    buf.write_bytes(0, &[1]);
+    let de = mlua::serde::Deserializer::new(Value::Buffer(buf));
+    assert_eq!(serde::Deserializer::deserialize_bytes(de, callback)?, 1);
 
     Ok(())
 }

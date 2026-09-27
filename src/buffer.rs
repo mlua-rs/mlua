@@ -164,8 +164,7 @@ impl io::Seek for BufferCursor {
 #[cfg(feature = "serde")]
 impl Serialize for Buffer {
     fn serialize<S: Serializer>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error> {
-        let lua = self.0.lua.lock();
-        serializer.serialize_bytes(self.as_slice(&lua))
+        serializer.serialize_bytes(&self.to_vec())
     }
 }
 

@@ -716,6 +716,21 @@ impl<'a> SerializableValue<'a> {
         self.options.detect_mixed_tables = enabled;
         self
     }
+
+    /// If true, pass Luau buffer bytes directly to serializers without copying.
+    ///
+    /// Default: **false**.
+    ///
+    /// # Safety
+    ///
+    /// When enabled, the caller must ensure that serializers and any code they invoke do not
+    /// mutate a buffer while its bytes are borrowed.
+    #[cfg(feature = "luau")]
+    #[must_use]
+    pub unsafe fn borrow_buffers(mut self, enabled: bool) -> Self {
+        self.options.borrow_buffers = enabled;
+        self
+    }
 }
 
 #[cfg(feature = "serde")]
@@ -740,6 +755,11 @@ impl Serialize for SerializableValue<'_> {
             Value::LightUserData(ud) if ud.0.is_null() => serializer.serialize_none(),
             Value::UserData(ud) if ud.is_serializable() || self.options.deny_unsupported_types => {
                 ud.serialize(serializer)
+            }
+            #[cfg(feature = "luau")]
+            Value::Buffer(buf) if self.options.borrow_buffers => {
+                let lua = buf.0.lua.lock();
+                serializer.serialize_bytes(buf.as_slice(&lua))
             }
             #[cfg(feature = "luau")]
             Value::Buffer(buf) => buf.serialize(serializer),
