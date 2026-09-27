@@ -967,6 +967,11 @@ impl Table {
     /// Sets element value at position `idx` without invoking metamethods.
     #[doc(hidden)]
     pub fn raw_seti(&self, idx: usize, value: impl IntoLua) -> Result<()> {
+        // Lua <5.3 and Luau accept only c_int indices in lua_rawseti.
+        if idx > c_int::MAX as usize {
+            return self.raw_set(idx, value);
+        }
+
         let lua = self.0.lua.lock();
         let state = lua.state();
         unsafe {
@@ -979,9 +984,8 @@ impl Table {
             #[cfg(feature = "luau")]
             self.check_readonly_write(&lua)?;
 
-            let idx = idx.try_into().unwrap();
             protect_lua_mem!(lua, 2, 0, |state| {
-                ffi::lua_rawseti(state, -2, idx);
+                ffi::lua_rawseti(state, -2, idx as Integer);
             })
         }
     }
