@@ -712,6 +712,11 @@ impl RawLua {
     pub(crate) unsafe fn create_recycled_thread(&self, func: &Function) -> Result<Thread> {
         if let Some(index) = (*self.extra.get()).thread_pool.pop() {
             let thread_state = ffi::lua_tothread(self.ref_thread(), index);
+            let thread = Thread(ValueRef::new(self, index), thread_state);
+
+            #[cfg(not(feature = "luau"))]
+            self.set_thread_hook(thread_state, HookKind::Global)?;
+
             ffi::lua_xpush(self.ref_thread(), thread_state, func.0.index);
 
             #[cfg(feature = "luau")]
@@ -721,7 +726,7 @@ impl RawLua {
                 ffi::lua_replace(thread_state, ffi::LUA_GLOBALSINDEX);
             }
 
-            return Ok(Thread(ValueRef::new(self, index), thread_state));
+            return Ok(thread);
         }
 
         self.create_thread(func)

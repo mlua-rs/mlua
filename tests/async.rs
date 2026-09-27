@@ -445,6 +445,22 @@ async fn test_async_thread_pool() -> Result<()> {
 }
 
 #[tokio::test]
+#[cfg(not(feature = "luau"))]
+async fn test_async_thread_pool_global_hook() -> Result<()> {
+    let lua = Lua::new_with(StdLib::ALL_SAFE, LuaOptions::new().thread_pool_size(1))?;
+
+    let f = lua.load("return 42").into_function()?;
+    f.call_async::<()>(()).await?;
+
+    lua.set_global_hook(mlua::HookTriggers::EVERY_LINE, |_, _| {
+        Err(Error::runtime("budget"))
+    })?;
+    assert!(matches!(f.call_async::<()>(()).await, Err(Error::RuntimeError(msg)) if msg == "budget"));
+
+    Ok(())
+}
+
+#[tokio::test]
 async fn test_async_userdata() -> Result<()> {
     struct MyUserdata(u64);
 
