@@ -50,7 +50,10 @@ fn test_value_eq() -> Result<()> {
     let null: Value = globals.get("null")?;
 
     assert!(table1 != table2);
-    assert!(table1.equals(&table2)?);
+    assert_eq!(
+        table1.equals(&table2)?,
+        lua.load("table1 == table2").eval::<bool>()?
+    );
     assert!(string1 == string2);
     assert!(string1.equals(&string2)?);
     assert!(num1 == num2);

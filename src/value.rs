@@ -103,13 +103,11 @@ impl Value {
     /// Compares two values for equality.
     ///
     /// Equality comparisons do not convert strings to numbers or vice versa.
-    /// Tables, functions, threads, and userdata are compared by reference:
-    /// two objects are considered equal only if they are the same object.
+    /// Functions and threads are compared by reference. Tables and userdata also use reference
+    /// equality unless their metamethod rules apply.
     ///
-    /// If table or userdata have `__eq` metamethod then mlua will try to invoke it.
-    /// The first value is checked first. If that value does not define a metamethod
-    /// for `__eq`, then mlua will check the second value.
-    /// Then mlua calls the metamethod with the two values as arguments, if found.
+    /// Tables follow the backend's `__eq` rules (see [`Table::equals`]).
+    /// Distinct userdata with the same metatable invoke its `__eq` metamethod, if present.
     pub fn equals(&self, other: &Self) -> Result<bool> {
         match (self, other) {
             (Value::Table(a), Value::Table(b)) => a.equals(b),

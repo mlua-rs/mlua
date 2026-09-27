@@ -406,9 +406,9 @@ impl Table {
 
     /// Compares two tables for equality.
     ///
-    /// Tables are compared by reference first.
-    /// If they are not primitively equals, then mlua will try to invoke the `__eq` metamethod.
-    /// mlua will check `self` first for the metamethod, then `other` if not found.
+    /// Uses the same rules as Lua's `==` operator, including `__eq` metamethod dispatch.
+    /// Lua <5.3 and Luau require both tables to have the same `__eq` metamethod.
+    /// Lua 5.3+ check `self` first, then `other` if no metamethod is found.
     ///
     /// # Examples
     ///
@@ -426,6 +426,7 @@ impl Table {
     ///
     /// let always_equals_mt = lua.create_table()?;
     /// always_equals_mt.set("__eq", lua.create_function(|_, (_t1, _t2): (Table, Table)| Ok(true))?)?;
+    /// table1.set_metatable(Some(always_equals_mt.clone()))?;
     /// table2.set_metatable(Some(always_equals_mt))?;
     ///
     /// assert!(table1.equals(&table1.clone())?);
@@ -434,25 +435,32 @@ impl Table {
     /// # }
     /// ```
     pub fn equals(&self, other: &Self) -> Result<bool> {
+        #[cfg(not(feature = "luau"))]
         if self == other {
             return Ok(true);
         }
 
-        // Compare using `__eq` metamethod if exists
-        // First, check the self for the metamethod.
-        // If self does not define it, then check the other table.
-        if let Some(mt) = self.try_metatable()?
-            && let Some(eq_func) = mt.get::<Option<Function>>("__eq")?
-        {
-            return eq_func.call((self, other));
-        }
-        if let Some(mt) = other.try_metatable()?
-            && let Some(eq_func) = mt.get::<Option<Function>>("__eq")?
-        {
-            return eq_func.call((self, other));
-        }
+        let lua = self.0.lua.lock();
+        let state = lua.state();
+        unsafe {
+            let _sg = StackGuard::new(state);
+            check_stack(state, 5)?;
 
-        Ok(false)
+            lua.push_ref(&self.0);
+            lua.push_ref(&other.0);
+            if ffi::lua_getmetatable(state, -2) == 0 && ffi::lua_getmetatable(state, -1) == 0 {
+                return Ok(ffi::lua_rawequal(state, -2, -1) != 0);
+            }
+            ffi::lua_pop(state, 1);
+
+            protect_lua!(state, 2, 0, |state| {
+                #[cfg(any(feature = "lua51", feature = "luajit", feature = "luau"))]
+                let equal = ffi::lua_equal(state, 1, 2);
+                #[cfg(any(feature = "lua52", feature = "lua53", feature = "lua54", feature = "lua55"))]
+                let equal = ffi::lua_compare(state, 1, 2, ffi::LUA_OPEQ);
+                equal != 0
+            })
+        }
     }
 
     /// Sets a key-value pair without invoking metamethods.
@@ -682,19 +690,6 @@ impl Table {
             ffi::lua_pop(ref_thread, 2);
         }
         false
-    }
-
-    // Like `metatable`, but returns an error if the auxiliary stack cannot grow.
-    fn try_metatable(&self) -> Result<Option<Table>> {
-        let lua = self.0.lua.lock();
-        let ref_thread = lua.ref_thread();
-        unsafe {
-            Ok(if ffi::lua_getmetatable(ref_thread, self.0.index) == 0 {
-                None
-            } else {
-                Some(Table(lua.try_pop_ref_thread()?))
-            })
-        }
     }
 
     /// Returns a reference to the metatable of this table, or `None` if no metatable is set.
