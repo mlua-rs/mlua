@@ -1,8 +1,10 @@
 #![cfg(feature = "async")]
 
+use std::future;
 use std::sync::Arc;
 use std::time::Duration;
 
+use futures_util::FutureExt;
 use futures_util::stream::TryStreamExt;
 use tokio::sync::Mutex;
 
@@ -617,6 +619,65 @@ async fn test_async_terminate() -> Result<()> {
     let mutex2 = lua.create_any_userdata(mutex.clone())?;
     let _ = tokio::time::timeout(Duration::from_millis(30), func.call_async::<()>(mutex2)).await;
     assert!(mutex.try_lock().is_ok());
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_async_drop_user_yield() -> Result<()> {
+    let lua = Lua::new();
+
+    lua.globals().set("pending", Lua::poll_pending())?;
+    for args in ["", "pending"] {
+        lua.globals().set("never_true", false)?;
+        let f = lua
+            .load(format!("coroutine.yield({args}); never_true = true"))
+            .into_function()?;
+        assert!(f.call_async::<()>(()).now_or_never().is_none());
+        assert!(!lua.globals().get::<bool>("never_true")?);
+    }
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_async_drop_wrapped_yield() -> Result<()> {
+    let lua = Lua::new();
+
+    lua.load(
+        "local yield = coroutine.yield; coroutine.yield = function(...) yield(...); never_true = true end",
+    )
+    .exec()?;
+    let f = lua.create_async_function(|_, ()| future::pending::<Result<()>>())?;
+    assert!(f.call_async::<()>(()).now_or_never().is_none());
+    assert_eq!(lua.globals().get::<Value>("never_true")?, Value::Nil);
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_async_cancel_yield_with() -> Result<()> {
+    let lua = Lua::new();
+
+    let guard = Arc::new(());
+    let captured = guard.clone();
+    let f = lua.create_async_function(move |lua, ()| {
+        let captured = captured.clone();
+        async move {
+            lua.yield_with::<()>(42).await?;
+            drop(captured);
+            Ok(())
+        }
+    })?;
+    let mut future = Box::pin(f.call_async::<()>(()));
+    assert!(future.as_mut().now_or_never().is_none());
+    assert_eq!(Arc::strong_count(&guard), 3);
+    drop(future);
+    assert_eq!(Arc::strong_count(&guard), 2);
+    drop(f);
+    lua.gc_collect()?;
+    lua.gc_collect()?;
+    assert_eq!(Arc::strong_count(&guard), 1);
 
     Ok(())
 }

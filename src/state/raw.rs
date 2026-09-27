@@ -1651,9 +1651,20 @@ impl RawLua {
             end
             "#,
         )
-        .try_cache()
         .set_name("=__mlua_async_poll")
+        .try_cache()
         .call((get_future, poll, r#yield, unpack))
+    }
+
+    #[cfg(feature = "async")]
+    pub(crate) unsafe fn is_async_wrapper_yield(&self, thread_state: *mut ffi::lua_State) -> bool {
+        let mut ar = mem::zeroed::<ffi::lua_Debug>();
+        #[cfg(not(feature = "luau"))]
+        let found = ffi::lua_getstack(thread_state, 1, &mut ar) != 0
+            && ffi::lua_getinfo(thread_state, cstr!("S"), &mut ar) != 0;
+        #[cfg(feature = "luau")]
+        let found = ffi::lua_getinfo(thread_state, 1, cstr!("s"), &mut ar) != 0;
+        found && !ar.source.is_null() && CStr::from_ptr(ar.source) == c"=__mlua_async_poll"
     }
 
     #[cfg(feature = "async")]

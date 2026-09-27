@@ -813,7 +813,10 @@ impl<R> Drop for AsyncThread<R> {
                 }
 
                 let mut status = self.thread.status_inner(&lua);
-                if matches!(status, ThreadStatusInner::Yielded(0)) && !self.thread.is_hook_yielded(&lua) {
+                if matches!(status, ThreadStatusInner::Yielded(0))
+                    && !self.thread.is_hook_yielded(&lua)
+                    && lua.is_async_wrapper_yield(self.thread.state())
+                {
                     // The thread is dropped while yielded, resume it with the "terminate" signal
                     ffi::lua_pushlightuserdata(self.thread.1, crate::Lua::poll_terminate().0);
                     if let Ok((new_status, _)) = self.thread.resume_inner(&lua, 1) {
