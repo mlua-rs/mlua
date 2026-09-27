@@ -1,4 +1,4 @@
-use mlua::{Lua, Result, UserData, chunk};
+use mlua::{AnyUserData, Lua, Result, UserData, chunk};
 
 #[derive(Default, UserData)]
 struct Rectangle {
@@ -26,7 +26,7 @@ impl Rectangle {
 
     // Constructor via `__call` metamethod
     #[lua(meta, infallible)]
-    fn __call(length: u32, width: u32) -> Self {
+    fn __call(_: AnyUserData, length: u32, width: u32) -> Self {
         Rectangle::new(length, width)
     }
 }
