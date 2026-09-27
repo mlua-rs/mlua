@@ -481,51 +481,60 @@ pub(super) fn create_require_function<R: Require + MaybeSend + 'static>(
         })
     }?;
 
-    // Prepare environment for the "require" function
-    let env = lua.create_table_with_capacity(0, 7)?;
-    env.raw_set("get_cache_key", get_cache_key)?;
-    env.raw_set("find_current_file", find_current_file)?;
-    env.raw_set("proxyrequire", proxyrequire)?;
-    env.raw_set("REGISTERED_MODULES", registered_modules)?;
-    env.raw_set("LOADER_CACHE", loader_cache)?;
-    env.raw_set("error", error)?;
-    env.raw_set("type", r#type)?;
-    env.raw_set("to_lowercase", to_lowercase)?;
+    let upvalues = lua.create_table_with_capacity(0, 8)?;
+    upvalues.raw_set("get_cache_key", get_cache_key)?;
+    upvalues.raw_set("find_current_file", find_current_file)?;
+    upvalues.raw_set("proxyrequire", proxyrequire)?;
+    upvalues.raw_set("REGISTERED_MODULES", registered_modules)?;
+    upvalues.raw_set("LOADER_CACHE", loader_cache)?;
+    upvalues.raw_set("error", error)?;
+    upvalues.raw_set("type", r#type)?;
+    upvalues.raw_set("to_lowercase", to_lowercase)?;
 
     lua.load(
         r#"
-        local path = ...
-        if type(path) ~= "string" then
-            error("bad argument #1 to 'require' (string expected, got " .. type(path) .. ")")
-        end
+        local upvalues = ...
+        local get_cache_key = upvalues.get_cache_key
+        local find_current_file = upvalues.find_current_file
+        local proxyrequire = upvalues.proxyrequire
+        local REGISTERED_MODULES = upvalues.REGISTERED_MODULES
+        local LOADER_CACHE = upvalues.LOADER_CACHE
+        local error = upvalues.error
+        local type = upvalues.type
+        local to_lowercase = upvalues.to_lowercase
+        return function(path)
+            if type(path) ~= "string" then
+                error("bad argument #1 to 'require' (string expected, got " .. type(path) .. ")")
+            end
 
-        -- Check if the module (path) is explicitly registered
-        local maybe_result = REGISTERED_MODULES[to_lowercase(path)]
-        if maybe_result ~= nil then
-            return maybe_result
-        end
+            -- Check if the module (path) is explicitly registered
+            local maybe_result = REGISTERED_MODULES[to_lowercase(path)]
+            if maybe_result ~= nil then
+                return maybe_result
+            end
 
-        local loader = proxyrequire(path, find_current_file())
-        local cache_key = get_cache_key()
-        -- Check if the loader result is already cached
-        local result = LOADER_CACHE[cache_key]
-        if result ~= nil then
+            local loader = proxyrequire(path, find_current_file())
+            local cache_key = get_cache_key()
+            -- Check if the loader result is already cached
+            local result = LOADER_CACHE[cache_key]
+            if result ~= nil then
+                return result
+            end
+
+            -- Call the loader function and cache the result
+            result = loader()
+            if result == nil then
+                result = true
+            end
+            LOADER_CACHE[cache_key] = result
             return result
         end
-
-        -- Call the loader function and cache the result
-        result = loader()
-        if result == nil then
-            result = true
-        end
-        LOADER_CACHE[cache_key] = result
-        return result
         "#,
     )
     .try_cache()
     .set_name("=__mlua_require")
-    .set_environment(env)
-    .into_function()
+    .set_environment(lua.create_table()?)
+    .call(upvalues)
 }
 
 mod fs;
