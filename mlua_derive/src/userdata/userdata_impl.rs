@@ -143,7 +143,7 @@ fn try_unwrap_option(ty: &Type) -> Option<&Type> {
 /// Determine `self` kind and collect the callback arguments.
 /// Auto-detects `Lua` (owned or reference) as the first non-self parameter.
 fn analyze_self_and_args(sig: &Signature) -> syn::Result<MethodInfo> {
-    if !sig.generics.params.is_empty() {
+    if sig.generics.type_params().next().is_some() || sig.generics.const_params().next().is_some() {
         return Err(syn::Error::new_spanned(
             &sig.generics,
             "`#[mlua::userdata_impl]` does not support generic methods.",

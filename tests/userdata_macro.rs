@@ -382,7 +382,7 @@ impl Bytes {
     }
 
     #[lua(setter, infallible)]
-    fn text(&mut self, value: &str) {
+    fn text<'a>(&mut self, value: &'a str) {
         self.0 = value.as_bytes().to_vec();
     }
 
