@@ -341,8 +341,8 @@ impl Function {
             end
             "#,
         )
-        .try_cache()
         .set_name("=__mlua_bind")
+        .try_cache()
         .call((self, args_wrapper))
     }
 

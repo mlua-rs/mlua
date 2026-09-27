@@ -60,7 +60,9 @@ fn test_function_bind() -> Result<()> {
 
     let mut concat = globals.get::<Function>("concat")?;
     concat = concat.bind("foo")?;
+    assert_eq!(concat.info().source.as_deref(), Some("=__mlua_bind"));
     concat = concat.bind("bar")?;
+    assert_eq!(concat.info().source.as_deref(), Some("=__mlua_bind"));
     concat = concat.bind(("baz", "baf"))?;
     assert_eq!(concat.call::<String>(())?, "foobarbazbaf");
     assert_eq!(concat.call::<String>(("hi", "wut"))?, "foobarbazbafhiwut");
