@@ -1,6 +1,7 @@
 ## v0.12.2 (Oct 03, 2026)
 
 - Luau updated to 0.740
+- Added `Value::weak_lua` helper (#714)
 - Added `recursion_limit` to `SerializeOptions` and `DeserializeOptions` (defaults to 128)
 - Reject fractional numbers when converting to Rust integers on Lua 5.3+ and Luau
 - Fix precision loss when comparing integer and floating point `Value`s
