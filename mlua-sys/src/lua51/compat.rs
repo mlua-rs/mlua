@@ -2,9 +2,10 @@
 //!
 //! Based on github.com/keplerproject/lua-compat-5.3
 
-use std::ffi::CStr;
 use std::os::raw::{c_char, c_int, c_void};
-use std::{mem, ptr};
+use std::ptr;
+#[cfg(not(feature = "luajit"))]
+use std::{ffi::CStr, mem};
 
 use super::lauxlib::*;
 use super::lua::*;
@@ -21,9 +22,12 @@ unsafe fn compat53_reverse(L: *mut lua_State, mut a: c_int, mut b: c_int) {
     }
 }
 
+#[cfg(not(feature = "luajit"))]
 const COMPAT53_LEVELS1: c_int = 10; // size of the first part of the stack
+#[cfg(not(feature = "luajit"))]
 const COMPAT53_LEVELS2: c_int = 11; // size of the second part of the stack
 
+#[cfg(not(feature = "luajit"))]
 unsafe fn compat53_countlevels(L: *mut lua_State) -> c_int {
     let mut ar: lua_Debug = mem::zeroed();
     let (mut li, mut le) = (1, 1);
@@ -70,6 +74,7 @@ unsafe fn compat53_checkmode(
     LUA_OK
 }
 
+#[cfg(not(feature = "luajit"))]
 unsafe fn compat53_findfield(L: *mut lua_State, objidx: c_int, level: c_int) -> c_int {
     if level == 0 || lua_istable(L, -1) == 0 {
         return 0; // not found
@@ -97,6 +102,7 @@ unsafe fn compat53_findfield(L: *mut lua_State, objidx: c_int, level: c_int) -> 
     0 // not found
 }
 
+#[cfg(not(feature = "luajit"))]
 unsafe fn compat53_pushglobalfuncname(L: *mut lua_State, L1: *mut lua_State, ar: *mut lua_Debug) -> c_int {
     let top = lua_gettop(L);
     lua_getinfo(L1, cstr!("f"), ar); // push function
@@ -118,6 +124,7 @@ unsafe fn compat53_pushglobalfuncname(L: *mut lua_State, L1: *mut lua_State, ar:
     }
 }
 
+#[cfg(not(feature = "luajit"))]
 unsafe fn compat53_pushfuncname(L: *mut lua_State, L1: *mut lua_State, ar: *mut lua_Debug) {
     // try first a global name
     if compat53_pushglobalfuncname(L, L1, ar) != 0 {
@@ -458,6 +465,7 @@ pub unsafe fn luaL_len(L: *mut lua_State, idx: c_int) -> lua_Integer {
     res
 }
 
+#[cfg(not(feature = "luajit"))]
 pub unsafe fn luaL_traceback(L: *mut lua_State, L1: *mut lua_State, msg: *const c_char, mut level: c_int) {
     let mut ar: lua_Debug = mem::zeroed();
     let top = lua_gettop(L);
