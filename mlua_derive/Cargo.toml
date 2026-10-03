@@ -1,6 +1,6 @@
 [package]
 name = "mlua_derive"
-version = "0.12.1"
+version = "0.12.2"
 authors = ["Aleksandr Orlenko <zxteam@pm.me>"]
 rust-version = "1.88"
 edition = "2024"
