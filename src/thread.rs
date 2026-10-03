@@ -40,7 +40,7 @@ use std::os::raw::{c_int, c_void};
 
 use crate::error::{Error, Result};
 use crate::function::Function;
-use crate::state::RawLua;
+use crate::state::{RawLua, WeakLua};
 use crate::traits::{FromLuaMulti, IntoLuaMulti};
 use crate::types::{LuaType, ValueRef};
 use crate::util::{StackGuard, check_stack, error_traceback_thread, pop_error};
@@ -773,6 +773,13 @@ impl Thread {
     #[inline]
     pub fn to_pointer(&self) -> *const c_void {
         self.0.to_pointer()
+    }
+
+    /// Returns a weak reference to the Lua instance owning this value.
+    #[doc(hidden)]
+    #[inline]
+    pub fn weak_lua(&self) -> &WeakLua {
+        &self.0.lua
     }
 }
 

@@ -3,7 +3,7 @@ use std::io;
 #[cfg(feature = "serde")]
 use serde::ser::{Serialize, Serializer};
 
-use crate::state::RawLua;
+use crate::state::{RawLua, WeakLua};
 use crate::types::ValueRef;
 
 /// A Luau buffer type.
@@ -70,6 +70,13 @@ impl Buffer {
     /// Buffer operations are infallible, none of the read/write functions will return an Err.
     pub fn cursor(self) -> impl io::Read + io::Write + io::Seek {
         BufferCursor(self, 0)
+    }
+
+    /// Returns a weak reference to the Lua instance owning this value.
+    #[doc(hidden)]
+    #[inline]
+    pub fn weak_lua(&self) -> &WeakLua {
+        &self.0.lua
     }
 
     pub(crate) fn as_slice(&self, lua: &RawLua) -> &[u8] {

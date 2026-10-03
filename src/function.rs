@@ -79,7 +79,7 @@ use std::result::Result as StdResult;
 use std::{mem, ptr, slice};
 
 use crate::error::{Error, ExternalError, ExternalResult, Result};
-use crate::state::Lua;
+use crate::state::{Lua, WeakLua};
 use crate::table::Table;
 use crate::traits::{FromLuaMulti, IntoLua, IntoLuaMulti};
 use crate::types::{Callback, LuaType, MaybeSend, ValueRef};
@@ -605,6 +605,13 @@ impl Function {
     #[inline]
     pub fn to_pointer(&self) -> *const c_void {
         self.0.to_pointer()
+    }
+
+    /// Returns a weak reference to the Lua instance owning this value.
+    #[doc(hidden)]
+    #[inline]
+    pub fn weak_lua(&self) -> &WeakLua {
+        &self.0.lua
     }
 
     /// Creates a deep clone of the Lua function.

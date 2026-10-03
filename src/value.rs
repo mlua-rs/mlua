@@ -7,6 +7,7 @@ use num_traits::FromPrimitive;
 
 use crate::error::{Error, Result};
 use crate::function::Function;
+use crate::state::WeakLua;
 use crate::string::LuaString;
 use crate::table::Table;
 use crate::thread::Thread;
@@ -175,6 +176,25 @@ impl Value {
             #[cfg(feature = "luau")]
             Value::Buffer(crate::Buffer(vref)) => unsafe { invoke_tostring(vref) },
             Value::Error(err) => Ok(err.to_string()),
+        }
+    }
+
+    /// Returns a weak reference to the Lua instance owning this value.
+    ///
+    /// Returns `None` for values without an associated Lua instance, such as primitive values
+    /// and [`Value::Error`].
+    #[inline]
+    pub fn weak_lua(&self) -> Option<&WeakLua> {
+        match self {
+            Value::String(s) => Some(s.weak_lua()),
+            Value::Table(t) => Some(t.weak_lua()),
+            Value::Function(f) => Some(f.weak_lua()),
+            Value::Thread(t) => Some(t.weak_lua()),
+            Value::UserData(ud) => Some(ud.weak_lua()),
+            #[cfg(feature = "luau")]
+            Value::Buffer(b) => Some(b.weak_lua()),
+            Value::Other(vref) => Some(&vref.lua),
+            _ => None,
         }
     }
 

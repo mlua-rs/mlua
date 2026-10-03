@@ -795,6 +795,13 @@ impl Table {
         self.0.to_pointer()
     }
 
+    /// Returns a weak reference to the Lua instance owning this value.
+    #[doc(hidden)]
+    #[inline]
+    pub fn weak_lua(&self) -> &WeakLua {
+        &self.0.lua
+    }
+
     /// Returns an iterator over the pairs of the table.
     ///
     /// This works like the Lua `pairs` function, but does not invoke the `__pairs` metamethod.

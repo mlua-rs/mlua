@@ -9,7 +9,7 @@ use std::os::raw::{c_int, c_void};
 use std::{cmp, fmt, mem, slice, str};
 
 use crate::error::{Error, Result};
-use crate::state::Lua;
+use crate::state::{Lua, WeakLua};
 use crate::traits::IntoLua;
 use crate::types::{LuaType, ValueRef};
 use crate::value::Value;
@@ -153,6 +153,13 @@ impl LuaString {
         // Use alternative approach
         let lua = self.0.lua.lock();
         unsafe { ffi::lua_tostring(lua.ref_thread(), self.0.index) as *const c_void }
+    }
+
+    /// Returns a weak reference to the Lua instance owning this value.
+    #[doc(hidden)]
+    #[inline]
+    pub fn weak_lua(&self) -> &WeakLua {
+        &self.0.lua
     }
 }
 

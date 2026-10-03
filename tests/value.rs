@@ -238,6 +238,51 @@ fn test_value_to_string() -> Result<()> {
 }
 
 #[test]
+fn test_value_weak_lua() -> Result<()> {
+    let lua = Lua::new();
+    let values = [
+        Value::String(lua.create_string("hello")?),
+        Value::Table(lua.create_table()?),
+        Value::Function(lua.create_function(|_, ()| Ok(()))?),
+        Value::Thread(lua.create_thread(lua.create_function(|_, ()| Ok(()))?)?),
+        Value::UserData(lua.create_any_userdata(())?),
+        #[cfg(feature = "luau")]
+        Value::Buffer(lua.create_buffer(b"hello")?),
+    ];
+
+    for value in &values {
+        let weak = value.weak_lua().expect("reference value has a Lua instance");
+        assert!(weak == &lua.weak());
+        let upgraded = weak.try_upgrade().expect("Lua instance is alive");
+        upgraded.globals().set("weak_lua_test", true)?;
+        assert!(lua.globals().get::<bool>("weak_lua_test")?);
+    }
+
+    drop(lua);
+    for value in &values {
+        let weak = value
+            .weak_lua()
+            .expect("destroyed instance still has a weak handle");
+        assert!(weak.try_upgrade().is_none());
+    }
+
+    for value in [
+        Value::Nil,
+        Value::Boolean(true),
+        Value::NULL,
+        Value::Integer(1),
+        Value::Number(1.0),
+        Value::Error(Box::new(Error::runtime("test"))),
+        #[cfg(feature = "luau")]
+        Value::Vector(mlua::Vector::default()),
+    ] {
+        assert!(value.weak_lua().is_none());
+    }
+
+    Ok(())
+}
+
+#[test]
 fn test_debug_format() -> Result<()> {
     let lua = Lua::new();
 
