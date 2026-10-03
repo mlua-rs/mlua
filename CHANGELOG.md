@@ -1,3 +1,19 @@
+## v0.12.2 (Oct 03, 2026)
+
+- Luau updated to 0.740
+- Added `recursion_limit` to `SerializeOptions` and `DeserializeOptions` (defaults to 128)
+- Reject fractional numbers when converting to Rust integers on Lua 5.3+ and Luau
+- Fix precision loss when comparing integer and floating point `Value`s
+- `Table::equals` now follows the backend's native `__eq` semantics
+- Fix raw identifiers and callback types in derive macros
+- Prevent scoped userdata and callbacks from outliving their scope during cleanup
+- Fix panic and error handling in callbacks and userdata destructors to avoid corrupting Lua state
+- Return errors on reference stack exhaustion and improve stack checks
+- Fix async thread cancellation, stack cleanup, and global hook restoration when recycling threads
+- Fix Luau `require` from chunks loaded by path (#735) and require context lifetimes
+- perf: Reduce callback overhead
+- perf: Improve serde performance
+
 ## v0.12.1 (Aug 29, 2026)
 
 - Lua 5.5 updated to 5.5.1
