@@ -17,6 +17,10 @@ pub struct HeapDump {
 
 impl HeapDump {
     /// Dumps the current Lua heap state.
+    #[cfg_attr(
+        all(target_arch = "wasm32", target_os = "unknown"),
+        allow(unused_variables, dead_code)
+    )]
     pub(crate) unsafe fn new(state: *mut ffi::lua_State) -> Option<Self> {
         unsafe extern "C" fn category_name(state: *mut ffi::lua_State, cat: u8) -> *const c_char {
             (&*ExtraData::get(state))
@@ -26,7 +30,10 @@ impl HeapDump {
                 .unwrap_or(cstr!("unknown"))
         }
 
+        #[allow(unused_mut)]
         let mut buf = Vec::new();
+        // No stdio bindings on wasm32-unknown-unknown; the dump stays empty and `new` returns None.
+        #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
         unsafe {
             let file = libc::tmpfile();
             if file.is_null() {
