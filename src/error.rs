@@ -325,8 +325,8 @@ impl StdError for Error {
             // An error type with a source error should either return that error via source or
             // include that source's error message in its own Display output, but never both.
             // https://blog.rust-lang.org/inside-rust/2021/07/01/What-the-error-handling-project-group-is-working-towards.html
-            // Given that we include source to fmt::Display implementation for `CallbackError`, this call
-            // returns nothing.
+            // Given that we include source to fmt::Display implementation for `CallbackError`, this
+            // call returns nothing.
             Error::CallbackError { .. } => None,
             Error::ExternalError(err) => err.source(),
             Error::WithContext { cause, .. } => Self::source(cause),
