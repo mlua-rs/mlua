@@ -411,6 +411,13 @@ async fn test_async_table_object_like() -> Result<()> {
     )?;
     table.set_metatable(Some(metatable))?;
     assert_eq!(table.call_async::<i64>(()).await.unwrap(), 15);
+    lua.globals().set("callable_table", &table)?;
+    assert_eq!(
+        lua.globals()
+            .call_async_function::<i64>("callable_table", ())
+            .await?,
+        15
+    );
 
     match table.call_async_method::<()>("non_existent", ()).await {
         Err(Error::RuntimeError(err)) => {
@@ -465,6 +472,10 @@ async fn test_async_userdata() -> Result<()> {
     struct MyUserdata(u64);
 
     impl UserData for MyUserdata {
+        fn add_fields<F: mlua::UserDataFields<Self>>(fields: &mut F) {
+            fields.add_field_method_get("callable_userdata", |_, this| Ok(MyUserdata(this.0)));
+        }
+
         fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
             methods.add_async_method("get_value", |_, data, ()| async move {
                 sleep_ms(10).await;
@@ -558,6 +569,13 @@ async fn test_async_userdata() -> Result<()> {
     let n: u64 = userdata.call_async_method("get_value", ()).await?;
     assert_eq!(n, 24);
     userdata.call_async_function::<()>("sleep", 15).await?;
+    #[cfg(not(any(feature = "lua51", feature = "luau")))]
+    assert_eq!(
+        userdata
+            .call_async_function::<String>("callable_userdata", ())
+            .await?,
+        "elapsed:24ms"
+    );
 
     #[cfg(not(any(feature = "lua51", feature = "luau")))]
     assert_eq!(userdata.call_async::<String>(()).await?, "elapsed:24ms");

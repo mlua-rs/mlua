@@ -169,14 +169,14 @@ pub trait ObjectLike: Sealed {
     where
         R: FromLuaMulti;
 
-    /// Gets the function associated to key `name` from the object and calls it,
+    /// Gets the callable value associated to key `name` from the object and calls it,
     /// passing the object itself along with `args` as function arguments.
     fn call_method<R>(&self, name: &str, args: impl IntoLuaMulti) -> Result<R>
     where
         R: FromLuaMulti;
 
-    /// Gets the function associated to key `name` from the object and asynchronously calls it,
-    /// passing the object itself along with `args` as function arguments.
+    /// Gets the callable value associated to key `name` from the object and asynchronously calls
+    /// it, passing the object itself along with `args` as function arguments.
     ///
     /// This might invoke the `__index` metamethod.
     #[cfg(feature = "async")]
@@ -185,7 +185,7 @@ pub trait ObjectLike: Sealed {
     where
         R: FromLuaMulti;
 
-    /// Gets the function associated to key `name` from the object and calls it,
+    /// Gets the callable value associated to key `name` from the object and calls it,
     /// passing `args` as function arguments.
     ///
     /// This might invoke the `__index` metamethod.
@@ -193,8 +193,8 @@ pub trait ObjectLike: Sealed {
     where
         R: FromLuaMulti;
 
-    /// Gets the function associated to key `name` from the object and asynchronously calls it,
-    /// passing `args` as function arguments.
+    /// Gets the callable value associated to key `name` from the object and asynchronously calls
+    /// it, passing `args` as function arguments.
     ///
     /// This might invoke the `__index` metamethod.
     #[cfg(feature = "async")]

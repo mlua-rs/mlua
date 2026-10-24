@@ -702,6 +702,13 @@ fn test_table_object_like() -> Result<()> {
     assert_eq!(table.call_method::<String>("method", "a")?, "method_1");
     assert_eq!(table.to_string()?, "table object");
 
+    assert_eq!(lua.globals().call_function::<String>("table", "b")?, "call_2");
+    let callable = lua
+        .load("return setmetatable({}, {__call = function(_, receiver, key) return receiver[key] end})")
+        .eval::<Table>()?;
+    table.set("callable", callable)?;
+    assert_eq!(table.call_method::<i32>("callable", "a")?, 1);
+
     match table.call_method::<()>("non_existent", ()) {
         Err(Error::RuntimeError(err)) => {
             assert!(err.contains("attempt to call a nil value (function 'non_existent')"))
@@ -712,6 +719,11 @@ fn test_table_object_like() -> Result<()> {
     // Test calling non-callable table
     let table2 = lua.create_table()?;
     assert!(matches!(table2.call::<()>(()), Err(Error::RuntimeError(_))));
+    table.set("non_callable", table2)?;
+    assert!(matches!(
+        table.call_function::<()>("non_callable", ()),
+        Err(Error::RuntimeError(_))
+    ));
 
     Ok(())
 }
