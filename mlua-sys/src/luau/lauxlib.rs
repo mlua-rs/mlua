@@ -1,5 +1,6 @@
 //! Contains definitions from `lualib.h`.
 
+use std::marker::{PhantomData, PhantomPinned};
 use std::os::raw::{c_char, c_float, c_int, c_void};
 use std::ptr;
 
@@ -206,6 +207,7 @@ pub struct luaL_Strbuf {
     L: *mut lua_State,
     storage: *mut c_void, // TString
     buffer: [c_char; LUA_BUFFERSIZE],
+    _marker: PhantomData<PhantomPinned>,
 }
 
 // For compatibility
