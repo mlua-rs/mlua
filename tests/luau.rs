@@ -477,6 +477,7 @@ fn test_memory_category() -> Result<()> {
 }
 
 #[test]
+#[cfg(not(any(all(target_arch = "wasm32", target_os = "unknown"), target_os = "wasi")))]
 fn test_heap_dump() -> Result<()> {
     let lua = Lua::new();
 

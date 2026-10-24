@@ -27,6 +27,9 @@ impl HeapDump {
         }
 
         let mut buf = Vec::new();
+        #[cfg(any(all(target_arch = "wasm32", target_os = "unknown"), target_os = "wasi"))]
+        let _ = (state, &mut buf, category_name);
+        #[cfg(not(any(all(target_arch = "wasm32", target_os = "unknown"), target_os = "wasi")))]
         unsafe {
             let file = libc::tmpfile();
             if file.is_null() {
