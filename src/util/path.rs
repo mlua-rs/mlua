@@ -78,10 +78,17 @@ pub(crate) fn parse_path<'a>(path: &'a str) -> Result<Vec<(PathKey<'a>, bool)>> 
                         }
                         let mut num: Option<Integer> = None;
                         while let Some(&(_, c @ '0'..='9')) = chars.peek() {
+                            let digit = (c as u8 - b'0') as Integer;
                             let new_num = num
                                 .unwrap_or(0)
                                 .checked_mul(10)
-                                .and_then(|n| n.checked_add((c as u8 - b'0') as Integer))
+                                .and_then(|n| {
+                                    if negative {
+                                        n.checked_sub(digit)
+                                    } else {
+                                        n.checked_add(digit)
+                                    }
+                                })
                                 .ok_or_else(|| {
                                     Error::runtime(format!("integer overflow in path at position {pos}"))
                                 })?;
@@ -89,7 +96,6 @@ pub(crate) fn parse_path<'a>(path: &'a str) -> Result<Vec<(PathKey<'a>, bool)>> 
                             chars.next(); // consume digit
                         }
                         match num {
-                            Some(n) if negative => PathKey::Int(-n),
                             Some(n) => PathKey::Int(n),
                             None => {
                                 let err = format!("invalid integer in path at position {pos}");
@@ -209,6 +215,10 @@ mod tests {
         assert!(matches!(path[3], (PathKey::Str(ref s), false) if s == "c"));
         assert!(matches!(path[4], (PathKey::Str(ref s), false) if s == "d"));
 
+        let min_path = format!("a[{}]", crate::Integer::MIN);
+        let path = parse_path(&min_path).unwrap();
+        assert!(matches!(path[1], (PathKey::Int(n), false) if n == crate::Integer::MIN));
+
         // Test empty path
         let path = parse_path("").unwrap();
         assert_eq!(path.len(), 0);
@@ -248,6 +258,9 @@ mod tests {
 
         // Test bad integers
         let err = parse_path("a[99999999999999999999]").unwrap_err().to_string();
+        assert_eq!(err, "runtime error: integer overflow in path at position 2");
+        let negative_overflow = format!("a[{}0]", crate::Integer::MIN);
+        let err = parse_path(&negative_overflow).unwrap_err().to_string();
         assert_eq!(err, "runtime error: integer overflow in path at position 2");
         let err = parse_path("a[-]").unwrap_err().to_string();
         assert_eq!(err, "runtime error: invalid integer in path at position 2");
