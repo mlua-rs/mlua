@@ -136,7 +136,7 @@ fn make_lua() -> Result<Lua> {
         dylib_path = env::var("DYLD_FALLBACK_LIBRARY_PATH").unwrap();
         dylib_ext = "dylib";
         separator = ":";
-    } else if cfg!(target_os = "linux") {
+    } else if cfg!(any(target_os = "linux", target_os = "illumos")) {
         dylib_path = env::var("LD_LIBRARY_PATH").unwrap();
         dylib_ext = "so";
         separator = ":";
