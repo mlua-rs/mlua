@@ -1,0 +1,54 @@
+name: Setup Wasm dependencies
+description: Install Rust, WASI SDK, and Wasmtime on x86_64 Linux
+inputs:
+  target:
+    description: Rust target (wasm32-unknown-unknown/wasm32-wasipx)
+    required: true
+  c_target:
+    description: C target for wasm32-unknown-unknown (wasm32-wasip1 or wasm32-wasip2)
+    default: wasm32-wasip1
+  toolchain:
+    description: Rust toolchain
+    default: stable
+  wasi_sdk:
+    description: WASI SDK version
+    default: '34'
+  wasmtime:
+    description: Wasmtime version for WASI targets
+    default: v50.0.0
+
+runs:
+  using: composite
+  steps:
+    - uses: dtolnay/rust-toolchain@stable
+      with:
+        toolchain: ${{ inputs.toolchain }}
+        target: ${{ inputs.target }}
+    - name: Install WASI SDK
+      shell: bash
+      working-directory: ${{ runner.tool_cache }}
+      env:
+        WASI_SDK_VERSION: ${{ inputs.wasi_sdk }}
+      run: |
+        archive="wasi-sdk-$WASI_SDK_VERSION.0-x86_64-linux"
+        curl -fLO "https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-$WASI_SDK_VERSION/$archive.tar.gz"
+        tar xf "$archive.tar.gz"
+        echo "WASI_SDK_PATH=$PWD/$archive" >> "$GITHUB_ENV"
+    - name: Install Wasmtime
+      shell: bash
+      working-directory: ${{ runner.tool_cache }}
+      env:
+        WASMTIME_VERSION: ${{ inputs.wasmtime }}
+      run: |
+        archive="wasmtime-$WASMTIME_VERSION-x86_64-linux"
+        curl -fLO "https://github.com/bytecodealliance/wasmtime/releases/download/$WASMTIME_VERSION/$archive.tar.xz"
+        tar xf "$archive.tar.xz"
+        echo "$PWD/$archive" >> "$GITHUB_PATH"
+    - name: Configure Wasm build
+      shell: bash
+      env:
+        WASM_TARGET: ${{ inputs.target }}
+        WASM_C_TARGET: ${{ inputs.c_target }}
+      run: |
+        source "$GITHUB_WORKSPACE/tests/wasm/setup.sh" "$WASM_TARGET" "$WASM_C_TARGET"
+        printf '%s\n' "${wasm_env[@]}" >> "$GITHUB_ENV"
