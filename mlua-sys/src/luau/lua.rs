@@ -275,6 +275,10 @@ unsafe extern "C-unwind" {
     pub fn lua_getthreaddata(L: *mut lua_State) -> *mut c_void;
     pub fn lua_setthreaddata(L: *mut lua_State, data: *mut c_void);
     pub fn lua_costatus(L: *mut lua_State, co: *mut lua_State) -> c_int;
+
+    pub fn lua_hasfinalizers(L: *mut lua_State) -> c_int;
+    pub fn lua_pushfinalizerfunction(L: *mut lua_State, co: *mut lua_State, toclose: c_int);
+    pub fn lua_addfinalizer(L: *mut lua_State, co: *mut lua_State, idx: c_int);
 }
 
 #[inline(always)]
