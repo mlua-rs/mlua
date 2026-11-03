@@ -350,7 +350,8 @@ unsafe extern "C-unwind" {
 
 pub type lua_UserdataMark = unsafe extern "C-unwind" fn(L: *mut lua_State, ud: *mut c_void);
 pub type lua_EmbedderMark = unsafe extern "C-unwind" fn(L: *mut lua_State, r#ref: c_int);
-pub type lua_EmbedderGc = unsafe extern "C-unwind" fn(L: *mut lua_State, markref: Option<lua_EmbedderMark>);
+pub type lua_EmbedderGc =
+    unsafe extern "C-unwind" fn(L: *mut lua_State, markref: Option<lua_EmbedderMark>) -> c_int;
 
 //
 // Reference system, can be used to pin objects
