@@ -17,6 +17,7 @@ use crate::traits::{FromLuaMulti, IntoLua};
 use crate::types::MaybeSend;
 
 pub use heap_dump::HeapDump;
+pub use interrupt::InterruptHandle;
 pub use require::{FsRequirer, NavigateError, Require};
 
 #[cfg(feature = "luau-jit")]
@@ -168,5 +169,6 @@ unsafe extern "C-unwind" fn lua_loadstring(state: *mut ffi::lua_State) -> c_int 
 }
 
 mod heap_dump;
+mod interrupt;
 mod json;
 mod require;
