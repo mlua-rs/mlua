@@ -71,6 +71,9 @@ impl Drop for RawLua {
 
             #[cfg(feature = "luau")]
             {
+                if let Some(handle) = (*self.extra.get()).interrupt_handle.take() {
+                    handle.invalidate();
+                }
                 // Reset any callbacks
                 (*ffi::lua_callbacks(self.main_state())).interrupt = None;
                 (*ffi::lua_callbacks(self.main_state())).userthread = None;
