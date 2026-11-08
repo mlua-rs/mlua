@@ -15,6 +15,8 @@ use ffi::{lua_Debug, lua_State};
 use crate::function::Function;
 use crate::state::RawLua;
 use crate::util::{StackGuard, assert_stack, linenumber_to_usize, ptr_to_lossy_str, ptr_to_str};
+#[cfg(feature = "luau")]
+use crate::{error::Result, value::Value};
 
 /// Contains information about currently executing Lua code.
 ///
@@ -204,6 +206,222 @@ impl<'a> Debug<'a> {
             };
             stack
         }
+    }
+
+    /// Reads local variable `index` (1-based) in this activation record, returning its name and
+    /// current value, or `None` once `index` is past the last visible local (wraps `lua_getlocal`).
+    ///
+    /// Luau keeps locals reachable here even though its sandbox removes `debug.getlocal`, so this is
+    /// the way to inspect locals from a [`Lua::set_debug_break`]/[`Lua::set_debug_step`] callback.
+    ///
+    /// [`Lua::set_debug_break`]: crate::Lua::set_debug_break
+    /// [`Lua::set_debug_step`]: crate::Lua::set_debug_step
+    #[cfg(feature = "luau")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
+    pub fn get_local(&self, index: usize) -> Option<(String, Value)> {
+        let index = c_int::try_from(index).ok().filter(|&index| index > 0)?;
+        unsafe {
+            let _sg = StackGuard::new(self.state);
+            assert_stack(self.state, 1);
+
+            // `lua_getlocal` pushes the value only when a local exists; otherwise it returns null.
+            let name = ptr_to_lossy_str(ffi::lua_getlocal(self.state, self.level, index))?;
+            Some((name.into_owned(), self.lua.pop_value()))
+        }
+    }
+
+    /// Assigns `value` to local variable `index` (1-based) in this activation record.
+    ///
+    /// Returns `Ok(Some(name))` with the local's name when the write succeeded, or `Ok(None)` when
+    /// `index` is out of range or the frame belongs to a **native-compiled** function (Luau's JIT
+    /// guard: `LUA_CALLINFO_NATIVE` prevents writes to native frames because register type tags
+    /// could be invalidated).
+    ///
+    /// The replacement preserves the VM value tag. Interpreted bytecode can
+    /// assume a register's type (for example, a numeric loop index).
+    /// Integer/number conversions are accepted when they preserve the value.
+    ///
+    /// Only meaningful inside a [`Lua::set_debug_break`] / [`Lua::set_debug_step`] callback. For
+    /// reliable local visibility, compile the chunk with
+    /// [`Compiler::set_optimization_level(0)`][opt] and [`Compiler::set_debug_level(2)`][dbg].
+    ///
+    /// [opt]: crate::Compiler::set_optimization_level
+    /// [dbg]: crate::Compiler::set_debug_level
+    /// [`Lua::set_debug_break`]: crate::Lua::set_debug_break
+    /// [`Lua::set_debug_step`]: crate::Lua::set_debug_step
+    #[cfg(feature = "luau")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
+    pub fn set_local(&self, index: usize, value: Value) -> Result<Option<String>> {
+        let Ok(index) = c_int::try_from(index) else {
+            return Ok(None);
+        };
+        if index == 0 {
+            return Ok(None);
+        }
+        unsafe {
+            // `lua_setlocal` pops the value on success and leaves it on the stack on failure
+            // (out-of-range or native frame).  The `StackGuard` restores the top in every case.
+            let _sg = StackGuard::new(self.state);
+            assert_stack(self.state, 1);
+            if ffi::lua_getlocal(self.state, self.level, index).is_null() {
+                return Ok(None);
+            }
+            self.push_debug_replacement(value)?;
+            let name = ffi::lua_setlocal(self.state, self.level, index);
+            Ok(ptr_to_lossy_str(name).map(|s| s.into_owned()))
+        }
+    }
+
+    /// Collects every readable local in this record as `(name, value)` pairs, in index order.
+    ///
+    /// Convenience wrapper over [`Debug::get_local`].
+    #[cfg(feature = "luau")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
+    pub fn locals(&self) -> Vec<(String, Value)> {
+        let mut locals = Vec::new();
+        let mut index = 1;
+        while let Some(local) = self.get_local(index) {
+            locals.push(local);
+            index += 1;
+        }
+        locals
+    }
+
+    /// Returns the name and current value of the `index`-th upvalue (1-based) of the function
+    /// running at this stack level. Returns `None` when `index` is out of range
+    /// or the frame is a native host function.
+    ///
+    /// The function is pushed then popped internally; the stack is left unchanged.
+    #[cfg(feature = "luau")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
+    pub fn get_upvalue(&self, index: usize) -> Option<(String, Value)> {
+        let index = c_int::try_from(index).ok().filter(|&index| index > 0)?;
+        unsafe {
+            let _sg = StackGuard::new(self.state);
+            assert_stack(self.state, 2); // function + upvalue value
+
+            // Push the function running at this level.
+            mlua_assert!(
+                ffi::lua_getinfo(self.state, self.level, cstr!("f"), self.ar) != 0,
+                "lua_getinfo failed with `f`"
+            );
+
+            let func_idx = ffi::lua_gettop(self.state);
+            // C closures can hold private state owned by mlua or another
+            // host binding. Never expose or overwrite these slots.
+            if ffi::lua_iscfunction(self.state, func_idx) != 0 {
+                return None;
+            }
+
+            // lua_getupvalue pushes the value and returns its name, or returns null and
+            // pushes nothing when `index` exceeds the upvalue count.
+            let name = ptr_to_lossy_str(ffi::lua_getupvalue(self.state, func_idx, index))?;
+            let value = self.lua.pop_value();
+            Some((name.into_owned(), value))
+            // _sg restores the stack top to before the function push, popping it.
+        }
+    }
+
+    /// Collects every upvalue of the function at this stack level as `(name, value)` pairs.
+    ///
+    /// Convenience wrapper over [`Debug::get_upvalue`].
+    #[cfg(feature = "luau")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
+    pub fn upvalues(&self) -> Vec<(String, Value)> {
+        let mut upvalues = Vec::new();
+        let mut index = 1;
+        while let Some(upval) = self.get_upvalue(index) {
+            upvalues.push(upval);
+            index += 1;
+        }
+        upvalues
+    }
+
+    /// Sets the `index`-th upvalue (1-based) of the function running at this stack level.
+    /// Returns the upvalue's name on success, `None` when `index` is out of range
+    /// or the frame is a native host function.
+    ///
+    /// Because upvalues are shared with every closure capturing them, the write is visible
+    /// to the running function as soon as it resumes.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the replacement changes the VM value tag, cannot be
+    /// pushed, or Luau code generation is enabled in this build. A captured
+    /// slot may be shared with a different, native-compiled closure.
+    #[cfg(feature = "luau")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
+    pub fn set_upvalue(&self, index: usize, value: Value) -> Result<Option<String>> {
+        let Ok(index) = c_int::try_from(index) else {
+            return Ok(None);
+        };
+        if index == 0 {
+            return Ok(None);
+        }
+        if cfg!(feature = "luau-jit") {
+            return Err(crate::Error::runtime(
+                "cannot write Luau upvalues with native code generation enabled",
+            ));
+        }
+        unsafe {
+            let _sg = StackGuard::new(self.state);
+            assert_stack(self.state, 3); // function + value + slack
+
+            // Push the function running at this level.
+            mlua_assert!(
+                ffi::lua_getinfo(self.state, self.level, cstr!("f"), self.ar) != 0,
+                "lua_getinfo failed with `f`"
+            );
+
+            let func_idx = ffi::lua_gettop(self.state);
+            // C closures can hold private state owned by mlua or another
+            // host binding. Never expose or overwrite these slots.
+            if ffi::lua_iscfunction(self.state, func_idx) != 0 {
+                return Ok(None);
+            }
+            if ffi::lua_getupvalue(self.state, func_idx, index).is_null() {
+                return Ok(None);
+            }
+            self.push_debug_replacement(value)?;
+            // `lua_setupvalue` pops the value on success and leaves it on failure
+            // (out-of-range); the `StackGuard` restores the top in every case.
+            let name = ffi::lua_setupvalue(self.state, func_idx, index);
+            Ok(ptr_to_lossy_str(name).map(|s| s.into_owned()))
+        }
+    }
+
+    // Replace the slot value on top of the stack without changing the raw tag.
+    // mlua may present a whole Luau number as Value::Integer, so check the VM
+    // tag instead of comparing Rust Value variants.
+    #[cfg(feature = "luau")]
+    unsafe fn push_debug_replacement(&self, value: Value) -> Result<()> {
+        let tag = ffi::lua_type(self.state, -1);
+        ffi::lua_pop(self.state, 1);
+        let value = match (tag, value) {
+            (ffi::LUA_TNUMBER, Value::Integer(i)) if (i as f64) as i128 == i as i128 => {
+                Value::Number(i as f64)
+            }
+            (ffi::LUA_TINTEGER, Value::Number(n))
+                if n < i64::MAX as f64 && n >= i64::MIN as f64 && (n as i64) as f64 == n =>
+            {
+                Value::Integer(n as i64)
+            }
+            (_, value) => value,
+        };
+        self.lua.push_value(&value)?;
+        if ffi::lua_type(self.state, -1) != tag {
+            return Err(crate::Error::runtime(
+                "debug variable replacement would change the Luau value type",
+            ));
+        }
+        Ok(())
+    }
+
+    /// Returns the number of frames in the active Luau thread.
+    #[cfg(feature = "luau")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
+    pub fn stack_depth(&self) -> usize {
+        unsafe { ffi::lua_stackdepth(self.state) as usize }
     }
 }
 

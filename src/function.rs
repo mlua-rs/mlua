@@ -597,6 +597,32 @@ impl Function {
         }
     }
 
+    /// Sets or clears a breakpoint on `line` of this Luau function (wraps `lua_breakpoint`).
+    ///
+    /// Luau snaps the breakpoint to the next executable line, so the returned value is the line it
+    /// was actually placed on (which may differ from `line`), or `None` if no executable line was
+    /// found. Pair this with [`Lua::set_debug_break`] to observe the hit.
+    ///
+    /// [`Lua::set_debug_break`]: crate::Lua::set_debug_break
+    #[cfg(feature = "luau")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
+    pub fn set_breakpoint(&self, line: u32, enabled: bool) -> Option<u32> {
+        let line = c_int::try_from(line).ok()?;
+        let lua = self.0.lua.lock();
+        let state = lua.state();
+        unsafe {
+            let _sg = StackGuard::new(state);
+            assert_stack(state, 1);
+
+            lua.push_ref(&self.0);
+            if ffi::lua_iscfunction(state, -1) != 0 {
+                return None;
+            }
+            let actual = ffi::lua_breakpoint(state, -1, line, enabled as c_int);
+            linenumber_to_usize(actual).map(|line| line as u32)
+        }
+    }
+
     /// Converts this function to a generic C pointer.
     ///
     /// There is no way to convert the pointer back to its original value.
