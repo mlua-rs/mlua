@@ -63,8 +63,8 @@ pub(crate) struct Chunk {
 }
 
 impl Chunk {
-    pub(crate) fn new(tokens: TokenStream) -> Self {
-        let tokens = Tokens::retokenize(tokens);
+    pub(crate) fn new(tokens: TokenStream) -> Result<Self, TokenStream2> {
+        let tokens = Tokens::retokenize(tokens)?;
 
         let mut source = String::new();
         let mut caps = Captures::new();
@@ -91,10 +91,8 @@ impl Chunk {
             prev_end = Some(t.end());
         }
 
-        Self {
-            source: source.trim_end().to_string(),
-            caps,
-        }
+        let source = source.trim_end().to_string();
+        Ok(Self { source, caps })
     }
 
     pub(crate) fn captures(&self) -> &[Capture] {
@@ -111,7 +109,8 @@ impl Chunk {
         });
 
         quote! {{
-            use mlua::{AsChunk, ChunkMode, Lua, Result, Table};
+            use mlua::chunk::{AsChunk, ChunkMode};
+            use mlua::{Lua, Result, Table};
             use ::std::borrow::Cow;
             use ::std::cell::Cell;
             use ::std::io::Result as IoResult;

@@ -14,6 +14,7 @@ pub struct lua_CompileOptions {
     pub vectorLib: *const c_char,
     pub vectorCtor: *const c_char,
     pub vectorType: *const c_char,
+    pub vectorPrecision: c_int,
     pub mutableGlobals: *const *const c_char,
     pub userdataTypes: *const *const c_char,
     pub librariesWithKnownMembers: *const *const c_char,
@@ -32,6 +33,7 @@ impl Default for lua_CompileOptions {
             vectorLib: ptr::null(),
             vectorCtor: ptr::null(),
             vectorType: ptr::null(),
+            vectorPrecision: 0,
             mutableGlobals: ptr::null(),
             userdataTypes: ptr::null(),
             librariesWithKnownMembers: ptr::null(),
@@ -82,6 +84,7 @@ unsafe extern "C" {
     pub fn luau_set_compile_constant_number(cons: *mut lua_CompileConstant, n: f64);
     pub fn luau_set_compile_constant_integer64(cons: *mut lua_CompileConstant, l: i64);
     pub fn luau_set_compile_constant_vector(cons: *mut lua_CompileConstant, x: f32, y: f32, z: f32, w: f32);
+    pub fn luau_set_compile_constant_vectord(cons: *mut lua_CompileConstant, x: f64, y: f64, z: f64, w: f64);
     pub fn luau_set_compile_constant_string(cons: *mut lua_CompileConstant, s: *const c_char, l: usize);
 }
 

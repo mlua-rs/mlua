@@ -3,6 +3,7 @@ pub(crate) mod userdata_impl;
 
 use proc_macro::TokenStream;
 use quote::{format_ident, quote};
+use syn::ext::IdentExt;
 use syn::spanned::Spanned;
 use syn::{Attribute, Data, DeriveInput, Error, Fields, FieldsNamed, Meta, parse_macro_input};
 
@@ -103,7 +104,7 @@ pub fn userdata_type(item: TokenStream) -> TokenStream {
                 continue;
             }
 
-            let lua_name = lua_attr.name.unwrap_or_else(|| field_name.to_string());
+            let lua_name = lua_attr.name.unwrap_or_else(|| field_name.unraw().to_string());
 
             // Assume get/set by default (unless explicitly specified)
             let (has_get, has_set) = if lua_attr.get || lua_attr.set {
@@ -130,17 +131,28 @@ pub fn userdata_type(item: TokenStream) -> TokenStream {
         }
     }
 
-    let registration_type_name = format_ident!("__MluaUserDataRegistration_{type_name}");
-    let register_fields_fn_name = format_ident!("__mlua_register_{type_name}_fields");
+    let registration_type_name = format_ident!("__MluaUserDataRegistration_{}", type_name);
+    let registration_fn_name = format_ident!("__mlua_userdata_registration");
+    let register_fields_fn_name = format_ident!("__mlua_register_{}_fields", type_name);
 
     let output = quote! {
         #[doc(hidden)]
         #[allow(non_camel_case_types)]
-        struct #registration_type_name {
+        pub(crate) struct #registration_type_name {
             register: fn(&mut ::mlua::userdata::UserDataRegistry<#type_name>),
         }
 
         ::mlua::__inventory::collect!(#registration_type_name);
+
+        impl #type_name {
+            #[doc(hidden)]
+            #[allow(dead_code)]
+            pub(crate) const fn #registration_fn_name(
+                register: fn(&mut ::mlua::userdata::UserDataRegistry<Self>),
+            ) -> #registration_type_name {
+                #registration_type_name { register }
+            }
+        }
 
         #[allow(non_snake_case)]
         fn #register_fields_fn_name(registry: &mut ::mlua::userdata::UserDataRegistry<#type_name>) {
@@ -149,7 +161,7 @@ pub fn userdata_type(item: TokenStream) -> TokenStream {
         }
 
         ::mlua::__inventory::submit! {
-            #registration_type_name { register: #register_fields_fn_name }
+            #type_name::#registration_fn_name(#register_fields_fn_name)
         }
 
         impl ::mlua::userdata::UserData for #type_name {

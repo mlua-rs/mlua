@@ -52,8 +52,7 @@ impl<'a> Json<'a> {
     }
 
     pub(crate) fn as_u64(&self) -> Option<u64> {
-        self.as_i64()
-            .and_then(|i| if i >= 0 { Some(i as u64) } else { None })
+        self.as_i64().and_then(|i| u64::try_from(i).ok())
     }
 
     pub(crate) fn as_array(&self) -> Option<&[Json<'a>]> {
@@ -74,8 +73,7 @@ impl<'a> Json<'a> {
 pub(crate) fn parse<'a>(s: &'a str) -> Result<Json<'a>, &'static str> {
     let s = s.trim_ascii();
     let mut chars = s.char_indices().peekable();
-    let value = parse_value(s, &mut chars)?;
-    Ok(value)
+    parse_value(s, &mut chars)
 }
 
 fn parse_value<'a>(s: &'a str, chars: &mut Peekable<CharIndices>) -> Result<Json<'a>, &'static str> {
@@ -265,8 +263,8 @@ mod tests {
     fn test_numbers() {
         assert_eq!(parse("0").unwrap(), Json::Integer(0));
         assert_eq!(parse("-42").unwrap(), Json::Integer(-42));
-        assert_eq!(parse("3.14").unwrap(), Json::Number(3.14));
-        assert_eq!(parse("-3.14").unwrap(), Json::Number(-3.14));
+        assert_eq!(parse("3.25").unwrap(), Json::Number(3.25));
+        assert_eq!(parse("-3.25").unwrap(), Json::Number(-3.25));
         assert_eq!(parse("1e10").unwrap(), Json::Number(1e10));
         assert_eq!(parse("1E10").unwrap(), Json::Number(1E10));
         assert_eq!(parse("1e-10").unwrap(), Json::Number(1e-10));

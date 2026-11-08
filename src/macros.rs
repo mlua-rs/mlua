@@ -95,9 +95,20 @@ macro_rules! require_module_feature {
 }
 
 macro_rules! protect_lua {
-    ($state:expr, $nargs:expr, $nresults:expr, $f:expr) => {
-        crate::util::protect_lua_closure($state, $nargs, $nresults, $f)
-    };
+    ($state:expr, $nargs:expr, $nresults:expr, $f:expr) => {{
+        // Check captures here to preserve Lua::exec_raw's existing closure contract.
+        #[inline(always)]
+        fn check<F>(f: F) -> F {
+            const {
+                assert!(
+                    !std::mem::needs_drop::<F>(),
+                    "protected closure must not own values requiring drop"
+                );
+            }
+            f
+        }
+        crate::util::protect_lua_closure($state, $nargs, $nresults, check($f))
+    }};
 
     ($state:expr, $nargs:expr, $nresults:expr, fn($state_inner:ident) $code:expr) => {{
         use ::std::os::raw::c_int;
@@ -112,5 +123,39 @@ macro_rules! protect_lua {
         }
 
         crate::util::protect_lua_call($state, $nargs, do_call)
+    }};
+}
+
+// Like `protect_lua!`, but skips protection when memory errors are unlikely.
+// The direct path neither creates a call frame nor adjusts the stack to `nresults`.
+macro_rules! protect_lua_mem {
+    ($state:expr, if $protect:expr, $nargs:expr, $nresults:expr, $f:expr) => {{
+        let state = $state;
+        let f = $f;
+        if $protect {
+            protect_lua!(state, $nargs, $nresults, f)
+        } else {
+            crate::Result::Ok(f(state))
+        }
+    }};
+
+    ($state:expr, if $protect:expr, $nargs:expr, $nresults:expr, fn($state_inner:ident) $code:expr) => {{
+        let state = $state;
+        if $protect {
+            protect_lua!(state, $nargs, $nresults, fn($state_inner) $code)
+        } else {
+            let $state_inner = state;
+            $code;
+            crate::Result::Ok(())
+        }
+    }};
+
+    ($lua:expr, or $force:expr, $($args:tt)*) => {{
+        let lua = &$lua;
+        protect_lua_mem!(lua.state(), if !lua.unlikely_memory_error() || $force, $($args)*)
+    }};
+
+    ($lua:expr, $($args:tt)*) => {{
+        protect_lua_mem!($lua, or false, $($args)*)
     }};
 }

@@ -290,7 +290,7 @@ impl fmt::Display for Error {
                     // Try to find local traceback within the full traceback
                     if let Some(pos) = full_traceback.find(traceback) {
                         write!(fmt, "{}", &full_traceback[..pos])?;
-                        writeln!(fmt, ">{}", &full_traceback[pos..].trim_end())?;
+                        writeln!(fmt, ">{}", full_traceback[pos..].trim_end())?;
                     } else {
                         writeln!(fmt, "{}", full_traceback.trim_end())?;
                     }
@@ -325,8 +325,8 @@ impl StdError for Error {
             // An error type with a source error should either return that error via source or
             // include that source's error message in its own Display output, but never both.
             // https://blog.rust-lang.org/inside-rust/2021/07/01/What-the-error-handling-project-group-is-working-towards.html
-            // Given that we include source to fmt::Display implementation for `CallbackError`, this call
-            // returns nothing.
+            // Given that we include source to fmt::Display implementation for `CallbackError`, this
+            // call returns nothing.
             Error::CallbackError { .. } => None,
             Error::ExternalError(err) => err.source(),
             Error::WithContext { cause, .. } => Self::source(cause),
@@ -352,19 +352,28 @@ impl Error {
         }
     }
 
-    /// Attempts to downcast the external error object to a concrete type by reference.
+    /// Attempts to downcast to a concrete external error type by reference.
+    ///
+    /// The search descends through wrapping layers following the same path as [`Error::chain`].
     pub fn downcast_ref<T>(&self) -> Option<&T>
     where
         T: StdError + 'static,
     {
         match self {
             Error::ExternalError(err) => err.downcast_ref(),
-            Error::WithContext { cause, .. } => Self::downcast_ref(cause),
+            Error::BadArgument { cause, .. }
+            | Error::CallbackError { cause, .. }
+            | Error::WithContext { cause, .. } => Self::downcast_ref(cause),
             _ => None,
         }
     }
 
-    /// An iterator over the chain of nested errors wrapped by this Error.
+    /// An iterator over the chain of nested errors wrapped by this `Error`.
+    ///
+    /// Iteration starts with `self` and descends through wrapping layers.
+    /// A bare [`Error::ExternalError`] wrapper is skipped in favor of the error it wraps.
+    /// The chain stops at the innermost error and does not follow the external error's own
+    /// [`StdError::source`] chain.
     pub fn chain(&self) -> impl Iterator<Item = &(dyn StdError + 'static)> {
         Chain {
             root: self,

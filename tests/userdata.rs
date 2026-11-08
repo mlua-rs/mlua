@@ -151,9 +151,9 @@ fn test_metamethods() -> Result<()> {
                     if i <= data.0 {
                         return Ok(mlua::Variadic::from_iter(vec![i, i]));
                     }
-                    return Ok(mlua::Variadic::new());
+                    Ok(mlua::Variadic::new())
                 })?;
-                Ok((stateless_iter, data.clone(), 0))
+                Ok((stateless_iter, *data, 0))
             });
         }
     }
@@ -443,6 +443,90 @@ fn test_userdata_destroy() -> Result<()> {
     ud.destroy().unwrap();
     assert_eq!(Arc::strong_count(&rc), 1);
 
+    Ok(())
+}
+
+#[test]
+#[cfg(panic = "unwind")]
+fn test_userdata_destroy_panic() -> Result<()> {
+    use std::panic::{AssertUnwindSafe, catch_unwind};
+
+    struct Panicking;
+    impl Drop for Panicking {
+        fn drop(&mut self) {
+            panic!("userdata drop");
+        }
+    }
+
+    let lua = Lua::new();
+    // Repeat beyond Lua's C-call limit
+    for _ in 0..256 {
+        let ud = lua.create_any_userdata(Panicking)?;
+        let panic = catch_unwind(AssertUnwindSafe(|| ud.destroy())).unwrap_err();
+        assert_eq!(panic.downcast_ref::<&str>(), Some(&"userdata drop"));
+        assert!(matches!(ud.destroy(), Err(Error::UserDataDestructed)));
+        assert!(lua.inspect_stack(0, |_| ()).is_none());
+        assert_eq!(lua.load("return 42").eval::<i32>()?, 42);
+    }
+    lua.gc_collect()?;
+
+    Ok(())
+}
+
+#[cfg(not(target_family = "wasm"))]
+#[test]
+fn test_userdata_gc_panic() -> Result<()> {
+    use std::panic::{AssertUnwindSafe, catch_unwind};
+
+    struct Panicking;
+    impl Drop for Panicking {
+        fn drop(&mut self) {
+            panic!("userdata drop");
+        }
+    }
+
+    if let Ok(mode) = std::env::var("MLUA_TEST_GC_PANIC") {
+        let _ = catch_unwind(AssertUnwindSafe(|| -> Result<()> {
+            let lua = Lua::new();
+            lua.gc_stop();
+            if mode.starts_with("callback") {
+                let value = Panicking;
+                lua.create_function(move |_, ()| {
+                    let _ = &value;
+                    Ok(())
+                })?;
+            } else {
+                lua.create_any_userdata(Panicking)?;
+            }
+            if mode.ends_with("collect") {
+                lua.gc_collect()?;
+                lua.gc_collect()?;
+                // Collection must abort before reaching here
+                std::process::exit(0);
+            }
+            drop(lua);
+            Ok(())
+        }));
+        return Ok(());
+    }
+
+    for mode in [
+        "userdata_collect",
+        "userdata_close",
+        "callback_collect",
+        "callback_close",
+    ] {
+        let output = std::process::Command::new(std::env::current_exe()?)
+            .args(["--exact", "test_userdata_gc_panic"])
+            .env("MLUA_TEST_GC_PANIC", mode)
+            .output()?;
+        assert!(!output.status.success(), "{mode}");
+        #[cfg(unix)]
+        {
+            use std::os::unix::process::ExitStatusExt;
+            assert_eq!(output.status.signal(), Some(libc::SIGABRT), "{mode}");
+        }
+    }
     Ok(())
 }
 
@@ -844,6 +928,26 @@ fn test_any_userdata() -> Result<()> {
 }
 
 #[test]
+fn test_userdata_reregister_type() -> Result<()> {
+    let lua = Lua::new();
+    let old = lua.create_any_userdata(0u32)?;
+    assert!(old.is::<u32>());
+    lua.register_userdata_type::<u32>(|_| {})?;
+    assert!(!old.is::<u32>());
+    assert!(matches!(old.borrow::<u32>(), Err(Error::UserDataTypeMismatch)));
+
+    let new = lua.create_any_userdata(1u32)?;
+    assert_eq!(*new.borrow::<u32>()?, 1);
+    assert!(!old.is::<u32>());
+    drop(old);
+    lua.gc_collect()?;
+    lua.gc_collect()?;
+    // Metatable address of `u32` can be reused for `i32`
+    assert!(lua.create_any_userdata(0i32)?.is::<i32>());
+    Ok(())
+}
+
+#[test]
 fn test_any_userdata_wrap() -> Result<()> {
     let lua = Lua::new();
 
@@ -872,6 +976,7 @@ fn test_userdata_object_like() -> Result<()> {
 
     impl UserData for MyUserData {
         fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
+            fields.add_field_method_get("callable_userdata", |_, this| Ok(*this));
             fields.add_field_method_get("n", |_, this| Ok(this.0));
             fields.add_field_method_set("n", |_, this, val| {
                 this.0 = val;
@@ -900,6 +1005,7 @@ fn test_userdata_object_like() -> Result<()> {
     }
 
     assert_eq!(ud.call::<LuaString>(())?, "called");
+    assert_eq!(ud.call_function::<String>("callable_userdata", ())?, "called");
 
     ud.call_method::<()>("add", 2)?;
     assert_eq!(ud.get::<u32>("n")?, 323);
@@ -969,6 +1075,7 @@ fn test_userdata_pointer() -> Result<()> {
 
 #[cfg(feature = "macros")]
 #[test]
+#[allow(clippy::needless_maybe_sized)] // Exercise derive parsing with a `?Sized` generic bound.
 fn test_userdata_derive() -> Result<()> {
     let lua = Lua::new();
 
@@ -986,10 +1093,11 @@ fn test_userdata_derive() -> Result<()> {
 
     // More complex struct where generics and where clause
 
+    #[rustfmt::skip]
     #[derive(Clone, Copy, mlua::FromLua)]
     struct MyUserData2<'a, T: ?Sized>(&'a T)
     where
-        T: Copy;
+        T: Copy,; // trailing comma is needed for testing
 
     lua.register_userdata_type::<MyUserData2<'static, i32>>(|reg| {
         reg.add_function("val", |_, this: MyUserData2<'static, i32>| Ok(*this.0));
@@ -1439,6 +1547,41 @@ fn test_userdata_namecall() -> Result<()> {
     ud.destroy()?;
     let err = lua.load("ud:method()").exec().unwrap_err();
     assert!(err.to_string().contains("userdata has been destructed"));
+
+    Ok(())
+}
+
+#[cfg(feature = "luau")]
+#[test]
+fn test_userdata_namecall_lifetime() -> Result<()> {
+    let lua = Lua::new();
+
+    let value = Arc::new(42);
+    let weak = Arc::downgrade(&value);
+    lua.register_userdata_type::<()>(|registry| {
+        registry.add_function("method", move |_, ()| Ok(*value));
+        registry.add_field_method_get("field", |_, _| Ok(Nil));
+        registry.enable_namecall();
+    })?;
+    let namecall = lua
+        .create_any_userdata(())?
+        .metatable()?
+        .get::<Function>("__namecall")?;
+    // Retaining only `__namecall` must keep its callbacks alive after re-registration.
+    lua.register_userdata_type::<()>(|_| {})?;
+    lua.gc_collect()?;
+    lua.gc_collect()?;
+    assert!(weak.upgrade().is_some());
+
+    let ud = lua.create_any_userdata(())?;
+    ud.metatable()?.set("__namecall", namecall)?;
+    lua.globals().set("ud", &ud)?;
+    assert_eq!(lua.load("return ud:method()").eval::<i32>()?, 42);
+
+    ud.metatable()?.set("__namecall", Nil)?;
+    lua.gc_collect()?;
+    lua.gc_collect()?;
+    assert!(weak.upgrade().is_none());
 
     Ok(())
 }

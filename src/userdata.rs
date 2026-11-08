@@ -11,7 +11,7 @@ use std::os::raw::{c_char, c_void};
 use crate::Either;
 use crate::error::{Error, Result};
 use crate::function::Function;
-use crate::state::Lua;
+use crate::state::{Lua, WeakLua};
 use crate::string::LuaString;
 use crate::table::{Table, TablePairs};
 use crate::traits::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti};
@@ -275,8 +275,7 @@ impl MetaMethod {
 
     pub(crate) fn validate(name: &str) -> Result<&str> {
         match name {
-            "__gc" => Err(Error::MetaMethodRestricted(name.to_string())),
-            "__metatable" => Err(Error::MetaMethodRestricted(name.to_string())),
+            "__gc" | "__metatable" => Err(Error::MetaMethodRestricted(name.to_string())),
             _ if name.starts_with("__mlua") => Err(Error::MetaMethodRestricted(name.to_string())),
             name => Ok(name),
         }
@@ -327,8 +326,8 @@ pub trait UserDataMethods<T> {
     /// The userdata `T` will be moved out of the userdata container. This is useful for
     /// methods that need to consume the userdata.
     ///
-    /// The method can be called only once per userdata instance, subsequent calls will result in a
-    /// [`Error::UserDataDestructed`] error.
+    /// The method can be called only once per userdata instance. A subsequent call returns an
+    /// [`Error::BadArgument`] for `self` whose cause is [`Error::UserDataDestructed`].
     fn add_method_once<M, A, R>(&mut self, name: impl Into<String>, method: M)
     where
         T: 'static,
@@ -379,8 +378,8 @@ pub trait UserDataMethods<T> {
     /// The userdata `T` will be moved out of the userdata container. This is useful for
     /// methods that need to consume the userdata.
     ///
-    /// The method can be called only once per userdata instance, subsequent calls will result in a
-    /// [`Error::UserDataDestructed`] error.
+    /// The method can be called only once per userdata instance. A subsequent call returns an
+    /// [`Error::BadArgument`] for `self` whose cause is [`Error::UserDataDestructed`].
     #[cfg(feature = "async")]
     #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
     fn add_async_method_once<M, A, MR, R>(&mut self, name: impl Into<String>, method: M)
@@ -491,7 +490,10 @@ pub trait UserDataMethods<T> {
     ///
     /// [`add_meta_method_mut`]: UserDataMethods::add_meta_method_mut
     #[cfg(all(feature = "async", not(any(feature = "lua51", feature = "luau"))))]
-    #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
+    #[cfg_attr(
+        docsrs,
+        doc(cfg(all(feature = "async", not(any(feature = "lua51", feature = "luau")))))
+    )]
     fn add_async_meta_method_mut<M, A, MR, R>(&mut self, name: impl Into<String>, method: M)
     where
         T: 'static,
@@ -814,6 +816,9 @@ impl AnyUserData {
     /// This is similar to [`AnyUserData::take`], but it doesn't require a type.
     ///
     /// This method works for non-scoped userdata only.
+    ///
+    /// Panics from the value's destructor propagate to the caller. During garbage collection,
+    /// destructor panics abort the process instead.
     pub fn destroy(&self) -> Result<()> {
         let lua = self.0.lua.lock();
         let state = lua.state();
@@ -823,7 +828,12 @@ impl AnyUserData {
 
             lua.push_userdata_ref(&self.0)?;
             protect_lua!(state, 1, 1, fn(state) {
-                if ffi::luaL_callmeta(state, -1, cstr!("__gc")) == 0 {
+                if ffi::luaL_getmetafield(state, 1, cstr!("__gc")) != ffi::LUA_TNIL {
+                    ffi::lua_pushvalue(state, 1);
+                    // Only explicit destruction may propagate panics
+                    ffi::lua_pushboolean(state, 1);
+                    ffi::lua_call(state, 2, 1);
+                } else {
                     ffi::lua_pushboolean(state, 0);
                 }
             })?;
@@ -923,7 +933,7 @@ impl AnyUserData {
             }
             ffi::lua_rawgeti(state, -1, n as ffi::lua_Integer);
 
-            V::from_lua(lua.pop_value(), lua.lua())
+            V::from_stack(-1, &lua)
         }
     }
 
@@ -1004,7 +1014,7 @@ impl AnyUserData {
             let _type_id = lua.get_userdata_ref_type_id(&self.0)?;
 
             ffi::lua_getmetatable(ref_thread, self.0.index);
-            Ok(Table(lua.pop_ref_thread()))
+            Ok(Table(lua.try_pop_ref_thread()?))
         }
     }
 
@@ -1016,6 +1026,13 @@ impl AnyUserData {
     #[inline]
     pub fn to_pointer(&self) -> *const c_void {
         self.0.to_pointer()
+    }
+
+    /// Returns a weak reference to the Lua instance owning this value.
+    #[doc(hidden)]
+    #[inline]
+    pub fn weak_lua(&self) -> &WeakLua {
+        &self.0.lua
     }
 
     /// Returns [`TypeId`] of this userdata if it is registered and `'static`.
@@ -1038,16 +1055,11 @@ impl AnyUserData {
             check_stack(state, 3)?;
 
             lua.push_userdata_ref(&self.0)?;
-            let protect = !lua.unlikely_memory_error();
-            let name_type = if protect {
-                protect_lua!(state, 1, 1, |state| {
-                    ffi::luaL_getmetafield(state, -1, MetaMethod::Type.as_cstr().as_ptr())
-                })?
-            } else {
+            let name_type = protect_lua_mem!(lua, 1, 1, |state| {
                 ffi::luaL_getmetafield(state, -1, MetaMethod::Type.as_cstr().as_ptr())
-            };
+            })?;
             match name_type {
-                ffi::LUA_TSTRING => Ok(LuaString(lua.pop_ref())),
+                ffi::LUA_TSTRING => Ok(LuaString(lua.try_pop_ref()?)),
                 _ => lua.create_string(b"userdata"),
             }
         }
@@ -1064,8 +1076,8 @@ impl AnyUserData {
             return Ok(false);
         }
 
-        if mt.contains_key("__eq")? {
-            return mt.get::<Function>("__eq")?.call((self, other));
+        if let Some(eq) = mt.get::<Option<Function>>("__eq")? {
+            return eq.call((self, other));
         }
 
         Ok(false)
@@ -1080,7 +1092,7 @@ impl AnyUserData {
             // Userdata must be registered and not destructed
             let _ = lua.get_userdata_ref_type_id(&self.0)?;
             let ud = &*get_userdata::<UserDataStorage<()>>(lua.ref_thread(), self.0.index);
-            Ok::<_, Error>((*ud).is_serializable())
+            Ok::<_, Error>(ud.is_serializable())
         };
         is_serializable().unwrap_or(false)
     }
@@ -1101,7 +1113,7 @@ impl AnyUserData {
                 }
             }
         })?;
-        Ok(lua.pop_value().as_string().map(|s| s.to_string_lossy()))
+        Ok(lua.try_pop_value()?.as_string().map(|s| s.to_string_lossy()))
     }
 
     pub(crate) fn fmt_pretty(&self, fmt: &mut fmt::Formatter) -> fmt::Result {

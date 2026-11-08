@@ -137,20 +137,20 @@ impl Require for FsRequirer {
             return Ok(());
         }
 
-        if chunk_path.is_absolute() {
-            let resolved_path = Self::resolve_module(&chunk_path)?;
-            self.abs_path = chunk_path.clone();
-            self.rel_path = chunk_path;
-            self.resolved_path = resolved_path;
+        let abs_path = if chunk_path.is_absolute() {
+            chunk_path.clone()
         } else {
-            // Relative path
             let cwd = env::current_dir().map_err(|_| NavigateError::NotFound)?;
-            let abs_path = Self::normalize_path(&cwd.join(&chunk_path));
-            let resolved_path = Self::resolve_module(&abs_path)?;
-            self.abs_path = abs_path;
-            self.rel_path = chunk_path;
-            self.resolved_path = resolved_path;
-        }
+            Self::normalize_path(&cwd.join(&chunk_path))
+        };
+        // Chunks loaded by path include the file extension, unlike module names.
+        let resolved_path = match Self::resolve_module(&abs_path) {
+            Err(NavigateError::NotFound) if abs_path.is_file() => Some(abs_path.clone()),
+            result => result?,
+        };
+        self.abs_path = abs_path;
+        self.rel_path = chunk_path;
+        self.resolved_path = resolved_path;
 
         Ok(())
     }
@@ -169,9 +169,10 @@ impl Require for FsRequirer {
     fn to_parent(&mut self) -> StdResult<(), NavigateError> {
         let mut abs_path = self.abs_path.clone();
         if !abs_path.pop() {
-            // It's important to return `NotFound` if we reached the root, as it's a "recoverable" error if we
-            // cannot go beyond the root directory.
-            // Luau "require-by-string` has a special logic to search for config file to resolve aliases.
+            // It's important to return `NotFound` if we reached the root, as it's a "recoverable"
+            // error if we cannot go beyond the root directory.
+            // Luau "require-by-string` has a special logic to search for config file to resolve
+            // aliases.
             return Err(NavigateError::NotFound);
         }
         let mut rel_parent = self.rel_path.clone();
@@ -208,13 +209,15 @@ impl Require for FsRequirer {
     }
 
     fn has_config(&self) -> bool {
-        self.abs_path.is_dir() && self.abs_path.join(Self::LUAURC_CONFIG_FILENAME).is_file()
-            || self.abs_path.is_dir() && self.abs_path.join(Self::LUAU_CONFIG_FILENAME).is_file()
+        self.abs_path.is_dir()
+            && (self.abs_path.join(Self::LUAURC_CONFIG_FILENAME).is_file()
+                || self.abs_path.join(Self::LUAU_CONFIG_FILENAME).is_file())
     }
 
     fn config(&self) -> IoResult<Vec<u8>> {
-        if self.abs_path.join(Self::LUAURC_CONFIG_FILENAME).is_file() {
-            return fs::read(self.abs_path.join(Self::LUAURC_CONFIG_FILENAME));
+        let path = self.abs_path.join(Self::LUAURC_CONFIG_FILENAME);
+        if path.is_file() {
+            return fs::read(path);
         }
         fs::read(self.abs_path.join(Self::LUAU_CONFIG_FILENAME))
     }

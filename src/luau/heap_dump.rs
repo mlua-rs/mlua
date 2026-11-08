@@ -27,19 +27,23 @@ impl HeapDump {
         }
 
         let mut buf = Vec::new();
+        #[cfg(any(all(target_arch = "wasm32", target_os = "unknown"), target_os = "wasi"))]
+        let _ = (state, &mut buf, category_name);
+        #[cfg(not(any(all(target_arch = "wasm32", target_os = "unknown"), target_os = "wasi")))]
         unsafe {
             let file = libc::tmpfile();
             if file.is_null() {
                 return None;
             }
-            ffi::lua_gcdump(state, file as *mut _, Some(category_name));
+            ffi::lua_memorydump(state, file as *mut _, Some(category_name));
             libc::fseek(file, 0, libc::SEEK_END);
-            let len = libc::ftell(file) as usize;
+            let len = libc::ftell(file);
             libc::rewind(file);
             if len > 0 {
+                let len = len as usize;
                 buf.reserve(len);
-                libc::fread(buf.as_mut_ptr() as *mut _, 1, len, file);
-                buf.set_len(len);
+                let n = libc::fread(buf.as_mut_ptr() as *mut _, 1, len, file);
+                buf.set_len(n);
             }
             libc::fclose(file);
         }
@@ -64,7 +68,8 @@ impl HeapDump {
 
     /// Returns a mapping from object type to (count, total size in bytes).
     ///
-    /// If `category` is provided, only objects in that category are considered.
+    /// If `category` is provided, only objects in that category are considered. An unknown category
+    /// yields an empty map.
     pub fn size_by_type<'a>(&'a self, category: Option<&str>) -> HashMap<&'a str, (usize, u64)> {
         self.size_by_type_inner(category).unwrap_or_default()
     }
@@ -103,6 +108,9 @@ impl HeapDump {
     }
 
     /// Returns a mapping from userdata type to (count, total size in bytes).
+    ///
+    /// If `category` is provided, only objects in that category are considered. An unknown category
+    /// yields an empty map.
     pub fn size_by_userdata<'a>(&'a self, category: Option<&str>) -> HashMap<&'a str, (usize, u64)> {
         self.size_by_userdata_inner(category).unwrap_or_default()
     }
@@ -163,7 +171,7 @@ fn update_size<K: Eq + Hash>(size_type: &mut HashMap<K, (usize, u64)>, key: K, s
 /// Retrieves the value associated with a given `key` from a Lua table `tbl`.
 fn get_key<'a>(objects: &'a HashMap<&'a str, Json>, tbl: &Json, key: &str) -> Option<&'a str> {
     let pairs = tbl["pairs"].as_array()?;
-    for kv in pairs.chunks_exact(2) {
+    for kv in pairs.as_chunks::<2>().0 {
         #[rustfmt::skip]
         let (Some(key_addr), Some(val_addr)) = (kv[0].as_str(), kv[1].as_str()) else { continue; };
         if objects[key_addr]["type"] == "string" && objects[key_addr]["data"].as_str() == Some(key) {

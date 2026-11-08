@@ -13,6 +13,10 @@ cfg_if::cfg_if! {
         include!("main_inner.rs");
     } else if #[cfg(all(feature = "luau", not(any(feature = "lua55", feature = "lua54", feature = "lua53", feature = "lua52", feature = "lua51", feature = "luajit"))))] {
         include!("main_inner.rs");
+    } else if #[cfg(not(any(feature = "lua55", feature = "lua54", feature = "lua53", feature = "lua52", feature = "lua51", feature = "luajit", feature = "luau")))] {
+        fn main() {
+            compile_error!("No Lua feature enabled. Please enable one of: lua55, lua54, lua53, lua52, lua51, luajit, luajit52, luau");
+        }
     } else {
         fn main() {
             compile_error!("You can enable only one of the features: lua55, lua54, lua53, lua52, lua51, luajit, luajit52, luau");

@@ -1,8 +1,11 @@
 //! Lua debugging interface.
 //!
 //! This module provides access to the Lua debug interface, allowing inspection of the call stack,
-//! and function information. The main types are [`struct@Debug`] for accessing debug information
-//! and [`HookTriggers`] for configuring debug hooks.
+//! and function information. The main type is [`struct@Debug`] for accessing debug information.
+#![cfg_attr(
+    not(feature = "luau"),
+    doc = "\nDebug hooks are configured with [`HookTriggers`]."
+)]
 
 use std::borrow::Cow;
 use std::os::raw::c_int;
@@ -101,10 +104,7 @@ impl<'a> Debug<'a> {
             DebugNames {
                 name: ptr_to_lossy_str((*self.ar).name),
                 #[cfg(not(feature = "luau"))]
-                name_what: match ptr_to_str((*self.ar).namewhat) {
-                    Some("") => None,
-                    val => val,
-                },
+                name_what: ptr_to_str((*self.ar).namewhat).filter(|s| !s.is_empty()),
                 #[cfg(feature = "luau")]
                 name_what: None,
             }
@@ -219,12 +219,13 @@ impl<'a> Debug<'a> {
     #[cfg(any(feature = "luau", doc))]
     #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
     pub fn get_local(&self, index: usize) -> Option<(String, Value)> {
+        let index = c_int::try_from(index).ok().filter(|&index| index > 0)?;
         unsafe {
             let _sg = StackGuard::new(self.state);
             assert_stack(self.state, 1);
 
             // `lua_getlocal` pushes the value only when a local exists; otherwise it returns null.
-            let name = ptr_to_lossy_str(ffi::lua_getlocal(self.state, self.level, index as c_int))?;
+            let name = ptr_to_lossy_str(ffi::lua_getlocal(self.state, self.level, index))?;
             Some((name.into_owned(), self.lua.pop_value()))
         }
     }
@@ -236,11 +237,9 @@ impl<'a> Debug<'a> {
     /// guard: `LUA_CALLINFO_NATIVE` prevents writes to native frames because register type tags
     /// could be invalidated).
     ///
-    /// For **interpreted** frames the write always succeeds at the C level. If the new value's type
-    /// differs from what the Luau bytecode expects, a `RuntimeError` will be raised the next time
-    /// the VM touches that register — not here, and not as Rust UB.  This matches the behaviour of
-    /// `debug.setlocal` in standard Lua and is intentional: it lets debuggers write any value and
-    /// observe the resulting Lua error without compromising memory safety.
+    /// The replacement preserves the VM value tag. Interpreted bytecode can
+    /// assume a register's type (for example, a numeric loop index).
+    /// Integer/number conversions are accepted when they preserve the value.
     ///
     /// Only meaningful inside a [`Lua::set_debug_break`] / [`Lua::set_debug_step`] callback. For
     /// reliable local visibility, compile the chunk with
@@ -253,14 +252,22 @@ impl<'a> Debug<'a> {
     #[cfg(any(feature = "luau", doc))]
     #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
     pub fn set_local(&self, index: usize, value: Value) -> Result<Option<String>> {
+        let Ok(index) = c_int::try_from(index) else {
+            return Ok(None);
+        };
+        if index == 0 {
+            return Ok(None);
+        }
         unsafe {
             // `lua_setlocal` pops the value on success and leaves it on the stack on failure
             // (out-of-range or native frame).  The `StackGuard` restores the top in every case.
             let _sg = StackGuard::new(self.state);
             assert_stack(self.state, 1);
-
-            self.lua.push_value(&value)?;
-            let name = ffi::lua_setlocal(self.state, self.level, index as c_int);
+            if ffi::lua_getlocal(self.state, self.level, index).is_null() {
+                return Ok(None);
+            }
+            self.push_debug_replacement(value)?;
+            let name = ffi::lua_setlocal(self.state, self.level, index);
             Ok(ptr_to_lossy_str(name).map(|s| s.into_owned()))
         }
     }
@@ -281,32 +288,34 @@ impl<'a> Debug<'a> {
     }
 
     /// Returns the name and current value of the `index`-th upvalue (1-based) of the function
-    /// running at this stack level. Returns `None` when `index` is out of range.
+    /// running at this stack level. Returns `None` when `index` is out of range
+    /// or the frame is a native host function.
     ///
     /// The function is pushed then popped internally; the stack is left unchanged.
+    #[cfg(any(feature = "luau", doc))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
     pub fn get_upvalue(&self, index: usize) -> Option<(String, Value)> {
+        let index = c_int::try_from(index).ok().filter(|&index| index > 0)?;
         unsafe {
             let _sg = StackGuard::new(self.state);
             assert_stack(self.state, 2); // function + upvalue value
 
             // Push the function running at this level.
-            #[cfg(not(feature = "luau"))]
-            mlua_assert!(
-                ffi::lua_getinfo(self.state, cstr!("f"), self.ar) != 0,
-                "lua_getinfo failed with `f`"
-            );
-            #[cfg(feature = "luau")]
             mlua_assert!(
                 ffi::lua_getinfo(self.state, self.level, cstr!("f"), self.ar) != 0,
                 "lua_getinfo failed with `f`"
             );
 
             let func_idx = ffi::lua_gettop(self.state);
+            // C closures can hold private state owned by mlua or another
+            // host binding. Never expose or overwrite these slots.
+            if ffi::lua_iscfunction(self.state, func_idx) != 0 {
+                return None;
+            }
 
             // lua_getupvalue pushes the value and returns its name, or returns null and
             // pushes nothing when `index` exceeds the upvalue count.
-            let name =
-                ptr_to_lossy_str(ffi::lua_getupvalue(self.state, func_idx, index as c_int))?;
+            let name = ptr_to_lossy_str(ffi::lua_getupvalue(self.state, func_idx, index))?;
             let value = self.lua.pop_value();
             Some((name.into_owned(), value))
             // _sg restores the stack top to before the function push, popping it.
@@ -316,6 +325,8 @@ impl<'a> Debug<'a> {
     /// Collects every upvalue of the function at this stack level as `(name, value)` pairs.
     ///
     /// Convenience wrapper over [`Debug::get_upvalue`].
+    #[cfg(any(feature = "luau", doc))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
     pub fn upvalues(&self) -> Vec<(String, Value)> {
         let mut upvalues = Vec::new();
         let mut index = 1;
@@ -327,38 +338,90 @@ impl<'a> Debug<'a> {
     }
 
     /// Sets the `index`-th upvalue (1-based) of the function running at this stack level.
-    /// Returns the upvalue's name on success, `None` when `index` is out of range.
+    /// Returns the upvalue's name on success, `None` when `index` is out of range
+    /// or the frame is a native host function.
     ///
     /// Because upvalues are shared with every closure capturing them, the write is visible
     /// to the running function as soon as it resumes.
     ///
     /// # Errors
     ///
-    /// Returns an error if `value` cannot be pushed onto the Lua stack.
+    /// Returns an error if the replacement changes the VM value tag, cannot be
+    /// pushed, or Luau code generation is enabled in this build. A captured
+    /// slot may be shared with a different, native-compiled closure.
+    #[cfg(any(feature = "luau", doc))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
     pub fn set_upvalue(&self, index: usize, value: Value) -> Result<Option<String>> {
+        let Ok(index) = c_int::try_from(index) else {
+            return Ok(None);
+        };
+        if index == 0 {
+            return Ok(None);
+        }
+        if cfg!(feature = "luau-jit") {
+            return Err(crate::Error::runtime(
+                "cannot write Luau upvalues with native code generation enabled",
+            ));
+        }
         unsafe {
             let _sg = StackGuard::new(self.state);
             assert_stack(self.state, 3); // function + value + slack
 
             // Push the function running at this level.
-            #[cfg(not(feature = "luau"))]
-            mlua_assert!(
-                ffi::lua_getinfo(self.state, cstr!("f"), self.ar) != 0,
-                "lua_getinfo failed with `f`"
-            );
-            #[cfg(feature = "luau")]
             mlua_assert!(
                 ffi::lua_getinfo(self.state, self.level, cstr!("f"), self.ar) != 0,
                 "lua_getinfo failed with `f`"
             );
 
             let func_idx = ffi::lua_gettop(self.state);
-            self.lua.push_value(&value)?;
+            // C closures can hold private state owned by mlua or another
+            // host binding. Never expose or overwrite these slots.
+            if ffi::lua_iscfunction(self.state, func_idx) != 0 {
+                return Ok(None);
+            }
+            if ffi::lua_getupvalue(self.state, func_idx, index).is_null() {
+                return Ok(None);
+            }
+            self.push_debug_replacement(value)?;
             // `lua_setupvalue` pops the value on success and leaves it on failure
             // (out-of-range); the `StackGuard` restores the top in every case.
-            let name = ffi::lua_setupvalue(self.state, func_idx, index as c_int);
+            let name = ffi::lua_setupvalue(self.state, func_idx, index);
             Ok(ptr_to_lossy_str(name).map(|s| s.into_owned()))
         }
+    }
+
+    // Replace the slot value on top of the stack without changing the raw tag.
+    // mlua may present a whole Luau number as Value::Integer, so check the VM
+    // tag instead of comparing Rust Value variants.
+    #[cfg(feature = "luau")]
+    unsafe fn push_debug_replacement(&self, value: Value) -> Result<()> {
+        let tag = ffi::lua_type(self.state, -1);
+        ffi::lua_pop(self.state, 1);
+        let value = match (tag, value) {
+            (ffi::LUA_TNUMBER, Value::Integer(i)) if (i as f64) as i128 == i as i128 => {
+                Value::Number(i as f64)
+            }
+            (ffi::LUA_TINTEGER, Value::Number(n))
+                if n < i64::MAX as f64 && n >= i64::MIN as f64 && (n as i64) as f64 == n =>
+            {
+                Value::Integer(n as i64)
+            }
+            (_, value) => value,
+        };
+        self.lua.push_value(&value)?;
+        if ffi::lua_type(self.state, -1) != tag {
+            return Err(crate::Error::runtime(
+                "debug variable replacement would change the Luau value type",
+            ));
+        }
+        Ok(())
+    }
+
+    /// Returns the number of frames in the active Luau thread.
+    #[cfg(feature = "luau")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
+    pub fn stack_depth(&self) -> usize {
+        unsafe { ffi::lua_stackdepth(self.state) as usize }
     }
 }
 
@@ -467,6 +530,7 @@ impl HookTriggers {
     /// Returns an instance of `HookTriggers` with [`on_calls`] trigger set.
     ///
     /// [`on_calls`]: #structfield.on_calls
+    #[must_use]
     pub const fn on_calls(mut self) -> Self {
         self.on_calls = true;
         self
@@ -475,6 +539,7 @@ impl HookTriggers {
     /// Returns an instance of `HookTriggers` with [`on_returns`] trigger set.
     ///
     /// [`on_returns`]: #structfield.on_returns
+    #[must_use]
     pub const fn on_returns(mut self) -> Self {
         self.on_returns = true;
         self
@@ -483,6 +548,7 @@ impl HookTriggers {
     /// Returns an instance of `HookTriggers` with [`every_line`] trigger set.
     ///
     /// [`every_line`]: #structfield.every_line
+    #[must_use]
     pub const fn every_line(mut self) -> Self {
         self.every_line = true;
         self
@@ -491,6 +557,7 @@ impl HookTriggers {
     /// Returns an instance of `HookTriggers` with [`every_nth_instruction`] trigger set.
     ///
     /// [`every_nth_instruction`]: #structfield.every_nth_instruction
+    #[must_use]
     pub const fn every_nth_instruction(mut self, n: u32) -> Self {
         self.every_nth_instruction = Some(n);
         self
@@ -520,6 +587,7 @@ impl HookTriggers {
     #[cfg(not(feature = "luau"))]
     pub(crate) const fn count(&self) -> c_int {
         match self.every_nth_instruction {
+            Some(n) if n > c_int::MAX as u32 => c_int::MAX,
             Some(n) => n as c_int,
             None => 0,
         }
@@ -534,9 +602,7 @@ impl std::ops::BitOr for HookTriggers {
         self.on_calls |= rhs.on_calls;
         self.on_returns |= rhs.on_returns;
         self.every_line |= rhs.every_line;
-        if self.every_nth_instruction.is_none() && rhs.every_nth_instruction.is_some() {
-            self.every_nth_instruction = rhs.every_nth_instruction;
-        }
+        self.every_nth_instruction = self.every_nth_instruction.or(rhs.every_nth_instruction);
         self
     }
 }

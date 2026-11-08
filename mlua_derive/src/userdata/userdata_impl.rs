@@ -1,7 +1,7 @@
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use proc_macro::TokenStream;
-use proc_macro2::TokenStream as TokenStream2;
+use proc_macro2::{Span as Span2, TokenStream as TokenStream2};
 use quote::{format_ident, quote};
 use syn::spanned::Spanned;
 use syn::{
@@ -26,6 +26,8 @@ enum SelfKind {
 enum RefKind {
     Ref,
     Mut,
+    OptionRef,
+    OptionMut,
 }
 
 struct ArgInfo {
@@ -36,7 +38,7 @@ struct ArgInfo {
 
 struct MethodInfo {
     self_kind: SelfKind,
-    has_lua: bool,
+    lua: Option<LuaArg>,
     args: Vec<ArgInfo>,
 }
 
@@ -48,15 +50,28 @@ fn ref_inner_type(ty: &Type) -> Type {
     }
 }
 
-/// Check if the type is `&Lua` or `&mlua::Lua`.
-fn is_lua_ref(ty: &Type) -> bool {
-    let Type::Reference(ref_ty) = ty else { return false };
-    match &*ref_ty.elem {
-        Type::Path(p) if p.path.segments.len() == 1 => p.path.segments[0].ident == "Lua",
-        Type::Path(p) if p.path.segments.len() == 2 => {
-            p.path.segments[0].ident == "mlua" && p.path.segments[1].ident == "Lua"
-        }
+/// How the `Lua` context parameter is passed to the method.
+enum LuaArg {
+    Ref,
+    Owned,
+}
+
+/// Check if the type is `Lua` or `mlua::Lua`.
+fn is_lua_type(ty: &Type) -> bool {
+    let Type::Path(p) = ty else { return false };
+    match p.path.segments.len() {
+        1 => p.path.segments[0].ident == "Lua",
+        2 => p.path.segments[0].ident == "mlua" && p.path.segments[1].ident == "Lua",
         _ => false,
+    }
+}
+
+/// Classify the method's `Lua` context parameter, if present.
+fn lua_arg_kind(ty: &Type) -> Option<LuaArg> {
+    match ty {
+        Type::Reference(r) if r.mutability.is_none() && is_lua_type(&r.elem) => Some(LuaArg::Ref),
+        ty if is_lua_type(ty) => Some(LuaArg::Owned),
+        _ => None,
     }
 }
 
@@ -104,13 +119,38 @@ fn classify_ref_type(ty: &Type) -> Option<Type> {
     }
 }
 
+/// If `ty` is `Option<InnerType>`, return the inner type.
+fn try_unwrap_option(ty: &Type) -> Option<&Type> {
+    let Type::Path(type_path) = ty else { return None };
+    let segment = type_path.path.segments.last()?;
+    if segment.ident != "Option" {
+        return None;
+    }
+    let syn::PathArguments::AngleBracketed(args) = &segment.arguments else {
+        return None;
+    };
+    if args.args.len() != 1 {
+        return None;
+    }
+    let syn::GenericArgument::Type(inner) = &args.args[0] else {
+        return None;
+    };
+    Some(inner)
+}
+
 /// Analyze method signature.
 ///
 /// Determine `self` kind and collect the callback arguments.
-/// Auto-detects `&Lua` as the first non-self parameter.
+/// Auto-detects `Lua` (owned or reference) as the first non-self parameter.
 fn analyze_self_and_args(sig: &Signature) -> syn::Result<MethodInfo> {
+    if sig.generics.type_params().next().is_some() || sig.generics.const_params().next().is_some() {
+        return Err(syn::Error::new_spanned(
+            &sig.generics,
+            "`#[mlua::userdata_impl]` does not support generic methods.",
+        ));
+    }
     let mut self_kind = SelfKind::None;
-    let mut has_lua = false;
+    let mut lua = None;
     let mut args = Vec::new();
     let mut check_first_typed = true;
 
@@ -126,46 +166,77 @@ fn analyze_self_and_args(sig: &Signature) -> syn::Result<MethodInfo> {
                 self_kind = SelfKind::Owned;
             }
             FnArg::Typed(typed) => {
-                if check_first_typed && is_lua_ref(&typed.ty) {
-                    has_lua = true;
+                if check_first_typed {
                     check_first_typed = false;
-                    continue;
+                    if let Some(kind) = lua_arg_kind(&typed.ty) {
+                        lua = Some(kind);
+                        continue;
+                    }
                 }
-                check_first_typed = false;
-                if let syn::Pat::Ident(pat_ident) = &*typed.pat {
-                    let arg_type = &*typed.ty;
-                    let ref_kind = match arg_type {
-                        Type::Reference(r) if r.mutability.is_some() => Some(RefKind::Mut),
-                        Type::Reference(_) => Some(RefKind::Ref),
-                        _ => None,
-                    };
-                    let callback_type = match &ref_kind {
-                        Some(_) => match classify_ref_type(arg_type) {
-                            Some(ty) => ty,
+
+                let ident = match &*typed.pat {
+                    syn::Pat::Ident(pat_ident) => pat_ident.ident.clone(),
+                    syn::Pat::Wild(_) => {
+                        // For wildcards we generate a unique identifier to avoid collisions with
+                        // other parameters.
+                        Ident::new(&format!("__mlua_arg_{}", args.len()), Span2::mixed_site())
+                    }
+                    _ => {
+                        return Err(syn::Error::new_spanned(
+                            &typed.pat,
+                            "`#[mlua::userdata_impl]` requires a named parameter or `_`; destructuring patterns are not supported",
+                        ));
+                    }
+                };
+
+                let arg_type = &*typed.ty;
+                let mut option_inner = None;
+                let ref_kind = match arg_type {
+                    Type::Reference(r) if r.mutability.is_some() => Some(RefKind::Mut),
+                    Type::Reference(_) => Some(RefKind::Ref),
+                    _ => {
+                        // Check if it's `Option<&T>` or `Option<&mut T>`
+                        option_inner = try_unwrap_option(arg_type);
+                        option_inner.and_then(|inner| match inner {
+                            Type::Reference(r) if r.mutability.is_some() => Some(RefKind::OptionMut),
+                            Type::Reference(_) => Some(RefKind::OptionRef),
+                            _ => None,
+                        })
+                    }
+                };
+                let callback_type = match &ref_kind {
+                    Some(RefKind::OptionRef | RefKind::OptionMut) => {
+                        match classify_ref_type(option_inner.unwrap()) {
+                            Some(ty) => parse_quote! { Option<#ty> },
                             None => {
                                 return Err(syn::Error::new_spanned(
                                     arg_type,
                                     "this reference type is not supported as a callback parameter",
                                 ));
                             }
-                        },
-                        None => arg_type.clone(),
-                    };
-                    args.push(ArgInfo {
-                        ident: pat_ident.ident.clone(),
-                        userdata_ref: ref_kind,
-                        callback_type,
-                    });
-                }
+                        }
+                    }
+                    Some(_) => match classify_ref_type(arg_type) {
+                        Some(ty) => ty,
+                        None => {
+                            return Err(syn::Error::new_spanned(
+                                arg_type,
+                                "this reference type is not supported as a callback parameter",
+                            ));
+                        }
+                    },
+                    None => arg_type.clone(),
+                };
+                args.push(ArgInfo {
+                    ident,
+                    userdata_ref: ref_kind,
+                    callback_type,
+                });
             }
         }
     }
 
-    Ok(MethodInfo {
-        self_kind,
-        has_lua,
-        args,
-    })
+    Ok(MethodInfo { self_kind, lua, args })
 }
 
 fn strip_item_attrs(attrs: &[Attribute]) -> Vec<Attribute> {
@@ -223,6 +294,24 @@ pub fn userdata_impl(attr: TokenStream, item: TokenStream) -> TokenStream {
 
     let mut input = parse_macro_input!(item as ItemImpl);
 
+    // Generic impl blocks are not supported
+    if !input.generics.params.is_empty() {
+        return syn::Error::new_spanned(
+            &input.generics,
+            "`#[mlua::userdata_impl]` does not support generic impl blocks.",
+        )
+        .to_compile_error()
+        .into();
+    }
+    if let Some(where_clause) = &input.generics.where_clause {
+        return syn::Error::new_spanned(
+            where_clause,
+            "`#[mlua::userdata_impl]` does not support `where` clauses on the impl block.",
+        )
+        .to_compile_error()
+        .into();
+    }
+
     let type_path = match &*input.self_ty {
         Type::Path(type_path) => &type_path.path,
         _ => {
@@ -239,8 +328,8 @@ pub fn userdata_impl(attr: TokenStream, item: TokenStream) -> TokenStream {
 
     static COUNTER: AtomicUsize = AtomicUsize::new(0);
     let unique_suffix = COUNTER.fetch_add(1, Ordering::Relaxed);
-    let register_fn_name = format_ident!("__mlua_register_{type_name}_{unique_suffix}");
-    let registration_type_name = format_ident!("__MluaUserDataRegistration_{type_name}");
+    let register_fn_name = format_ident!("__mlua_register_{}_{unique_suffix}", type_name);
+    let registration_fn_name = format_ident!("__mlua_userdata_registration");
 
     let mut registration_calls = Vec::new();
     for item in &input.items {
@@ -260,17 +349,16 @@ pub fn userdata_impl(attr: TokenStream, item: TokenStream) -> TokenStream {
                 }
                 let const_name = &const_item.ident;
                 let lua_name = lua_attr.name(const_name);
-                if lua_attr.meta {
-                    let tokens = quote! {
+                let tokens = if lua_attr.meta {
+                    quote! {
                         registry.add_meta_field(#lua_name, #type_path::#const_name);
-                    };
-                    registration_calls.push(with_cfg(tokens, &const_item.attrs));
+                    }
                 } else {
-                    let tokens = quote! {
+                    quote! {
                         registry.add_field(#lua_name, #type_path::#const_name);
-                    };
-                    registration_calls.push(with_cfg(tokens, &const_item.attrs));
-                }
+                    }
+                };
+                registration_calls.push(with_cfg(tokens, &const_item.attrs));
             }
             ImplItem::Fn(method) => {
                 let lua_attr = try_compile!(parse_lua_attr(&method.attrs));
@@ -302,6 +390,16 @@ pub fn userdata_impl(attr: TokenStream, item: TokenStream) -> TokenStream {
                 let fn_name = &method.sig.ident;
                 let info = try_compile!(analyze_self_and_args(&method.sig));
                 let is_async = method.sig.asyncness.is_some();
+
+                // Owned `Lua` is only available to async callbacks.
+                if !is_async && matches!(info.lua, Some(LuaArg::Owned)) {
+                    return syn::Error::new_spanned(
+                        &method.sig,
+                        "owned `Lua` parameter is only supported for `async` methods (use `&Lua` instead)",
+                    )
+                    .to_compile_error()
+                    .into();
+                }
 
                 if lua_attr.getter {
                     if is_async {
@@ -369,17 +467,16 @@ pub fn userdata_impl(attr: TokenStream, item: TokenStream) -> TokenStream {
                         .into();
                     }
                     let lua_name = lua_attr.name(fn_name);
-                    if lua_attr.meta {
-                        let tokens = quote! {
+                    let tokens = if lua_attr.meta {
+                        quote! {
                             registry.add_meta_field(#lua_name, #type_path::#fn_name());
-                        };
-                        registration_calls.push(with_cfg(tokens, &method.attrs));
+                        }
                     } else {
-                        let tokens = quote! {
+                        quote! {
                             registry.add_field(#lua_name, #type_path::#fn_name());
-                        };
-                        registration_calls.push(with_cfg(tokens, &method.attrs));
-                    }
+                        }
+                    };
+                    registration_calls.push(with_cfg(tokens, &method.attrs));
                     continue;
                 }
 
@@ -424,14 +521,16 @@ pub fn userdata_impl(attr: TokenStream, item: TokenStream) -> TokenStream {
     input.attrs = strip_item_attrs(&input.attrs);
 
     let output = quote! {
-        #[allow(non_snake_case)]
-        fn #register_fn_name(registry: &mut ::mlua::userdata::UserDataRegistry<#type_path>) {
-            use ::mlua::userdata::{UserDataFields as _, UserDataMethods as _};
-            #(#registration_calls)*
+        impl #type_path {
+            #[allow(non_snake_case)]
+            fn #register_fn_name(registry: &mut ::mlua::userdata::UserDataRegistry<Self>) {
+                use ::mlua::userdata::{UserDataFields as _, UserDataMethods as _};
+                #(#registration_calls)*
+            }
         }
 
         ::mlua::__inventory::submit! {
-            #registration_type_name { register: #register_fn_name }
+            #type_path::#registration_fn_name(#type_path::#register_fn_name)
         }
 
         #input
@@ -449,7 +548,7 @@ fn gen_closure_destructure(info: &MethodInfo) -> TokenStream2 {
         .iter()
         .map(|a| {
             let ident = &a.ident;
-            if matches!(a.userdata_ref, Some(RefKind::Mut)) {
+            if matches!(a.userdata_ref, Some(RefKind::Mut | RefKind::OptionMut)) {
                 quote! { mut #ident }
             } else {
                 quote! { #ident }
@@ -460,26 +559,35 @@ fn gen_closure_destructure(info: &MethodInfo) -> TokenStream2 {
     quote! { (#(#idents),*): (#(#types),*) }
 }
 
+/// Generate the call-site expression for a single argument.
+fn gen_arg_token(arg: &ArgInfo) -> TokenStream2 {
+    let ident = &arg.ident;
+    match arg.userdata_ref {
+        Some(RefKind::Ref) => quote! { &*#ident },
+        Some(RefKind::Mut) => quote! { &mut *#ident },
+        Some(RefKind::OptionRef) => quote! { #ident.as_ref().map(|r| &**r) },
+        Some(RefKind::OptionMut) => quote! { #ident.as_mut().map(|r| &mut **r) },
+        None => quote! { #ident },
+    }
+}
+
 /// Generate call arguments for invoking the original method.
 fn gen_call_args(info: &MethodInfo) -> TokenStream2 {
     let mut call_args: Vec<TokenStream2> = Vec::new();
+    let this = Ident::new("this", Span2::mixed_site());
+    let lua = Ident::new("lua", Span2::mixed_site());
 
     match info.self_kind {
         SelfKind::None => {}
-        _ => call_args.push(quote! { this }),
+        _ => call_args.push(quote! { #this }),
     }
 
-    if info.has_lua {
-        call_args.push(quote! { lua });
+    if info.lua.is_some() {
+        call_args.push(quote! { #lua });
     }
 
     for arg in &info.args {
-        let ident = &arg.ident;
-        match arg.userdata_ref {
-            Some(RefKind::Ref) => call_args.push(quote! { &*#ident }),
-            Some(RefKind::Mut) => call_args.push(quote! { &mut *#ident }),
-            None => call_args.push(quote! { #ident }),
-        }
+        call_args.push(gen_arg_token(arg));
     }
 
     quote! { #(#call_args),* }
@@ -488,25 +596,24 @@ fn gen_call_args(info: &MethodInfo) -> TokenStream2 {
 /// Generate call arguments for invoking the original async method.
 fn gen_async_call_args(info: &MethodInfo) -> TokenStream2 {
     let mut call_args: Vec<TokenStream2> = Vec::new();
+    let this = Ident::new("this", Span2::mixed_site());
+    let lua = Ident::new("lua", Span2::mixed_site());
 
     match info.self_kind {
         SelfKind::None => {}
-        SelfKind::Ref(RefKind::Ref) => call_args.push(quote! { &this }),
-        SelfKind::Ref(RefKind::Mut) => call_args.push(quote! { &mut this }),
-        SelfKind::Owned => call_args.push(quote! { this }),
+        SelfKind::Ref(RefKind::Mut | RefKind::OptionMut) => call_args.push(quote! { &mut #this }),
+        SelfKind::Ref(_) => call_args.push(quote! { &#this }),
+        SelfKind::Owned => call_args.push(quote! { #this }),
     }
 
-    if info.has_lua {
-        call_args.push(quote! { lua });
+    match info.lua {
+        Some(LuaArg::Ref) => call_args.push(quote! { &#lua }),
+        Some(LuaArg::Owned) => call_args.push(quote! { #lua }),
+        None => {}
     }
 
     for arg in &info.args {
-        let ident = &arg.ident;
-        match arg.userdata_ref {
-            Some(RefKind::Ref) => call_args.push(quote! { &*#ident }),
-            Some(RefKind::Mut) => call_args.push(quote! { &mut *#ident }),
-            None => call_args.push(quote! { #ident }),
-        }
+        call_args.push(gen_arg_token(arg));
     }
 
     quote! { #(#call_args),* }
@@ -515,19 +622,25 @@ fn gen_async_call_args(info: &MethodInfo) -> TokenStream2 {
 /// Generate the closure params for the registration callback.
 fn gen_closure_params(info: &MethodInfo) -> TokenStream2 {
     let destructure = gen_closure_destructure(info);
+    let this = Ident::new("this", Span2::mixed_site());
+    let lua = Ident::new("lua", Span2::mixed_site());
+
     match info.self_kind {
-        SelfKind::None => quote! { |lua, #destructure| },
-        _ => quote! { |lua, this, #destructure| },
+        SelfKind::None => quote! { |#lua, #destructure| },
+        _ => quote! { |#lua, #this, #destructure| },
     }
 }
 
 /// Generate the closure params for an async registration callback.
 fn gen_async_closure_params(info: &MethodInfo) -> TokenStream2 {
     let destructure = gen_closure_destructure(info);
+    let this = Ident::new("this", Span2::mixed_site());
+    let lua = Ident::new("lua", Span2::mixed_site());
+
     match info.self_kind {
-        SelfKind::None => quote! { |lua, #destructure| },
-        SelfKind::Ref(RefKind::Mut) => quote! { |lua, mut this, #destructure| },
-        _ => quote! { |lua, this, #destructure| },
+        SelfKind::None => quote! { |#lua, #destructure| },
+        SelfKind::Ref(RefKind::Mut) => quote! { |#lua, mut #this, #destructure| },
+        _ => quote! { |#lua, #this, #destructure| },
     }
 }
 
@@ -537,21 +650,23 @@ fn gen_field_getter(
     lua_attr: &LuaAttr,
     info: &MethodInfo,
 ) -> TokenStream2 {
-    let lua_name = lua_attr.name(&fn_name);
+    let lua_name = lua_attr.name(fn_name);
     let call_args = gen_call_args(info);
+    let this = Ident::new("this", Span2::mixed_site());
+    let lua = Ident::new("lua", Span2::mixed_site());
 
     if lua_attr.infallible {
         return quote! {
-            registry.add_field_method_get(#lua_name, |lua, this| {
-                let _ = lua; // silence unused variable warning
+            registry.add_field_method_get(#lua_name, |#lua, #this| {
+                let _ = #lua; // silence unused variable warning
                 Ok(#type_path::#fn_name(#call_args))
             });
         };
     }
 
     quote! {
-        registry.add_field_method_get(#lua_name, |lua, this| {
-            let _ = lua; // silence unused variable warning
+        registry.add_field_method_get(#lua_name, |#lua, #this| {
+            let _ = #lua; // silence unused variable warning
             #type_path::#fn_name(#call_args)
         });
     }
@@ -565,23 +680,16 @@ fn gen_field_setter(
 ) -> TokenStream2 {
     let lua_name = lua_attr.name(fn_name);
     let call_args = gen_call_args(info);
+    let closure_params = gen_closure_params(info);
 
-    if lua_attr.infallible {
-        let val_ident = info.args.first().map(|a| &a.ident);
-        return quote! {
-            registry.add_field_method_set(#lua_name, |lua, this, #val_ident| {
-                let _ = lua; // silence unused variable warning
-                Ok(#type_path::#fn_name(#call_args))
-            });
-        };
-    }
+    let body = if lua_attr.infallible {
+        quote! { Ok(#type_path::#fn_name(#call_args)) }
+    } else {
+        quote! { #type_path::#fn_name(#call_args) }
+    };
 
-    let val_ident = info.args.first().map(|a| &a.ident);
     quote! {
-        registry.add_field_method_set(#lua_name, |lua, this, #val_ident| {
-            let _ = lua; // silence unused variable warning
-            #type_path::#fn_name(#call_args)
-        });
+        registry.add_field_method_set(#lua_name, #closure_params { #body });
     }
 }
 
@@ -590,18 +698,7 @@ fn gen_meta(type_path: &syn::Path, fn_name: &Ident, lua_attr: &LuaAttr, info: &M
         Ok(name) => name,
         Err(err) => return err.to_compile_error(),
     };
-    let closure_params = if matches!(info.self_kind, SelfKind::None) {
-        // Lua always passes `self` to the stack arg, just ignore it.
-        if info.args.is_empty() {
-            quote! { |lua, _this: ::mlua::AnyUserData| }
-        } else {
-            let idents: Vec<_> = info.args.iter().map(|a| &a.ident).collect();
-            let types: Vec<_> = info.args.iter().map(|a| &a.callback_type).collect();
-            quote! { |lua, (_this, #(#idents),*): (::mlua::AnyUserData, #(#types),*) | }
-        }
-    } else {
-        gen_closure_params(info)
-    };
+    let closure_params = gen_closure_params(info);
     let call_args = gen_call_args(info);
     let fn_path = quote! { #type_path::#fn_name };
 
@@ -640,11 +737,11 @@ fn gen_regular_method(
         quote! { #fn_path(#call_args) }
     };
     match info.self_kind {
-        SelfKind::Ref(RefKind::Ref) => quote! {
-            registry.add_method(#lua_name, #closure_params { #body });
-        },
-        SelfKind::Ref(RefKind::Mut) => quote! {
+        SelfKind::Ref(RefKind::Mut | RefKind::OptionMut) => quote! {
             registry.add_method_mut(#lua_name, #closure_params { #body });
+        },
+        SelfKind::Ref(_) => quote! {
+            registry.add_method(#lua_name, #closure_params { #body });
         },
         SelfKind::Owned => quote! {
             registry.add_method_once(#lua_name, #closure_params { #body });
@@ -672,11 +769,11 @@ fn gen_async_regular_method(
         quote! { async move { #fn_path(#call_args).await } }
     };
     match info.self_kind {
-        SelfKind::Ref(RefKind::Ref) => quote! {
-            registry.add_async_method(#lua_name, #closure_params #body);
-        },
-        SelfKind::Ref(RefKind::Mut) => quote! {
+        SelfKind::Ref(RefKind::Mut | RefKind::OptionMut) => quote! {
             registry.add_async_method_mut(#lua_name, #closure_params #body);
+        },
+        SelfKind::Ref(_) => quote! {
+            registry.add_async_method(#lua_name, #closure_params #body);
         },
         SelfKind::Owned => quote! {
             registry.add_async_method_once(#lua_name, #closure_params #body);
@@ -697,17 +794,7 @@ fn gen_async_meta(
         Ok(name) => name,
         Err(err) => return err.to_compile_error(),
     };
-    let closure_params = if matches!(info.self_kind, SelfKind::None) {
-        if info.args.is_empty() {
-            quote! { |lua, _this: ::mlua::AnyUserData| }
-        } else {
-            let idents: Vec<_> = info.args.iter().map(|a| &a.ident).collect();
-            let types: Vec<_> = info.args.iter().map(|a| &a.callback_type).collect();
-            quote! { |lua, (_this, #(#idents),*): (::mlua::AnyUserData, #(#types),*) | }
-        }
-    } else {
-        gen_async_closure_params(info)
-    };
+    let closure_params = gen_async_closure_params(info);
     let call_args = gen_async_call_args(info);
     let fn_path = quote! { #type_path::#fn_name };
 

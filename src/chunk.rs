@@ -396,19 +396,19 @@ impl Compiler {
     ///
     /// Returns [`Error::SyntaxError`] if the source code is invalid.
     pub fn compile(&self, source: impl AsRef<[u8]>) -> Result<Vec<u8>> {
+        #[cfg(feature = "luau-jit")]
+        crate::luau::init_jit_flags();
+
         use std::cell::RefCell;
         use std::ffi::CStr;
         use std::os::raw::{c_char, c_int};
         use std::ptr;
 
-        let vector_lib = self.vector_lib.clone();
-        let vector_lib = vector_lib.and_then(|lib| CString::new(lib).ok());
+        let vector_lib = (self.vector_lib.as_deref()).and_then(|lib| CString::new(lib).ok());
         let vector_lib = vector_lib.as_ref();
-        let vector_ctor = self.vector_ctor.clone();
-        let vector_ctor = vector_ctor.and_then(|ctor| CString::new(ctor).ok());
+        let vector_ctor = (self.vector_ctor.as_deref()).and_then(|ctor| CString::new(ctor).ok());
         let vector_ctor = vector_ctor.as_ref();
-        let vector_type = self.vector_type.clone();
-        let vector_type = vector_type.and_then(|t| CString::new(t).ok());
+        let vector_type = (self.vector_type.as_deref()).and_then(|t| CString::new(t).ok());
         let vector_type = vector_type.as_ref();
 
         macro_rules! vec2cstring_ptr {
@@ -675,8 +675,10 @@ impl Chunk<'_> {
                 self.mode = Some(ChunkMode::Binary);
             }
             #[cfg(not(feature = "luau"))]
-            if let Ok(func) = self.lua.lock().load_chunk(None, None, None, source.as_ref()) {
-                let data = func.dump(false);
+            if let Ok(name) = Self::convert_name(self.name.clone())
+                && let Ok(func) = (self.lua.lock()).load_chunk(Some(&name), None, None, source.as_ref())
+                && let Ok(data) = func.try_dump(false)
+            {
                 self.source = Ok(Cow::Owned(data));
                 self.mode = Some(ChunkMode::Binary);
             }
@@ -740,11 +742,7 @@ impl Chunk<'_> {
             .unwrap_or(source);
 
         let name = Self::convert_name(self.name.clone())?;
-        let env = match &self.env {
-            Ok(Some(env)) => Some(env),
-            Ok(None) => None,
-            Err(err) => return Err(err.clone()),
-        };
+        let env = self.env.as_ref().map_err(Error::clone)?.as_ref();
         self.lua.lock().load_chunk(Some(&name), env, None, &source)
     }
 
@@ -758,7 +756,7 @@ impl Chunk<'_> {
                 return ChunkMode::Binary;
             }
             #[cfg(feature = "luau")]
-            if *source.first().unwrap_or(&u8::MAX) < b'\n' {
+            if unsafe { ffi::luaL_isbytecode(source.as_ptr().cast(), source.len()) } {
                 return ChunkMode::Binary;
             }
         }

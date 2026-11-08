@@ -1,5 +1,6 @@
 //! Contains definitions from `lualib.h`.
 
+use std::marker::{PhantomData, PhantomPinned};
 use std::os::raw::{c_char, c_float, c_int, c_void};
 use std::ptr;
 
@@ -56,6 +57,7 @@ unsafe extern "C-unwind" {
     #[link_name = "luaL_newmetatable"]
     pub fn luaL_newmetatable_(L: *mut lua_State, tname: *const c_char) -> c_int;
     pub fn luaL_checkudata(L: *mut lua_State, ud: c_int, tname: *const c_char) -> *mut c_void;
+    pub fn luaL_checkudatatagged(L: *mut lua_State, ud: c_int, tag: c_int) -> *mut c_void;
 
     pub fn luaL_checkbuffer(L: *mut lua_State, narg: c_int, len: *mut usize) -> *mut c_void;
 
@@ -84,8 +86,6 @@ unsafe extern "C-unwind" {
     ) -> *const c_char;
 
     pub fn luaL_typename(L: *mut lua_State, idx: c_int) -> *const c_char;
-
-    pub fn luaL_callyieldable(L: *mut lua_State, nargs: c_int, nresults: c_int) -> c_int;
 
     #[link_name = "luaL_traceback"]
     pub fn luaL_traceback_(L: *mut lua_State, L1: *mut lua_State, msg: *const c_char, level: c_int);
@@ -139,6 +139,16 @@ pub unsafe fn luaL_opt<T>(
 }
 
 #[inline(always)]
+pub unsafe fn luaL_callyieldable(L: *mut lua_State, nargs: c_int, nresults: c_int) -> c_int {
+    lua::lua_callyieldable(L, nargs, nresults)
+}
+
+#[inline(always)]
+pub unsafe fn luaL_pcallyieldable(L: *mut lua_State, nargs: c_int, nresults: c_int, errfunc: c_int) -> c_int {
+    lua::lua_pcallyieldable(L, nargs, nresults, errfunc)
+}
+
+#[inline(always)]
 pub unsafe fn luaL_getmetatable(L: *mut lua_State, n: *const c_char) -> c_int {
     lua::lua_getfield(L, LUA_REGISTRYINDEX, n)
 }
@@ -154,7 +164,7 @@ pub unsafe fn luaL_ref(L: *mut lua_State, t: c_int) -> c_int {
 #[inline(always)]
 pub unsafe fn luaL_unref(L: *mut lua_State, t: c_int, r#ref: c_int) {
     assert_eq!(t, LUA_REGISTRYINDEX);
-    lua::lua_unref(L, r#ref)
+    lua::lua_unref(L, r#ref);
 }
 
 pub unsafe fn luaL_sandbox(L: *mut lua_State, enabled: c_int) {
@@ -197,6 +207,7 @@ pub struct luaL_Strbuf {
     L: *mut lua_State,
     storage: *mut c_void, // TString
     buffer: [c_char; LUA_BUFFERSIZE],
+    _marker: PhantomData<PhantomPinned>,
 }
 
 // For compatibility

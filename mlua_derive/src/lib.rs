@@ -3,7 +3,7 @@ use proc_macro::TokenStream;
 mod module;
 
 #[cfg(feature = "macros")]
-use {crate::chunk::Chunk, proc_macro_error2::proc_macro_error};
+use crate::chunk::Chunk;
 
 #[cfg(feature = "macros")]
 macro_rules! try_compile {
@@ -22,9 +22,11 @@ pub fn lua_module(attr: TokenStream, item: TokenStream) -> TokenStream {
 
 #[cfg(feature = "macros")]
 #[proc_macro]
-#[proc_macro_error]
 pub fn chunk(input: TokenStream) -> TokenStream {
-    Chunk::new(input).expand().into()
+    match Chunk::new(input) {
+        Ok(chunk) => chunk.expand().into(),
+        Err(err) => err.into(),
+    }
 }
 
 #[cfg(feature = "macros")]

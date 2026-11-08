@@ -50,7 +50,10 @@ fn test_value_eq() -> Result<()> {
     let null: Value = globals.get("null")?;
 
     assert!(table1 != table2);
-    assert!(table1.equals(&table2)?);
+    assert_eq!(
+        table1.equals(&table2)?,
+        lua.load("table1 == table2").eval::<bool>()?
+    );
     assert!(string1 == string2);
     assert!(string1.equals(&string2)?);
     assert!(num1 == num2);
@@ -62,6 +65,29 @@ fn test_value_eq() -> Result<()> {
     assert!(thread1 == thread2);
     assert!(thread1.equals(&thread2)?);
     assert!(null == Value::NULL);
+
+    for (integer, number, equal) in [
+        (0, -0.0, true),
+        (1, 1.0, true),
+        (1, 1.5, false),
+        (0, f64::NAN, false),
+        (i64::MAX, f64::INFINITY, false),
+        (i64::MIN, f64::NEG_INFINITY, false),
+        (i64::MAX, i64::MAX as f64, false),
+        (i64::MIN, i64::MIN as f64, true),
+        (1 << 53, (1u64 << 53) as f64, true),
+        ((1 << 53) + 1, (1u64 << 53) as f64, false),
+        (-(1 << 53) - 1, -((1u64 << 53) as f64), false),
+    ] {
+        let integer = match mlua::Integer::try_from(integer) {
+            Ok(integer) => integer,
+            Err(_) => continue,
+        };
+        let (a, b) = (Value::Integer(integer), Value::Number(number));
+        assert_eq!(a == b, equal, "{a:?} == {b:?}");
+        assert_eq!(b == a, equal, "{b:?} == {a:?}");
+        assert_eq!(a.equals(&b)?, equal);
+    }
 
     assert!(!table1.to_pointer().is_null());
     assert!(!ptr::eq(table1.to_pointer(), table2.to_pointer()));
@@ -76,11 +102,11 @@ fn test_value_eq() -> Result<()> {
 fn test_multi_value() {
     let mut multi_value = MultiValue::new();
     assert_eq!(multi_value.len(), 0);
-    assert_eq!(multi_value.get(0), None);
+    assert_eq!(multi_value.front(), None);
 
     multi_value.push_front(Value::Number(2.));
     multi_value.push_front(Value::Number(1.));
-    assert_eq!(multi_value.get(0), Some(&Value::Number(1.)));
+    assert_eq!(multi_value.front(), Some(&Value::Number(1.)));
     assert_eq!(multi_value.get(1), Some(&Value::Number(2.)));
 
     assert_eq!(multi_value.pop_front(), Some(Value::Number(1.)));
@@ -137,7 +163,7 @@ fn test_value_to_string() -> Result<()> {
     assert_eq!(Value::NULL.to_string()?, "null");
     assert_eq!(Value::NULL.type_name(), "lightuserdata");
     assert_eq!(
-        Value::LightUserData(LightUserData(0x1 as *const c_void as *mut _)).to_string()?,
+        Value::LightUserData(LightUserData(ptr::dangling_mut::<c_void>())).to_string()?,
         "lightuserdata: 0x1"
     );
     assert_eq!(Value::Integer(1).to_string()?, "1");
@@ -206,6 +232,51 @@ fn test_value_to_string() -> Result<()> {
         let mt = lua.load("{__tostring = buffer.tostring}").eval()?;
         lua.set_type_metatable::<mlua::Buffer>(mt);
         assert_eq!(buf.to_string()?, "hello");
+    }
+
+    Ok(())
+}
+
+#[test]
+fn test_value_weak_lua() -> Result<()> {
+    let lua = Lua::new();
+    let values = [
+        Value::String(lua.create_string("hello")?),
+        Value::Table(lua.create_table()?),
+        Value::Function(lua.create_function(|_, ()| Ok(()))?),
+        Value::Thread(lua.create_thread(lua.create_function(|_, ()| Ok(()))?)?),
+        Value::UserData(lua.create_any_userdata(())?),
+        #[cfg(feature = "luau")]
+        Value::Buffer(lua.create_buffer(b"hello")?),
+    ];
+
+    for value in &values {
+        let weak = value.weak_lua().expect("reference value has a Lua instance");
+        assert!(weak == &lua.weak());
+        let upgraded = weak.try_upgrade().expect("Lua instance is alive");
+        upgraded.globals().set("weak_lua_test", true)?;
+        assert!(lua.globals().get::<bool>("weak_lua_test")?);
+    }
+
+    drop(lua);
+    for value in &values {
+        let weak = value
+            .weak_lua()
+            .expect("destroyed instance still has a weak handle");
+        assert!(weak.try_upgrade().is_none());
+    }
+
+    for value in [
+        Value::Nil,
+        Value::Boolean(true),
+        Value::NULL,
+        Value::Integer(1),
+        Value::Number(1.0),
+        Value::Error(Box::new(Error::runtime("test"))),
+        #[cfg(feature = "luau")]
+        Value::Vector(mlua::Vector::default()),
+    ] {
+        assert!(value.weak_lua().is_none());
     }
 
     Ok(())

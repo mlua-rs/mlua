@@ -1,6 +1,6 @@
 [package]
 name = "mlua_derive"
-version = "0.11.0"
+version = "0.12.2"
 authors = ["Aleksandr Orlenko <zxteam@pm.me>"]
 rust-version = "1.88"
 edition = "2024"
@@ -13,11 +13,9 @@ license = "MIT"
 proc-macro = true
 
 [features]
-macros = ["proc-macro-error2", "itertools"]
+macros = []
 
 [dependencies]
 quote = "1.0"
 proc-macro2 = { version = "1.0", features = ["span-locations"] }
-proc-macro-error2 = { version = "2.0.1", optional = true }
 syn = { version = "2.0", features = ["full"] }
-itertools = { version = "0.14", optional = true }

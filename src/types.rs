@@ -21,9 +21,6 @@ pub use either::Either;
 pub use registry_key::RegistryKey;
 pub(crate) use value_ref::ValueRef;
 
-#[cfg(feature = "async")]
-pub(crate) use value_ref::ValueRefIndex;
-
 /// Type of Lua integer numbers.
 pub type Integer = ffi::lua_Integer;
 /// Type of Lua floating point numbers.
@@ -72,6 +69,7 @@ pub(crate) type AsyncPollUpvalue = Upvalue<Option<BoxFuture<'static, Result<c_in
 
 /// Type to set next Lua VM action after executing interrupt or hook function.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum VmState {
     Continue,
     /// Yield the current thread.
@@ -130,13 +128,17 @@ pub trait MaybeSend {}
 #[cfg(not(feature = "send"))]
 impl<T> MaybeSend for T {}
 
-/// A trait that adds `Sync` requirement if `send` feature is enabled.
+/// Adds a `Sync` requirement to userdata types when the `send` feature is enabled.
+///
+/// It is automatically implemented for all applicable types.
 #[cfg(feature = "send")]
 pub trait MaybeSync: Sync {}
 #[cfg(feature = "send")]
 impl<T: Sync> MaybeSync for T {}
 
-/// A trait that adds `Sync` requirement if `send` feature is enabled.
+/// Adds a `Sync` requirement to userdata types when the `send` feature is enabled.
+///
+/// It is automatically implemented for all applicable types.
 #[cfg(not(feature = "send"))]
 pub trait MaybeSync {}
 #[cfg(not(feature = "send"))]

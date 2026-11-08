@@ -1,5 +1,6 @@
 //! Contains definitions from `lauxlib.h`.
 
+use std::marker::{PhantomData, PhantomPinned};
 use std::os::raw::{c_char, c_double, c_int, c_long, c_void};
 use std::{mem, ptr};
 
@@ -230,6 +231,7 @@ pub struct luaL_Buffer {
     pub n: usize,       // number of characters in buffer
     pub L: *mut lua_State,
     pub init: luaL_BufferInit, // initial buffer (union with alignment)
+    _marker: PhantomData<PhantomPinned>,
 }
 
 #[cfg_attr(all(windows, raw_dylib), link(name = "lua54", kind = "raw-dylib"))]

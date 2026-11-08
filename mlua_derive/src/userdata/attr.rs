@@ -1,4 +1,5 @@
 use proc_macro2::Span;
+use syn::ext::IdentExt;
 use syn::meta::ParseNestedMeta;
 use syn::{Ident, LitStr, Result};
 
@@ -63,7 +64,7 @@ impl LuaAttr {
 
     /// Returns the effective Lua name.
     pub(crate) fn name(&self, ident: &Ident) -> String {
-        self.name.clone().unwrap_or_else(|| ident.to_string())
+        self.name.clone().unwrap_or_else(|| ident.unraw().to_string())
     }
 
     /// Returns the span to use for error reporting.
@@ -79,7 +80,7 @@ impl LuaAttr {
         if let Some(ref name) = self.name {
             return Ok(name.clone());
         }
-        let fn_name = fn_ident.to_string();
+        let fn_name = fn_ident.unraw().to_string();
         if fn_name.starts_with("__") {
             return Ok(fn_name);
         }

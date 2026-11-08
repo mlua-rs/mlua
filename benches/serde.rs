@@ -1,6 +1,7 @@
+use std::collections::BTreeMap;
 use std::time::Duration;
 
-use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
+use criterion::{BatchSize, BenchmarkId, Criterion, criterion_group, criterion_main};
 
 use mlua::prelude::*;
 
@@ -76,6 +77,29 @@ fn decode_json(c: &mut Criterion) {
     });
 }
 
+fn sorted_map_traversal(c: &mut Criterion) {
+    let lua = Lua::new();
+    let mut group = c.benchmark_group("sorted map traversal");
+    for size in [0, 1, 2, 3, 4, 7, 8, 64, 4096] {
+        let table = lua
+            .create_table_from((0..size).map(|i| (format!("key_{i:08}"), i)))
+            .unwrap();
+        let value = LuaValue::Table(table);
+        group.bench_function(BenchmarkId::new("serialize", size), |b| {
+            b.iter(|| serde_json::to_string(&value.to_serializable().sort_keys(true)).unwrap());
+        });
+        group.bench_function(BenchmarkId::new("from_value", size), |b| {
+            b.iter(|| {
+                lua.from_value_with::<BTreeMap<String, i64>>(
+                    value.clone(),
+                    LuaDeserializeOptions::new().sort_keys(true),
+                )
+                .unwrap()
+            });
+        });
+    }
+}
+
 criterion_group! {
     name = benches;
     config = Criterion::default()
@@ -85,6 +109,7 @@ criterion_group! {
     targets =
         encode_json,
         decode_json,
+        sorted_map_traversal,
 }
 
 criterion_main!(benches);

@@ -56,7 +56,7 @@ pub trait FromLua: Sized {
     #[doc(hidden)]
     #[inline]
     unsafe fn from_stack(idx: c_int, lua: &RawLua) -> Result<Self> {
-        Self::from_lua(lua.stack_value(idx, None), lua.lua())
+        Self::from_lua(lua.try_stack_value(idx, None)?, lua.lua())
     }
 
     /// Same as `from_lua_arg` but for a value in the Lua stack at index `idx`.
@@ -129,7 +129,7 @@ pub trait FromLuaMulti: Sized {
     unsafe fn from_stack_multi(nvals: c_int, lua: &RawLua) -> Result<Self> {
         let mut values = MultiValue::with_capacity(nvals as usize);
         for idx in 0..nvals {
-            values.push_back(lua.stack_value(-nvals + idx, None));
+            values.push_back(lua.try_stack_value(-nvals + idx, None)?);
         }
         Self::from_lua_multi(values, lua.lua())
     }
@@ -169,14 +169,14 @@ pub trait ObjectLike: Sealed {
     where
         R: FromLuaMulti;
 
-    /// Gets the function associated to key `name` from the object and calls it,
+    /// Gets the callable value associated to key `name` from the object and calls it,
     /// passing the object itself along with `args` as function arguments.
     fn call_method<R>(&self, name: &str, args: impl IntoLuaMulti) -> Result<R>
     where
         R: FromLuaMulti;
 
-    /// Gets the function associated to key `name` from the object and asynchronously calls it,
-    /// passing the object itself along with `args` as function arguments.
+    /// Gets the callable value associated to key `name` from the object and asynchronously calls
+    /// it, passing the object itself along with `args` as function arguments.
     ///
     /// This might invoke the `__index` metamethod.
     #[cfg(feature = "async")]
@@ -185,7 +185,7 @@ pub trait ObjectLike: Sealed {
     where
         R: FromLuaMulti;
 
-    /// Gets the function associated to key `name` from the object and calls it,
+    /// Gets the callable value associated to key `name` from the object and calls it,
     /// passing `args` as function arguments.
     ///
     /// This might invoke the `__index` metamethod.
@@ -193,8 +193,8 @@ pub trait ObjectLike: Sealed {
     where
         R: FromLuaMulti;
 
-    /// Gets the function associated to key `name` from the object and asynchronously calls it,
-    /// passing `args` as function arguments.
+    /// Gets the callable value associated to key `name` from the object and asynchronously calls
+    /// it, passing `args` as function arguments.
     ///
     /// This might invoke the `__index` metamethod.
     #[cfg(feature = "async")]

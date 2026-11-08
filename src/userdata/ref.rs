@@ -63,7 +63,8 @@ impl<T> TryFrom<UserDataVariant<T>> for UserDataRef<T> {
     #[inline]
     fn try_from(variant: UserDataVariant<T>) -> Result<Self> {
         // Shared (read) lock is always correct:
-        // - with `send` feature, `T: Sync` is guaranteed by the `MaybeSync` bound on userdata creation
+        // - with `send` feature, `T: Sync` is guaranteed by the `MaybeSync` bound on userdata
+        //   creation
         // - without `send` feature, single-threaded access makes shared lock safe for any `T`
         let guard = variant.raw_lock().try_lock_shared_guarded();
         let guard = guard.map_err(|_| Error::UserDataBorrowError)?;

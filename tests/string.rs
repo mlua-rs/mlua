@@ -74,7 +74,7 @@ fn test_string_views() -> Result<()> {
 fn test_string_from_bytes() -> Result<()> {
     let lua = Lua::new();
 
-    let rs = lua.create_string(&[0, 1, 2, 3, 0, 1, 2, 3])?;
+    let rs = lua.create_string([0, 1, 2, 3, 0, 1, 2, 3])?;
     assert_eq!(rs.as_bytes(), &[0, 1, 2, 3, 0, 1, 2, 3]);
 
     Ok(())
@@ -84,6 +84,7 @@ fn test_string_from_bytes() -> Result<()> {
 fn test_string_hash() -> Result<()> {
     let lua = Lua::new();
 
+    #[allow(clippy::mutable_key_type)] // Lua strings are immutable despite their owning handle.
     let set: HashSet<LuaString> = lua.load(r#"{"hello", "world", "abc", 321}"#).eval()?;
     assert_eq!(set.len(), 4);
     assert!(set.contains(&lua.create_string("hello")?));

@@ -79,7 +79,7 @@ use std::result::Result as StdResult;
 use std::{mem, ptr, slice};
 
 use crate::error::{Error, ExternalError, ExternalResult, Result};
-use crate::state::Lua;
+use crate::state::{Lua, WeakLua};
 use crate::table::Table;
 use crate::traits::{FromLuaMulti, IntoLua, IntoLuaMulti};
 use crate::types::{Callback, LuaType, MaybeSend, ValueRef};
@@ -210,6 +210,8 @@ impl Function {
             }
             // Get the results
             let nresults = ffi::lua_gettop(state) - stack_start;
+            #[cfg(not(feature = "luau"))]
+            check_stack(state, 1)?;
             R::from_stack_multi(nresults, &lua)
         }
     }
@@ -252,6 +254,7 @@ impl Function {
             lua.create_recycled_thread(self).and_then(|th| {
                 let mut th = th.into_async(args)?;
                 th.set_recyclable(true);
+                lua.update_thread_ownership(th.thread(), Some(lua.state()));
                 Ok(th)
             })
         })
@@ -326,7 +329,7 @@ impl Function {
                 ffi::lua_pushcclosure(state, args_wrapper_impl, ffi::lua_gettop(state));
             })?;
 
-            Function(lua.pop_ref())
+            Function(lua.try_pop_ref()?)
         };
 
         let lua = lua.lua();
@@ -338,8 +341,8 @@ impl Function {
             end
             "#,
         )
-        .try_cache()
         .set_name("=__mlua_bind")
+        .try_cache()
         .call((self, args_wrapper))
     }
 
@@ -456,10 +459,7 @@ impl Function {
             FunctionInfo {
                 name: ptr_to_lossy_str(ar.name).map(|s| s.into_owned()),
                 #[cfg(not(feature = "luau"))]
-                name_what: match ptr_to_str(ar.namewhat) {
-                    Some("") => None,
-                    val => val,
-                },
+                name_what: ptr_to_str(ar.namewhat).filter(|s| !s.is_empty()),
                 #[cfg(feature = "luau")]
                 name_what: None,
                 what: ptr_to_str(ar.what).unwrap_or("main"),
@@ -496,6 +496,12 @@ impl Function {
     #[cfg(not(feature = "luau"))]
     #[cfg_attr(docsrs, doc(cfg(not(feature = "luau"))))]
     pub fn dump(&self, strip: bool) -> Vec<u8> {
+        self.try_dump(strip).expect("cannot dump function")
+    }
+
+    // Like `dump`, but returns an error if stack growth or dumping fails.
+    #[cfg(not(feature = "luau"))]
+    pub(crate) fn try_dump(&self, strip: bool) -> Result<Vec<u8>> {
         unsafe extern "C-unwind" fn writer(
             _state: *mut ffi::lua_State,
             buf: *const c_void,
@@ -516,15 +522,24 @@ impl Function {
         let mut data: Vec<u8> = Vec::new();
         unsafe {
             let _sg = StackGuard::new(state);
-            assert_stack(state, 1);
+            // Lua 5.5 allocates an auxiliary table while dumping
+            let protect = cfg!(feature = "lua55") && !lua.unlikely_memory_error();
+            check_stack(state, if protect { 4 } else { 1 })?;
 
             lua.push_ref(&self.0);
+            if ffi::lua_iscfunction(state, -1) != 0 {
+                return Ok(data);
+            }
             let data_ptr = &mut data as *mut Vec<u8> as *mut c_void;
-            ffi::lua_dump(state, writer, data_ptr, strip as i32);
-            ffi::lua_pop(state, 1);
+            let status = protect_lua_mem!(state, if protect, 1, 0, |state| {
+                ffi::lua_dump(state, writer, data_ptr, strip as i32)
+            })?;
+            if status != 0 {
+                return Err(pop_error(state, status));
+            }
         }
 
-        data
+        Ok(data)
     }
 
     /// Retrieves recorded coverage information about this Lua function including inner calls.
@@ -541,31 +556,29 @@ impl Function {
     where
         F: FnMut(CoverageInfo),
     {
-        use std::ffi::CStr;
-        use std::os::raw::c_char;
+        use std::panic::{AssertUnwindSafe, catch_unwind, resume_unwind};
 
         unsafe extern "C-unwind" fn callback<F: FnMut(CoverageInfo)>(
             data: *mut c_void,
-            function: *const c_char,
+            function: *const std::os::raw::c_char,
             line_defined: c_int,
             depth: c_int,
             hits: *const c_int,
             size: usize,
         ) {
-            let function = if !function.is_null() {
-                Some(CStr::from_ptr(function).to_string_lossy().to_string())
-            } else {
-                None
-            };
-            let rust_callback = &*(data as *const RefCell<F>);
+            let rust_callback = &*(data as *const RefCell<(F, std::thread::Result<()>)>);
             if let Ok(mut rust_callback) = rust_callback.try_borrow_mut() {
-                // Call the Rust callback with CoverageInfo
-                rust_callback(CoverageInfo {
-                    function,
-                    line_defined,
-                    depth,
-                    hits: slice::from_raw_parts(hits, size).to_vec(),
-                });
+                let (func, result) = &mut *rust_callback;
+                if result.is_ok() {
+                    *result = catch_unwind(AssertUnwindSafe(|| {
+                        func(CoverageInfo {
+                            function: ptr_to_lossy_str(function).map(|s| s.into_owned()),
+                            line_defined,
+                            depth,
+                            hits: slice::from_raw_parts(hits, size).to_vec(),
+                        });
+                    }));
+                }
             }
         }
 
@@ -576,9 +589,11 @@ impl Function {
             assert_stack(state, 1);
 
             lua.push_ref(&self.0);
-            let func = RefCell::new(func);
-            let func_ptr = &func as *const RefCell<F> as *mut c_void;
+            let func: RefCell<(F, std::thread::Result<()>)> = RefCell::new((func, Ok(())));
+            let func_ptr = &func as *const _ as *mut c_void;
             ffi::lua_getcoverage(state, -1, func_ptr, callback::<F>);
+            // Resume only after Luau has freed its coverage buffer.
+            func.into_inner().1.unwrap_or_else(|panic| resume_unwind(panic));
         }
     }
 
@@ -592,6 +607,7 @@ impl Function {
     #[cfg(any(feature = "luau", doc))]
     #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
     pub fn set_breakpoint(&self, line: u32, enabled: bool) -> Option<u32> {
+        let line = c_int::try_from(line).ok()?;
         let lua = self.0.lua.lock();
         let state = lua.state();
         unsafe {
@@ -599,7 +615,10 @@ impl Function {
             assert_stack(state, 1);
 
             lua.push_ref(&self.0);
-            let actual = ffi::lua_breakpoint(state, -1, line as c_int, enabled as c_int);
+            if ffi::lua_iscfunction(state, -1) != 0 {
+                return None;
+            }
+            let actual = ffi::lua_breakpoint(state, -1, line, enabled as c_int);
             linenumber_to_usize(actual).map(|line| line as u32)
         }
     }
@@ -612,6 +631,13 @@ impl Function {
     #[inline]
     pub fn to_pointer(&self) -> *const c_void {
         self.0.to_pointer()
+    }
+
+    /// Returns a weak reference to the Lua instance owning this value.
+    #[doc(hidden)]
+    #[inline]
+    pub fn weak_lua(&self) -> &WeakLua {
+        &self.0.lua
     }
 
     /// Creates a deep clone of the Lua function.
@@ -633,12 +659,8 @@ impl Function {
                 return Ok(self.clone());
             }
 
-            if lua.unlikely_memory_error() {
-                ffi::lua_clonefunction(state, -1);
-            } else {
-                protect_lua!(state, 1, 1, fn(state) ffi::lua_clonefunction(state, -1))?;
-            }
-            Ok(Function(lua.pop_ref()))
+            protect_lua_mem!(lua, 1, 1, fn(state) ffi::lua_clonefunction(state, -1))?;
+            Ok(Function(lua.try_pop_ref()?))
         }
     }
 }
@@ -649,7 +671,7 @@ struct WrappedFunction(pub(crate) Callback);
 struct WrappedAsyncFunction(pub(crate) AsyncCallback);
 
 impl Function {
-    /// Wraps a Rust function or closure, returning an opaque type that implements [`IntoLua`]
+    /// Wraps a Rust function or closure, returning an opaque type that implements the [`IntoLua`]
     /// trait.
     #[inline]
     pub fn wrap<F, A, R, E>(func: F) -> impl IntoLua
@@ -826,6 +848,7 @@ pub trait LuaNativeFnMut<A: FromLuaMulti> {
 
 /// A trait for types that returns a future and can be used as Lua functions.
 #[cfg(feature = "async")]
+#[cfg_attr(docsrs, doc(cfg(feature = "async")))]
 pub trait LuaNativeAsyncFn<A: FromLuaMulti> {
     type Output;
 

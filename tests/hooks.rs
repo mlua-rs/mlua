@@ -113,6 +113,36 @@ fn test_error_within_hook() -> Result<()> {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
+fn test_panic_during_callback_traceback() -> Result<()> {
+    use std::panic::{AssertUnwindSafe, catch_unwind};
+
+    let lua = Lua::new();
+    if cfg!(feature = "luajit") && lua.set_memory_limit(0).is_err() {
+        return Ok(());
+    }
+    let callback = lua.create_function(|lua, ()| -> Result<()> {
+        lua.set_hook(HookTriggers::ON_CALLS, |lua, _| {
+            lua.remove_hook();
+            panic!("traceback hook panic");
+        })?;
+        // use protected traceback generation
+        lua.set_memory_limit(usize::MAX)?;
+        Err(Error::runtime("callback error"))
+    })?;
+    lua.globals().set("callback", callback)?;
+
+    let panic = catch_unwind(AssertUnwindSafe(|| lua.load("callback()").exec()))
+        .expect_err("hook panic did not propagate");
+    assert_eq!(panic.downcast_ref::<&str>(), Some(&"traceback hook panic"));
+    assert!(
+        lua.inspect_stack(0, |_| ()).is_none(),
+        "Lua frames were not restored"
+    );
+    Ok(())
+}
+
+#[test]
 fn test_limit_execution_instructions() -> Result<()> {
     let lua = Lua::new();
 
@@ -295,6 +325,40 @@ fn test_hook_yield() -> Result<()> {
 }
 
 #[test]
+#[cfg(any(feature = "lua55", feature = "lua54", feature = "lua53"))]
+fn test_hook_yield_preserves_stack() -> Result<()> {
+    let lua = Lua::new();
+
+    let func = lua
+        .load(
+            r#"
+            local x = { value = 40 }
+            local y = 2
+            return x.value + y
+        "#,
+        )
+        .into_function()?;
+    let co = lua.create_thread(func)?;
+
+    let yielded = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let yielded2 = yielded.clone();
+    co.set_hook(HookTriggers::EVERY_LINE, move |_lua, debug| {
+        if debug.current_line() == Some(4) && !yielded2.swap(true, Ordering::Relaxed) {
+            return Ok(VmState::Yield);
+        }
+        Ok(VmState::Continue)
+    })?;
+
+    co.resume::<()>(())?;
+    assert!(yielded.load(Ordering::Relaxed));
+    co.remove_hook();
+    lua.gc_collect()?;
+    assert_eq!(co.resume::<i32>(())?, 42);
+
+    Ok(())
+}
+
+#[test]
 fn test_global_hook() -> Result<()> {
     let lua = Lua::new();
 
@@ -323,6 +387,57 @@ fn test_global_hook() -> Result<()> {
     thread.resume::<()>(()).unwrap();
     assert!(thread.is_finished());
     assert_eq!(counter.load(Ordering::Relaxed), 3);
+
+    Ok(())
+}
+
+#[test]
+fn test_global_hook_callback_drop() -> Result<()> {
+    struct ReenterOnDrop(Lua);
+
+    impl Drop for ReenterOnDrop {
+        fn drop(&mut self) {
+            self.0.load("local n = 1").exec().unwrap();
+            self.0.set_app_data(());
+        }
+    }
+
+    for replace in [false, true] {
+        let lua = Lua::new();
+        let guard = ReenterOnDrop(lua.clone());
+        lua.set_global_hook(HookTriggers::EVERY_LINE, move |_, _| {
+            let _ = &guard;
+            panic!("called a callback during drop");
+        })?;
+        if replace {
+            lua.set_global_hook(HookTriggers::EVERY_LINE, |_, _| Ok(VmState::Continue))?;
+        } else {
+            lua.remove_global_hook();
+        }
+        assert_eq!(lua.remove_app_data::<()>(), Some(()));
+    }
+    Ok(())
+}
+
+#[test]
+fn test_hook_memory_error() -> Result<()> {
+    let lua = Lua::new();
+    if cfg!(feature = "luajit") && lua.set_memory_limit(0).is_err() {
+        return Ok(());
+    }
+
+    let arc = Arc::new(());
+    let captured = arc.clone();
+    lua.set_memory_limit(1)?;
+    assert!(matches!(
+        lua.set_hook(HookTriggers::EVERY_LINE, move |_, _| {
+            let _ = &captured;
+            Ok(VmState::Continue)
+        }),
+        Err(Error::MemoryError(_))
+    ));
+    drop(lua);
+    assert_eq!(Arc::strong_count(&arc), 1);
 
     Ok(())
 }

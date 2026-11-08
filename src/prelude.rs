@@ -3,40 +3,46 @@
 #[doc(no_inline)]
 pub use crate::{
     AnyUserData as LuaAnyUserData, BorrowedBytes as LuaBorrowedBytes, BorrowedStr as LuaBorrowedStr,
-    Either as LuaEither, Error as LuaError, FromLua, FromLuaMulti, Function as LuaFunction,
-    Integer as LuaInteger, IntoLua, IntoLuaMulti, LightUserData as LuaLightUserData, Lua, LuaOptions,
-    LuaString, MetaMethod as LuaMetaMethod, MultiValue as LuaMultiValue, Nil as LuaNil, Number as LuaNumber,
-    ObjectLike as LuaObjectLike, RegistryKey as LuaRegistryKey, Result as LuaResult, StdLib as LuaStdLib,
-    Table as LuaTable, Thread as LuaThread, UserData as LuaUserData, UserDataFields as LuaUserDataFields,
-    UserDataMetatable as LuaUserDataMetatable, UserDataMethods as LuaUserDataMethods,
+    Either as LuaEither, Error as LuaError, ErrorContext as LuaErrorContext,
+    ExternalError as LuaExternalError, ExternalResult as LuaExternalResult, FromLua, FromLuaMulti,
+    Function as LuaFunction, Integer as LuaInteger, IntoLua, IntoLuaMulti, LightUserData as LuaLightUserData,
+    Lua, LuaOptions, LuaString, MetaMethod as LuaMetaMethod, MultiValue as LuaMultiValue, Nil as LuaNil,
+    Number as LuaNumber, ObjectLike as LuaObjectLike, RegistryKey as LuaRegistryKey, Result as LuaResult,
+    StdLib as LuaStdLib, Table as LuaTable, Thread as LuaThread, UserData as LuaUserData,
+    UserDataFields as LuaUserDataFields, UserDataMethods as LuaUserDataMethods,
     UserDataOwned as LuaUserDataOwned, UserDataRef as LuaUserDataRef, UserDataRefMut as LuaUserDataRefMut,
     UserDataRegistry as LuaUserDataRegistry, Value as LuaValue, Variadic as LuaVariadic,
     VmState as LuaVmState, WeakLua, chunk::AsChunk as AsLuaChunk, chunk::Chunk as LuaChunk,
-    chunk::ChunkMode as LuaChunkMode, error::ErrorContext as LuaErrorContext,
-    error::ExternalError as LuaExternalError, error::ExternalResult as LuaExternalResult,
-    function::FunctionInfo as LuaFunctionInfo, function::LuaNativeFn, function::LuaNativeFnMut,
-    state::GcIncParams as LuaGcIncParams, state::GcMode as LuaGcMode, table::TablePairs as LuaTablePairs,
-    table::TableSequence as LuaTableSequence, thread::ThreadStatus as LuaThreadStatus,
+    chunk::ChunkMode as LuaChunkMode, function::FunctionInfo as LuaFunctionInfo, function::LuaNativeFn,
+    function::LuaNativeFnMut, state::GcIncParams as LuaGcIncParams, state::GcMode as LuaGcMode,
+    table::TablePairs as LuaTablePairs, table::TableSequence as LuaTableSequence,
+    thread::ThreadEvent as LuaThreadEvent, thread::ThreadStatus as LuaThreadStatus,
+    thread::ThreadTriggers as LuaThreadTriggers, userdata::UserDataMetatable as LuaUserDataMetatable,
 };
 
 #[cfg(not(feature = "luau"))]
 #[doc(no_inline)]
-pub use crate::HookTriggers as LuaHookTriggers;
+pub use crate::debug::HookTriggers as LuaHookTriggers;
 
 #[cfg(any(feature = "lua54", feature = "lua55"))]
 #[doc(no_inline)]
 pub use crate::state::GcGenParams as LuaGcGenParams;
 
-#[cfg(feature = "luau")]
+#[cfg(any(feature = "luau", doc))]
 #[doc(no_inline)]
 pub use crate::{
-    Vector as LuaVector,
+    Buffer as LuaBuffer, Vector as LuaVector,
     chunk::{CompileConstant as LuaCompileConstant, Compiler as LuaCompiler},
+    function::CoverageInfo as LuaCoverageInfo,
     luau::{
         FsRequirer as LuaFsRequirer, HeapDump as LuaHeapDump, NavigateError as LuaNavigateError,
         Require as LuaRequire,
     },
 };
+
+#[cfg(any(feature = "luau-jit", doc))]
+#[doc(no_inline)]
+pub use crate::state::JitOptions as LuauJitOptions;
 
 #[cfg(feature = "async")]
 #[doc(no_inline)]
@@ -45,6 +51,6 @@ pub use crate::{function::LuaNativeAsyncFn, thread::AsyncThread as LuaAsyncThrea
 #[cfg(feature = "serde")]
 #[doc(no_inline)]
 pub use crate::{
-    DeserializeOptions as LuaDeserializeOptions, LuaSerdeExt, SerializableValue as LuaSerializableValue,
-    SerializeOptions as LuaSerializeOptions,
+    LuaSerdeExt, SerializableValue as LuaSerializableValue,
+    serde::DeserializeOptions as LuaDeserializeOptions, serde::SerializeOptions as LuaSerializeOptions,
 };

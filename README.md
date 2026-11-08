@@ -9,15 +9,13 @@
 [docs.rs]: https://docs.rs/mlua
 [Coverage Status]: https://codecov.io/gh/mlua-rs/mlua/branch/main/graph/badge.svg?token=99339FS1CG
 [codecov.io]: https://codecov.io/gh/mlua-rs/mlua
-[MSRV]: https://img.shields.io/badge/rust-1.79+-brightgreen.svg?&logo=rust
+[MSRV]: https://img.shields.io/badge/rust-1.88+-brightgreen.svg?&logo=rust
 
 [Guided Tour] | [Benchmarks] | [FAQ]
 
 [Guided Tour]: examples/guided_tour.rs
 [Benchmarks]: https://github.com/khvzak/script-bench-rs
 [FAQ]: FAQ.md
-
-## The main branch is the development version of `mlua`. Please see the [v0.11](https://github.com/mlua-rs/mlua/tree/v0.11) branch for the stable versions of `mlua`.
 
 `mlua` is a set of bindings to the [Lua](https://www.lua.org) programming language for Rust with a goal of providing a
 _safe_ (as much as possible), high level, easy to use, practical and flexible API.
@@ -26,7 +24,7 @@ Started as an `rlua` fork, `mlua` supports Lua 5.5, 5.4, 5.3, 5.2, 5.1 (includin
 
 `mlua` is tested on Windows/macOS/Linux including module mode in [GitHub Actions] on `x86_64` platforms and cross-compilation to `aarch64` (other targets are also supported).
 
-WebAssembly (WASM) is supported through the `wasm32-unknown-emscripten` target for all Lua/Luau versions excluding JIT.
+Lua 5.1–5.5 and Luau support `wasm32-unknown-unknown` with a WASI C runtime and the `wasm32-wasip` targets. See [Compiling for WebAssembly](docs/wasm32.md) for setup and build instructions.
 
 [GitHub Actions]: https://github.com/mlua-rs/mlua/actions
 [Luau]: https://luau.org
@@ -51,8 +49,8 @@ Below is a list of the available feature flags. By default `mlua` does not enabl
 * `vendored`: build static Lua(JIT) libraries from sources during `mlua` compilation using [lua-src] or [luajit-src]
 * `module`: enable module mode (building loadable `cdylib` library for Lua)
 * `async`: enable async/await support (any executor can be used, eg. [tokio] or [async-std])
-* `send`: make `mlua::Lua: Send + Sync` (adds [`Send`] requirement to `mlua::Function` and `mlua::UserData`)
-* `error-send`: make `mlua:Error: Send + Sync`
+* `send`: make `mlua::Lua: Send + Sync` (adds [`Send`] requirement to `mlua::Function` and `Send + Sync` to `mlua::UserData`)
+* `error-send`: make `mlua::Error: Send + Sync`
 * `serde`: add serialization and deserialization support to `mlua` types using [serde]
 * `macros`: enable procedural macros (such as `chunk!`)
 * `anyhow`: enable `anyhow::Error` conversion into Lua
@@ -133,7 +131,7 @@ Add to `Cargo.toml`:
 
 ``` toml
 [dependencies]
-mlua = { version = "0.11", features = ["lua54", "vendored"] }
+mlua = { version = "0.12", features = ["lua54", "vendored"] }
 ```
 
 `main.rs`
@@ -168,7 +166,7 @@ Add to `Cargo.toml`:
 crate-type = ["cdylib"]
 
 [dependencies]
-mlua = { version = "0.11", features = ["lua54", "module"] }
+mlua = { version = "0.12", features = ["lua54", "module"] }
 ```
 
 `lib.rs`:

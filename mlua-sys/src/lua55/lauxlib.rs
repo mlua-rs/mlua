@@ -1,5 +1,6 @@
 //! Contains definitions from `lauxlib.h`.
 
+use std::marker::{PhantomData, PhantomPinned};
 use std::os::raw::{c_char, c_double, c_int, c_long, c_uint, c_void};
 use std::{mem, ptr};
 
@@ -190,10 +191,11 @@ pub unsafe fn luaL_loadbufferenv(
     status
 }
 
+#[allow(unused_variables, unreachable_code)]
 pub unsafe fn luaL_makeseed(L: *mut lua_State) -> c_uint {
-    #[cfg(macos)]
+    #[cfg(target_os = "macos")]
     return libc::arc4random();
-    #[cfg(linux)]
+    #[cfg(target_os = "linux")]
     {
         let mut seed = 0u32;
         let buf = &mut seed as *mut _ as *mut c_void;
@@ -248,6 +250,7 @@ pub struct luaL_Buffer {
     pub n: usize,       // number of characters in buffer
     pub L: *mut lua_State,
     pub init: luaL_BufferInit, // initial buffer (union with alignment)
+    _marker: PhantomData<PhantomPinned>,
 }
 
 #[cfg_attr(all(windows, raw_dylib), link(name = "lua55", kind = "raw-dylib"))]

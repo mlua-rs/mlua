@@ -1,0 +1,11 @@
+error: `#[mlua::userdata_impl]` does not support generic impl blocks.
+ --> tests/compile/userdata_generic_impl.rs:7:5
+  |
+7 | impl<T> Foo<T> {
+  |     ^^^
+
+error: `#[mlua::userdata_impl]` does not support generic methods.
+  --> tests/compile/userdata_generic_impl.rs:16:15
+   |
+16 |     fn generic<T>(&self, value: T) -> mlua::Result<T> {
+   |               ^^^

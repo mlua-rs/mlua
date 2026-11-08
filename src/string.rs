@@ -9,7 +9,7 @@ use std::os::raw::{c_int, c_void};
 use std::{cmp, fmt, mem, slice, str};
 
 use crate::error::{Error, Result};
-use crate::state::Lua;
+use crate::state::{Lua, WeakLua};
 use crate::traits::IntoLua;
 use crate::types::{LuaType, ValueRef};
 use crate::value::Value;
@@ -154,6 +154,13 @@ impl LuaString {
         let lua = self.0.lua.lock();
         unsafe { ffi::lua_tostring(lua.ref_thread(), self.0.index) as *const c_void }
     }
+
+    /// Returns a weak reference to the Lua instance owning this value.
+    #[doc(hidden)]
+    #[inline]
+    pub fn weak_lua(&self) -> &WeakLua {
+        &self.0.lua
+    }
 }
 
 impl fmt::Debug for LuaString {
@@ -268,6 +275,12 @@ impl AsRef<str> for BorrowedStr {
     }
 }
 
+impl Hash for BorrowedStr {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.buf.hash(state);
+    }
+}
+
 impl fmt::Display for BorrowedStr {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         self.buf.fmt(f)
@@ -346,6 +359,12 @@ impl AsRef<[u8]> for BorrowedBytes {
     #[inline(always)]
     fn as_ref(&self) -> &[u8] {
         self.buf
+    }
+}
+
+impl Hash for BorrowedBytes {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.buf.hash(state);
     }
 }
 

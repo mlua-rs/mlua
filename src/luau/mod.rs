@@ -19,6 +19,19 @@ use crate::types::MaybeSend;
 pub use heap_dump::HeapDump;
 pub use require::{FsRequirer, NavigateError, Require};
 
+#[cfg(feature = "luau-jit")]
+pub(crate) fn init_jit_flags() {
+    static INIT: std::sync::Once = std::sync::Once::new();
+    INIT.call_once(|| {
+        // These process-global flags must be set before any VM or compiler uses them.
+        let _ = Lua::set_fflag("LuauCallFeedback", true);
+        let _ = Lua::set_fflag("LuauEmitCallFeedback", true);
+        let _ = Lua::set_fflag("LuauCIProto", true);
+        let _ = Lua::set_fflag("LuauPromoteProto", true);
+        let _ = Lua::set_fflag("LuauVirtualBcBuilder", true);
+    });
+}
+
 // Since Luau has some missing standard functions, we re-implement them here
 
 impl Lua {
@@ -81,7 +94,7 @@ impl Lua {
     }
 
     pub(crate) unsafe fn configure_luau(&self) -> Result<()> {
-        let globals = self.globals();
+        let globals = self.try_globals()?;
 
         globals.raw_set("collectgarbage", self.create_c_function(lua_collectgarbage)?)?;
         globals.raw_set("loadstring", self.create_c_function(lua_loadstring)?)?;
@@ -94,7 +107,7 @@ impl Lua {
 
         // Enable default `require` implementation
         let require = self.create_require_function(FsRequirer::new())?;
-        self.globals().raw_set("require", require)?;
+        globals.raw_set("require", require)?;
 
         Ok(())
     }

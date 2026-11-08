@@ -20,7 +20,7 @@ fn main() {
             match lua.load(&line).eval::<MultiValue>() {
                 Ok(values) => {
                     editor.add_history_entry(line).unwrap();
-                    if values.len() > 0 {
+                    if !values.is_empty() {
                         println!(
                             "{}",
                             values
@@ -37,7 +37,7 @@ fn main() {
                     ..
                 }) => {
                     // continue reading input and append it to `line`
-                    line.push_str("\n"); // separate input lines
+                    line.push('\n'); // separate input lines
                     prompt = ">> ";
                 }
                 Err(e) => {

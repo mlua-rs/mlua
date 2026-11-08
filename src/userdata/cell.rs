@@ -43,10 +43,10 @@ impl<T> UserDataVariant<T> {
     #[inline(always)]
     pub(super) fn try_borrow_scoped<R>(&self, f: impl FnOnce(&T) -> R) -> Result<R> {
         // Shared (read) lock is always correct for in-place borrows:
-        // - this method is called internally while the Lua mutex is held, ensuring exclusive Lua-level
-        //   access per call frame
-        // - with `send` feature, all owned userdata satisfies `T: Sync`, so simultaneous shared references
-        //   from multiple threads are sound
+        // - this method is called internally while the Lua mutex is held, ensuring exclusive
+        //   Lua-level access per call frame
+        // - with `send` feature, all owned userdata satisfies `T: Sync`, so simultaneous shared
+        //   references from multiple threads are sound
         // - without `send` feature, single-threaded execution makes shared lock safe for any `T`
         let _guard = (self.raw_lock().try_lock_shared_guarded()).map_err(|_| Error::UserDataBorrowError)?;
         Ok(f(unsafe { &*self.as_ptr() }))

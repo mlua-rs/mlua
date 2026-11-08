@@ -1,8 +1,9 @@
-use std::panic::catch_unwind;
+use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
-use mlua::{Error, Function, IntoLua, Lua, Result, Thread, ThreadEvent, ThreadTriggers, Value};
+use mlua::thread::{ThreadEvent, ThreadStatus, ThreadTriggers};
+use mlua::{Error, Function, IntoLua, Lua, Result, Thread, Value};
 
 #[test]
 fn test_thread() -> Result<()> {
@@ -104,6 +105,44 @@ fn test_thread() -> Result<()> {
     })?)?;
     let result = thread.resume::<()>(());
     assert!(result.is_ok(), "unexpected result: {result:?}");
+
+    // A thread that has resumed another thread (still running) is "normal".
+    let check_outer = lua.create_function(|lua, ()| {
+        let outer: Thread = lua.globals().get("outer")?;
+        assert!(outer.is_normal());
+        assert!(
+            matches!(outer.resume::<()>(()), Err(Error::CoroutineUnresumable)),
+            "resuming a `normal` thread must be unresumable",
+        );
+        Ok(())
+    })?;
+    lua.globals().set("check_outer", check_outer)?;
+    let outer = lua.create_thread(
+        lua.load(
+            r#"
+            function()
+                local inner = coroutine.create(function() check_outer() end)
+                assert(coroutine.resume(inner))
+            end
+            "#,
+        )
+        .eval()?,
+    )?;
+    lua.globals().set("outer", &outer)?;
+    outer.resume::<()>(())?;
+    assert!(outer.is_finished());
+
+    Ok(())
+}
+
+#[test]
+#[cfg(not(panic = "abort"))]
+fn test_thread_foreign_function() -> Result<()> {
+    let lua = Lua::new();
+
+    let other = Lua::new();
+    let func = other.load("return 123").into_function()?;
+    assert!(catch_unwind(AssertUnwindSafe(|| lua.create_thread(func))).is_err());
 
     Ok(())
 }
@@ -408,6 +447,43 @@ fn test_thread_event_yield_error() -> Result<()> {
 }
 
 #[test]
+fn test_thread_event_reentrant_resume() -> Result<()> {
+    let lua = Lua::new();
+
+    // Self-resume from within the yield callback is not allowed
+    let reentered = Arc::new(AtomicBool::new(false));
+    let reentered2 = reentered.clone();
+    lua.set_thread_event_callback(ThreadTriggers::ON_YIELD, move |_lua, event| {
+        if let ThreadEvent::Yield(thread) = event
+            && !reentered2.swap(true, Ordering::Relaxed)
+        {
+            assert_eq!(thread.status(), ThreadStatus::Resumable);
+            assert!(thread.is_resumable());
+            let err = thread.resume::<Value>(()).unwrap_err();
+            assert!(
+                matches!(&err, Error::RuntimeError(msg) if msg.contains("from within its own event callback")),
+                "unexpected error: {err:?}"
+            );
+        }
+        Ok(())
+    });
+
+    let thread = lua.create_thread(
+        lua.load("coroutine.yield(1, 2, 3, 4, 5) return 7")
+            .into_function()?,
+    )?;
+
+    let vals = thread.resume::<(i32, i32, i32, i32, i32)>(())?;
+    assert_eq!(vals, (1, 2, 3, 4, 5));
+    assert!(reentered.load(Ordering::Relaxed));
+
+    assert_eq!(thread.resume::<i32>(())?, 7);
+    assert!(thread.is_finished());
+
+    Ok(())
+}
+
+#[test]
 fn test_thread_event_swap() -> Result<()> {
     let lua = Lua::new();
 
@@ -441,6 +517,34 @@ fn test_thread_event_swap() -> Result<()> {
     assert_eq!(count3.load(Ordering::Relaxed), 10); // unchanged
 
     Ok(())
+}
+
+#[test]
+fn test_thread_event_callback_drop() {
+    struct ReenterOnDrop(Lua);
+
+    impl Drop for ReenterOnDrop {
+        fn drop(&mut self) {
+            let function = self.0.create_function(|_, ()| Ok(())).unwrap();
+            self.0.create_thread(function).unwrap();
+            self.0.set_app_data(());
+        }
+    }
+
+    for replace in [false, true] {
+        let lua = Lua::new();
+        let guard = ReenterOnDrop(lua.clone());
+        lua.set_thread_event_callback(ThreadTriggers::ON_CREATE, move |_, _| {
+            let _ = &guard;
+            panic!("called a callback during drop");
+        });
+        if replace {
+            lua.set_thread_event_callback(ThreadTriggers::ON_CREATE, |_, _| Ok(()));
+        } else {
+            lua.remove_thread_event_callback();
+        }
+        assert_eq!(lua.remove_app_data::<()>(), Some(()));
+    }
 }
 
 #[cfg(feature = "luau")]

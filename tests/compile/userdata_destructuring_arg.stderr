@@ -1,0 +1,5 @@
+error: `#[mlua::userdata_impl]` requires a named parameter or `_`; destructuring patterns are not supported
+ --> tests/compile/userdata_destructuring_arg.rs:9:29
+  |
+9 |     fn takes_pattern(&self, (a, b): (u32, u32)) -> u32 {
+  |                             ^^^^^^

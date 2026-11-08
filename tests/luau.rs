@@ -4,9 +4,8 @@ use std::fmt::Debug;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use mlua::{
-    Compiler, Error, Function, Lua, LuaOptions, ObjectLike, Result, StdLib, Table, Value, Vector, VmState,
-};
+use mlua::chunk::Compiler;
+use mlua::{Error, Function, Lua, LuaOptions, ObjectLike, Result, StdLib, Table, Value, Vector, VmState};
 
 #[test]
 fn test_version() -> Result<()> {
@@ -20,10 +19,11 @@ fn test_version() -> Result<()> {
 fn test_vectors() -> Result<()> {
     let lua = Lua::new();
 
-    let v: Vector = lua
+    let v: Value = lua
         .load("vector.create(1, 2, 3) + vector.create(3, 2, 1)")
         .eval()?;
-    assert_eq!(v, [4.0, 4.0, 4.0]);
+    assert!(v.is_vector());
+    assert_eq!(v.as_vector().unwrap(), [4.0, 4.0, 4.0]);
 
     // Test conversion into Rust array
     let v: [f64; 3] = lua.load("vector.create(1, 2, 3)").eval()?;
@@ -60,10 +60,11 @@ fn test_vectors() -> Result<()> {
 fn test_vectors() -> Result<()> {
     let lua = Lua::new();
 
-    let v: Vector = lua
+    let v: Value = lua
         .load("vector.create(1, 2, 3, 4) + vector.create(4, 3, 2, 1)")
         .eval()?;
-    assert_eq!(v, [5.0, 5.0, 5.0, 5.0]);
+    assert!(v.is_vector());
+    assert_eq!(v.as_vector().unwrap(), [5.0, 5.0, 5.0, 5.0]);
 
     // Test conversion into Rust array
     let v: [f64; 4] = lua.load("vector.create(1, 2, 3, 4)").eval()?;
@@ -97,7 +98,6 @@ fn test_vectors() -> Result<()> {
     Ok(())
 }
 
-#[cfg(not(feature = "luau-vector4"))]
 #[test]
 fn test_vector_metatable() -> Result<()> {
     let lua = Lua::new();
@@ -201,7 +201,7 @@ fn test_sandbox() -> Result<()> {
         let err = collectgarbage.call::<()>(arg).err().unwrap().to_string();
         assert!(err.contains("collectgarbage called with invalid option"));
     }
-    assert!(collectgarbage.call::<u64>("count").unwrap() > 0);
+    assert!(collectgarbage.call::<f64>("count").unwrap() > 0.0);
 
     lua.sandbox(false)?;
 
@@ -483,6 +483,56 @@ fn test_debug_single_step() -> Result<()> {
 }
 
 #[test]
+fn test_debug_step_can_be_toggled_on_a_suspended_thread() -> Result<()> {
+    let lua = debug_lua();
+    let hits = Arc::new(AtomicU64::new(0));
+    let step_hits = hits.clone();
+    lua.set_debug_step(move |_, _| {
+        step_hits.fetch_add(1, Ordering::Relaxed);
+        Ok(VmState::Yield)
+    });
+
+    let function = lua.load(DEBUG_CHUNK).into_function()?;
+    let thread = lua.create_thread(function.clone())?;
+    thread.set_single_step(true);
+    thread.resume::<()>(())?;
+    assert!(thread.is_resumable());
+    assert_eq!(hits.load(Ordering::Relaxed), 1);
+
+    assert_eq!(lua.create_thread(function)?.resume::<i32>(())?, 3);
+    thread.set_single_step(false);
+    assert_eq!(thread.resume::<i32>(())?, 3);
+    assert_eq!(hits.load(Ordering::Relaxed), 1);
+    Ok(())
+}
+
+#[test]
+fn test_debug_breakpoint_rejects_native_functions_and_invalid_lines() -> Result<()> {
+    let lua = debug_lua();
+    let native = lua.create_function(|_, ()| Ok(42))?;
+    assert_eq!(native.set_breakpoint(1, true), None);
+    assert_eq!(native.call::<i32>(())?, 42);
+
+    let function = lua.load(DEBUG_CHUNK).into_function()?;
+    assert_eq!(function.set_breakpoint(u32::MAX, true), None);
+    Ok(())
+}
+
+#[test]
+fn test_debug_upvalues_are_unavailable_for_native_functions() -> Result<()> {
+    let lua = debug_lua();
+    let native = lua.create_function(|lua, ()| {
+        lua.inspect_stack(0, |frame| {
+            assert!(frame.get_upvalue(1).is_none());
+            assert_eq!(frame.set_upvalue(1, Value::Nil)?, None);
+            Ok(())
+        })
+        .expect("native frame")
+    })?;
+    native.call(())
+}
+
+#[test]
 fn test_debug_locals() -> Result<()> {
     let lua = debug_lua();
 
@@ -555,33 +605,96 @@ fn test_set_local_out_of_range() -> Result<()> {
 }
 
 #[test]
-fn test_set_local_type_mismatch_causes_lua_error() -> Result<()> {
-    // Replace the integer local `a` with a string value.  The write itself
-    // succeeds (returns the local's name), but the VM raises a RuntimeError
-    // when it tries to add a string to `b` on the next line.  No Rust UB.
+fn test_set_local_rejects_type_changes_before_the_vm_uses_the_register() -> Result<()> {
     let lua = debug_lua();
-
     lua.set_debug_break(|lua, debug| {
-        let name = debug.set_local(1, Value::String(lua.create_string("not_a_number")?))?;
-        assert_eq!(name, Some("a".to_string()));
+        let error = debug
+            .set_local(1, Value::String(lua.create_string("not_a_number")?))
+            .expect_err("the register must keep its numeric tag");
+        assert!(error.to_string().contains("change the Luau value type"));
         Ok(VmState::Continue)
     });
 
-    let f = lua.load(DEBUG_CHUNK).into_function()?;
-    f.set_breakpoint(4, true).expect("breakpoint was not placed");
+    let function = lua.load(DEBUG_CHUNK).into_function()?;
+    function
+        .set_breakpoint(4, true)
+        .expect("breakpoint was not placed");
+    assert_eq!(function.call::<i32>(())?, 3);
+    Ok(())
+}
 
-    match f.call::<i32>(()) {
-        Err(_) => {} // RuntimeError from `a + b` where `a` is now a string.
-        Ok(v) => panic!("expected a Lua error, got {v}"),
+#[test]
+fn test_interrupt_callback_drop() {
+    struct ReenterOnDrop(Lua);
+
+    impl Drop for ReenterOnDrop {
+        fn drop(&mut self) {
+            self.0
+                .load("local n = 0; for i = 1, 10 do n = n + i end")
+                .exec()
+                .unwrap();
+            self.0.set_app_data(());
+        }
     }
 
-    Ok(())
+    for replace in [false, true] {
+        let lua = Lua::new();
+        let guard = ReenterOnDrop(lua.clone());
+        lua.set_interrupt(move |_| {
+            let _ = &guard;
+            panic!("called a callback during drop");
+        });
+        if replace {
+            lua.set_interrupt(|_| Ok(VmState::Continue));
+        } else {
+            lua.remove_interrupt();
+        }
+        assert_eq!(lua.remove_app_data::<()>(), Some(()));
+    }
 }
 
 #[test]
 fn test_fflags() {
     // We cannot really on any particular feature flag to be present
     assert!(Lua::set_fflag("UnknownFlag", true).is_err());
+}
+
+#[cfg(feature = "luau-jit")]
+#[test]
+fn test_jit_inliner() -> Result<()> {
+    let compiler = Compiler::new();
+    let bytecode = compiler.compile("return 42")?;
+
+    let lua = Lua::new();
+    lua.enable_jit(false);
+    lua.sandbox(true)?;
+    lua.set_jit_options(mlua::state::JitOptions::new().inliner(true));
+
+    // Enabling the inliner must not change global compiler flags.
+    assert_eq!(compiler.compile("return 42")?, bytecode);
+
+    // An inlinable helper called in a hot loop.
+    let sum = lua
+        .load(
+            r#"
+            local function add(a, b)
+                return a + b + 0.5
+            end
+            local function caller(a, b)
+                local sum = add(a, b)
+                return sum - 0.5
+            end
+            local sum = 0
+            for i = 1, 1000 do
+                sum = caller(sum, i)
+            end
+            return sum
+        "#,
+        )
+        .eval::<i64>()?;
+    assert_eq!(sum, 500500);
+
+    Ok(())
 }
 
 #[test]
@@ -636,6 +749,7 @@ fn test_memory_category() -> Result<()> {
 }
 
 #[test]
+#[cfg(not(any(all(target_arch = "wasm32", target_os = "unknown"), target_os = "wasi")))]
 fn test_heap_dump() -> Result<()> {
     let lua = Lua::new();
 
@@ -679,11 +793,23 @@ fn test_heap_dump() -> Result<()> {
     Ok(())
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 #[test]
 fn test_integer64_type() -> Result<()> {
-    let lua = Lua::new();
+    // Isolate process-global flag changes from other tests' VMs and compilers.
+    if std::env::var_os("MLUA_TEST_INTEGER64_TYPE").is_none() {
+        assert!(
+            std::process::Command::new(std::env::current_exe()?)
+                .args(["--exact", "test_integer64_type"])
+                .env("MLUA_TEST_INTEGER64_TYPE", "1")
+                .status()?
+                .success()
+        );
+        return Ok(());
+    }
 
     _ = Lua::set_fflag("LuauIntegerType2", true);
+    let lua = Lua::new();
 
     let integer_lib = lua.globals().get::<Table>("integer")?;
     let n = integer_lib.call_function::<i64>("create", 42)?;

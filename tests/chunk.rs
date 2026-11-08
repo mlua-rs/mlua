@@ -1,7 +1,8 @@
 #[cfg(not(target_os = "wasi"))]
 use std::{fs, io};
 
-use mlua::{Chunk, ChunkMode, Lua, Result};
+use mlua::chunk::{Chunk, ChunkMode};
+use mlua::{Lua, Result};
 
 #[test]
 fn test_chunk_methods() -> Result<()> {
@@ -49,7 +50,8 @@ fn test_chunk_path() -> Result<()> {
 
     // &Path
     assert_eq!(
-        (lua.load(&*temp_dir.path().join("module.lua").as_path())).eval::<i32>()?,
+        lua.load(temp_dir.path().join("module.lua").as_path())
+            .eval::<i32>()?,
         321
     );
 
@@ -62,14 +64,14 @@ fn test_chunk_impls() -> Result<()> {
 
     // StdString
     assert_eq!(lua.load(String::from("1")).eval::<i32>()?, 1);
-    assert_eq!(lua.load(&String::from("2")).eval::<i32>()?, 2);
+    assert_eq!(lua.load(String::from("2")).eval::<i32>()?, 2);
 
     // &[u8]
     assert_eq!(lua.load(&b"3"[..]).eval::<i32>()?, 3);
 
     // Vec<u8>
     assert_eq!(lua.load(b"4".to_vec()).eval::<i32>()?, 4);
-    assert_eq!(lua.load(&b"5".to_vec()).eval::<i32>()?, 5);
+    assert_eq!(lua.load(b"5".to_vec()).eval::<i32>()?, 5);
 
     Ok(())
 }
@@ -131,7 +133,7 @@ fn test_chunk_macro() -> Result<()> {
 #[cfg(feature = "luau")]
 #[test]
 fn test_compiler() -> Result<()> {
-    let compiler = mlua::Compiler::new()
+    let compiler = mlua::chunk::Compiler::new()
         .set_optimization_level(2)
         .set_debug_level(2)
         .set_type_info_level(1)
@@ -158,7 +160,8 @@ fn test_compiler() -> Result<()> {
 #[cfg(feature = "luau")]
 #[test]
 fn test_compiler_library_constants() {
-    use mlua::{Compiler, Vector};
+    use mlua::Vector;
+    use mlua::chunk::Compiler;
 
     let compiler = Compiler::new()
         .set_optimization_level(2)
@@ -170,7 +173,7 @@ fn test_compiler_library_constants() {
     let lua = Lua::new();
     lua.set_compiler(compiler);
     let const_bool = lua.load("return mylib.const_bool").eval::<bool>().unwrap();
-    assert_eq!(const_bool, true);
+    assert!(const_bool);
     let const_num = lua.load("return mylib.const_num").eval::<f64>().unwrap();
     assert_eq!(const_num, 123.0);
     let const_vec = lua.load("return mylib.const_vec").eval::<Vector>().unwrap();

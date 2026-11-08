@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use mlua::state::{GcIncParams, GcMode};
-use mlua::{Error, Lua, Result, UserData};
+use mlua::{Error, Function, Lua, MultiValue, Result, Table, UserData};
 
 #[cfg(any(feature = "lua54", feature = "lua55"))]
 use mlua::state::GcGenParams;
@@ -37,14 +37,54 @@ fn test_memory_limit() -> Result<()> {
 
     // Test memory limit during chunk loading
     lua.set_memory_limit(1024)?;
-    match lua
-        .load("local t = {}; for i = 1,10000 do t[i] = i end")
-        .into_function()
-    {
+    match lua.load(format!("return '{}'", "x".repeat(4096))).into_function() {
         Err(Error::MemoryError(_)) => {}
         _ => panic!("did not trigger memory error"),
     };
 
+    // Callback cleanup must not panic if the reference stack cannot grow under a memory limit.
+    for nrefs in 0..64 {
+        let lua = Lua::new();
+        let f = lua.create_function(|lua, value: i32| {
+            lua.set_memory_limit(1)?;
+            Ok(value)
+        })?;
+        let _refs: Vec<_> = (0..nrefs).map(|_| lua.globals()).collect();
+        assert_eq!(f.call::<i32>(42)?, 42);
+        lua.set_memory_limit(0)?;
+    }
+
+    Ok(())
+}
+
+#[test]
+fn test_result_reference_exhaustion() -> Result<()> {
+    let lua = Lua::new();
+    if cfg!(feature = "luajit") && lua.set_memory_limit(0).is_err() {
+        return Ok(());
+    }
+    let f: Function = lua
+        .load("local t = {}; return function() return t, t end")
+        .eval()?;
+    f.call::<MultiValue>(())?; // Warm the call stack before limiting allocations.
+    lua.gc_stop();
+    lua.set_memory_limit(1)?;
+
+    let mut refs = Vec::new();
+    loop {
+        match f.call::<Table>(()) {
+            Ok(table) => refs.push(table),
+            Err(Error::StackError) => break,
+            Err(err) => return Err(err),
+        }
+    }
+
+    // The first result can be retained, but the second must fail and release the first.
+    drop(refs.pop().unwrap());
+    assert!(matches!(f.call::<MultiValue>(()), Err(Error::StackError)));
+    f.call::<Table>(())?;
+    lua.set_memory_limit(0)?;
+    assert_eq!(f.call::<MultiValue>(())?.len(), 2);
     Ok(())
 }
 
@@ -126,6 +166,36 @@ fn test_gc_control() -> Result<()> {
     lua.gc_collect()?;
     lua.gc_collect()?;
     assert_eq!(Arc::strong_count(&rc), 1);
+
+    Ok(())
+}
+
+#[cfg(any(feature = "lua54", feature = "lua55"))]
+#[test]
+fn test_gc_set_mode_in_finalizer() -> Result<()> {
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    let lua = Lua::new();
+
+    // While finalizers are running, the GC is internally stopped and `lua_gc` rejects all
+    // options
+    let switched = Arc::new(AtomicBool::new(false));
+    let switched2 = switched.clone();
+    let finalizer = lua.create_function(move |lua, ()| {
+        let mode = lua.gc_set_mode(GcMode::Generational(GcGenParams::default()));
+        switched2.store(matches!(mode, GcMode::Generational(_)), Ordering::Relaxed);
+        Ok(())
+    })?;
+    lua.globals().set("finalizer", finalizer)?;
+    lua.load("setmetatable({}, { __gc = finalizer })").exec()?;
+    lua.globals().raw_remove("finalizer")?;
+
+    lua.gc_collect()?;
+    lua.gc_collect()?;
+    assert!(
+        switched.load(Ordering::Relaxed),
+        "gc_set_mode did not complete in finalizer"
+    );
 
     Ok(())
 }

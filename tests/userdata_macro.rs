@@ -1,6 +1,6 @@
 #![cfg(feature = "macros")]
 
-use mlua::{Lua, Result, UserData};
+use mlua::{AnyUserData, Lua, Result, UserData};
 
 #[derive(Default, Clone, Debug, UserData)]
 struct Rectangle {
@@ -71,11 +71,23 @@ impl Rectangle {
     }
 
     #[lua(meta, infallible, name = "__add")]
-    fn add(&self, other: &Rectangle) -> Rectangle {
+    fn add(&self, other: &Self) -> Self {
         Rectangle {
             length: self.length + other.length,
             width: self.width + other.width,
             ..Default::default()
+        }
+    }
+
+    #[lua(infallible)]
+    fn maybe_add(&self, other: Option<&Self>) -> Self {
+        match other {
+            Some(other) => Rectangle {
+                length: self.length + other.length,
+                width: self.width + other.width,
+                ..Default::default()
+            },
+            None => self.clone(),
         }
     }
 
@@ -113,7 +125,14 @@ impl Rectangle {
         Ok(format!("Hello, {name}!"))
     }
 
-    fn transfer_length(&mut self, other: &mut Rectangle) -> Result<()> {
+    fn maybe_greet(&self, name: Option<&str>) -> Result<String> {
+        match name {
+            Some(name) => Ok(format!("Hello, {name}!")),
+            None => Ok("Hello!".to_string()),
+        }
+    }
+
+    fn transfer_length(&mut self, other: &mut Self) -> Result<()> {
         other.length += self.length;
         self.length = 0;
         Ok(())
@@ -190,6 +209,14 @@ fn test_rectangle() {
         assert(r4.length == 8, "__add length should be 5 + 3 = 8")
         assert(r4.width == 14, "__add width should be 10 + 4 = 14")
 
+        -- Option<&T> wrapped parameter
+        local r5 = r1:maybe_add(r3)
+        assert(r5.length == 8, "maybe_add with arg length should be 5 + 3 = 8")
+        assert(r5.width == 14, "maybe_add with arg width should be 10 + 4 = 14")
+        local r6 = r1:maybe_add()
+        assert(r6.length == 5, "maybe_add with nil is no-op")
+        assert(r6.width == 10, "maybe_add with nil is no-op")
+
         -- method with &mut self and &mut Rectangle param
         rect = Rectangle.new(5, 10, 3)
         other = Rectangle.new(2, 3, 0)
@@ -212,6 +239,11 @@ fn test_rectangle() {
         assert(h == 10, "into_tuple height should be 7")
         local ok, err = pcall(function() rect:area() end)
         assert(not ok and tostring(err):match("userdata has been destructed"), "rect should be consumed and unusable after into_tuple")
+
+        -- Custom methods
+        assert(other:greet("User") == "Hello, User!", "greet should return 'Hello, User!'")
+        assert(other:maybe_greet("User") == "Hello, User!", "maybe_greet with arg should return 'Hello, User!'")
+        assert(other:maybe_greet() == "Hello!", "maybe_greet with nil should return 'Hello!'")
     "#,
     )
     .exec()
@@ -349,6 +381,22 @@ impl Bytes {
         Bytes(data.to_vec())
     }
 
+    #[lua(setter, infallible)]
+    fn text<'a>(&mut self, value: &'a str) {
+        self.0 = value.as_bytes().to_vec();
+    }
+
+    #[lua(setter)]
+    fn bytes(&mut self, value: Option<&[u8]>) -> Result<()> {
+        self.0 = value.unwrap_or_default().to_vec();
+        Ok(())
+    }
+
+    #[lua(setter, infallible)]
+    fn take(&mut self, value: &mut Self) {
+        self.0 = std::mem::take(&mut value.0);
+    }
+
     fn first(&self) -> Result<Option<u8>> {
         Ok(self.0.first().copied())
     }
@@ -370,6 +418,16 @@ fn test_known_borrow_wrappers() -> Result<()> {
         assert(b:first() == 97, "first should return 97 ('a')")
         assert(b:len() == 3, "len should return 3")
 
+        b.text = 'def'
+        assert(b:first() == 100)
+        b.bytes = 'ghi'
+        assert(b:first() == 103)
+        local other = Bytes.new('jkl')
+        b.take = other
+        assert(b:first() == 106 and other:len() == 0)
+        b.bytes = nil
+        assert(b:len() == 0)
+
         if _VERSION:match("Luau") then
             assert(typeof(b) == 'MyBytes', "type should be MyBytes in Luau")
         end
@@ -378,6 +436,193 @@ fn test_known_borrow_wrappers() -> Result<()> {
     .exec()
     .unwrap();
     Ok(())
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, UserData)]
+struct Vec2 {
+    x: i32,
+    y: i32,
+}
+
+#[mlua::userdata_impl]
+impl Vec2 {
+    #[lua(infallible)]
+    fn new(x: i32, y: i32) -> Self {
+        Vec2 { x, y }
+    }
+
+    #[lua(meta, infallible, name = "__add")]
+    fn add(this: &Vec2, other: &Vec2) -> Vec2 {
+        Vec2 {
+            x: this.x + other.x,
+            y: this.y + other.y,
+        }
+    }
+
+    #[lua(meta, infallible, name = "__eq")]
+    fn eq(this: &Vec2, other: &Vec2) -> bool {
+        this == other
+    }
+
+    #[lua(meta, infallible, name = "__call")]
+    fn call(_lua: &Lua, _proxy: AnyUserData, x: i32, y: i32) -> Vec2 {
+        Self::new(x, y)
+    }
+}
+
+#[test]
+fn test_static_metamethods() {
+    let lua = Lua::new();
+    lua.globals()
+        .set("Vec2", lua.create_proxy::<Vec2>().unwrap())
+        .unwrap();
+    lua.load(
+        r#"
+        local a = Vec2.new(1, 2)
+        local b = Vec2.new(3, 4)
+
+        local c = a + b
+        assert(c.x == 4, "__add x should be 1 + 3 = 4, got " .. tostring(c.x))
+        assert(c.y == 6, "__add y should be 2 + 4 = 6, got " .. tostring(c.y))
+
+        assert(a == Vec2.new(1, 2), "__eq should report vectors equal")
+        assert(a ~= b, "__eq should report vectors unequal")
+
+        -- `__call` on the proxy
+        local d = Vec2(7, 14)
+        assert(d.x == 7 and d.y == 14, "__call should build Vec2(7, 14)")
+    "#,
+    )
+    .exec()
+    .unwrap();
+}
+
+#[derive(Clone, Debug, UserData)]
+struct r#Hygiene {
+    value: i32,
+    r#type: i32,
+}
+
+#[mlua::userdata_impl]
+impl r#Hygiene {
+    #[lua(infallible)]
+    fn new(value: i32) -> Self {
+        Hygiene { value, r#type: 7 }
+    }
+
+    // `this` must not clash with the generated receiver binding.
+    #[lua(infallible)]
+    fn add_this(&self, this: i32) -> i32 {
+        self.value + this
+    }
+
+    // `lua` must not clash either.
+    #[lua(infallible)]
+    fn add_lua(&self, lua: i32) -> i32 {
+        self.value + lua
+    }
+
+    #[lua(infallible)]
+    fn r#double_type(&self) -> i32 {
+        self.r#type * 2
+    }
+}
+
+#[test]
+fn test_param_name_hygiene() {
+    let lua = Lua::new();
+    lua.globals()
+        .set("Hygiene", lua.create_proxy::<Hygiene>().unwrap())
+        .unwrap();
+    lua.load(
+        r#"
+        local h = Hygiene.new(10)
+
+        -- reserved parameter names must not clash with generated bindings
+        assert(h:add_this(5) == 15, "add_this should be 10 + 5 = 15")
+        assert(h:add_lua(3) == 13, "add_lua should be 10 + 3 = 13")
+
+        -- the `r#` prefix must not leak into Lua names
+        assert(h.type == 7, "field r#type should be exposed as 'type'")
+        h.type = 10
+        assert(h.type == 10, "field r#type setter should update via 'type'")
+        assert(h:double_type() == 20, "method r#double_type should be callable as 'double_type'")
+        assert(h["r#type"] == nil, "the raw prefix must not leak into the Lua name")
+    "#,
+    )
+    .exec()
+    .unwrap();
+}
+
+#[derive(Clone, Debug, UserData)]
+struct Wild {
+    n: i32,
+}
+
+#[mlua::userdata_impl]
+impl Wild {
+    #[lua(infallible)]
+    fn new(n: i32) -> Self {
+        Wild { n }
+    }
+
+    #[lua(infallible)]
+    fn ignore_one(&self, _: i32) -> i32 {
+        self.n
+    }
+
+    #[lua(infallible)]
+    fn add_second(&self, _: i32, other: &Wild) -> i32 {
+        self.n + other.n
+    }
+}
+
+#[test]
+fn test_wildcard_params() {
+    let lua = Lua::new();
+    lua.globals()
+        .set("Wild", lua.create_proxy::<Wild>().unwrap())
+        .unwrap();
+    lua.load(
+        r#"
+        local w = Wild.new(7)
+        assert(w:ignore_one(99) == 7, "single wildcard arg should be ignored")
+        assert(w:add_second(1, Wild.new(5)) == 12, "named arg after a wildcard should work")
+        assert(not pcall(function() return w:ignore_one({}) end), "wildcard arg is still type-checked")
+    "#,
+    )
+    .exec()
+    .unwrap();
+}
+
+mod separate_definition {
+    use mlua::UserData;
+
+    #[derive(UserData)]
+    pub(super) struct SeparateModuleUserData;
+}
+
+mod separate_implementation {
+    use super::separate_definition::SeparateModuleUserData;
+
+    #[mlua::userdata_impl]
+    impl SeparateModuleUserData {
+        #[lua(infallible)]
+        fn answer(&self) -> i32 {
+            42
+        }
+    }
+}
+
+#[test]
+fn test_userdata_impl_in_separate_module() {
+    let lua = Lua::new();
+    let userdata = lua
+        .create_userdata(separate_definition::SeparateModuleUserData)
+        .unwrap();
+    lua.globals().set("userdata", userdata).unwrap();
+
+    assert_eq!(lua.load("return userdata:answer()").eval::<i32>().unwrap(), 42);
 }
 
 #[cfg(feature = "async")]
@@ -416,8 +661,20 @@ mod async_tests {
             Ok(self.0 * factor)
         }
 
+        async fn add(&self, this: u64, lua: u64) -> Result<u64> {
+            Ok(self.0 + this + lua)
+        }
+
         async fn default_value() -> Result<u64> {
             Ok(42)
+        }
+
+        async fn lua_version(lua: &Lua, extra: Option<&str>) -> Result<String> {
+            (lua.globals().get("_VERSION")).map(|s: String| s + extra.unwrap_or(""))
+        }
+
+        async fn lua_version_owned(lua: Lua) -> Result<String> {
+            lua.globals().get("_VERSION")
         }
 
         #[cfg(not(any(feature = "lua51", feature = "luau")))]
@@ -442,8 +699,30 @@ mod async_tests {
             assert(val == 10, "expected 10, got " .. tostring(val))
             local doubled = c:multiply(3)
             assert(doubled == 30, "expected 30, got " .. tostring(doubled))
+            local summed = c:add(1, 2)
+            assert(summed == 13, "expected 10 + 1 + 2 = 13, got " .. tostring(summed))
             local inf = c:get_value_infallible()
             assert(inf == 10, "expected infallible 10, got " .. tostring(inf))
+        "#,
+        )
+        .exec_async()
+        .await
+        .unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_async_lua_param() {
+        let lua = Lua::new();
+        lua.globals()
+            .set("AsyncCounter", lua.create_proxy::<AsyncCounter>().unwrap())
+            .unwrap();
+
+        lua.load(
+            r#"
+            local c = AsyncCounter.new()
+            assert(type(AsyncCounter.lua_version()) == "string")
+            assert(string.sub(AsyncCounter.lua_version(" extra"), -5) == "extra", "expected 'extra' at the end")
+            assert(type(AsyncCounter.lua_version_owned()) == "string")
         "#,
         )
         .exec_async()

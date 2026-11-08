@@ -14,14 +14,14 @@ impl ObjectLike for AnyUserData {
     fn get<V: FromLua>(&self, key: impl IntoLua) -> Result<V> {
         // `lua_gettable` method used under the hood can work with any Lua value
         // that has `__index` metamethod
-        Table(self.0.clone()).get_protected(key)
+        Table(self.0.clone()).get_impl(key, true)
     }
 
     #[inline]
     fn set(&self, key: impl IntoLua, value: impl IntoLua) -> Result<()> {
         // `lua_settable` method used under the hood can work with any Lua value
         // that has `__newindex` metamethod
-        Table(self.0.clone()).set_protected(key, value)
+        Table(self.0.clone()).set_impl(key, value, true)
     }
 
     #[inline]
@@ -63,6 +63,8 @@ impl ObjectLike for AnyUserData {
     {
         match self.get(name)? {
             Value::Function(func) => func.call(args),
+            Value::Table(table) => table.call(args),
+            Value::UserData(ud) => ud.call(args),
             val => {
                 let msg = format!("attempt to call a {} value (function '{name}')", val.type_name());
                 Err(Error::RuntimeError(msg))
@@ -77,6 +79,8 @@ impl ObjectLike for AnyUserData {
     {
         match self.get(name) {
             Ok(Value::Function(func)) => func.call_async(args),
+            Ok(Value::Table(table)) => table.call_async(args),
+            Ok(Value::UserData(ud)) => ud.call_async(args),
             Ok(val) => {
                 let msg = format!("attempt to call a {} value (function '{name}')", val.type_name());
                 AsyncCallFuture::error(Error::RuntimeError(msg))

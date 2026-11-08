@@ -1,8 +1,11 @@
+use std::fs;
 use std::io::Result as IoResult;
+use std::path::Path;
 use std::result::Result as StdResult;
+use std::sync::Arc;
 
 use mlua::luau::{FsRequirer, NavigateError, Require};
-use mlua::{Error, FromLua, IntoLua, Lua, MultiValue, Result, Value};
+use mlua::{Error, FromLua, Function, IntoLua, Lua, MultiValue, Result, Value};
 
 fn run_require(lua: &Lua, path: impl IntoLua) -> Result<Value> {
     lua.load(r#"return require(...)"#).call(path)
@@ -66,54 +69,112 @@ fn test_require_errors() {
     assert!((res.unwrap_err().to_string()).contains("@ is not a valid alias"));
 
     // Test throwing mlua::Error
-    struct MyRequire(FsRequirer);
+    struct MyRequire {
+        inner: FsRequirer,
+        _alive: Arc<()>,
+    }
 
     impl Require for MyRequire {
         fn is_require_allowed(&self, chunk_name: &str) -> bool {
-            self.0.is_require_allowed(chunk_name)
+            self.inner.is_require_allowed(chunk_name)
         }
 
-        fn reset(&mut self, _chunk_name: &str) -> StdResult<(), NavigateError> {
-            Err(Error::runtime("test error"))?
+        fn reset(&mut self, chunk_name: &str) -> StdResult<(), NavigateError> {
+            if chunk_name.ends_with(".rs") {
+                Err(Error::runtime("test error"))?;
+            }
+            self.inner.reset(chunk_name)
         }
 
         fn jump_to_alias(&mut self, path: &str) -> StdResult<(), NavigateError> {
-            self.0.jump_to_alias(path)
+            self.inner.jump_to_alias(path)
         }
 
         fn to_parent(&mut self) -> StdResult<(), NavigateError> {
-            self.0.to_parent()
+            self.inner.to_parent()
         }
 
         fn to_child(&mut self, name: &str) -> StdResult<(), NavigateError> {
-            self.0.to_child(name)
+            self.inner.to_child(name)
         }
 
         fn has_module(&self) -> bool {
-            self.0.has_module()
+            self.inner.has_module()
         }
 
         fn cache_key(&self) -> String {
-            self.0.cache_key()
+            self.inner.cache_key()
         }
 
         fn has_config(&self) -> bool {
-            self.0.has_config()
+            self.inner.has_config()
         }
 
         fn config(&self) -> IoResult<Vec<u8>> {
-            self.0.config()
+            self.inner.config()
         }
 
-        fn loader(&self, lua: &Lua) -> Result<mlua::Function> {
-            self.0.loader(lua)
+        fn loader(&self, lua: &Lua) -> Result<Function> {
+            lua.create_function(|_, ()| Ok(42))
         }
     }
 
-    let require = lua.create_require_function(MyRequire(FsRequirer::new())).unwrap();
-    lua.globals().set("require", require).unwrap();
-    let res = lua.load(r#"return require('./a/relative/path')"#).exec();
+    let alive = Arc::new(());
+    let require = lua
+        .create_require_function(MyRequire {
+            inner: FsRequirer::new(),
+            _alive: alive.clone(),
+        })
+        .unwrap();
+    lua.globals().set("require", &require).unwrap();
+    let res = lua
+        .load(r#"return require('./a/relative/path')"#)
+        .set_name("@main.rs")
+        .exec();
     assert!((res.unwrap_err().to_string()).contains("test error"));
+
+    // A saved require function must retain its context independently of the globals.
+    lua.globals().set("require", Value::Nil).unwrap();
+    lua.gc_collect().unwrap();
+    lua.gc_collect().unwrap();
+    assert_eq!(Arc::strong_count(&alive), 2);
+    let res = lua
+        .load(r#"local require = ...; return require('./a/relative/path')"#)
+        .set_name("@main.rs")
+        .call::<Value>(&require);
+    assert!(res.unwrap_err().to_string().contains("test error"));
+    assert_eq!(
+        lua.load(r#"local require = ...; return require('./dependency')"#)
+            .set_name("@tests/luau/require/without_config/module.luau")
+            .call::<i32>(&require)
+            .unwrap(),
+        42
+    );
+    drop(require);
+    lua.gc_collect().unwrap();
+    lua.gc_collect().unwrap();
+    assert_eq!(Arc::strong_count(&alive), 1);
+}
+
+#[test]
+fn test_require_from_path() -> Result<()> {
+    let dir = tempfile::tempdir_in(".").unwrap();
+    // Resetting a required module must not pick an unrelated extensionless file.
+    fs::write(dir.path().join("dependency"), "return 99").unwrap();
+    fs::write(
+        dir.path().join("dependency.luau"),
+        "if not loaded then loaded = true; return require('@self') end; return 42",
+    )
+    .unwrap();
+    for name in ["main.luau", "main.lua", "init.luau"] {
+        let path = Path::new(dir.path().file_name().unwrap()).join(name);
+        fs::write(&path, "return require('./dependency')").unwrap();
+        for path in [path.clone(), path.canonicalize().unwrap()] {
+            let lua = Lua::new();
+            assert_eq!(lua.load(path.as_path()).eval::<i32>()?, 42);
+        }
+    }
+    Ok(())
 }
 
 #[test]
@@ -249,6 +310,152 @@ fn test_require_with_config() {
 #[test]
 fn test_require_with_config_luau() {
     test_require_with_config_inner("with_config_luau");
+}
+
+#[test]
+fn test_alias_override() {
+    let lua = Lua::new();
+
+    struct OverrideRequire(FsRequirer);
+
+    impl Require for OverrideRequire {
+        fn is_require_allowed(&self, chunk_name: &str) -> bool {
+            self.0.is_require_allowed(chunk_name)
+        }
+
+        fn reset(&mut self, chunk_name: &str) -> StdResult<(), NavigateError> {
+            self.0.reset(chunk_name)
+        }
+
+        fn jump_to_alias(&mut self, path: &str) -> StdResult<(), NavigateError> {
+            self.0.jump_to_alias(path)
+        }
+
+        fn to_alias_override(&mut self, alias: &str) -> StdResult<(), NavigateError> {
+            if alias == "testoverride" {
+                self.0.jump_to_alias("./tests/luau/require/without_config")
+            } else {
+                Err(NavigateError::NotFound)
+            }
+        }
+
+        fn to_parent(&mut self) -> StdResult<(), NavigateError> {
+            self.0.to_parent()
+        }
+
+        fn to_child(&mut self, name: &str) -> StdResult<(), NavigateError> {
+            self.0.to_child(name)
+        }
+
+        fn has_module(&self) -> bool {
+            self.0.has_module()
+        }
+
+        fn cache_key(&self) -> String {
+            self.0.cache_key()
+        }
+
+        fn has_config(&self) -> bool {
+            self.0.has_config()
+        }
+
+        fn config(&self) -> IoResult<Vec<u8>> {
+            self.0.config()
+        }
+
+        fn loader(&self, lua: &Lua) -> Result<Function> {
+            self.0.loader(lua)
+        }
+    }
+
+    let require_fn = lua
+        .create_require_function(OverrideRequire(FsRequirer::new()))
+        .unwrap();
+    lua.globals().set("require", require_fn).unwrap();
+
+    // to_alias_override intercepts before config-file search
+    let res = run_require(&lua, "@testoverride/dependency").unwrap();
+    assert_eq!("result from dependency", get_str(&res, 1));
+
+    // Different sub-path through the same alias
+    let res = run_require(&lua, "@testoverride/module").unwrap();
+    assert_eq!("required into module", get_str(&res, 2));
+
+    // Aliases not handled by the override still fail normally
+    let res = run_require(&lua, "@unknown_alias_xyz/anything");
+    assert!(res.is_err());
+    assert!((res.unwrap_err().to_string()).contains("@unknown_alias_xyz is not a valid alias"));
+}
+
+#[test]
+fn test_alias_fallback() {
+    let lua = Lua::new();
+
+    struct FallbackRequire(FsRequirer);
+
+    impl Require for FallbackRequire {
+        fn is_require_allowed(&self, chunk_name: &str) -> bool {
+            self.0.is_require_allowed(chunk_name)
+        }
+
+        fn reset(&mut self, chunk_name: &str) -> StdResult<(), NavigateError> {
+            self.0.reset(chunk_name)
+        }
+
+        fn jump_to_alias(&mut self, path: &str) -> StdResult<(), NavigateError> {
+            self.0.jump_to_alias(path)
+        }
+
+        fn to_alias_fallback(&mut self, alias: &str) -> StdResult<(), NavigateError> {
+            if alias == "testfallback" {
+                self.0.jump_to_alias("./tests/luau/require/without_config")
+            } else {
+                Err(NavigateError::NotFound)
+            }
+        }
+
+        fn to_parent(&mut self) -> StdResult<(), NavigateError> {
+            self.0.to_parent()
+        }
+
+        fn to_child(&mut self, name: &str) -> StdResult<(), NavigateError> {
+            self.0.to_child(name)
+        }
+
+        fn has_module(&self) -> bool {
+            self.0.has_module()
+        }
+
+        fn cache_key(&self) -> String {
+            self.0.cache_key()
+        }
+
+        fn has_config(&self) -> bool {
+            self.0.has_config()
+        }
+
+        fn config(&self) -> IoResult<Vec<u8>> {
+            self.0.config()
+        }
+
+        fn loader(&self, lua: &Lua) -> Result<Function> {
+            self.0.loader(lua)
+        }
+    }
+
+    let require_fn = lua
+        .create_require_function(FallbackRequire(FsRequirer::new()))
+        .unwrap();
+    lua.globals().set("require", require_fn).unwrap();
+
+    // to_alias_fallback catches after config-file search misses
+    let res = run_require(&lua, "@testfallback/dependency").unwrap();
+    assert_eq!("result from dependency", get_str(&res, 1));
+
+    // Aliases not handled by the fallback still fail
+    let res = run_require(&lua, "@unknown_alias_xyz/anything");
+    assert!(res.is_err());
+    assert!((res.unwrap_err().to_string()).contains("@unknown_alias_xyz is not a valid alias"));
 }
 
 #[cfg(all(feature = "async", not(windows)))]

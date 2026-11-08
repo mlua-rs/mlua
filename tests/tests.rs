@@ -3,10 +3,11 @@ use std::collections::HashMap;
 use std::iter::FromIterator;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::Arc;
-use std::{error, f32, f64, fmt};
+use std::{error, fmt};
 
+use mlua::chunk::ChunkMode;
 use mlua::{
-    ChunkMode, Error, ExternalError, Function, Lua, LuaOptions, Nil, Result, StdLib, Table, UserData, Value,
+    Error, ExternalError, Function, Integer, Lua, LuaOptions, Nil, Result, StdLib, Table, UserData, Value,
     Variadic, ffi,
 };
 
@@ -132,9 +133,9 @@ fn test_exec() -> Result<()> {
 fn test_eval() -> Result<()> {
     let lua = Lua::new();
 
-    assert_eq!(lua.load("1 + 1").eval::<i32>()?, 2);
-    assert_eq!(lua.load("false == false").eval::<bool>()?, true);
-    assert_eq!(lua.load("return 1 + 2").eval::<i32>()?, 3);
+    assert_eq!(lua.load("\t1 + 1").eval::<i32>()?, 2);
+    assert!(lua.load("false == false").eval::<bool>()?);
+    assert_eq!(lua.load("\nreturn 1 + 2").eval::<i32>()?, 3);
     match lua.load("if true then").eval::<()>() {
         Err(Error::SyntaxError {
             incomplete_input: true,
@@ -187,7 +188,7 @@ fn test_load_mode() -> Result<()> {
     #[cfg(not(feature = "luau"))]
     let bytecode = lua.load("return 1 + 1").into_function()?.dump(true);
     #[cfg(feature = "luau")]
-    let bytecode = mlua::Compiler::new().compile("return 1 + 1")?;
+    let bytecode = mlua::chunk::Compiler::new().compile("return 1 + 1")?;
     assert_eq!(lua.load(&bytecode).eval::<i32>()?, 2);
     assert_eq!(lua.load(&bytecode).set_mode(ChunkMode::Binary).eval::<i32>()?, 2);
     match lua.load(&bytecode).set_mode(ChunkMode::Text).exec() {
@@ -436,21 +437,22 @@ fn test_panic() -> Result<()> {
     // Test returning Rust panic (must be resumed)
     {
         let lua = make_lua(LuaOptions::default())?;
-        match catch_unwind(AssertUnwindSafe(|| -> Result<()> {
-            let _caught_panic = lua
-                .load(
-                    r#"
+        assert!(
+            catch_unwind(AssertUnwindSafe(|| -> Result<()> {
+                let _caught_panic = lua
+                    .load(
+                        r#"
                     -- Set global
                     _, err = pcall(rust_panic_function)
                     return err
                 "#,
-                )
-                .eval::<Value>()?;
-            Ok(())
-        })) {
-            Ok(_) => panic!("no panic was detected"),
-            Err(_) => {}
-        };
+                    )
+                    .eval::<Value>()?;
+                Ok(())
+            }))
+            .is_err(),
+            "no panic was detected"
+        );
 
         assert!(lua.globals().get::<Value>("err")? == Value::Nil);
         match lua.load("tostring(err)").exec() {
@@ -552,6 +554,29 @@ fn test_safe_integers() -> Result<()> {
 fn test_num_conversion() -> Result<()> {
     let lua = Lua::new();
 
+    let min = Integer::MIN as f64;
+    for (number, expected) in [
+        (0.0, Some(0)),
+        (-0.0, Some(0)),
+        (1.0, Some(1)),
+        (min, Some(Integer::MIN)),
+        (-min, None),
+        (min.next_down(), None),
+        (1e-20, None),
+        (-1e-20, None),
+        (1.5, None),
+        (f64::NAN, None),
+        (f64::INFINITY, None),
+        (f64::NEG_INFINITY, None),
+    ] {
+        assert_eq!(lua.coerce_integer(Value::Number(number))?, expected, "{number:?}");
+    }
+    unsafe {
+        lua.exec_raw::<()>(Value::Number(-min), |state| {
+            assert_eq!(ffi::lua_isinteger(state, -1), 0);
+        })?;
+    }
+
     assert_eq!(
         lua.coerce_integer(Value::String(lua.create_string("1")?))?,
         Some(1)
@@ -585,7 +610,13 @@ fn test_num_conversion() -> Result<()> {
     #[cfg(any(feature = "lua52", feature = "lua51", feature = "luajit", feature = "luau"))]
     assert_eq!(lua.load("1.0").eval::<String>()?, "1");
 
+    #[cfg(any(feature = "lua51", feature = "lua52", feature = "luajit"))]
     assert_eq!(lua.load("1.5").eval::<i64>()?, 1);
+    #[cfg(not(any(feature = "lua51", feature = "lua52", feature = "luajit")))]
+    assert!(matches!(
+        lua.load("1.5").eval::<i64>(),
+        Err(Error::FromLuaConversionError { .. })
+    ));
     assert_eq!(lua.load("1.5").eval::<f64>()?, 1.5);
     assert_eq!(lua.load("1.5").eval::<String>()?, "1.5");
 
@@ -601,6 +632,7 @@ fn test_num_conversion() -> Result<()> {
     assert_eq!(lua.unpack::<f32>(lua.pack(f64::MIN)?)?, f32::NEG_INFINITY);
 
     assert_eq!(lua.unpack::<i128>(lua.pack(1i128 << 64)?)?, 1i128 << 64);
+    assert_eq!(lua.convert::<u128>("18446744073709551616")?, 1u128 << 64);
 
     // Negative zero
     let negative_zero = lua.load("-0.0").eval::<f64>()?;
@@ -670,10 +702,10 @@ fn test_pcall_xpcall() -> Result<()> {
     )
     .exec()?;
 
-    assert_eq!(globals.get::<bool>("pcall_status")?, false);
+    assert!(!globals.get::<bool>("pcall_status")?);
     assert_eq!(globals.get::<String>("pcall_error")?, "testerror");
 
-    assert_eq!(globals.get::<bool>("xpcall_statusr")?, false);
+    assert!(!globals.get::<bool>("xpcall_status")?);
     #[cfg(any(
         feature = "lua55",
         feature = "lua54",
@@ -727,7 +759,7 @@ fn test_recursive_mut_callback_error() -> Result<()> {
     match lua.globals().get::<Function>("f")?.call::<()>(false) {
         Err(Error::CallbackError { ref cause, .. }) => match *cause.as_ref() {
             Error::CallbackError { ref cause, .. } => match *cause.as_ref() {
-                Error::RecursiveMutCallback { .. } => {}
+                Error::RecursiveMutCallback => {}
                 ref other => panic!("incorrect result: {:?}", other),
             },
             ref other => panic!("incorrect result: {:?}", other),
@@ -836,6 +868,7 @@ fn test_replace_registry_value() -> Result<()> {
 }
 
 #[test]
+#[allow(clippy::mutable_key_type)] // This test specifically exercises RegistryKey hashing.
 fn test_lua_registry_hash() -> Result<()> {
     let lua = Lua::new();
 
@@ -919,14 +952,14 @@ fn test_application_data() -> Result<()> {
 
     // Insert of new data or removal should fail now
     assert!(lua.try_set_app_data::<i32>(123).is_err());
-    match catch_unwind(AssertUnwindSafe(|| lua.set_app_data::<i32>(123))) {
-        Ok(_) => panic!("expected panic"),
-        Err(_) => {}
-    }
-    match catch_unwind(AssertUnwindSafe(|| lua.remove_app_data::<i32>())) {
-        Ok(_) => panic!("expected panic"),
-        Err(_) => {}
-    }
+    assert!(
+        catch_unwind(AssertUnwindSafe(|| lua.set_app_data::<i32>(123))).is_err(),
+        "expected panic"
+    );
+    assert!(
+        catch_unwind(AssertUnwindSafe(|| lua.remove_app_data::<i32>())).is_err(),
+        "expected panic"
+    );
 
     // Check display and debug impls
     assert_eq!(format!("{s}"), "test1");
@@ -934,10 +967,10 @@ fn test_application_data() -> Result<()> {
 
     // Borrowing immutably and mutably of the same type is not allowed
     assert!(lua.try_app_data_mut::<&str>().is_err());
-    match catch_unwind(AssertUnwindSafe(|| lua.app_data_mut::<&str>().unwrap())) {
-        Ok(_) => panic!("expected panic"),
-        Err(_) => {}
-    }
+    assert!(
+        catch_unwind(AssertUnwindSafe(|| lua.app_data_mut::<&str>().unwrap())).is_err(),
+        "expected panic"
+    );
     assert!(lua.try_app_data_ref::<Vec<&str>>().is_err());
     drop((s, v));
 
@@ -958,7 +991,7 @@ fn test_application_data() -> Result<()> {
     assert_eq!(*lua.app_data_ref::<Vec<&str>>().unwrap(), vec!["test2", "test3"]);
 
     lua.remove_app_data::<Vec<&str>>();
-    assert!(matches!(lua.app_data_ref::<Vec<&str>>(), None));
+    assert!(lua.app_data_ref::<Vec<&str>>().is_none());
 
     Ok(())
 }
@@ -996,14 +1029,14 @@ fn test_c_function() -> Result<()> {
     extern "C-unwind" fn c_function(state: *mut mlua::lua_State) -> std::os::raw::c_int {
         unsafe {
             ffi::lua_pushboolean(state, 1);
-            ffi::lua_setglobal(state, b"c_function\0" as *const _ as *const _);
+            ffi::lua_setglobal(state, c"c_function".as_ptr());
         }
         0
     }
 
     let func = unsafe { lua.create_c_function(c_function)? };
     func.call::<()>(())?;
-    assert_eq!(lua.globals().get::<bool>("c_function")?, true);
+    assert!(lua.globals().get::<bool>("c_function")?);
 
     Ok(())
 }
@@ -1062,21 +1095,15 @@ fn test_too_many_recursions() -> Result<()> {
 #[test]
 #[cfg(not(target_arch = "wasm32"))]
 fn test_ref_stack_exhaustion() {
-    match catch_unwind(AssertUnwindSafe(|| -> Result<()> {
+    let result = (|| -> Result<()> {
         let lua = Lua::new();
         let mut vals = Vec::new();
         for _ in 0..10000000 {
             vals.push(lua.create_table()?);
         }
         Ok(())
-    })) {
-        Ok(_) => panic!("no panic was detected"),
-        Err(p) => assert!(
-            p.downcast::<String>()
-                .unwrap()
-                .starts_with("cannot create a Lua reference, out of auxiliary stack space")
-        ),
-    }
+    })();
+    assert!(matches!(result, Err(Error::StackError)));
 }
 
 #[test]
@@ -1537,13 +1564,38 @@ fn test_warnings() -> Result<()> {
             ("continue".to_string(), false),
         ]
     );
+    drop(messages);
 
     // Trigger error inside warning
     lua.set_warning_function(|_, _, _| Err(Error::runtime("warning error")));
-    assert!(matches!(
-        lua.load(r#"warn("test")"#).exec(),
-        Err(Error::RuntimeError(ref err)) if err == "warning error"
-    ));
+    lua.warning("test", false);
+    lua.load(r#"warn("test")"#).exec()?;
+    let thread = lua.create_thread(lua.load(r#"warn("test")"#).into_function()?)?;
+    thread.resume::<()>(())?;
+
+    // A warning from a nested coroutine must not jump past Rust destructors or Lua's lock.
+    let main_thread = lua.current_thread();
+    let dropped = Arc::new(());
+    let dropped2 = dropped.clone();
+    lua.globals().set(
+        "resume_warning",
+        lua.create_function(move |lua, ()| {
+            let _guard = dropped2.clone();
+            let thread = lua.create_thread(lua.load(r#"warn("test")"#).into_function()?)?;
+            thread.resume::<()>(())
+        })?,
+    )?;
+    lua.load("coroutine.wrap(resume_warning)()").exec()?;
+    assert_eq!(Arc::strong_count(&dropped), 2);
+    assert_eq!(lua.current_thread(), main_thread);
+
+    #[cfg(all(feature = "send", not(target_family = "wasm")))]
+    {
+        let lua = lua.clone();
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || tx.send(lua.load("return 42").eval::<i32>()).unwrap());
+        assert_eq!(rx.recv_timeout(std::time::Duration::from_secs(5)).unwrap()?, 42);
+    }
 
     // Recursive warning
     lua.set_warning_function(|lua, _, _| {
@@ -1622,13 +1674,23 @@ fn test_exec_raw() -> Result<()> {
 
     let n: i32 = unsafe {
         lua.exec_raw((), |state| {
-            ffi::lua_getglobal(state, b"sum\0".as_ptr() as _);
+            ffi::lua_getglobal(state, c"sum".as_ptr());
             ffi::lua_pushinteger(state, 1);
             ffi::lua_pushinteger(state, 7);
             ffi::lua_call(state, 2, 1);
         })
     }?;
     assert_eq!(n, 8);
+
+    let values: Variadic<Table> = unsafe {
+        lua.exec_raw((), |state| {
+            assert_ne!(ffi::lua_checkstack(state, 64), 0);
+            for _ in 0..64 {
+                ffi::lua_newtable(state);
+            }
+        })
+    }?;
+    assert_eq!(values.len(), 64);
 
     // Test error handling
     let res: Result<()> = unsafe {

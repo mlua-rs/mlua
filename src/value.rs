@@ -7,7 +7,8 @@ use num_traits::FromPrimitive;
 
 use crate::error::{Error, Result};
 use crate::function::Function;
-use crate::string::{BorrowedStr, LuaString};
+use crate::state::WeakLua;
+use crate::string::LuaString;
 use crate::table::Table;
 use crate::thread::Thread;
 use crate::types::{Integer, LightUserData, Number, ValueRef};
@@ -38,7 +39,7 @@ pub enum Value {
     LightUserData(LightUserData),
     /// An integer number.
     ///
-    /// Any Lua number convertible to a `Integer` will be represented as this variant.
+    /// Any Lua number convertible to an `Integer` will be represented as this variant.
     Integer(Integer),
     /// A floating point number.
     Number(Number),
@@ -103,13 +104,11 @@ impl Value {
     /// Compares two values for equality.
     ///
     /// Equality comparisons do not convert strings to numbers or vice versa.
-    /// Tables, functions, threads, and userdata are compared by reference:
-    /// two objects are considered equal only if they are the same object.
+    /// Functions and threads are compared by reference. Tables and userdata also use reference
+    /// equality unless their metamethod rules apply.
     ///
-    /// If table or userdata have `__eq` metamethod then mlua will try to invoke it.
-    /// The first value is checked first. If that value does not define a metamethod
-    /// for `__eq`, then mlua will check the second value.
-    /// Then mlua calls the metamethod with the two values as arguments, if found.
+    /// Tables follow the backend's `__eq` rules (see [`Table::equals`]).
+    /// Distinct userdata with the same metatable invoke its `__eq` metamethod, if present.
     pub fn equals(&self, other: &Self) -> Result<bool> {
         match (self, other) {
             (Value::Table(a), Value::Table(b)) => a.equals(b),
@@ -156,7 +155,7 @@ impl Value {
             protect_lua!(state, 1, 1, fn(state) {
                 ffi::luaL_tolstring(state, -1, ptr::null_mut());
             })?;
-            Ok(LuaString(lua.pop_ref()).to_str()?.to_string())
+            Ok(LuaString(lua.try_pop_ref()?).to_str()?.to_string())
         }
 
         match self {
@@ -177,6 +176,25 @@ impl Value {
             #[cfg(feature = "luau")]
             Value::Buffer(crate::Buffer(vref)) => unsafe { invoke_tostring(vref) },
             Value::Error(err) => Ok(err.to_string()),
+        }
+    }
+
+    /// Returns a weak reference to the Lua instance owning this value.
+    ///
+    /// Returns `None` for values without an associated Lua instance, such as primitive values
+    /// and [`Value::Error`].
+    #[inline]
+    pub fn weak_lua(&self) -> Option<&WeakLua> {
+        match self {
+            Value::String(s) => Some(s.weak_lua()),
+            Value::Table(t) => Some(t.weak_lua()),
+            Value::Function(f) => Some(f.weak_lua()),
+            Value::Thread(t) => Some(t.weak_lua()),
+            Value::UserData(ud) => Some(ud.weak_lua()),
+            #[cfg(feature = "luau")]
+            Value::Buffer(b) => Some(b.weak_lua()),
+            Value::Other(vref) => Some(&vref.lua),
+            _ => None,
         }
     }
 
@@ -347,31 +365,6 @@ impl Value {
         }
     }
 
-    /// Cast the value to [`BorrowedStr`].
-    ///
-    /// If the value is a [`LuaString`], try to convert it to [`BorrowedStr`] or return `None`
-    /// otherwise.
-    #[deprecated(
-        since = "0.11.0",
-        note = "This method does not follow Rust naming convention. Use `as_string().and_then(|s| s.to_str().ok())` instead."
-    )]
-    #[inline]
-    pub fn as_str(&self) -> Option<BorrowedStr> {
-        self.as_string().and_then(|s| s.to_str().ok())
-    }
-
-    /// Cast the value to [`String`].
-    ///
-    /// If the value is a [`LuaString`], converts it to [`String`] or returns `None` otherwise.
-    #[deprecated(
-        since = "0.11.0",
-        note = "This method does not follow Rust naming convention. Use `as_string().map(|s| s.to_string_lossy())` instead."
-    )]
-    #[inline]
-    pub fn as_string_lossy(&self) -> Option<String> {
-        self.as_string().map(|s| s.to_string_lossy())
-    }
-
     /// Returns `true` if the value is a Lua [`Table`].
     #[inline]
     pub fn is_table(&self) -> bool {
@@ -440,6 +433,31 @@ impl Value {
         }
     }
 
+    /// Cast the value to a [`Vector`].
+    ///
+    /// If the value is a [`Vector`], returns it or `None` otherwise.
+    ///
+    /// [`Vector`]: crate::Vector
+    #[cfg(any(feature = "luau", doc))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
+    #[inline]
+    pub fn as_vector(&self) -> Option<crate::Vector> {
+        match self {
+            Value::Vector(v) => Some(*v),
+            _ => None,
+        }
+    }
+
+    /// Returns `true` if the value is a [`Vector`].
+    ///
+    /// [`Vector`]: crate::Vector
+    #[cfg(any(feature = "luau", doc))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
+    #[inline]
+    pub fn is_vector(&self) -> bool {
+        self.as_vector().is_some()
+    }
+
     /// Cast the value to a [`Buffer`].
     ///
     /// If the value is [`Buffer`], returns it or `None` otherwise.
@@ -493,11 +511,11 @@ impl Value {
     // Compares two values.
     // Used to sort values for Debug printing.
     pub(crate) fn sort_cmp(&self, other: &Self) -> Ordering {
-        fn cmp_num(a: Number, b: Number) -> Ordering {
-            match (a, b) {
-                _ if a < b => Ordering::Less,
-                _ if a > b => Ordering::Greater,
-                _ => Ordering::Equal,
+        fn cmp_integer_number(a: Integer, b: Number) -> Ordering {
+            match (a as Number).partial_cmp(&b) {
+                // Integer::MAX can round up to a float outside the integer ranges
+                Some(Ordering::Equal) => Integer::from_f64(b).map_or(Ordering::Less, |b| a.cmp(&b)),
+                ordering => ordering.unwrap_or(Ordering::Equal),
             }
         }
 
@@ -516,9 +534,9 @@ impl Value {
             (_, Value::Boolean(_)) => Ordering::Greater,
             // Integer && Number
             (Value::Integer(a), Value::Integer(b)) => a.cmp(b),
-            (Value::Integer(a), Value::Number(b)) => cmp_num(*a as Number, *b),
-            (Value::Number(a), Value::Integer(b)) => cmp_num(*a, *b as Number),
-            (Value::Number(a), Value::Number(b)) => cmp_num(*a, *b),
+            (Value::Integer(a), Value::Number(b)) => cmp_integer_number(*a, *b),
+            (Value::Number(a), Value::Integer(b)) => cmp_integer_number(*b, *a).reverse(),
+            (Value::Number(a), Value::Number(b)) => a.partial_cmp(b).unwrap_or(Ordering::Equal),
             (Value::Integer(_) | Value::Number(_), _) => Ordering::Less,
             (_, Value::Integer(_) | Value::Number(_)) => Ordering::Greater,
             // Vector (Luau)
@@ -600,8 +618,9 @@ impl PartialEq for Value {
             (Value::Boolean(a), Value::Boolean(b)) => a == b,
             (Value::LightUserData(a), Value::LightUserData(b)) => a == b,
             (Value::Integer(a), Value::Integer(b)) => *a == *b,
-            (Value::Integer(a), Value::Number(b)) => *a as Number == *b,
-            (Value::Number(a), Value::Integer(b)) => *a == *b as Number,
+            (Value::Integer(a), Value::Number(b)) | (Value::Number(b), Value::Integer(a)) => {
+                *a as Number == *b && Integer::from_f64(*b) == Some(*a)
+            }
             (Value::Number(a), Value::Number(b)) => *a == *b,
             #[cfg(feature = "luau")]
             (Value::Vector(v1), Value::Vector(v2)) => v1 == v2,
@@ -658,6 +677,15 @@ impl<'a> SerializableValue<'a> {
         }
     }
 
+    /// Sets the maximum table nesting depth. Default: **128**.
+    ///
+    /// Increasing this limit may require a larger thread stack. Zero rejects all tables.
+    #[must_use]
+    pub fn recursion_limit(mut self, limit: usize) -> Self {
+        self.options.recursion_limit = limit;
+        self
+    }
+
     /// If true, an attempt to serialize types such as [`Function`], [`Thread`], [`LightUserData`]
     /// and [`Error`] will cause an error.
     /// Otherwise these types skipped when iterating or serialized as unit type.
@@ -708,6 +736,21 @@ impl<'a> SerializableValue<'a> {
         self.options.detect_mixed_tables = enabled;
         self
     }
+
+    /// If true, pass Luau buffer bytes directly to serializers without copying.
+    ///
+    /// Default: **false**.
+    ///
+    /// # Safety
+    ///
+    /// When enabled, the caller must ensure that serializers and any code they invoke do not
+    /// mutate a buffer while its bytes are borrowed.
+    #[cfg(feature = "luau")]
+    #[must_use]
+    pub unsafe fn borrow_buffers(mut self, enabled: bool) -> Self {
+        self.options.borrow_buffers = enabled;
+        self
+    }
 }
 
 #[cfg(feature = "serde")]
@@ -732,6 +775,11 @@ impl Serialize for SerializableValue<'_> {
             Value::LightUserData(ud) if ud.0.is_null() => serializer.serialize_none(),
             Value::UserData(ud) if ud.is_serializable() || self.options.deny_unsupported_types => {
                 ud.serialize(serializer)
+            }
+            #[cfg(feature = "luau")]
+            Value::Buffer(buf) if self.options.borrow_buffers => {
+                let lua = buf.0.lua.lock();
+                serializer.serialize_bytes(buf.as_slice(&lua))
             }
             #[cfg(feature = "luau")]
             Value::Buffer(buf) => buf.serialize(serializer),

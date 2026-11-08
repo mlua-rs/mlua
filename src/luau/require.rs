@@ -10,15 +10,21 @@ use crate::error::{Error, Result};
 use crate::function::Function;
 use crate::state::{Lua, callback_error_ext};
 use crate::table::Table;
+use crate::traits::FromLuaMulti;
 use crate::types::MaybeSend;
+use crate::util::{StackGuard, check_stack, push_userdata};
 
 pub use fs::FsRequirer;
 
 /// An error that can occur during navigation in the Luau `require-by-string` system.
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub enum NavigateError {
+    /// The path is ambiguous (more than one candidate matches).
     Ambiguous,
+    /// The requested path could not be found.
     NotFound,
+    /// Another error occurred during navigation.
     Other(Error),
 }
 
@@ -61,12 +67,30 @@ pub trait Require {
 
     /// Resets the internal state to point at an aliased module.
     ///
-    /// This function received an exact path from a configuration file.
+    /// This function receives an exact path from a configuration file.
     /// It's only called when an alias's path cannot be resolved relative to its
     /// configuration file.
     fn jump_to_alias(&mut self, path: &str) -> StdResult<(), NavigateError>;
 
-    // Navigate to parent directory
+    /// Provides an initial alias override opportunity prior to searching for
+    /// configuration files.
+    ///
+    /// If `Ok(())` is returned, alias resolution stops here and the internal state
+    /// must point at the aliased location.
+    fn to_alias_override(&mut self, _alias: &str) -> StdResult<(), NavigateError> {
+        Err(NavigateError::NotFound)
+    }
+
+    /// Provides a final opportunity to resolve an alias if it cannot be found in
+    /// configuration files.
+    ///
+    /// If `Ok(())` is returned, alias resolution stops here and the internal state
+    /// must point at the aliased location.
+    fn to_alias_fallback(&mut self, _alias: &str) -> StdResult<(), NavigateError> {
+        Err(NavigateError::NotFound)
+    }
+
+    /// Navigates to the parent directory of the current requirer.
     fn to_parent(&mut self) -> StdResult<(), NavigateError>;
 
     /// Navigate to the given child directory.
@@ -192,6 +216,30 @@ pub(super) unsafe extern "C-unwind" fn init_config(config: *mut ffi::luarequire_
         })
     }
 
+    unsafe extern "C-unwind" fn to_alias_override(
+        state: *mut ffi::lua_State,
+        ctx: *mut c_void,
+        alias_unprefixed: *const c_char,
+    ) -> ffi::luarequire_NavigateResult {
+        let mut this = try_borrow_mut!(state, ctx);
+        let alias = CStr::from_ptr(alias_unprefixed).to_string_lossy();
+        callback_error_ext(state, ptr::null_mut(), true, move |_, _| {
+            this.to_alias_override(&alias).into_nav_result()
+        })
+    }
+
+    unsafe extern "C-unwind" fn to_alias_fallback(
+        state: *mut ffi::lua_State,
+        ctx: *mut c_void,
+        alias_unprefixed: *const c_char,
+    ) -> ffi::luarequire_NavigateResult {
+        let mut this = try_borrow_mut!(state, ctx);
+        let alias = CStr::from_ptr(alias_unprefixed).to_string_lossy();
+        callback_error_ext(state, ptr::null_mut(), true, move |_, _| {
+            this.to_alias_fallback(&alias).into_nav_result()
+        })
+    }
+
     unsafe extern "C-unwind" fn to_parent(
         state: *mut ffi::lua_State,
         ctx: *mut c_void,
@@ -247,7 +295,7 @@ pub(super) unsafe extern "C-unwind" fn init_config(config: *mut ffi::luarequire_
         size_out: *mut usize,
     ) -> WriteResult {
         let this = try_borrow!(state, ctx);
-        let cache_key = this.cache_key();
+        let cache_key = callback_error_ext(state, ptr::null_mut(), true, move |_, _| Ok(this.cache_key()));
         write_to_buffer(buffer, buffer_size, size_out, cache_key.as_bytes())
     }
 
@@ -298,8 +346,8 @@ pub(super) unsafe extern "C-unwind" fn init_config(config: *mut ffi::luarequire_
     (*config).is_require_allowed = is_require_allowed;
     (*config).reset = reset;
     (*config).jump_to_alias = jump_to_alias;
-    (*config).to_alias_override = None;
-    (*config).to_alias_fallback = None;
+    (*config).to_alias_override = Some(to_alias_override);
+    (*config).to_alias_fallback = Some(to_alias_fallback);
     (*config).to_parent = to_parent;
     (*config).to_child = to_child;
     (*config).is_module_present = is_module_present;
@@ -317,7 +365,7 @@ pub(super) unsafe extern "C-unwind" fn init_config(config: *mut ffi::luarequire_
 fn detect_config_format(data: &[u8]) -> ConfigStatus {
     let data = data.trim_ascii();
     if data.starts_with(b"{") {
-        let data = &data[1..].trim_ascii_start();
+        let data = data[1..].trim_ascii_start();
         if data.starts_with(b"\"") || data == b"}" {
             return ConfigStatus::PresentJson;
         }
@@ -368,21 +416,34 @@ pub(super) fn create_require_function<R: Require + MaybeSend + 'static>(
     unsafe extern "C-unwind" fn get_cache_key(state: *mut ffi::lua_State) -> c_int {
         let ctx = ffi::lua_touserdata(state, ffi::lua_upvalueindex(1));
         let ctx = try_borrow!(state, ctx);
-        let cache_key = ctx.cache_key();
-        ffi::lua_pushlstring(state, cache_key.as_ptr() as *const _, cache_key.len());
-        1
+        callback_error_ext(state, ptr::null_mut(), true, move |extra, _| {
+            (*extra).raw_lua().push(ctx.cache_key())?;
+            Ok(1)
+        })
     }
 
     let (get_cache_key, find_current_file, proxyrequire, registered_modules, loader_cache) = unsafe {
-        lua.exec_raw::<(Function, Function, Function, Table, Table)>((), move |state| {
-            let context = Context::new(require);
-            let context_ptr = ffi::lua_newuserdata_t(state, RefCell::new(context));
+        let rawlua = lua.lock();
+        let state = rawlua.state();
+        let _sg = StackGuard::new(state);
+        check_stack(state, 6)?;
+        let protect = !rawlua.unlikely_memory_error();
+        let context_ptr = push_userdata(state, RefCell::new(Context::new(require)), protect)?;
+        protect_lua!(state, 1, 5, |state| {
             ffi::lua_pushcclosured(state, get_cache_key, cstr!("get_cache_key"), 1);
             ffi::lua_pushcfunctiond(state, find_current_file, cstr!("find_current_file"));
             ffi::luarequire_pushproxyrequire(state, init_config, context_ptr as *mut _);
+            // Anchor to the config userdata to keep the context alive
+            ffi::lua_getupvalue(state, -1, 1);
+            ffi::lua_createtable(state, 1, 0);
+            ffi::lua_getupvalue(state, 1, 1);
+            ffi::lua_rawseti(state, -2, 1);
+            ffi::lua_setmetatable(state, -2);
+            ffi::lua_pop(state, 1);
             ffi::luaL_getsubtable(state, ffi::LUA_REGISTRYINDEX, ffi::LUA_REGISTERED_MODULES_TABLE);
             ffi::luaL_getsubtable(state, ffi::LUA_REGISTRYINDEX, cstr!("__MLUA_LOADER_CACHE"));
-        })
+        })?;
+        <(Function, Function, Function, Table, Table)>::from_stack_multi(5, &rawlua)
     }?;
 
     unsafe extern "C-unwind" fn error(state: *mut ffi::lua_State) -> c_int {
@@ -420,51 +481,60 @@ pub(super) fn create_require_function<R: Require + MaybeSend + 'static>(
         })
     }?;
 
-    // Prepare environment for the "require" function
-    let env = lua.create_table_with_capacity(0, 7)?;
-    env.raw_set("get_cache_key", get_cache_key)?;
-    env.raw_set("find_current_file", find_current_file)?;
-    env.raw_set("proxyrequire", proxyrequire)?;
-    env.raw_set("REGISTERED_MODULES", registered_modules)?;
-    env.raw_set("LOADER_CACHE", loader_cache)?;
-    env.raw_set("error", error)?;
-    env.raw_set("type", r#type)?;
-    env.raw_set("to_lowercase", to_lowercase)?;
+    let upvalues = lua.create_table_with_capacity(0, 8)?;
+    upvalues.raw_set("get_cache_key", get_cache_key)?;
+    upvalues.raw_set("find_current_file", find_current_file)?;
+    upvalues.raw_set("proxyrequire", proxyrequire)?;
+    upvalues.raw_set("REGISTERED_MODULES", registered_modules)?;
+    upvalues.raw_set("LOADER_CACHE", loader_cache)?;
+    upvalues.raw_set("error", error)?;
+    upvalues.raw_set("type", r#type)?;
+    upvalues.raw_set("to_lowercase", to_lowercase)?;
 
     lua.load(
         r#"
-        local path = ...
-        if type(path) ~= "string" then
-            error("bad argument #1 to 'require' (string expected, got " .. type(path) .. ")")
-        end
+        local upvalues = ...
+        local get_cache_key = upvalues.get_cache_key
+        local find_current_file = upvalues.find_current_file
+        local proxyrequire = upvalues.proxyrequire
+        local REGISTERED_MODULES = upvalues.REGISTERED_MODULES
+        local LOADER_CACHE = upvalues.LOADER_CACHE
+        local error = upvalues.error
+        local type = upvalues.type
+        local to_lowercase = upvalues.to_lowercase
+        return function(path)
+            if type(path) ~= "string" then
+                error("bad argument #1 to 'require' (string expected, got " .. type(path) .. ")")
+            end
 
-        -- Check if the module (path) is explicitly registered
-        local maybe_result = REGISTERED_MODULES[to_lowercase(path)]
-        if maybe_result ~= nil then
-            return maybe_result
-        end
+            -- Check if the module (path) is explicitly registered
+            local maybe_result = REGISTERED_MODULES[to_lowercase(path)]
+            if maybe_result ~= nil then
+                return maybe_result
+            end
 
-        local loader = proxyrequire(path, find_current_file())
-        local cache_key = get_cache_key()
-        -- Check if the loader result is already cached
-        local result = LOADER_CACHE[cache_key]
-        if result ~= nil then
+            local loader = proxyrequire(path, find_current_file())
+            local cache_key = get_cache_key()
+            -- Check if the loader result is already cached
+            local result = LOADER_CACHE[cache_key]
+            if result ~= nil then
+                return result
+            end
+
+            -- Call the loader function and cache the result
+            result = loader()
+            if result == nil then
+                result = true
+            end
+            LOADER_CACHE[cache_key] = result
             return result
         end
-
-        -- Call the loader function and cache the result
-        result = loader()
-        if result == nil then
-            result = true
-        end
-        LOADER_CACHE[cache_key] = result
-        return result
         "#,
     )
     .try_cache()
     .set_name("=__mlua_require")
-    .set_environment(env)
-    .into_function()
+    .set_environment(lua.create_table()?)
+    .call(upvalues)
 }
 
 mod fs;

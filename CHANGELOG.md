@@ -1,3 +1,50 @@
+## v0.12.2 (Oct 03, 2026)
+
+- Luau updated to 0.740
+- Added `Value::weak_lua` helper (#714)
+- Added `recursion_limit` to `SerializeOptions` and `DeserializeOptions` (defaults to 128)
+- Reject fractional numbers when converting to Rust integers on Lua 5.3+ and Luau
+- Fix precision loss when comparing integer and floating point `Value`s
+- `Table::equals` now follows the backend's native `__eq` semantics
+- Fix raw identifiers and callback types in derive macros
+- Prevent scoped userdata and callbacks from outliving their scope during cleanup
+- Fix panic and error handling in callbacks and userdata destructors to avoid corrupting Lua state
+- Return errors on reference stack exhaustion and improve stack checks
+- Fix async thread cancellation, stack cleanup, and global hook restoration when recycling threads
+- Fix Luau `require` from chunks loaded by path (#735) and require context lifetimes
+- perf: Reduce callback overhead
+- perf: Improve serde performance
+
+## v0.12.1 (Aug 29, 2026)
+
+- Lua 5.5 updated to 5.5.1
+- Luau updated to 0.736
+- Allow `#[mlua::userdata_impl]` to be used in a different module from `#[derive(UserData)]` (#726)
+- Fix coroutine stack handling after yielding from hooks (#723)
+
+## v0.12.0 (Jul 05, 2026)
+
+Changes since v0.12.0-rc.2
+
+- Create root re-exports are refactored (only essentials are re-exported, the rest is in the new submodules)
+- Added `ThreadStatus::Normal` and `Thread::is_normal` (mimic `coroutine.status`)
+- Added `Lua::set_jit_options` with support of Luau JIT inliner (Luau)
+- Added `Value::as_vector`/`Value::is_vector` (Luau)
+- Added `Table::remove`
+- `serde`: tables with the array metatable are always encoded as arrays (incl. `detect_mixed_tables` option)
+- impl `Hash` for `BorrowedStr`/`BorrowedBytes`
+- `Lua::current_thread` resolves implicit async threads to their root owner (#706)
+- Bugfixes and improvements
+
+## v0.12.0-rc.2 (Jun 06, 2026)
+
+- Add `#[derive(UserData)]` and `#[mlua::userdata_impl]` macros
+- Support thread create/resume/yield callbacks for all Lua versions (including Luau)
+- Support `to_alias_override`/`to_alias_fallback` in `Require` trait (Luau)
+- Prevent `XRc` overflow when dropping `RawLua` with foreign Lua state
+- implement `Not` for `StdLib` (#699)
+- Fix `String::to_pointer` return NULL in Lua <5.4
+
 ## v0.12.0-rc.1 (Apr 21, 2026)
 
 - Rust 2024 edition

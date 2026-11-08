@@ -1,6 +1,5 @@
 use std::collections::{VecDeque, vec_deque};
 use std::iter::FromIterator;
-use std::mem;
 use std::ops::{Deref, DerefMut};
 use std::os::raw::c_int;
 use std::result::Result as StdResult;
@@ -180,10 +179,8 @@ impl IntoIterator for MultiValue {
     type IntoIter = vec_deque::IntoIter<Value>;
 
     #[inline]
-    fn into_iter(mut self) -> Self::IntoIter {
-        let deque = mem::take(&mut self.0);
-        mem::forget(self);
-        deque.into_iter()
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
     }
 }
 

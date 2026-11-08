@@ -34,6 +34,8 @@ fn test_compilation() {
         t.compile_fail("tests/compile/userdata_setter_no_value.rs");
         t.compile_fail("tests/compile/userdata_static_with_self.rs");
         t.compile_fail("tests/compile/userdata_meta_owned_self.rs");
+        t.compile_fail("tests/compile/userdata_destructuring_arg.rs");
+        t.compile_fail("tests/compile/userdata_generic_impl.rs");
         t.compile_fail("tests/compile/userdata_const_getter.rs");
         t.compile_fail("tests/compile/userdata_field_with_args.rs");
     }

@@ -14,12 +14,9 @@ pub(crate) use short_names::short_type_name;
 pub(crate) use types::TypeKey;
 pub(crate) use userdata::{
     DESTRUCTED_USERDATA_METATABLE, get_destructed_userdata_metatable, get_internal_metatable,
-    get_internal_userdata, get_userdata, init_internal_metatable, push_internal_userdata, push_userdata,
-    take_userdata,
+    get_internal_userdata, get_userdata, init_internal_metatable, push_internal_userdata,
+    push_uninit_userdata, push_userdata, take_userdata,
 };
-
-#[cfg(not(feature = "luau"))]
-pub(crate) use userdata::push_uninit_userdata;
 
 // Checks that Lua has enough free stack space for future stack operations. On failure, this will
 // panic with an internal error message.
@@ -89,14 +86,10 @@ impl Drop for StackGuard {
 #[inline(always)]
 pub(crate) unsafe fn push_string(state: *mut ffi::lua_State, s: &[u8], protect: bool) -> Result<()> {
     // Always use protected mode if the string is too long
-    if protect || s.len() >= const { 1 << 30 } {
-        protect_lua!(state, 0, 1, |state| {
-            ffi::lua_pushlstring(state, s.as_ptr() as *const c_char, s.len());
-        })
-    } else {
+    let protect = protect || s.len() >= const { 1 << 30 };
+    protect_lua_mem!(state, if protect, 0, 1, |state| {
         ffi::lua_pushlstring(state, s.as_ptr() as *const c_char, s.len());
-        Ok(())
-    }
+    })
 }
 
 // Uses 3 (or 1 if unprotected) stack spaces, does not call checkstack.
@@ -116,31 +109,20 @@ pub(crate) unsafe fn push_external_string(
         ptr::null_mut()
     }
 
-    if protect {
-        let res = protect_lua!(state, 0, 1, move |state| {
-            ffi::lua_pushexternalstring(state, s_ptr, s_len, Some(dealloc), bytes_ud as *mut _);
-        });
-        if res.is_err() {
-            // Deallocate on error
-            drop(Box::from_raw(bytes_ud));
-            return res;
-        }
-    } else {
+    // Lua frees the external string on error.
+    protect_lua_mem!(state, if protect, 0, 1, move |state| {
         ffi::lua_pushexternalstring(state, s_ptr, s_len, Some(dealloc), bytes_ud as *mut _);
-    }
-    Ok(())
+    })
 }
 
 // Uses 3 stack spaces (when protect), does not call checkstack.
 #[cfg(feature = "luau")]
 #[inline(always)]
 pub(crate) unsafe fn push_buffer(state: *mut ffi::lua_State, size: usize, protect: bool) -> Result<*mut u8> {
-    let data = if protect || size > const { 1024 * 1024 * 1024 } {
-        protect_lua!(state, 0, 1, |state| ffi::lua_newbuffer(state, size))?
-    } else {
-        ffi::lua_newbuffer(state, size)
-    };
-    Ok(data as *mut u8)
+    let protect = protect || size > const { 1024 * 1024 * 1024 };
+    protect_lua_mem!(state, if protect, 0, 1, |state| {
+        ffi::lua_newbuffer(state, size) as *mut u8
+    })
 }
 
 // Uses 3 stack spaces, does not call checkstack.
@@ -153,12 +135,8 @@ pub(crate) unsafe fn push_table(
 ) -> Result<()> {
     let narr: c_int = narr.try_into().unwrap_or(c_int::MAX);
     let nrec: c_int = nrec.try_into().unwrap_or(c_int::MAX);
-    if protect || narr >= const { 1 << 26 } || nrec >= const { 1 << 26 } {
-        protect_lua!(state, 0, 1, |state| ffi::lua_createtable(state, narr, nrec))
-    } else {
-        ffi::lua_createtable(state, narr, nrec);
-        Ok(())
-    }
+    let protect = protect || narr >= const { 1 << 26 } || nrec >= const { 1 << 26 };
+    protect_lua_mem!(state, if protect, 0, 1, |state| ffi::lua_createtable(state, narr, nrec))
 }
 
 // Uses 4 stack spaces, does not call checkstack.
@@ -282,7 +260,7 @@ pub(crate) unsafe fn to_string(state: *mut ffi::lua_State, index: c_int) -> Stri
         }
         ffi::LUA_TNUMBER => {
             let mut isint = 0;
-            let i = ffi::lua_tointegerx(state, -1, &mut isint);
+            let i = ffi::lua_tointegerx(state, index, &mut isint);
             if isint == 0 {
                 ffi::lua_tonumber(state, index).to_string()
             } else {
@@ -349,10 +327,7 @@ pub(crate) unsafe fn ptr_to_lossy_str<'a>(input: *const c_char) -> Option<Cow<'a
 }
 
 pub(crate) fn linenumber_to_usize(n: c_int) -> Option<usize> {
-    match n {
-        n if n < 0 => None,
-        n => Some(n as usize),
-    }
+    usize::try_from(n).ok()
 }
 
 mod error;

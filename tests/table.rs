@@ -1,4 +1,4 @@
-use mlua::{Error, Lua, ObjectLike, Result, Table, Value};
+use mlua::{Error, IntoLua, Lua, ObjectLike, Result, Table, Value};
 
 #[test]
 fn test_globals_set_get() -> Result<()> {
@@ -43,12 +43,15 @@ fn test_table() -> Result<()> {
     );
     assert_eq!(table1, [1, 2, 3, 4, 5]);
     assert_eq!(table1, [1, 2, 3, 4, 5].as_slice());
+    assert_ne!(table1, [1, 2, 3, 4, 5, 6]);
+    assert_ne!(table1, [1, 2, 3, 4]);
 
     let table2 = globals.get::<Table>("table2")?;
     assert_eq!(table2.len()?, 0);
     assert!(table2.is_empty());
     assert_eq!(table2.pairs().collect::<Result<Vec<(i64, i64)>>>()?, vec![]);
     assert_eq!(table2, [0; 0]);
+    assert_ne!(table2, [1]);
 
     let table3 = globals.get::<Table>("table3")?;
     // sequence_values should only iterate until the first border
@@ -109,6 +112,33 @@ fn test_table_push_pop() -> Result<()> {
     assert_eq!(table2.pop::<Value>()?, Value::Nil);
     assert_eq!(table2.len()?, 0);
 
+    #[cfg(any(feature = "lua53", feature = "lua54", feature = "lua55"))]
+    {
+        let table = (lua.load("setmetatable({}, {__len = function() return math.maxinteger end})"))
+            .eval::<Table>()?;
+        assert!(
+            matches!(table.push(1), Err(Error::RuntimeError(msg)) if msg.contains("table length overflow"))
+        );
+        assert!(table.is_empty());
+    }
+
+    Ok(())
+}
+
+#[test]
+fn test_table_pop_empty() -> Result<()> {
+    let lua = Lua::new();
+
+    let empty = lua.create_table()?;
+    let table = lua.create_table_from([(0, 42)])?;
+    assert_eq!(empty.raw_pop::<Value>()?, Value::Nil);
+    assert_eq!(table.raw_pop::<Value>()?, Value::Nil);
+    assert_eq!(table.raw_get::<i64>(0)?, 42);
+
+    table.set_metatable(Some(lua.create_table()?))?;
+    assert_eq!(table.pop::<Value>()?, Value::Nil);
+    assert_eq!(table.raw_get::<i64>(0)?, 42);
+
     Ok(())
 }
 
@@ -138,6 +168,97 @@ fn test_table_insert_remove() -> Result<()> {
 
     // Wrong index, tables are 1-indexed
     assert!(table4.raw_insert(0, "123").is_err());
+
+    Ok(())
+}
+
+#[test]
+fn test_table_remove_metatable() -> Result<()> {
+    let lua = Lua::new();
+
+    let inner = lua.create_sequence_from([1, 2, 3, 4, 5])?;
+    let mt = lua.create_table()?;
+    mt.set("__index", &inner)?;
+    mt.set("__newindex", &inner)?;
+    mt.set("__len", {
+        let inner = inner.clone();
+        lua.create_function(move |_, ()| Ok(inner.raw_len()))?
+    })?;
+
+    let t = lua.create_table()?;
+    t.set_metatable(Some(mt))?;
+
+    t.remove(2)?; // removes value `2`
+    assert_eq!(t.len()?, 4);
+    assert_eq!(
+        inner.pairs().collect::<Result<Vec<(i64, i64)>>>()?,
+        vec![(1, 1), (2, 3), (3, 4), (4, 5)]
+    );
+
+    // Remove non-integer key
+    t.set("abc", "abcdef")?;
+    assert_eq!(inner.get::<String>("abc")?, "abcdef");
+    t.remove("abc")?;
+    assert_eq!(inner.get::<Value>("abc")?, Value::Nil);
+
+    Ok(())
+}
+
+#[test]
+fn test_table_metatable_during_conversion() -> Result<()> {
+    struct SetMetatable<'a>(&'a Table, &'a Table);
+
+    impl IntoLua for SetMetatable<'_> {
+        fn into_lua(self, _: &Lua) -> Result<Value> {
+            self.0.set_metatable(Some(self.1.clone()))?;
+            Ok(Value::Integer(1))
+        }
+    }
+
+    let lua = Lua::new();
+    let inner = lua.create_sequence_from([42, 43])?;
+    let mt = lua.create_table_from([("__index", &inner), ("__newindex", &inner)])?;
+    mt.set(
+        "__len",
+        lua.create_function({
+            let inner = inner.clone();
+            move |_, ()| Ok(inner.raw_len())
+        })?,
+    )?;
+    let table = lua.create_table()?;
+
+    assert_eq!(table.get::<i64>(SetMetatable(&table, &mt))?, 42);
+    table.set_metatable(None)?;
+    table.set(1, SetMetatable(&table, &mt))?;
+    assert_eq!(inner.raw_get::<i64>(1)?, 1);
+    table.set_metatable(None)?;
+    table.push(SetMetatable(&table, &mt))?;
+    assert_eq!(inner.raw_get::<i64>(3)?, 1);
+    table.set_metatable(None)?;
+    table.remove(SetMetatable(&table, &mt))?;
+    assert_eq!(inner, [43, 1]);
+    assert!(table.is_empty());
+
+    Ok(())
+}
+
+#[test]
+#[cfg(feature = "luau")]
+fn test_table_readonly_during_conversion() -> Result<()> {
+    struct Freeze<'a>(&'a Table);
+
+    impl mlua::IntoLua for Freeze<'_> {
+        fn into_lua(self, _: &Lua) -> Result<Value> {
+            self.0.set_readonly(true);
+            Ok(Value::Integer(1))
+        }
+    }
+
+    let lua = Lua::new();
+    let table = lua.create_table()?;
+    let result = table.raw_set(1, Freeze(&table));
+    assert!(matches!(result, Err(Error::RuntimeError(err)) if err.contains("readonly")));
+    assert!(table.is_empty());
 
     Ok(())
 }
@@ -241,6 +362,41 @@ fn test_table_pairs() -> Result<()> {
 }
 
 #[test]
+#[cfg(feature = "luau")]
+fn test_table_iteration_after_clear() -> Result<()> {
+    let lua = Lua::new();
+
+    let table = lua.create_table_from([("key", 1)])?;
+    let mut pairs = table.pairs::<String, i32>();
+    pairs.next().unwrap()?;
+    table.clear()?;
+    assert!(pairs.next().is_none());
+
+    table.raw_set("key", 1)?;
+    table.for_each::<String, i32>(|_, _| table.clear())?;
+    table.raw_set("key", 2)?;
+    assert_eq!(table.pairs::<String, i32>().next().unwrap()?.1, 2);
+
+    Ok(())
+}
+
+#[test]
+#[cfg(not(feature = "luau"))]
+fn test_table_pairs_invalid_key() -> Result<()> {
+    let lua = Lua::new();
+    let table = lua.create_table_from([("key", true)])?;
+    let mut pairs = table.pairs::<Value, Value>();
+    pairs.next().unwrap()?;
+    table.clear()?;
+    for key in ["a", "b", "c"] {
+        table.raw_set(key, true)?;
+    }
+    assert!(matches!(pairs.next().unwrap(), Err(Error::RuntimeError(e)) if e.contains("invalid key")));
+    assert!(pairs.next().is_none());
+    Ok(())
+}
+
+#[test]
 fn test_table_for_each() -> Result<()> {
     let lua = Lua::new();
 
@@ -265,7 +421,8 @@ fn test_table_for_each() -> Result<()> {
             table.set(k, Value::Nil)?;
             lua.gc_collect()?;
         }
-        Ok(i += 1)
+        i += 1;
+        Ok(())
     })?;
     assert_eq!(i, 5);
 
@@ -286,6 +443,60 @@ fn test_table_for_each_value() -> Result<()> {
     assert_eq!(sum, 1 + 2 + 3 + 4 + 5);
 
     Ok(())
+}
+
+#[test]
+#[cfg(not(feature = "luau"))]
+fn test_table_for_each_invalid_key() -> Result<()> {
+    let lua = Lua::new();
+    let table = lua.create_table_from([("key", true)])?;
+    let result = table.for_each::<Value, Value>(|_, _| {
+        table.clear()?;
+        for key in ["a", "b", "c"] {
+            table.raw_set(key, true)?;
+        }
+        Ok(())
+    });
+    assert!(matches!(result, Err(Error::RuntimeError(e)) if e.contains("invalid key")));
+    Ok(())
+}
+
+#[test]
+fn test_table_for_each_error() -> Result<()> {
+    let lua = Lua::new();
+    let table = lua.create_sequence_from([1, 2])?;
+    #[cfg(not(feature = "luau"))]
+    lua.set_hook(mlua::HookTriggers::ON_RETURNS, |_, _| {
+        Err(Error::runtime("return hook error"))
+    })?;
+    let mut calls = 0;
+    let result = table.for_each::<i64, i64>(|_, _| {
+        calls += 1;
+        Err(Error::runtime("callback error"))
+    });
+    assert!(matches!(result, Err(Error::RuntimeError(e)) if e == "callback error"));
+    assert_eq!(calls, 1);
+    assert!(matches!(
+        table.for_each::<i64, Table>(|_, _| unreachable!()),
+        Err(Error::FromLuaConversionError { .. })
+    ));
+
+    #[cfg(panic = "unwind")]
+    {
+        use std::panic::{AssertUnwindSafe, catch_unwind};
+
+        let panic = catch_unwind(AssertUnwindSafe(|| {
+            table.for_each::<i64, i64>(|_, _| panic!("callback panic"))
+        }));
+        assert_eq!(panic.unwrap_err().downcast_ref::<&str>(), Some(&"callback panic"));
+    }
+
+    #[cfg(not(feature = "luau"))]
+    lua.remove_hook();
+    table.for_each::<i64, i64>(|k, v| {
+        assert_eq!(lua.load("return ...").call::<i64>(v)?, k);
+        Ok(())
+    })
 }
 
 #[test]
@@ -335,33 +546,39 @@ fn test_metatable() -> Result<()> {
 #[test]
 fn test_table_equals() -> Result<()> {
     let lua = Lua::new();
-    let globals = lua.globals();
+    let tables = lua
+        .load(
+            r#"
+            local a = {}
+            local eq = function() return 42 end
+            return {
+                a, a, {},
+                setmetatable({}, {__eq = eq}),
+                setmetatable({}, {__eq = eq}),
+                setmetatable({}, {__eq = function() return false end}),
+                setmetatable({}, setmetatable({}, {__index = {__eq = eq}})),
+            }
+            "#,
+        )
+        .eval::<Vec<Table>>()?;
+    let equals = lua
+        .load("function(a, b) return a == b end")
+        .eval::<mlua::Function>()?;
+    for a in &tables {
+        for b in &tables {
+            assert_eq!(a.equals(b)?, equals.call::<bool>((a, b))?);
+        }
+    }
 
-    lua.load(
-        r#"
-        table1 = {1}
-        table2 = {1}
-        table3 = table1
-        table4 = {1}
-
-        setmetatable(table4, {
-            __eq = function(a, b) return a[1] == b[1] end
-        })
-    "#,
-    )
-    .exec()?;
-
-    let table1 = globals.get::<Table>("table1")?;
-    let table2 = globals.get::<Table>("table2")?;
-    let table3 = globals.get::<Table>("table3")?;
-    let table4 = globals.get::<Table>("table4")?;
-
-    assert!(table1 != table2);
-    assert!(!table1.equals(&table2)?);
-    assert!(table1 == table3);
-    assert!(table1.equals(&table3)?);
-    assert!(table1 != table4);
-    assert!(table1.equals(&table4)?);
+    let mt = lua
+        .load("{__eq = function() error('comparison failed') end}")
+        .eval::<Table>()?;
+    tables[0].set_metatable(Some(mt.clone()))?;
+    tables[2].set_metatable(Some(mt))?;
+    assert!(matches!(
+        tables[0].equals(&tables[2]),
+        Err(Error::RuntimeError(_))
+    ));
 
     Ok(())
 }
@@ -485,6 +702,13 @@ fn test_table_object_like() -> Result<()> {
     assert_eq!(table.call_method::<String>("method", "a")?, "method_1");
     assert_eq!(table.to_string()?, "table object");
 
+    assert_eq!(lua.globals().call_function::<String>("table", "b")?, "call_2");
+    let callable = lua
+        .load("return setmetatable({}, {__call = function(_, receiver, key) return receiver[key] end})")
+        .eval::<Table>()?;
+    table.set("callable", callable)?;
+    assert_eq!(table.call_method::<i32>("callable", "a")?, 1);
+
     match table.call_method::<()>("non_existent", ()) {
         Err(Error::RuntimeError(err)) => {
             assert!(err.contains("attempt to call a nil value (function 'non_existent')"))
@@ -495,6 +719,11 @@ fn test_table_object_like() -> Result<()> {
     // Test calling non-callable table
     let table2 = lua.create_table()?;
     assert!(matches!(table2.call::<()>(()), Err(Error::RuntimeError(_))));
+    table.set("non_callable", table2)?;
+    assert!(matches!(
+        table.call_function::<()>("non_callable", ()),
+        Err(Error::RuntimeError(_))
+    ));
 
     Ok(())
 }
@@ -576,6 +805,30 @@ fn test_table_get_path() -> Result<()> {
     // Test indexing non-indexable value
     let err = table.get_path::<String>("abc.c").unwrap_err().to_string();
     assert_eq!(err, "runtime error: attempt to index a string value with key 'c'");
+
+    Ok(())
+}
+
+#[test]
+fn test_table_invalid_keys() -> Result<()> {
+    let lua = Lua::new();
+
+    let table = lua.create_table()?;
+    for key in [
+        Value::Nil,
+        Value::Number(f64::NAN),
+        #[cfg(all(feature = "luau", not(feature = "luau-vector4")))]
+        Value::Vector(mlua::Vector::new(f32::NAN, 0., 0.)),
+    ] {
+        assert!(matches!(
+            table.raw_set(key.clone(), 1),
+            Err(Error::RuntimeError(_))
+        ));
+        assert!(matches!(
+            lua.create_table_from([(key, 1)]),
+            Err(Error::RuntimeError(_))
+        ));
+    }
 
     Ok(())
 }

@@ -29,13 +29,6 @@ The main thing to remember is:
   (Single quoted strings only work if they contain a single character, since in Rust,
   `'a'` is a character literal).
 
-- Using Lua comments `--` is not desirable in **stable** Rust and can have bad side effects.
-
-  This is because procedural macros have Line/Column information available only in
-  **nightly** Rust. Instead, Lua chunks represented as a big single line of code in stable Rust.
-
-  As workaround, Rust comments `//` can be used.
-
 Other minor limitations:
 
 - Certain escape codes in string literals don't work. (Specifically: `\a`, `\b`, `\f`, `\v`,
