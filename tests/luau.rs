@@ -524,7 +524,12 @@ fn test_debug_upvalues_are_unavailable_for_native_functions() -> Result<()> {
     let native = lua.create_function(|lua, ()| {
         lua.inspect_stack(0, |frame| {
             assert!(frame.get_upvalue(1).is_none());
-            assert_eq!(frame.set_upvalue(1, Value::Nil)?, None);
+            let write = frame.set_upvalue(1, Value::Nil);
+            if cfg!(feature = "luau-jit") {
+                assert!(write.is_err());
+            } else {
+                assert_eq!(write?, None);
+            }
             Ok(())
         })
         .expect("native frame")
