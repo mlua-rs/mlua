@@ -904,7 +904,7 @@ impl Lua {
     /// typically yields on the first hit and continues once the user resumes).
     ///
     /// [`Function::set_breakpoint`]: crate::Function::set_breakpoint
-    #[cfg(any(feature = "luau", doc))]
+    #[cfg(feature = "luau")]
     #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
     pub fn set_debug_break<F>(&self, callback: F)
     where
@@ -926,7 +926,7 @@ impl Lua {
     ///
     /// Like [`Lua::set_debug_break`], the callback may return [`VmState::Yield`] to suspend the
     /// running coroutine.
-    #[cfg(any(feature = "luau", doc))]
+    #[cfg(feature = "luau")]
     #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
     pub fn set_debug_step<F>(&self, callback: F)
     where
@@ -948,7 +948,7 @@ impl Lua {
     /// While enabled, the callback registered with [`Lua::set_debug_step`] fires for every line.
     /// The flag is per-thread; threads created afterwards inherit it, so enable it before creating
     /// the thread you want to step.
-    #[cfg(any(feature = "luau", doc))]
+    #[cfg(feature = "luau")]
     #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
     pub fn set_single_step(&self, enabled: bool) {
         let lua = self.lock();
@@ -956,7 +956,7 @@ impl Lua {
     }
 
     /// Removes the breakpoint callback previously set by [`Lua::set_debug_break`].
-    #[cfg(any(feature = "luau", doc))]
+    #[cfg(feature = "luau")]
     #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
     pub fn remove_debug_break(&self) {
         let lua = self.lock();
@@ -967,7 +967,7 @@ impl Lua {
     }
 
     /// Removes the single-step callback previously set by [`Lua::set_debug_step`].
-    #[cfg(any(feature = "luau", doc))]
+    #[cfg(feature = "luau")]
     #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
     pub fn remove_debug_step(&self) {
         let lua = self.lock();

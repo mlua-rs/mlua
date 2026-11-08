@@ -216,7 +216,7 @@ impl<'a> Debug<'a> {
     ///
     /// [`Lua::set_debug_break`]: crate::Lua::set_debug_break
     /// [`Lua::set_debug_step`]: crate::Lua::set_debug_step
-    #[cfg(any(feature = "luau", doc))]
+    #[cfg(feature = "luau")]
     #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
     pub fn get_local(&self, index: usize) -> Option<(String, Value)> {
         let index = c_int::try_from(index).ok().filter(|&index| index > 0)?;
@@ -249,7 +249,7 @@ impl<'a> Debug<'a> {
     /// [dbg]: crate::Compiler::set_debug_level
     /// [`Lua::set_debug_break`]: crate::Lua::set_debug_break
     /// [`Lua::set_debug_step`]: crate::Lua::set_debug_step
-    #[cfg(any(feature = "luau", doc))]
+    #[cfg(feature = "luau")]
     #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
     pub fn set_local(&self, index: usize, value: Value) -> Result<Option<String>> {
         let Ok(index) = c_int::try_from(index) else {
@@ -275,7 +275,7 @@ impl<'a> Debug<'a> {
     /// Collects every readable local in this record as `(name, value)` pairs, in index order.
     ///
     /// Convenience wrapper over [`Debug::get_local`].
-    #[cfg(any(feature = "luau", doc))]
+    #[cfg(feature = "luau")]
     #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
     pub fn locals(&self) -> Vec<(String, Value)> {
         let mut locals = Vec::new();
@@ -292,7 +292,7 @@ impl<'a> Debug<'a> {
     /// or the frame is a native host function.
     ///
     /// The function is pushed then popped internally; the stack is left unchanged.
-    #[cfg(any(feature = "luau", doc))]
+    #[cfg(feature = "luau")]
     #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
     pub fn get_upvalue(&self, index: usize) -> Option<(String, Value)> {
         let index = c_int::try_from(index).ok().filter(|&index| index > 0)?;
@@ -325,7 +325,7 @@ impl<'a> Debug<'a> {
     /// Collects every upvalue of the function at this stack level as `(name, value)` pairs.
     ///
     /// Convenience wrapper over [`Debug::get_upvalue`].
-    #[cfg(any(feature = "luau", doc))]
+    #[cfg(feature = "luau")]
     #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
     pub fn upvalues(&self) -> Vec<(String, Value)> {
         let mut upvalues = Vec::new();
@@ -349,7 +349,7 @@ impl<'a> Debug<'a> {
     /// Returns an error if the replacement changes the VM value tag, cannot be
     /// pushed, or Luau code generation is enabled in this build. A captured
     /// slot may be shared with a different, native-compiled closure.
-    #[cfg(any(feature = "luau", doc))]
+    #[cfg(feature = "luau")]
     #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
     pub fn set_upvalue(&self, index: usize, value: Value) -> Result<Option<String>> {
         let Ok(index) = c_int::try_from(index) else {

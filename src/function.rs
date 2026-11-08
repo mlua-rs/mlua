@@ -604,7 +604,7 @@ impl Function {
     /// found. Pair this with [`Lua::set_debug_break`] to observe the hit.
     ///
     /// [`Lua::set_debug_break`]: crate::Lua::set_debug_break
-    #[cfg(any(feature = "luau", doc))]
+    #[cfg(feature = "luau")]
     #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
     pub fn set_breakpoint(&self, line: u32, enabled: bool) -> Option<u32> {
         let line = c_int::try_from(line).ok()?;

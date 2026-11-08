@@ -536,7 +536,7 @@ impl Thread {
     /// The debug step callback is registered with [`Lua::set_debug_step`] on
     /// the owning VM. The flag can be changed while the coroutine is suspended
     /// so ordinary resumes can run without invoking the step callback.
-    #[cfg(any(feature = "luau", doc))]
+    #[cfg(feature = "luau")]
     #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
     pub fn set_single_step(&self, enabled: bool) {
         let _lua = self.0.lua.lock();
