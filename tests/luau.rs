@@ -428,6 +428,13 @@ fn test_interrupt_oneshot() -> Result<()> {
     f.call::<()>(())?;
     assert_eq!(calls.load(Ordering::Relaxed), 0);
 
+    assert!(handle.clone().arm());
+    handle.disarm();
+    handle.disarm();
+    assert!(!has_native_interrupt(&lua)?);
+    f.call::<()>(())?;
+    assert_eq!(calls.load(Ordering::Relaxed), 0);
+
     assert!(handle.arm());
     assert!(handle.clone().arm());
     // GC safepoints must not consume the pending execution interrupt.
@@ -520,7 +527,8 @@ fn test_interrupt_oneshot_replace_during_callback() -> Result<()> {
         handle.arm();
         lua.load("for i = 1, 10 do end").exec()?;
         assert!(!handle.arm());
-        // Finishing the old callback must not change the replacement's native slot.
+        // Neither finishing nor disarming the old callback may change the replacement's slot.
+        handle.disarm();
         assert_eq!(has_native_interrupt(&lua)?, persistent);
     }
     Ok(())
@@ -531,9 +539,17 @@ fn test_interrupt_oneshot_yield() -> Result<()> {
     let lua = Lua::new();
 
     let co = lua.create_thread(lua.load("for i = 1, 10 do end; return 42").into_function()?)?;
-    let handle = lua.set_interrupt_oneshot(|_| Ok(VmState::Yield));
+    let calls = Arc::new(AtomicU64::new(0));
+    let handle = lua.set_interrupt_oneshot({
+        let calls = calls.clone();
+        move |_| {
+            calls.fetch_add(1, Ordering::Relaxed);
+            Ok(VmState::Yield)
+        }
+    });
     handle.arm();
     co.resume::<()>(())?;
+    assert_eq!(calls.load(Ordering::Relaxed), 1); // Delivered before yielding.
     assert!(co.is_resumable());
     assert!(!has_native_interrupt(&lua)?);
     assert_eq!(co.resume::<usize>(())?, 42);
@@ -543,7 +559,36 @@ fn test_interrupt_oneshot_yield() -> Result<()> {
     let f = lua.create_function(|lua, ()| lua.load("return 42").eval::<usize>())?;
     handle.arm();
     assert_eq!(f.call::<usize>(())?, 42);
+    assert_eq!(calls.load(Ordering::Relaxed), 2); // The handle survived the yield.
     assert!(!has_native_interrupt(&lua)?);
+
+    Ok(())
+}
+
+#[test]
+fn test_interrupt_oneshot_disarm_during_callback() -> Result<()> {
+    let lua = Lua::new();
+
+    let f = lua.load("for i = 1, 10 do end").into_function()?;
+    let calls = Arc::new(AtomicU64::new(0));
+    let handle = lua.set_interrupt_oneshot({
+        let calls = calls.clone();
+        move |lua| {
+            if calls.fetch_add(1, Ordering::Relaxed) == 0 {
+                let handle = lua.app_data_ref::<InterruptHandle>().unwrap();
+                assert!(handle.arm());
+                handle.disarm();
+            }
+            Ok(VmState::Continue)
+        }
+    });
+    lua.set_app_data(handle.clone());
+    handle.arm();
+    f.call::<()>(())?;
+    // The re-arm made during the callback must not be re-installed when the guard exits.
+    assert!(!has_native_interrupt(&lua)?);
+    f.call::<()>(())?;
+    assert_eq!(calls.load(Ordering::Relaxed), 1);
 
     Ok(())
 }
@@ -557,7 +602,7 @@ fn test_interrupt_oneshot_from_another_thread() -> Result<()> {
     let lua = Lua::new();
 
     let (started_tx, started_rx) = mpsc::channel();
-    let (armed_tx, armed_rx) = mpsc::channel();
+    let (armed_tx, armed_rx) = mpsc::channel::<bool>();
     lua.globals().set(
         "started",
         lua.create_function(move |_, ()| {
@@ -569,6 +614,8 @@ fn test_interrupt_oneshot_from_another_thread() -> Result<()> {
     let handle = lua.set_interrupt_oneshot(|_| Err(Error::runtime("interrupted")));
     let worker = std::thread::spawn(move || {
         started_rx.recv_timeout(Duration::from_secs(10)).unwrap();
+        assert!(handle.arm());
+        handle.disarm();
         armed_tx.send(handle.arm()).unwrap();
     });
     let result = lua.load("started(); for i = 1, 10 do end").exec();
@@ -589,22 +636,17 @@ fn test_interrupt_oneshot_teardown_race() {
             let lua = Lua::new();
             let handle = lua.set_interrupt_oneshot(|_| Ok(VmState::Continue));
             let (started_tx, started_rx) = mpsc::channel();
-            let (done_tx, done_rx) = mpsc::channel();
             let worker = std::thread::spawn(move || {
                 assert!(handle.arm());
                 started_tx.send(()).unwrap();
+                // Alternate arm/disarm until teardown invalidates the handle.
                 let deadline = Instant::now() + Duration::from_secs(10);
-                loop {
-                    match done_rx.try_recv() {
-                        Ok(()) => break,
-                        Err(mpsc::TryRecvError::Empty) => {}
-                        Err(mpsc::TryRecvError::Disconnected) => panic!("teardown did not complete"),
-                    }
+                while handle.arm() {
                     assert!(Instant::now() < deadline, "timed out waiting for teardown");
-                    handle.arm();
+                    handle.disarm();
                     std::thread::yield_now();
                 }
-                assert!(!handle.arm(), "handle remained valid after teardown");
+                handle.disarm();
             });
             started_rx.recv_timeout(Duration::from_secs(10)).unwrap();
             if remove {
@@ -612,7 +654,6 @@ fn test_interrupt_oneshot_teardown_race() {
             } else {
                 drop(lua);
             }
-            done_tx.send(()).unwrap();
             worker.join().unwrap();
         }
     }

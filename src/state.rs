@@ -859,7 +859,8 @@ impl Lua {
     /// Registers a reusable interrupt callback triggered by [`InterruptHandle::arm`].
     ///
     /// The interrupt is initially disarmed and automatically disarms before each invocation.
-    /// While disarmed, no native interrupt callback is installed.
+    /// While disarmed, no native interrupt callback is installed. A pending request can be
+    /// cancelled with [`InterruptHandle::disarm`].
     ///
     /// The callback runs on the thread executing Luau, with the error and yield behavior of
     /// [`Lua::set_interrupt`]. Replaces any previous interrupt registration, invalidating its

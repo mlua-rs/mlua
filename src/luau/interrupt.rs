@@ -45,6 +45,21 @@ impl InterruptHandle {
         true
     }
 
+    /// Cancels the pending request, including one queued during a callback.
+    ///
+    /// A callback already claimed for delivery may still run. Later calls to [`Self::arm`]
+    /// can schedule another request.
+    pub fn disarm(&self) {
+        let mut state = self.inner.lock();
+        if state.slot.is_null() {
+            return;
+        }
+        state.pending = false;
+        if !state.running {
+            unsafe { state.slot.write(None) };
+        }
+    }
+
     // The caller must invalidate this registration before freeing the callback slot, and must
     // invalidate any previous registration before constructing this one.
     pub(crate) unsafe fn new(state: *mut ffi::lua_State) -> Self {
