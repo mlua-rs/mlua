@@ -146,7 +146,7 @@ pub use crate::debug::HookTriggers;
 
 #[cfg(any(feature = "luau", doc))]
 #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
-pub use crate::{buffer::Buffer, vector::Vector};
+pub use crate::{buffer::Buffer, luau::InterruptHandle, vector::Vector};
 
 #[cfg(feature = "serde")]
 #[doc(inline)]

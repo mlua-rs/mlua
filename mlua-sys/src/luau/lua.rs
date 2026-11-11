@@ -591,6 +591,9 @@ pub struct lua_Debug {
 // These are shared between all coroutines.
 //
 
+/// Type for interrupt callbacks invoked at Luau safepoints.
+pub type lua_InterruptFunction = unsafe extern "C-unwind" fn(L: *mut lua_State, gc: c_int);
+
 #[repr(C)]
 #[non_exhaustive]
 pub struct lua_Callbacks {
@@ -598,7 +601,7 @@ pub struct lua_Callbacks {
     pub userdata: *mut c_void,
 
     /// gets called at safepoints (loop back edges, call/ret, gc) if set
-    pub interrupt: Option<unsafe extern "C-unwind" fn(L: *mut lua_State, gc: c_int)>,
+    pub interrupt: Option<lua_InterruptFunction>,
     /// gets called when an unprotected error is raised (if longjmp is used)
     pub panic: Option<unsafe extern "C-unwind" fn(L: *mut lua_State, errcode: c_int)>,
 

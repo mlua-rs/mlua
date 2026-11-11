@@ -90,6 +90,8 @@ pub(crate) struct ExtraData {
     pub(super) warn_callback: Option<crate::types::WarnCallback>,
     #[cfg(feature = "luau")]
     pub(super) interrupt_callback: Option<crate::types::InterruptCallback>,
+    #[cfg(feature = "luau")]
+    pub(super) interrupt_handle: Option<crate::luau::InterruptHandle>,
     pub(super) thread_triggers: ThreadTriggers,
     pub(super) thread_event_callback: Option<ThreadEventCallback>,
     pub(super) thread_event_state: *mut ffi::lua_State,
@@ -108,6 +110,12 @@ pub(crate) struct ExtraData {
 
 impl Drop for ExtraData {
     fn drop(&mut self) {
+        #[cfg(feature = "luau")]
+        if self.owned {
+            debug_assert!(self.interrupt_handle.is_none());
+        } else if let Some(handle) = self.interrupt_handle.take() {
+            handle.invalidate();
+        }
         unsafe {
             if !self.owned {
                 self.lua.assume_init_drop();
@@ -206,6 +214,8 @@ impl ExtraData {
             warn_callback: None,
             #[cfg(feature = "luau")]
             interrupt_callback: None,
+            #[cfg(feature = "luau")]
+            interrupt_handle: None,
             thread_triggers: ThreadTriggers::default(),
             thread_event_callback: None,
             thread_event_state: ptr::null_mut(),
