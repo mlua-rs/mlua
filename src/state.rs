@@ -1119,7 +1119,32 @@ impl Lua {
             match MemoryState::get(lua.state()) {
                 mem_state if !mem_state.is_null() => {
                     let prev_limit = (*mem_state).set_memory_limit(limit);
-                    (*lua.extra.get()).unlikely_memory_error = (*mem_state).memory_limit() == 0;
+                    (*lua.extra.get()).unlikely_memory_error = !(*mem_state).has_limit();
+                    Ok(prev_limit)
+                }
+                _ => Err(Error::MemoryControlNotAvailable),
+            }
+        }
+    }
+
+    /// Sets a limit (in bytes) on the size of a single memory allocation in this Lua state.
+    ///
+    /// Once Lua requests a new block, or grows an existing one, larger than this limit, a
+    /// `Error::MemoryError` is generated instead, the same way as for [`Lua::set_memory_limit`].
+    /// Shrinking a block always succeeds. Unlike the memory limit, this bounds how large a single
+    /// string, table or buffer can be, and so how much work a single library call can do on it.
+    ///
+    /// A limit that is too small may prevent Lua from working at all.
+    /// Returns previous limit (zero means no limit).
+    ///
+    /// Does not work in module mode where Lua state is managed externally.
+    pub fn set_allocation_limit(&self, limit: usize) -> Result<usize> {
+        let lua = self.lock();
+        unsafe {
+            match MemoryState::get(lua.state()) {
+                mem_state if !mem_state.is_null() => {
+                    let prev_limit = (*mem_state).set_allocation_limit(limit);
+                    (*lua.extra.get()).unlikely_memory_error = !(*mem_state).has_limit();
                     Ok(prev_limit)
                 }
                 _ => Err(Error::MemoryControlNotAvailable),

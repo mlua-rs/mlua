@@ -1087,7 +1087,7 @@ impl RawLua {
 
         // Externally managed states may change their allocator.
         match MemoryState::get(self.state()) {
-            mem_state if !mem_state.is_null() => (*mem_state).memory_limit() == 0,
+            mem_state if !mem_state.is_null() => !(*mem_state).has_limit(),
             _ => (*self.extra.get()).skip_memory_check, // Check the special flag (only for module mode)
         }
     }

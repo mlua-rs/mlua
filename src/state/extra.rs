@@ -179,7 +179,7 @@ impl ExtraData {
             libs: StdLib::NONE,
             unlikely_memory_error: owned && {
                 let mem_state = MemoryState::get(state);
-                !mem_state.is_null() && (*mem_state).memory_limit() == 0
+                !mem_state.is_null() && !(*mem_state).has_limit()
             },
             skip_memory_check: false,
             ref_thread,
