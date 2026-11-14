@@ -1564,13 +1564,38 @@ fn test_warnings() -> Result<()> {
             ("continue".to_string(), false),
         ]
     );
+    drop(messages);
 
     // Trigger error inside warning
     lua.set_warning_function(|_, _, _| Err(Error::runtime("warning error")));
-    assert!(matches!(
-        lua.load(r#"warn("test")"#).exec(),
-        Err(Error::RuntimeError(ref err)) if err == "warning error"
-    ));
+    lua.warning("test", false);
+    lua.load(r#"warn("test")"#).exec()?;
+    let thread = lua.create_thread(lua.load(r#"warn("test")"#).into_function()?)?;
+    thread.resume::<()>(())?;
+
+    // A warning from a nested coroutine must not jump past Rust destructors or Lua's lock.
+    let main_thread = lua.current_thread();
+    let dropped = Arc::new(());
+    let dropped2 = dropped.clone();
+    lua.globals().set(
+        "resume_warning",
+        lua.create_function(move |lua, ()| {
+            let _guard = dropped2.clone();
+            let thread = lua.create_thread(lua.load(r#"warn("test")"#).into_function()?)?;
+            thread.resume::<()>(())
+        })?,
+    )?;
+    lua.load("coroutine.wrap(resume_warning)()").exec()?;
+    assert_eq!(Arc::strong_count(&dropped), 2);
+    assert_eq!(lua.current_thread(), main_thread);
+
+    #[cfg(all(feature = "send", not(target_family = "wasm")))]
+    {
+        let lua = lua.clone();
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || tx.send(lua.load("return 42").eval::<i32>()).unwrap());
+        assert_eq!(rx.recv_timeout(std::time::Duration::from_secs(5)).unwrap()?, 42);
+    }
 
     // Recursive warning
     lua.set_warning_function(|lua, _, _| {
@@ -1656,6 +1681,16 @@ fn test_exec_raw() -> Result<()> {
         })
     }?;
     assert_eq!(n, 8);
+
+    let values: Variadic<Table> = unsafe {
+        lua.exec_raw((), |state| {
+            assert_ne!(ffi::lua_checkstack(state, 64), 0);
+            for _ in 0..64 {
+                ffi::lua_newtable(state);
+            }
+        })
+    }?;
+    assert_eq!(values.len(), 64);
 
     // Test error handling
     let res: Result<()> = unsafe {

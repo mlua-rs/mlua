@@ -356,6 +356,79 @@ fn test_scope_userdata_drop() -> Result<()> {
 }
 
 #[test]
+fn test_scope_escaped_methods() -> Result<()> {
+    let lua = Lua::new();
+
+    let (ud, get, set) = lua.scope(|scope| {
+        let ud = scope.create_any_userdata((), |reg| {
+            reg.add_method("get", |_, _, ()| Ok(42));
+            reg.add_method_mut("set", |_, _, ()| Ok(()));
+        })?;
+        let get = ud.get::<Function>("get")?;
+        let set = ud.get::<Function>("set")?;
+        assert_eq!(get.call::<i32>(&ud)?, 42);
+        set.call::<()>(&ud)?;
+        Ok((ud, get, set))
+    })?;
+    for method in [get, set] {
+        assert!(matches!(
+            method.call::<()>(&ud),
+            Err(Error::CallbackError { cause, .. })
+                if matches!(cause.as_ref(), Error::BadArgument { cause, .. }
+                    if matches!(cause.as_ref(), Error::UserDataDestructed))
+        ));
+    }
+
+    Ok(())
+}
+
+#[test]
+fn test_scope_teardown_registration() -> Result<()> {
+    struct OnDrop<F: FnOnce()>(Option<F>);
+    impl<F: FnOnce()> Drop for OnDrop<F> {
+        fn drop(&mut self) {
+            self.0.take().unwrap()();
+        }
+    }
+
+    struct Data;
+    impl UserData for Data {}
+
+    let lua = Lua::new();
+
+    let data = Data;
+    let (data_mut, any_mut) = (&mut Data, &mut Data);
+    let dropped = Cell::new(false);
+    lua.scope(|scope| {
+        let (data, dropped) = (&data, &dropped);
+        let guard = OnDrop(Some(move || {
+            let (data_mut, any_mut) = (data_mut, any_mut);
+            assert!(scope.create_function(|_, ()| Ok(())).is_err());
+            assert!(scope.create_function_mut(|_, ()| Ok(())).is_err());
+            assert!(scope.create_userdata_ref(data).is_err());
+            assert!(scope.create_userdata_ref_mut(data_mut).is_err());
+            assert!(scope.create_any_userdata_ref(data).is_err());
+            assert!(scope.create_any_userdata_ref_mut(any_mut).is_err());
+            assert!(scope.create_userdata(Data).is_err());
+            assert!(
+                scope
+                    .create_any_userdata(Data, |_| panic!("registration ran"))
+                    .is_err()
+            );
+            dropped.set(true);
+        }));
+        scope.create_function(move |_, ()| {
+            let _ = &guard;
+            Ok(())
+        })?;
+        Ok(())
+    })?;
+    assert!(dropped.get());
+
+    Ok(())
+}
+
+#[test]
 fn test_scope_userdata_ref() -> Result<()> {
     let lua = Lua::new();
 

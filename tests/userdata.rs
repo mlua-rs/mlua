@@ -930,8 +930,16 @@ fn test_any_userdata() -> Result<()> {
 #[test]
 fn test_userdata_reregister_type() -> Result<()> {
     let lua = Lua::new();
-    assert!(lua.create_any_userdata(0u32)?.is::<u32>());
+    let old = lua.create_any_userdata(0u32)?;
+    assert!(old.is::<u32>());
     lua.register_userdata_type::<u32>(|_| {})?;
+    assert!(!old.is::<u32>());
+    assert!(matches!(old.borrow::<u32>(), Err(Error::UserDataTypeMismatch)));
+
+    let new = lua.create_any_userdata(1u32)?;
+    assert_eq!(*new.borrow::<u32>()?, 1);
+    assert!(!old.is::<u32>());
+    drop(old);
     lua.gc_collect()?;
     lua.gc_collect()?;
     // Metatable address of `u32` can be reused for `i32`
@@ -968,6 +976,7 @@ fn test_userdata_object_like() -> Result<()> {
 
     impl UserData for MyUserData {
         fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
+            fields.add_field_method_get("callable_userdata", |_, this| Ok(*this));
             fields.add_field_method_get("n", |_, this| Ok(this.0));
             fields.add_field_method_set("n", |_, this, val| {
                 this.0 = val;
@@ -996,6 +1005,7 @@ fn test_userdata_object_like() -> Result<()> {
     }
 
     assert_eq!(ud.call::<LuaString>(())?, "called");
+    assert_eq!(ud.call_function::<String>("callable_userdata", ())?, "called");
 
     ud.call_method::<()>("add", 2)?;
     assert_eq!(ud.get::<u32>("n")?, 323);

@@ -63,6 +63,8 @@ impl ObjectLike for AnyUserData {
     {
         match self.get(name)? {
             Value::Function(func) => func.call(args),
+            Value::Table(table) => table.call(args),
+            Value::UserData(ud) => ud.call(args),
             val => {
                 let msg = format!("attempt to call a {} value (function '{name}')", val.type_name());
                 Err(Error::RuntimeError(msg))
@@ -77,6 +79,8 @@ impl ObjectLike for AnyUserData {
     {
         match self.get(name) {
             Ok(Value::Function(func)) => func.call_async(args),
+            Ok(Value::Table(table)) => table.call_async(args),
+            Ok(Value::UserData(ud)) => ud.call_async(args),
             Ok(val) => {
                 let msg = format!("attempt to call a {} value (function '{name}')", val.type_name());
                 AsyncCallFuture::error(Error::RuntimeError(msg))

@@ -1,5 +1,6 @@
 //! Contains definitions from `lauxlib.h`.
 
+use std::marker::{PhantomData, PhantomPinned};
 use std::os::raw::{c_char, c_int, c_void};
 use std::ptr;
 
@@ -94,7 +95,7 @@ unsafe extern "C-unwind" {
 
     pub fn luaL_newstate() -> *mut lua_State;
 
-    pub fn luaL_len(L: *mut lua_State, idx: c_int) -> lua_Integer;
+    pub fn luaL_len(L: *mut lua_State, idx: c_int) -> c_int;
 
     pub fn luaL_gsub(
         L: *mut lua_State,
@@ -205,6 +206,7 @@ pub struct luaL_Buffer {
     pub n: usize,       // number of characters in buffer
     pub L: *mut lua_State,
     pub initb: [c_char; LUAL_BUFFERSIZE], // initial buffer space
+    _marker: PhantomData<PhantomPinned>,
 }
 
 #[cfg_attr(all(windows, raw_dylib), link(name = "lua52", kind = "raw-dylib"))]

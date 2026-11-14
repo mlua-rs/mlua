@@ -546,33 +546,39 @@ fn test_metatable() -> Result<()> {
 #[test]
 fn test_table_equals() -> Result<()> {
     let lua = Lua::new();
-    let globals = lua.globals();
+    let tables = lua
+        .load(
+            r#"
+            local a = {}
+            local eq = function() return 42 end
+            return {
+                a, a, {},
+                setmetatable({}, {__eq = eq}),
+                setmetatable({}, {__eq = eq}),
+                setmetatable({}, {__eq = function() return false end}),
+                setmetatable({}, setmetatable({}, {__index = {__eq = eq}})),
+            }
+            "#,
+        )
+        .eval::<Vec<Table>>()?;
+    let equals = lua
+        .load("function(a, b) return a == b end")
+        .eval::<mlua::Function>()?;
+    for a in &tables {
+        for b in &tables {
+            assert_eq!(a.equals(b)?, equals.call::<bool>((a, b))?);
+        }
+    }
 
-    lua.load(
-        r#"
-        table1 = {1}
-        table2 = {1}
-        table3 = table1
-        table4 = {1}
-
-        setmetatable(table4, {
-            __eq = function(a, b) return a[1] == b[1] end
-        })
-    "#,
-    )
-    .exec()?;
-
-    let table1 = globals.get::<Table>("table1")?;
-    let table2 = globals.get::<Table>("table2")?;
-    let table3 = globals.get::<Table>("table3")?;
-    let table4 = globals.get::<Table>("table4")?;
-
-    assert!(table1 != table2);
-    assert!(!table1.equals(&table2)?);
-    assert!(table1 == table3);
-    assert!(table1.equals(&table3)?);
-    assert!(table1 != table4);
-    assert!(table1.equals(&table4)?);
+    let mt = lua
+        .load("{__eq = function() error('comparison failed') end}")
+        .eval::<Table>()?;
+    tables[0].set_metatable(Some(mt.clone()))?;
+    tables[2].set_metatable(Some(mt))?;
+    assert!(matches!(
+        tables[0].equals(&tables[2]),
+        Err(Error::RuntimeError(_))
+    ));
 
     Ok(())
 }
@@ -696,6 +702,13 @@ fn test_table_object_like() -> Result<()> {
     assert_eq!(table.call_method::<String>("method", "a")?, "method_1");
     assert_eq!(table.to_string()?, "table object");
 
+    assert_eq!(lua.globals().call_function::<String>("table", "b")?, "call_2");
+    let callable = lua
+        .load("return setmetatable({}, {__call = function(_, receiver, key) return receiver[key] end})")
+        .eval::<Table>()?;
+    table.set("callable", callable)?;
+    assert_eq!(table.call_method::<i32>("callable", "a")?, 1);
+
     match table.call_method::<()>("non_existent", ()) {
         Err(Error::RuntimeError(err)) => {
             assert!(err.contains("attempt to call a nil value (function 'non_existent')"))
@@ -706,6 +719,11 @@ fn test_table_object_like() -> Result<()> {
     // Test calling non-callable table
     let table2 = lua.create_table()?;
     assert!(matches!(table2.call::<()>(()), Err(Error::RuntimeError(_))));
+    table.set("non_callable", table2)?;
+    assert!(matches!(
+        table.call_function::<()>("non_callable", ()),
+        Err(Error::RuntimeError(_))
+    ));
 
     Ok(())
 }

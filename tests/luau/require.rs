@@ -126,32 +126,31 @@ fn test_require_errors() {
             _alive: alive.clone(),
         })
         .unwrap();
-    let proxy = (require.environment().unwrap())
-        .get::<Function>("proxyrequire")
-        .unwrap();
-    lua.globals().set("require", require).unwrap();
+    lua.globals().set("require", &require).unwrap();
     let res = lua
         .load(r#"return require('./a/relative/path')"#)
         .set_name("@main.rs")
         .exec();
     assert!((res.unwrap_err().to_string()).contains("test error"));
 
-    // An escaped proxy must retain its context independently of the require environment.
+    // A saved require function must retain its context independently of the globals.
     lua.globals().set("require", Value::Nil).unwrap();
     lua.gc_collect().unwrap();
     lua.gc_collect().unwrap();
     assert_eq!(Arc::strong_count(&alive), 2);
-    let res = proxy.call::<Value>(("./a/relative/path", "@main.rs"));
+    let res = lua
+        .load(r#"local require = ...; return require('./a/relative/path')"#)
+        .set_name("@main.rs")
+        .call::<Value>(&require);
     assert!(res.unwrap_err().to_string().contains("test error"));
     assert_eq!(
-        proxy
-            .call::<Function>(("./dependency", "@tests/luau/require/without_config/module.luau"))
-            .unwrap()
-            .call::<i32>(())
+        lua.load(r#"local require = ...; return require('./dependency')"#)
+            .set_name("@tests/luau/require/without_config/module.luau")
+            .call::<i32>(&require)
             .unwrap(),
         42
     );
-    drop(proxy);
+    drop(require);
     lua.gc_collect().unwrap();
     lua.gc_collect().unwrap();
     assert_eq!(Arc::strong_count(&alive), 1);

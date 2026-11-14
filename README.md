@@ -24,7 +24,7 @@ Started as an `rlua` fork, `mlua` supports Lua 5.5, 5.4, 5.3, 5.2, 5.1 (includin
 
 `mlua` is tested on Windows/macOS/Linux including module mode in [GitHub Actions] on `x86_64` platforms and cross-compilation to `aarch64` (other targets are also supported).
 
-WebAssembly (WASM) is supported through the `wasm32-unknown-emscripten` target for all Lua/Luau versions excluding JIT.
+Lua 5.1–5.5 and Luau support `wasm32-unknown-unknown` with a WASI C runtime and the `wasm32-wasip` targets. See [Compiling for WebAssembly](docs/wasm32.md) for setup and build instructions.
 
 [GitHub Actions]: https://github.com/mlua-rs/mlua/actions
 [Luau]: https://luau.org

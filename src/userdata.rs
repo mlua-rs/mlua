@@ -11,7 +11,7 @@ use std::os::raw::{c_char, c_void};
 use crate::Either;
 use crate::error::{Error, Result};
 use crate::function::Function;
-use crate::state::Lua;
+use crate::state::{Lua, WeakLua};
 use crate::string::LuaString;
 use crate::table::{Table, TablePairs};
 use crate::traits::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti};
@@ -1026,6 +1026,13 @@ impl AnyUserData {
     #[inline]
     pub fn to_pointer(&self) -> *const c_void {
         self.0.to_pointer()
+    }
+
+    /// Returns a weak reference to the Lua instance owning this value.
+    #[doc(hidden)]
+    #[inline]
+    pub fn weak_lua(&self) -> &WeakLua {
+        &self.0.lua
     }
 
     /// Returns [`TypeId`] of this userdata if it is registered and `'static`.

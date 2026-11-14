@@ -7,6 +7,7 @@ use num_traits::FromPrimitive;
 
 use crate::error::{Error, Result};
 use crate::function::Function;
+use crate::state::WeakLua;
 use crate::string::LuaString;
 use crate::table::Table;
 use crate::thread::Thread;
@@ -103,13 +104,11 @@ impl Value {
     /// Compares two values for equality.
     ///
     /// Equality comparisons do not convert strings to numbers or vice versa.
-    /// Tables, functions, threads, and userdata are compared by reference:
-    /// two objects are considered equal only if they are the same object.
+    /// Functions and threads are compared by reference. Tables and userdata also use reference
+    /// equality unless their metamethod rules apply.
     ///
-    /// If table or userdata have `__eq` metamethod then mlua will try to invoke it.
-    /// The first value is checked first. If that value does not define a metamethod
-    /// for `__eq`, then mlua will check the second value.
-    /// Then mlua calls the metamethod with the two values as arguments, if found.
+    /// Tables follow the backend's `__eq` rules (see [`Table::equals`]).
+    /// Distinct userdata with the same metatable invoke its `__eq` metamethod, if present.
     pub fn equals(&self, other: &Self) -> Result<bool> {
         match (self, other) {
             (Value::Table(a), Value::Table(b)) => a.equals(b),
@@ -177,6 +176,25 @@ impl Value {
             #[cfg(feature = "luau")]
             Value::Buffer(crate::Buffer(vref)) => unsafe { invoke_tostring(vref) },
             Value::Error(err) => Ok(err.to_string()),
+        }
+    }
+
+    /// Returns a weak reference to the Lua instance owning this value.
+    ///
+    /// Returns `None` for values without an associated Lua instance, such as primitive values
+    /// and [`Value::Error`].
+    #[inline]
+    pub fn weak_lua(&self) -> Option<&WeakLua> {
+        match self {
+            Value::String(s) => Some(s.weak_lua()),
+            Value::Table(t) => Some(t.weak_lua()),
+            Value::Function(f) => Some(f.weak_lua()),
+            Value::Thread(t) => Some(t.weak_lua()),
+            Value::UserData(ud) => Some(ud.weak_lua()),
+            #[cfg(feature = "luau")]
+            Value::Buffer(b) => Some(b.weak_lua()),
+            Value::Other(vref) => Some(&vref.lua),
+            _ => None,
         }
     }
 
@@ -718,6 +736,21 @@ impl<'a> SerializableValue<'a> {
         self.options.detect_mixed_tables = enabled;
         self
     }
+
+    /// If true, pass Luau buffer bytes directly to serializers without copying.
+    ///
+    /// Default: **false**.
+    ///
+    /// # Safety
+    ///
+    /// When enabled, the caller must ensure that serializers and any code they invoke do not
+    /// mutate a buffer while its bytes are borrowed.
+    #[cfg(feature = "luau")]
+    #[must_use]
+    pub unsafe fn borrow_buffers(mut self, enabled: bool) -> Self {
+        self.options.borrow_buffers = enabled;
+        self
+    }
 }
 
 #[cfg(feature = "serde")]
@@ -742,6 +775,11 @@ impl Serialize for SerializableValue<'_> {
             Value::LightUserData(ud) if ud.0.is_null() => serializer.serialize_none(),
             Value::UserData(ud) if ud.is_serializable() || self.options.deny_unsupported_types => {
                 ud.serialize(serializer)
+            }
+            #[cfg(feature = "luau")]
+            Value::Buffer(buf) if self.options.borrow_buffers => {
+                let lua = buf.0.lua.lock();
+                serializer.serialize_bytes(buf.as_slice(&lua))
             }
             #[cfg(feature = "luau")]
             Value::Buffer(buf) => buf.serialize(serializer),

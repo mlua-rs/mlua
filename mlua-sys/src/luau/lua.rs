@@ -275,6 +275,10 @@ unsafe extern "C-unwind" {
     pub fn lua_getthreaddata(L: *mut lua_State) -> *mut c_void;
     pub fn lua_setthreaddata(L: *mut lua_State, data: *mut c_void);
     pub fn lua_costatus(L: *mut lua_State, co: *mut lua_State) -> c_int;
+
+    pub fn lua_hasfinalizers(L: *mut lua_State) -> c_int;
+    pub fn lua_pushfinalizerfunction(L: *mut lua_State, co: *mut lua_State, toclose: c_int);
+    pub fn lua_addfinalizer(L: *mut lua_State, co: *mut lua_State, idx: c_int);
 }
 
 #[inline(always)]
@@ -346,7 +350,8 @@ unsafe extern "C-unwind" {
 
 pub type lua_UserdataMark = unsafe extern "C-unwind" fn(L: *mut lua_State, ud: *mut c_void);
 pub type lua_EmbedderMark = unsafe extern "C-unwind" fn(L: *mut lua_State, r#ref: c_int);
-pub type lua_EmbedderGc = unsafe extern "C-unwind" fn(L: *mut lua_State, markref: Option<lua_EmbedderMark>);
+pub type lua_EmbedderGc =
+    unsafe extern "C-unwind" fn(L: *mut lua_State, markref: Option<lua_EmbedderMark>) -> c_int;
 
 //
 // Reference system, can be used to pin objects
@@ -601,6 +606,9 @@ pub struct lua_Callbacks {
     pub userthread: Option<unsafe extern "C-unwind" fn(LP: *mut lua_State, L: *mut lua_State)>,
     /// gets called when a string is created to assign an atom id
     pub useratom: Option<unsafe extern "C-unwind" fn(L: *mut lua_State, s: *const c_char, l: usize) -> i16>,
+
+    /// gets called before a finalizer is attached to `co` by the current thread
+    pub userfinalizer: Option<unsafe extern "C-unwind" fn(L: *mut lua_State, co: *mut lua_State)>,
 
     /// gets called when BREAK instruction is encountered
     pub debugbreak: Option<unsafe extern "C-unwind" fn(L: *mut lua_State, ar: *mut lua_Debug)>,

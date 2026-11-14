@@ -16,6 +16,16 @@ fn test_function_call() -> Result<()> {
 }
 
 #[test]
+fn test_function_call_many_returns() -> Result<()> {
+    let lua = Lua::new();
+    let values = lua
+        .load("local t = {}; for i = 1, 64 do t[i] = {} end; return (table.unpack or unpack)(t)")
+        .eval::<Variadic<Table>>()?;
+    assert_eq!(values.len(), 64);
+    Ok(())
+}
+
+#[test]
 fn test_function_call_error() -> Result<()> {
     let lua = Lua::new();
 
@@ -25,6 +35,46 @@ fn test_function_call_error() -> Result<()> {
     match concat_err.call::<String>(("foo", "bar")) {
         Err(Error::RuntimeError(msg)) if msg.contains("concat error") => {}
         other => panic!("unexpected result: {other:?}"),
+    }
+
+    Ok(())
+}
+
+#[test]
+#[cfg(all(not(panic = "abort"), not(target_arch = "wasm32")))]
+fn test_function_failure_recovery() -> Result<()> {
+    use std::panic::{AssertUnwindSafe, catch_unwind};
+
+    let lua = Lua::new();
+
+    let inner = lua.create_function(|_, outcome: String| match outcome.as_str() {
+        "success" => Ok(42),
+        "error" => Err(Error::runtime("callback failure")),
+        "panic" => panic!("callback panic"),
+        _ => unreachable!(),
+    })?;
+    let outer = lua.create_function(move |_, outcome: String| inner.call::<i32>(outcome))?;
+
+    // Check that nested coroutine callbacks recover after both errors and panics.
+    for outcome in ["success", "error", "success", "panic", "success"] {
+        let thread = lua.create_thread(outer.clone())?;
+        let result = catch_unwind(AssertUnwindSafe(|| thread.resume::<i32>(outcome)));
+        match outcome {
+            "success" => assert_eq!(result.unwrap()?, 42),
+            "error" => {
+                let err = result.unwrap().unwrap_err();
+                assert!(matches!(err, Error::CallbackError { .. }));
+                assert!(matches!(
+                    err.chain().last().unwrap().downcast_ref::<Error>(),
+                    Some(Error::RuntimeError(msg)) if msg == "callback failure"
+                ));
+            }
+            "panic" => assert_eq!(
+                result.unwrap_err().downcast_ref::<&str>(),
+                Some(&"callback panic")
+            ),
+            _ => unreachable!(),
+        }
     }
 
     Ok(())
@@ -50,7 +100,9 @@ fn test_function_bind() -> Result<()> {
 
     let mut concat = globals.get::<Function>("concat")?;
     concat = concat.bind("foo")?;
+    assert_eq!(concat.info().source.as_deref(), Some("=__mlua_bind"));
     concat = concat.bind("bar")?;
+    assert_eq!(concat.info().source.as_deref(), Some("=__mlua_bind"));
     concat = concat.bind(("baz", "baf"))?;
     assert_eq!(concat.call::<String>(())?, "foobarbazbaf");
     assert_eq!(concat.call::<String>(("hi", "wut"))?, "foobarbazbafhiwut");

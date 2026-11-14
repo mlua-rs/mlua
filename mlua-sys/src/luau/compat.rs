@@ -13,7 +13,7 @@ use super::luacode::*;
 pub const LUA_RESUMEERROR: c_int = -1;
 
 // Keep in sync with Bytecode.h
-const LBC_VERSION_MAX: u8 = 11;
+const LBC_VERSION_MAX: u8 = 14;
 const LBC_TYPE_VERSION_MIN: u8 = 1;
 const LBC_TYPE_VERSION_MAX: u8 = 3;
 

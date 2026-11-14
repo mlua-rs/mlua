@@ -712,6 +712,11 @@ impl RawLua {
     pub(crate) unsafe fn create_recycled_thread(&self, func: &Function) -> Result<Thread> {
         if let Some(index) = (*self.extra.get()).thread_pool.pop() {
             let thread_state = ffi::lua_tothread(self.ref_thread(), index);
+            let thread = Thread(ValueRef::new(self, index), thread_state);
+
+            #[cfg(not(feature = "luau"))]
+            self.set_thread_hook(thread_state, HookKind::Global)?;
+
             ffi::lua_xpush(self.ref_thread(), thread_state, func.0.index);
 
             #[cfg(feature = "luau")]
@@ -721,7 +726,7 @@ impl RawLua {
                 ffi::lua_replace(thread_state, ffi::LUA_GLOBALSINDEX);
             }
 
-            return Ok(Thread(ValueRef::new(self, index), thread_state));
+            return Ok(thread);
         }
 
         self.create_thread(func)
@@ -1384,6 +1389,7 @@ impl RawLua {
         }
     }
 
+    #[inline]
     unsafe fn get_userdata_type_id_inner(
         &self,
         state: *mut ffi::lua_State,
@@ -1400,6 +1406,11 @@ impl RawLua {
             return Ok(last_type_id);
         }
 
+        self.get_userdata_type_id_uncached(mt_ptr)
+    }
+
+    #[inline(never)]
+    unsafe fn get_userdata_type_id_uncached(&self, mt_ptr: *const c_void) -> Result<Option<TypeId>> {
         match (*self.extra.get()).registered_userdata_mt.get(&mt_ptr) {
             Some(&type_id) if type_id == Some(TypeId::of::<DestructedUserdata>()) => {
                 Err(Error::UserDataDestructed)
@@ -1559,6 +1570,7 @@ impl RawLua {
                             Ok(nresults + 1)
                         }
                         nresults => {
+                            check_stack(state, 1)?;
                             let results = MultiValue::from_stack_multi(nresults, rawlua)?;
                             ffi::lua_pushinteger(state, nresults as _);
                             rawlua.push(rawlua.create_sequence_from(results)?)?;
@@ -1650,9 +1662,20 @@ impl RawLua {
             end
             "#,
         )
-        .try_cache()
         .set_name("=__mlua_async_poll")
+        .try_cache()
         .call((get_future, poll, r#yield, unpack))
+    }
+
+    #[cfg(feature = "async")]
+    pub(crate) unsafe fn is_async_wrapper_yield(&self, thread_state: *mut ffi::lua_State) -> bool {
+        let mut ar = mem::zeroed::<ffi::lua_Debug>();
+        #[cfg(not(feature = "luau"))]
+        let found = ffi::lua_getstack(thread_state, 1, &mut ar) != 0
+            && ffi::lua_getinfo(thread_state, cstr!("S"), &mut ar) != 0;
+        #[cfg(feature = "luau")]
+        let found = ffi::lua_getinfo(thread_state, 1, cstr!("s"), &mut ar) != 0;
+        found && !ar.source.is_null() && CStr::from_ptr(ar.source) == c"=__mlua_async_poll"
     }
 
     #[cfg(feature = "async")]

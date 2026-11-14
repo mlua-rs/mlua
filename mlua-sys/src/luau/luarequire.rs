@@ -49,9 +49,9 @@ pub struct luarequire_Configuration {
         requirer_chunkname: *const c_char,
     ) -> luarequire_NavigateResult,
 
-    // Resets the internal state to point at an aliased module, given its exact path from a configuration
-    // file. This function is only called when an alias's path cannot be resolved relative to its
-    // configuration file.
+    // Resets the internal state to point at an aliased module, given its exact path from a
+    // configuration file. This function is only called when an alias's path cannot be resolved
+    // relative to its configuration file.
     pub jump_to_alias: unsafe extern "C-unwind" fn(
         L: *mut lua_State,
         ctx: *mut c_void,
@@ -71,8 +71,8 @@ pub struct luarequire_Configuration {
     >,
 
     // Provides a final override opportunity if an alias cannot be found in configuration files. If
-    // NAVIGATE_SUCCESS is returned, this must update the internal state to point at the aliased module.
-    // Can be left undefined.
+    // NAVIGATE_SUCCESS is returned, this must update the internal state to point at the aliased
+    // module. Can be left undefined.
     pub to_alias_fallback: Option<
         unsafe extern "C-unwind" fn(
             L: *mut lua_State,
@@ -93,8 +93,8 @@ pub struct luarequire_Configuration {
     // Returns whether the context is currently pointing at a module.
     pub is_module_present: unsafe extern "C-unwind" fn(L: *mut lua_State, ctx: *mut c_void) -> bool,
 
-    // Provides a chunkname for the current module. This will be accessible through the debug library. This
-    // function is only called if is_module_present returns true.
+    // Provides a chunkname for the current module. This will be accessible through the debug
+    // library. This function is only called if is_module_present returns true.
     pub get_chunkname: unsafe extern "C-unwind" fn(
         L: *mut lua_State,
         ctx: *mut c_void,
@@ -123,9 +123,9 @@ pub struct luarequire_Configuration {
         size_out: *mut usize,
     ) -> luarequire_WriteResult,
 
-    // Returns whether a configuration file is present in the current context, and if so, its syntax.
-    // If not present, require-by-string will call to_parent until either a configuration file is present or
-    // NAVIGATE_FAILURE is returned (at root).
+    // Returns whether a configuration file is present in the current context, and if so, its
+    // syntax. If not present, require-by-string will call to_parent until either a configuration
+    // file is present or NAVIGATE_FAILURE is returned (at root).
     pub get_config_status:
         unsafe extern "C-unwind" fn(L: *mut lua_State, ctx: *mut c_void) -> luarequire_ConfigStatus,
 
@@ -146,9 +146,9 @@ pub struct luarequire_Configuration {
     >,
 
     // Provides the contents of the configuration file in the current context.
-    // This function is only called if get_config_status does not return CONFIG_ABSENT. If this function
-    // pointer is set, get_alias must not be set. Opting in to this function pointer enables parsing
-    // configuration files internally.
+    // This function is only called if get_config_status does not return CONFIG_ABSENT. If this
+    // function pointer is set, get_alias must not be set. Opting in to this function pointer
+    // enables parsing configuration files internally.
     pub get_config: Option<
         unsafe extern "C-unwind" fn(
             L: *mut lua_State,
@@ -159,17 +159,17 @@ pub struct luarequire_Configuration {
         ) -> luarequire_WriteResult,
     >,
 
-    // Returns the maximum number of milliseconds to allow for executing a given Luau-syntax configuration
-    // file. This function is only called if get_config_status returns CONFIG_PRESENT_LUAU and can be left
-    // undefined if support for Luau-syntax configuration files is not needed. A default value of 2000ms is
-    // used. Negative values are treated as infinite.
+    // Returns the maximum number of milliseconds to allow for executing a given Luau-syntax
+    // configuration file. This function is only called if get_config_status returns
+    // CONFIG_PRESENT_LUAU and can be left undefined if support for Luau-syntax configuration files
+    // is not needed. A default value of 2000ms is used. Negative values are treated as infinite.
     pub get_luau_config_timeout:
         Option<unsafe extern "C-unwind" fn(L: *mut lua_State, ctx: *mut c_void) -> c_int>,
 
-    // Executes the module and places the result on the stack. Returns the number of results placed on the
-    // stack.
-    // Returning -1 directs the requiring thread to yield. In this case, this thread should be resumed with
-    // the module result pushed onto its stack.
+    // Executes the module and places the result on the stack. Returns the number of results placed
+    // on the stack.
+    // Returning -1 directs the requiring thread to yield. In this case, this thread should be
+    // resumed with the module result pushed onto its stack.
     pub load: unsafe extern "C-unwind" fn(
         L: *mut lua_State,
         ctx: *mut c_void,

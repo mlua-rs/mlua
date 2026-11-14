@@ -1,12 +1,14 @@
 use std::cell::RefCell;
 use std::marker::PhantomData;
-use std::mem;
+use std::os::raw::c_void;
+use std::sync::atomic::{AtomicPtr, Ordering};
+use std::{mem, ptr};
 
 use crate::error::{Error, Result};
 use crate::function::Function;
 use crate::state::{Lua, LuaGuard, RawLua};
 use crate::traits::{FromLuaMulti, IntoLuaMulti};
-use crate::types::{Callback, CallbackUpvalue, ScopedCallback, ValueRef};
+use crate::types::{Callback, CallbackUpvalue, ScopedCallback, ValueRef, XRc};
 use crate::userdata::{AnyUserData, UserData, UserDataRegistry, UserDataStorage};
 use crate::util::{self, StackGuard, check_stack, get_metatable_ptr, get_userdata, take_userdata};
 
@@ -26,14 +28,14 @@ pub struct Scope<'scope, 'env: 'scope> {
 type DestructorCallback<'a> = Box<dyn FnOnce(&RawLua, ValueRef) -> Vec<Box<dyn FnOnce() + 'a>>>;
 
 // Implement Drop on Destructors instead of Scope to avoid compilation error
-struct Destructors<'a>(RefCell<Vec<(ValueRef, DestructorCallback<'a>)>>);
+struct Destructors<'a>(RefCell<Option<Vec<(ValueRef, DestructorCallback<'a>)>>>);
 
 struct UserDestructors<'a>(RefCell<Vec<Box<dyn FnOnce() + 'a>>>);
 
 impl<'scope, 'env: 'scope> Scope<'scope, 'env> {
     pub(crate) fn new(lua: LuaGuard) -> Self {
         Scope {
-            destructors: Destructors(RefCell::new(Vec::new())),
+            destructors: Destructors(RefCell::new(Some(Vec::new()))),
             lua,
             user_destructors: UserDestructors(RefCell::new(Vec::new())),
             _scope_invariant: PhantomData,
@@ -51,6 +53,7 @@ impl<'scope, 'env: 'scope> Scope<'scope, 'env> {
         A: FromLuaMulti,
         R: IntoLuaMulti,
     {
+        self.check_active()?;
         unsafe {
             self.create_callback(Box::new(move |rawlua, nargs| {
                 let args = A::from_stack_args(nargs, 1, None, rawlua)?;
@@ -86,8 +89,9 @@ impl<'scope, 'env: 'scope> Scope<'scope, 'env> {
     where
         T: UserData + 'static,
     {
+        self.check_active()?;
         let ud = unsafe { self.lua.make_userdata(UserDataStorage::new_ref(data)) }?;
-        self.seal_userdata::<T>(&ud);
+        self.seal_userdata::<T>(&ud, None);
         Ok(ud)
     }
 
@@ -100,8 +104,9 @@ impl<'scope, 'env: 'scope> Scope<'scope, 'env> {
     where
         T: UserData + 'static,
     {
+        self.check_active()?;
         let ud = unsafe { self.lua.make_userdata(UserDataStorage::new_ref_mut(data)) }?;
-        self.seal_userdata::<T>(&ud);
+        self.seal_userdata::<T>(&ud, None);
         Ok(ud)
     }
 
@@ -116,8 +121,9 @@ impl<'scope, 'env: 'scope> Scope<'scope, 'env> {
     where
         T: 'static,
     {
+        self.check_active()?;
         let ud = unsafe { self.lua.make_any_userdata(UserDataStorage::new_ref(data)) }?;
-        self.seal_userdata::<T>(&ud);
+        self.seal_userdata::<T>(&ud, None);
         Ok(ud)
     }
 
@@ -130,8 +136,9 @@ impl<'scope, 'env: 'scope> Scope<'scope, 'env> {
     where
         T: 'static,
     {
+        self.check_active()?;
         let ud = unsafe { self.lua.make_any_userdata(UserDataStorage::new_ref_mut(data)) }?;
-        self.seal_userdata::<T>(&ud);
+        self.seal_userdata::<T>(&ud, None);
         Ok(ud)
     }
 
@@ -173,7 +180,10 @@ impl<'scope, 'env: 'scope> Scope<'scope, 'env> {
     where
         T: 'env,
     {
+        self.check_active()?;
         let state = self.lua.state();
+        // Escaped methods must remain invalid even if Lua reuses the userdata's address.
+        let target_ptr = XRc::new(AtomicPtr::new(ptr::null_mut()));
         let ud = unsafe {
             let _sg = StackGuard::new(state);
             check_stack(state, 3)?;
@@ -183,20 +193,23 @@ impl<'scope, 'env: 'scope> Scope<'scope, 'env> {
             let ud_ptr = util::push_uninit_userdata::<UserDataStorage<T>>(state, protect)?;
 
             // Push the metatable and register it with no TypeId
-            let mut registry = UserDataRegistry::new_unique(self.lua.lua(), ud_ptr as *mut _);
+            let mut registry = UserDataRegistry::new_unique(self.lua.lua(), target_ptr.clone());
             register(&mut registry);
             self.lua.push_userdata_metatable(registry.into_raw())?;
             let mt_ptr = ffi::lua_topointer(state, -1);
             self.lua.register_userdata_metatable(mt_ptr, None);
 
             // Write data to the pointer and attach metatable
-            std::ptr::write(ud_ptr, UserDataStorage::new_scoped(data));
+            ptr::write(ud_ptr, UserDataStorage::new_scoped(data));
             ffi::lua_setmetatable(state, -2);
 
             // Keep the userdata on the stack so it can be invalidated on failure.
             ffi::lua_xpush(state, self.lua.ref_thread(), -1);
             match self.lua.try_pop_ref_thread() {
-                Ok(vref) => AnyUserData(vref),
+                Ok(vref) => {
+                    target_ptr.store(ud_ptr as *mut _, Ordering::Relaxed);
+                    AnyUserData(vref)
+                }
                 Err(err) => {
                     self.lua.deregister_userdata_metatable(mt_ptr);
                     drop(take_userdata::<UserDataStorage<T>>(state, -1));
@@ -204,7 +217,7 @@ impl<'scope, 'env: 'scope> Scope<'scope, 'env> {
                 }
             }
         };
-        self.seal_userdata::<T>(&ud);
+        self.seal_userdata::<T>(&ud, Some(target_ptr));
         Ok(ud)
     }
 
@@ -233,6 +246,13 @@ impl<'scope, 'env: 'scope> Scope<'scope, 'env> {
         self.user_destructors.0.borrow_mut().push(Box::new(destructor));
     }
 
+    fn check_active(&self) -> Result<()> {
+        if self.destructors.0.borrow().is_none() {
+            return Err(Error::runtime("scope is already destroyed"));
+        }
+        Ok(())
+    }
+
     unsafe fn create_callback(&'scope self, f: ScopedCallback<'scope>) -> Result<Function> {
         let f = mem::transmute::<ScopedCallback, Callback>(f);
         let f = self.lua.create_callback(f)?;
@@ -245,14 +265,18 @@ impl<'scope, 'env: 'scope> Scope<'scope, 'env> {
             ffi::lua_pop(ref_thread, 1);
             vec![Box::new(move || drop(data))]
         });
-        self.destructors.0.borrow_mut().push((f.0.clone(), destructor));
+        let mut destructors = self.destructors.0.borrow_mut();
+        destructors.as_mut().unwrap().push((f.0.clone(), destructor));
 
         Ok(f)
     }
 
     /// Shortens the lifetime of the userdata to the lifetime of the scope.
-    fn seal_userdata<T: 'env>(&self, ud: &AnyUserData) {
-        let destructor: DestructorCallback = Box::new(|rawlua, vref| unsafe {
+    fn seal_userdata<T: 'env>(&self, ud: &AnyUserData, target_ptr: Option<XRc<AtomicPtr<c_void>>>) {
+        let destructor: DestructorCallback = Box::new(move |rawlua, vref| unsafe {
+            if let Some(target_ptr) = target_ptr {
+                target_ptr.store(ptr::null_mut(), Ordering::Relaxed);
+            }
             // Ensure that userdata is not destructed
             match rawlua.get_userdata_ref_type_id(&vref) {
                 Ok(Some(_)) => {}
@@ -267,7 +291,8 @@ impl<'scope, 'env: 'scope> Scope<'scope, 'env> {
             let data = take_userdata::<UserDataStorage<T>>(rawlua.ref_thread(), vref.index);
             vec![Box::new(move || drop(data))]
         });
-        self.destructors.0.borrow_mut().push((ud.0.clone(), destructor));
+        let mut destructors = self.destructors.0.borrow_mut();
+        destructors.as_mut().unwrap().push((ud.0.clone(), destructor));
     }
 }
 
@@ -277,7 +302,8 @@ impl Drop for Destructors<'_> {
         // userdata type into two phases. This is so that, in the event a userdata drop panics,
         // we can be sure that all of the userdata in Lua is actually invalidated.
 
-        let destructors = mem::take(&mut *self.0.borrow_mut());
+        // Close registration before invalidation or user destructors can reenter the scope.
+        let destructors = self.0.borrow_mut().take().unwrap();
         if let Some(lua) = destructors.first().map(|(vref, _)| vref.lua.lock()) {
             // All destructors are non-panicking, so this is fine
             let to_drop = destructors

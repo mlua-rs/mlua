@@ -40,7 +40,7 @@ use std::os::raw::{c_int, c_void};
 
 use crate::error::{Error, Result};
 use crate::function::Function;
-use crate::state::RawLua;
+use crate::state::{RawLua, WeakLua};
 use crate::traits::{FromLuaMulti, IntoLuaMulti};
 use crate::types::{LuaType, ValueRef};
 use crate::util::{StackGuard, check_stack, error_traceback_thread, pop_error};
@@ -606,14 +606,13 @@ impl Thread {
 
     unsafe fn reset_inner(&self, status: ThreadStatusInner) -> Result<()> {
         match status {
-            ThreadStatusInner::New(_) => {
-                // The thread is new, so we can just set the top to 0
+            ThreadStatusInner::New(_) | ThreadStatusInner::Finished => {
+                // Clear everything
                 ffi::lua_settop(self.state(), 0);
                 Ok(())
             }
             ThreadStatusInner::Running => Err(Error::runtime("cannot reset a running thread")),
             ThreadStatusInner::Normal => Err(Error::runtime("cannot reset a normal thread")),
-            ThreadStatusInner::Finished => Ok(()),
             #[cfg(not(any(feature = "lua55", feature = "lua54", feature = "luau")))]
             ThreadStatusInner::Yielded(_) | ThreadStatusInner::Error => {
                 Err(Error::runtime("cannot reset non-finished thread"))
@@ -775,6 +774,13 @@ impl Thread {
     pub fn to_pointer(&self) -> *const c_void {
         self.0.to_pointer()
     }
+
+    /// Returns a weak reference to the Lua instance owning this value.
+    #[doc(hidden)]
+    #[inline]
+    pub fn weak_lua(&self) -> &WeakLua {
+        &self.0.lua
+    }
 }
 
 impl fmt::Debug for Thread {
@@ -814,11 +820,14 @@ impl<R> Drop for AsyncThread<R> {
                 }
 
                 let mut status = self.thread.status_inner(&lua);
-                if matches!(status, ThreadStatusInner::Yielded(0)) && !self.thread.is_hook_yielded(&lua) {
+                if matches!(status, ThreadStatusInner::Yielded(0))
+                    && !self.thread.is_hook_yielded(&lua)
+                    && lua.is_async_wrapper_yield(self.thread.state())
+                {
                     // The thread is dropped while yielded, resume it with the "terminate" signal
                     ffi::lua_pushlightuserdata(self.thread.1, crate::Lua::poll_terminate().0);
                     if let Ok((new_status, _)) = self.thread.resume_inner(&lua, 1) {
-                        // `new_status` should always be `ThreadStatusInner::Yielded(0)`
+                        // The coroutine can finish or yield again.
                         status = new_status;
                     }
                 }

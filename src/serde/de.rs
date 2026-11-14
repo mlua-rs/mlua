@@ -74,6 +74,9 @@ pub struct Options {
     ///
     /// [`The Length Operator`]: https://www.lua.org/manual/5.4/manual.html#3.4.7
     pub detect_mixed_tables: bool,
+
+    #[cfg(feature = "luau")]
+    pub(crate) borrow_buffers: bool,
 }
 
 impl Default for Options {
@@ -92,6 +95,8 @@ impl Options {
             sort_keys: false,
             encode_empty_tables_as_array: false,
             detect_mixed_tables: false,
+            #[cfg(feature = "luau")]
+            borrow_buffers: false,
         }
     }
 
@@ -144,6 +149,21 @@ impl Options {
     #[must_use]
     pub const fn detect_mixed_tables(mut self, enable: bool) -> Self {
         self.detect_mixed_tables = enable;
+        self
+    }
+
+    /// If true, pass Luau buffer bytes directly to visitors without copying.
+    ///
+    /// Default: **false**.
+    ///
+    /// # Safety
+    ///
+    /// When enabled, the caller must ensure that visitors and any code they invoke do not
+    /// mutate a buffer while its bytes are borrowed.
+    #[cfg(feature = "luau")]
+    #[must_use]
+    pub const unsafe fn borrow_buffers(mut self, enabled: bool) -> Self {
+        self.borrow_buffers = enabled;
         self
     }
 }
@@ -211,10 +231,12 @@ impl<'de> serde::Deserializer<'de> for Deserializer {
                 serde_userdata(ud, |value| value.deserialize_any(visitor))
             }
             #[cfg(feature = "luau")]
-            Value::Buffer(buf) => {
+            Value::Buffer(buf) if self.options.borrow_buffers => {
                 let lua = buf.0.lua.lock();
                 visitor.visit_bytes(buf.as_slice(&lua))
             }
+            #[cfg(feature = "luau")]
+            Value::Buffer(buf) => visitor.visit_bytes(&buf.to_vec()),
             Value::Function(_)
             | Value::Thread(_)
             | Value::UserData(_)

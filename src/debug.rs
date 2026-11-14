@@ -369,6 +369,7 @@ impl HookTriggers {
     #[cfg(not(feature = "luau"))]
     pub(crate) const fn count(&self) -> c_int {
         match self.every_nth_instruction {
+            Some(n) if n > c_int::MAX as u32 => c_int::MAX,
             Some(n) => n as c_int,
             None => 0,
         }

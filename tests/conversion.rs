@@ -382,6 +382,11 @@ fn test_integer_from_lua() -> Result<()> {
         }
     }
 
+    let f = lua.create_function(|_, n: u128| Ok(n.to_string()))?;
+    assert_eq!(f.call::<String>(2_f64.powi(100))?, (1_u128 << 100).to_string());
+    assert!(f.call::<String>(2_f64.powi(128)).is_err());
+    assert!(f.call::<String>(-1).is_err());
+
     Ok(())
 }
 
@@ -412,6 +417,12 @@ fn test_conv_vec() -> Result<()> {
     let v2: Vec<i32> = lua.globals().get("v")?;
     assert_eq!(v, v2);
 
+    assert!(lua.load("{10, false, 30}").eval::<Vec<i32>>().is_err());
+    assert_eq!(
+        lua.load("{{1, 2}, {3}}").eval::<Vec<Vec<i32>>>()?,
+        vec![vec![1, 2], vec![3]]
+    );
+
     Ok(())
 }
 
@@ -439,6 +450,10 @@ fn test_conv_hashset() -> Result<()> {
     let set3 = lua.load(r#"{"a", "b", "c"}"#).eval::<HashSet<String>>()?;
     assert_eq!(set3, hashset! { "a".into(), "b".into(), "c".into() });
 
+    let set = hashset! {1, 2, 3};
+    assert_eq!(lua.unpack::<HashSet<i32>>(set.clone().into_lua(&lua)?)?, set);
+    assert_eq!(lua.load("{1, 2, 3}").eval::<HashSet<i32>>()?, set);
+
     Ok(())
 }
 
@@ -465,6 +480,10 @@ fn test_conv_btreeset() -> Result<()> {
 
     let set3 = lua.load(r#"{"a", "b", "c"}"#).eval::<BTreeSet<String>>()?;
     assert_eq!(set3, btreeset! { "a".into(), "b".into(), "c".into() });
+
+    let set = btreeset! {1, 2, 3};
+    assert_eq!(lua.unpack::<BTreeSet<i32>>(set.clone().into_lua(&lua)?)?, set);
+    assert_eq!(lua.load("{1, 2, 3}").eval::<BTreeSet<i32>>()?, set);
 
     Ok(())
 }

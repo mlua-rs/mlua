@@ -226,7 +226,7 @@ impl Table {
             lua.push_ref(&self.0);
             key.push_into_stack(&lua)?;
             value.push_into_stack(&lua)?;
-            if protect || self.has_metatable() {
+            if protect || !get_metatable_ptr(lua.ref_thread(), self.0.index).is_null() {
                 protect_lua!(state, 3, 0, fn(state) ffi::lua_settable(state, -3))
             } else {
                 #[cfg(feature = "luau")]
@@ -276,7 +276,7 @@ impl Table {
 
             lua.push_ref(&self.0);
             key.push_into_stack(&lua)?;
-            if protect || self.has_metatable() {
+            if protect || !get_metatable_ptr(lua.ref_thread(), self.0.index).is_null() {
                 protect_lua!(state, 2, 1, fn(state) ffi::lua_gettable(state, -2))?;
             } else {
                 ffi::lua_rawget(state, -2);
@@ -305,7 +305,7 @@ impl Table {
 
             lua.push_ref(&self.0);
             value.push_into_stack(&lua)?;
-            if !self.has_metatable() {
+            if get_metatable_ptr(lua.ref_thread(), self.0.index).is_null() {
                 #[cfg(feature = "luau")]
                 self.check_readonly_write(&lua)?;
 
@@ -406,9 +406,9 @@ impl Table {
 
     /// Compares two tables for equality.
     ///
-    /// Tables are compared by reference first.
-    /// If they are not primitively equals, then mlua will try to invoke the `__eq` metamethod.
-    /// mlua will check `self` first for the metamethod, then `other` if not found.
+    /// Uses the same rules as Lua's `==` operator, including `__eq` metamethod dispatch.
+    /// Lua <5.3 and Luau require both tables to have the same `__eq` metamethod.
+    /// Lua 5.3+ check `self` first, then `other` if no metamethod is found.
     ///
     /// # Examples
     ///
@@ -426,6 +426,7 @@ impl Table {
     ///
     /// let always_equals_mt = lua.create_table()?;
     /// always_equals_mt.set("__eq", lua.create_function(|_, (_t1, _t2): (Table, Table)| Ok(true))?)?;
+    /// table1.set_metatable(Some(always_equals_mt.clone()))?;
     /// table2.set_metatable(Some(always_equals_mt))?;
     ///
     /// assert!(table1.equals(&table1.clone())?);
@@ -434,25 +435,32 @@ impl Table {
     /// # }
     /// ```
     pub fn equals(&self, other: &Self) -> Result<bool> {
+        #[cfg(not(feature = "luau"))]
         if self == other {
             return Ok(true);
         }
 
-        // Compare using `__eq` metamethod if exists
-        // First, check the self for the metamethod.
-        // If self does not define it, then check the other table.
-        if let Some(mt) = self.try_metatable()?
-            && let Some(eq_func) = mt.get::<Option<Function>>("__eq")?
-        {
-            return eq_func.call((self, other));
-        }
-        if let Some(mt) = other.try_metatable()?
-            && let Some(eq_func) = mt.get::<Option<Function>>("__eq")?
-        {
-            return eq_func.call((self, other));
-        }
+        let lua = self.0.lua.lock();
+        let state = lua.state();
+        unsafe {
+            let _sg = StackGuard::new(state);
+            check_stack(state, 5)?;
 
-        Ok(false)
+            lua.push_ref(&self.0);
+            lua.push_ref(&other.0);
+            if ffi::lua_getmetatable(state, -2) == 0 && ffi::lua_getmetatable(state, -1) == 0 {
+                return Ok(ffi::lua_rawequal(state, -2, -1) != 0);
+            }
+            ffi::lua_pop(state, 1);
+
+            protect_lua!(state, 2, 0, |state| {
+                #[cfg(any(feature = "lua51", feature = "luajit", feature = "luau"))]
+                let equal = ffi::lua_equal(state, 1, 2);
+                #[cfg(any(feature = "lua52", feature = "lua53", feature = "lua54", feature = "lua55"))]
+                let equal = ffi::lua_compare(state, 1, 2, ffi::LUA_OPEQ);
+                equal != 0
+            })
+        }
     }
 
     /// Sets a key-value pair without invoking metamethods.
@@ -658,7 +666,7 @@ impl Table {
             check_stack(state, 4)?;
 
             lua.push_ref(&self.0);
-            protect_lua!(state, 1, 0, |state| ffi::luaL_len(state, -1))
+            protect_lua!(state, 1, 0, |state| ffi::luaL_len(state, -1) as Integer)
         }
     }
 
@@ -682,19 +690,6 @@ impl Table {
             ffi::lua_pop(ref_thread, 2);
         }
         false
-    }
-
-    // Like `metatable`, but returns an error if the auxiliary stack cannot grow.
-    fn try_metatable(&self) -> Result<Option<Table>> {
-        let lua = self.0.lua.lock();
-        let ref_thread = lua.ref_thread();
-        unsafe {
-            Ok(if ffi::lua_getmetatable(ref_thread, self.0.index) == 0 {
-                None
-            } else {
-                Some(Table(lua.try_pop_ref_thread()?))
-            })
-        }
     }
 
     /// Returns a reference to the metatable of this table, or `None` if no metatable is set.
@@ -798,6 +793,13 @@ impl Table {
     #[inline]
     pub fn to_pointer(&self) -> *const c_void {
         self.0.to_pointer()
+    }
+
+    /// Returns a weak reference to the Lua instance owning this value.
+    #[doc(hidden)]
+    #[inline]
+    pub fn weak_lua(&self) -> &WeakLua {
+        &self.0.lua
     }
 
     /// Returns an iterator over the pairs of the table.
@@ -967,6 +969,11 @@ impl Table {
     /// Sets element value at position `idx` without invoking metamethods.
     #[doc(hidden)]
     pub fn raw_seti(&self, idx: usize, value: impl IntoLua) -> Result<()> {
+        // Lua <5.3 and Luau accept only c_int indices in lua_rawseti.
+        if idx > c_int::MAX as usize {
+            return self.raw_set(idx, value);
+        }
+
         let lua = self.0.lua.lock();
         let state = lua.state();
         unsafe {
@@ -979,9 +986,8 @@ impl Table {
             #[cfg(feature = "luau")]
             self.check_readonly_write(&lua)?;
 
-            let idx = idx.try_into().unwrap();
             protect_lua_mem!(lua, 2, 0, |state| {
-                ffi::lua_rawseti(state, -2, idx);
+                ffi::lua_rawseti(state, -2, idx as Integer);
             })
         }
     }
@@ -1301,6 +1307,8 @@ impl ObjectLike for Table {
     fn call_function<R: FromLuaMulti>(&self, name: &str, args: impl IntoLuaMulti) -> Result<R> {
         match self.get(name)? {
             Value::Function(func) => func.call(args),
+            Value::Table(table) => table.call(args),
+            Value::UserData(ud) => ud.call(args),
             val => {
                 let msg = format!("attempt to call a {} value (function '{name}')", val.type_name());
                 Err(Error::runtime(msg))
@@ -1316,6 +1324,8 @@ impl ObjectLike for Table {
     {
         match self.get(name) {
             Ok(Value::Function(func)) => func.call_async(args),
+            Ok(Value::Table(table)) => table.call_async(args),
+            Ok(Value::UserData(ud)) => ud.call_async(args),
             Ok(val) => {
                 let msg = format!("attempt to call a {} value (function '{name}')", val.type_name());
                 AsyncCallFuture::error(Error::RuntimeError(msg))
@@ -1550,7 +1560,7 @@ impl<V: FromLua> Iterator for TableSequence<'_, V> {
         let state = lua.state();
         unsafe {
             let _sg = StackGuard::new(state);
-            if let Err(err) = check_stack(state, 1) {
+            if let Err(err) = check_stack(state, 2) {
                 return Some(Err(err));
             }
 

@@ -814,6 +814,18 @@ macro_rules! lua_convert_int {
             unsafe fn from_stack(idx: c_int, lua: &RawLua) -> Result<Self> {
                 let state = lua.state();
                 let type_id = ffi::lua_type(state, idx);
+                #[cfg(feature = "luau")]
+                if matches!(type_id, ffi::LUA_TNUMBER | ffi::LUA_TSTRING) {
+                    let mut ok = 0;
+                    let n = ffi::lua_tonumberx(state, idx, &mut ok);
+                    if ok != 0
+                        && n == n.trunc()
+                        && let Some(i) = cast(n)
+                    {
+                        return Ok(i);
+                    }
+                }
+                #[cfg(not(feature = "luau"))]
                 if type_id == ffi::LUA_TNUMBER {
                     let mut ok = 0;
                     let i = ffi::lua_tointegerx(state, idx, &mut ok);
@@ -910,16 +922,16 @@ where
     T: FromLua,
 {
     #[inline]
-    fn from_lua(value: Value, _lua: &Lua) -> Result<Self> {
+    fn from_lua(value: Value, lua: &Lua) -> Result<Self> {
         match value {
             #[cfg(feature = "luau")]
             Value::Vector(v) if N == crate::Vector::SIZE => {
                 use std::mem::MaybeUninit;
-                let x = T::from_lua(Value::Number(v.x() as _), _lua)?;
-                let y = T::from_lua(Value::Number(v.y() as _), _lua)?;
-                let z = T::from_lua(Value::Number(v.z() as _), _lua)?;
+                let x = T::from_lua(Value::Number(v.x() as _), lua)?;
+                let y = T::from_lua(Value::Number(v.y() as _), lua)?;
+                let z = T::from_lua(Value::Number(v.z() as _), lua)?;
                 #[cfg(feature = "luau-vector4")]
-                let w = T::from_lua(Value::Number(v.w() as _), _lua)?;
+                let w = T::from_lua(Value::Number(v.w() as _), lua)?;
                 let mut arr: [MaybeUninit<T>; N] = [const { MaybeUninit::uninit() }; N];
                 arr[0].write(x);
                 arr[1].write(y);
@@ -929,7 +941,7 @@ where
                 Ok(arr.map(|e| unsafe { e.assume_init() }))
             }
             Value::Table(table) => {
-                let vec = table.sequence_values().collect::<Result<Vec<_>>>()?;
+                let vec = Vec::<T>::from_lua(Value::Table(table), lua)?;
                 vec.try_into().map_err(|vec: Vec<T>| {
                     let msg = format!("expected table of length {N}, got {}", vec.len());
                     Error::from_lua_conversion("table", Self::type_name(), msg)
@@ -969,7 +981,14 @@ impl<T: FromLua> FromLua for Vec<T> {
     #[inline]
     fn from_lua(value: Value, _lua: &Lua) -> Result<Self> {
         match value {
-            Value::Table(table) => table.sequence_values().collect(),
+            Value::Table(table) => {
+                let mut values = Vec::new();
+                table.for_each_value(|value| {
+                    values.push(value);
+                    Ok(())
+                })?;
+                Ok(values)
+            }
             _ => Err(Error::from_lua_conversion(
                 value.type_name(),
                 Self::type_name(),
@@ -1034,7 +1053,11 @@ impl<T: Eq + Hash + FromLua, S: BuildHasher + Default> FromLua for HashSet<T, S>
     #[inline]
     fn from_lua(value: Value, _: &Lua) -> Result<Self> {
         match value {
-            Value::Table(table) if table.raw_len() > 0 => table.sequence_values().collect(),
+            Value::Table(table)
+                if table.raw_len() > 0 && !matches!(table.raw_get(1)?, Value::Boolean(true)) =>
+            {
+                table.sequence_values().collect()
+            }
             Value::Table(table) => table.pairs::<T, Value>().map(|res| res.map(|(k, _)| k)).collect(),
             _ => Err(Error::from_lua_conversion(
                 value.type_name(),
@@ -1058,7 +1081,11 @@ impl<T: Ord + FromLua> FromLua for BTreeSet<T> {
     #[inline]
     fn from_lua(value: Value, _: &Lua) -> Result<Self> {
         match value {
-            Value::Table(table) if table.raw_len() > 0 => table.sequence_values().collect(),
+            Value::Table(table)
+                if table.raw_len() > 0 && !matches!(table.raw_get(1)?, Value::Boolean(true)) =>
+            {
+                table.sequence_values().collect()
+            }
             Value::Table(table) => table.pairs::<T, Value>().map(|res| res.map(|(k, _)| k)).collect(),
             _ => Err(Error::from_lua_conversion(
                 value.type_name(),

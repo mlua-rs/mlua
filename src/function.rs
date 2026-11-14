@@ -79,7 +79,7 @@ use std::result::Result as StdResult;
 use std::{mem, ptr, slice};
 
 use crate::error::{Error, ExternalError, ExternalResult, Result};
-use crate::state::Lua;
+use crate::state::{Lua, WeakLua};
 use crate::table::Table;
 use crate::traits::{FromLuaMulti, IntoLua, IntoLuaMulti};
 use crate::types::{Callback, LuaType, MaybeSend, ValueRef};
@@ -210,6 +210,8 @@ impl Function {
             }
             // Get the results
             let nresults = ffi::lua_gettop(state) - stack_start;
+            #[cfg(not(feature = "luau"))]
+            check_stack(state, 1)?;
             R::from_stack_multi(nresults, &lua)
         }
     }
@@ -339,8 +341,8 @@ impl Function {
             end
             "#,
         )
-        .try_cache()
         .set_name("=__mlua_bind")
+        .try_cache()
         .call((self, args_wrapper))
     }
 
@@ -603,6 +605,13 @@ impl Function {
     #[inline]
     pub fn to_pointer(&self) -> *const c_void {
         self.0.to_pointer()
+    }
+
+    /// Returns a weak reference to the Lua instance owning this value.
+    #[doc(hidden)]
+    #[inline]
+    pub fn weak_lua(&self) -> &WeakLua {
+        &self.0.lua
     }
 
     /// Creates a deep clone of the Lua function.
