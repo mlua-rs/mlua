@@ -707,7 +707,9 @@ impl Thread {
 
             if !hook_yielded {
                 let nargs = args.push_into_stack_multi(&lua)?;
-                if nargs > 0 {
+                // Argument conversion may change this thread, so re-read its state
+                let (_, hook_yielded) = self.resumable_state(&lua)?;
+                if !hook_yielded && nargs > 0 {
                     check_stack(thread_state, nargs)?;
                     ffi::lua_xmove(state, thread_state, nargs);
                 }
