@@ -261,7 +261,7 @@ impl<'scope, 'env: 'scope> Scope<'scope, 'env> {
             let ref_thread = rawlua.ref_thread();
             ffi::lua_getupvalue(ref_thread, vref.index, 1);
             let upvalue = get_userdata::<CallbackUpvalue>(ref_thread, -1);
-            let data = (*upvalue).data.take();
+            let data = (&mut *(*upvalue).data).take();
             ffi::lua_pop(ref_thread, 1);
             vec![Box::new(move || drop(data))]
         });

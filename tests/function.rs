@@ -41,6 +41,27 @@ fn test_function_call_error() -> Result<()> {
 }
 
 #[test]
+#[cfg(any(feature = "lua55", feature = "lua54", feature = "lua53", feature = "lua52"))]
+fn test_function_gc_resurrection() -> Result<()> {
+    let lua = Lua::new();
+
+    lua.gc_stop();
+    let table: Table = lua
+        .load("return setmetatable({}, {__gc = function(self) _, err = pcall(self.f) end})")
+        .eval()?;
+    let captured = String::from("callback state on the heap");
+    table.set("f", lua.create_function(move |_, ()| Ok(captured.len()))?)?;
+    drop(table);
+
+    lua.gc_collect()?;
+    assert!(
+        matches!(lua.globals().get::<Error>("err")?, Error::CallbackError { cause, .. } if matches!(*cause, Error::CallbackDestructed))
+    );
+
+    Ok(())
+}
+
+#[test]
 #[cfg(all(not(panic = "abort"), not(target_arch = "wasm32")))]
 fn test_function_failure_recovery() -> Result<()> {
     use std::panic::{AssertUnwindSafe, catch_unwind};

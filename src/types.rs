@@ -1,4 +1,5 @@
 use std::cell::UnsafeCell;
+use std::mem::ManuallyDrop;
 use std::os::raw::{c_int, c_void};
 
 #[cfg(not(feature = "luau"))]
@@ -45,26 +46,130 @@ pub(crate) type CallbackPtr = *const CallbackFn<'static>;
 
 pub(crate) type ScopedCallback<'s> = Box<dyn Fn(&RawLua, c_int) -> Result<c_int> + 's>;
 
-pub(crate) struct Upvalue<T> {
-    pub(crate) data: T,
-    pub(crate) extra: XRc<UnsafeCell<ExtraData>>,
+pub(crate) struct CallbackUpvalueStorage<T> {
+    pub(crate) data: ManuallyDrop<T>,
+    // Lua (not Luau) can resurrect and call finalized objects, so we need the pointer to remain
+    // readable after its XRc ownership is released
+    #[cfg(not(feature = "luau"))]
+    extra: *const UnsafeCell<ExtraData>,
+    #[cfg(feature = "luau")]
+    extra: XRc<UnsafeCell<ExtraData>>,
 }
 
-pub(crate) type CallbackUpvalue = Upvalue<Option<Callback>>;
+impl<T> CallbackUpvalueStorage<T> {
+    fn from_parts(data: T, extra: XRc<UnsafeCell<ExtraData>>) -> Self {
+        Self {
+            data: ManuallyDrop::new(data),
+            #[cfg(not(feature = "luau"))]
+            extra: XRc::into_raw(extra),
+            #[cfg(feature = "luau")]
+            extra,
+        }
+    }
+
+    #[inline(always)]
+    pub(crate) fn extra(&self) -> *mut ExtraData {
+        #[cfg(not(feature = "luau"))]
+        return unsafe { (*self.extra).get() };
+        #[cfg(feature = "luau")]
+        return self.extra.get();
+    }
+}
+
+impl<T> Drop for CallbackUpvalueStorage<T> {
+    fn drop(&mut self) {
+        unsafe {
+            ManuallyDrop::drop(&mut self.data);
+            #[cfg(not(feature = "luau"))]
+            XRc::decrement_strong_count(self.extra);
+        }
+    }
+}
+
+#[cfg(not(feature = "luau"))]
+impl<T> CallbackUpvalueStorage<Option<T>> {
+    pub(crate) unsafe fn drop_userdata(this: *mut Self) {
+        // Leave a tombstone before dropping captures, which can reenter Lua.
+        let data = (&mut *(*this).data).take();
+        drop(data);
+        XRc::decrement_strong_count((*this).extra);
+    }
+}
+
+pub(crate) type CallbackUpvalue = CallbackUpvalueStorage<Option<Callback>>;
+
+impl CallbackUpvalueStorage<Option<Callback>> {
+    pub(crate) fn new(extra: XRc<UnsafeCell<ExtraData>>) -> Self {
+        Self::from_parts(None, extra)
+    }
+}
 
 #[cfg(all(feature = "async", feature = "send"))]
-pub(crate) type AsyncCallback =
-    Box<dyn for<'a> Fn(&'a RawLua, c_int) -> BoxFuture<'a, Result<c_int>> + Send + 'static>;
+type AsyncCallbackFn = dyn for<'a> Fn(&'a RawLua, c_int) -> BoxFuture<'a, Result<c_int>> + Send + 'static;
 
 #[cfg(all(feature = "async", not(feature = "send")))]
-pub(crate) type AsyncCallback =
-    Box<dyn for<'a> Fn(&'a RawLua, c_int) -> BoxFuture<'a, Result<c_int>> + 'static>;
+type AsyncCallbackFn = dyn for<'a> Fn(&'a RawLua, c_int) -> BoxFuture<'a, Result<c_int>> + 'static;
 
 #[cfg(feature = "async")]
-pub(crate) type AsyncCallbackUpvalue = Upvalue<AsyncCallback>;
+pub(crate) type AsyncCallback = Box<AsyncCallbackFn>;
+
+#[cfg(all(feature = "async", not(feature = "luau")))]
+#[repr(transparent)]
+pub(crate) struct AsyncCallbackPtr(*mut AsyncCallbackFn);
+
+#[cfg(all(feature = "async", not(feature = "luau")))]
+impl std::ops::Deref for AsyncCallbackPtr {
+    type Target = AsyncCallbackFn;
+
+    fn deref(&self) -> &Self::Target {
+        unsafe { &*self.0 }
+    }
+}
+
+#[cfg(all(feature = "async", not(feature = "luau")))]
+impl Drop for AsyncCallbackPtr {
+    fn drop(&mut self) {
+        unsafe { drop(Box::from_raw(self.0)) }
+    }
+}
+
+#[cfg(all(feature = "async", not(feature = "luau")))]
+pub(crate) type AsyncCallbackUpvalue = CallbackUpvalueStorage<AsyncCallbackPtr>;
+
+#[cfg(all(feature = "async", feature = "luau"))]
+pub(crate) type AsyncCallbackUpvalue = CallbackUpvalueStorage<AsyncCallback>;
+
+#[cfg(all(feature = "async", not(feature = "luau")))]
+impl CallbackUpvalueStorage<AsyncCallbackPtr> {
+    pub(crate) fn new(func: AsyncCallback, extra: XRc<UnsafeCell<ExtraData>>) -> Self {
+        Self::from_parts(AsyncCallbackPtr(Box::into_raw(func)), extra)
+    }
+
+    pub(crate) unsafe fn drop_userdata(this: *mut Self) {
+        static DESTRUCTED: for<'a> fn(&'a RawLua, c_int) -> BoxFuture<'a, Result<c_int>> = destructed;
+        fn destructed<'a>(_: &'a RawLua, _: c_int) -> BoxFuture<'a, Result<c_int>> {
+            Box::pin(async { Err(crate::Error::CallbackDestructed) })
+        }
+
+        let destructed = &DESTRUCTED as &AsyncCallbackFn as *const AsyncCallbackFn as *mut AsyncCallbackFn;
+        let data = std::mem::replace(&mut *(*this).data, AsyncCallbackPtr(destructed));
+        drop(data);
+        XRc::decrement_strong_count((*this).extra);
+    }
+}
+
+#[cfg(all(feature = "async", feature = "luau"))]
+impl CallbackUpvalueStorage<AsyncCallback> {
+    pub(crate) fn new(func: AsyncCallback, extra: XRc<UnsafeCell<ExtraData>>) -> Self {
+        Self::from_parts(func, extra)
+    }
+}
 
 #[cfg(feature = "async")]
-pub(crate) type AsyncPollUpvalue = Upvalue<Option<BoxFuture<'static, Result<c_int>>>>;
+pub(crate) struct AsyncPollUpvalue {
+    pub(crate) data: Option<BoxFuture<'static, Result<c_int>>>,
+    pub(crate) extra: XRc<UnsafeCell<ExtraData>>,
+}
 
 /// Type to set next Lua VM action after executing interrupt or hook function.
 #[non_exhaustive]

@@ -1438,13 +1438,13 @@ impl RawLua {
     pub(crate) fn create_callback(&self, func: Callback) -> Result<Function> {
         unsafe extern "C-unwind" fn call_callback(state: *mut ffi::lua_State) -> c_int {
             let upvalue = get_userdata::<CallbackUpvalue>(state, ffi::lua_upvalueindex(1));
-            callback_error_ext(state, (*upvalue).extra.get(), true, |extra, nargs| {
+            callback_error_ext(state, (*upvalue).extra(), true, |extra, nargs| {
                 // Lua ensures that `LUA_MINSTACK` stack spaces are available (after pushing
                 // arguments) The lock must be already held as the callback is
                 // executed
                 let rawlua = (*extra).raw_lua();
-                match (*upvalue).data {
-                    Some(ref func) => func(rawlua, nargs),
+                match &*(*upvalue).data {
+                    Some(func) => func(rawlua, nargs),
                     None => Err(Error::CallbackDestructed),
                 }
             })
@@ -1457,14 +1457,14 @@ impl RawLua {
 
             let extra = XRc::clone(&self.extra);
             let protect = !self.unlikely_memory_error();
-            let upvalue = push_internal_userdata(state, CallbackUpvalue { data: None, extra }, protect)?;
+            let upvalue = push_internal_userdata(state, CallbackUpvalue::new(extra), protect)?;
             protect_lua_mem!(self, 1, 1, fn(state) {
                 ffi::lua_pushcclosure(state, call_callback, 1);
             })?;
 
             let function = Function(self.try_pop_ref()?);
             // Keep scoped captures owned locally until all fallible operations succeed.
-            (*upvalue).data = Some(func);
+            *(*upvalue).data = Some(func);
             Ok(function)
         }
     }
@@ -1487,18 +1487,16 @@ impl RawLua {
         }
 
         unsafe extern "C-unwind" fn get_future_callback(state: *mut ffi::lua_State) -> c_int {
-            // Async functions cannot be scoped and therefore destroyed,
-            // so the first upvalue is always valid
             let upvalue = get_userdata::<AsyncCallbackUpvalue>(state, ffi::lua_upvalueindex(1));
-            callback_error_ext(state, (*upvalue).extra.get(), true, |extra, nargs| {
+            callback_error_ext(state, (*upvalue).extra(), true, |extra, nargs| {
                 // Lua ensures that `LUA_MINSTACK` stack spaces are available (after pushing
                 // arguments) The lock must be already held as the callback is
                 // executed
                 let rawlua = (*extra).raw_lua();
 
-                let func = &*(*upvalue).data;
+                let func = &**(*upvalue).data;
                 let fut = Some(func(rawlua, nargs));
-                let extra = XRc::clone(&(*upvalue).extra);
+                let extra = XRc::clone(&rawlua.extra);
                 let protect = !rawlua.unlikely_memory_error();
                 // Remove arguments but preserve any preallocated failure below them.
                 ffi::lua_pop(state, nargs);
@@ -1592,7 +1590,7 @@ impl RawLua {
 
             let extra = XRc::clone(&self.extra);
             let protect = !self.unlikely_memory_error();
-            let upvalue = AsyncCallbackUpvalue { data: func, extra };
+            let upvalue = AsyncCallbackUpvalue::new(func, extra);
             push_internal_userdata(state, upvalue, protect)?;
             protect_lua_mem!(self, 1, 1, fn(state) {
                 ffi::lua_pushcclosure(state, get_future_callback, 1);

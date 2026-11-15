@@ -8,6 +8,11 @@ use crate::types::{AsyncCallback, AsyncCallbackUpvalue, AsyncPollUpvalue};
 
 pub(crate) trait TypeKey: Any {
     fn type_key() -> *const c_void;
+
+    #[cfg(not(feature = "luau"))]
+    unsafe fn drop_userdata(ud: *mut Self) {
+        std::ptr::drop_in_place(ud);
+    }
 }
 
 impl TypeKey for Callback {
@@ -23,6 +28,11 @@ impl TypeKey for CallbackUpvalue {
     fn type_key() -> *const c_void {
         static CALLBACK_UPVALUE_TYPE_KEY: u8 = 0;
         &CALLBACK_UPVALUE_TYPE_KEY as *const u8 as *const c_void
+    }
+
+    #[cfg(not(feature = "luau"))]
+    unsafe fn drop_userdata(ud: *mut Self) {
+        CallbackUpvalue::drop_userdata(ud);
     }
 }
 
@@ -50,6 +60,11 @@ impl TypeKey for AsyncCallbackUpvalue {
     fn type_key() -> *const c_void {
         static ASYNC_CALLBACK_UPVALUE_TYPE_KEY: u8 = 0;
         &ASYNC_CALLBACK_UPVALUE_TYPE_KEY as *const u8 as *const c_void
+    }
+
+    #[cfg(not(feature = "luau"))]
+    unsafe fn drop_userdata(ud: *mut Self) {
+        AsyncCallbackUpvalue::drop_userdata(ud);
     }
 }
 

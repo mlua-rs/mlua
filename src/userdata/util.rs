@@ -442,10 +442,15 @@ unsafe fn push_userdata_metatable_namecall(
 //
 // This method is usually used to collect internal userdata.
 #[cfg(not(feature = "luau"))]
-pub(crate) unsafe extern "C-unwind" fn collect_userdata<T>(state: *mut ffi::lua_State) -> c_int {
+pub(crate) unsafe extern "C-unwind" fn collect_userdata<T: crate::util::TypeKey>(
+    state: *mut ffi::lua_State,
+) -> c_int {
+    // Finalizers can resurrect userdata, so invalidate it before dropping its contents.
     let ud = get_userdata::<T>(state, -1);
+    crate::util::get_destructed_userdata_metatable(state);
+    ffi::lua_setmetatable(state, -2);
     // A GC finalizer must neither unwind through Lua nor raise a Lua error
-    catch_unwind(AssertUnwindSafe(|| ptr::drop_in_place(ud))).unwrap_or_else(|_| std::process::abort());
+    catch_unwind(AssertUnwindSafe(|| T::drop_userdata(ud))).unwrap_or_else(|_| std::process::abort());
     0
 }
 
