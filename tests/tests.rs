@@ -1703,6 +1703,34 @@ fn test_exec_raw() -> Result<()> {
     Ok(())
 }
 
+#[cfg(not(target_family = "wasm"))]
+#[test]
+fn test_exec_raw_panic() -> Result<()> {
+    const TEST_ENV: &str = "MLUA_TEST_EXEC_RAW_PANIC";
+
+    if std::env::var_os(TEST_ENV).is_some() {
+        let lua = Lua::new();
+        let _ = catch_unwind(AssertUnwindSafe(|| unsafe {
+            lua.exec_raw::<()>((), |_state| panic!("exec_raw closure panicked"))
+        }));
+        // Do not drop a Lua state that may have been corrupted by the escaping panic.
+        std::process::exit(0);
+    }
+
+    let output = std::process::Command::new(std::env::current_exe()?)
+        .args(["--exact", "test_exec_raw_panic"])
+        .env(TEST_ENV, "1")
+        .output()?;
+    assert!(!output.status.success());
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::ExitStatusExt;
+        assert_eq!(output.status.signal(), Some(libc::SIGABRT));
+    }
+
+    Ok(())
+}
+
 #[test]
 fn test_gc_drop_ref_thread() -> Result<()> {
     let lua = Lua::new();

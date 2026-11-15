@@ -29,7 +29,9 @@ use crate::types::{
     ReentrantMutex, ReentrantMutexGuard, RegistryKey, VmState, XRc, XWeak,
 };
 use crate::userdata::{AnyUserData, UserData, UserDataProxy, UserDataRegistry, UserDataStorage};
-use crate::util::{StackGuard, assert_stack, check_stack, protect_lua_closure, push_string, rawset_field};
+use crate::util::{
+    StackGuard, abort_on_unwind, assert_stack, check_stack, protect_lua_closure, push_string, rawset_field,
+};
 use crate::value::{Nil, Value};
 
 #[cfg(not(feature = "luau"))]
@@ -473,7 +475,13 @@ impl Lua {
     /// # Ok(())
     /// # }
     /// ```
-    #[allow(clippy::missing_safety_doc)]
+    ///
+    /// # Safety
+    ///
+    /// The provided function and any raw callbacks it invokes must not unwind. The provided state
+    /// must be used according to the Lua C API and must not be retained beyond the call. Rust
+    /// values that require dropping must not be live across calls to the Lua API that may raise
+    /// errors, as such errors can skip Rust destructors.
     pub unsafe fn exec_raw<R: FromLuaMulti>(
         &self,
         args: impl IntoLuaMulti,
@@ -485,7 +493,7 @@ impl Lua {
         let stack_start = ffi::lua_gettop(state);
         let nargs = args.push_into_stack_multi(&lua)?;
         check_stack(state, 3)?;
-        protect_lua_closure::<_, ()>(state, nargs, ffi::LUA_MULTRET, f)?;
+        abort_on_unwind(|| protect_lua_closure::<_, ()>(state, nargs, ffi::LUA_MULTRET, f))?;
         let nresults = ffi::lua_gettop(state) - stack_start;
         R::from_stack_multi(nresults, &lua)
     }

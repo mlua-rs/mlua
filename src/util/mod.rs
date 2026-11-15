@@ -18,6 +18,27 @@ pub(crate) use userdata::{
     push_uninit_userdata, push_userdata, take_userdata,
 };
 
+/// Invokes a closure, aborting the process if it unwinds.
+#[inline]
+pub(crate) fn abort_on_unwind<F: FnOnce() -> R, R>(f: F) -> R {
+    #[cfg(panic = "unwind")]
+    struct AbortOnDrop;
+
+    #[cfg(panic = "unwind")]
+    impl Drop for AbortOnDrop {
+        fn drop(&mut self) {
+            std::process::abort();
+        }
+    }
+
+    #[cfg(panic = "unwind")]
+    let abort_on_drop = AbortOnDrop;
+    let result = f();
+    #[cfg(panic = "unwind")]
+    std::mem::forget(abort_on_drop);
+    result
+}
+
 // Checks that Lua has enough free stack space for future stack operations. On failure, this will
 // panic with an internal error message.
 #[inline]
