@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use std::mem::ManuallyDrop;
 
 #[cfg(feature = "serde")]
 use serde::ser::{Serialize, Serializer};
@@ -76,11 +77,14 @@ impl<T> UserDataVariant<T> {
     //
     // This method checks that we have exclusive access to the value.
     fn into_inner(self) -> Result<T> {
+        debug_assert_eq!(self.strong_count(), 1, "userdata must have a single owner");
         if !self.raw_lock().try_lock_exclusive() {
             return Err(Error::UserDataBorrowMutError);
         }
         Ok(match self {
-            Self::Default(inner) => XRc::into_inner(inner).unwrap().into_inner(),
+            Self::Default(inner) => XRc::into_inner(inner)
+                .expect("userdata ownership checked before extraction")
+                .into_inner(),
             #[cfg(feature = "serde")]
             Self::Serializable(inner) => unsafe {
                 // The serde variant erases `T` to `Box<DynSerialize>`, so we
@@ -136,16 +140,16 @@ impl Serialize for UserDataStorage<()> {
 pub(crate) enum ScopedUserDataVariant<T> {
     Ref(*const T),
     RefMut(RefCell<*mut T>),
-    Boxed(RefCell<*mut T>),
+    Boxed(RefCell<ManuallyDrop<Box<T>>>),
 }
 
 impl<T> Drop for ScopedUserDataVariant<T> {
     #[inline]
     fn drop(&mut self) {
         if let Self::Boxed(value) = self
-            && let Ok(value) = value.try_borrow_mut()
+            && let Ok(mut value) = value.try_borrow_mut()
         {
-            unsafe { drop(Box::from_raw(*value)) }
+            unsafe { ManuallyDrop::drop(&mut value) }
         }
     }
 }
@@ -213,16 +217,24 @@ impl<T: 'static> UserDataStorage<T> {
 impl<T> UserDataStorage<T> {
     #[inline(always)]
     pub(crate) fn new_scoped(data: T) -> Self {
-        let data = Box::into_raw(Box::new(data));
+        let data = ManuallyDrop::new(Box::new(data));
         Self::Scoped(ScopedUserDataVariant::Boxed(RefCell::new(data)))
     }
 
     /// Returns `true` if it's safe to destroy the container.
     ///
-    /// It's safe to destroy the container if the reference count is greater than 1 or the lock is
-    /// not acquired.
+    /// It's safe to destroy the container if the lock is not acquired.
     #[inline(always)]
     pub(crate) fn is_safe_to_destroy(&self) -> bool {
+        match self {
+            Self::Owned(variant) => !variant.raw_lock().is_locked(),
+            Self::Scoped(_) => false,
+        }
+    }
+
+    /// Returns `true` if it's safe for Lua to collect the container.
+    #[inline(always)]
+    pub(crate) fn is_safe_to_collect(&self) -> bool {
         match self {
             Self::Owned(variant) => variant.strong_count() > 1 || !variant.raw_lock().is_locked(),
             Self::Scoped(_) => false,
@@ -233,7 +245,7 @@ impl<T> UserDataStorage<T> {
     #[inline(always)]
     pub(crate) fn has_exclusive_access(&self) -> bool {
         match self {
-            Self::Owned(variant) => !variant.raw_lock().is_locked(),
+            Self::Owned(variant) => variant.strong_count() == 1 && !variant.raw_lock().is_locked(),
             Self::Scoped(_) => false,
         }
     }
@@ -243,9 +255,13 @@ impl<T> UserDataStorage<T> {
         match self {
             Self::Owned(data) => data.try_borrow_scoped(f),
             Self::Scoped(ScopedUserDataVariant::Ref(value)) => Ok(f(unsafe { &**value })),
-            Self::Scoped(ScopedUserDataVariant::RefMut(value) | ScopedUserDataVariant::Boxed(value)) => {
+            Self::Scoped(ScopedUserDataVariant::RefMut(value)) => {
                 let t = value.try_borrow().map_err(|_| Error::UserDataBorrowError)?;
                 Ok(f(unsafe { &**t }))
+            }
+            Self::Scoped(ScopedUserDataVariant::Boxed(value)) => {
+                let t = value.try_borrow().map_err(|_| Error::UserDataBorrowError)?;
+                Ok(f(&t))
             }
         }
     }
@@ -255,12 +271,36 @@ impl<T> UserDataStorage<T> {
         match self {
             Self::Owned(data) => data.try_borrow_scoped_mut(f),
             Self::Scoped(ScopedUserDataVariant::Ref(_)) => Err(Error::UserDataBorrowMutError),
-            Self::Scoped(ScopedUserDataVariant::RefMut(value) | ScopedUserDataVariant::Boxed(value)) => {
+            Self::Scoped(ScopedUserDataVariant::RefMut(value)) => {
                 let mut t = value
                     .try_borrow_mut()
                     .map_err(|_| Error::UserDataBorrowMutError)?;
                 Ok(f(unsafe { &mut **t }))
             }
+            Self::Scoped(ScopedUserDataVariant::Boxed(value)) => {
+                let mut t = value
+                    .try_borrow_mut()
+                    .map_err(|_| Error::UserDataBorrowMutError)?;
+                Ok(f(&mut t))
+            }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::UserDataStorage;
+
+    #[test]
+    fn test_exclusive_access_requires_sole_owner() {
+        let storage = UserDataStorage::new(String::from("value"));
+        let owner = match &storage {
+            UserDataStorage::Owned(variant) => variant.clone(),
+            UserDataStorage::Scoped(_) => unreachable!(),
+        };
+
+        assert!(!storage.has_exclusive_access());
+        drop(owner);
+        assert!(storage.has_exclusive_access());
     }
 }

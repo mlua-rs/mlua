@@ -429,9 +429,18 @@ fn test_userdata_destroy() -> Result<()> {
     let ud = lua.create_userdata(MyUserdata(rc.clone()))?;
     assert_eq!(Arc::strong_count(&rc), 2);
     let ud_ref = ud.borrow::<MyUserdata>()?;
-    // With active `UserDataRef` this methods only marks userdata as destructed
-    // without running destructor
+    ud.borrow_scoped::<MyUserdata, _>(|userdata| {
+        assert!(matches!(ud.destroy(), Err(Error::UserDataBorrowMutError)));
+        drop(ud_ref);
+        assert_eq!(Arc::strong_count(&userdata.0), 2);
+    })?;
     ud.destroy().unwrap();
+    assert_eq!(Arc::strong_count(&rc), 1);
+
+    let ud = lua.create_userdata(MyUserdata(rc.clone()))?;
+    let ud_ref = ud.borrow::<MyUserdata>()?;
+    drop(ud);
+    lua.gc_collect()?;
     assert_eq!(Arc::strong_count(&rc), 2);
     drop(ud_ref);
     assert_eq!(Arc::strong_count(&rc), 1);
@@ -439,7 +448,9 @@ fn test_userdata_destroy() -> Result<()> {
     // We cannot destroy (internally) borrowed userdata
     let ud = lua.create_userdata(MyUserdata(rc.clone()))?;
     lua.globals().set("ud", &ud)?;
+    let ud_ref = ud.borrow::<MyUserdata>()?;
     lua.load("ud:try_destroy()").exec().unwrap();
+    drop(ud_ref);
     ud.destroy().unwrap();
     assert_eq!(Arc::strong_count(&rc), 1);
 
