@@ -358,6 +358,7 @@ impl Thread {
 
             check_stack(state, nresults + 1)?;
             ffi::lua_xmove(thread_state, state, nresults);
+            drop(thread_sg);
 
             // Exec thread yield callback
             let on_yield = lua.thread_event_triggers().on_yield && status.is_yielded();
@@ -399,11 +400,12 @@ impl Thread {
             check_stack(thread_state, 1)?;
             ffi::lua_xmove(state, thread_state, 1);
 
-            let _thread_sg = StackGuard::with_top(thread_state, 0);
+            let thread_sg = StackGuard::with_top(thread_state, 0);
             let (status, nresults) = self.resume_inner(&lua, ffi::LUA_RESUMEERROR)?;
 
             check_stack(state, nresults + 1)?;
             ffi::lua_xmove(thread_state, state, nresults);
+            drop(thread_sg);
 
             // Exec thread yield callback
             let on_yield = lua.thread_event_triggers().on_yield && status.is_yielded();
@@ -886,6 +888,7 @@ impl<R: FromLuaMulti> Stream for AsyncThread<R> {
             }
 
             if status.is_yielded() && !hook_yielded && nresults == 1 && is_poll_pending(thread_state) {
+                drop(thread_sg);
                 // Exec thread yield callback
                 let on_yield = lua.thread_event_triggers().on_yield;
                 exec_thread_event(&lua, on_yield, thread_state, || {
@@ -896,6 +899,7 @@ impl<R: FromLuaMulti> Stream for AsyncThread<R> {
 
             check_stack(state, nresults + 1)?;
             ffi::lua_xmove(thread_state, state, nresults);
+            drop(thread_sg);
 
             if status.is_yielded() {
                 let on_yield = lua.thread_event_triggers().on_yield;
@@ -944,6 +948,7 @@ impl<R: FromLuaMulti> Future for AsyncThread<R> {
 
             if status.is_yielded() {
                 let pending = !hook_yielded && nresults == 1 && is_poll_pending(thread_state);
+                drop(thread_sg);
 
                 // Exec thread yield callback
                 let on_yield = lua.thread_event_triggers().on_yield;
@@ -960,6 +965,7 @@ impl<R: FromLuaMulti> Future for AsyncThread<R> {
 
             check_stack(state, nresults + 1)?;
             ffi::lua_xmove(thread_state, state, nresults);
+            drop(thread_sg);
 
             Poll::Ready(R::from_stack_multi(nresults, &lua))
         }

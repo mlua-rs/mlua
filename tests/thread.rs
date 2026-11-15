@@ -343,6 +343,28 @@ fn test_thread_resume_bad_arg() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn test_thread_reentrant_result_conversion() -> Result<()> {
+    struct ResetThread;
+
+    impl FromLua for ResetThread {
+        fn from_lua(_value: Value, lua: &Lua) -> Result<Self> {
+            let thread = lua.globals().get::<Thread>("thread")?;
+            thread.reset(lua.load("return 42").into_function()?)?;
+            Ok(ResetThread)
+        }
+    }
+
+    let lua = Lua::new();
+    let thread = lua.create_thread(lua.load("return 1").into_function()?)?;
+    lua.globals().set("thread", &thread)?;
+
+    thread.resume::<ResetThread>(())?;
+    assert_eq!(thread.resume::<i32>(())?, 42);
+
+    Ok(())
+}
+
 #[cfg(feature = "async")]
 #[test]
 fn test_thread_resume_reentrant_arg_conversion() -> Result<()> {
