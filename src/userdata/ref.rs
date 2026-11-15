@@ -70,8 +70,13 @@ impl<T> UserDataGuard<T> {
     }
 
     #[inline(always)]
-    fn as_ptr(&self) -> *mut T {
-        self.variant.as_ptr()
+    fn as_ptr(&self) -> *const T {
+        unsafe { self.variant.as_ptr() }
+    }
+
+    #[inline(always)]
+    unsafe fn as_mut_ptr(&mut self) -> *mut T {
+        unsafe { self.variant.as_mut_ptr() }
     }
 
     #[inline(always)]
@@ -480,7 +485,7 @@ impl<T> DerefMut for UserDataRefMutInner<T> {
     #[inline]
     fn deref_mut(&mut self) -> &mut T {
         match self {
-            Self::Default(inner) => unsafe { &mut *inner.as_ptr() },
+            Self::Default(inner) => unsafe { &mut *inner.as_mut_ptr() },
 
             #[cfg(all(feature = "userdata-wrappers", not(feature = "send")))]
             Self::RcRefCell(x, ..) => x,
