@@ -3,7 +3,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
 use mlua::thread::{ThreadEvent, ThreadStatus, ThreadTriggers};
-use mlua::{Error, Function, IntoLua, Lua, Result, Thread, Value};
+use mlua::{Error, FromLua, Function, IntoLua, Lua, Result, Thread, Value};
 
 #[test]
 fn test_thread() -> Result<()> {
@@ -131,6 +131,32 @@ fn test_thread() -> Result<()> {
     lua.globals().set("outer", &outer)?;
     outer.resume::<()>(())?;
     assert!(outer.is_finished());
+
+    Ok(())
+}
+
+#[test]
+fn test_main_thread_status_from_coroutine() -> Result<()> {
+    struct CheckMainThread;
+
+    impl FromLua for CheckMainThread {
+        fn from_lua(_value: Value, lua: &Lua) -> Result<Self> {
+            lua.globals().get::<Thread>("inner")?.resume::<()>(())?;
+            Ok(CheckMainThread)
+        }
+    }
+
+    let lua = Lua::new();
+    let main_thread = lua.current_thread();
+    assert_eq!(main_thread.status(), ThreadStatus::Running);
+    let inner = lua.create_thread(lua.create_function(move |_, ()| {
+        assert_eq!(main_thread.status(), ThreadStatus::Normal);
+        Ok(())
+    })?)?;
+    lua.globals().set("inner", inner)?;
+
+    let thread = lua.create_thread(lua.load("return 42").into_function()?)?;
+    thread.resume::<CheckMainThread>(())?;
 
     Ok(())
 }

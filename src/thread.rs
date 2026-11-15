@@ -452,11 +452,13 @@ impl Thread {
 
     /// Gets the status of the thread (internal implementation).
     fn status_inner(&self, lua: &RawLua) -> ThreadStatusInner {
-        let thread_state = self.state();
-        if thread_state == lua.state() {
+        let thread_state = match self.state() {
             // The thread is currently running
-            return ThreadStatusInner::Running;
-        }
+            state if state == lua.state() => return ThreadStatusInner::Running,
+            // The main thread cannot be resumed as a coroutine
+            state if state == lua.main_state() => return ThreadStatusInner::Normal,
+            state => state,
+        };
         let status = unsafe { ffi::lua_status(thread_state) };
         let top = unsafe { ffi::lua_gettop(thread_state) };
         match status {
