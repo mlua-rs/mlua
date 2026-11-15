@@ -317,6 +317,28 @@ fn test_thread_resume_bad_arg() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "async")]
+#[test]
+fn test_thread_resume_reentrant_arg_conversion() -> Result<()> {
+    struct ReplaceArgs(Thread);
+
+    impl IntoLua for ReplaceArgs {
+        fn into_lua(self, lua: &Lua) -> Result<Value> {
+            self.0
+                .reset(lua.load("return select('#', ...)").into_function()?)?;
+            drop(self.0.clone().into_async::<()>((1, 2))?);
+            Ok(Value::Nil)
+        }
+    }
+
+    let lua = Lua::new();
+    let thread = lua.create_thread(lua.load("return").into_function()?)?;
+    drop(thread.clone().into_async::<()>(0)?);
+    assert_eq!(thread.resume::<i32>(ReplaceArgs(thread.clone()))?, 3);
+
+    Ok(())
+}
+
 #[test]
 fn test_thread_event_create() -> Result<()> {
     let lua = Lua::new();
