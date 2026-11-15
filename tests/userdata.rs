@@ -958,6 +958,38 @@ fn test_userdata_reregister_type() -> Result<()> {
     Ok(())
 }
 
+#[cfg(not(feature = "luau"))]
+#[test]
+fn test_userdata_reregister_during_creation() -> Result<()> {
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    struct Reentrant;
+    impl UserData for Reentrant {}
+
+    let lua = Lua::new();
+    let called = Arc::new(AtomicBool::new(false));
+    let called2 = Arc::clone(&called);
+    let reregister = lua.create_function(move |lua, ()| {
+        called2.store(true, Ordering::Relaxed);
+        lua.register_userdata_type::<Reentrant>(|_| {})
+    })?;
+    lua.globals().set("reregister", reregister)?;
+
+    #[cfg(not(any(feature = "lua51", feature = "luajit")))]
+    lua.load("for _ = 1, 50 do setmetatable({}, { __gc = reregister }) end")
+        .exec()?;
+    #[cfg(any(feature = "lua51", feature = "luajit"))]
+    lua.load("for _ = 1, 50 do local ud = newproxy(true); getmetatable(ud).__gc = reregister end")
+        .exec()?;
+    called.store(false, Ordering::Relaxed);
+    for _ in 0..2000 {
+        drop(lua.create_userdata(Reentrant)?);
+    }
+    assert!(called.load(Ordering::Relaxed));
+
+    Ok(())
+}
+
 #[test]
 fn test_any_userdata_wrap() -> Result<()> {
     let lua = Lua::new();

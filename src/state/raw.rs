@@ -1145,13 +1145,14 @@ impl RawLua {
     ) -> Result<AnyUserData> {
         let state = self.state();
         let _sg = StackGuard::new(state);
-        check_stack(state, 3)?;
+        check_stack(state, 4)?;
 
-        // We generate metatable first to make sure it *always* available when userdata pushed
+        // Keep the metatable alive while allocating userdata, which may run GC finalizers.
         let mt_id = get_metatable_id()?;
+        ffi::lua_rawgeti(state, ffi::LUA_REGISTRYINDEX, mt_id as _);
         let protect = !self.unlikely_memory_error();
         push_userdata(state, data, protect)?;
-        ffi::lua_rawgeti(state, ffi::LUA_REGISTRYINDEX, mt_id as _);
+        ffi::lua_insert(state, -2);
         ffi::lua_setmetatable(state, -2);
 
         // Set empty environment for Lua 5.1
