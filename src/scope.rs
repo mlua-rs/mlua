@@ -28,14 +28,14 @@ pub struct Scope<'scope, 'env: 'scope> {
 type DestructorCallback<'a> = Box<dyn FnOnce(&RawLua, ValueRef) -> Vec<Box<dyn FnOnce() + 'a>>>;
 
 // Implement Drop on Destructors instead of Scope to avoid compilation error
-struct Destructors<'a>(RefCell<Option<Vec<(ValueRef, DestructorCallback<'a>)>>>);
+struct Destructors<'a>(Box<RefCell<Option<Vec<(ValueRef, DestructorCallback<'a>)>>>>);
 
 struct UserDestructors<'a>(RefCell<Vec<Box<dyn FnOnce() + 'a>>>);
 
 impl<'scope, 'env: 'scope> Scope<'scope, 'env> {
     pub(crate) fn new(lua: LuaGuard) -> Self {
         Scope {
-            destructors: Destructors(RefCell::new(Some(Vec::new()))),
+            destructors: Destructors(Box::new(RefCell::new(Some(Vec::new())))),
             lua,
             user_destructors: UserDestructors(RefCell::new(Vec::new())),
             _scope_invariant: PhantomData,
