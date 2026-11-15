@@ -897,6 +897,89 @@ macro_rules! lua_convert_float {
 lua_convert_float!(f32);
 lua_convert_float!(f64);
 
+impl<T: IntoLua> IntoLua for std::num::Wrapping<T> {
+    #[inline]
+    fn into_lua(self, lua: &Lua) -> Result<Value> {
+        self.0.into_lua(lua)
+    }
+
+    #[inline]
+    unsafe fn push_into_stack(self, lua: &RawLua) -> Result<()> {
+        self.0.push_into_stack(lua)
+    }
+}
+
+impl<T: FromLua> FromLua for std::num::Wrapping<T> {
+    #[inline]
+    fn from_lua(value: Value, lua: &Lua) -> Result<Self> {
+        T::from_lua(value, lua).map(std::num::Wrapping)
+    }
+
+    #[inline]
+    unsafe fn from_stack(idx: c_int, lua: &RawLua) -> Result<Self> {
+        T::from_stack(idx, lua).map(std::num::Wrapping)
+    }
+}
+
+impl<T: IntoLua> IntoLua for std::num::Saturating<T> {
+    #[inline]
+    fn into_lua(self, lua: &Lua) -> Result<Value> {
+        self.0.into_lua(lua)
+    }
+
+    #[inline]
+    unsafe fn push_into_stack(self, lua: &RawLua) -> Result<()> {
+        self.0.push_into_stack(lua)
+    }
+}
+
+impl<T: FromLua> FromLua for std::num::Saturating<T> {
+    #[inline]
+    fn from_lua(value: Value, lua: &Lua) -> Result<Self> {
+        T::from_lua(value, lua).map(std::num::Saturating)
+    }
+
+    #[inline]
+    unsafe fn from_stack(idx: c_int, lua: &RawLua) -> Result<Self> {
+        T::from_stack(idx, lua).map(std::num::Saturating)
+    }
+}
+
+macro_rules! lua_convert_nonzero {
+    ($($x:ty),+ $(,)?) => {
+        $(
+            impl IntoLua for std::num::NonZero<$x> {
+                #[inline]
+                fn into_lua(self, lua: &Lua) -> Result<Value> {
+                    self.get().into_lua(lua)
+                }
+
+                #[inline]
+                unsafe fn push_into_stack(self, lua: &RawLua) -> Result<()> {
+                    self.get().push_into_stack(lua)
+                }
+            }
+
+            impl FromLua for std::num::NonZero<$x> {
+                #[inline]
+                fn from_lua(value: Value, lua: &Lua) -> Result<Self> {
+                    let ty = value.type_name();
+                    let value = <$x>::from_lua(value, lua)?;
+                    Self::new(value).ok_or_else(|| {
+                        Error::from_lua_conversion(
+                            ty,
+                            Self::type_name(),
+                            "zero is not valid for this type".to_string(),
+                        )
+                    })
+                }
+            }
+        )+
+    };
+}
+
+lua_convert_nonzero!(i8, u8, i16, u16, i32, u32, i64, u64, i128, u128, isize, usize);
+
 impl<T> IntoLua for &[T]
 where
     T: IntoLua + Clone,

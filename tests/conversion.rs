@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::ffi::{CString, OsString};
+use std::num::{NonZero, Saturating, Wrapping};
 use std::path::PathBuf;
 
 use bstr::BString;
@@ -404,6 +405,52 @@ fn test_float_from_lua() -> Result<()> {
 
     // Should fallback to default conversion
     assert_eq!(f.call::<f32>("42.0")?, 42.0);
+
+    Ok(())
+}
+
+#[test]
+fn test_std_num_wrappers() -> Result<()> {
+    let lua = Lua::new();
+
+    assert_eq!(lua.convert::<Wrapping<i32>>(42)?.0, 42);
+    assert_eq!(lua.convert::<i32>(Wrapping(42))?, 42);
+    assert_eq!(lua.convert::<Saturating<i32>>(42)?.0, 42);
+    assert_eq!(lua.convert::<i32>(Saturating(42))?, 42);
+
+    macro_rules! test_nonzero {
+        ($($x:ty),+ $(,)?) => {
+            $(
+                let value = NonZero::<$x>::new(42).unwrap();
+                assert_eq!(lua.convert::<NonZero<$x>>(value.get())?, value);
+                assert_eq!(lua.convert::<$x>(value)?, value.get());
+            )+
+        };
+    }
+    test_nonzero!(i8, u8, i16, u16, i32, u32, i64, u64, i128, u128, isize, usize);
+
+    assert!(
+        lua.convert::<NonZero<u8>>(0)
+            .is_err_and(|e| e.to_string().contains("zero is not valid for this type"))
+    );
+
+    // Exercise conversions through the Lua stack.
+    let f = lua.create_function(
+        |_, (Wrapping(w), Saturating(s), n): (Wrapping<i32>, Saturating<i32>, NonZero<u8>)| {
+            Ok((Wrapping(w), Saturating(s), n))
+        },
+    )?;
+    assert_eq!(f.call::<(i32, i32, u8)>((40, 41, 42))?, (40, 41, 42));
+    let Err(Error::CallbackError { cause, .. }) = f.call::<(i32, i32, u8)>((40, 41, 0)) else {
+        panic!("expected `Error::CallbackError`");
+    };
+    let Error::BadArgument { cause, .. } = cause.as_ref() else {
+        panic!("expected `Error::BadArgument`");
+    };
+    let Error::FromLuaConversionError { message, .. } = cause.as_ref() else {
+        panic!("expected `Error::FromLuaConversionError`");
+    };
+    assert_eq!(message.as_deref(), Some("zero is not valid for this type"));
 
     Ok(())
 }
