@@ -1524,6 +1524,42 @@ fn test_userdata_wrappers() -> Result<()> {
     Ok(())
 }
 
+#[cfg(all(feature = "userdata-wrappers", feature = "send"))]
+#[test]
+fn test_userdata_wrapper_ref_drop_race() -> Result<()> {
+    use std::sync::mpsc;
+
+    use parking_lot::Mutex;
+
+    struct MyUserData;
+
+    let lua = Lua::new();
+
+    let ud = lua.create_any_userdata(Arc::new(Mutex::new(MyUserData)))?;
+    let (tx, rx) = mpsc::sync_channel::<UserDataRef<MyUserData>>(0);
+    let thread = std::thread::spawn(move || {
+        while let Ok(ud) = rx.recv() {
+            drop(ud);
+        }
+    });
+
+    for _ in 0..10_000 {
+        tx.send(ud.borrow::<MyUserData>()?).unwrap();
+        loop {
+            if let Ok(mut inner) = ud.borrow_mut::<Arc<Mutex<MyUserData>>>() {
+                *inner = Arc::new(Mutex::new(MyUserData));
+                break;
+            }
+            std::hint::spin_loop();
+        }
+    }
+
+    drop(tx);
+    thread.join().unwrap();
+
+    Ok(())
+}
+
 #[cfg(feature = "luau")]
 #[test]
 fn test_userdata_namecall() -> Result<()> {

@@ -3,6 +3,8 @@ use std::ops::{Deref, DerefMut};
 use std::os::raw::c_int;
 use std::{fmt, mem};
 
+use maybe_dangling::MaybeDangling;
+
 use crate::error::{Error, Result};
 use crate::state::{Lua, RawLua};
 use crate::traits::FromLua;
@@ -27,12 +29,62 @@ use {
     std::rc::Rc,
 };
 
+#[cfg(all(feature = "userdata-wrappers", not(feature = "send")))]
+type RcRefCellRef<T> = MaybeDangling<Ref<'static, T>>;
+#[cfg(all(feature = "userdata-wrappers", not(feature = "send")))]
+type RcRefCellRefMut<T> = MaybeDangling<RefMut<'static, T>>;
+
+struct UserDataGuard<T: 'static> {
+    // Keep the guard before its owner so the lock is released before the allocation is freed.
+    _guard: MaybeDangling<LockGuard<'static, RawLock>>,
+    variant: UserDataVariant<T>,
+}
+
+impl<T> UserDataGuard<T> {
+    #[inline]
+    fn try_read(variant: UserDataVariant<T>) -> Result<Self> {
+        let guard = variant
+            .raw_lock()
+            .try_lock_shared_guarded()
+            .map_err(|_| Error::UserDataBorrowError)?;
+        let guard = unsafe { mem::transmute::<LockGuard<'_, _>, LockGuard<'static, _>>(guard) };
+        Ok(Self::new(variant, guard))
+    }
+
+    #[inline]
+    fn try_write(variant: UserDataVariant<T>) -> Result<Self> {
+        let guard = variant
+            .raw_lock()
+            .try_lock_exclusive_guarded()
+            .map_err(|_| Error::UserDataBorrowMutError)?;
+        let guard = unsafe { mem::transmute::<LockGuard<'_, _>, LockGuard<'static, _>>(guard) };
+        Ok(Self::new(variant, guard))
+    }
+
+    #[inline(always)]
+    fn new(variant: UserDataVariant<T>, guard: LockGuard<'static, RawLock>) -> Self {
+        Self {
+            _guard: MaybeDangling::new(guard),
+            variant,
+        }
+    }
+
+    #[inline(always)]
+    fn as_ptr(&self) -> *mut T {
+        self.variant.as_ptr()
+    }
+
+    #[inline(always)]
+    fn get(&self) -> &T {
+        // SAFETY: `variant` owns the value and `_guard` keeps it locked.
+        unsafe { &*self.as_ptr() }
+    }
+}
+
 /// A wrapper type for a userdata value that provides read access.
 ///
 /// It implements [`FromLua`] and can be used to receive a typed userdata from Lua.
 pub struct UserDataRef<T: 'static> {
-    // It's important to drop the guard first, as it refers to the `inner` data.
-    _guard: LockGuard<'static, RawLock>,
     inner: UserDataRefInner<T>,
 }
 
@@ -66,10 +118,9 @@ impl<T> TryFrom<UserDataVariant<T>> for UserDataRef<T> {
         // - with `send` feature, `T: Sync` is guaranteed by the `MaybeSync` bound on userdata
         //   creation
         // - without `send` feature, single-threaded access makes shared lock safe for any `T`
-        let guard = variant.raw_lock().try_lock_shared_guarded();
-        let guard = guard.map_err(|_| Error::UserDataBorrowError)?;
-        let guard = unsafe { mem::transmute::<LockGuard<_>, LockGuard<'static, _>>(guard) };
-        Ok(UserDataRef::from_parts(UserDataRefInner::Default(variant), guard))
+        Ok(UserDataRef {
+            inner: UserDataRefInner::Default(UserDataGuard::try_read(variant)?),
+        })
     }
 }
 
@@ -85,21 +136,13 @@ impl<T: 'static> FromLua for UserDataRef<T> {
 }
 
 impl<T: 'static> UserDataRef<T> {
-    #[inline(always)]
-    fn from_parts(inner: UserDataRefInner<T>, guard: LockGuard<'static, RawLock>) -> Self {
-        Self { _guard: guard, inner }
-    }
-
     #[cfg(feature = "userdata-wrappers")]
     fn remap<U>(
         self,
-        f: impl FnOnce(UserDataVariant<T>) -> Result<UserDataRefInner<U>>,
+        f: impl FnOnce(UserDataGuard<T>) -> Result<UserDataRefInner<U>>,
     ) -> Result<UserDataRef<U>> {
-        match &self.inner {
-            UserDataRefInner::Default(variant) => {
-                let inner = f(variant.clone())?;
-                Ok(UserDataRef::from_parts(inner, self._guard))
-            }
+        match self.inner {
+            UserDataRefInner::Default(guard) => Ok(UserDataRef { inner: f(guard)? }),
             _ => Err(Error::UserDataTypeMismatch),
         }
     }
@@ -150,18 +193,19 @@ impl<T: 'static> UserDataRef<T> {
 #[cfg(all(feature = "userdata-wrappers", not(feature = "send")))]
 impl<T> UserDataRef<Rc<T>> {
     fn transform_rc(self) -> Result<UserDataRef<T>> {
-        self.remap(|variant| Ok(UserDataRefInner::Rc(variant)))
+        self.remap(|owner| Ok(UserDataRefInner::Rc(owner)))
     }
 }
 
 #[cfg(all(feature = "userdata-wrappers", not(feature = "send")))]
 impl<T> UserDataRef<Rc<RefCell<T>>> {
     fn transform_rc_refcell(self) -> Result<UserDataRef<T>> {
-        self.remap(|variant| unsafe {
-            let obj = &*variant.as_ptr();
-            let r#ref = obj.try_borrow().map_err(|_| Error::UserDataBorrowError)?;
-            let borrow = std::mem::transmute::<Ref<T>, Ref<'static, T>>(r#ref);
-            Ok(UserDataRefInner::RcRefCell(borrow, variant))
+        self.remap(|owner| {
+            let obj = owner.get();
+            let borrow = obj.try_borrow().map_err(|_| Error::UserDataBorrowError)?;
+            let borrow = unsafe { mem::transmute::<Ref<T>, Ref<'static, T>>(borrow) };
+            let borrow = MaybeDangling::new(borrow);
+            Ok(UserDataRefInner::RcRefCell(borrow, owner))
         })
     }
 }
@@ -169,18 +213,19 @@ impl<T> UserDataRef<Rc<RefCell<T>>> {
 #[cfg(feature = "userdata-wrappers")]
 impl<T> UserDataRef<Arc<T>> {
     fn transform_arc(self) -> Result<UserDataRef<T>> {
-        self.remap(|variant| Ok(UserDataRefInner::Arc(variant)))
+        self.remap(|owner| Ok(UserDataRefInner::Arc(owner)))
     }
 }
 
 #[cfg(feature = "userdata-wrappers")]
 impl<T> UserDataRef<Arc<MutexPL<T>>> {
     fn transform_arc_mutex_pl(self) -> Result<UserDataRef<T>> {
-        self.remap(|variant| unsafe {
-            let obj = &*variant.as_ptr();
-            let guard = obj.try_lock().ok_or(Error::UserDataBorrowError)?;
-            let borrow = std::mem::transmute::<MutexGuardPL<T>, MutexGuardPL<'static, T>>(guard);
-            Ok(UserDataRefInner::ArcMutexPL(borrow, variant))
+        self.remap(|owner| {
+            let obj = owner.get();
+            let borrow = obj.try_lock().ok_or(Error::UserDataBorrowError)?;
+            let borrow = unsafe { mem::transmute::<MutexGuardPL<'_, T>, MutexGuardPL<'static, T>>(borrow) };
+            let borrow = MaybeDangling::new(borrow);
+            Ok(UserDataRefInner::ArcMutexPL(borrow, owner))
         })
     }
 }
@@ -188,30 +233,39 @@ impl<T> UserDataRef<Arc<MutexPL<T>>> {
 #[cfg(feature = "userdata-wrappers")]
 impl<T> UserDataRef<Arc<RwLockPL<T>>> {
     fn transform_arc_rwlock_pl(self) -> Result<UserDataRef<T>> {
-        self.remap(|variant| unsafe {
-            let obj = &*variant.as_ptr();
-            let guard = obj.try_read().ok_or(Error::UserDataBorrowError)?;
-            let borrow = std::mem::transmute::<RwLockReadGuardPL<T>, RwLockReadGuardPL<'static, T>>(guard);
-            Ok(UserDataRefInner::ArcRwLockPL(borrow, variant))
+        self.remap(|owner| {
+            let obj = owner.get();
+            let borrow = obj.try_read().ok_or(Error::UserDataBorrowError)?;
+            let borrow =
+                unsafe { mem::transmute::<RwLockReadGuardPL<'_, T>, RwLockReadGuardPL<'static, T>>(borrow) };
+            let borrow = MaybeDangling::new(borrow);
+            Ok(UserDataRefInner::ArcRwLockPL(borrow, owner))
         })
     }
 }
 
 #[allow(unused)]
+// In variants with a separate borrowing guard, the guard must remain before its owner.
 enum UserDataRefInner<T: 'static> {
-    Default(UserDataVariant<T>),
+    Default(UserDataGuard<T>),
 
     #[cfg(all(feature = "userdata-wrappers", not(feature = "send")))]
-    Rc(UserDataVariant<Rc<T>>),
+    Rc(UserDataGuard<Rc<T>>),
     #[cfg(all(feature = "userdata-wrappers", not(feature = "send")))]
-    RcRefCell(Ref<'static, T>, UserDataVariant<Rc<RefCell<T>>>),
+    RcRefCell(RcRefCellRef<T>, UserDataGuard<Rc<RefCell<T>>>),
 
     #[cfg(feature = "userdata-wrappers")]
-    Arc(UserDataVariant<Arc<T>>),
+    Arc(UserDataGuard<Arc<T>>),
     #[cfg(feature = "userdata-wrappers")]
-    ArcMutexPL(MutexGuardPL<'static, T>, UserDataVariant<Arc<MutexPL<T>>>),
+    ArcMutexPL(
+        MaybeDangling<MutexGuardPL<'static, T>>,
+        UserDataGuard<Arc<MutexPL<T>>>,
+    ),
     #[cfg(feature = "userdata-wrappers")]
-    ArcRwLockPL(RwLockReadGuardPL<'static, T>, UserDataVariant<Arc<RwLockPL<T>>>),
+    ArcRwLockPL(
+        MaybeDangling<RwLockReadGuardPL<'static, T>>,
+        UserDataGuard<Arc<RwLockPL<T>>>,
+    ),
 }
 
 impl<T> Deref for UserDataRefInner<T> {
@@ -220,15 +274,15 @@ impl<T> Deref for UserDataRefInner<T> {
     #[inline]
     fn deref(&self) -> &T {
         match self {
-            Self::Default(inner) => unsafe { &*inner.as_ptr() },
+            Self::Default(inner) => inner.get(),
 
             #[cfg(all(feature = "userdata-wrappers", not(feature = "send")))]
-            Self::Rc(inner) => unsafe { &*Rc::as_ptr(&*inner.as_ptr()) },
+            Self::Rc(inner) => inner.get(),
             #[cfg(all(feature = "userdata-wrappers", not(feature = "send")))]
             Self::RcRefCell(x, ..) => x,
 
             #[cfg(feature = "userdata-wrappers")]
-            Self::Arc(inner) => unsafe { &*Arc::as_ptr(&*inner.as_ptr()) },
+            Self::Arc(inner) => inner.get(),
             #[cfg(feature = "userdata-wrappers")]
             Self::ArcMutexPL(x, ..) => x,
             #[cfg(feature = "userdata-wrappers")]
@@ -241,8 +295,6 @@ impl<T> Deref for UserDataRefInner<T> {
 ///
 /// It implements [`FromLua`] and can be used to receive a typed userdata from Lua.
 pub struct UserDataRefMut<T: 'static> {
-    // It's important to drop the guard first, as it refers to the `inner` data.
-    _guard: LockGuard<'static, RawLock>,
     inner: UserDataRefMutInner<T>,
 }
 
@@ -279,13 +331,9 @@ impl<T> TryFrom<UserDataVariant<T>> for UserDataRefMut<T> {
 
     #[inline]
     fn try_from(variant: UserDataVariant<T>) -> Result<Self> {
-        let guard = variant.raw_lock().try_lock_exclusive_guarded();
-        let guard = guard.map_err(|_| Error::UserDataBorrowMutError)?;
-        let guard = unsafe { mem::transmute::<LockGuard<_>, LockGuard<'static, _>>(guard) };
-        Ok(UserDataRefMut::from_parts(
-            UserDataRefMutInner::Default(variant),
-            guard,
-        ))
+        Ok(UserDataRefMut {
+            inner: UserDataRefMutInner::Default(UserDataGuard::try_write(variant)?),
+        })
     }
 }
 
@@ -300,21 +348,13 @@ impl<T: 'static> FromLua for UserDataRefMut<T> {
 }
 
 impl<T: 'static> UserDataRefMut<T> {
-    #[inline(always)]
-    fn from_parts(inner: UserDataRefMutInner<T>, guard: LockGuard<'static, RawLock>) -> Self {
-        Self { _guard: guard, inner }
-    }
-
     #[cfg(feature = "userdata-wrappers")]
     fn remap<U>(
         self,
-        f: impl FnOnce(UserDataVariant<T>) -> Result<UserDataRefMutInner<U>>,
+        f: impl FnOnce(UserDataGuard<T>) -> Result<UserDataRefMutInner<U>>,
     ) -> Result<UserDataRefMut<U>> {
-        match &self.inner {
-            UserDataRefMutInner::Default(variant) => {
-                let inner = f(variant.clone())?;
-                Ok(UserDataRefMut::from_parts(inner, self._guard))
-            }
+        match self.inner {
+            UserDataRefMutInner::Default(guard) => Ok(UserDataRefMut { inner: f(guard)? }),
             _ => Err(Error::UserDataTypeMismatch),
         }
     }
@@ -359,11 +399,12 @@ impl<T: 'static> UserDataRefMut<T> {
 #[cfg(all(feature = "userdata-wrappers", not(feature = "send")))]
 impl<T> UserDataRefMut<Rc<RefCell<T>>> {
     fn transform_rc_refcell(self) -> Result<UserDataRefMut<T>> {
-        self.remap(|variant| unsafe {
-            let obj = &*variant.as_ptr();
-            let refmut = obj.try_borrow_mut().map_err(|_| Error::UserDataBorrowMutError)?;
-            let borrow = std::mem::transmute::<RefMut<T>, RefMut<'static, T>>(refmut);
-            Ok(UserDataRefMutInner::RcRefCell(borrow, variant))
+        self.remap(|owner| {
+            let obj = owner.get();
+            let borrow = obj.try_borrow_mut().map_err(|_| Error::UserDataBorrowMutError)?;
+            let borrow = unsafe { mem::transmute::<RefMut<T>, RefMut<'static, T>>(borrow) };
+            let borrow = MaybeDangling::new(borrow);
+            Ok(UserDataRefMutInner::RcRefCell(borrow, owner))
         })
     }
 }
@@ -371,11 +412,12 @@ impl<T> UserDataRefMut<Rc<RefCell<T>>> {
 #[cfg(feature = "userdata-wrappers")]
 impl<T> UserDataRefMut<Arc<MutexPL<T>>> {
     fn transform_arc_mutex_pl(self) -> Result<UserDataRefMut<T>> {
-        self.remap(|variant| unsafe {
-            let obj = &*variant.as_ptr();
-            let guard = obj.try_lock().ok_or(Error::UserDataBorrowMutError)?;
-            let borrow = std::mem::transmute::<MutexGuardPL<T>, MutexGuardPL<'static, T>>(guard);
-            Ok(UserDataRefMutInner::ArcMutexPL(borrow, variant))
+        self.remap(|owner| {
+            let obj = owner.get();
+            let borrow = obj.try_lock().ok_or(Error::UserDataBorrowMutError)?;
+            let borrow = unsafe { mem::transmute::<MutexGuardPL<'_, T>, MutexGuardPL<'static, T>>(borrow) };
+            let borrow = MaybeDangling::new(borrow);
+            Ok(UserDataRefMutInner::ArcMutexPL(borrow, owner))
         })
     }
 }
@@ -383,26 +425,36 @@ impl<T> UserDataRefMut<Arc<MutexPL<T>>> {
 #[cfg(feature = "userdata-wrappers")]
 impl<T> UserDataRefMut<Arc<RwLockPL<T>>> {
     fn transform_arc_rwlock_pl(self) -> Result<UserDataRefMut<T>> {
-        self.remap(|variant| unsafe {
-            let obj = &*variant.as_ptr();
-            let guard = obj.try_write().ok_or(Error::UserDataBorrowMutError)?;
-            let borrow = std::mem::transmute::<RwLockWriteGuardPL<T>, RwLockWriteGuardPL<'static, T>>(guard);
-            Ok(UserDataRefMutInner::ArcRwLockPL(borrow, variant))
+        self.remap(|owner| {
+            let obj = owner.get();
+            let borrow = obj.try_write().ok_or(Error::UserDataBorrowMutError)?;
+            let borrow = unsafe {
+                mem::transmute::<RwLockWriteGuardPL<'_, T>, RwLockWriteGuardPL<'static, T>>(borrow)
+            };
+            let borrow = MaybeDangling::new(borrow);
+            Ok(UserDataRefMutInner::ArcRwLockPL(borrow, owner))
         })
     }
 }
 
 #[allow(unused)]
+// In variants with a separate borrowing guard, the guard must remain before its owner.
 enum UserDataRefMutInner<T: 'static> {
-    Default(UserDataVariant<T>),
+    Default(UserDataGuard<T>),
 
     #[cfg(all(feature = "userdata-wrappers", not(feature = "send")))]
-    RcRefCell(RefMut<'static, T>, UserDataVariant<Rc<RefCell<T>>>),
+    RcRefCell(RcRefCellRefMut<T>, UserDataGuard<Rc<RefCell<T>>>),
 
     #[cfg(feature = "userdata-wrappers")]
-    ArcMutexPL(MutexGuardPL<'static, T>, UserDataVariant<Arc<MutexPL<T>>>),
+    ArcMutexPL(
+        MaybeDangling<MutexGuardPL<'static, T>>,
+        UserDataGuard<Arc<MutexPL<T>>>,
+    ),
     #[cfg(feature = "userdata-wrappers")]
-    ArcRwLockPL(RwLockWriteGuardPL<'static, T>, UserDataVariant<Arc<RwLockPL<T>>>),
+    ArcRwLockPL(
+        MaybeDangling<RwLockWriteGuardPL<'static, T>>,
+        UserDataGuard<Arc<RwLockPL<T>>>,
+    ),
 }
 
 impl<T> Deref for UserDataRefMutInner<T> {
@@ -411,7 +463,7 @@ impl<T> Deref for UserDataRefMutInner<T> {
     #[inline]
     fn deref(&self) -> &T {
         match self {
-            Self::Default(inner) => unsafe { &*inner.as_ptr() },
+            Self::Default(inner) => inner.get(),
 
             #[cfg(all(feature = "userdata-wrappers", not(feature = "send")))]
             Self::RcRefCell(x, ..) => x,
