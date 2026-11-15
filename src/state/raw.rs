@@ -79,6 +79,10 @@ impl Drop for RawLua {
                 (*ffi::lua_callbacks(self.main_state())).userthread = None;
             }
 
+            #[cfg(not(feature = "luau"))]
+            {
+                (*self.extra.get()).closing = true;
+            }
             ffi::lua_close(self.main_state());
 
             // Deallocate `MemoryState`

@@ -37,6 +37,8 @@ pub(crate) struct ExtraData {
     pub(super) lua: MaybeUninit<Lua>,
     pub(super) weak: MaybeUninit<WeakLua>,
     pub(super) owned: bool,
+    #[cfg(not(feature = "luau"))]
+    pub(super) closing: bool,
 
     pub(super) pending_userdata_reg: FxHashMap<TypeId, RawUserDataRegistry>,
     pub(super) registered_userdata_t: FxHashMap<TypeId, c_int>,
@@ -176,6 +178,8 @@ impl ExtraData {
             lua: MaybeUninit::uninit(),
             weak: MaybeUninit::uninit(),
             owned,
+            #[cfg(not(feature = "luau"))]
+            closing: false,
             pending_userdata_reg: FxHashMap::default(),
             registered_userdata_t: FxHashMap::default(),
             registered_userdata_mt: FxHashMap::default(),

@@ -62,6 +62,34 @@ fn test_function_gc_resurrection() -> Result<()> {
 }
 
 #[test]
+#[cfg(not(feature = "luau"))]
+fn test_callback_rejected_during_lua_drop() -> Result<()> {
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    let lua = Lua::new();
+    let called = Arc::new(AtomicBool::new(false));
+    let called2 = Arc::clone(&called);
+    let callback = lua.create_function(move |lua, ()| {
+        called2.store(true, Ordering::Relaxed);
+        drop(lua.clone());
+        Ok(())
+    })?;
+    lua.globals().set("callback", callback)?;
+    #[cfg(not(any(feature = "lua51", feature = "luajit")))]
+    lua.load("_finalizable = setmetatable({}, { __gc = callback })")
+        .exec()?;
+    #[cfg(any(feature = "lua51", feature = "luajit"))]
+    lua.load("_finalizable = newproxy(true); getmetatable(_finalizable).__gc = callback")
+        .exec()?;
+
+    drop(lua);
+    assert!(!called.load(Ordering::Relaxed));
+
+    Ok(())
+}
+
+#[test]
 #[cfg(all(not(panic = "abort"), not(target_arch = "wasm32")))]
 fn test_function_failure_recovery() -> Result<()> {
     use std::panic::{AssertUnwindSafe, catch_unwind};
