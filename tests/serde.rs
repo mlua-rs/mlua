@@ -469,6 +469,48 @@ fn test_to_value_with_options() -> Result<(), Box<dyn StdError>> {
 }
 
 #[test]
+fn test_from_value_integer_numbers() -> LuaResult<()> {
+    let lua = Lua::new();
+
+    assert_eq!(
+        lua.from_value::<u64>(Value::Number(3_000_000_000.0))?,
+        3_000_000_000
+    );
+    let value = lua.load("return 3000000000").eval()?;
+    assert_eq!(lua.from_value::<u64>(value)?, 3_000_000_000);
+
+    macro_rules! check_integer {
+        ($($ty:ty),+ $(,)?) => {$(
+            assert_eq!(lua.from_value::<$ty>(Value::Number(42.0))?, 42);
+        )+};
+    }
+    check_integer!(i8, i16, i32, i64, i128, isize, u8, u16, u32, u64, u128, usize);
+
+    assert_eq!(lua.from_value::<i64>(Value::Number(-42.0))?, -42);
+    assert!(lua.from_value::<u8>(Value::Number(256.0)).is_err());
+    for n in [0.5, -1.0, f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+        assert!(lua.from_value::<u64>(Value::Number(n)).is_err());
+    }
+
+    assert!(lua.from_value::<i64>(Value::Number(i64::MAX as f64)).is_err());
+    let upper = u64::MAX as f64;
+    assert!(lua.from_value::<u64>(Value::Number(upper)).is_err());
+    assert_eq!(
+        lua.from_value::<u64>(Value::Number(upper.next_down()))?,
+        upper.next_down() as u64
+    );
+    assert_eq!(lua.from_value::<i128>(Value::Number(upper))?, 1i128 << 64);
+    assert_eq!(lua.from_value::<u128>(Value::Number(upper))?, 1u128 << 64);
+
+    assert_eq!(
+        lua.from_value::<serde_value::Value>(Value::Number(42.0))?,
+        serde_value::Value::F64(42.0)
+    );
+
+    Ok(())
+}
+
+#[test]
 fn test_from_value_nested_tables() -> Result<(), Box<dyn StdError>> {
     let lua = Lua::new();
 
