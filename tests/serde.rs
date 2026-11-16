@@ -469,6 +469,100 @@ fn test_to_value_with_options() -> Result<(), Box<dyn StdError>> {
 }
 
 #[test]
+fn test_from_value_integer_numbers() -> LuaResult<()> {
+    let lua = Lua::new();
+
+    // Exercise the 32-bit Luau representation even on 64-bit hosts.
+    assert_eq!(
+        lua.from_value::<u64>(Value::Number(3_000_000_000.0))?,
+        3_000_000_000
+    );
+    assert_eq!(
+        lua.from_value::<i64>(Value::Number(-3_000_000_000.0))?,
+        -3_000_000_000
+    );
+    let value = lua.load("return 3000000000").eval()?;
+    assert_eq!(lua.from_value::<u64>(value)?, 3_000_000_000);
+
+    macro_rules! check_integer {
+        ($($ty:ty),+ $(,)?) => {$(
+            assert_eq!(lua.from_value::<$ty>(Value::Number(42.0))?, 42);
+            assert_eq!(lua.from_value::<$ty>(Value::Number(0.0))?, 0);
+            assert_eq!(lua.from_value::<$ty>(Value::Number(-0.0))?, 0);
+            assert_eq!(lua.from_value::<$ty>(Value::Integer(42))?, 42);
+            for n in [0.5, -0.5, f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+                assert!(matches!(
+                    lua.from_value::<$ty>(Value::Number(n)),
+                    Err(Error::DeserializeError(_))
+                ));
+            }
+            assert!(lua.from_value::<$ty>(Value::String(lua.create_string("42")?)).is_err());
+        )+};
+    }
+    check_integer!(i8, i16, i32, i64, i128, isize, u8, u16, u32, u64, u128, usize);
+
+    // Small integer bounds are exactly representable as f64.
+    macro_rules! check_small_integer {
+        ($($ty:ty),+ $(,)?) => {$(
+            for n in [<$ty>::MIN, <$ty>::MAX] {
+                assert_eq!(lua.from_value::<$ty>(Value::Number(n as f64))?, n);
+            }
+            for n in [<$ty>::MIN as f64 - 1.0, <$ty>::MAX as f64 + 1.0] {
+                assert!(lua.from_value::<$ty>(Value::Number(n)).is_err());
+            }
+        )+};
+    }
+    check_small_integer!(i8, i16, i32, u8, u16, u32);
+
+    // Untyped and floating-point deserialization must keep the floating-point value.
+    assert_eq!(lua.from_value::<f64>(Value::Number(42.0))?, 42.0);
+    assert_eq!(
+        lua.from_value::<serde_value::Value>(Value::Number(42.0))?,
+        serde_value::Value::F64(42.0)
+    );
+    Ok(())
+}
+
+#[test]
+fn test_from_value_integer_number_bounds() -> LuaResult<()> {
+    let lua = Lua::new();
+
+    macro_rules! check_signed {
+        ($($ty:ty),+ $(,)?) => {$(
+            // MAX rounds up to the first out-of-range integer when cast to f64.
+            let upper = <$ty>::MAX as f64;
+            let below_upper = f64::from_bits(upper.to_bits() - 1);
+            assert_eq!(
+                lua.from_value::<$ty>(Value::Number(below_upper))?,
+                below_upper as $ty
+            );
+            assert!(lua.from_value::<$ty>(Value::Number(upper)).is_err());
+
+            let lower = <$ty>::MIN as f64;
+            assert_eq!(lua.from_value::<$ty>(Value::Number(lower))?, <$ty>::MIN);
+            let below_lower = f64::from_bits(lower.to_bits() + 1);
+            assert!(lua.from_value::<$ty>(Value::Number(below_lower)).is_err());
+        )+};
+    }
+    check_signed!(i64, i128);
+
+    macro_rules! check_unsigned {
+        ($($ty:ty),+ $(,)?) => {$(
+            let upper = <$ty>::MAX as f64;
+            let below_upper = f64::from_bits(upper.to_bits() - 1);
+            assert_eq!(
+                lua.from_value::<$ty>(Value::Number(below_upper))?,
+                below_upper as $ty
+            );
+            assert!(lua.from_value::<$ty>(Value::Number(upper)).is_err());
+            assert!(lua.from_value::<$ty>(Value::Number(-1.0)).is_err());
+        )+};
+    }
+    check_unsigned!(u64, u128);
+    Ok(())
+}
+
+#[test]
 fn test_from_value_nested_tables() -> Result<(), Box<dyn StdError>> {
     let lua = Lua::new();
 

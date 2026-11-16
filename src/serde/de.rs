@@ -198,6 +198,25 @@ impl Deserializer {
     }
 }
 
+macro_rules! deserialize_integer {
+    ($method:ident, $ty:ty, $visit:ident) => {
+        #[inline]
+        fn $method<V>(self, visitor: V) -> Result<V::Value>
+        where
+            V: de::Visitor<'de>,
+        {
+            // Lua numbers may represent integers outside the range of `crate::Integer`.
+            if let Value::Number(n) = self.value
+                && n.fract() == 0.0
+                && let Some(n) = num_traits::cast::<_, $ty>(n)
+            {
+                return visitor.$visit(n);
+            }
+            self.deserialize_any(visitor)
+        }
+    };
+}
+
 impl<'de> serde::Deserializer<'de> for Deserializer {
     type Error = Error;
 
@@ -473,9 +492,19 @@ impl<'de> serde::Deserializer<'de> for Deserializer {
         }
     }
 
+    deserialize_integer!(deserialize_i8, i8, visit_i8);
+    deserialize_integer!(deserialize_i16, i16, visit_i16);
+    deserialize_integer!(deserialize_i32, i32, visit_i32);
+    deserialize_integer!(deserialize_i64, i64, visit_i64);
+    deserialize_integer!(deserialize_i128, i128, visit_i128);
+    deserialize_integer!(deserialize_u8, u8, visit_u8);
+    deserialize_integer!(deserialize_u16, u16, visit_u16);
+    deserialize_integer!(deserialize_u32, u32, visit_u32);
+    deserialize_integer!(deserialize_u64, u64, visit_u64);
+    deserialize_integer!(deserialize_u128, u128, visit_u128);
+
     serde::forward_to_deserialize_any! {
-        bool i8 i16 i32 i64 i128 u8 u16 u32 u64 u128 f32 f64 char str string bytes
-        byte_buf identifier ignored_any
+        bool f32 f64 char str string bytes byte_buf identifier ignored_any
     }
 }
 
