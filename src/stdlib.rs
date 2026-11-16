@@ -78,7 +78,10 @@ impl StdLib {
     /// This flag has no effect since Luau 0.747.
     #[cfg(any(feature = "luau", doc))]
     #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
-    #[deprecated(since = "0.12.3", note = "Luau no longer provides the integer library since 0.747")]
+    #[deprecated(
+        since = "0.12.3",
+        note = "Luau no longer provides the integer library since 0.747"
+    )]
     pub const INTEGER: StdLib = StdLib(1 << 11);
 
     /// [`jit`](http://luajit.org/ext_jit.html) library
