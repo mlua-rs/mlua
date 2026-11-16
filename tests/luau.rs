@@ -6,8 +6,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use mlua::chunk::Compiler;
 use mlua::{
-    Error, Function, InterruptHandle, Lua, LuaOptions, ObjectLike, Result, StdLib, Table, Value, Vector,
-    VmState, ffi,
+    Error, Function, InterruptHandle, Lua, LuaOptions, Result, StdLib, Table, Value, Vector, VmState, ffi,
 };
 
 #[test]
@@ -812,36 +811,6 @@ fn test_heap_dump() -> Result<()> {
     // Remove category filter
     let size_by_udtype_all = dump.size_by_userdata(None);
     assert!(size_by_udtype.len() < size_by_udtype_all.len());
-
-    Ok(())
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-#[test]
-fn test_integer64_type() -> Result<()> {
-    // Isolate process-global flag changes from other tests' VMs and compilers.
-    if std::env::var_os("MLUA_TEST_INTEGER64_TYPE").is_none() {
-        assert!(
-            std::process::Command::new(std::env::current_exe()?)
-                .args(["--exact", "test_integer64_type"])
-                .env("MLUA_TEST_INTEGER64_TYPE", "1")
-                .status()?
-                .success()
-        );
-        return Ok(());
-    }
-
-    _ = Lua::set_fflag("LuauIntegerType2", true);
-    let lua = Lua::new();
-
-    let integer_lib = lua.globals().get::<Table>("integer")?;
-    let n = integer_lib.call_function::<i64>("create", 42)?;
-    assert_eq!(n, 42);
-
-    let n: i64 = lua.load("return 42i").eval()?;
-    assert_eq!(n, 42);
-    let n: i64 = lua.load("return -42i").eval()?;
-    assert_eq!(n, -42);
 
     Ok(())
 }

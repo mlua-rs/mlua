@@ -936,15 +936,6 @@ impl RawLua {
             }
 
             #[cfg(feature = "luau")]
-            ffi::LUA_TINTEGER => {
-                let i = ffi::lua_tointeger64(state, idx, ptr::null_mut());
-                match num_traits::cast(i) {
-                    Some(i) => Value::Integer(i),
-                    _ => Value::Number(i as crate::types::Number),
-                }
-            }
-
-            #[cfg(feature = "luau")]
             ffi::LUA_TVECTOR => {
                 let v = ffi::lua_tovector(state, idx);
                 mlua_debug_assert!(!v.is_null(), "vector is null");
@@ -1792,11 +1783,6 @@ unsafe fn load_std_libs(state: *mut ffi::lua_State, libs: StdLib) -> Result<()> 
     #[cfg(feature = "luau")]
     if libs.contains(StdLib::VECTOR) {
         requiref(state, ffi::LUA_VECLIBNAME, ffi::luaopen_vector, 1)?;
-    }
-
-    #[cfg(feature = "luau")]
-    if libs.contains(StdLib::INTEGER) {
-        requiref(state, ffi::LUA_INTLIBNAME, ffi::luaopen_integer, 1)?;
     }
 
     if libs.contains(StdLib::MATH) {
