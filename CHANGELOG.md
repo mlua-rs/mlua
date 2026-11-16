@@ -1,3 +1,15 @@
+## v0.12.3 (unreleased)
+
+- Luau updated to 0.747
+- Luau integer64 support is removed and `StdLib::INTEGER` is deprecated
+- Added `Lua::set_interrupt_oneshot` (Luau)
+- Added `IntoLua`/`FromLua` for `Wrapping/Saturating/NonZero` integer types (#438)
+- Fix serde deserialization of Lua numbers with no fractional part into Rust integers (#753)
+- Wasm build docs (including `wasm32-unknown-unknown`)
+- Abort when `Lua::exec_raw` panics (#762)
+- Removed `Unpin` from `ffi::luaL_Buffer` (#741)
+- Bugfixes
+
 ## v0.12.2 (Oct 03, 2026)
 
 - Luau updated to 0.740
