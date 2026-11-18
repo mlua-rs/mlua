@@ -19,6 +19,7 @@ concurrency:
 jobs:
   build:
     name: Build Documentation
+    if: github.repository == 'mlua-rs/mlua'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@main
