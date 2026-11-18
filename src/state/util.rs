@@ -1,3 +1,4 @@
+use std::mem::ManuallyDrop;
 use std::os::raw::c_int;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::ptr::{self, NonNull};
@@ -33,8 +34,13 @@ pub(crate) unsafe fn callback_error_ext<F, R>(
 where
     F: FnOnce(*mut ExtraData, c_int) -> Result<R>,
 {
+    let f = ManuallyDrop::new(f);
     if extra.is_null() {
         extra = ExtraData::get(state);
+    }
+    #[cfg(not(feature = "luau"))]
+    if (*extra).closing {
+        raise_closing_error(state);
     }
 
     let nargs = ffi::lua_gettop(state);
@@ -115,6 +121,7 @@ where
     // We cannot shadow Rust errors with Lua ones, so we need to reserve pre-allocated memory
     // to store a wrapped failure (error or panic) *before* we proceed.
     let prealloc_failure = PreallocatedFailure::reserve(state, extra);
+    let f = ManuallyDrop::into_inner(f);
 
     // Keep the Error payload out of catch_unwind return value
     let mut callback_error = None;
@@ -181,4 +188,12 @@ where
             ffi::lua_error(state)
         }
     }
+}
+
+#[cfg(not(feature = "luau"))]
+#[cold]
+#[inline(never)]
+unsafe fn raise_closing_error(state: *mut ffi::lua_State) -> ! {
+    ffi::lua_pushliteral(state, c"Lua state is closing");
+    ffi::lua_error(state)
 }

@@ -65,15 +65,14 @@ pub const LUA_TBOOLEAN: c_int = 1;
 
 pub const LUA_TLIGHTUSERDATA: c_int = 2;
 pub const LUA_TNUMBER: c_int = 3;
-pub const LUA_TINTEGER: c_int = 4;
-pub const LUA_TVECTOR: c_int = 5;
+pub const LUA_TVECTOR: c_int = 4;
 
-pub const LUA_TSTRING: c_int = 6;
-pub const LUA_TTABLE: c_int = 7;
-pub const LUA_TFUNCTION: c_int = 8;
-pub const LUA_TUSERDATA: c_int = 9;
-pub const LUA_TTHREAD: c_int = 10;
-pub const LUA_TBUFFER: c_int = 11;
+pub const LUA_TSTRING: c_int = 5;
+pub const LUA_TTABLE: c_int = 6;
+pub const LUA_TFUNCTION: c_int = 7;
+pub const LUA_TUSERDATA: c_int = 8;
+pub const LUA_TTHREAD: c_int = 9;
+pub const LUA_TBUFFER: c_int = 10;
 
 /// Guaranteed number of Lua stack slots available to a C function.
 pub const LUA_MINSTACK: c_int = 20;
@@ -154,7 +153,6 @@ unsafe extern "C-unwind" {
     pub fn lua_tounsignedx(L: *mut lua_State, idx: c_int, isnum: *mut c_int) -> lua_Unsigned;
     pub fn lua_tovector(L: *mut lua_State, idx: c_int) -> *const c_float;
     pub fn lua_toboolean(L: *mut lua_State, idx: c_int) -> c_int;
-    pub fn lua_tointeger64(L: *mut lua_State, idx: c_int, isinteger: *mut c_int) -> i64;
     pub fn lua_tolstring(L: *mut lua_State, idx: c_int, len: *mut usize) -> *const c_char;
     pub fn lua_tostringatom(L: *mut lua_State, idx: c_int, atom: *mut c_int) -> *const c_char;
     pub fn lua_tolstringatom(
@@ -184,7 +182,6 @@ unsafe extern "C-unwind" {
     pub fn lua_pushnumber(L: *mut lua_State, n: lua_Number);
     #[link_name = "lua_pushinteger"]
     pub fn lua_pushinteger_(L: *mut lua_State, n: c_int);
-    pub fn lua_pushinteger64(L: *mut lua_State, n: i64);
     pub fn lua_pushunsigned(L: *mut lua_State, n: lua_Unsigned);
     #[cfg(not(feature = "luau-vector4"))]
     pub fn lua_pushvector(L: *mut lua_State, x: c_float, y: c_float, z: c_float);
@@ -255,6 +252,15 @@ unsafe extern "C-unwind" {
         data: *const c_char,
         size: usize,
         env: c_int,
+    ) -> c_int;
+    pub fn luau_loadlazy(
+        L: *mut lua_State,
+        chunkname: *const c_char,
+        data: *const c_char,
+        size: usize,
+        env: c_int,
+        owner: *mut c_void,
+        release: Option<unsafe extern "C" fn(owner: *mut c_void)>,
     ) -> c_int;
     pub fn lua_call(L: *mut lua_State, nargs: c_int, nresults: c_int);
     pub fn lua_pcall(L: *mut lua_State, nargs: c_int, nresults: c_int, errfunc: c_int) -> c_int;
@@ -440,11 +446,6 @@ pub unsafe fn lua_isboolean(L: *mut lua_State, n: c_int) -> c_int {
 }
 
 #[inline(always)]
-pub unsafe fn lua_isinteger64(L: *mut lua_State, n: c_int) -> c_int {
-    (lua_type(L, n) == LUA_TINTEGER) as c_int
-}
-
-#[inline(always)]
 pub unsafe fn lua_isvector(L: *mut lua_State, n: c_int) -> c_int {
     (lua_type(L, n) == LUA_TVECTOR) as c_int
 }
@@ -591,6 +592,9 @@ pub struct lua_Debug {
 // These are shared between all coroutines.
 //
 
+/// Type for interrupt callbacks invoked at Luau safepoints.
+pub type lua_InterruptFunction = unsafe extern "C-unwind" fn(L: *mut lua_State, gc: c_int);
+
 #[repr(C)]
 #[non_exhaustive]
 pub struct lua_Callbacks {
@@ -598,7 +602,7 @@ pub struct lua_Callbacks {
     pub userdata: *mut c_void,
 
     /// gets called at safepoints (loop back edges, call/ret, gc) if set
-    pub interrupt: Option<unsafe extern "C-unwind" fn(L: *mut lua_State, gc: c_int)>,
+    pub interrupt: Option<lua_InterruptFunction>,
     /// gets called when an unprotected error is raised (if longjmp is used)
     pub panic: Option<unsafe extern "C-unwind" fn(L: *mut lua_State, errcode: c_int)>,
 

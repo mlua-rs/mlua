@@ -24,6 +24,7 @@ use std::future::Future;
 
 #[cfg(feature = "serde")]
 use {
+    cell::SerializeHeader,
     serde::ser::{self, Serialize, Serializer},
     std::result::Result as StdResult,
 };
@@ -1091,8 +1092,8 @@ impl AnyUserData {
         let is_serializable = || unsafe {
             // Userdata must be registered and not destructed
             let _ = lua.get_userdata_ref_type_id(&self.0)?;
-            let ud = &*get_userdata::<UserDataStorage<()>>(lua.ref_thread(), self.0.index);
-            Ok::<_, Error>(ud.is_serializable())
+            let header = &*get_userdata::<SerializeHeader>(lua.ref_thread(), self.0.index);
+            Ok::<_, Error>(header.is_serializable())
         };
         is_serializable().unwrap_or(false)
     }
@@ -1222,8 +1223,8 @@ impl Serialize for AnyUserData {
             let _ = lua
                 .get_userdata_ref_type_id(&self.0)
                 .map_err(ser::Error::custom)?;
-            let ud = &*get_userdata::<UserDataStorage<()>>(lua.ref_thread(), self.0.index);
-            ud.serialize(serializer)
+            let header = &*get_userdata::<SerializeHeader>(lua.ref_thread(), self.0.index);
+            header.serialize(serializer)
         }
     }
 }

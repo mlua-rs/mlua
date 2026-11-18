@@ -29,14 +29,16 @@ use crate::types::{
     ReentrantMutex, ReentrantMutexGuard, RegistryKey, VmState, XRc, XWeak,
 };
 use crate::userdata::{AnyUserData, UserData, UserDataProxy, UserDataRegistry, UserDataStorage};
-use crate::util::{StackGuard, assert_stack, check_stack, protect_lua_closure, push_string, rawset_field};
+use crate::util::{
+    StackGuard, abort_on_unwind, assert_stack, check_stack, protect_lua_closure, push_string, rawset_field,
+};
 use crate::value::{Nil, Value};
 
 #[cfg(not(feature = "luau"))]
 use crate::{debug::HookTriggers, types::HookKind};
 
 #[cfg(any(feature = "luau", doc))]
-use crate::{buffer::Buffer, chunk::Compiler};
+use crate::{buffer::Buffer, chunk::Compiler, luau::InterruptHandle};
 
 #[cfg(feature = "async")]
 use {
@@ -473,7 +475,13 @@ impl Lua {
     /// # Ok(())
     /// # }
     /// ```
-    #[allow(clippy::missing_safety_doc)]
+    ///
+    /// # Safety
+    ///
+    /// The provided function and any raw callbacks it invokes must not unwind. The provided state
+    /// must be used according to the Lua C API and must not be retained beyond the call. Rust
+    /// values that require dropping must not be live across calls to the Lua API that may raise
+    /// errors, as such errors can skip Rust destructors.
     pub unsafe fn exec_raw<R: FromLuaMulti>(
         &self,
         args: impl IntoLuaMulti,
@@ -485,7 +493,7 @@ impl Lua {
         let stack_start = ffi::lua_gettop(state);
         let nargs = args.push_into_stack_multi(&lua)?;
         check_stack(state, 3)?;
-        protect_lua_closure::<_, ()>(state, nargs, ffi::LUA_MULTRET, f)?;
+        abort_on_unwind(|| protect_lua_closure::<_, ()>(state, nargs, ffi::LUA_MULTRET, f))?;
         let nresults = ffi::lua_gettop(state) - stack_start;
         R::from_stack_multi(nresults, &lua)
     }
@@ -796,6 +804,7 @@ impl Lua {
     /// Any Luau code is guaranteed to call this handler "eventually"
     /// (in practice this can happen at any function call or at any loop iteration).
     /// This is similar to `Lua::set_hook` but in more simplified form.
+    /// Replaces any previous interrupt registration, invalidating its one-shot handles.
     ///
     /// The provided interrupt function can error, and this error will be propagated through
     /// the Luau code that was executing at the time the interrupt was triggered.
@@ -844,39 +853,64 @@ impl Lua {
     where
         F: Fn(&Lua) -> Result<VmState> + MaybeSend + 'static,
     {
-        unsafe extern "C-unwind" fn interrupt_proc(state: *mut ffi::lua_State, gc: c_int) {
-            if gc >= 0 {
-                // We don't support GC interrupts since they cannot survive Lua exceptions
-                return;
-            }
-            let result = callback_error_ext(state, ptr::null_mut(), false, move |extra, _| {
-                let interrupt_cb = (*extra).interrupt_callback.clone();
-                let interrupt_cb = mlua_expect!(interrupt_cb, "no interrupt callback set in interrupt_proc");
-                if XRc::strong_count(&interrupt_cb) > 2 {
-                    return Ok(VmState::Continue); // Don't allow recursion
-                }
-                interrupt_cb((*extra).lua())
-            });
-            match result {
-                VmState::Continue => {}
-                VmState::Yield => {
-                    // We can yield only at yieldable points, otherwise ignore and continue
-                    if ffi::lua_isyieldable(state) != 0 {
-                        ffi::lua_yield(state, 0);
-                    }
-                }
-            }
-        }
-
         // Set interrupt callback
         let lua = self.lock();
         unsafe {
+            if let Some(handle) = (*lua.extra.get()).interrupt_handle.take() {
+                handle.invalidate();
+            }
             let _old_callback = (*lua.extra.get()).interrupt_callback.replace(XRc::new(callback));
-            (*ffi::lua_callbacks(lua.main_state())).interrupt = Some(interrupt_proc);
+            (*ffi::lua_callbacks(lua.main_state())).interrupt = Some(Self::interrupt_proc);
         }
     }
 
-    /// Removes any interrupt function previously set by `set_interrupt`.
+    /// Registers a reusable interrupt callback triggered by [`InterruptHandle::arm`].
+    ///
+    /// The interrupt is initially disarmed and automatically disarms before each invocation.
+    /// While disarmed, no native interrupt callback is installed. A pending request can be
+    /// cancelled with [`InterruptHandle::disarm`].
+    ///
+    /// The callback runs on the thread executing Luau, with the error and yield behavior of
+    /// [`Lua::set_interrupt`]. Replaces any previous interrupt registration, invalidating its
+    /// handles.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # use mlua::{Error, Lua};
+    /// # #[cfg(feature = "luau")]
+    /// # fn main() -> mlua::Result<()> {
+    /// let lua = Lua::new();
+    /// let interrupt = lua.set_interrupt_oneshot(|_| Err(Error::runtime("interrupted")));
+    /// // A timer or watchdog can arm the interrupt from another thread.
+    /// std::thread::spawn(move || interrupt.arm()).join().unwrap();
+    /// assert!(lua.load("while true do end").exec().is_err());
+    /// # Ok(())
+    /// # }
+    /// # #[cfg(not(feature = "luau"))]
+    /// # fn main() {}
+    /// ```
+    #[cfg(any(feature = "luau", doc))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "luau")))]
+    #[must_use]
+    pub fn set_interrupt_oneshot<F>(&self, callback: F) -> InterruptHandle
+    where
+        F: Fn(&Lua) -> Result<VmState> + MaybeSend + 'static,
+    {
+        let lua = self.lock();
+        unsafe {
+            if let Some(handle) = (*lua.extra.get()).interrupt_handle.take() {
+                handle.invalidate();
+            }
+            let _old_callback = (*lua.extra.get()).interrupt_callback.replace(XRc::new(callback));
+            let handle = InterruptHandle::new(lua.main_state());
+            (*lua.extra.get()).interrupt_handle = Some(handle.clone());
+            handle
+        }
+    }
+
+    /// Removes any interrupt function previously set by [`Lua::set_interrupt`] or
+    /// [`Lua::set_interrupt_oneshot`], invalidating its handles.
     ///
     /// This function has no effect if an 'interrupt' was not previously set.
     #[cfg(any(feature = "luau", doc))]
@@ -884,8 +918,44 @@ impl Lua {
     pub fn remove_interrupt(&self) {
         let lua = self.lock();
         unsafe {
+            if let Some(handle) = (*lua.extra.get()).interrupt_handle.take() {
+                handle.invalidate();
+            }
             let _old_callback = (*lua.extra.get()).interrupt_callback.take();
             (*ffi::lua_callbacks(lua.main_state())).interrupt = None;
+        }
+    }
+
+    #[cfg(feature = "luau")]
+    pub(crate) unsafe extern "C-unwind" fn interrupt_proc(state: *mut ffi::lua_State, gc: c_int) {
+        if gc >= 0 {
+            // We don't support GC interrupts since they cannot survive Lua exceptions.
+            return;
+        }
+        let result = callback_error_ext(state, ptr::null_mut(), false, |extra, _| {
+            // Reserve error storage before consuming a one-shot request.
+            let _guard = match (*extra).interrupt_handle.as_ref() {
+                Some(handle) => match handle.begin() {
+                    Some(guard) => Some(guard),
+                    None => return Ok(VmState::Continue),
+                },
+                None => None,
+            };
+            let interrupt_cb = (*extra).interrupt_callback.clone();
+            let interrupt_cb = mlua_expect!(interrupt_cb, "no interrupt callback set in interrupt_proc");
+            if XRc::strong_count(&interrupt_cb) > 2 {
+                return Ok(VmState::Continue); // Don't allow recursion.
+            }
+            interrupt_cb((*extra).lua())
+        });
+        match result {
+            VmState::Continue => {}
+            VmState::Yield => {
+                // We can yield only at yieldable points, otherwise ignore and continue.
+                if ffi::lua_isyieldable(state) != 0 {
+                    ffi::lua_yield(state, 0);
+                }
+            }
         }
     }
 

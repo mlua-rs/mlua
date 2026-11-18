@@ -9,8 +9,8 @@ use futures_util::stream::TryStreamExt;
 use tokio::sync::Mutex;
 
 use mlua::{
-    Error, Function, Lua, LuaOptions, MultiValue, ObjectLike, Result, StdLib, Table, Thread, UserData,
-    UserDataMethods, UserDataRef, Value,
+    Error, Function, IntoLua, Lua, LuaOptions, MultiValue, ObjectLike, Result, StdLib, Table, Thread,
+    UserData, UserDataMethods, UserDataRef, Value,
 };
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -355,6 +355,25 @@ async fn test_async_thread() -> Result<()> {
     assert_eq!(Arc::strong_count(&cnt), 2);
     lua.gc_collect()?; // thread_s is non-resumable and subject to garbage collection
     assert_eq!(Arc::strong_count(&cnt), 1);
+
+    Ok(())
+}
+
+#[test]
+fn test_async_thread_reentrant_arg_conversion() -> Result<()> {
+    struct FinishThread(Thread);
+
+    impl IntoLua for FinishThread {
+        fn into_lua(self, _lua: &Lua) -> Result<Value> {
+            self.0.resume::<()>(())?;
+            Ok(Value::Nil)
+        }
+    }
+
+    let lua = Lua::new();
+    let thread = lua.create_thread(lua.load("return").into_function()?)?;
+    let result = thread.clone().into_async::<()>(FinishThread(thread));
+    assert!(matches!(result, Err(Error::CoroutineUnresumable)));
 
     Ok(())
 }

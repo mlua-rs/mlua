@@ -429,9 +429,18 @@ fn test_userdata_destroy() -> Result<()> {
     let ud = lua.create_userdata(MyUserdata(rc.clone()))?;
     assert_eq!(Arc::strong_count(&rc), 2);
     let ud_ref = ud.borrow::<MyUserdata>()?;
-    // With active `UserDataRef` this methods only marks userdata as destructed
-    // without running destructor
+    ud.borrow_scoped::<MyUserdata, _>(|userdata| {
+        assert!(matches!(ud.destroy(), Err(Error::UserDataBorrowMutError)));
+        drop(ud_ref);
+        assert_eq!(Arc::strong_count(&userdata.0), 2);
+    })?;
     ud.destroy().unwrap();
+    assert_eq!(Arc::strong_count(&rc), 1);
+
+    let ud = lua.create_userdata(MyUserdata(rc.clone()))?;
+    let ud_ref = ud.borrow::<MyUserdata>()?;
+    drop(ud);
+    lua.gc_collect()?;
     assert_eq!(Arc::strong_count(&rc), 2);
     drop(ud_ref);
     assert_eq!(Arc::strong_count(&rc), 1);
@@ -439,7 +448,9 @@ fn test_userdata_destroy() -> Result<()> {
     // We cannot destroy (internally) borrowed userdata
     let ud = lua.create_userdata(MyUserdata(rc.clone()))?;
     lua.globals().set("ud", &ud)?;
+    let ud_ref = ud.borrow::<MyUserdata>()?;
     lua.load("ud:try_destroy()").exec().unwrap();
+    drop(ud_ref);
     ud.destroy().unwrap();
     assert_eq!(Arc::strong_count(&rc), 1);
 
@@ -944,6 +955,38 @@ fn test_userdata_reregister_type() -> Result<()> {
     lua.gc_collect()?;
     // Metatable address of `u32` can be reused for `i32`
     assert!(lua.create_any_userdata(0i32)?.is::<i32>());
+    Ok(())
+}
+
+#[cfg(not(feature = "luau"))]
+#[test]
+fn test_userdata_reregister_during_creation() -> Result<()> {
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    struct Reentrant;
+    impl UserData for Reentrant {}
+
+    let lua = Lua::new();
+    let called = Arc::new(AtomicBool::new(false));
+    let called2 = Arc::clone(&called);
+    let reregister = lua.create_function(move |lua, ()| {
+        called2.store(true, Ordering::Relaxed);
+        lua.register_userdata_type::<Reentrant>(|_| {})
+    })?;
+    lua.globals().set("reregister", reregister)?;
+
+    #[cfg(not(any(feature = "lua51", feature = "luajit")))]
+    lua.load("for _ = 1, 50 do setmetatable({}, { __gc = reregister }) end")
+        .exec()?;
+    #[cfg(any(feature = "lua51", feature = "luajit"))]
+    lua.load("for _ = 1, 50 do local ud = newproxy(true); getmetatable(ud).__gc = reregister end")
+        .exec()?;
+    called.store(false, Ordering::Relaxed);
+    for _ in 0..2000 {
+        drop(lua.create_userdata(Reentrant)?);
+    }
+    assert!(called.load(Ordering::Relaxed));
+
     Ok(())
 }
 
@@ -1509,6 +1552,42 @@ fn test_userdata_wrappers() -> Result<()> {
         assert_eq!(ud.0, 20);
         drop(ud);
     }
+
+    Ok(())
+}
+
+#[cfg(all(feature = "userdata-wrappers", feature = "send"))]
+#[test]
+fn test_userdata_wrapper_ref_drop_race() -> Result<()> {
+    use std::sync::mpsc;
+
+    use parking_lot::Mutex;
+
+    struct MyUserData;
+
+    let lua = Lua::new();
+
+    let ud = lua.create_any_userdata(Arc::new(Mutex::new(MyUserData)))?;
+    let (tx, rx) = mpsc::sync_channel::<UserDataRef<MyUserData>>(0);
+    let thread = std::thread::spawn(move || {
+        while let Ok(ud) = rx.recv() {
+            drop(ud);
+        }
+    });
+
+    for _ in 0..10_000 {
+        tx.send(ud.borrow::<MyUserData>()?).unwrap();
+        loop {
+            if let Ok(mut inner) = ud.borrow_mut::<Arc<Mutex<MyUserData>>>() {
+                *inner = Arc::new(Mutex::new(MyUserData));
+                break;
+            }
+            std::hint::spin_loop();
+        }
+    }
+
+    drop(tx);
+    thread.join().unwrap();
 
     Ok(())
 }

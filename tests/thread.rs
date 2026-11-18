@@ -3,7 +3,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
 use mlua::thread::{ThreadEvent, ThreadStatus, ThreadTriggers};
-use mlua::{Error, Function, IntoLua, Lua, Result, Thread, Value};
+use mlua::{Error, FromLua, Function, IntoLua, Lua, Result, Thread, Value};
 
 #[test]
 fn test_thread() -> Result<()> {
@@ -131,6 +131,32 @@ fn test_thread() -> Result<()> {
     lua.globals().set("outer", &outer)?;
     outer.resume::<()>(())?;
     assert!(outer.is_finished());
+
+    Ok(())
+}
+
+#[test]
+fn test_main_thread_status_from_coroutine() -> Result<()> {
+    struct CheckMainThread;
+
+    impl FromLua for CheckMainThread {
+        fn from_lua(_value: Value, lua: &Lua) -> Result<Self> {
+            lua.globals().get::<Thread>("inner")?.resume::<()>(())?;
+            Ok(CheckMainThread)
+        }
+    }
+
+    let lua = Lua::new();
+    let main_thread = lua.current_thread();
+    assert_eq!(main_thread.status(), ThreadStatus::Running);
+    let inner = lua.create_thread(lua.create_function(move |_, ()| {
+        assert_eq!(main_thread.status(), ThreadStatus::Normal);
+        Ok(())
+    })?)?;
+    lua.globals().set("inner", inner)?;
+
+    let thread = lua.create_thread(lua.load("return 42").into_function()?)?;
+    thread.resume::<CheckMainThread>(())?;
 
     Ok(())
 }
@@ -313,6 +339,50 @@ fn test_thread_resume_bad_arg() -> Result<()> {
     assert!(matches!(res, Err(Error::RuntimeError(msg)) if msg == "bad arg"));
     let res = f.resume::<String>(()).unwrap();
     assert_eq!(res, "okay");
+
+    Ok(())
+}
+
+#[test]
+fn test_thread_reentrant_result_conversion() -> Result<()> {
+    struct ResetThread;
+
+    impl FromLua for ResetThread {
+        fn from_lua(_value: Value, lua: &Lua) -> Result<Self> {
+            let thread = lua.globals().get::<Thread>("thread")?;
+            thread.reset(lua.load("return 42").into_function()?)?;
+            Ok(ResetThread)
+        }
+    }
+
+    let lua = Lua::new();
+    let thread = lua.create_thread(lua.load("return 1").into_function()?)?;
+    lua.globals().set("thread", &thread)?;
+
+    thread.resume::<ResetThread>(())?;
+    assert_eq!(thread.resume::<i32>(())?, 42);
+
+    Ok(())
+}
+
+#[cfg(feature = "async")]
+#[test]
+fn test_thread_resume_reentrant_arg_conversion() -> Result<()> {
+    struct ReplaceArgs(Thread);
+
+    impl IntoLua for ReplaceArgs {
+        fn into_lua(self, lua: &Lua) -> Result<Value> {
+            self.0
+                .reset(lua.load("return select('#', ...)").into_function()?)?;
+            drop(self.0.clone().into_async::<()>((1, 2))?);
+            Ok(Value::Nil)
+        }
+    }
+
+    let lua = Lua::new();
+    let thread = lua.create_thread(lua.load("return").into_function()?)?;
+    drop(thread.clone().into_async::<()>(0)?);
+    assert_eq!(thread.resume::<i32>(ReplaceArgs(thread.clone()))?, 3);
 
     Ok(())
 }

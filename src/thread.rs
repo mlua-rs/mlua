@@ -340,7 +340,9 @@ impl Thread {
 
             if !hook_yielded {
                 let nargs = args.push_into_stack_multi(&lua)?;
-                if nargs > 0 {
+                // Argument conversion may change this thread, so re-read its state
+                (pushed_nargs, hook_yielded) = self.resumable_state(&lua)?;
+                if !hook_yielded && nargs > 0 {
                     check_stack(thread_state, nargs)?;
                     ffi::lua_xmove(state, thread_state, nargs);
                     pushed_nargs += nargs;
@@ -356,6 +358,7 @@ impl Thread {
 
             check_stack(state, nresults + 1)?;
             ffi::lua_xmove(thread_state, state, nresults);
+            drop(thread_sg);
 
             // Exec thread yield callback
             let on_yield = lua.thread_event_triggers().on_yield && status.is_yielded();
@@ -397,11 +400,12 @@ impl Thread {
             check_stack(thread_state, 1)?;
             ffi::lua_xmove(state, thread_state, 1);
 
-            let _thread_sg = StackGuard::with_top(thread_state, 0);
+            let thread_sg = StackGuard::with_top(thread_state, 0);
             let (status, nresults) = self.resume_inner(&lua, ffi::LUA_RESUMEERROR)?;
 
             check_stack(state, nresults + 1)?;
             ffi::lua_xmove(thread_state, state, nresults);
+            drop(thread_sg);
 
             // Exec thread yield callback
             let on_yield = lua.thread_event_triggers().on_yield && status.is_yielded();
@@ -450,11 +454,13 @@ impl Thread {
 
     /// Gets the status of the thread (internal implementation).
     fn status_inner(&self, lua: &RawLua) -> ThreadStatusInner {
-        let thread_state = self.state();
-        if thread_state == lua.state() {
+        let thread_state = match self.state() {
             // The thread is currently running
-            return ThreadStatusInner::Running;
-        }
+            state if state == lua.state() => return ThreadStatusInner::Running,
+            // The main thread cannot be resumed as a coroutine
+            state if state == lua.main_state() => return ThreadStatusInner::Normal,
+            state => state,
+        };
         let status = unsafe { ffi::lua_status(thread_state) };
         let top = unsafe { ffi::lua_gettop(thread_state) };
         match status {
@@ -703,7 +709,9 @@ impl Thread {
 
             if !hook_yielded {
                 let nargs = args.push_into_stack_multi(&lua)?;
-                if nargs > 0 {
+                // Argument conversion may change this thread, so re-read its state
+                let (_, hook_yielded) = self.resumable_state(&lua)?;
+                if !hook_yielded && nargs > 0 {
                     check_stack(thread_state, nargs)?;
                     ffi::lua_xmove(state, thread_state, nargs);
                 }
@@ -880,6 +888,7 @@ impl<R: FromLuaMulti> Stream for AsyncThread<R> {
             }
 
             if status.is_yielded() && !hook_yielded && nresults == 1 && is_poll_pending(thread_state) {
+                drop(thread_sg);
                 // Exec thread yield callback
                 let on_yield = lua.thread_event_triggers().on_yield;
                 exec_thread_event(&lua, on_yield, thread_state, || {
@@ -890,6 +899,7 @@ impl<R: FromLuaMulti> Stream for AsyncThread<R> {
 
             check_stack(state, nresults + 1)?;
             ffi::lua_xmove(thread_state, state, nresults);
+            drop(thread_sg);
 
             if status.is_yielded() {
                 let on_yield = lua.thread_event_triggers().on_yield;
@@ -938,6 +948,7 @@ impl<R: FromLuaMulti> Future for AsyncThread<R> {
 
             if status.is_yielded() {
                 let pending = !hook_yielded && nresults == 1 && is_poll_pending(thread_state);
+                drop(thread_sg);
 
                 // Exec thread yield callback
                 let on_yield = lua.thread_event_triggers().on_yield;
@@ -954,6 +965,7 @@ impl<R: FromLuaMulti> Future for AsyncThread<R> {
 
             check_stack(state, nresults + 1)?;
             ffi::lua_xmove(thread_state, state, nresults);
+            drop(thread_sg);
 
             Poll::Ready(R::from_stack_multi(nresults, &lua))
         }

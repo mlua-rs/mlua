@@ -71,11 +71,18 @@ impl Drop for RawLua {
 
             #[cfg(feature = "luau")]
             {
+                if let Some(handle) = (*self.extra.get()).interrupt_handle.take() {
+                    handle.invalidate();
+                }
                 // Reset any callbacks
                 (*ffi::lua_callbacks(self.main_state())).interrupt = None;
                 (*ffi::lua_callbacks(self.main_state())).userthread = None;
             }
 
+            #[cfg(not(feature = "luau"))]
+            {
+                (*self.extra.get()).closing = true;
+            }
             ffi::lua_close(self.main_state());
 
             // Deallocate `MemoryState`
@@ -929,15 +936,6 @@ impl RawLua {
             }
 
             #[cfg(feature = "luau")]
-            ffi::LUA_TINTEGER => {
-                let i = ffi::lua_tointeger64(state, idx, ptr::null_mut());
-                match num_traits::cast(i) {
-                    Some(i) => Value::Integer(i),
-                    _ => Value::Number(i as crate::types::Number),
-                }
-            }
-
-            #[cfg(feature = "luau")]
             ffi::LUA_TVECTOR => {
                 let v = ffi::lua_tovector(state, idx);
                 mlua_debug_assert!(!v.is_null(), "vector is null");
@@ -1138,13 +1136,14 @@ impl RawLua {
     ) -> Result<AnyUserData> {
         let state = self.state();
         let _sg = StackGuard::new(state);
-        check_stack(state, 3)?;
+        check_stack(state, 4)?;
 
-        // We generate metatable first to make sure it *always* available when userdata pushed
+        // Keep the metatable alive while allocating userdata, which may run GC finalizers.
         let mt_id = get_metatable_id()?;
+        ffi::lua_rawgeti(state, ffi::LUA_REGISTRYINDEX, mt_id as _);
         let protect = !self.unlikely_memory_error();
         push_userdata(state, data, protect)?;
-        ffi::lua_rawgeti(state, ffi::LUA_REGISTRYINDEX, mt_id as _);
+        ffi::lua_insert(state, -2);
         ffi::lua_setmetatable(state, -2);
 
         // Set empty environment for Lua 5.1
@@ -1435,13 +1434,13 @@ impl RawLua {
     pub(crate) fn create_callback(&self, func: Callback) -> Result<Function> {
         unsafe extern "C-unwind" fn call_callback(state: *mut ffi::lua_State) -> c_int {
             let upvalue = get_userdata::<CallbackUpvalue>(state, ffi::lua_upvalueindex(1));
-            callback_error_ext(state, (*upvalue).extra.get(), true, |extra, nargs| {
+            callback_error_ext(state, (*upvalue).extra(), true, |extra, nargs| {
                 // Lua ensures that `LUA_MINSTACK` stack spaces are available (after pushing
                 // arguments) The lock must be already held as the callback is
                 // executed
                 let rawlua = (*extra).raw_lua();
-                match (*upvalue).data {
-                    Some(ref func) => func(rawlua, nargs),
+                match &*(*upvalue).data {
+                    Some(func) => func(rawlua, nargs),
                     None => Err(Error::CallbackDestructed),
                 }
             })
@@ -1454,14 +1453,14 @@ impl RawLua {
 
             let extra = XRc::clone(&self.extra);
             let protect = !self.unlikely_memory_error();
-            let upvalue = push_internal_userdata(state, CallbackUpvalue { data: None, extra }, protect)?;
+            let upvalue = push_internal_userdata(state, CallbackUpvalue::new(extra), protect)?;
             protect_lua_mem!(self, 1, 1, fn(state) {
                 ffi::lua_pushcclosure(state, call_callback, 1);
             })?;
 
             let function = Function(self.try_pop_ref()?);
             // Keep scoped captures owned locally until all fallible operations succeed.
-            (*upvalue).data = Some(func);
+            *(*upvalue).data = Some(func);
             Ok(function)
         }
     }
@@ -1484,18 +1483,16 @@ impl RawLua {
         }
 
         unsafe extern "C-unwind" fn get_future_callback(state: *mut ffi::lua_State) -> c_int {
-            // Async functions cannot be scoped and therefore destroyed,
-            // so the first upvalue is always valid
             let upvalue = get_userdata::<AsyncCallbackUpvalue>(state, ffi::lua_upvalueindex(1));
-            callback_error_ext(state, (*upvalue).extra.get(), true, |extra, nargs| {
+            callback_error_ext(state, (*upvalue).extra(), true, |extra, nargs| {
                 // Lua ensures that `LUA_MINSTACK` stack spaces are available (after pushing
                 // arguments) The lock must be already held as the callback is
                 // executed
                 let rawlua = (*extra).raw_lua();
 
-                let func = &*(*upvalue).data;
+                let func = &**(*upvalue).data;
                 let fut = Some(func(rawlua, nargs));
-                let extra = XRc::clone(&(*upvalue).extra);
+                let extra = XRc::clone(&rawlua.extra);
                 let protect = !rawlua.unlikely_memory_error();
                 // Remove arguments but preserve any preallocated failure below them.
                 ffi::lua_pop(state, nargs);
@@ -1589,7 +1586,7 @@ impl RawLua {
 
             let extra = XRc::clone(&self.extra);
             let protect = !self.unlikely_memory_error();
-            let upvalue = AsyncCallbackUpvalue { data: func, extra };
+            let upvalue = AsyncCallbackUpvalue::new(func, extra);
             push_internal_userdata(state, upvalue, protect)?;
             protect_lua_mem!(self, 1, 1, fn(state) {
                 ffi::lua_pushcclosure(state, get_future_callback, 1);
@@ -1786,11 +1783,6 @@ unsafe fn load_std_libs(state: *mut ffi::lua_State, libs: StdLib) -> Result<()> 
     #[cfg(feature = "luau")]
     if libs.contains(StdLib::VECTOR) {
         requiref(state, ffi::LUA_VECLIBNAME, ffi::luaopen_vector, 1)?;
-    }
-
-    #[cfg(feature = "luau")]
-    if libs.contains(StdLib::INTEGER) {
-        requiref(state, ffi::LUA_INTLIBNAME, ffi::luaopen_integer, 1)?;
     }
 
     if libs.contains(StdLib::MATH) {
