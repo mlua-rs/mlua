@@ -209,10 +209,15 @@ jobs:
         shell: msys2 {0}
     steps:
       - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          install: >-
+            mingw-w64-ucrt-x86_64-rust
+            mingw-w64-ucrt-x86_64-lua54
+            mingw-w64-ucrt-x86_64-lua
+            mingw-w64-ucrt-x86_64-luajit
+            mingw-w64-ucrt-x86_64-pkgconf
       - uses: actions/checkout@main
-      - name: Install Rust & Lua
-        run: |
-          pacman -S --noconfirm mingw-w64-x86_64-rust mingw-w64-x86_64-lua54 mingw-w64-x86_64-lua mingw-w64-x86_64-luajit mingw-w64-x86_64-pkg-config
       - name: Run ${{ matrix.lua }} module tests
         run: |
           (cd tests/module && cargo build --release --features "${{ matrix.lua }}")
