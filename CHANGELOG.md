@@ -1,4 +1,4 @@
-## v0.12.3 (unreleased)
+## v0.12.3 (Nov 22, 2026)
 
 - Luau updated to 0.747
 - Luau integer64 support is removed and `StdLib::INTEGER` is deprecated
