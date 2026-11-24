@@ -55,6 +55,9 @@ unsafe extern "C-unwind" {
         def: *const c_char,
         lst: *const *const c_char,
     ) -> c_int;
+
+    #[cfg(feature = "luajit")]
+    pub fn luaL_traceback(L: *mut lua_State, L1: *mut lua_State, msg: *const c_char, level: c_int);
 }
 
 // Pre-defined references
