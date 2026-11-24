@@ -111,6 +111,122 @@ fn test_memory_limit_thread() -> Result<()> {
     Ok(())
 }
 
+// Creates a string of `len` bytes that is not interned yet, returns `false` on a memory error
+fn try_create_string(lua: &Lua, len: usize) -> bool {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static SEQ: AtomicU64 = AtomicU64::new(0);
+
+    let mut bytes = vec![b'x'; len.max(8)];
+    bytes.truncate(len);
+    let seq = SEQ.fetch_add(1, Ordering::Relaxed).to_le_bytes();
+    let n = len.min(8);
+    bytes[..n].copy_from_slice(&seq[..n]);
+    match lua.create_string(&bytes) {
+        Ok(_) => true,
+        Err(Error::MemoryError(_)) => false,
+        Err(err) => panic!("unexpected error: {err:?}"),
+    }
+}
+
+#[test]
+fn test_allocation_limit() -> Result<()> {
+    let lua = Lua::new();
+
+    if cfg!(feature = "luajit") && lua.set_allocation_limit(0).is_err() {
+        // seems this luajit version does not support memory limit
+        return Ok(());
+    }
+
+    // No limit by default
+    assert_eq!(lua.set_allocation_limit(0)?, 0);
+    assert!(try_create_string(&lua, 1 << 24));
+    lua.gc_collect()?;
+
+    const LIMIT: usize = 64 * 1024;
+    assert_eq!(lua.set_allocation_limit(LIMIT)?, 0);
+    assert!(try_create_string(&lua, LIMIT / 2));
+    assert!(!try_create_string(&lua, LIMIT));
+
+    // The largest string that fits grows with the limit byte for byte
+    let largest_string = |lua: &Lua| {
+        let (mut lo, mut hi) = (LIMIT / 2, 2 * LIMIT);
+        while hi - lo > 1 {
+            let mid = (lo + hi) / 2;
+            if try_create_string(lua, mid) {
+                lo = mid;
+            } else {
+                hi = mid;
+            }
+        }
+        assert!(try_create_string(lua, lo));
+        assert!(!try_create_string(lua, lo + 1));
+        lo
+    };
+    let largest = largest_string(&lua);
+    assert!(largest < LIMIT);
+    lua.set_allocation_limit(LIMIT + 64)?;
+    assert_eq!(largest_string(&lua), largest + 64);
+    lua.set_allocation_limit(LIMIT)?;
+
+    // Growing a table past the limit fails
+    let grow = lua
+        .load("local t = {}; for i = 1, 100000 do t[i] = i end; return #t")
+        .into_function()?;
+    match grow.call::<usize>(()) {
+        Err(Error::MemoryError(_)) => {}
+        something_else => panic!("did not trigger memory error: {:?}", something_else),
+    }
+
+    // The error can be caught by `pcall` and Lua keeps working
+    let (ok, len) = lua
+        .load(
+            r#"
+            local ok = pcall(string.rep, "x", 2 * 65536)
+            return ok, #string.rep("x", 1024)
+        "#,
+        )
+        .eval::<(bool, usize)>()?;
+    assert!(!ok);
+    assert_eq!(len, 1024);
+    assert_eq!(lua.load("return 1 + 1").eval::<i32>()?, 2);
+
+    assert_eq!(lua.set_allocation_limit(0)?, LIMIT);
+    assert_eq!(grow.call::<usize>(())?, 100000);
+
+    Ok(())
+}
+
+#[test]
+fn test_allocation_limit_with_memory_limit() -> Result<()> {
+    let lua = Lua::new();
+
+    if cfg!(feature = "luajit") && lua.set_allocation_limit(0).is_err() {
+        // seems this luajit version does not support memory limit
+        return Ok(());
+    }
+
+    const LIMIT: usize = 64 * 1024;
+    lua.set_allocation_limit(LIMIT)?;
+    let memory_limit = lua.used_memory() + (1 << 20);
+    lua.set_memory_limit(memory_limit)?;
+
+    // Each limit applies on its own
+    assert!(try_create_string(&lua, LIMIT / 2));
+    assert!(!try_create_string(&lua, 2 * LIMIT));
+    assert_eq!(lua.set_allocation_limit(0)?, LIMIT);
+    assert!(try_create_string(&lua, 2 * LIMIT));
+    lua.gc_collect()?;
+    assert!(!try_create_string(&lua, 2 << 20));
+
+    // Removing the memory limit keeps the allocation limit
+    lua.set_allocation_limit(LIMIT)?;
+    assert_eq!(lua.set_memory_limit(0)?, memory_limit);
+    assert!(try_create_string(&lua, LIMIT / 2));
+    assert!(!try_create_string(&lua, 2 * LIMIT));
+
+    Ok(())
+}
+
 #[test]
 fn test_gc_control() -> Result<()> {
     let lua = Lua::new();

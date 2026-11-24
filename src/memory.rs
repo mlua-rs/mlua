@@ -5,16 +5,30 @@ use std::ptr;
 pub(crate) static ALLOCATOR: ffi::lua_Alloc = allocator;
 
 #[repr(C)]
-#[derive(Default)]
 pub(crate) struct MemoryState {
     used_memory: isize,
     memory_limit: isize,
+    // The largest size of a single allocation, `usize::MAX` means no limit.
+    allocation_limit: usize,
     // Can be set to temporary ignore the memory limit.
     // This is used when calling `lua_pushcfunction` for lua5.1/jit/luau.
     ignore_limit: bool,
     // Indicates that the memory limit was reached on the last allocation.
     #[cfg(feature = "luau")]
     limit_reached: bool,
+}
+
+impl Default for MemoryState {
+    fn default() -> Self {
+        MemoryState {
+            used_memory: 0,
+            memory_limit: 0,
+            allocation_limit: usize::MAX,
+            ignore_limit: false,
+            #[cfg(feature = "luau")]
+            limit_reached: false,
+        }
+    }
 }
 
 impl MemoryState {
@@ -43,15 +57,23 @@ impl MemoryState {
     }
 
     #[inline]
-    pub(crate) fn memory_limit(&self) -> usize {
-        self.memory_limit as usize
-    }
-
-    #[inline]
     pub(crate) fn set_memory_limit(&mut self, limit: usize) -> usize {
         let prev_limit = self.memory_limit;
         self.memory_limit = limit.min(isize::MAX as usize) as isize;
         prev_limit as usize
+    }
+
+    #[inline]
+    pub(crate) fn set_allocation_limit(&mut self, limit: usize) -> usize {
+        let prev_limit = self.allocation_limit;
+        self.allocation_limit = if limit == 0 { usize::MAX } else { limit };
+        if prev_limit == usize::MAX { 0 } else { prev_limit }
+    }
+
+    // Returns `true` if any memory or allocation limit is set
+    #[inline]
+    pub(crate) fn has_limit(&self) -> bool {
+        self.memory_limit > 0 || self.allocation_limit != usize::MAX
     }
 
     // This function is used primarily for calling `lua_pushcfunction` in lua5.1/jit/luau
@@ -112,6 +134,15 @@ unsafe extern "C" fn allocator(
         return ptr::null_mut();
     }
 
+    // Is a new or growing block within the allocation limit?
+    if nsize > mem_state.allocation_limit && (ptr.is_null() || nsize > osize) && !mem_state.ignore_limit {
+        #[cfg(feature = "luau")]
+        {
+            mem_state.limit_reached = true;
+        }
+        return ptr::null_mut();
+    }
+
     // Are we fit to the memory limits?
     let mut mem_diff = nsize as isize;
     if !ptr.is_null() {
@@ -148,4 +179,60 @@ unsafe extern "C" fn allocator(
         alloc::handle_alloc_error(old_layout);
     }
     new_ptr
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    unsafe fn realloc(state: &mut MemoryState, ptr: *mut c_void, osize: usize, nsize: usize) -> *mut c_void {
+        allocator(state as *mut MemoryState as *mut c_void, ptr, osize, nsize)
+    }
+
+    #[test]
+    fn test_allocation_limit() {
+        let mut state = MemoryState::default();
+        unsafe {
+            // No limit by default
+            let large = realloc(&mut state, ptr::null_mut(), 0, 4096);
+            assert!(!large.is_null());
+
+            assert_eq!(state.set_allocation_limit(1024), 0);
+            assert!(state.has_limit());
+
+            // Below, at and one past the limit
+            let below = realloc(&mut state, ptr::null_mut(), 0, 1023);
+            assert!(!below.is_null());
+            let at = realloc(&mut state, ptr::null_mut(), 0, 1024);
+            assert!(!at.is_null());
+            assert!(realloc(&mut state, ptr::null_mut(), 0, 1025).is_null());
+            #[cfg(feature = "luau")]
+            assert!(state.limit_reached);
+            assert_eq!(state.used_memory(), 4096 + 1023 + 1024);
+
+            // Growing past the limit fails and keeps the block
+            assert!(realloc(&mut state, at, 1024, 1025).is_null());
+            let at2 = realloc(&mut state, below, 1023, 1024);
+            assert!(!at2.is_null());
+            #[cfg(feature = "luau")]
+            assert!(!state.limit_reached);
+
+            // Shrinking always succeeds, even from above the limit
+            let large = realloc(&mut state, large, 4096, 2048);
+            assert!(!large.is_null());
+            assert!(realloc(&mut state, large, 2048, 2049).is_null());
+            assert_eq!(state.used_memory(), 2048 + 1024 + 1024);
+
+            // Zero removes the limit
+            assert_eq!(state.set_allocation_limit(0), 1024);
+            assert!(!state.has_limit());
+            let large = realloc(&mut state, large, 2048, 8192);
+            assert!(!large.is_null());
+
+            realloc(&mut state, large, 8192, 0);
+            realloc(&mut state, at, 1024, 0);
+            realloc(&mut state, at2, 1024, 0);
+            assert_eq!(state.used_memory(), 0);
+        }
+    }
 }
